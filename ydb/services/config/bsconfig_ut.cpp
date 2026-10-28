@@ -1501,6 +1501,187 @@ config:
         UNIT_ASSERT_VALUES_EQUAL(*mainConfig, mainYaml);
         UNIT_ASSERT(!storageConfig);
     }
+    // The validation of the replacement passes, but the config command applying its storage settings after the commit
+    // fails. The replacement must not be reported as a success; the next one, applying fine, is.
+    Y_UNIT_TEST(FailedStorageApplicationIsNotSuccess) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        const TString pdiskPath = runtime.GetTempDir() + "pdisk_1.dat";
+        auto makeYaml = [&](ui32 version, ui32 extraDrives) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+%s  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", version, pdiskPath.c_str(), ExtraDrives(extraDrives).c_str());
+        };
+
+        // BSC sends the config commands to itself; the one without rollback is the application, which fails here
+        ui32 numFailed = 0;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse && ev->Sender == ev->Recipient) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                if (response->GetSuccess() && !response->GetRollbackSuccess()) {
+                    response->SetSuccess(false);
+                    response->SetErrorDescription("application failed by the test");
+                    ++numFailed;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        const auto failed = Replace(runtime, server, makeYaml(1, 1));
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(failed.operation().status() != Ydb::StatusIds::SUCCESS, failed.operation().DebugString());
+        UNIT_ASSERT(numFailed);
+
+        const auto applied = Replace(runtime, server, makeYaml(2, 2));
+        UNIT_ASSERT_CHECK_STATUS(applied.operation(), Ydb::StatusIds::SUCCESS);
+    }
+
+    // The application of replacement A is held after Console commits it, and Console restarts, ending its session.
+    // A's application then comes back either successfully before B's validation, or failed after B's commit.
+    // B must get the result of its own application and persist its own YAML in either order.
+    void CheckApplicationOfEarlierCommitIsNotTakenForLaterOne(bool beforeValidation) {
+        TRaceServer server;
+        auto& runtime = *server.GetRuntime();
+        const TString pdiskPath = runtime.GetTempDir() + "pdisk_1.dat";
+        auto makeYaml = [&](ui32 version, ui32 extraDrives) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  log_config:
+    cluster_name: replacement-%u
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+%s  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", version, version, pdiskPath.c_str(), ExtraDrives(extraDrives).c_str());
+        };
+
+        // BSC sends the config commands to itself; the one without rollback is the application
+        std::vector<TAutoPtr<IEventHandle>> held;
+        bool hold = true;
+        bool holdValidation = false;
+        TAutoPtr<IEventHandle> heldValidation;
+        TActorId controller;
+        ui32 consoleCommits = 0;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerValidateConfigResponse) {
+                controller = ev->GetRecipientRewrite();
+                if (holdValidation && !heldValidation) {
+                    heldValidation = ev;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConsoleCommitResponse
+                    && ev->GetRecipientRewrite() == controller
+                    && ev->Get<TEvBlobStorage::TEvControllerConsoleCommitResponse>()->Record.GetStatus()
+                        == NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed) {
+                ++consoleCommits;
+            }
+            if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigResponse && ev->Sender == ev->Recipient) {
+                const auto& response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse();
+                if (response.GetSuccess() && !response.GetRollbackSuccess()) {
+                    held.push_back(ev);
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        // BSC asks blob storage for its block before it connects to Console again, with a scheduled event, which the
+        // runtime drops by default
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev, TDuration delay,
+                TInstant& deadline) {
+            return ev->GetTypeRewrite() != TEvBlobStorage::EvGetBlock
+                && TTestActorRuntime::DefaultScheduledFilterFunc(r, ev, delay, deadline);
+        });
+
+        Ydb::Config::ReplaceConfigResponse responseA, responseB;
+        auto a = ReplaceAsync(server, makeYaml(1, 1), responseA);
+        WaitFor(runtime, [&] { return held.size() == 1 && consoleCommits; });
+        const ui64 applicationCookieA = held[0]->Cookie;
+        RebootTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor()); // the session of A ends
+        a->Wait(runtime);
+        UNIT_ASSERT_C(responseA.operation().status() != Ydb::StatusIds::SUCCESS, responseA.operation().DebugString());
+
+        // B is refused until the session of BSC with Console comes back, so it is sent again then
+        holdValidation = true;
+        std::unique_ptr<TAsyncCall> b;
+        std::atomic<bool> answered = false;
+        for (ui32 attempt = 0; !heldValidation; ++attempt) {
+            UNIT_ASSERT_C(attempt < 30, "the validation of B was not held: " << responseB.operation().DebugString());
+            answered = false;
+            b = std::make_unique<TAsyncCall>([&] {
+                ReplaceConfig(server.GetChannel(), makeYaml(2, 2), std::nullopt, std::nullopt, false, false,
+                    [&](const auto& resp) { responseB = resp; });
+                answered = true;
+            });
+            WaitFor(runtime, [&] { return bool(heldValidation) || answered; });
+            if (!heldValidation) {
+                b->Wait(runtime);
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+        const ui32 commitsBeforeB = consoleCommits;
+        if (beforeValidation) {
+            // A's successful application must not acknowledge B while its YAML has not even been validated yet
+            runtime.Send(held[0].Release());
+        }
+        holdValidation = false;
+        runtime.Send(heldValidation.Release());
+        WaitFor(runtime, [&] {
+            return answered || (held.size() == 2 && (beforeValidation || consoleCommits > commitsBeforeB));
+        });
+
+        const bool ownApplicationHeld = held.size() == 2;
+        const bool ownApplicationCookie = ownApplicationHeld && held[1]->Cookie != applicationCookieA;
+        hold = false;
+        if (!beforeValidation) {
+            auto *failed = held[0]->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+            failed->SetSuccess(false);
+            failed->SetErrorDescription("application of A failed by the test");
+            runtime.Send(held[0].Release());
+        }
+        if (ownApplicationHeld) {
+            runtime.Send(held[1].Release());
+        }
+        b->Wait(runtime);
+        runtime.SetObserverFunc(prevObserver);
+        UNIT_ASSERT_C(ownApplicationHeld, "B replied without its own application: " << responseB.operation().DebugString());
+        UNIT_ASSERT_C(ownApplicationCookie, "B reused the application cookie of A");
+        UNIT_ASSERT_C(responseB.operation().status() == Ydb::StatusIds::SUCCESS,
+            "B got the result of the application of A: " << responseB.operation().DebugString());
+        const auto mainConfig = FetchMainConfig(runtime, server);
+        UNIT_ASSERT(mainConfig);
+        UNIT_ASSERT_C(mainConfig->Contains("replacement-2"), *mainConfig);
+    }
+
+    Y_UNIT_TEST(ApplicationOfEarlierCommitIsNotTakenForLaterOne) {
+        CheckApplicationOfEarlierCommitIsNotTakenForLaterOne(/*beforeValidation=*/ false);
+    }
+
+    Y_UNIT_TEST(ApplicationOfEarlierCommitBeforeValidationIsNotTakenForLaterOne) {
+        CheckApplicationOfEarlierCommitIsNotTakenForLaterOne(/*beforeValidation=*/ true);
+    }
 
 }
 

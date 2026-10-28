@@ -193,6 +193,119 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTiering) {
+    Y_UNIT_TEST_QUAD(TieringNeedActualization, InStore, Reboot) {
+        using namespace NWrappers::NExternalStorage;
+        auto* storage = Singleton<TFakeExternalStorage>();
+        storage->Clear();
+        TTieringTestHelper tieringHelper{true, [](TKikimrSettings& settings) {
+            settings.FeatureFlags.SetEnableTieringObjectKeyTree(true);
+        }};
+        auto& testHelper = tieringHelper.GetTestHelper();
+        auto& controller = tieringHelper.GetCsController();
+        controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        controller->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        const TString tablePath = InStore ? DEFAULT_TABLE_PATH : TString("/Root/olapTable");
+        const TString objectPath = InStore ? TString("/Root/olapStore") : tablePath;
+        const TString objectType = InStore ? "TABLESTORE" : "TABLE";
+        tieringHelper.SetTablePath(tablePath);
+        if (InStore) {
+            tieringHelper.GetOlapHelper().CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        } else {
+            tieringHelper.GetOlapHelper().CreateTestOlapStandaloneTable("olapTable", 1);
+        }
+
+        const auto alterOptions = [&](const TString& options) {
+            return testHelper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER OBJECT `" << objectPath << "` (TYPE " << objectType << ") SET (ACTION=UPSERT_OPTIONS, " << options << ");")
+                .GetValueSync();
+        };
+        const auto setActualization = [&](const bool enabled) {
+            const auto result = alterOptions(TStringBuilder() << "TIERING_NEED_ACTUALIZATION=`" << (enabled ? "true" : "false") << "`");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto checkOption = [&](const bool expected) {
+            auto desc = testHelper.GetKikimr().GetTestClient().Ls(objectPath);
+            UNIT_ASSERT(desc);
+            const auto& path = desc->Record.GetPathDescription();
+            const auto& schema = InStore ? path.GetColumnStoreDescription().GetSchemaPresets(0).GetSchema()
+                                        : path.GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetOptions().GetTieringNeedActualization(), expected);
+        };
+        const auto alterPrefix = [&](const TString& prefix) {
+            const auto result = testHelper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER TABLE `" << tablePath << "` SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `"
+                << DEFAULT_TIER_PATH << "`.`" << prefix << "` ON " << DEFAULT_COLUMN_NAME << ";").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto checkRows = [&]() {
+            auto client = testHelper.GetKikimr().GetTableClient();
+            const auto rows = ExecuteScanQuery(client, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`;");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 2000);
+        };
+
+        checkOption(false);
+        const auto invalid = alterOptions("TIERING_NEED_ACTUALIZATION=`notabool`");
+        UNIT_ASSERT(!invalid.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "TIERING_NEED_ACTUALIZATION");
+        setActualization(false);
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        WriteTestData(testHelper.GetKikimr(), tablePath, 0, 3600000000, 2000);
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        controller->WaitActualization(TDuration::Seconds(5), true);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        checkRows();
+
+        const auto oldKeys = storage->GetBucket("olap-tier1").GetObjectKeys();
+        UNIT_ASSERT(!oldKeys.empty());
+        for (const auto& key : oldKeys) {
+            UNIT_ASSERT_C(!key.Contains('/'), key);
+        }
+
+        const auto writesBefore = storage->GetWritesCount();
+        alterPrefix("archive/data");
+        controller->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(storage->GetWritesCount(), writesBefore);
+
+        if (Reboot) {
+            controller->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        }
+
+        setActualization(true);
+        const auto unrelated = alterOptions("SCAN_READER_POLICY_NAME=`SIMPLE`");
+        UNIT_ASSERT_C(unrelated.IsSuccess(), unrelated.GetIssues().ToString());
+        checkOption(true);
+        if (Reboot) {
+            testHelper.RebootTablets(tablePath);
+            controller->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
+        }
+
+        // Wait for both migration and GC: no object in the old layout may remain.
+        controller->WaitCondition(TDuration::Seconds(60), [&]() {
+            const auto keys = storage->GetBucket("olap-tier1").GetObjectKeys();
+            if (keys.empty()) {
+                return false;
+            }
+
+            for (const auto& key : keys) {
+                if (!key.StartsWith("archive/data/")) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+        checkRows();
+
+        setActualization(false);
+        checkOption(false);
+        const auto writesAfter = storage->GetWritesCount();
+        alterPrefix("another/path");
+        controller->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(storage->GetWritesCount(), writesAfter);
+        checkRows();
+    }
+
     Y_UNIT_TEST(EvictionResetTiering) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

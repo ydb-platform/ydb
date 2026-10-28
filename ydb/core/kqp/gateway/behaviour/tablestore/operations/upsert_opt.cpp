@@ -27,6 +27,10 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
         return TConclusionStatus::Fail("Incorrect value for SCHEME_NEED_ACTUALIZATION: cannot parse as boolean");
     }
     SchemeNeedActualization = *value;
+    if (auto status = ExtractInsertOption(features, "TIERING_NEED_ACTUALIZATION", TieringNeedActualization); status.IsFail()) {
+        return status;
+    }
+
     ScanReaderPolicyName = features.Extract<TString>("SCAN_READER_POLICY_NAME");
     if (ScanReaderPolicyName) {
         if (*ScanReaderPolicyName != "PLAIN" && *ScanReaderPolicyName != "SIMPLE" && *ScanReaderPolicyName != "TRIVIAL") {
@@ -87,6 +91,10 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
 
 void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTableSchema& schemaData) const {
     schemaData.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+    if (TieringNeedActualization) {
+        schemaData.MutableOptions()->SetTieringNeedActualization(*TieringNeedActualization);
+    }
+
     if (ScanReaderPolicyName) {
         schemaData.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
     }

@@ -232,6 +232,7 @@ bool TInsertOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificat
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
+    TieringNeedActualization = optionsProto.GetTieringNeedActualization();
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }

@@ -105,6 +105,7 @@ private:
     std::shared_ptr<std::set<TString>> UsedStorageIds;
 
     bool SchemeNeedActualization = false;
+    bool TieringNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
@@ -281,6 +282,10 @@ public:
 
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;
+    }
+
+    bool GetTieringNeedActualization() const {
+        return TieringNeedActualization;
     }
 
     const TInsertOptionsPolicy& GetInsertOptions() const {

@@ -14,12 +14,12 @@ namespace NKikimr::NOlap::NActualizer {
 
 namespace {
 
-bool NeedsTierChange(const TString& current, const TString& target, const TTiering& tiering) {
+bool NeedsTierChange(const TString& current, const TString& target, const TTiering& tiering, const bool tieringNeedActualization) {
     if (current == target) {
         return false;
     }
 
-    if (current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
+    if (tieringNeedActualization || current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
         target == NTiering::NCommon::DeleteTierName) {
         return true;
     }
@@ -85,7 +85,8 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         std::optional<i64> d;
         std::set<TString> storagesWrite;
         TString targetTierName;
-        if (NeedsTierChange(currentTierName, tieringInfo.GetCurrentTierName(), *Tiering)) {
+        if (NeedsTierChange(currentTierName, tieringInfo.GetCurrentTierName(), *Tiering,
+                VersionedIndex.GetLastSchema()->GetIndexInfo().GetTieringNeedActualization())) {
             d = -1 * tieringInfo.GetCurrentTierLag().GetValue();
             targetTierName = tieringInfo.GetCurrentTierName();
         } else if (tieringInfo.GetNextTierName()) {
@@ -305,6 +306,10 @@ void TTieringActualizer::DoExtractTasks(
     for (auto&& i : rejectedPortions) {
         RemovePortion(i);
     }
+}
+
+void TTieringActualizer::RefreshScheme(const TAddExternalContext& externalContext) {
+    Refresh(Tiering, externalContext);
 }
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {

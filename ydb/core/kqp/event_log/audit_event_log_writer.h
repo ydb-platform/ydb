@@ -18,7 +18,7 @@ public:
             std::make_shared<TDBLogMessageNodeIdColumn>(),
             std::make_shared<TDBLogMessageErrorColumn>(),
             std::make_shared<TDBLogMessageStringValueColumn>("subject"),
-            std::make_shared<TDBLogMessageStringValueColumn>("sanitized_token", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("sanitized_token"),
             std::make_shared<TDBLogMessageStringValueColumn>("operation", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("component", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("status", dict),
@@ -157,10 +157,11 @@ public:
     }
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
+        auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
         auto result = TBaseAuditEventLogWriter::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
-            std::make_shared<TDBLogMessageStringValueColumn>("login_user"),
-            std::make_shared<TDBLogMessageStringValueColumn>("login_user_level")};
+            std::make_shared<TDBLogMessageStringValueColumn>("login_user", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("login_user_level", dict)};
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
@@ -174,10 +175,11 @@ public:
     }
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
+        auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
         auto result = TBaseAuditEventLogWriter::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
-            std::make_shared<TDBLogMessageStringValueColumn>("method"),
-            std::make_shared<TDBLogMessageStringValueColumn>("url"),
+            std::make_shared<TDBLogMessageStringValueColumn>("method", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("url", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("params"),
             std::make_shared<TDBLogMessageStringValueColumn>("body"),
         };

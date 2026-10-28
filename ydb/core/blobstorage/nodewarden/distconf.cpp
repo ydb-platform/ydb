@@ -86,6 +86,10 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (auto error = ValidateDistconfStates(config, bool(Cfg->BridgeConfig))) {
+            YDB_LOG_ERROR("Invalid distconf states", {"error", *error});
+            return false;
+        }
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             // extract the main config from newly applied section
@@ -165,6 +169,10 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (auto error = ValidateDistconfStates(config, bool(Cfg->BridgeConfig))) {
+            YDB_LOG_ERROR("Invalid distconf states", {"error", *error});
+            return;
+        }
         FanOutReversePush(&config); // send this configuration to all direct bound nodes (before they get possibly unbound)
         ApplyStorageConfig(config);
 
@@ -210,6 +218,7 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(CommittedStorageConfig->GetFingerprint() == config.GetFingerprint());
             Y_ABORT_UNLESS(CommittedStorageConfig == LocalCommittedStorageConfig);
         }
+        UpdatePendingDistconfStateProposal();
     }
 
     void TDistributedConfigKeeper::Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev) {
@@ -464,6 +473,7 @@ namespace NKikimr::NStorage {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
                 ReconcileNodeRole();
+                ReportStorageConfigToNodeWarden();
             }
             processPendingEvents();
         }
@@ -499,6 +509,13 @@ namespace NKikimr::NStorage {
             {"sessionId", ev->InterconnectSession},
             {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
+        if (ev->InterconnectSession
+                && (IsDistconfNodeExcluded(senderNodeId) || (IsSelfStatic && IsDistconfNodeExcluded(SelfId().NodeId())))
+                && (type == TEvNodeConfigScatter::EventType || type == TEvNodeConfigGather::EventType
+                    || type == TEvNodeConfigInvokeOnRoot::EventType || type == TEvNodeConfigInvokeOnRootResult::EventType
+                    || type == TEvNodeConfigReversePush::EventType)) {
+            return;
+        }
         if (ev->InterconnectSession) {
             if (const auto it = SubscribedSessions.find(senderNodeId); it != SubscribedSessions.end()) {
                 const auto& subs = it->second;

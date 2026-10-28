@@ -2,13 +2,147 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
+    NKikimrBlobStorage::TStorageConfig MakeDistconfQuorumConfig(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeWardenConfig& nwConfig) {
+        NKikimrBlobStorage::TStorageConfig configured;
+        if (nwConfig.NameserviceConfig) {
+            for (const auto& node : nwConfig.NameserviceConfig->GetNode()) {
+                if (node.HasDistconfState()) {
+                    auto *item = configured.AddAllNodes();
+                    item->SetNodeId(node.GetNodeId());
+                    item->SetDistconfState(node.GetDistconfState());
+                }
+            }
+        }
+        if (nwConfig.SelfManagementConfig) {
+            configured.MutableSelfManagementConfig()->MutableDataCenterStates()->CopyFrom(
+                nwConfig.SelfManagementConfig->GetDataCenterStates());
+        }
+        auto result = config;
+        TDistributedConfigKeeper::MergeDistconfStates(configured, config, &result,
+            nwConfig.SelfManagementConfig && nwConfig.SelfManagementConfig->GetOverrideDistconfState());
+        return result;
+    }
+
+    namespace {
+        bool IsExcluded(const NKikimrBlobStorage::TNodeIdentifier& node,
+                const NKikimrConfig::TSelfManagementConfig& config) {
+            if (node.HasDistconfState() && node.GetDistconfState() == NKikimrBlobStorage::TDistconfState::EXCLUDED) {
+                return true;
+            }
+            for (const auto& item : config.GetDataCenterStates()) {
+                if (item.GetName() == node.GetLocation().GetDataCenter()) {
+                    return item.HasState() && item.GetState() == NKikimrBlobStorage::TDistconfState::EXCLUDED;
+                }
+            }
+            return false;
+        }
+
+        bool HasExclusions(const NKikimrBlobStorage::TStorageConfig& config) {
+            return std::ranges::any_of(config.GetAllNodes(), [&](const auto& node) {
+                return IsExcluded(node, config.GetSelfManagementConfig());
+            });
+        }
+
+        bool MayHaveExclusions(const NKikimrBlobStorage::TStorageConfig& config, const TNodeWardenConfig& nwConfig) {
+            const auto excludedHost = [](const auto& node) {
+                return node.HasDistconfState() && node.GetDistconfState() == NKikimrBlobStorage::TDistconfState::EXCLUDED;
+            };
+            const auto excludedDataCenter = [](const auto& item) {
+                return item.HasState() && item.GetState() == NKikimrBlobStorage::TDistconfState::EXCLUDED;
+            };
+            return std::ranges::any_of(config.GetAllNodes(), excludedHost)
+                || std::ranges::any_of(config.GetSelfManagementConfig().GetDataCenterStates(), excludedDataCenter)
+                || (nwConfig.NameserviceConfig && std::ranges::any_of(nwConfig.NameserviceConfig->GetNode(), excludedHost))
+                || (nwConfig.SelfManagementConfig && std::ranges::any_of(
+                    nwConfig.SelfManagementConfig->GetDataCenterStates(), excludedDataCenter));
+        }
+
+        void ClearConfigVersion(NKikimrBlobStorage::TStorageConfig& config) {
+            config.ClearGeneration();
+            config.ClearFingerprint();
+            config.ClearPrevConfig();
+            config.ClearForcedDistconfState();
+        }
+
+        auto ActiveDisks(const NKikimrBlobStorage::TStorageConfig& config) {
+            THashSet<std::tuple<TNodeIdentifier, TString>> disks;
+            EnumerateConfigDrives(config, 0, [&](const auto& node, const auto& drive) {
+                if (!IsExcluded(node, config.GetSelfManagementConfig())) {
+                    disks.emplace(TNodeIdentifier(node), drive.GetPath());
+                }
+            });
+            return disks;
+        }
+
+        bool IsStoredForcedTransition(const NKikimrBlobStorage::TStorageConfig& previous,
+                const NKikimrBlobStorage::TStorageConfig& proposed) {
+            if (previous.HasClusterState() || proposed.HasClusterState()) {
+                return false;
+            }
+            const auto topology = [](const auto& config) {
+                auto result = config;
+                ClearConfigVersion(result);
+                for (auto& node : *result.MutableAllNodes()) {
+                    node.ClearDistconfState();
+                }
+                if (result.HasSelfManagementConfig()) {
+                    auto *settings = result.MutableSelfManagementConfig();
+                    settings->ClearDataCenterStates();
+                    settings->ClearOverrideDistconfState();
+                    if (!settings->ByteSizeLong()) {
+                        result.ClearSelfManagementConfig();
+                    }
+                }
+                return result;
+            };
+            if (!google::protobuf::util::MessageDifferencer::Equals(topology(previous), topology(proposed))) {
+                return false;
+            }
+            const auto oldDisks = ActiveDisks(previous);
+            const auto newDisks = ActiveDisks(proposed);
+            return !newDisks.empty() && newDisks.size() < oldDisks.size()
+                && std::ranges::all_of(newDisks, [&](const auto& disk) { return oldDisks.contains(disk); });
+        }
+    }
+
+    bool HasDistconfExclusions(const NKikimrBlobStorage::TStorageConfig& config, const TNodeWardenConfig& nwConfig) {
+        return MayHaveExclusions(config, nwConfig) && HasExclusions(MakeDistconfQuorumConfig(config, nwConfig));
+    }
+
+    bool HasDistconfExclusions(const NKikimrBlobStorage::TStorageConfig& config) {
+        return HasExclusions(config);
+    }
+
+    bool IsForcedDistconfExclusionTransition(const NKikimrBlobStorage::TStorageConfig& previous,
+            const NKikimrBlobStorage::TStorageConfig& proposed, const TNodeWardenConfig& nwConfig) {
+        if (!nwConfig.SelfManagementConfig || !nwConfig.SelfManagementConfig->GetOverrideDistconfState()
+                || previous.HasClusterState() || proposed.HasClusterState() || nwConfig.BridgeConfig) {
+            return false;
+        }
+        auto expected = MakeDistconfQuorumConfig(previous, nwConfig);
+        auto candidate = proposed;
+        ClearConfigVersion(expected);
+        ClearConfigVersion(candidate);
+        if (!google::protobuf::util::MessageDifferencer::Equals(expected, candidate)) {
+            return false;
+        }
+        return IsStoredForcedTransition(previous, proposed);
+    }
+
     std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
             TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool allowUnformatted,
             IOutputStream *out, const char *name);
+
+    static bool HasDiskQuorumImpl(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+        TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, IOutputStream *out, const char *name,
+        bool mindGuids = false);
 
     // generate set of mandatory pile ids for quorum
     THashSet<TBridgePileId> GetMandatoryPileIds(const NKikimrBlobStorage::TStorageConfig& config,
@@ -73,6 +207,19 @@ namespace NKikimr::NStorage {
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
             TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, TStringStream *out,
             bool allowConfigQuorum) {
+        if (MayHaveExclusions(config, nwConfig)) {
+            const auto effective = MakeDistconfQuorumConfig(config, nwConfig);
+            if (HasExclusions(effective)) {
+                THashSet<TNodeIdentifier> nodes(successful.begin(), successful.end());
+                std::vector<TSuccessfulDisk> disks;
+                EnumerateConfigDrives(effective, 0, [&](const auto& node, const auto& drive) {
+                    if (nodes.contains(TNodeIdentifier(node))) {
+                        disks.emplace_back(node, drive.GetPath(), std::nullopt);
+                    }
+                });
+                return HasDiskQuorumImpl(effective, disks, singleBridgePileId, nwConfig, out, "config");
+            }
+        }
         if (allowConfigQuorum) {
             THashSet<TNodeIdentifier> successfulNodes(successful.begin(), successful.end());
 
@@ -106,6 +253,28 @@ namespace NKikimr::NStorage {
 
     bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
             TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, IOutputStream *out, const char *name) {
+        if (MayHaveExclusions(config, nwConfig)) {
+            return HasDiskQuorumImpl(MakeDistconfQuorumConfig(config, nwConfig), successful,
+                singleBridgePileId, nwConfig, out, name);
+        }
+        return HasDiskQuorumImpl(config, successful, singleBridgePileId, nwConfig, out, name);
+    }
+
+    bool HasDistconfMetadataQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            std::span<TSuccessfulDisk> successful, TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig,
+            IOutputStream *out, const char *name, bool mindGuids) {
+        return HasDiskQuorumImpl(config, successful, singleBridgePileId, nwConfig, out, name, mindGuids);
+    }
+
+    static bool HasDiskQuorumImpl(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+            TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, IOutputStream *out, const char *name,
+            bool mindGuids) {
+        if (HasExclusions(config) && (config.HasClusterState() || nwConfig.BridgeConfig || singleBridgePileId)) {
+            if (out) {
+                *out << ' ' << name << ":exclusions-not-supported-in-bridge";
+            }
+            return false;
+        }
         // prepare list of piles we want to examine
         auto status = PrepareStatusMap(config, singleBridgePileId);
         // nodes of the config that is not a bridged one (or of the node that is not bridge-capable) are all in default
@@ -117,8 +286,19 @@ namespace NKikimr::NStorage {
         // generate set of all required drives
         THashMap<ui32, std::tuple<const NKikimrBlobStorage::TNodeIdentifier&, TBridgePileId, TNodeLocation>> nodeMap;
         THashSet<std::tuple<ui32, TString>> allDrives; // only drives from mandatory piles
+        THashMap<std::tuple<ui32, TString>, ui64> expectedGuids;
+        if (mindGuids) {
+            for (const auto& pdisk : config.GetBlobStorageConfig().GetServiceSet().GetPDisks()) {
+                if (pdisk.GetPDiskGuid()) {
+                    expectedGuids.emplace(std::make_tuple(pdisk.GetNodeID(), pdisk.GetPath()), pdisk.GetPDiskGuid());
+                }
+            }
+        }
         bool error = false;
         EnumerateConfigDrives(config, 0, [&](const NKikimrBlobStorage::TNodeIdentifier& node, const auto& drive) {
+            if (IsExcluded(node, config.GetSelfManagementConfig())) {
+                return;
+            }
             TNodeLocation location(node.GetLocation());
             const auto bridgePileId = ResolveNodePileId(registry, location);
             if (!bridgePileId) {
@@ -126,12 +306,16 @@ namespace NKikimr::NStorage {
                 error = true;
             } else if (const auto it = status.find(*bridgePileId); it != status.end()) {
                 auto& [ok, err] = it->second[location.GetDataCenterId()];
-                ++err;
+                if (allDrives.emplace(node.GetNodeId(), drive.GetPath()).second) {
+                    ++err;
+                }
                 nodeMap.try_emplace(node.GetNodeId(), node, *bridgePileId, std::move(location));
-                allDrives.emplace(node.GetNodeId(), drive.GetPath());
             }
         });
-        if (error) {
+        if (error || allDrives.empty()) {
+            if (out && allDrives.empty()) {
+                *out << ' ' << name << ":no-active-drives";
+            }
             return false;
         }
 
@@ -139,7 +323,11 @@ namespace NKikimr::NStorage {
         for (const auto& [node, path, guid] : successful) {
             if (const auto it = nodeMap.find(node.NodeId()); it != nodeMap.end()) {
                 const auto& [identifier, bridgePileId, location] = it->second;
-                if (node == TNodeIdentifier(identifier) && allDrives.erase(std::make_tuple(it->first, path))) {
+                const auto key = std::make_tuple(it->first, path);
+                const auto expectedGuid = expectedGuids.find(key);
+                const bool validGuid = expectedGuid == expectedGuids.end()
+                    || (guid && *guid == expectedGuid->second);
+                if (validGuid && node == TNodeIdentifier(identifier) && allDrives.erase(key)) {
                     auto& [ok, err] = status[bridgePileId][location.GetDataCenterId()];
                     Y_ABORT_UNLESS(err);
                     ++ok;
@@ -322,12 +510,45 @@ namespace NKikimr::NStorage {
             : std::make_optional(true); // all groups meet their quorums
     }
 
+    static bool HasConfigQuorumImpl(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+            TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out,
+            bool useStartup) {
+        std::optional<NKikimrBlobStorage::TStorageConfig> overlay;
+        if (useStartup && MayHaveExclusions(config, nwConfig)) {
+            overlay.emplace(MakeDistconfQuorumConfig(config, nwConfig));
+        }
+        const auto& effective = overlay ? *overlay : config;
+        const bool exclusions = HasExclusions(effective);
+        if (!HasDiskQuorumImpl(effective, successful, singleBridgePileId, nwConfig, out, "new")) {
+            return false;
+        }
+        if (!exclusions && !HasStorageQuorum(config, successful, singleBridgePileId,
+                nwConfig, true, out, "new").value_or(true)) {
+            return false;
+        }
+        if (!mindPrev || !config.HasPrevConfig()) {
+            return true;
+        }
+        const auto& previous = config.GetPrevConfig();
+        if (exclusions || HasExclusions(previous)) {
+            const bool forced = config.GetForcedDistconfState()
+                && (useStartup ? IsForcedDistconfExclusionTransition(previous, config, nwConfig)
+                    : IsStoredForcedTransition(previous, config));
+            return forced
+                || HasDiskQuorumImpl(previous, successful, singleBridgePileId, nwConfig, out, "prev", true);
+        }
+        return HasStorageQuorum(previous, successful, singleBridgePileId,
+            nwConfig, false, out, "prev").value_or(true);
+    }
+
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
             TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out) {
-        return HasDiskQuorum(config, successful, singleBridgePileId, nwConfig, out, "new") &&
-            HasStorageQuorum(config, successful, singleBridgePileId, nwConfig, true, out, "new").value_or(true) &&
-            (!mindPrev || !config.HasPrevConfig() || HasStorageQuorum(config.GetPrevConfig(), successful,
-                singleBridgePileId, nwConfig, false, out, "prev").value_or(true));
+        return HasConfigQuorumImpl(config, successful, singleBridgePileId, nwConfig, mindPrev, out, true);
+    }
+
+    bool HasOriginalConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+            TBridgePileId singleBridgePileId, const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out) {
+        return HasConfigQuorumImpl(config, successful, singleBridgePileId, nwConfig, mindPrev, out, false);
     }
 
 } // NKikimr::NStorage

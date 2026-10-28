@@ -25,6 +25,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
+#include <algorithm>
+
 template <>
 NKikimrBlobStorage::EPDiskType
 NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<const TString, NKikimrBlobStorage::EPDiskType>(const TString* const in) {
@@ -617,6 +619,11 @@ namespace NKikimr::NYaml {
             return;
         }
 
+        for (const auto& host : ephemeralConfig.GetHosts()) {
+            Y_ENSURE_BT(!host.HasDistconfState() || (host.HasNodeId() && host.GetNodeId()),
+                "hosts with distconf_state require an explicit nonzero node_id");
+        }
+
         // TODO validate
         auto defaultDiskType = ephemeralConfig.GetDefaultDiskType();
 
@@ -1074,6 +1081,62 @@ endDiskTypeCheck:   ;
             } else {
                 node->SetInterconnectHost(host.GetHost());
             }
+        }
+    }
+
+    void PrepareDistconfStates(NKikimrConfig::TAppConfig& config,
+            const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        const bool hasHostStates = std::ranges::any_of(ephemeralConfig.GetHosts(), [](const auto& host) {
+            return host.HasDistconfState();
+        });
+        if (!config.GetSelfManagementConfig().DataCenterStatesSize() && !hasHostStates) {
+            return;
+        }
+
+        THashMap<ui32, NKikimrConfig::TStaticNameserviceConfig::TNode*> nodes;
+        THashSet<TString> dataCenters;
+        for (auto& node : *config.MutableNameserviceConfig()->MutableNode()) {
+            Y_ENSURE_BT(nodes.emplace(node.GetNodeId(), &node).second,
+                "duplicate nameservice node_id " << node.GetNodeId());
+            const auto& location = node.HasLocation() ? node.GetLocation() : node.GetWalleLocation();
+            dataCenters.insert(location.GetDataCenter());
+        }
+
+        THashSet<TString> excludedDataCenters;
+        THashSet<TString> configuredDataCenters;
+        for (const auto& item : config.GetSelfManagementConfig().GetDataCenterStates()) {
+            const auto& dc = item.GetName();
+            Y_ENSURE_BT(!dc.empty() && dataCenters.contains(dc), "unknown distconf data center " << dc);
+            Y_ENSURE_BT(configuredDataCenters.insert(dc).second, "duplicate distconf data center " << dc);
+            if (item.HasState() && item.GetState() == NKikimrBlobStorage::TDistconfState::EXCLUDED) {
+                excludedDataCenters.insert(dc);
+            }
+        }
+
+        THashSet<ui32> markedNodes;
+        for (const auto& host : ephemeralConfig.GetHosts()) {
+            if (!host.HasDistconfState()) {
+                continue;
+            }
+            const ui32 nodeId = host.GetNodeId();
+            const auto it = nodes.find(nodeId);
+            Y_ENSURE_BT(it != nodes.end(), "unknown distconf_state node_id " << nodeId);
+            Y_ENSURE_BT(markedNodes.insert(nodeId).second, "duplicate distconf_state node_id " << nodeId);
+            auto& node = *it->second;
+            const auto& hostName = host.HasInterconnectHost() ? host.GetInterconnectHost() : host.GetHost();
+            const auto& nodeHost = node.HasInterconnectHost() ? node.GetInterconnectHost() : node.GetHost();
+            Y_ENSURE_BT(hostName == nodeHost && host.GetPort() == node.GetPort(),
+                "distconf_state host does not match nameservice node_id " << nodeId);
+            Y_ENSURE_BT(!node.HasDistconfState() || node.GetDistconfState() == host.GetDistconfState(),
+                "conflicting distconf_state for node_id " << nodeId);
+            node.SetDistconfState(host.GetDistconfState());
+        }
+
+        for (const auto& node : config.GetNameserviceConfig().GetNode()) {
+            const auto& location = node.HasLocation() ? node.GetLocation() : node.GetWalleLocation();
+            Y_ENSURE_BT(!node.HasDistconfState() || node.GetDistconfState() != NKikimrBlobStorage::TDistconfState::ACTIVE
+                    || !excludedDataCenters.contains(location.GetDataCenter()),
+                "active distconf host is in an excluded data center: node_id " << node.GetNodeId());
         }
     }
 
@@ -1642,6 +1705,7 @@ endDiskTypeCheck:   ;
         MoveFields(ctx, config, ephemeralConfig);
         ApplyDefaultConfigs(ctx, config, ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);
+        PrepareDistconfStates(config, ephemeralConfig);
         PrepareStaticGroup(ctx, config, ephemeralConfig);
         PrepareBlobStorageConfig(config, ephemeralConfig);
         PrepareSystemTabletsInfo(config, ephemeralConfig, relaxed);

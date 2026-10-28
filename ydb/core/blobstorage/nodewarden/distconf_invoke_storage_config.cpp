@@ -707,7 +707,7 @@ namespace NKikimr::NStorage {
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
                 }
-                if (result.RequiresRecoveryProposition) {
+                if (result.RequiresRecoveryProposition || result.RequiresDistconfStateTransition) {
                     return StartRecoveryProposition(result);
                 }
                 Self->ConfigRecoveryRequired = false;
@@ -1008,7 +1008,7 @@ namespace NKikimr::NStorage {
                 throw TExRace() << "Storage config generation regenerated while collecting configs";
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
-            } else if (r.RequiresRecoveryProposition) {
+            } else if (r.RequiresRecoveryProposition || r.RequiresDistconfStateTransition) {
                 return StartRecoveryProposition(r);
             } else if (r.ConfigToPropose) {
                 // config validation, which is basically done in Console

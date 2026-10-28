@@ -176,6 +176,7 @@ namespace NKikimr::NStorage {
     }
 
     ui64 TDistributedConfigKeeper::PersistConfig(TPersistCallback callback, const std::vector<TString>& drives) {
+        UpdatePendingDistconfStateProposal();
         YDB_LOG_DEBUG("PersistConfig",
             {"marker", "NWDC35"},
             {"metadataByPath", MetadataByPath});
@@ -392,7 +393,8 @@ namespace NKikimr::NStorage {
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                 MetadataByPath[path] = m;
 
-                if (m.HasCommittedStorageConfig()) {
+                if (m.HasCommittedStorageConfig()
+                        && !ValidateDistconfStates(m.GetCommittedStorageConfig(), bool(Cfg->BridgeConfig))) {
                     const auto& config = m.GetCommittedStorageConfig();
                     if (!LocalCommittedStorageConfig || LocalCommittedStorageConfig->GetGeneration() < config.GetGeneration()) {
                         LocalCommittedStorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
@@ -400,7 +402,8 @@ namespace NKikimr::NStorage {
                     EnumerateConfigDrives(config, SelfId().NodeId(), processDrive);
                 }
 
-                if (m.HasProposedStorageConfig()) {
+                if (m.HasProposedStorageConfig()
+                        && !ValidateDistconfStates(m.GetProposedStorageConfig(), bool(Cfg->BridgeConfig))) {
                     const auto& proposed = m.GetProposedStorageConfig();
                     EnumerateConfigDrives(proposed, SelfId().NodeId(), processDrive);
                 }
@@ -469,9 +472,24 @@ namespace NKikimr::NStorage {
                 }
 
                 Y_ABORT_UNLESS(DirectBoundNodes.empty()); // ensure we don't have to spread this config
+                UpdatePendingDistconfStateProposal();
                 StorageConfigLoaded = true;
             }
         }
+    }
+
+    void TDistributedConfigKeeper::UpdatePendingDistconfStateProposal() {
+        HasPendingDistconfStateProposal = std::ranges::any_of(MetadataByPath, [&](const auto& item) {
+            const auto& record = item.second;
+            if (!record.HasProposedStorageConfig() || !RequiresDistconfStateSupport(record.GetProposedStorageConfig())) {
+                return false;
+            }
+            const auto& proposed = record.GetProposedStorageConfig();
+            return !LocalCommittedStorageConfig
+                || proposed.GetGeneration() > LocalCommittedStorageConfig->GetGeneration()
+                || (proposed.GetGeneration() == LocalCommittedStorageConfig->GetGeneration()
+                    && TStorageConfigMeta(proposed) != TStorageConfigMeta(*LocalCommittedStorageConfig));
+        });
     }
 
     std::vector<TString> TDistributedConfigKeeper::GetDrives(const NKikimrBlobStorage::TStorageConfig& config) const {

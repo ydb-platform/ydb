@@ -8,6 +8,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <map>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
@@ -877,8 +879,110 @@ namespace NKikimr::NStorage {
         return goodConfig;
     }
 
+    bool TDistributedConfigKeeper::MergeDistconfStates(const NKikimrBlobStorage::TStorageConfig& configured,
+            const NKikimrBlobStorage::TStorageConfig& persisted,
+            NKikimrBlobStorage::TStorageConfig *target, bool overrideDistconfState) {
+        const auto hostStates = [](const auto& config) {
+            THashMap<ui32, EDistconfState> states;
+            for (const auto& node : config.GetAllNodes()) {
+                if (node.HasDistconfState()) {
+                    states.emplace(node.GetNodeId(), node.GetDistconfState());
+                }
+            }
+            return states;
+        };
+        const auto configuredHosts = hostStates(configured);
+        const auto persistedHosts = hostStates(persisted);
+        std::map<TString, EDistconfState> dataCenters;
+        for (const auto& item : persisted.GetSelfManagementConfig().GetDataCenterStates()) {
+            if (item.HasState()) {
+                dataCenters.emplace(item.GetName(), item.GetState());
+            }
+        }
+        for (const auto& item : configured.GetSelfManagementConfig().GetDataCenterStates()) {
+            if (item.HasState()) {
+                if (overrideDistconfState) {
+                    dataCenters[item.GetName()] = item.GetState();
+                } else {
+                    dataCenters.emplace(item.GetName(), item.GetState());
+                }
+            }
+        }
+
+        bool changed = false;
+        for (auto& node : *target->MutableAllNodes()) {
+            const auto configuredIt = configuredHosts.find(node.GetNodeId());
+            const auto persistedIt = persistedHosts.find(node.GetNodeId());
+            std::optional<EDistconfState> state;
+            if (configuredIt != configuredHosts.end() && (overrideDistconfState || persistedIt == persistedHosts.end())) {
+                state = configuredIt->second;
+            } else if (persistedIt != persistedHosts.end()) {
+                state = persistedIt->second;
+            }
+            if (state && (!node.HasDistconfState() || node.GetDistconfState() != *state)) {
+                node.SetDistconfState(*state);
+                changed = true;
+            } else if (!state && node.HasDistconfState()) {
+                node.ClearDistconfState();
+                changed = true;
+            }
+        }
+
+        const auto& current = target->GetSelfManagementConfig().GetDataCenterStates();
+        auto it = dataCenters.begin();
+        bool sameDataCenters = size_t(current.size()) == dataCenters.size();
+        for (const auto& item : current) {
+            if (it == dataCenters.end() || item.GetName() != it->first || !item.HasState() || item.GetState() != it->second) {
+                sameDataCenters = false;
+                break;
+            }
+            ++it;
+        }
+        if (!sameDataCenters) {
+            auto *states = target->MutableSelfManagementConfig()->MutableDataCenterStates();
+            states->Clear();
+            for (const auto& [name, state] : dataCenters) {
+                auto *item = states->Add();
+                item->SetName(name);
+                item->SetState(state);
+            }
+            changed = true;
+        }
+        if (target->GetSelfManagementConfig().HasOverrideDistconfState()) {
+            target->MutableSelfManagementConfig()->ClearOverrideDistconfState();
+            changed = true;
+        }
+        return changed;
+    }
+
+    bool TDistributedConfigKeeper::SameDistconfStates(const NKikimrBlobStorage::TStorageConfig& lhs,
+            const NKikimrBlobStorage::TStorageConfig& rhs) {
+        const auto states = [](const auto& config) {
+            std::map<ui32, EDistconfState> hosts;
+            std::map<TString, EDistconfState> dataCenters;
+            for (const auto& node : config.GetAllNodes()) {
+                if (node.HasDistconfState()) {
+                    hosts.emplace(node.GetNodeId(), node.GetDistconfState());
+                }
+            }
+            for (const auto& item : config.GetSelfManagementConfig().GetDataCenterStates()) {
+                if (item.HasState()) {
+                    dataCenters.emplace(item.GetName(), item.GetState());
+                }
+            }
+            return std::make_pair(std::move(hosts), std::move(dataCenters));
+        };
+        return states(lhs) == states(rhs);
+    }
+
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
-        return UpdateBridgeConfig(config);
+        const auto& startup = Cfg->SelfManagementConfig ? *Cfg->SelfManagementConfig : BaseConfig->GetSelfManagementConfig();
+        NKikimrBlobStorage::TStorageConfig configured;
+        configured.MutableAllNodes()->CopyFrom(BaseConfig->GetAllNodes());
+        configured.MutableSelfManagementConfig()->MutableDataCenterStates()->CopyFrom(startup.GetDataCenterStates());
+        const bool statesChanged = MergeDistconfStates(configured, *config, config, startup.GetOverrideDistconfState());
+        const bool bridgeChanged = UpdateBridgeConfig(config);
+        return statesChanged || bridgeChanged;
     }
 
 } // NKikimr::NStorage

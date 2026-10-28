@@ -1775,6 +1775,11 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         return false;
     }
 
+    NKikimrBlobStorage::TStorageConfig previousDistconfStates;
+    previousDistconfStates.MutableAllNodes()->CopyFrom(config->GetAllNodes());
+    previousDistconfStates.MutableSelfManagementConfig()->MutableDataCenterStates()->CopyFrom(
+        config->GetSelfManagementConfig().GetDataCenterStates());
+
     if (appConfig.HasSelfManagementConfig()) {
         const auto& smFrom = appConfig.GetSelfManagementConfig();
         auto *smTo = config->MutableSelfManagementConfig();
@@ -2001,6 +2006,9 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         r->SetHost(node.GetInterconnectHost());
         r->SetPort(node.GetPort());
         r->SetNodeId(node.GetNodeId());
+        if (node.HasDistconfState()) {
+            r->SetDistconfState(node.GetDistconfState());
+        }
         if (node.HasLocation()) {
             r->MutableLocation()->CopyFrom(node.GetLocation());
         } else if (node.HasWalleLocation()) {
@@ -2083,6 +2091,12 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         UPDATE_EXPLICIT_CONFIG(SchemeBoard)
     }
 
+    TDistributedConfigKeeper::MergeDistconfStates(*config, previousDistconfStates, config,
+        appConfig.GetSelfManagementConfig().GetOverrideDistconfState());
+    if (auto error = NStorage::ValidateDistconfStates(*config, appConfig.HasBridgeConfig())) {
+        *errorReason = *error;
+        return false;
+    }
     return true;
 }
 

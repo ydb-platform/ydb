@@ -96,6 +96,7 @@ message THosts {
     optional string Address = 9;
     optional string Name = 10;
     repeated TExtendedHostConfigDrive Drive = 11;
+    optional NKikimrBlobStorage.TDistconfState.E DistconfState = 12;
 }
 
 message TTls {

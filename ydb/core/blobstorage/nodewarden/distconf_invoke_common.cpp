@@ -270,7 +270,8 @@ namespace NKikimr::NStorage {
                         Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
                         RecoveryProposition = r.RequiresRecoveryProposition;
-                        StartProposition(&r.ConfigToPropose.value(), !r.RequiresRecoveryProposition,
+                        StartProposition(&r.ConfigToPropose.value(), !r.RequiresRecoveryProposition
+                            || TDistributedConfigKeeper::RequiresDistconfStateSupport(*r.ConfigToPropose),
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
@@ -314,7 +315,13 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
-        StartProposition(request->MutableConfig());
+        auto *config = request->MutableConfig();
+        if (auto error = ValidateDistconfStates(*config, bool(Self->Cfg->BridgeConfig))) {
+            throw TExError() << *error;
+        }
+        TDistributedConfigKeeper::MergeDistconfStates(*config, *Self->StorageConfig, config,
+            config->GetSelfManagementConfig().GetOverrideDistconfState());
+        StartProposition(config);
     }
 
     void TInvokeRequestHandlerActor::DemandRetroTrace(const TQuery::TDemandRetroTrace& cmd) {
@@ -389,7 +396,7 @@ namespace NKikimr::NStorage {
             if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
                 throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
             }
-            if (result.RequiresRecoveryProposition) {
+            if (result.RequiresRecoveryProposition || result.RequiresDistconfStateTransition) {
                 return StartRecoveryProposition(result);
             }
             if (!result.RequiresGenerationAdvance) {
@@ -401,9 +408,13 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::StartRecoveryProposition(TProcessCollectConfigsResult& result) {
-        Y_ABORT_UNLESS(result.RequiresRecoveryProposition && result.ConfigToPropose && result.PropositionBase);
+        Y_ABORT_UNLESS((result.RequiresRecoveryProposition || result.RequiresDistconfStateTransition)
+            && result.ConfigToPropose && result.PropositionBase);
         RecoveryProposition = true;
-        StartPropositionImpl(&*result.ConfigToPropose, false, &*result.PropositionBase, false);
+        DistconfStateTransition = result.RequiresDistconfStateTransition;
+        StartPropositionImpl(&*result.ConfigToPropose,
+            DistconfStateTransition || TDistributedConfigKeeper::RequiresDistconfStateSupport(*result.ConfigToPropose),
+            &*result.PropositionBase, false);
     }
 
     void TInvokeRequestHandlerActor::CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config,
@@ -572,7 +583,8 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
+                                      SelfId(), mindPrev, AdvancesConflictingGeneration,
+                                      RecoveryProposition && !DistconfStateTransition);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -654,6 +666,20 @@ namespace NKikimr::NStorage {
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {
                 if (sendResult) {
+                    const bool requiresStateSupport = record.HasQueryConfig()
+                        && TDistributedConfigKeeper::RequiresDistconfStateSupport(record.GetQueryConfig().GetConfig());
+                    const auto sendResponse = [&](const TInvokeExternalOperation& request,
+                            std::unique_ptr<IEventHandle> response) {
+                        if (requiresStateSupport && request.SessionId
+                                && !request.Command.GetQueryConfig().GetSupportsDistconfStates()) {
+                            auto error = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                            error->Record.SetStatus(TResult::ERROR);
+                            error->Record.SetErrorReason("Peer does not support distconf states");
+                            SendInvokeResult(request.Sender, SelfId(), request.Cookie, request.SessionId, std::move(error));
+                        } else {
+                            SendInvokeResult(std::move(response), request.SessionId);
+                        }
+                    };
                     auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
                     record.Swap(&ev->Record);
                     auto response = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
@@ -661,12 +687,12 @@ namespace NKikimr::NStorage {
                         || !FreshConfigQueryGroup->RefillRequests.empty())) {
                         auto buffer = response->ReleaseChainBuffer();
                         for (const auto& request : FreshConfigQueryGroup->AdditionalRequests) {
-                            SendInvokeResult(std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
-                                request.Sender, SelfId(), buffer, request.Cookie), request.SessionId);
+                            sendResponse(request, std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
+                                request.Sender, SelfId(), buffer, request.Cookie));
                         }
                         for (const auto& [nodeId, request] : FreshConfigQueryGroup->RefillRequests) {
-                            SendInvokeResult(std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
-                                request.Sender, SelfId(), buffer, request.Cookie), request.SessionId);
+                            sendResponse(request, std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
+                                request.Sender, SelfId(), buffer, request.Cookie));
                         }
                         if (op.Command.GetQueryConfig().GetRefillNodeId()) {
                             return;
@@ -674,7 +700,7 @@ namespace NKikimr::NStorage {
                         response = std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
                             op.Sender, SelfId(), std::move(buffer), op.Cookie);
                     }
-                    SendInvokeResult(std::move(response), op.SessionId);
+                    sendResponse(op, std::move(response));
                 }
             },
             [&](TCollectConfigsAndPropose&) {
@@ -809,6 +835,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev) {
+        if (!ev->InterconnectSession && ev->Get()->Record.HasQueryConfig()) {
+            ev->Get()->Record.MutableQueryConfig()->SetSupportsDistconfStates(true);
+        }
         if (ev->Get()->Record.HasValidateTargetedProposition()) {
             const auto& request = ev->Get()->Record.GetValidateTargetedProposition();
             const ui32 nodeId = ev->Sender.NodeId();
@@ -848,7 +877,9 @@ namespace NKikimr::NStorage {
         if (ev->Get()->Record.HasQueryWorkingRoot()) {
             auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
             response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
-            if (Scepter && HasStaticGroupConfig() && QuorumValid && GlobalQuorum) {
+            const bool pendingStateChange = StorageConfig && RequiresDistconfStateSupport()
+                && !SameDistconfStates(*StorageConfig, MakeDistconfQuorumConfig(*StorageConfig, *Cfg));
+            if (Scepter && HasStaticGroupConfig() && QuorumValid && GlobalQuorum && !pendingStateChange) {
                 auto *scepter = response->Record.MutableScepter();
                 scepter->SetId(Scepter->Id);
                 scepter->SetNodeId(SelfId().NodeId());

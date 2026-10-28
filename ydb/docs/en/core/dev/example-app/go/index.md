@@ -4,6 +4,10 @@
 
 This page provides a detailed description of the code for a [test app](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic) that uses the {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk).
 
+## Parameterized queries {#param-queries}
+
+See [parameterized queries](../optimization/parameterized-queries.md).
+
 ## Downloading and starting {#download}
 
 The instructions below assume that [Git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install) are installed. Make sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).

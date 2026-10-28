@@ -43,6 +43,10 @@ More about initial deployment:
 The suffix `@<subsystem>` identifies the "user source" or "auth domain", within which the uniqueness of all `login` is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user names will be `user1@ldap` and `user2@ldap`.
 If a `login` without a suffix is specified, it implies users directly created in the {{ ydb-short-name }} cluster.
 
+### SID {#sid}
+
+See [{#T}](../concepts/glossary.md#access-sid).
+
 ## Group {#group}
 
 Any [user](../concepts/glossary.md#access-user) can be included in or excluded from a certain [access group](../concepts/glossary.md#access-group). Once a user is included in a group, they receive all the rights to [database objects](../concepts/glossary.md#access-object) that were provided to the access group.

@@ -38,7 +38,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% if oss == true and backend_name == "YDB" %}
 
-## Параметры запроса
+## Параметры запроса {#request-parameters}
 
 ### table_name
 

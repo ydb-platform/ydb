@@ -202,7 +202,7 @@
   * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
   * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
 * Реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.
-* Реализован [экспорт представлений](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+* Реализован [экспорт представлений](./reference/ydb-cli/export-import/file-structure.md) (`VIEW`) в S3 и из S3.
 
 #### Исправления ошибок
 
@@ -697,6 +697,8 @@
 
 
 ## Версия 23.3 {#23-3}
+
+### Версия 23.3.17 {#23-3-17}
 
 Дата выхода: 12 октября 2023.
 

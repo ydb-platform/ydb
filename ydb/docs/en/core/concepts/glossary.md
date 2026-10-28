@@ -223,6 +223,10 @@ A local index is an auxiliary structure stored together with table data (unlike 
 
 A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki/Bloom_filter) that allows you to quickly check whether an element belongs to a set. False positives are possible, but false negatives are not.
 
+#### Local min_max index {#local-min-max-index}
+
+A **local min_max index** is a local [skip index](#local-index) that stores minimum and maximum column values per granule. See [min_max skip index](../dev/min_max-skip-index.md).
+
 #### Local bloom index {#local-bloom-skip-index}
 
 A local Bloom index is a special case of a [local index](#local-index): a probabilistic filter on column values based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments where the searched value is guaranteed to be absent. For more information, see [Bloom indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
@@ -504,6 +508,14 @@ The optional suffix `@<auth-domain>` identifies the source of the access subject
 
 **compile cache** is a cache of compiled queries on each [node](#node) of the cluster. It is used to avoid recompilation: if the query text is already in the node's cache, no additional compilation is performed. For more details, see the [Query Compilation Cache](../dev/system-views.md#compile-cache-queries) section.
 
+#### Operator {#operator}
+
+An **operator** is an element of a [query execution plan](../dev/optimization/index.md) that describes an action on data.
+
+#### Task {#task}
+
+A **task** is a unit of distributed execution within a processing stage on a [node](#node).
+
 ## Advanced Terminology {#advanced-terminology}
 
 This section explains terms that are useful for [{{ ydb-short-name }} contributors](../contributor/index.md) and users who want to understand what happens inside the system more deeply.
@@ -521,6 +533,10 @@ This section explains terms that are useful for [{{ ydb-short-name }} contributo
 #### ActorId {#actorid}
 
 **ActorId** is a unique identifier of an actor or a [tablet](#tablet) in a [cluster](#cluster).
+
+#### Actor system pools {#actor-system-pools}
+
+**Actor system pools** are thread pools in the [actor system](#actor-system) that run [actors](#actor) on a [node](#node).
 
 #### Actor System Interconnect {#actor-system-interconnect}
 

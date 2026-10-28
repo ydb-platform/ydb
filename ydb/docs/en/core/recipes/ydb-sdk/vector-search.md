@@ -1,4 +1,4 @@
-# Vector search
+# Vector search {#vector-search}
 
 This section contains code recipes in different programming languages for [vector search](../../concepts/query_execution/vector_search.md) tasks using the {{ ydb-short-name }} SDK.
 

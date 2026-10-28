@@ -202,7 +202,7 @@ Release date: May 20, 2026.
   * In Kafka API [compacted](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
   * Topic APIs were extended with new `DescribeConsumer` and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
 * Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
-* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) to S3 and from S3.
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md) (`VIEW`) to S3 and from S3.
 
 #### Bug Fixes
 
@@ -695,6 +695,8 @@ Release date: May 14, 2024.
 * [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2126) causing memory leaks that appeared when copying topic data between clusters. These could cause `ydbd` server processes to terminate due to out-of-memory issues.
 
 ## Version 23.3 {#23-3}
+
+### Version 23.3.17 {#23-3-17}
 
 Release date: October 12, 2023.
 

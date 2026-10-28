@@ -159,6 +159,6 @@
 * [tpcds clean](../../reference/ydb-cli/workload-tpcds.md#cleanup)
 * [query clean](../../reference/ydb-cli/workload-query.md#cleanup)
 * [kv clean](../../reference/ydb-cli/workload-kv.md#clean)
-* [stock clean](../../reference/ydb-cli/commands/workload/stock.md#cleanup)
+* [stock clean](../../reference/ydb-cli/commands/workload/stock.md#clean)
 * [topic clean](../../reference/ydb-cli/workload-topic.md#clean)
 * [transfer clean](../../reference/ydb-cli/workload-transfer.md#clean)

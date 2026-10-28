@@ -83,6 +83,10 @@ To check if the actions of a maintenance task can be performed, the CMS sequenti
 
 The action can be performed if the checks are successful, and temporary locks are acquired on the checked nodes, hosts, or disks. The CMS then considers the next group of actions. Temporary locks help to understand whether the actions requested in different groups conflict with each other. Once the check is complete, the temporary locks are released.
 
+## Suspending maintenance {#disable-maintenance}
+
+See the `disable_maintenance` flag in [CMS configuration](../../reference/configuration/cms_config.md).
+
 ## Bridge mode {#bridge}
 
 If the cluster runs in [bridge mode](../../concepts/glossary.md#bridge), unavailable-node limits and availability checks are applied independently for each [pile](../../concepts/glossary.md#pile).

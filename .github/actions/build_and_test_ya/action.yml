@@ -67,6 +67,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  custom_ya_bin_s3_uri:
+    type: string
+    required: false
+    default: "s3://ydb-gh-logs/experimental/ya-cpu-quota/ya-bin-account-cgroup-20261026.tar.gz"
+    description: "s3:// URI of a replacement ya-bin tarball"
 defaults:
   run:
     shell: bash
@@ -131,7 +136,8 @@ runs:
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
-        increment: ${{ inputs.increment }}
+        # Temporary comparison PR: rerun all small/medium tests selected by PR-check.
+        increment: false
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
@@ -147,3 +153,4 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps != 'false' }}
         pull_number: ${{ inputs.pull_number }}
+        custom_ya_bin_s3_uri: ${{ inputs.custom_ya_bin_s3_uri }}

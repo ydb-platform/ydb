@@ -12,6 +12,7 @@ private:
     bool Initialized = false;
 protected:
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) = 0;
+    virtual TConclusionStatus DoRestore(const TUpdateRestoreContext& context) = 0;
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) = 0;
     virtual TConclusionStatus DoFinish(const TUpdateFinishContext& context) = 0;
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& seqNo) const = 0;
@@ -47,6 +48,16 @@ public:
         if (result.IsSuccess()) {
             Initialized = true;
         }
+        return result;
+    }
+
+    TConclusionStatus Restore(const TUpdateRestoreContext& context) {
+        AFL_VERIFY(!Initialized);
+        auto result = DoRestore(context);
+        if (result.IsSuccess()) {
+            Initialized = true;
+        }
+
         return result;
     }
 };

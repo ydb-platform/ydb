@@ -17,6 +17,9 @@ private:
     std::set<ui64> ModifiedShardIds;
     std::shared_ptr<NSharding::IShardingBase> Sharding;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoRestoreImpl(
+        const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) override;
+    void InitializeShardIds();
     void FillToShardTx(NKikimrTxColumnShard::TCreateTable& shardAlter) const;
 
     virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& context) override;

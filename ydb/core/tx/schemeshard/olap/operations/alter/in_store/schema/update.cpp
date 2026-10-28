@@ -3,6 +3,25 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
+void TInStoreSchemaUpdate::InitializeSchemaPreset(const TInStoreTable& table) {
+    const auto& tableInfo = table.GetTableInfoVerified();
+    const auto& storeInfo = table.GetStoreInfo();
+    AFL_VERIFY(!!storeInfo)("problem", "Unexpected schema preset without olap store");
+    AFL_VERIFY(tableInfo.Description.HasSchemaPresetId());
+    const ui32 presetId = tableInfo.Description.GetSchemaPresetId();
+    AFL_VERIFY(storeInfo->SchemaPresets.contains(presetId))("problem", "Failed to find schema preset in an olap store")("id", presetId);
+    const auto& preset = storeInfo->SchemaPresets.at(presetId);
+    SchemaPreset = storeInfo->GetDescription().GetSchemaPresets(preset.GetProtoIndex());
+}
+
+TConclusionStatus TInStoreSchemaUpdate::DoRestoreImpl(
+    const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
+    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), alterData, eContext);
+    InitializeSchemaPreset(*TargetInStoreTable);
+    return TConclusionStatus::Success();
+}
+
 NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
@@ -19,17 +38,7 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
     const auto& originalTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
     auto description = originalTable.GetTableInfoVerified().Description;
 
-    {
-        const auto& originalTableInfo = originalTable.GetTableInfoVerified();
-        const auto& storeInfo = originalTable.GetStoreInfo();
-        AFL_VERIFY(!!storeInfo)("problem", "Unexpected schema preset without olap store");
-        AFL_VERIFY(originalTableInfo.Description.HasSchemaPresetId());
-        const ui32 presetId = originalTableInfo.Description.GetSchemaPresetId();
-        AFL_VERIFY(storeInfo->SchemaPresets.contains(presetId))("problem", "Failed to find schema preset in an olap store")("id", presetId);
-        auto& preset = storeInfo->SchemaPresets.at(presetId);
-        size_t presetIndex = preset.GetProtoIndex();
-        SchemaPreset = storeInfo->GetDescription().GetSchemaPresets(presetIndex);
-    }
+    InitializeSchemaPreset(originalTable);
 
     if (AlterTTL) {
         TOlapSchema originalSchema;

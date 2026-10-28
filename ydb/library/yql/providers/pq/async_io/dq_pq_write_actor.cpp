@@ -71,7 +71,6 @@ using namespace NLog;
 using namespace NKikimr::NMiniKQL;
 
 constexpr ui32 StateVersion = 1;
-constexpr ui32 MaxMessageSize = 1_MB;
 
 namespace {
 
@@ -99,15 +98,9 @@ struct TEvPrivate {
     };
 };
 
-<<<<<<< HEAD
 TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
     return TStringBuilder() << "[Checkpoint " << checkpoint.GetGeneration() << "." << checkpoint.GetId() << "] ";
 }
-=======
-class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExceptionHandler, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
-    static constexpr ui32 STATE_VERSION = 1;
-    static constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
->>>>>>> 894eb9eaf91 (YQ-5715 Don't check write message limit (#53441))
 
 } // anonymous namespace
 
@@ -240,15 +233,7 @@ public:
             SINK_LOG_T("Received data for sending: " << data);
 
             const auto messageSize = GetItemSize(data);
-<<<<<<< HEAD
-            if (messageSize > MaxMessageSize) {
-                Fail(TStringBuilder() << "Max message size for YDS is " << MaxMessageSize
-                    << " bytes but received message with size of " << messageSize << " bytes");
-                return false;
-            }
 
-=======
->>>>>>> 894eb9eaf91 (YQ-5715 Don't check write message limit (#53441))
             FreeSpace -= messageSize;
             Metrics.InFlyData->Inc();
             Buffer.push(std::move(data));
@@ -369,14 +354,8 @@ private:
 
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
-<<<<<<< HEAD
             .TraceId(LogPrefix)
-            .MaxMemoryUsage(FreeSpace)
-=======
-            .TraceId(LogPrefix())
             .MaxMemoryUsage(FreeSpace > 0 ? FreeSpace : DqPqDefaultFreeSpace)
-            .DeduplicationEnabled(EnableDeduplication)
->>>>>>> 894eb9eaf91 (YQ-5715 Don't check write message limit (#53441))
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP)

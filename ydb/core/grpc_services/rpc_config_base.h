@@ -466,6 +466,16 @@ protected:
     const TDerived *Self() const { return static_cast<const TDerived*>(this); }
     TDerived *Self() { return static_cast<TDerived*>(this); }
 
+    void PassAway() override {
+        // a pipe client doesn't go away with its owner, so the pipes to BSC and Console are closed here
+        for (TActorId *pipe : {&BSCPipeClient, &ConsolePipe}) {
+            if (*pipe) {
+                NTabletPipe::CloseClient(this->SelfId(), std::exchange(*pipe, TActorId()));
+            }
+        }
+        TBase::PassAway();
+    }
+
 private:
     enum class EState {
         UNKNOWN,

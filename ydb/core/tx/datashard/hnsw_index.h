@@ -25,6 +25,7 @@ namespace NKikimr::NDataShard {
         const Ydb::Table::VectorIndexSettings& requested);
 
     // Result of an HNSW search: pairs of (serialized primary key, distance).
+    // Euclidean scores are squared L2, for both graph and journal candidates.
     struct THnswSearchResult {
         std::vector<std::pair<TString, float>> Results;
         bool Covered = true;
@@ -204,8 +205,9 @@ namespace NKikimr::NDataShard {
         // Estimates the memory required to hold an HNSW index over `rowCount`
         // vectors of `dimension` float elements, without building anything.
         // Used to decide up front whether a build should even be attempted.
+        // losslessL2 reserves the optional byte copy for dimensions <=256.
         static size_t EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity = 16,
-                                          size_t serializedKeyBytes = 0);
+                                          size_t serializedKeyBytes = 0, bool losslessL2 = false);
 
     private:
         class TGraph;

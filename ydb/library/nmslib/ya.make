@@ -65,6 +65,10 @@ SRCS(
     src/method/vptree.cc
 )
 
+PEERDIR(
+    library/cpp/dot_product
+)
+
 END()
 
 RECURSE(

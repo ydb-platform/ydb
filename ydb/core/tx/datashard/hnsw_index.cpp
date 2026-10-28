@@ -252,6 +252,7 @@ namespace NKikimr::NDataShard {
         bool Build(const VectorIndexSettings& settings) {
             Settings = settings;
             Settings.set_vector_dimension(Dimension);
+            LosslessL2Budgeted = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN && Dimension <= 256;
             Connectivity = settings.has_m() ? settings.m() : DefaultHnswM;
             if (Objects.empty()) {
                 return true; // Empty rebuilt generations still have a searchable journal.
@@ -267,6 +268,9 @@ namespace NKikimr::NDataShard {
                 "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
             });
             Index->CreateIndex(buildParams);
+            if (LosslessL2Budgeted) {
+                Index->EnableLosslessL2Bytes();
+            }
             for (size_t i = 0; i < Objects.size(); ++i) {
                 if (Objects[i]->id() != static_cast<similarity::IdType>(i)) {
                     Index.reset();
@@ -328,6 +332,7 @@ namespace NKikimr::NDataShard {
         std::unique_ptr<similarity::Space<float>> Space;
         size_t Dimension = 0;
         ui32 Connectivity = DefaultHnswM;
+        bool LosslessL2Budgeted = false;
         size_t KeyBytes = 0;
         std::vector<const similarity::Object*> Objects;
         std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
@@ -403,7 +408,13 @@ namespace NKikimr::NDataShard {
                     continue;
                 }
                 similarity::Object deltaObj(-1, -1, Graph->Dimension * sizeof(float), deltaView.Data);
-                merged[key] = query.DistanceObjLeft(&deltaObj);
+                float distance = query.DistanceObjLeft(&deltaObj);
+                // Optimized HNSW L2 kernels return squared distances. Journal
+                // candidates must use the same scale before merging ranks.
+                if (Graph->Settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN) {
+                    distance *= distance;
+                }
+                merged[key] = distance;
             }
 
             result.Results.assign(merged.begin(), merged.end());
@@ -619,11 +630,19 @@ namespace NKikimr::NDataShard {
                 graph->AddVector(std::move(key), data);
             }
             if (rows) {
+                // Keep snapshots from peers with float-only budgets usable.
+                graph->LosslessL2Budgeted = settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN
+                    && dimension <= 256
+                    && EstimateMemoryBytes(rows, dimension, connectivity, graph->KeyBytes, true) <= maxMemoryBytes;
+                const ui64 losslessBytes = graph->LosslessL2Budgeted ? rows * dimension : 0;
                 const ui64 inputs = rows * (ui64(dimension) * sizeof(float) + 128) + graph->KeyBytes;
-                if (inputs >= maxMemoryBytes)
+                if (inputs >= maxMemoryBytes || losslessBytes >= maxMemoryBytes - inputs)
                     ythrow yexception() << "HNSW snapshot exceeds memory budget";
                 graph->Index = std::make_unique<similarity::Hnsw<float>>(false, *graph->Space, graph->Objects);
-                graph->Index->LoadTopology(in, connectivity, maxMemoryBytes - inputs);
+                graph->Index->LoadTopology(in, connectivity, maxMemoryBytes - inputs - losslessBytes);
+                if (graph->LosslessL2Budgeted) {
+                    graph->Index->EnableLosslessL2Bytes();
+                }
             }
             if (ReadSnapshotWord<ui64>(input) != buffer.Hash)
                 ythrow yexception() << "HNSW snapshot checksum mismatch";
@@ -637,7 +656,7 @@ namespace NKikimr::NDataShard {
     }
 
     size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 connectivity,
-                                           size_t serializedKeyBytes) {
+                                           size_t serializedKeyBytes, bool losslessL2) {
         // NMSLIB reserves up to 2*M friend ids on level zero. Higher levels and
         // container allocations are covered by the deliberately conservative
         // fixed overhead. Saturate on overflow so an attacker cannot wrap the
@@ -646,9 +665,10 @@ namespace NKikimr::NDataShard {
         // NMSLIB retains the source Object and copies its raw vector into the
         // contiguous optimized-search index. We no longer retain a third copy in
         // YDB wire format; GetVector() reconstructs its trailing format byte.
-        const size_t bytesPerRow = SaturatingAdd(
+        const size_t losslessBytes = losslessL2 && dimension <= 256 ? dimension : 0;
+        const size_t bytesPerRow = SaturatingAdd(SaturatingAdd(
             SaturatingAdd(SaturatingMultiply(dimension, 2 * sizeof(float)), EstimatedBytesPerNodeOverhead),
-            friendBytes);
+            friendBytes), losslessBytes);
         return SaturatingAdd(SaturatingMultiply(rowCount, bytesPerRow), serializedKeyBytes);
     }
 
@@ -703,7 +723,8 @@ namespace NKikimr::NDataShard {
                 keyBytes += key.size();
             }
             const size_t estimated = EstimateMemoryBytes(
-                keysAndVectors.size(), dimension, connectivity, keyBytes);
+                keysAndVectors.size(), dimension, connectivity, keyBytes,
+                settings.metric() == VectorIndexSettings::DISTANCE_EUCLIDEAN);
             if (estimated > maxMemoryBytes) {
                 error = TStringBuilder() << "Estimated HNSW memory usage " << estimated
                                          << " exceeds budget " << maxMemoryBytes;
@@ -805,7 +826,8 @@ namespace NKikimr::NDataShard {
 
     size_t THnswIndex::EstimatedMemoryBytes() const {
         return EstimateMemoryBytes(
-            Impl->Size(), Impl->Dim(), Impl->GetConnectivity(), Impl->GetKeyBytes());
+            Impl->Size(), Impl->Dim(), Impl->GetConnectivity(), Impl->GetKeyBytes(),
+            Impl->Graph->LosslessL2Budgeted);
     }
 
 } // namespace NKikimr::NDataShard

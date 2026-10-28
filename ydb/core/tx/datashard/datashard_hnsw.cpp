@@ -93,7 +93,8 @@ namespace NKikimr::NDataShard {
                 }
                 const size_t count = Rows.size() + 1;
                 const auto graphBytes = THnswIndex::EstimateMemoryBytes(count,
-                                                                        Settings.vector_dimension(), Settings.has_m() ? Settings.m() : 16, 2 * KeyBytes);
+                                                                        Settings.vector_dimension(), Settings.has_m() ? Settings.m() : 16, 2 * KeyBytes,
+                                                                        Settings.metric() == Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
                 if (graphBytes == Max<size_t>() || count > (Max<size_t>() - graphBytes) / cells[0].Size()) {
                     Failed = true;
                     return EScan::Final;

@@ -24,6 +24,9 @@
 */
 
 #include <atomic>
+#include <library/cpp/dot_product/dot_product.h>
+#include <util/system/cpu_id.h>
+#include <type_traits>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -69,10 +72,82 @@
 
 namespace similarity {
 
-    float
-    NegativeDotProduct(const float *pVect1, const float *pVect2, size_t &qty, float * __restrict TmpRes) {
-        return -ScalarProduct(pVect1, pVect2, qty, TmpRes);
+#if defined(__x86_64__) && (defined(__clang__) || defined(__GNUC__))
+    __attribute__((target("avx2")))
+    float L2SqrBytesAvx2(const float* lhsRaw, const float* rhsRaw, size_t& qty, float*) {
+        const auto* lhs = reinterpret_cast<const uint8_t*>(lhsRaw);
+        const auto* rhs = reinterpret_cast<const uint8_t*>(rhsRaw);
+        __m256i sums[4] = {_mm256_setzero_si256(), _mm256_setzero_si256(),
+            _mm256_setzero_si256(), _mm256_setzero_si256()};
+        size_t offset = 0;
+        for (; qty - offset >= 64; offset += 64) {
+            for (size_t lane = 0; lane < 4; ++lane) {
+                const auto a = _mm256_cvtepu8_epi16(_mm_loadu_si128(
+                    reinterpret_cast<const __m128i*>(lhs + offset + lane * 16)));
+                const auto b = _mm256_cvtepu8_epi16(_mm_loadu_si128(
+                    reinterpret_cast<const __m128i*>(rhs + offset + lane * 16)));
+                const auto delta = _mm256_sub_epi16(a, b);
+                sums[lane] = _mm256_add_epi32(sums[lane], _mm256_madd_epi16(delta, delta));
+            }
+        }
+        for (; qty - offset >= 16; offset += 16) {
+            const auto a = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(lhs + offset)));
+            const auto b = _mm256_cvtepu8_epi16(_mm_loadu_si128(reinterpret_cast<const __m128i*>(rhs + offset)));
+            const auto delta = _mm256_sub_epi16(a, b);
+            sums[0] = _mm256_add_epi32(sums[0], _mm256_madd_epi16(delta, delta));
+        }
+        const auto sum = _mm256_add_epi32(_mm256_add_epi32(sums[0], sums[1]), _mm256_add_epi32(sums[2], sums[3]));
+        alignas(32) uint32_t lanes[8];
+        _mm256_store_si256(reinterpret_cast<__m256i*>(lanes), sum);
+        uint32_t result = 0;
+        for (const auto lane : lanes) {
+            result += lane;
+        }
+        for (; offset < qty; ++offset) {
+            const int delta = int(lhs[offset]) - int(rhs[offset]);
+            result += delta * delta;
+        }
+        // At dimension <=256 even the largest sum is below 2^24.
+        return static_cast<float>(result);
     }
+
+    // Keep the rest of the library portable. Four independent accumulators
+    // avoid serializing every cache line on one FMA dependency chain.
+    __attribute__((target("avx2,fma")))
+    float L2SqrAvx2(const float* lhs, const float* rhs, size_t& qty, float*) {
+        __m256 sums[4] = {_mm256_setzero_ps(), _mm256_setzero_ps(),
+            _mm256_setzero_ps(), _mm256_setzero_ps()};
+        size_t offset = 0;
+        for (; qty - offset >= 32; offset += 32) {
+            for (size_t lane = 0; lane < 4; ++lane) {
+                const auto delta = _mm256_sub_ps(_mm256_loadu_ps(lhs + offset + lane * 8),
+                    _mm256_loadu_ps(rhs + offset + lane * 8));
+                sums[lane] = _mm256_fmadd_ps(delta, delta, sums[lane]);
+            }
+        }
+        for (; qty - offset >= 8; offset += 8) {
+            const auto delta = _mm256_sub_ps(_mm256_loadu_ps(lhs + offset), _mm256_loadu_ps(rhs + offset));
+            sums[0] = _mm256_fmadd_ps(delta, delta, sums[0]);
+        }
+        const auto sum = _mm256_add_ps(_mm256_add_ps(sums[0], sums[1]), _mm256_add_ps(sums[2], sums[3]));
+        alignas(32) float lanes[8];
+        _mm256_store_ps(lanes, sum);
+        float result = lanes[0] + lanes[1] + lanes[2] + lanes[3]
+            + lanes[4] + lanes[5] + lanes[6] + lanes[7];
+        for (; offset < qty; ++offset) {
+            const float delta = lhs[offset] - rhs[offset];
+            result += delta * delta;
+        }
+        return result;
+    }
+#endif
+
+    float
+    NegativeDotProduct(const float *pVect1, const float *pVect2, size_t &qty, float *) {
+        // Select AVX2/FMA at runtime when available, keeping the portable fallback.
+        return -::DotProduct(pVect1, pVect2, qty);
+    }
+
 
     /*
      * Important note: This function is applicable only when both vectors are normalized!
@@ -91,6 +166,12 @@ namespace similarity {
     }
 
     EfficientDistFunc getDistFunc(DistFuncType funcType) {
+#if defined(__x86_64__) && (defined(__clang__) || defined(__GNUC__))
+        if ((funcType == kL2Sqr16Ext || funcType == kL2SqrExt)
+                && NX86::HaveAVX2() && NX86::HaveFMA()) {
+            return L2SqrAvx2;
+        }
+#endif
         switch (funcType) {
             case kL2Sqr16Ext : return L2Sqr16Ext;
             case kL2SqrExt   : return L2SqrExt;
@@ -122,6 +203,46 @@ namespace similarity {
         , linkLists_(nullptr)
         , fstdistfunc_(nullptr)
     {
+    }
+
+    template <typename dist_t>
+    bool Hnsw<dist_t>::EnableLosslessL2Bytes() {
+        if constexpr (!std::is_same_v<dist_t, float>) {
+            return false;
+        }
+        if (!byteL2Data_.empty()) {
+            return true;
+        }
+        EfficientDistFunc distance = nullptr;
+#if defined(__x86_64__) && (defined(__clang__) || defined(__GNUC__))
+        if (NX86::HaveAVX2()) {
+            distance = L2SqrBytesAvx2;
+        }
+#endif
+        if (!distance || (dist_func_type_ != kL2SqrExt && dist_func_type_ != kL2Sqr16Ext)
+                || vectorlength_ <= 0 || vectorlength_ > 256 || data_rearranged_.empty()) {
+            return false;
+        }
+        const size_t dimension = vectorlength_;
+        if (data_rearranged_.size() > std::numeric_limits<size_t>::max() / dimension) {
+            return false;
+        }
+        std::vector<uint8_t> bytes;
+        const size_t byteCount = data_rearranged_.size() * dimension;
+        bytes.reserve(byteCount);
+        bytes.resize(byteCount);
+        for (size_t i = 0; i < data_rearranged_.size(); ++i) {
+            const auto* object = data_rearranged_[i];
+            if (object->datalength() != dimension * sizeof(float)
+                    || !EncodeLosslessL2Bytes(reinterpret_cast<const float*>(object->data()),
+                        bytes.data() + i * dimension, dimension)) {
+                return false;
+            }
+        }
+        byteL2Dimension_ = dimension;
+        byteL2Data_.swap(bytes);
+        byteL2DistFunc_ = distance;
+        return true;
     }
 
     void
@@ -186,6 +307,7 @@ namespace similarity {
     void
     Hnsw<dist_t>::CreateIndex(const AnyParams &IndexParams)
     {
+        ResetLosslessL2Bytes();
         AnyParamManager pmgr(IndexParams);
 
         pmgr.GetParamOptional("M", M_, 16);
@@ -818,6 +940,7 @@ namespace similarity {
 
     template <typename dist_t>
     void Hnsw<dist_t>::LoadTopology(std::istream& input, uint32_t connectivity, uint64_t maxBytes) {
+        ResetLosslessL2Bytes();
         if (!ElList_.empty() || data_level0_memory_)
             throw std::runtime_error("HNSW topology must be loaded into a new index");
         totalElementsStored_ = ReadTopologyWord(input);
@@ -1128,6 +1251,7 @@ namespace similarity {
     template <typename dist_t>
     void
     Hnsw<dist_t>::LoadIndex(const string &location) {
+        ResetLosslessL2Bytes();
         LOG(LIB_INFO) << "Loading index from " << location;
         std::ifstream input(location, 
                             std::ios::binary); /* text files can be opened in binary mode as well */

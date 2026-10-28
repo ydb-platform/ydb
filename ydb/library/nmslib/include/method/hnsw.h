@@ -469,6 +469,11 @@ namespace similarity {
         // Query-local search breadth for concurrent readers of the same graph.
         void SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const;
 
+        // Call before publishing the immutable index. The caller must budget
+        // up to data_.size() * dimension additional bytes. Other graphs and
+        // queries retain float distances; this representation is lossless.
+        bool EnableLosslessL2Bytes();
+
         void SetQueryTimeParams(const AnyParams &) override;
 
         // Portable links over caller-owned data, restored without construction.
@@ -564,6 +569,29 @@ namespace similarity {
         char **linkLists_;
         size_t memoryPerObject_;
         EfficientDistFunc fstdistfunc_;
+        EfficientDistFunc byteL2DistFunc_ = nullptr;
+        std::vector<uint8_t> byteL2Data_;
+        size_t byteL2Dimension_ = 0;
+
+        void ResetLosslessL2Bytes() {
+            byteL2Data_ = std::vector<uint8_t>{};
+            byteL2DistFunc_ = nullptr;
+            byteL2Dimension_ = 0;
+        }
+
+        static bool EncodeLosslessL2Bytes(const float* values, uint8_t* bytes, size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+                const float value = values[i];
+                // This also rejects NaNs and infinities before the cast.
+                if (!(value >= 0 && value <= 255) || value != static_cast<uint8_t>(value)) {
+                    return false;
+                }
+                bytes[i] = static_cast<uint8_t>(value);
+            }
+            return true;
+        }
+
+
 
         enum AlgoType { kOld, kV1Merge, kHybrid };
 

@@ -55,6 +55,7 @@ SRCS(
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
     ut_shared_schema_cache.cpp
+    ut_bloom_ngram_size.cpp
     helper.cpp
 )
 

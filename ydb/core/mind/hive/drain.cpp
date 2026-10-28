@@ -46,6 +46,11 @@ protected:
                 node->DrainActor = nullptr;
             }
         }
+        if (const auto* pileId = std::get_if<TBridgePileId>(&Target)) {
+            if (auto it = Hive->BridgePiles.find(*pileId); it != Hive->BridgePiles.end() && it->second.DrainActor == this) {
+                it->second.DrainActor = nullptr;
+            }
+        }
         return IActor::PassAway();
     }
 

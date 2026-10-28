@@ -216,7 +216,7 @@ FROM my_table;
 
 {% note alert %}
 
-When the aggregate function `SOME` is called multiple times, it's **not** guaranteed that all the resulting values are taken from the same row of the source table. To get this guarantee, pack the values into any container and pass it to `SOME`. For example, in the case of a structure, you can apply [AsStruct](basic.md#asstruct)
+When the aggregate function `SOME` is called multiple times, it's **not** guaranteed that all the resulting values are taken from the same row of the source table. To get this guarantee, pack the values into any container and pass it to `SOME`. For example, in the case of a structure, you can apply [AsStruct](basic.md#as-container)
 
 {% endnote %}
 
@@ -279,7 +279,7 @@ If you know already that you have few distinct values, use the `AGGREGATE_LIST_D
 
 The order of elements in the result list depends on the implementation and can't be set externally. To return an ordered list, sort the result, for example, with [ListSort](list.md#listsort).
 
-To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE_LIST` function several times, but add all the needed values to a container, for example, via [AsList](basic.md#aslist) or [AsTuple](basic.md#astuple), then pass this container to a single `AGGREGATE_LIST` call.
+To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE_LIST` function several times, but add all the needed values to a container, for example, via [AsList](basic.md#as-container) or [AsTuple](basic.md#as-container), then pass this container to a single `AGGREGATE_LIST` call.
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/select/group-by.md).
 

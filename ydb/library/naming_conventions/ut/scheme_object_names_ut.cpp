@@ -2,11 +2,14 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/output.h>
+
 namespace NKikimr::NNaming {
 
 Y_UNIT_TEST_SUITE(SchemeObjectNames) {
 
     Y_UNIT_TEST(Names) {
+        Cerr << "DIR_OUTPUTS_PROBE: scheme names successful test" << Endl;
         const struct {
             TStringBuf Name;
             bool System;

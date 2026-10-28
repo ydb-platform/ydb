@@ -223,7 +223,14 @@ namespace NKikimr::NBsController {
                 if (PendingReplaceRequest) {
                     YDB_LOG_DEBUG("ReverseCommit status received when BSC has PendingReplaceRequest",
                         {"marker", "BSC47"});
-                    ExpectedYamlConfigVersion.emplace(record.GetConsoleConfigVersion());
+                    if (Self.YamlConfig && record.GetConsoleConfigVersion() == GetVersion(*Self.YamlConfig) + 1
+                            && record.GetYAML() == std::get<2>(*Self.YamlConfig)) {
+                        // Console still has the YAML retained by BSC; an unchanged replacement may only switch the mode.
+                        ExpectedYamlConfigVersion.reset();
+                    } else {
+                        // Configuration v1 can replace or drop and recreate the Console YAML independently of BSC.
+                        ExpectedYamlConfigVersion.emplace(record.GetConsoleConfigVersion());
+                    }
                     Handle(PendingReplaceRequest);
                     PendingReplaceRequest.Reset();
                 } else if (!Self.YamlConfig && !Self.StorageYamlConfig) {
@@ -474,7 +481,9 @@ namespace NKikimr::NBsController {
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
 
-            if (Self.YamlConfig && PendingYamlConfig == std::get<0>(*Self.YamlConfig)) {
+            // Keep unchanged YAML pending when configuration v1 changed Console independently of BSC.
+            if (Self.YamlConfig && PendingYamlConfig == std::get<0>(*Self.YamlConfig)
+                    && !ExpectedYamlConfigVersion) {
                 PendingYamlConfig.reset(); // no cluster yaml config changed
             }
         } else {
@@ -486,6 +495,17 @@ namespace NKikimr::NBsController {
         }
 
         if (!PendingYamlConfig && !PendingStorageYamlConfig) {
+            if (SwitchEnableConfigV2 && *SwitchEnableConfigV2 != Self.EnableConfigV2 && !IsDryRun) {
+                // the YAML stays as it is, but the configuration mode is switched; commit just the mode
+                CommitInProgress = true;
+                Self.Execute(Self.CreateTxUpdateEnableConfigV2(*SwitchEnableConfigV2, [this, clientId = ClientId] {
+                    CommitInProgress = false;
+                    if (ClientId == clientId) {
+                        IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
+                    }
+                }));
+                return;
+            }
             // nothing changes -- finish request now
             return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }

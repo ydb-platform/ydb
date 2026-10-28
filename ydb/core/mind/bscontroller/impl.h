@@ -2191,7 +2191,7 @@ private:
     ITransaction* CreateTxInitScheme();
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
-    ITransaction* CreateTxUpdateEnableConfigV2(bool value);
+    ITransaction* CreateTxUpdateEnableConfigV2(bool value, std::function<void()> onComplete = {});
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
     ITransaction* CreateTxCleanupStaleStorageEntries();
     // validate addition of the pile against the storage config being proposed, then send the response

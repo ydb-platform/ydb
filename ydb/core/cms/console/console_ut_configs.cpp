@@ -5875,4 +5875,108 @@ selector_config:
     }
 }
 
+Y_UNIT_TEST_SUITE(TConsoleControllerSessionTests) {
+    // The controller session A commits YAML A, and the write of it is held. A new session B of the controller replaces
+    // A and commits YAML B. The write of A comes then; it is a commit of the replaced session and must not overwrite B.
+    Y_UNIT_TEST(CommitOfReplacedSessionDoesNotOverwrite) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        const NTabletPipe::TClientConfig pipeConfig;
+
+        // a session of the controller: the proposal over its pipe, then the commits go over it
+        auto openSession = [&](TActorId edge) {
+            const TActorId pipe = runtime.ConnectToPipe(MakeConsoleID(), edge, 0, pipeConfig);
+            auto *propose = new TEvBlobStorage::TEvControllerProposeConfigRequest;
+            propose->Record.SetDistconf(true);
+            runtime.SendToPipe(pipe, edge, propose);
+            runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerProposeConfigResponse>(edge);
+            return pipe;
+        };
+
+        std::unique_ptr<IEventHandle> heldWrite;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvConsole::EvSetYamlConfigRequest && !heldWrite) {
+                if (ev->Get<TEvConsole::TEvSetYamlConfigRequest>()->Record.GetRequest().config() == YAML_CONFIG_1) {
+                    heldWrite.reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const TActorId edgeA = runtime.AllocateEdgeActor(0);
+        const TActorId pipeA = openSession(edgeA);
+        runtime.SendToPipe(pipeA, edgeA, new TEvBlobStorage::TEvControllerConsoleCommitRequest(YAML_CONFIG_1));
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return heldWrite != nullptr; };
+        runtime.DispatchEvents(options);
+
+        const TActorId edgeB = runtime.AllocateEdgeActor(0);
+        const TActorId pipeB = openSession(edgeB);
+        runtime.SendToPipe(pipeB, edgeB, new TEvBlobStorage::TEvControllerConsoleCommitRequest(YAML_CONFIG_2));
+        auto committedB = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConsoleCommitResponse>(edgeB);
+        UNIT_ASSERT_C(committedB->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed,
+            committedB->Get()->Record.ShortDebugString());
+
+        runtime.Send(heldWrite.release());
+        runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        runtime.SimulateSleep(TDuration::Seconds(1)); // the write of A is done or refused
+
+        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        TAutoPtr<IEventHandle> handle;
+        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config_size(), 1);
+        const TString stored = configs->Record.GetResponse().config(0);
+        UNIT_ASSERT_C(stored.Contains("cluster2"), stored);
+    }
+
+    // BSC commits YAML A, and the write of it is held; distconf, the other controller, starts its session then. The
+    // session of BSC goes on, so the write of A must apply.
+    Y_UNIT_TEST(CommitSurvivesSessionOfOtherController) {
+        TTenantTestRuntime runtime(MultipleNodesConsoleTestConfig());
+        const NTabletPipe::TClientConfig pipeConfig;
+
+        auto openSession = [&](TActorId edge, bool distconf) {
+            const TActorId pipe = runtime.ConnectToPipe(MakeConsoleID(), edge, 0, pipeConfig);
+            auto *propose = new TEvBlobStorage::TEvControllerProposeConfigRequest;
+            propose->Record.SetDistconf(distconf);
+            runtime.SendToPipe(pipe, edge, propose);
+            runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerProposeConfigResponse>(edge);
+            return pipe;
+        };
+
+        std::unique_ptr<IEventHandle> heldWrite;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvConsole::EvSetYamlConfigRequest && !heldWrite) {
+                if (ev->Get<TEvConsole::TEvSetYamlConfigRequest>()->Record.GetRequest().config() == YAML_CONFIG_1) {
+                    heldWrite.reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const TActorId edgeBsc = runtime.AllocateEdgeActor(0);
+        const TActorId pipeBsc = openSession(edgeBsc, false);
+        runtime.SendToPipe(pipeBsc, edgeBsc, new TEvBlobStorage::TEvControllerConsoleCommitRequest(YAML_CONFIG_1));
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return heldWrite != nullptr; };
+        runtime.DispatchEvents(options);
+
+        openSession(runtime.AllocateEdgeActor(0), true);
+
+        runtime.Send(heldWrite.release());
+        runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        auto committed = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConsoleCommitResponse>(edgeBsc);
+        UNIT_ASSERT_C(committed->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed,
+            committed->Get()->Record.ShortDebugString());
+
+        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        TAutoPtr<IEventHandle> handle;
+        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config_size(), 1);
+        const TString stored = configs->Record.GetResponse().config(0);
+        UNIT_ASSERT_C(stored.Contains("cluster1"), stored);
+    }
+}
+
 } // namespace NKikimr

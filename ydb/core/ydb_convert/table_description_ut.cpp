@@ -12,6 +12,8 @@
 
 #include <util/string/strip.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
@@ -225,7 +227,7 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
                     UNIT_ASSERT_VALUES_EQUAL(restored->size(), 2);
                     const auto& compression = restored->Get(0).compression();
                     UNIT_ASSERT(compression.has_algorithm());
-                    UNIT_ASSERT_VALUES_EQUAL(compression.algorithm(), algorithm);
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compression.algorithm()), static_cast<int>(algorithm));
                     UNIT_ASSERT_VALUES_EQUAL(compression.has_compression_level(), level.has_value());
                     if (level) {
                         UNIT_ASSERT_VALUES_EQUAL(compression.compression_level(), *level);

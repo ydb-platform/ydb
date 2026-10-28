@@ -1206,7 +1206,7 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
                     newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
                     break;
                 default:
-                    ythrow yexception() << "Unsupported column compression codec: " << compression.GetCodec();
+                    ythrow yexception() << "Unsupported column compression codec: " << static_cast<int>(compression.GetCodec());
             }
             if (compression.HasLevel()) {
                 newCompression->set_compression_level(compression.GetLevel());

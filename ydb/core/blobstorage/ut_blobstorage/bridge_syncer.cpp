@@ -287,3 +287,66 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         CheckPileData(env, checker, 1, 9);
     }
 }
+
+Y_UNIT_TEST_SUITE(BridgeSyncerBlocks) {
+    // The syncer copies the block of a tablet to the part of the group in the rejoining pile. One VDisk there says the
+    // block is already in place, the others fail; the VDisks holding the block don't form a quorum, so the BLOCKS stage
+    // must not be reported as done.
+    Y_UNIT_TEST(AlreadyWithoutQuorumIsNotSynced) {
+        using namespace NBridgeTest;
+
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        const ui64 tabletId = 100500;
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvBlock(tabletId, 5, TInstant::Max()));
+        });
+        auto block = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(block->Get()->Status, NKikimrProto::OK, block->Get()->ToString());
+
+        bool inject = true;
+        bool alreadyGiven = false;
+        ui32 numFailed = 0;
+        std::optional<std::optional<TString>> blocksResult; // of the first sync of the part in pile 1
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (inject && ev->GetTypeRewrite() == TEvBlobStorage::EvVBlockResult && ev->HasEvent()) {
+                auto& record = ev->Get<TEvBlobStorage::TEvVBlockResult>()->Record;
+                if (record.GetTabletId() == tabletId &&
+                        VDiskIDFromVDiskID(record.GetVDiskID()).GroupID.GetRawId() == pileGroups[1]) {
+                    record.SetStatus(std::exchange(alreadyGiven, true) ? NKikimrProto::ERROR : NKikimrProto::ALREADY);
+                    numFailed += record.GetStatus() == NKikimrProto::ERROR;
+                }
+            } else if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (msg->TargetGroupId.GetRawId() == pileGroups[1] && alreadyGiven && !blocksResult) {
+                    blocksResult.emplace(msg->ErrorReason);
+                    inject = false;
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        for (ui32 i = 0; !blocksResult; ++i) {
+            UNIT_ASSERT_C(i < 300, "the syncer didn't finish with the part in pile 1");
+            env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(numFailed);
+        UNIT_ASSERT_C(*blocksResult, "the block held by one VDisk of the part was taken for synced");
+
+        // with the VDisks answering again, the sync goes on
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        env.Runtime->FilterFunction = {};
+    }
+}

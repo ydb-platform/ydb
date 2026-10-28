@@ -155,6 +155,27 @@ Y_UNIT_TEST(SessionShutdownNullSessionStopsReading) {
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizeCalls, 0);
 }
 
+Y_UNIT_TEST(ShutdownBetweenMarkIdleAndReturnPreventsPooling) {
+    for (const auto& state : {MakeSessionShutdownState(), MakeNodeShutdownState()}) {
+        auto session = std::make_unique<TTestKqpSession>("", "host:2136");
+        auto client = std::make_shared<TMockSessionClient>();
+        NSessionPool::TSessionPool pool(1);
+        UNIT_ASSERT(session->MarkIdle());
+        UNIT_ASSERT(HandleAttachSessionState(state, session.get(), client) == EAttachStreamReadAction::Stop);
+        const bool returned = pool.ReturnSession(session.get(), false);
+        if (returned) {
+            session.release();
+        }
+        UNIT_ASSERT(!returned);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetCurrentPoolSize(), 0);
+        // Checkout may already have removed the idle session before shutdown.
+        UNIT_ASSERT(session->MarkActive());
+        UNIT_ASSERT(!session->MarkIdle());
+        HandleAttachSessionState(state, session.get(), client);
+        UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 1);
+    }
+}
+
 Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {
     const std::pair<const NSessionPool::TSessionCloseCommand*, std::string_view> commands[] = {
         {&NSessionPool::NSessionCloseCommands::PoolIdleTimeout, "pool_idle_timeout"},
@@ -174,6 +195,9 @@ Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {
         command->Execute(session, client.get());
         command->Execute(session, client.get());
         UNIT_ASSERT_VALUES_EQUAL(client->LastReason, reason);
+        session.MarkBroken();
+        command->Execute(session, client.get());
+        UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_BROKEN);
     }
     UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 10);
 

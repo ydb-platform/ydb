@@ -1,3 +1,5 @@
+* Fixed Query session shutdown racing with session pool return.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0

@@ -268,7 +268,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
     std::unique_ptr<IGetSessionCtx> getSessionCtx;
     {
         std::lock_guard guard(Mtx_);
-        if (Closed_ || impl->GetState() != TKqpSessionCommon::S_IDLE)
+        if (Closed_ || !impl->CanReturnToPool())
             return false;
 
         if (auto maybeCtx = WaitersQueue_.TryGet()) {
@@ -277,7 +277,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
                 IncrementActiveCounterUnsafe();
         } else {
             impl->UpdateServerCloseHandler(this);
-            if (impl->GetState() != TKqpSessionCommon::S_IDLE) {
+            if (!impl->CanReturnToPool()) {
                 impl->UpdateServerCloseHandler(nullptr);
                 return false;
             }
@@ -458,7 +458,9 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
 
     if (session) {
         Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
-        RecordSessionClosed(reason);
+        if (session->MarkBroken()) {
+            RecordSessionClosed(reason);
+        }
         CloseAndDeleteSession(std::move(session), client);
     }
 }

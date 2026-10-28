@@ -537,9 +537,8 @@ TBlobStorageGroupInfo::IDataIntegrityChecker*
 TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::Erasure4Plus2Block:
-            return new TDataIntegrityCheckerBlock42(topology);
-
         case TBlobStorageGroupType::Erasure8Plus2Block:
+            return new TDataIntegrityCheckerParityBlock(topology);
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:

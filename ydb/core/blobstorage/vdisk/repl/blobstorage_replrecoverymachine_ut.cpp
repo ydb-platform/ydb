@@ -64,10 +64,12 @@ namespace NKikimr {
             auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
             baseInfo.VDiskIdShort = TVDiskIdShort(vdisks[0]);
             auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo);
+            vdiskCfg->BlobHeaderMode = GetEffectiveBlobHeaderMode(vdiskCfg->BlobHeaderMode,
+                info->Type.TotalPartCount());
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(TGroupId::FromValue(0), 1, 0, 0, 0),
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, EBlobHeaderMode::OLD_HEADER);
+            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, vdiskCfg->BlobHeaderMode);
             auto replCtx = std::make_shared<TReplCtx>(
                 vctx,
                 nullptr, // HullCtx
@@ -83,10 +85,10 @@ namespace NKikimr {
             return replCtx;
         }
 
-        Y_UNIT_TEST(BasicFunctionality) {
+        void TestBasicFunctionality(TBlobStorageGroupType::EErasureSpecies erasure) {
             TRopeArena arena(&TRopeArenaBackend::Allocate);
             TVector<TVDiskID> vdisks;
-            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(erasure);
             auto replCtx = CreateReplCtx(vdisks, groupInfo);
             auto info = MakeIntrusive<TEvReplFinished::TInfo>();
             info->WorkUnitsPlanned = Max<ui64>();
@@ -176,10 +178,17 @@ namespace NKikimr {
                 UNIT_ASSERT_EQUAL(item.Id, id);
 
                 TRope buf = TDiskBlob::Create(id.BlobSize(), partIndex + 1, groupInfo->Type.TotalPartCount(),
-                    TRope(v[0]), arena, EBlobHeaderMode::OLD_HEADER, std::nullopt);
+                    TRope(v[0]), arena, replCtx->VDiskCfg->BlobHeaderMode, std::nullopt);
 
                 UNIT_ASSERT_EQUAL(item.Data, buf);
             }
+        }
+        Y_UNIT_TEST(BasicFunctionality) {
+            TestBasicFunctionality(TBlobStorageGroupType::Erasure4Plus2Block);
+        }
+
+        Y_UNIT_TEST(BasicFunctionalityBlock82) {
+            TestBasicFunctionality(TBlobStorageGroupType::Erasure8Plus2Block);
         }
     }
 

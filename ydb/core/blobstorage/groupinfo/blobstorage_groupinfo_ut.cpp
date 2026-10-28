@@ -1,4 +1,5 @@
 #include "blobstorage_groupinfo.h"
+#include "blobstorage_groupinfo_data_check.h"
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
@@ -10,6 +11,66 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
+
+    Y_UNIT_TEST(ParityBlockIntegrity) {
+        for (auto species : {TErasureType::Erasure4Plus2Block, TErasureType::Erasure8Plus2Block}) {
+            const TBlobStorageGroupInfo info(species);
+            const auto& type = info.Type;
+            const auto& checker = info.GetTopology().GetDataIntegrityChecker();
+            for (auto crc : {TErasureType::CrcModeNone, TErasureType::CrcModeWholePart}) {
+                for (ui32 size : {0, 1, 639, 640, 641, 4097}) {
+                    const TLogoBlobID id(1, 1, 1, 0, size, 0, 0, crc);
+                    const TString data(size, 'x');
+                    TDataPartSet encoded;
+                    type.SplitData(crc, data, encoded);
+                    TBlobStorageGroupInfo::IDataIntegrityChecker::TPartsData parts;
+                    parts.Parts.resize(type.TotalPartCount());
+                    for (ui32 part = 0; part < type.TotalPartCount(); ++part) {
+                        parts.Parts[part].emplace_back(part, encoded.Parts[part].OwnedString);
+                        const TString contiguous = encoded.Parts[part].OwnedString.ConvertToString();
+                        UNIT_ASSERT(CheckCrcAtTheEnd(crc, TContiguousSpan(contiguous.data(), contiguous.size())));
+                    }
+                    const auto check = [&](const auto& input, bool expected) {
+                        const auto result = checker.GetDataState(id, input, '\n');
+                        UNIT_ASSERT_VALUES_EQUAL_C(result.IsOk, expected,
+                            "species# " << species << " crc# " << static_cast<ui32>(crc) << " size# " << size << " " << result.DataInfo);
+                        return result;
+                    };
+                    check(parts, true);
+                    for (ui32 count : {type.DataParts() - 1, type.DataParts(), type.TotalPartCount() - 1}) {
+                        auto subset = parts;
+                        for (ui32 part = count; part < type.TotalPartCount(); ++part) {
+                            subset.Parts[part].clear();
+                        }
+                        check(subset, true);
+                    }
+                    for (ui32 part = 0; part < type.TotalPartCount(); ++part) {
+                        auto copies = parts;
+                        copies.Parts[part].emplace_back(type.TotalPartCount(), copies.Parts[part].front().second);
+                        check(copies, true);
+                        TString bad = encoded.Parts[part].OwnedString.ConvertToString();
+                        if (!bad.empty()) {
+                            bad.Detach()[0] ^= 1;
+                            copies.Parts[part].back().second = TRope(bad);
+                            const auto result = check(copies, false);
+                            if (crc == TErasureType::CrcModeNone) {
+                                UNIT_ASSERT_STRING_CONTAINS(result.DataInfo, "ver1");
+                                UNIT_ASSERT_STRING_CONTAINS(result.DataInfo, "CHECK part ");
+                            }
+                            copies = parts;
+                            copies.Parts[part].front().second = TRope(bad);
+                            check(copies, false);
+                        }
+                        copies = parts;
+                        copies.Parts[part].front().second = TRope(TString(bad.size() + 1, 'x'));
+                        check(copies, false);
+                    }
+                }
+            }
+        }
+    }
+
+
 
     Y_UNIT_TEST(FailRealmStateDefaults) {
         using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
@@ -139,6 +200,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 continue;
             }
 
+            // The exhaustive ingress corpus grows to 2^30 layouts for 8+2.
+            // Block82 ingress tests cover a bounded corpus separately.
+            if (erasureType == TBlobStorageGroupType::Erasure8Plus2Block) {
+                continue;
+            }
             const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
             TBlobStorageGroupInfo info(erasureType, 1, numFailDomains);
 

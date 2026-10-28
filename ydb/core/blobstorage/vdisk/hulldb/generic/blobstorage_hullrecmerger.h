@@ -353,7 +353,7 @@ namespace NKikimr {
                 TDiskPart Part;
             };
             NMatrix::TVectorType ResParts;
-            std::array<TResItem, 8> Res;
+            std::array<TResItem, TErasureType::MaxTotalParts> Res;
         };
 
         TCallback *Callback;

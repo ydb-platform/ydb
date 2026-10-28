@@ -348,6 +348,7 @@ public:
         cmd->SetPeerName(Request_->GetPeerName());
         cmd->SetDryRun(protoRequest->dry_run());
         cmd->SetAllowUnknownFields(protoRequest->allow_unknown_fields() || protoRequest->bypass_checks());
+        cmd->SetBypassMetadataChecks(protoRequest->bypass_checks());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,

@@ -321,6 +321,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional string PeerName = 7;
         bool DryRun = 8;
         bool AllowUnknownFields = 9;
+        bool BypassMetadataChecks = 10; // replace the version and the cluster of the YAML with the expected ones
     }
 
     message TBootstrapCluster {

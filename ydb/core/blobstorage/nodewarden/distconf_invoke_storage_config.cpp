@@ -357,6 +357,23 @@ namespace NKikimr::NStorage {
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
         NewStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;
 
+        if (request.GetBypassMetadataChecks() && Self->SelfManagementEnabled) {
+            // the administrator replaces wrong metadata with the right one: the versions and the cluster expected here;
+            // when distconf is being enabled, the versions come from BSC, which handles the flag itself
+            if (NewYaml && NYamlConfig::IsMainConfig(*NewYaml)) {
+                NewYaml = NYamlConfig::ReplaceMetadata(*NewYaml, NYamlConfig::TMainMetadata{
+                    .Version = Self->MainConfigYamlVersion ? *Self->MainConfigYamlVersion + 1 : 0,
+                    .Cluster = AppData()->ClusterName,
+                });
+            }
+            if (NewStorageYaml && NYamlConfig::IsStorageConfig(*NewStorageYaml)) {
+                NewStorageYaml = NYamlConfig::ReplaceMetadata(*NewStorageYaml, NYamlConfig::TStorageMetadata{
+                    .Version = Self->StorageConfig->GetExpectedStorageYamlVersion(),
+                    .Cluster = AppData()->ClusterName,
+                });
+            }
+        }
+
         // check if we are really changing something?
         if (NewYaml == Self->MainConfigYaml) {
             NewYaml.reset();

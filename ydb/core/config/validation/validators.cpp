@@ -407,6 +407,11 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
 }
 
 
+// The number of rings which may be out while the rest makes the majority the proxy waits for
+static ui32 MaxRingsOutOfQuorum(ui32 nToSelect) {
+    return nToSelect - (nToSelect / 2 + 1);
+}
+
 TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
     if (!newSSConfig.HasRing() && newSSConfig.RingGroupsSize() == 0) {
         return TStringBuilder() << "New " << name << " configuration is not filled in";
@@ -427,7 +432,9 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     disabledCnt++;
                 }
             }
-            if (disabledCnt > rg.NToSelect / 2 - 1) { // -1 ring for rolling restart
+            // one more ring may go out at rolling restart
+            const ui32 maxOut = MaxRingsOutOfQuorum(rg.NToSelect);
+            if (disabledCnt > (maxOut ? maxOut - 1 : 0)) {
                 return TStringBuilder() << "New " << name << " configuration disabled too many rings";
             }
         }
@@ -458,7 +465,7 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     << " to# " << SingleLineProto(newSSConfig);
             }
         }
-        if (disabledCnt > fromInfoGroup.NToSelect / 2) {
+        if (disabledCnt > MaxRingsOutOfQuorum(fromInfoGroup.NToSelect)) {
             return TStringBuilder() << name << " configuration disabled too many rings"
                 << " from# " << SingleLineProto(oldSSConfig)
                 << " to# " << SingleLineProto(newSSConfig);

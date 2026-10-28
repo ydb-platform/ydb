@@ -106,7 +106,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
-        KeyedOperation = KeyedOperation || (Op->HasKeysInfo() && Op->KeysCount() > 0);
+        KeyedOperation = KeyedOperation || Op->HasUserTableKeys();
 
         switch (status) {
             case EExecutionStatus::Restart:

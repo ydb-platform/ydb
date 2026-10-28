@@ -529,6 +529,11 @@ struct TPartitionStats {
      *       for all followers and the leader for the given partition.
      *       Keeping the maximum CPU usage percentage across all followers
      *       and the leader is sufficient to verify this requirement.
+     *
+     *       Unlike split-by-load (see GetSplitCpuUsage()), merge-by-load uses
+     *       the total CPU usage, including operations without keys (e.g. scans).
+     *       Such load adds up in the merged partition, and since it doesn't
+     *       trigger split-by-load, an overloaded merged partition would stay so.
      */
     TTopCpuUsage TopCpuUsage;
 
@@ -541,11 +546,15 @@ struct TPartitionStats {
         return CPU;
     }
 
-    void SetSplitCpuUsage(std::optional<ui64> cpuWithKeys, std::optional<ui64> cpuWithoutKeys) {
+    void SetSplitCpuUsage(std::optional<ui64> cpuWithKeys) {
         CPUWithKeys = cpuWithKeys;
-        CPUWithoutKeys = cpuWithoutKeys;
     }
 
+    /**
+     * CPU usage to compare with the split-by-load threshold: only the load
+     * of operations with keys goes down after the split. Falls back to the total
+     * CPU usage for datashards which don't report it separately.
+     */
     ui64 GetSplitCpuUsage() const {
         return CPUWithKeys.value_or(CPU);
     }
@@ -555,8 +564,11 @@ struct TPartitionStats {
     }
 
 private:
+    /**
+     * The last observed CPU usage of operations with keys for the given partition.
+     * Updated the same way as the CPU field below.
+     */
     std::optional<ui64> CPUWithKeys;
-    std::optional<ui64> CPUWithoutKeys;
 
     /**
      * The last observed CPU usage for the given partition.

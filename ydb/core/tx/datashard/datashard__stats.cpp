@@ -395,8 +395,12 @@ public:
             resourceMetrics->CPUWithKeys.Increment(0, now);
             resourceMetrics->CPUWithoutKeys.Increment(0, now);
             resourceMetrics->Fill(*(Result->Record.MutableTabletMetrics()));
-            Result->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
-            Result->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
+            // Report split CPU usage only together with the total one, so that
+            // schemeshard can tell "not measured yet" from "no keyed load"
+            if (resourceMetrics->CPU.IsValueReady()) {
+                Result->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
+                Result->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
+            }
         }
 
         return true;

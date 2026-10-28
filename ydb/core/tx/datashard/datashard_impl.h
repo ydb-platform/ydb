@@ -3771,8 +3771,12 @@ protected:
                 resourceMetrics->CPUWithKeys.Increment(0, now);
                 resourceMetrics->CPUWithoutKeys.Increment(0, now);
                 resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
-                ev->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
-                ev->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
+                // Report split CPU usage only together with the total one, so that
+                // schemeshard can tell "not measured yet" from "no keyed load"
+                if (resourceMetrics->CPU.IsValueReady()) {
+                    ev->Record.MutableTableStats()->SetCPUWithKeys(resourceMetrics->CPUWithKeys.GetValue());
+                    ev->Record.MutableTableStats()->SetCPUWithoutKeys(resourceMetrics->CPUWithoutKeys.GetValue());
+                }
             }
 
             ev->Record.MutableTableStats()->SetLocksAcquired(TabletCounters->Cumulative()[COUNTER_LOCKS_ACQUIRED].Get());

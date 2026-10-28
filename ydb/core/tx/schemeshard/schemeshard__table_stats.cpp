@@ -242,8 +242,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
 
     newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now);
     newStats.SetSplitCpuUsage(
-        tableStats.HasCPUWithKeys() ? std::make_optional(tableStats.GetCPUWithKeys()) : std::nullopt,
-        tableStats.HasCPUWithoutKeys() ? std::make_optional(tableStats.GetCPUWithoutKeys()) : std::nullopt);
+        tableStats.HasCPUWithKeys() ? std::make_optional(tableStats.GetCPUWithKeys()) : std::nullopt);
     newStats.Memory = tabletMetrics.GetMemory();
     newStats.Network = tabletMetrics.GetNetwork();
     newStats.Storage = tabletMetrics.GetStorage();

@@ -68,13 +68,15 @@ private:
     NThreading::TPromise<NKikimrReplication::TEvDescribeReplicationResult> Promise;
 };
 
-struct TInflightEnv: TEnv<> {
+struct TTransactionsEnv: TEnv<> {
     ui64 TabletId;
     TPathId PathId;
     TActorId Controller;
     NKikimrReplication::TWorkerIdentity Worker;
 
-    explicit TInflightEnv(bool global = true) {
+    explicit TTransactionsEnv(bool global = true, ERuntimeMode mode = ERuntimeMode::RealThreads)
+        : TEnv<>(true, mode)
+    {
         GetRuntime().RegisterService(MakeReplicationServiceId(GetRuntime().GetNodeId(0)),
             GetRuntime().Register(CreateReplicationMockService(GetSender())));
         CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
@@ -82,15 +84,17 @@ struct TInflightEnv: TEnv<> {
             .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
             .ReplicationConfig = Nothing(),
         }));
-        NYdb::NTable::TTableClient client(GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        auto result = session.ExecuteSchemeQuery(Sprintf(R"(
-            CREATE ASYNC REPLICATION `replication` FOR `/Root/table` AS `/Root/replica`
-            WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", %s);
-        )", GetEndpoint().c_str(), global
-            ? "CONSISTENCY_LEVEL = \"GLOBAL\", COMMIT_INTERVAL = Interval(\"PT10S\")"
-            : "CONSISTENCY_LEVEL = \"ROW\"")).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        RunCall([&] {
+            NYdb::NTable::TTableClient client(GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE ASYNC REPLICATION `replication` FOR `/Root/table` AS `/Root/replica`
+                WITH (CONNECTION_STRING = "grpc://%s/?database=/Root", %s);
+            )", GetEndpoint().c_str(), global
+                ? "CONSISTENCY_LEVEL = \"GLOBAL\", COMMIT_INTERVAL = Interval(\"PT10S\")"
+                : "CONSISTENCY_LEVEL = \"ROW\"")).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        });
         TabletId = GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription().GetControllerId();
         PathId = GetPathId("/Root/replication");
         Handshake();
@@ -111,20 +115,26 @@ struct TInflightEnv: TEnv<> {
         return request;
     }
 
-    ui64 Count() {
+    Ydb::Replication::DescribeReplicationResult::Transactions Describe() {
         auto response = Send<TEvController::TEvDescribeReplicationResult>(TabletId, Request());
         const auto& record = response->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(ui32(record.GetStatus()), ui32(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS));
-        UNIT_ASSERT(record.HasInflightTransactions());
-        return record.GetInflightTransactions();
+        UNIT_ASSERT(record.HasTransactions());
+        return record.GetTransactions();
     }
 
-    std::optional<uint64_t> SdkCount(bool stats) {
-        NYdb::NReplication::TReplicationClient client(GetDriver());
-        auto result = client.DescribeReplication("/Root/replication",
-            NYdb::NReplication::TDescribeReplicationSettings().IncludeStats(stats)).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        return result.GetReplicationDescription().GetInflightTransactions();
+    size_t Count() {
+        return Describe().inflight_size();
+    }
+
+    std::optional<NYdb::NReplication::TReplicationDescription::TTransactions> SdkTransactions(bool stats) {
+        return RunCall([&] {
+            NYdb::NReplication::TReplicationClient client(GetDriver());
+            auto result = client.DescribeReplication("/Root/replication",
+                NYdb::NReplication::TDescribeReplicationSettings().IncludeStats(stats)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result.GetReplicationDescription().GetTransactions();
+        });
     }
 
     ui64 Assign(ui64 step) {
@@ -156,31 +166,100 @@ struct TInflightEnv: TEnv<> {
 };
 } // namespace
 
-Y_UNIT_TEST_SUITE(ReplicationInflightTransactions) {
+Y_UNIT_TEST_SUITE(ReplicationTransactions) {
+    void Check(TTransactionsEnv& env, const TMap<ui64, ui64>& inflight, const TVector<ui64>& pending = {}) {
+        const auto transactions = env.Describe();
+        UNIT_ASSERT_VALUES_EQUAL(transactions.inflight_size(), inflight.size());
+        UNIT_ASSERT_VALUES_EQUAL(transactions.pending_size(), pending.size());
+        size_t i = 0;
+        for (const auto& [step, txId] : inflight) {
+            const auto& item = transactions.inflight(i++);
+            UNIT_ASSERT_VALUES_EQUAL(item.version().step(), step);
+            UNIT_ASSERT_VALUES_EQUAL(item.version().tx_id(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(item.tx_id(), txId);
+        }
+        for (i = 0; i < pending.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(transactions.pending(i).step(), pending[i]);
+            UNIT_ASSERT_VALUES_EQUAL(transactions.pending(i).tx_id(), 0);
+        }
+        for (bool stats : {false, true}) {
+            const auto result = env.SdkTransactions(stats);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Inflight.size(), inflight.size());
+            UNIT_ASSERT_VALUES_EQUAL(result->Pending.size(), pending.size());
+            i = 0;
+            for (const auto& [step, txId] : inflight) {
+                const auto& item = result->Inflight[i++];
+                UNIT_ASSERT_VALUES_EQUAL(item.Version.Step, step);
+                UNIT_ASSERT_VALUES_EQUAL(item.Version.TxId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(item.TxId, txId);
+            }
+            for (i = 0; i < pending.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Pending[i].Step, pending[i]);
+                UNIT_ASSERT_VALUES_EQUAL(result->Pending[i].TxId, 0);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ReportsAssignedTransactionsWithAndWithoutStats) {
-        TInflightEnv env;
-        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.SdkCount(false).value(), 0);
+        TTransactionsEnv env;
+        Check(env, {});
         const auto first = env.Assign(1);
-        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
+        Check(env, {{10000, first}});
         UNIT_ASSERT_VALUES_EQUAL(env.Assign(2), first);
-        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 1);
-        UNIT_ASSERT(env.Assign(10001) != first);
-        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(env.SdkCount(false).value(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(env.SdkCount(true).value(), 2);
+        Check(env, {{10000, first}});
+        const auto second = env.Assign(10001);
+        UNIT_ASSERT(second != first);
+        Check(env, {{10000, first}, {20000, second}});
+    }
+
+    Y_UNIT_TEST(ReportsPendingVersionsAndTheirAssignment) {
+        TTransactionsEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        TVector<TEvTxAllocatorClient::TEvAllocateResult::TPtr> allocations;
+        bool hold = true;
+        auto observer = runtime.AddObserver<TEvTxAllocatorClient::TEvAllocateResult>([&](auto& ev) {
+            if (hold && ev->GetRecipientRewrite() == env.Controller && ev->Sender != env.GetSender()) {
+                allocations.push_back(std::move(ev));
+            }
+        });
+        // Unsorted requests, including duplicate versions within an interval.
+        env.SendAsync(env.TabletId, new TEvService::TEvGetTxId(TVector<TRowVersion>{
+            TRowVersion(20001, 7), TRowVersion(1, 3), TRowVersion(10001, 1), TRowVersion(2, 9),
+        }));
+        runtime.WaitFor("allocation held", [&] { return allocations.size() == 1; });
+        Check(env, {}, {10000, 20000, 30000});
+        // Supply just one of the real allocated IDs. The next allocation stays
+        // held, exposing assigned and pending entries in the same snapshot.
+        const auto firstTxId = allocations[0]->Get()->TxIds.front();
+        runtime.Send(new IEventHandle(env.Controller, env.GetSender(),
+            new TEvTxAllocatorClient::TEvAllocateResult(firstTxId)));
+        runtime.WaitFor("refill held", [&] { return allocations.size() == 2; });
+        auto first = runtime.GrabEdgeEvent<TEvService::TEvTxIdResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.VersionTxIdsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.GetVersionTxIds(0).GetTxId(), firstTxId);
+        Check(env, {{10000, firstTxId}}, {20000, 30000});
+        hold = false;
+        runtime.Send(allocations[1].Release());
+        auto assigned = runtime.GrabEdgeEvent<TEvService::TEvTxIdResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(assigned->Get()->Record.VersionTxIdsSize(), 2);
+        TMap<ui64, ui64> expected{{10000, firstTxId}};
+        for (const auto& item : assigned->Get()->Record.GetVersionTxIds()) {
+            expected.emplace(item.GetVersion().GetStep(), item.GetTxId());
+        }
+        Check(env, expected);
     }
 
     Y_UNIT_TEST(RowConsistencyDoesNotReportGlobalTransactions) {
-        TInflightEnv env(false);
+        TTransactionsEnv env(false);
         auto response = env.Send<TEvController::TEvDescribeReplicationResult>(env.TabletId, env.Request());
-        UNIT_ASSERT(!response->Get()->Record.HasInflightTransactions());
-        UNIT_ASSERT(!env.SdkCount(false));
-        UNIT_ASSERT(!env.SdkCount(true));
+        UNIT_ASSERT(!response->Get()->Record.HasTransactions());
+        UNIT_ASSERT(!env.SdkTransactions(false));
+        UNIT_ASSERT(!env.SdkTransactions(true));
     }
 
     Y_UNIT_TEST(CommitInProgressAndRetryRemainCounted) {
-        TInflightEnv env;
+        TTransactionsEnv env;
         const auto txId = env.Assign(1);
         env.HoldCommits();
         env.Heartbeat();
@@ -191,23 +270,22 @@ Y_UNIT_TEST_SUITE(ReplicationInflightTransactions) {
         env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
         env.CommitStatus(txId, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.SdkCount(true).value(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Inflight.size(), 0);
     }
 
     Y_UNIT_TEST(RestoresAssignedTransactionsAfterRestart) {
-        TInflightEnv env;
-        env.Assign(1);
-        env.Assign(10001);
-        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 2);
+        TTransactionsEnv env;
+        const auto first = env.Assign(1);
+        const auto second = env.Assign(10001);
+        Check(env, {{10000, first}, {20000, second}});
         env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
         env.Handshake();
-        // No heartbeat or fresh worker enumeration is needed to count stored TxIds.
-        UNIT_ASSERT_VALUES_EQUAL(env.Count(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(env.SdkCount(false).value(), 2);
+        // Stored interval versions and destination IDs survive restart unchanged.
+        Check(env, {{10000, first}, {20000, second}});
     }
 
     void CheckDeletionPersistence(bool restart) {
-        TInflightEnv env;
+        TTransactionsEnv env;
         auto& runtime = env.GetRuntime();
         const auto txId = env.Assign(1);
         env.HoldCommits();
@@ -242,8 +320,8 @@ Y_UNIT_TEST_SUITE(ReplicationInflightTransactions) {
             env.SendAsync(gate, new TEvents::TEvWakeup());
             UNIT_ASSERT(future.Wait(TDuration::Seconds(30)));
             const auto result = future.GetValueSync();
-            UNIT_ASSERT(result.HasInflightTransactions());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetInflightTransactions(), 0);
+            UNIT_ASSERT(result.HasTransactions());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTransactions().inflight_size(), 0);
             env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
             env.Handshake();
             UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
@@ -253,13 +331,30 @@ Y_UNIT_TEST_SUITE(ReplicationInflightTransactions) {
     Y_UNIT_TEST(ZeroWaitsForDurableDeletion) { CheckDeletionPersistence(false); }
     Y_UNIT_TEST(RestartBeforeDeletionRestoresTransaction) { CheckDeletionPersistence(true); }
 
-    Y_UNIT_TEST(SdkPreservesMissingZeroAndNonzero) {
+    Y_UNIT_TEST(SdkPreservesMissingEmptyAndPopulatedLists) {
         Ydb::Replication::DescribeReplicationResult proto;
-        UNIT_ASSERT(!NYdb::NReplication::TReplicationDescription(proto).GetInflightTransactions());
-        proto.set_inflight_transactions(0);
-        UNIT_ASSERT_VALUES_EQUAL(NYdb::NReplication::TReplicationDescription(proto).GetInflightTransactions().value(), 0);
-        proto.set_inflight_transactions(3);
-        UNIT_ASSERT_VALUES_EQUAL(NYdb::NReplication::TReplicationDescription(proto).GetInflightTransactions().value(), 3);
+        UNIT_ASSERT(!NYdb::NReplication::TReplicationDescription(proto).GetTransactions());
+        proto.mutable_transactions();
+        const auto empty = NYdb::NReplication::TReplicationDescription(proto).GetTransactions();
+        UNIT_ASSERT(empty);
+        UNIT_ASSERT(empty->Inflight.empty());
+        UNIT_ASSERT(empty->Pending.empty());
+        auto* item = proto.mutable_transactions()->add_inflight();
+        item->mutable_version()->set_step(10000);
+        item->mutable_version()->set_tx_id(42);
+        item->set_tx_id(123);
+        auto* pending = proto.mutable_transactions()->add_pending();
+        pending->set_step(20000);
+        pending->set_tx_id(43);
+        const auto result = NYdb::NReplication::TReplicationDescription(proto).GetTransactions();
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Inflight.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Inflight[0].Version.Step, 10000);
+        UNIT_ASSERT_VALUES_EQUAL(result->Inflight[0].Version.TxId, 42);
+        UNIT_ASSERT_VALUES_EQUAL(result->Inflight[0].TxId, 123);
+        UNIT_ASSERT_VALUES_EQUAL(result->Pending.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Pending[0].Step, 20000);
+        UNIT_ASSERT_VALUES_EQUAL(result->Pending[0].TxId, 43);
     }
 }
 } // namespace NKikimr::NReplication::NController

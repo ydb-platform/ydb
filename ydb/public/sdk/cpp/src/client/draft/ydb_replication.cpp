@@ -127,8 +127,6 @@ NYdb::NIssue::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrFie
 
 TReplicationDescription::TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc)
     : ConnectionParams_(desc.connection_params())
-    , InflightTransactions_(desc.has_inflight_transactions()
-        ? std::make_optional(desc.inflight_transactions()) : std::nullopt)
 {
     if (desc.has_availability_period()) {
         const auto& period = desc.availability_period();
@@ -154,6 +152,20 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         }
     }
 
+    if (desc.has_transactions()) {
+        auto& transactions = Transactions_.emplace();
+        transactions.Inflight.reserve(desc.transactions().inflight_size());
+        for (const auto& item : desc.transactions().inflight()) {
+            transactions.Inflight.push_back(TInflightTransaction{
+                .Version = {item.version().step(), item.version().tx_id()},
+                .TxId = item.tx_id(),
+            });
+        }
+        transactions.Pending.reserve(desc.transactions().pending_size());
+        for (const auto& version : desc.transactions().pending()) {
+            transactions.Pending.push_back(TTransactionVersion{version.step(), version.tx_id()});
+        }
+    }
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
         Items_.push_back(TItem{
@@ -222,8 +234,8 @@ const TGlobalConsistency& TReplicationDescription::GetGlobalConsistency() const 
 }
 
 
-const std::optional<uint64_t>& TReplicationDescription::GetInflightTransactions() const {
-    return InflightTransactions_;
+const std::optional<TReplicationDescription::TTransactions>& TReplicationDescription::GetTransactions() const {
+    return Transactions_;
 }
 
 TReplicationDescription::EState TReplicationDescription::GetState() const {

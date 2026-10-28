@@ -62,6 +62,26 @@ message AvailabilityPeriod {
 }
 
 message DescribeReplicationResult {
+    message Transactions {
+        // Exclusive upper source version of a replication commit interval.
+        message Version {
+            uint64 step = 1;
+            uint64 tx_id = 2;
+        }
+
+        message Inflight {
+            Version version = 1;
+            // Assigned write transaction ID on the destination.
+            uint64 tx_id = 2;
+        }
+
+        // Assigned transactions, including those awaiting CommitWrites completion.
+        repeated Inflight inflight = 1;
+        // Distinct versions queued for transaction-ID assignment, not transaction IDs.
+        // This in-memory queue is rebuilt from worker requests after restart.
+        repeated Version pending = 2;
+    }
+
     message Stats {
         optional google.protobuf.Duration lag = 1;
         optional float initial_scan_progress = 2;
@@ -105,11 +125,10 @@ message DescribeReplicationResult {
         DoneState done = 6;
         PausedState paused = 9;
     }
-    // Number of assigned global-consistency write transactions not yet completed
-    // by the controller, including transactions awaiting CommitWrites completion.
+    // Current global-consistency transaction state, ordered by interval version.
     // Reported independently of include_stats; absent when unavailable or in row mode.
-    // Zero is a snapshot of current transactions, not proof of catching up with the source.
-    optional uint64 inflight_transactions = 10;
+    // Empty lists do not prove that replication caught up with the source.
+    Transactions transactions = 11;
 }
 
 message DescribeTransferRequest {

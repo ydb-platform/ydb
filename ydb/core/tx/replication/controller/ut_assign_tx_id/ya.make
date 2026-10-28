@@ -15,7 +15,7 @@ PEERDIR(
 
 SRCS(
     assign_tx_id_ut.cpp
-    inflight_transactions_ut.cpp
+    transactions_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

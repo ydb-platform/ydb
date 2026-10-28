@@ -121,6 +121,25 @@ private:
 
 class TReplicationDescription {
 public:
+    struct TTransactionVersion {
+        uint64_t Step = 0;
+        uint64_t TxId = 0;
+    };
+
+    struct TInflightTransaction {
+        // Exclusive upper source version of the commit interval.
+        TTransactionVersion Version;
+        // Write transaction ID on the destination.
+        uint64_t TxId = 0;
+    };
+
+    struct TTransactions {
+        // Both lists are ordered by interval version.
+        std::vector<TInflightTransaction> Inflight;
+        // Versions queued for assignment; reconstructed from worker requests after restart.
+        std::vector<TTransactionVersion> Pending;
+    };
+
     struct TItem {
         uint64_t Id;
         std::string SrcPath;
@@ -160,9 +179,9 @@ public:
     EConsistencyLevel GetConsistencyLevel() const;
     const TGlobalConsistency& GetGlobalConsistency() const;
 
-    // Current assigned global transactions, including commits in progress.
-    // Missing means unavailable; zero does not imply that replication caught up.
-    const std::optional<uint64_t>& GetInflightTransactions() const;
+    // Current assigned global transactions and versions queued for assignment.
+    // Missing means unavailable; empty lists do not imply that replication caught up.
+    const std::optional<TTransactions>& GetTransactions() const;
 
     EState GetState() const;
     const TRunningState& GetRunningState() const;
@@ -175,7 +194,7 @@ private:
     std::vector<TItem> Items_;
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
-    std::optional<uint64_t> InflightTransactions_;
+    std::optional<TTransactions> Transactions_;
 
     std::variant<
         TRowConsistency,

@@ -205,8 +205,8 @@ void FillReplicationDescription(
         out.clear_availability_period();
     }
     ConvertState(inDesc.GetState(), out);
-    if (inDesc.HasInflightTransactions()) {
-        out.set_inflight_transactions(inDesc.GetInflightTransactions());
+    if (inDesc.HasTransactions()) {
+        out.mutable_transactions()->CopyFrom(inDesc.GetTransactions());
     }
 
     for (const auto& target : inDesc.GetTargets()) {

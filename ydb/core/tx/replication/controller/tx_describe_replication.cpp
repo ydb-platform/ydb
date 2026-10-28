@@ -6,6 +6,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/algorithm.h>
@@ -228,9 +229,20 @@ public:
                 AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
         }
         if (replication->GetConfig().GetConsistencySettings().HasGlobal() && Self->GetSingle() == replication) {
+            auto* transactions = Result->Record.MutableTransactions();
             // CommittingTxId is already included in AssignedTxIds. Entries are
             // removed by TTxCommitChanges and restored from Schema::TxIds on restart.
-            Result->Record.SetInflightTransactions(Self->AssignedTxIds.size());
+            for (const auto& [version, txId] : Self->AssignedTxIds) {
+                auto* item = transactions->add_inflight();
+                item->mutable_version()->set_step(version.Step);
+                item->mutable_version()->set_tx_id(version.TxId);
+                item->set_tx_id(txId);
+            }
+            for (const auto& [version, _] : Self->PendingTxId) {
+                auto* item = transactions->add_pending();
+                item->set_step(version.Step);
+                item->set_tx_id(version.TxId);
+            }
         }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;

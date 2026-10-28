@@ -12,6 +12,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_cluster_state.cpp
         bridge_conversion.cpp
         bridge_decommit.cpp
+        bridge_data_kind.cpp
         bridge_get.cpp
         bridge_keep_flags.cpp
         bridge_mixed_storage.cpp

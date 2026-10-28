@@ -87,6 +87,9 @@ void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
         if (item.IsZeroEntry) {
             pb->SetIsZeroEntry(item.IsZeroEntry);
         }
+        if (item.WriteSource != UnknownWriteSource()) {
+            pb->SetWriteSourceOp(WriteSourceToProto(item.WriteSource));
+        }
         for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
             auto *check = pb->AddExtraBlockChecks();
             check->SetTabletId(tabletId);

@@ -253,12 +253,16 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
             .HandleClass = msg.Record.GetHandleClass(),
             .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .WriteSource = WriteSourceFromProto(item.GetWriteSourceOp()),
             .IssueKeepFlag = item.GetIssueKeepFlag(),
             .IgnoreBlock = item.GetIgnoreBlock(),
             .AlreadyEncrypted = item.GetAlreadyEncrypted(),
             .ReduceInterpileTraffic = false,
             .IsZeroEntry = item.GetIsZeroEntry(),
         });
+        for (const auto& check : item.GetExtraBlockChecks()) {
+            ev->ExtraBlockChecks.emplace_back(check.GetTabletId(), check.GetGeneration());
+        }
         ev->ForceGroupGeneration = groupGeneration;
         SendToBSProxy(SelfId(), groupId, ev.release(), cookie, std::move(traceId));
         ++common->RepliesRemaining;

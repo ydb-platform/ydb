@@ -1696,6 +1696,7 @@ message TEvInterpilePut {
         optional bool IsZeroEntry = 8;
         repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 6;
         optional NActorsProto.TTraceId TraceId = 7;
+        optional uint32 WriteSourceOp = 10;
     }
 
     optional uint32 GroupId = 1;

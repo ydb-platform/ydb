@@ -232,7 +232,7 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            errors.clear();
+            std::vector<TString> errors;
 
             auto* csk = AppData()->ConfigSwissKnife;
 

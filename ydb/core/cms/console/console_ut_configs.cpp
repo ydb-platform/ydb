@@ -5169,8 +5169,6 @@ config:
     const TString NotAllowedErrorSubstring           = "\\'selector_config\\' and \\'allowed_labels\\' are not allowed";
     const TString ForbiddenTenantLabelErrorSubstring = "\\'tenant\\' label is forbidden";
 
-<<<<<<< HEAD
-=======
     // Check that database selectors cannot introduce unmarked config types without permission.
     Y_UNIT_TEST(TestDatabaseConfigAllowlistAppliesToSelectors) {
         NKikimrConfig::TAppConfig appcfg;
@@ -5200,7 +5198,6 @@ selector_config:
 )", "is not allowed to be used in the database configuration (for selector with description \\'existing database selector policy\\')");
     }
 
->>>>>>> 393b00d0712 ([Console, ConfigsDispatcher] Allow all types in database YAML configs via a database attribute (#56822))
     Y_UNIT_TEST(TestAllowDatabaseConfigSelectorsOnlyWithPermissiveTenantUserAttribute) {
         NKikimrConfig::TAppConfig appcfg;
         appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);

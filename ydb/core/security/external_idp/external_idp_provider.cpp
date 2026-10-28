@@ -908,6 +908,7 @@ void TExternalIdpProvider::HandleJwksResponse(
             }
         }
 
+        jwk.Usage = NSecurity::EJwkUsage::SIG;
         std::string error;
         auto pubkey = jwk.CalculatePublicKey(error);
         if (!pubkey.has_value()) {

@@ -225,15 +225,7 @@ std::optional<std::string> ParseThumbprint(
         return std::nullopt;
     }
 
-    try {
-        auto decoded = Base64StrictDecodeUneven(thumbprint.value());
-        if (decoded.size() != expectedLength) {
-            return std::nullopt;
-        }
-        return decoded;
-    } catch (const std::exception&) {
-        return std::nullopt;
-    }
+    return thumbprint;
 }
 
 // Parsing based on https://datatracker.ietf.org/doc/html/rfc7517

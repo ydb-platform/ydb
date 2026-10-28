@@ -5,6 +5,7 @@
 #include <util/network/address.h>
 #include <util/network/sock.h>
 #include <util/network/socket.h>
+#include <util/stream/output.h>
 
 using namespace NKikimr::NNet;
 
@@ -47,6 +48,7 @@ namespace {
 } // namespace
 
 TEST(FormatSourceAddress, NullIsUnknown) {
+    Cerr << "DIR_OUTPUTS_PROBE: net successful test" << Endl;
     EXPECT_EQ(FormatSourceAddress(nullptr), "unknown");
 }
 

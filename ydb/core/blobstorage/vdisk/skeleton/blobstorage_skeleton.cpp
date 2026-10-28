@@ -2407,6 +2407,7 @@ namespace NKikimr {
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"marker", "BSVS31"});
                 DbBirthLsn = ev->Get()->DbBirthLsn;
+                Db->LsnMngr->AdvanceSyncLogRecoveryBase(*DbBirthLsn);
                 SkeletonIsUpAndRunning(ctx, Config->RunRepl);
                 if (Config->RunRepl) {
                     StartReplActor(ctx);

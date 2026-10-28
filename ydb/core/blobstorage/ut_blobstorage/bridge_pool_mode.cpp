@@ -693,4 +693,35 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetGroupGeneration(), generation);
     }
 
+    // The ordinary block-4-2 pool has its group in pile 2, and pile 2 has an override for the kind of the pool with
+    // another erasure. The override is accepted, as it applies to bridged groups only. Making the pool bridged would
+    // turn the group into the part of pile 2 under that override, which its layout doesn't match; it must be refused,
+    // with the pool and the group left as they were.
+    Y_UNIT_TEST(BridgeModeChecksExistingGroupAgainstPileOverride) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        DropLocationFilter(env, 2);
+
+        const auto result = ReplaceMainConfig(env, [](YAML::Node& config) {
+            YAML::Node rule;
+            rule["pile_name"].push_back("pile_2");
+            rule["kind"].push_back("pool_2");
+            rule["erasure_species"] = "none";
+            rule["geometry"] = YAML::Node(YAML::NodeType::Map);
+            config["blob_storage_config"]["storage_pool_pile_overrides"].push_back(rule);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+
+        const auto response = ChangeStoragePoolBridgeMode(env, 2, true);
+        UNIT_ASSERT_C(!response.GetSuccess(), "the existing group doesn't match the override of its pile");
+        UNIT_ASSERT(!ReadStoragePool(env, 2).GetBridgeMode());
+        UNIT_ASSERT(!GetGroupInfo(env, groups.front()).HasBridgeGroupState());
+    }
+
 }

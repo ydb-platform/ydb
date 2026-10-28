@@ -474,6 +474,10 @@
   includes:
   - fftw3.h: contrib/restricted/fftw3/api/fftw3.h
 
+- source_filter: "^contrib/restricted/libx265"
+  includes:
+    - search.h: contrib/restricted/libx265/encoder/search.h
+
 # Resolve openssl3-specific to contrib/libs/openssl3
 # even if the target does not depend it
 # in order to ease the migration.

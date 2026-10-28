@@ -1339,6 +1339,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     //check already written
 
     ui64 poffset = p.Offset.GetOrElse(curOffset);
+    if (AppData(ctx)->PQConfig.HasMinOffset()) {
+        poffset = p.Offset.GetOrElse(std::max(curOffset, AppData(ctx)->PQConfig.GetMinOffset()));
+    }
 
     LOG_T(
         "Topic partition process write",

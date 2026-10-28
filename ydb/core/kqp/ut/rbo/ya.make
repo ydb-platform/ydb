@@ -14,6 +14,7 @@ SRCS(
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_ut.cpp
     kqp_rbo_lookup_join_ut.cpp
+    kqp_rbo_olap_distinct_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
 
@@ -62,3 +63,8 @@ NO_COMPILER_WARNINGS()
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    join_order
+    effects
+)

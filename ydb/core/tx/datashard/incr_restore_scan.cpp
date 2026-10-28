@@ -265,7 +265,7 @@ public:
 
             const auto& record = *recordPtr;
 
-            records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
+            records.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBodySize());
             PendingRecords.emplace(record.GetOrder(), recordPtr);
         }
 

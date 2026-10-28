@@ -1,5 +1,3 @@
-{% if select_command != "SELECT STREAM" %}
-
 ## GROUP BY
 
 Группирует результаты `SELECT` по значениям указанных столбцов или выражений. Вместе с `GROUP BY` часто применяются [агрегатные функции](../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) для выполнения вычислений в каждой группе.
@@ -42,7 +40,7 @@ GROUP BY
 
 {% endnote %}
 
-Также в YQL доступен механизм фабрик агрегатных функций, реализованный с помощью функций [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) и [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregateby).
+Также в YQL доступен механизм фабрик агрегатных функций, реализованный с помощью функций [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) и [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregate-by).
 
 ### Примеры {#examples}
 
@@ -75,7 +73,7 @@ GROUP BY
 
 {% note warning %}
 
-Возможность указывать имя для колонки или выражения в `GROUP BY .. AS foo` является расширением YQL. Такое имя становится видимым в `WHERE` несмотря на то, что фильтрация по `WHERE` выполняется [раньше](../index.md#selectexec) группировки. В частности, если в таблице `T` есть две колонки `foo` и `bar`, то в запросе `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` фильтрация фактически произойдет по колонке `bar` из исходной таблицы.
+Возможность указывать имя для колонки или выражения в `GROUP BY .. AS foo` является расширением YQL. Такое имя становится видимым в `WHERE` несмотря на то, что фильтрация по `WHERE` выполняется [раньше](index.md#selectexec) группировки. В частности, если в таблице `T` есть две колонки `foo` и `bar`, то в запросе `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` фильтрация фактически произойдет по колонке `bar` из исходной таблицы.
 
 {% endnote %}
 
@@ -266,8 +264,6 @@ GROUP /*+ COMPACT() */ BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
-
-{% endif %}
 
 ## GROUP BY ... HOP {#group-by-hop}
 

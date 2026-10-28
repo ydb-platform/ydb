@@ -308,6 +308,12 @@ struct TIndexScore {
     bool operator<(const TIndexScore& other) const { return AsTuple() < other.AsTuple(); }
 };
 
+// Whether the ranges cover the whole filter predicate, so the extractor pruned it to `true`.
+bool IsPrunedToTrue(const TExprNode::TPtr& prunedLambda) {
+    const auto literal = TCoLambda(prunedLambda).Body().Maybe<TCoBool>();
+    return literal.IsValid() && literal.Cast().Literal().Value() == "true";
+}
+
 bool HasNoResidualPredicate(const TExprNode::TPtr& prunedLambda) {
     if (!prunedLambda) {
         return false;
@@ -679,8 +685,11 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         for (const auto id : filter->GetFilterIUs(props)) {
             substitutions.Add(id, indexIds.at(props.InfoUnitRegistry.Get(id).GetColumnName()));
         }
-        auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
-        auto indexFilter = MakeIntrusive<TOpFilter>(std::move(indexRead), filter->Pos, filter->Props, std::move(indexPredicate), true);
+        TIntrusivePtr<IOperator> indexFilter = std::move(indexRead);
+        if (!IsPrunedToTrue(lookupResult.PrunedLambda)) {
+            auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
+            indexFilter = MakeIntrusive<TOpFilter>(std::move(indexFilter), filter->Pos, filter->Props, std::move(indexPredicate), true);
+        }
 
         TOpTableLookup::TLookupKeys lookupKeys;
         for (const auto& pk : mainMeta.KeyColumnNames) {
@@ -739,6 +748,10 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
+    // An always true filter would stand between the read and its consumers, e.g. an OLAP aggregate.
+    if (IsPrunedToTrue(chosen.PrunedLambda)) {
+        return newRead;
+    }
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
 }
 } // namespace NKikimr::NKqp

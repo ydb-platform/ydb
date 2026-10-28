@@ -183,7 +183,8 @@ void TConfigFlags::InitFlags() {
         if (ForPartialTypeCheck_) {
             return true;
         }
-        if (Types_.UdfBridgeBinaryPath.empty()) {
+        const bool replayingMetadata = Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full;
+        if (Types_.UdfBridgeBinaryPath.empty() && !replayingMetadata) {
             ctx.AddError(TIssue(pos, "udf_bridge is not available"));
             return false;
         }
@@ -459,6 +460,17 @@ void TConfigFlags::InitFlags() {
         }
         Types_.DeriveColumnOrder = (name == "OrderedColumns");
         Types_.OrderedColumns = (name == "OrderedColumns");
+        return true;
+    });
+
+    AddFlag("PositionalUnionAll", {}, /*system=*/false, [this](TStringBuf, const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (!args.empty()) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+            return false;
+        }
+        Types_.PositionalUnionAll = true;
+        Types_.OrderedColumns = true;
+        Types_.DeriveColumnOrder = true;
         return true;
     });
 

@@ -12,6 +12,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 #include <deque>
 
 namespace NKikimr::NOlap::NImport {
@@ -31,9 +33,11 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NImport::TSession> ImportSession;
     TActorId ImportActorId;
-    // Blobs left from the current batch. ColumnShard accepts one operation per TEvWrite.
+    // Keep the current blob until the write succeeds so it can be retried on overload.
+    // ColumnShard accepts one operation per TEvWrite.
     std::deque<TString> PendingBlobs;
     TString PendingPayloadSchema;
+    IRetryPolicy<>::IRetryState::TPtr WriteRetryState;
 
     TImportCounters Counters;
     TInstant ReadStartTime;
@@ -44,15 +48,17 @@ private:
     static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
     static constexpr TDuration WarningInterval = TDuration::Seconds(60);
     static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
+    static constexpr ui64 WriteRetryTag = 1;
 
     void SwitchStage(const EStage from, const EStage to);
     static TString StageToString(EStage stage);
 
     void ScheduleTimeoutCheck();
-    void HandleWakeup();
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
 
     void AbortImport(const TString& errorMessage);
     void SendNextBlob();
+    void SendWriteRequest();
 
     void PassAway() override;
 
@@ -77,7 +83,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch, Handle);
                 hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
-                cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
+                hFunc(NActors::TEvents::TEvWakeup, Handle);
                 default:
                     TBase::StateInProgress(ev);
             }

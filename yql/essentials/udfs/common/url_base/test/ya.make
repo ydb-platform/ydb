@@ -1,6 +1,8 @@
 YQL_UDF_MINITEST()
 
-DEPENDS(yql/essentials/udfs/common/url_base)
+DEPENDS(
+    yql/essentials/udfs/common/url_base/impl
+)
 
 TIMEOUT(600)
 

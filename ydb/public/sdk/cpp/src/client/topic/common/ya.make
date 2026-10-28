@@ -13,7 +13,6 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
 
-    ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/types
     
 

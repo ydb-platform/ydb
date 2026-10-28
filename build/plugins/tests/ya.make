@@ -10,6 +10,8 @@ TEST_SRCS(
     test_nots_checks.py
     test_requirements.py
     test_res.py
+    test_yql_prebuilt.py
+    test_ytest.py
 )
 
 PEERDIR(

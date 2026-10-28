@@ -21,6 +21,18 @@ private:
         return true;
     }
 
+    virtual void DoAddNamePrefix(const TString& prefix) override {
+        for (auto&& i : Children) {
+            i->AddNamePrefix(prefix);
+        }
+    }
+
+    virtual void DoSetOrbit(NLWTrace::TOrbit& orbit) override {
+        for (auto&& i : Children) {
+            i->SetOrbit(orbit);
+        }
+    }
+
 public:
     using TBase::TBase;
 

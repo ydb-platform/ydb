@@ -205,6 +205,7 @@ TStatus RemoveDirectoryRecursive(
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
     const auto listingSettings = TRecursiveListSettings()
+        .SkipMode(settings.SkipMode_)
         .Filter([](const TSchemeEntry& entry) {
             // explicitly skip subdomains
             return entry.Type != ESchemeEntryType::SubDomain;

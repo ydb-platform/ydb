@@ -662,12 +662,13 @@ public:
     // Each value was serialized as a single-cell TSerializedCellVec.
     static TOwnedCellVec ParsePrefixCells(const NKikimrKqp::TKqpFullTextSourceSettings* settings) {
         TVector<TCell> prefixCells;
-        TVector<TSerializedCellVec> prefixHolders;
+        TVector<TCell> cells;
         for (const auto& prefixColumn : settings->GetQuerySettings().GetPrefixColumns()) {
-            TSerializedCellVec vec(prefixColumn.GetValue());
-            YQL_ENSURE(vec.GetCells().size() == 1);
-            prefixCells.push_back(vec.GetCells()[0]);
-            prefixHolders.push_back(std::move(vec));
+            // The parsed cell points into the proto string, which is alive here;
+            // TOwnedCellVec below copies the cell data into owned storage.
+            YQL_ENSURE(TSerializedCellVec::TryParseCells(prefixColumn.GetValue(), cells));
+            YQL_ENSURE(cells.size() == 1);
+            prefixCells.push_back(cells[0]);
         }
         return TOwnedCellVec(prefixCells);
     }

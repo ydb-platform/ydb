@@ -272,8 +272,6 @@ SELECT * FROM my_table WHERE
 
 ### Примеры
 
-{% if select_command != "SELECT STREAM" %}
-
 ```yql
 SELECT key AS k FROM my_table;
 ```
@@ -287,23 +285,6 @@ SELECT
     MyFunction(key, 123 AS my_optional_arg)
 FROM my_table;
 ```
-{% else %}
-
-```yql
-SELECT STREAM key AS k FROM my_stream;
-```
-
-```yql
-SELECT STREAM s.key FROM my_stream AS s;
-```
-
-```yql
-SELECT STREAM
-    MyFunction(key, 123 AS my_optional_arg)
-FROM my_stream;
-```
-
-{% endif %}
 
 ## CAST {#cast}
 
@@ -484,7 +465,7 @@ $x, $y = AsTuple($y, $x); -- swap значений выражений
 
     Здесь табличные выражения работают как ожидается – например `$input = SELECT a, b, c FROM T; SELECT * FROM $input` вернет таблицу с тремя колонками.
 
-    Табличный контекст также возникает после [UNION ALL](select/index.md#unionall){% if feature_join %}, [JOIN](select/join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
+    Табличный контекст также возникает после [UNION ALL](select/union.md#union-all){% if feature_join %}, [JOIN](select/join.md){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
 
 * векторный контекст - после [IN](#in). В этом контексте табличное выражение обязано содержать ровно одну колонку (имя этой колонки никак не влияет на результат выражения).
 

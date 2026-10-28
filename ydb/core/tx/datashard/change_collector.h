@@ -70,6 +70,7 @@ public:
 public:
     virtual void OnRestart() = 0;
     virtual bool NeedToReadKeys() const = 0;
+    virtual bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const = 0;
 
     virtual void CommitLockChanges(ui64 lockId, const TRowVersion& writeVersion) = 0;
 

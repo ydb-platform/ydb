@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
@@ -377,7 +378,14 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         auto cb = [request, func, args = std::move(args)](const TAsyncCreateSessionResult& result) {
             auto sessionResult = result.GetValueSync();
             if (!sessionResult.IsSuccess()) {
-                return Complete<TEvYdbProxy::TEvCreateSessionResponse>(request, sessionResult);
+                using TResult = typename TEvResponse::TResult;
+                if constexpr (std::is_same_v<TResult, TStatus>) {
+                    return Complete<TEvResponse>(request, TResult(sessionResult));
+                } else {
+                    static_assert(std::is_same_v<TResult, TDescribeTableResult>);
+                    return Complete<TEvResponse>(request, TResult(TStatus(sessionResult),
+                        Ydb::Table::DescribeTableResult{}, std::get<TDescribeTableSettings>(args)));
+                }
             }
 
             auto session = sessionResult.GetSession();

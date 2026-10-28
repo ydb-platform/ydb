@@ -18,7 +18,7 @@ public:
 public:
     virtual ~IScalarLayoutConverter() = default;
 
-    // Pack single tuple from scalar values
+    // Pack one tuple. Same path as PackBatch of a single row.
     virtual void Pack(const NYql::NUdf::TUnboxedValue* values, TPackResult& packed) = 0;
 
     // Pack multiple tuples from scalar values

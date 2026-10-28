@@ -1,0 +1,280 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(tower)
+
+CRATE_VERSION(0.5.3)
+CRATE_EDITION(2018)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/balance/error.rs
+    src/balance/mod.rs
+    src/balance/p2c/layer.rs
+    src/balance/p2c/make.rs
+    src/balance/p2c/mod.rs
+    src/balance/p2c/service.rs
+    src/balance/p2c/test.rs
+    src/buffer/error.rs
+    src/buffer/future.rs
+    src/buffer/layer.rs
+    src/buffer/message.rs
+    src/buffer/mod.rs
+    src/buffer/service.rs
+    src/buffer/worker.rs
+    src/builder/mod.rs
+    src/discover/list.rs
+    src/discover/mod.rs
+    src/filter/future.rs
+    src/filter/layer.rs
+    src/filter/mod.rs
+    src/filter/predicate.rs
+    src/hedge/delay.rs
+    src/hedge/latency.rs
+    src/hedge/mod.rs
+    src/hedge/rotating_histogram.rs
+    src/hedge/select.rs
+    src/layer.rs
+    src/limit/concurrency/future.rs
+    src/limit/concurrency/layer.rs
+    src/limit/concurrency/mod.rs
+    src/limit/concurrency/service.rs
+    src/limit/mod.rs
+    src/limit/rate/layer.rs
+    src/limit/rate/mod.rs
+    src/limit/rate/rate.rs
+    src/limit/rate/service.rs
+    src/load/completion.rs
+    src/load/constant.rs
+    src/load/mod.rs
+    src/load/peak_ewma.rs
+    src/load/pending_requests.rs
+    src/load_shed/error.rs
+    src/load_shed/future.rs
+    src/load_shed/layer.rs
+    src/load_shed/mod.rs
+    src/macros.rs
+    src/make/make_connection.rs
+    src/make/make_service.rs
+    src/make/make_service/shared.rs
+    src/make/mod.rs
+    src/ready_cache/cache.rs
+    src/ready_cache/error.rs
+    src/ready_cache/mod.rs
+    src/reconnect/future.rs
+    src/reconnect/mod.rs
+    src/retry/backoff.rs
+    src/retry/budget/mod.rs
+    src/retry/budget/tps_budget.rs
+    src/retry/future.rs
+    src/retry/layer.rs
+    src/retry/mod.rs
+    src/retry/policy.rs
+    src/spawn_ready/future.rs
+    src/spawn_ready/layer.rs
+    src/spawn_ready/mod.rs
+    src/spawn_ready/service.rs
+    src/steer/mod.rs
+    src/timeout/error.rs
+    src/timeout/future.rs
+    src/timeout/layer.rs
+    src/timeout/mod.rs
+    src/util/and_then.rs
+    src/util/boxed/layer.rs
+    src/util/boxed/layer_clone.rs
+    src/util/boxed/layer_clone_sync.rs
+    src/util/boxed/mod.rs
+    src/util/boxed/sync.rs
+    src/util/boxed/unsync.rs
+    src/util/boxed_clone.rs
+    src/util/boxed_clone_sync.rs
+    src/util/call_all/common.rs
+    src/util/call_all/mod.rs
+    src/util/call_all/ordered.rs
+    src/util/call_all/unordered.rs
+    src/util/either.rs
+    src/util/future_service.rs
+    src/util/map_err.rs
+    src/util/map_future.rs
+    src/util/map_request.rs
+    src/util/map_response.rs
+    src/util/map_result.rs
+    src/util/mod.rs
+    src/util/oneshot.rs
+    src/util/optional/error.rs
+    src/util/optional/future.rs
+    src/util/optional/mod.rs
+    src/util/ready.rs
+    src/util/rng.rs
+    src/util/service_fn.rs
+    src/util/then.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    balance
+    buffer
+    discover
+    futures-core
+    futures-util
+    indexmap
+    limit
+    load
+    load-shed
+    make
+    pin-project-lite
+    ready-cache
+    retry
+    slab
+    sync_wrapper
+    timeout
+    tokio
+    tokio-util
+    tracing
+    util
+)
+
+PEERDIR(
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/futures-util-0.3.34
+    contrib/crates/indexmap-2.14.2
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/slab-0.4.12
+    contrib/crates/sync_wrapper-1.0.2
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-util-0.7.20
+    contrib/crates/tower-layer-0.3.3
+    contrib/crates/tower-service-0.3.3
+    contrib/crates/tracing-0.1.44
+)
+
+LICENSE("MIT")
+VERSION(0.5.3)
+ORIGINAL_SOURCE(https://static.crates.io/crates/tower/tower-0.5.3.crate)
+
+CRATE_FEATURES(
+    log
+)
+
+CRATE_SOURCES(
+    src/balance/error.rs
+    src/balance/mod.rs
+    src/balance/p2c/layer.rs
+    src/balance/p2c/make.rs
+    src/balance/p2c/mod.rs
+    src/balance/p2c/service.rs
+    src/balance/p2c/test.rs
+    src/buffer/error.rs
+    src/buffer/future.rs
+    src/buffer/layer.rs
+    src/buffer/message.rs
+    src/buffer/mod.rs
+    src/buffer/service.rs
+    src/buffer/worker.rs
+    src/builder/mod.rs
+    src/discover/list.rs
+    src/discover/mod.rs
+    src/filter/future.rs
+    src/filter/layer.rs
+    src/filter/mod.rs
+    src/filter/predicate.rs
+    src/hedge/delay.rs
+    src/hedge/latency.rs
+    src/hedge/mod.rs
+    src/hedge/rotating_histogram.rs
+    src/hedge/select.rs
+    src/layer.rs
+    src/lib.rs
+    src/limit/concurrency/future.rs
+    src/limit/concurrency/layer.rs
+    src/limit/concurrency/mod.rs
+    src/limit/concurrency/service.rs
+    src/limit/mod.rs
+    src/limit/rate/layer.rs
+    src/limit/rate/mod.rs
+    src/limit/rate/rate.rs
+    src/limit/rate/service.rs
+    src/load/completion.rs
+    src/load/constant.rs
+    src/load/mod.rs
+    src/load/peak_ewma.rs
+    src/load/pending_requests.rs
+    src/load_shed/error.rs
+    src/load_shed/future.rs
+    src/load_shed/layer.rs
+    src/load_shed/mod.rs
+    src/macros.rs
+    src/make/make_connection.rs
+    src/make/make_service.rs
+    src/make/make_service/shared.rs
+    src/make/mod.rs
+    src/ready_cache/cache.rs
+    src/ready_cache/error.rs
+    src/ready_cache/mod.rs
+    src/reconnect/future.rs
+    src/reconnect/mod.rs
+    src/retry/backoff.rs
+    src/retry/budget/mod.rs
+    src/retry/budget/tps_budget.rs
+    src/retry/future.rs
+    src/retry/layer.rs
+    src/retry/mod.rs
+    src/retry/policy.rs
+    src/spawn_ready/future.rs
+    src/spawn_ready/layer.rs
+    src/spawn_ready/mod.rs
+    src/spawn_ready/service.rs
+    src/steer/mod.rs
+    src/timeout/error.rs
+    src/timeout/future.rs
+    src/timeout/layer.rs
+    src/timeout/mod.rs
+    src/util/and_then.rs
+    src/util/boxed/layer.rs
+    src/util/boxed/layer_clone.rs
+    src/util/boxed/layer_clone_sync.rs
+    src/util/boxed/mod.rs
+    src/util/boxed/sync.rs
+    src/util/boxed/unsync.rs
+    src/util/boxed_clone.rs
+    src/util/boxed_clone_sync.rs
+    src/util/call_all/common.rs
+    src/util/call_all/mod.rs
+    src/util/call_all/ordered.rs
+    src/util/call_all/unordered.rs
+    src/util/either.rs
+    src/util/future_service.rs
+    src/util/map_err.rs
+    src/util/map_future.rs
+    src/util/map_request.rs
+    src/util/map_response.rs
+    src/util/map_result.rs
+    src/util/mod.rs
+    src/util/oneshot.rs
+    src/util/optional/error.rs
+    src/util/optional/future.rs
+    src/util/optional/mod.rs
+    src/util/ready.rs
+    src/util/rng.rs
+    src/util/service_fn.rs
+    src/util/then.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+)
+
+END()

@@ -362,7 +362,7 @@ public:
             Queue = new TRandomWaitThreadPool(*SectorMap->ImitateRandomWait);
         } else {
             Queue = new TThreadPool();
-            Queue->Start(1, MaxEvents);
+            Queue->Start(1, 128);
         }
         return EIoResult::Ok;
     }

@@ -417,6 +417,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         assert result_sets is not None and len(result_sets) != 0
 
         result_rows_count = 0
+        compressed_size = 0
+        uncompressed_size = 0
         for result_set in result_sets:
             self.validate_format_arrow(result_set)
 
@@ -424,14 +426,19 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
             batch.validate()
 
-            # is there the best way to check if the compression is working?
+            serialized_size = len(batch.serialize().to_pybytes())
             if codec.type in [ydb.ArrowCompressionCodecType.UNSPECIFIED, ydb.ArrowCompressionCodecType.NONE]:
-                assert len(result_set.data) == len(batch.serialize().to_pybytes())
+                assert len(result_set.data) == serialized_size
             else:
-                assert len(result_set.data) < len(batch.serialize().to_pybytes())
+                compressed_size += len(result_set.data)
+                uncompressed_size += serialized_size
 
             result_rows_count += batch.num_rows
             assert batch.num_columns == len(self.all_types) + 1
+
+        if codec.type not in [ydb.ArrowCompressionCodecType.UNSPECIFIED, ydb.ArrowCompressionCodecType.NONE]:
+            # Compression framing can make an individual small batch larger.
+            assert compressed_size < uncompressed_size
 
         assert result_rows_count == rows_count
 

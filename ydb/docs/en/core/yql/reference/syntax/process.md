@@ -26,13 +26,13 @@ In the list of function arguments after the `USING` keyword, you can pass one of
 
 {% note info %}
 
-After executing `{{ process_command }}`, within the same query, on the resulting table (or tables), you can perform {% if select_command != "SELECT STREAM" %}[SELECT](select/index.md), [REDUCE](reduce.md){% else %}[SELECT STREAM](select_stream.md){% endif %}, [INSERT INTO](insert_into.md), other `{{ process_command }}` and so on, depending on the intended result.
+After executing `{{ process_command }}`, within the same query, on the resulting table (or tables), you can perform [SELECT](select/index.md), [REDUCE](reduce.md), [INSERT INTO](insert_into.md), other `{{ process_command }}` and so on, depending on the intended result.
 
 {% endnote %}
 
 The `USING` keyword and the function are optional: if you omit them, the source table is returned. {% if feature_subquery %}This can be convenient for using a [subquery template](subquery.md).{% endif %}
 
-In `{{ process_command }}` you can pass multiple inputs (the input here means a table,{% if select_command != "PROCESS STREAM" %} a [range of tables](select/concat.md){% endif %}, a subquery, a [named expression](expressions.md#named-nodes)), separated by commas. To the function from `USING`, you can only pass in this case special named expressions `TableRow()` or  `TableRows()` that will have the following type:
+In `{{ process_command }}` you can pass multiple inputs (the input here means a table, a [range of tables](select/concat.md), a subquery, a [named expression](expressions.md#named-nodes)), separated by commas. To the function from `USING`, you can only pass in this case special named expressions `TableRow()` or  `TableRows()` that will have the following type:
 
 * `TableRow()`: A `Variant` where each element has an entry structure type from the relevant input. For each input row in the Variant, the element corresponding to the occurrence ID for this row is non-empty
 * `TableRows()`: A lazy iterator by Variants, in terms of the types `Stream<Variant...>>`. The alternative has the same semantics as for `TableRow()`
@@ -40,8 +40,6 @@ In `{{ process_command }}` you can pass multiple inputs (the input here means a 
 After `USING` in `{{ process_command }}` you can optionally specify `ASSUME ORDER BY` with a list of columns. The result of such a  `{{ process_command }}` statement is treated as sorted, but without actually running a sort. Sort check is performed at the query execution stage. It supports setting the sort order using the keywords `ASC` (ascending order) and `DESC` (descending order). Expressions are not supported in `ASSUME ORDER BY`.
 
 ## Examples
-
-{% if process_command != "PROCESS STREAM" %}
 
 ```yql
 PROCESS my_table
@@ -80,47 +78,3 @@ $udf = Python::MyFunc(Callable<(Stream<Variant<Struct<...>, Struct<...>>>) -> St
 
 PROCESS my_table1, my_table2 USING $udf(TableRows());
 ```
-
-{% else %}
-
-```yql
-
--- The lambda function accepts a primitive type and returns a structure with three identical fields
-$f = ($r) -> {
-   return AsStruct($r as key, $r as subkey, $r as value);
-};
-
--- Filtering the input stream by the WHERE clause
-PROCESS STREAM Input USING $f(value) WHERE cast(subkey as int) > 3;
-```
-
-```yql
--- The lambda function accepts the type `Struct<key:String, subkey:String, value:String>`
--- and returns a similar structure by adding a suffix to each field
-
-$f = ($r) -> {
-    return AsStruct($r.key || "_1" as key, $r.subkey || "_2" as subkey, $r.value || "_3" as value);
-};
-
-PROCESS STREAM Input USING $f(TableRow());
-```
-
-```yql
--- The lambda function accepts an entry in the format `Struct<...>`
--- and returns a list of two identical items
-$f1 = ($x) -> {
-    return AsList($x, $x);
-};
-
--- The lambda function accepts and returns the type `Stream<Struct...>>`
--- It applies the $f1 function to each element and returns duplicate rows
-$f2 = ($x) -> {
-    return ListFlatMap($x, $f1);
-};
-
-$p = (PROCESS STREAM Input USING $f2(TableRows()));
-
-SELECT STREAM * FROM $p;
-```
-
-{% endif %}

@@ -26,5 +26,9 @@ bool TBaseChangeCollector::NeedToReadKeys() const {
     return false;
 }
 
+bool TBaseChangeCollector::NeedHistoricalPrecharge(const TTableId&, TArrayRef<const TRawTypeValue>) const {
+    return false;
+}
+
 } // NDataShard
 } // NKikimr

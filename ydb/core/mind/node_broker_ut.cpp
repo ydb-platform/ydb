@@ -13,8 +13,10 @@
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -2986,6 +2988,57 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, extendedExpire);
         CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, extendedExpire);
+    }
+
+    // node of the implicit pile (in the cluster converted from non-bridged one) may get the name of its pile, but it can't
+    // move to another pile
+    Y_UNIT_TEST(BridgePileNameOfImplicitPile)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 3);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // NodeBroker resolves pile names against bridge info of the storage config
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        for (const char *name : {"pile_1", "pile_2"}) {
+            auto& pile = bridgeInfo->Piles.emplace_back();
+            pile.BridgePileId = TBridgePileId::FromPileIndex(bridgeInfo->Piles.size() - 1);
+            pile.Name = name;
+        }
+        bridgeInfo->ImplicitPile = &bridgeInfo->Piles.front();
+        const auto storageConfig = std::make_shared<const NKikimrBlobStorage::TStorageConfig>();
+        runtime.GetAppData(0).BridgeModeEnabled = true;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvNodeWardenQueryStorageConfig::EventType &&
+                    !ev->Get<TEvNodeWardenQueryStorageConfig>()->Subscribe) {
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new TEvNodeWardenStorageConfig(storageConfig,
+                    false, bridgeInfo)), 0, true);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto registerNode = [&](const TString& host, std::optional<TString> pileName) {
+            auto event = MakeRegistrationRequest(host, 1001, host, "1.2.3.4", DOMAIN_NAME, 1, 2, 3, 4);
+            if (pileName) {
+                event->Record.MutableLocation()->SetBridgePileName(*pileName);
+            }
+            runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvRegistrationResponse>(handle);
+            UNIT_ASSERT(reply);
+            return reply->Record.GetStatus();
+        };
+
+        UNIT_ASSERT_EQUAL(registerNode("host1", std::nullopt).GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(registerNode("host1", "pile_2").GetCode(), TStatus::WRONG_REQUEST);
+        UNIT_ASSERT_EQUAL(registerNode("host1", "pile_1").GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(registerNode("host1", "pile_1").GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(registerNode("host1", std::nullopt).GetCode(), TStatus::WRONG_REQUEST);
+
+        // node that has got its pile name explicitly can't change it
+        UNIT_ASSERT_EQUAL(registerNode("host2", "pile_2").GetCode(), TStatus::OK);
+        UNIT_ASSERT_EQUAL(registerNode("host2", "pile_1").GetCode(), TStatus::WRONG_REQUEST);
     }
 
     Y_UNIT_TEST(NodesMigrationSetLocation)

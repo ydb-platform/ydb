@@ -1,4 +1,5 @@
 from ydb.apps.dstool.main import main as dstool_main
+from ydb.core.protos.blobstorage_disk_pb2 import TPDiskState
 from ydb.tests.library.common import cms
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
@@ -45,9 +46,19 @@ def format_vdisk_id(vdisk):
 
 def wait_static_vdisks_ready(cluster):
     def get_ready_vdisks():
-        vdisks = get_static_vdisks(cluster)
+        base_config = cluster.client.query_base_config().BaseConfig
+        vdisks = [vdisk for vdisk in base_config.VSlot if vdisk.GroupId == STATIC_GROUP_ID]
         assert len(vdisks) == STATIC_GROUP_SIZE, 'Static group is not fully configured'
         assert all(vdisk.Ready for vdisk in vdisks), 'Static group is not BSC-ready'
+        used_nodes = {vdisk.VSlotId.NodeId for vdisk in vdisks}
+        connected_nodes = {node.NodeId for node in base_config.Node if node.Connected}
+        assert any(
+            pdisk.NodeId not in used_nodes
+            and pdisk.NodeId in connected_nodes
+            and pdisk.PDiskMetrics.State == TPDiskState.Normal
+            and pdisk.PDiskMetrics.AvailableSize > 0
+            for pdisk in base_config.PDisk
+        ), 'No BSC-ready spare PDisk for static VDisk eviction'
         return vdisks
 
     return retry_assertions(get_ready_vdisks, timeout_seconds=180, step_seconds=2)

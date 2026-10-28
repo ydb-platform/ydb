@@ -655,26 +655,30 @@ struct TPerfTestConfig {
     };
 
     static TIntrusivePtr<NPDisk::TSectorMap> TryParseSectorMap(const TString& path) {
-        if (!path.Contains(":")) {
+        if (!path.StartsWith("SectorMap:")) {
             return nullptr;
         }
-        TVector<TString> splitted;
-        Split(path, ":", splitted);
-        if (splitted.size() >= 2 && splitted[0] == "SectorMap") {
-            ui32 defaultSizeGb = 100;
-            ui64 size = (ui64)defaultSizeGb << 30;
-            if (splitted.size() >= 3) {
-                size = (ui64)FromStringWithDefault<ui32>(splitted[2], defaultSizeGb) << 30;
+        const TVector<TString> splitted = StringSplitter(path).Split(':');
+        Y_ENSURE(splitted.size() >= 2 && splitted.size() <= 4 && !splitted[1].empty(),
+            "Invalid sector map path '" << path << "'; expected SectorMap:<name>[:<GiB>[:<mode>]]");
+        ui32 sizeGb = 100;
+        if (splitted.size() >= 3) {
+            for (char c : splitted[2]) {
+                Y_ENSURE(c >= '0' && c <= '9',
+                    "Sector map size must be a positive uint32 number of GiB: '" << path << "'");
             }
-            auto diskMode = NPDisk::NSectorMap::DM_NONE;
-            if (splitted.size() >= 4) {
-                diskMode = NPDisk::NSectorMap::DiskModeFromString(splitted[3]);
-            }
-            auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(size, diskMode);
-            sectorMap->ZeroInit(1000);
-            return sectorMap;
+            Y_ENSURE(TryFromString(splitted[2], sizeGb) && sizeGb,
+                "Sector map size must be a positive uint32 number of GiB: '" << path << "'");
         }
-        return nullptr;
+        auto diskMode = NPDisk::NSectorMap::DM_NONE;
+        if (splitted.size() == 4) {
+            diskMode = NPDisk::NSectorMap::DiskModeFromString(splitted[3]);
+            Y_ENSURE(NPDisk::NSectorMap::DiskModeToString(diskMode) == splitted[3],
+                "Invalid sector map mode in '" << path << "'; expected NONE, HDD, SSD, or NVME");
+        }
+        auto sectorMap = MakeIntrusive<NPDisk::TSectorMap>(ui64(sizeGb) << 30, diskMode);
+        sectorMap->ZeroInit(1000);
+        return sectorMap;
     }
 
     TPerfTestConfig(const TString& path, const TString name, const TString type, const TString outputFormatName,

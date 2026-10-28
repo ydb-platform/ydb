@@ -4,10 +4,9 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import re
-import subprocess
 import tempfile
-import time
+
+from spin_runner import classify_search, execute
 
 CASES = {
     "split": {},
@@ -120,31 +119,6 @@ EXPECTED.update({
     "bootstrap_repeat_first_candidate": 'acceptance cycle',
 })
 
-def execute(command, directory, output_name, timeout):
-    started = time.monotonic()
-    output = directory / output_name
-    with output.open("w") as stream:
-        try:
-            result = subprocess.run(command, cwd=directory, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
-            return result.returncode, time.monotonic() - started, output.read_text()
-        except subprocess.TimeoutExpired:
-            return None, time.monotonic() - started, output.read_text()
-
-def classify_pan_result(code, output):
-    match = re.search(r"errors:\s*(\d+)", output)
-    errors = int(match.group(1)) if match else None
-    if code is None or re.search(r"max search depth too small|out of memory", output, re.I):
-        status = "INCOMPLETE"
-    elif errors:
-        status = "FAIL"
-    elif re.search(r"Search not completed", output, re.I):
-        status = "INCOMPLETE"
-    elif code != 0 or errors is None:
-        status = "FAIL"
-    else:
-        status = "PASS"
-    return status, errors
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", action="append", choices=CASES, dest="cases")
@@ -178,9 +152,9 @@ def main():
         run = {"case": name, "defines": definitions, "commands": commands, "directory": str(directory)}
         setup_ok = True
         for index, command in enumerate(commands):
-            code, _, output = execute(command, directory, f"setup-{index}.txt", args.timeout)
-            if code != 0:
-                run.update(status="SETUP_FAILED", output=output[:1000])
+            stage, output = execute(command, directory, f"setup-{index}.txt", args.timeout)
+            if stage["timed_out"] or stage["returncode"] != 0:
+                run.update(status="INCOMPLETE" if stage["timed_out"] else "SETUP_FAILED", output=output[:1000])
                 setup_ok = False
                 break
         if setup_ok:
@@ -188,31 +162,33 @@ def main():
             if not reachability:
                 command.extend(["-a", "-f", "-N", "convergence"])
             run["commands"].append(command)
-            code, seconds, output = execute(command, directory, "convergence.txt", args.timeout)
-            status, errors = classify_pan_result(code, output)
-            states = re.search(r"([\d.e+]+) states, stored", output)
+            search, output = execute(command, directory, "convergence.txt", args.timeout)
+            status, reason, stats = classify_search(search, output)
+            errors = stats["errors"]
             expected_failure = name in EXPECTED or reachability
-            run.update(status=status, seconds=round(seconds, 3), errors=errors,
-                       states=states.group(1) if states else None, expected_failure=expected_failure)
+            run.update(status=status, reason=reason, seconds=search["seconds"], errors=errors,
+                       states=str(stats["states_stored"]) if stats["states_stored"] is not None else None,
+                       expected_failure=expected_failure)
             if errors:
                 replay = ["spin", "-t", "-p", "-g", *model_flags, "model.pml"]
                 run["commands"].append(replay)
-                replay_code, _, replay_output = execute(replay, directory, "trail.txt", args.timeout)
+                replay_run, replay_output = execute(replay, directory, "trail.txt", args.timeout)
                 expected_text = (f"REACHED event={definitions['CHECK_EVENT']}" if reachability
                                  else EXPECTED.get(name))
                 evidence = replay_output if reachability else output
-                if expected_failure and status == "FAIL" and replay_code == 0 and expected_text in evidence:
+                if (expected_failure and status == "FAIL" and not replay_run["timed_out"]
+                        and replay_run["returncode"] == 0 and expected_text in evidence):
                     run["status"] = "EXPECTED_COUNTEREXAMPLE"
             if not expected_failure:
                 safety = ["./pan", "-a", "-b", "-m1000000", "-w20", "-N", "role_exclusion"]
                 run["commands"].append(safety)
-                code, seconds, output = execute(safety, directory, "safety.txt", args.timeout)
-                safety_status, safety_errors = classify_pan_result(code, output)
+                safety_run, output = execute(safety, directory, "safety.txt", args.timeout)
+                safety_status, _, safety_stats = classify_search(safety_run, output)
                 run["safety_status"] = safety_status
                 if safety_status == "FAIL" or run["status"] == "PASS":
                     run["status"] = safety_status
-                run["safety_errors"] = safety_errors
-                run["safety_seconds"] = round(seconds, 3)
+                run["safety_errors"] = safety_stats["errors"]
+                run["safety_seconds"] = safety_run["seconds"]
         failed |= run["status"] not in ("PASS", "EXPECTED_COUNTEREXAMPLE")
         if (name in EXPECTED or reachability) and run["status"] == "PASS":
             failed = True

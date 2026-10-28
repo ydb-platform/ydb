@@ -10,5 +10,7 @@ namespace NKikimr::NGRpcService {
     void DoUpdateClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoGetClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoConvertToBridge(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoAddPile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoRemovePile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
 } // NKikimr::NGRpcService

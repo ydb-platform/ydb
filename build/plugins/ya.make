@@ -31,6 +31,7 @@ PY_SRCS(
     pybuild.py
     res.py
     suppressions.py
+    yql_prebuilt.py
     yql_python_udf.py
     ytest.py
 )

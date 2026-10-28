@@ -318,6 +318,47 @@ TEST(TPhoenixTest, SinceVersionNew)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NKeepWhenMissing {
+
+struct S
+{
+    int A = 0;
+    int B = 42;
+    int C = 42;
+
+    PHOENIX_DECLARE_TYPE(S, 0xcdf77a11)
+    {
+        PHOENIX_REGISTER_FIELD(1, A);
+        PHOENIX_REGISTER_FIELD(2, B,
+            .SinceVersion(100)
+            .KeepWhenMissing());
+        PHOENIX_REGISTER_FIELD(3, C,
+            .SinceVersion(100));
+    }
+};
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // namespace NKeepWhenMissing
+
+TEST(TPhoenixTest, KeepWhenMissing)
+{
+    using namespace NKeepWhenMissing;
+
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto s = Deserialize<S>(buffer);
+    EXPECT_EQ(s.A, 123);
+    // Kept as is.
+    EXPECT_EQ(s.B, 42);
+    // Reset by default.
+    EXPECT_EQ(s.C, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NBeforeVersion {
 
 struct S
@@ -911,6 +952,173 @@ TEST(TPhoenixTest, SaveLoadVirtualField)
     s1.A = 123;
     auto s2 = Deserialize<S>(Serialize(s1));
     EXPECT_EQ(s1, s2);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NInlineRegisterMetadata {
+
+struct TInline
+{
+    int A = 0;
+    std::string B;
+
+    PHOENIX_DECLARE_TYPE(TInline, 0x86932a96)
+    {
+        PHOENIX_REGISTER_FIELD(1, A);
+        PHOENIX_REGISTER_FIELD(2, B);
+    }
+
+    // Still private, as after an out-of-line declaration.
+    int Hidden = 0;
+};
+
+PHOENIX_DEFINE_TYPE(TInline);
+
+template <class T>
+concept CHasPublicHidden = requires (T t) { t.Hidden; };
+
+static_assert(!CHasPublicHidden<TInline>);
+
+template <class T1, class T2>
+struct TInlinePair
+{
+    T1 First;
+    T2 Second;
+
+    PHOENIX_DECLARE_TEMPLATE_TYPE(TInlinePair, 0x4ad80fea)
+    {
+        PHOENIX_REGISTER_FIELD(1, First);
+        PHOENIX_REGISTER_FIELD(2, Second);
+    }
+};
+
+PHOENIX_DEFINE_TEMPLATE_TYPE(TInlinePair, (_, _));
+
+} // namespace NInlineRegisterMetadata
+
+TEST(TPhoenixTest, InlineRegisterMetadata)
+{
+    using namespace NInlineRegisterMetadata;
+
+    TInline s1;
+    s1.A = 123;
+    s1.B = "hello";
+    auto s2 = Deserialize<TInline>(Serialize(s1));
+    EXPECT_EQ(s2.A, 123);
+    EXPECT_EQ(s2.B, "hello");
+
+    // Same bytes as the out-of-line TPair.
+    TInlinePair<int, std::string> p1{.First = 1, .Second = "x"};
+    auto buffer = Serialize(p1);
+    EXPECT_EQ((Serialize(TPair<int, std::string>{.First = 1, .Second = "x"})), buffer);
+    auto p2 = Deserialize<TInlinePair<int, std::string>>(buffer);
+    EXPECT_EQ(p2.First, 1);
+    EXPECT_EQ(p2.Second, "x");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NPropertyField {
+
+class TWithAccessors
+{
+public:
+    int GetA() const
+    {
+        return A_;
+    }
+
+    void SetA(int value)
+    {
+        A_ = value;
+        ++SetACount_;
+    }
+
+    const std::vector<std::string>& GetB() const
+    {
+        return B_;
+    }
+
+    void SetB(std::vector<std::string> value)
+    {
+        B_ = std::move(value);
+    }
+
+    int GetSetACount() const
+    {
+        return SetACount_;
+    }
+
+    // Persisted as its decimal representation.
+    int C = 0;
+
+private:
+    int A_ = 0;
+    std::vector<std::string> B_;
+    int SetACount_ = 0;
+
+    PHOENIX_DECLARE_TYPE(TWithAccessors, 0x7825e083);
+};
+
+void TWithAccessors::RegisterMetadata(auto&& registrar)
+{
+    registrar.template PropertyField<1, &TThis::GetA, &TThis::SetA>("A")();
+    registrar.template PropertyField<2, &TThis::GetB, &TThis::SetB>("B")();
+    registrar.template PropertyField<3,
+        [] (const TThis* this_) {
+            return std::to_string(this_->C);
+        },
+        [] (TThis* this_, std::string value) {
+            this_->C = std::stoi(value);
+        }>("C")();
+}
+
+PHOENIX_DEFINE_TYPE(TWithAccessors);
+
+struct TPlain
+{
+    int A = 0;
+    std::vector<std::string> B;
+    std::string C;
+
+    PHOENIX_DECLARE_TYPE(TPlain, 0x54b96d39);
+};
+
+void TPlain::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+    PHOENIX_REGISTER_FIELD(2, B);
+    PHOENIX_REGISTER_FIELD(3, C);
+}
+
+PHOENIX_DEFINE_TYPE(TPlain);
+
+} // namespace NPropertyField
+
+TEST(TPhoenixTest, PropertyField)
+{
+    using namespace NPropertyField;
+
+    TWithAccessors s1;
+    s1.SetA(123);
+    s1.SetB({"x", "y"});
+    s1.C = 456;
+
+    auto buffer = Serialize(s1);
+
+    // Persisted exactly as the plain fields of the deduced types.
+    TPlain plain;
+    plain.A = 123;
+    plain.B = {"x", "y"};
+    plain.C = "456";
+    EXPECT_EQ(Serialize(plain), buffer);
+
+    auto s2 = Deserialize<TWithAccessors>(buffer);
+    EXPECT_EQ(s2.GetA(), 123);
+    EXPECT_EQ(s2.GetB(), (std::vector<std::string>{"x", "y"}));
+    EXPECT_EQ(s2.C, 456);
+    EXPECT_EQ(s2.GetSetACount(), 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2166,8 +2374,6 @@ public:
     }
 
 private:
-    PHOENIX_DECLARE_FRIEND();
-
     struct TInner
     {
         int A;
@@ -2338,6 +2544,167 @@ TEST(TPhoenixTest, FinalStructWithNullWeakAndNonNullStrong)
 }
 
 } // namespace NIntrusivePtrOnFinal
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NForeignContext {
+
+DEFINE_ENUM(EForeignVersion,
+    ((V1) (1))
+    ((V2) (2))
+);
+
+class TForeignSaveContext
+    : public TStreamSaveContext
+{
+public:
+    using TStreamSaveContext::TStreamSaveContext;
+
+    EForeignVersion GetVersion() const
+    {
+        return static_cast<EForeignVersion>(TStreamSaveContext::GetVersion());
+    }
+};
+
+class TForeignLoadContext
+    : public TStreamLoadContext
+{
+public:
+    using TStreamLoadContext::TStreamLoadContext;
+
+    EForeignVersion GetVersion() const
+    {
+        return static_cast<EForeignVersion>(TStreamLoadContext::GetVersion());
+    }
+};
+
+using TSaveContext = TForeignSaveContext;
+using TLoadContext = TForeignLoadContext;
+
+class TBase
+{
+public:
+    virtual ~TBase() = default;
+
+    int A = 0;
+
+    PHOENIX_DECLARE_VIRTUAL_TYPE(TBase, 0x6a1d0b37);
+};
+
+void TBase::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+}
+
+PHOENIX_DEFINE_TYPE(TBase);
+
+class TDerived
+    : public TBase
+{
+public:
+    int B = 0;
+    int C = 0;
+
+    PHOENIX_DECLARE_POLYMORPHIC_TYPE(TDerived, 0x3e94c2d1);
+};
+
+void TDerived::RegisterMetadata(auto&& registrar)
+{
+    registrar.template BaseType<TBase>();
+    PHOENIX_REGISTER_FIELD(1, B);
+    PHOENIX_REGISTER_FIELD(2, C,
+        .SinceVersion(EForeignVersion::V2));
+}
+
+PHOENIX_DEFINE_TYPE(TDerived);
+
+std::string SerializeViaBase(const TBase& value, EForeignVersion version)
+{
+    std::string buffer;
+    TStdStringOutput output(buffer);
+    TForeignSaveContext context(&output, ToUnderlying(version));
+    value.Save(context);
+    context.Finish();
+    return buffer;
+}
+
+void DeserializeViaBase(TBase* value, const std::string& buffer, EForeignVersion version)
+{
+    TMemoryInput input(buffer);
+    TForeignLoadContext context(&input);
+    context.SetVersion(ToUnderlying(version));
+    value->Load(context);
+}
+
+TEST(TPhoenixTest, ForeignContextVirtualType)
+{
+    TDerived derived1;
+    derived1.A = 1;
+    derived1.B = 2;
+    derived1.C = 3;
+
+    auto buffer = SerializeViaBase(derived1, EForeignVersion::V2);
+    EXPECT_EQ(buffer.size(), 3 * sizeof(int));
+
+    TDerived derived2;
+    DeserializeViaBase(&derived2, buffer, EForeignVersion::V2);
+    EXPECT_EQ(derived2.A, 1);
+    EXPECT_EQ(derived2.B, 2);
+    EXPECT_EQ(derived2.C, 3);
+}
+
+TEST(TPhoenixTest, ForeignContextSinceVersion)
+{
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 1);
+        Save<int>(context, 2);
+    });
+
+    TDerived derived;
+    derived.C = 3;
+    DeserializeViaBase(&derived, buffer, EForeignVersion::V1);
+    EXPECT_EQ(derived.A, 1);
+    EXPECT_EQ(derived.B, 2);
+    EXPECT_EQ(derived.C, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBeforeSaveStruct
+{
+    int A = 0;
+    mutable int SaveCount = 0;
+
+    PHOENIX_DECLARE_TYPE(TBeforeSaveStruct, 0x2f5c7e18);
+};
+
+void TBeforeSaveStruct::RegisterMetadata(auto&& registrar)
+{
+    registrar.BeforeSave([] (const TThis* this_, auto& /*context*/) {
+        ++this_->SaveCount;
+    });
+
+    PHOENIX_REGISTER_FIELD(1, A);
+}
+
+PHOENIX_DEFINE_TYPE(TBeforeSaveStruct);
+
+TEST(TPhoenixTest, BeforeSave)
+{
+    TBeforeSaveStruct value;
+    value.A = 123;
+
+    std::string buffer;
+    TStdStringOutput output(buffer);
+    TForeignSaveContext context(&output);
+    value.Save(context);
+    context.Finish();
+
+    EXPECT_EQ(value.SaveCount, 1);
+    EXPECT_EQ(buffer.size(), sizeof(int));
+}
+
+} // namespace NForeignContext
 
 ////////////////////////////////////////////////////////////////////////////////
 

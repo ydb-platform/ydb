@@ -134,7 +134,7 @@ class YQv2Extension(ExtensionPoint):
             'enable_external_data_sources',
             'enable_script_execution_operations',
         ]
-        disabled_feature_flags = []
+        disabled_feature_flags = ['disable_old_secret_creation']
         if self.enable_schema_inference:
             extra_feature_flags.append('enable_external_source_schema_inference')
         else:

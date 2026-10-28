@@ -32,9 +32,6 @@ struct _
 //! the registration body follows the macro, as for an in-class type.
 #define PHOENIX_DEFINE_EXTERNAL_TYPE(type)
 
-//! A handy helper for registering Phoenix fields.
-#define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...)
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NPhoenix

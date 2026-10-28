@@ -138,11 +138,6 @@ typedef struct
 
 static __thread HTAB *collation_cache = NULL;
 
-
-#if defined(WIN32) && defined(LC_MESSAGES)
-static char *IsoLocaleName(const char *);
-#endif
-
 #ifdef USE_ICU
 /*
  * Converter object for converting between ICU's UChar strings and C strings
@@ -150,7 +145,63 @@ static char *IsoLocaleName(const char *);
  * need one of these per session.
  */
 static __thread UConverter *icu_converter = NULL;
+#endif
 
+static void
+close_cached_locale(pg_locale_t locale)
+{
+	/* Locale handles are not owned by PostgreSQL memory contexts. */
+	switch (locale->provider)
+	{
+#ifdef USE_ICU
+		case COLLPROVIDER_ICU:
+			ucol_close(locale->info.icu.ucol);
+			break;
+#endif
+#ifdef HAVE_LOCALE_T
+		case COLLPROVIDER_LIBC:
+#ifndef WIN32
+			freelocale(locale->info.lt);
+#else
+			_free_locale(locale->info.lt);
+#endif
+			break;
+#endif
+	}
+}
+
+void
+destroy_collation_cache(void)
+{
+	if (collation_cache != NULL)
+	{
+		HASH_SEQ_STATUS status;
+		collation_cache_entry *cache_entry;
+
+		hash_seq_init(&status, collation_cache);
+		while ((cache_entry = hash_seq_search(&status)) != NULL)
+		{
+			pg_locale_t locale = cache_entry->locale;
+
+			if (!locale)
+				continue;
+			close_cached_locale(locale);
+		}
+		hash_destroy(collation_cache);
+		collation_cache = NULL;
+	}
+#ifdef USE_ICU
+	ucnv_close(icu_converter);
+	icu_converter = NULL;
+#endif
+}
+
+
+#if defined(WIN32) && defined(LC_MESSAGES)
+static char *IsoLocaleName(const char *);
+#endif
+
+#ifdef USE_ICU
 static UCollator *pg_ucol_open(const char *loc_str);
 static void init_icu_converter(void);
 static int32_t uchar_length(UConverter *converter,

@@ -73,6 +73,16 @@ If the current `PRIMARY` is unavailable, you must add the `--new-primary` parame
 {{ ydb-cli }} admin cluster bridge failover --pile <unavailable-primary> --new-primary <synchronized-pile>
 ```
 
+If several piles fail at the same time, list all of them in one command by repeating `--pile`. For example, if `pile-a` and `pile-b` fail and `pile-c` is still `SYNCHRONIZED`, connect to a node in `pile-c` and run:
+
+```bash
+{{ ydb-cli }} admin cluster bridge failover --pile pile-a --pile pile-b --new-primary pile-c
+```
+
+This is one configuration update that disconnects both unavailable piles and selects the new `PRIMARY`. Disconnecting them one at a time may fail: while the second failed pile is still part of the configuration quorum, the first update cannot obtain that quorum. The remaining pile must still have the node and storage quorums required to apply the new configuration and serve requests.
+
+Before running the command, ensure the failed piles are stopped or isolated so they cannot independently resume serving requests. Do not issue failover commands independently on opposite sides of a network partition; see [split-brain recovery](../../../concepts/bridge.md#split-brain). The command does not enable automatic failover or allow an unsynchronized pile to become `PRIMARY`. After the command succeeds, check the result with [list](#list). Recover each failed pile using [rejoin](#rejoin) after resolving the failure.
+
 The unavailable pile will be transitioned to the `DISCONNECTED` state, and when a new `PRIMARY` is specified, that role will be switched. If other pile are in states other than `SYNCHRONIZED`, emergency disconnection can also be performed. Valid transitions depend on the current state pair and are shown on the [state diagram](../../../concepts/bridge.md#pile-states) and in the [transition table](../../../concepts/bridge.md#transitions-between-states).
 
 {% note warning %}

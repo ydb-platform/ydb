@@ -672,6 +672,9 @@ func makeFloatArshaler(t reflect.Type) *arshaler {
 		if math.IsNaN(fv) || math.IsInf(fv, 0) {
 			if !allowNonFinite {
 				err := fmt.Errorf("unsupported value: %v", fv)
+				if mo.Flags.Get(jsonflags.ReportErrorsWithLegacySemantics) {
+					err = &internal.ValueError{Val: va.Interface(), Err: err}
+				}
 				return newMarshalErrorBefore(enc, t, err)
 			}
 			return enc.WriteToken(jsontext.Float(fv))
@@ -760,10 +763,10 @@ func makeFloatArshaler(t reflect.Type) *arshaler {
 				break
 			}
 			fv, err := strconv.ParseFloat(string(val), bits)
-			va.SetFloat(fv)
 			if err != nil {
 				return newUnmarshalErrorAfterWithValue(dec, t, errors.Unwrap(err))
 			}
+			va.SetFloat(fv)
 			return nil
 		}
 		return newUnmarshalErrorAfter(dec, t, nil)

@@ -2,7 +2,7 @@
 
 {% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
 
-{% if select_command != "SELECT STREAM" %} Adds rows to the table.{% if feature_bulk_tables %} If the target table already exists and is not sorted, the operation `INSERT INTO` adds rows at the end of the table. In the case of a sorted table, YQL tries to preserve sorting by running a sorted merge. {% endif %}{% if feature_map_tables %} If you try to insert a row into a table with an existing primary key value, the operation fails with the `PRECONDITION_FAILED` error code and the `Operation aborted due to constraint violation: insert_pk` message returned.{% endif %}
+ Adds rows to the table.{% if feature_bulk_tables %} If the target table already exists and is not sorted, the operation `INSERT INTO` adds rows at the end of the table. In the case of a sorted table, YQL tries to preserve sorting by running a sorted merge. {% endif %}{% if feature_map_tables %} If you try to insert a row into a table with an existing primary key value, the operation fails with the `PRECONDITION_FAILED` error code and the `Operation aborted due to constraint violation: insert_pk` message returned.{% endif %}
 
 {% if feature_mapreduce %}The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %}
 
@@ -28,29 +28,6 @@
   SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
   FROM my_table1;
   ```
-
-{% else %}
-
-Send the result of the [SELECT STREAM](select_stream.md) calculation to the specified stream on the cluster specified by the [USE](use.md) operator. The stream must exist and have a scheme matching the query result.
-
-## Examples
-
-```yql
-INSERT INTO my_stream_dst
-SELECT STREAM key FROM my_stream_src;
-```
-
-You can specify a table on a {{ ydb-short-name }} cluster as the target. The table must exist at the time you create the operation. The table schema must be compatible with the type of query result.
-
-
-```yql
-INSERT INTO ydb_cluster.`my_table_dst`
-SELECT STREAM * FROM rtmr_cluster.`my_stream_source`;
-```
-
-{% endif %}
-
-
 
 {% if feature_insert_with_truncate %}
 
@@ -117,7 +94,7 @@ RETURNING *;
 
 ```yql
 INSERT INTO some_table (id, color, price)
-VALUES 
+VALUES
     (1101, 'red', 200),
     (1102, 'green', 300)
 RETURNING id, price;

@@ -32,7 +32,7 @@ void PersistCdcSchemaChange(TDataShard& dataShard, NTabletFlatExecutor::TTransac
             .Step = record.GetStep(),
             .TxId = record.GetTxId(),
             .PathId = record.GetPathId(),
-            .BodySize = record.GetBody().size(),
+            .BodySize = record.GetBodySize(),
             .TableId = record.GetTableId(),
             .SchemaVersion = record.GetSchemaVersion(),
         });

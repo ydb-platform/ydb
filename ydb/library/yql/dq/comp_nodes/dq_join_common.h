@@ -1484,4 +1484,13 @@ EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, Ou
     return EFetchResult::One;
 }
 
+inline NYql::NUdf::TCounter MakeJoinOutputRowsCounter(TComputationContext& ctx) {
+    if (!ctx.CountersProvider) {
+        return {};
+    }
+    // id will be assigned externally in future versions
+    const TString id = TString(Operator_Join) + "0";
+    return ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
+}
+
 } // namespace NKikimr::NMiniKQL

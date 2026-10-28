@@ -27,6 +27,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         TString Datacenter; // is equal to cluster name at the moment
         TString Balancer;
         bool IsEnabled = false;
+        bool IsAvailable = true;
         bool IsLocal = false;
         bool IsFnx = false;
         ui64 Weight = 1000;

@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
@@ -15,8 +16,9 @@ struct TEvKqpSnapshot {
     struct TEvCreateSnapshotRequest : public TEventLocal<TEvCreateSnapshotRequest,
         TKqpSnapshotEvents::EvCreateSnapshotRequest>
     {
-        explicit TEvCreateSnapshotRequest(const TVector<TString>& tables, ui64 cookie, NLWTrace::TOrbit&& orbit = {})
-            : Tables(tables)
+        explicit TEvCreateSnapshotRequest(TVector<NKikimrTxUserProxy::TCreateVolatileSnapshotTx::TTable> tables,
+            ui64 cookie, NLWTrace::TOrbit&& orbit = {})
+            : Tables(std::move(tables))
             , MvccSnapshot(false)
             , Orbit(std::move(orbit))
             , Cookie(cookie) {}
@@ -28,7 +30,7 @@ struct TEvKqpSnapshot {
             , Orbit(std::move(orbit))
             , Cookie(cookie) {}
 
-        const TVector<TString> Tables;
+        const TVector<NKikimrTxUserProxy::TCreateVolatileSnapshotTx::TTable> Tables;
         const bool MvccSnapshot;
         const TVector<NKikimr::TTableId> TableIds;
         NLWTrace::TOrbit Orbit;

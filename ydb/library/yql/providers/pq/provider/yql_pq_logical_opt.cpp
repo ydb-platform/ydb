@@ -67,7 +67,7 @@ void GetUsedWatermarkGeneratorColumnNames(std::unordered_set<TString>& usedColum
     });
 
     for (const auto& key : RequiredKeys) {
-        const auto descriptor = GetPqMetaFieldDescriptorByKey(TString(key), state.AddTransparentPrefixToTransparentSystemColumns,
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(TString(key), state.ShouldAddTransparentPrefixToTransparentSystemColumns(),
             state.EnableUserAttributesInTopicQuery, state.ForbidYqlSysColumnsAndSystemMetadata);
         YQL_ENSURE(descriptor, "Unexpected pq metadata key: " << key);
         usedColumnNames.emplace(descriptor->SysColumn);

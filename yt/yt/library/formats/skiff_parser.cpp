@@ -190,58 +190,37 @@ TSkiffToUnversionedValueConverter CreatePrimitiveTypeConverter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSkiffToUnversionedValueConverter CreateTzTypeConverter(
+TSkiffToUnversionedValueConverter CreateTzTupleConverter(
     const std::shared_ptr<NSkiff::TSkiffSchema>& skiffSchema,
     bool required,
-    ui16 columnId,
-    TYsonToUnversionedValueConverter* ysonConverter)
+    ui16 columnId)
 {
     // Schema is already validated to match tz-time format.
-    auto wireType = skiffSchema->GetWireType();
-
-    switch (wireType) {
-        case EWireType::String32:
-            if (required) {
-                return TPrimitiveTypeConverter<false, TSimpleSkiffParser<EWireType::String32>>(columnId);
-            } else {
-                return TPrimitiveTypeConverter<true, TSimpleSkiffParser<EWireType::String32>>(columnId);
-            }
-        case EWireType::Tuple:
-        {
-            const auto& children = skiffSchema->GetChildren();
-            YT_VERIFY(children.size() == 2);
-            const auto innerWireType = children[0]->GetWireType();
-            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
-            switch (innerWireType) {
-        #define CASE(x) \
-                case ((x)): \
-                    do { \
-                        if (required) { \
-                            return TPrimitiveTypeConverter<false, TTzSkiffParser<(x)>>(columnId); \
-                        } else { \
-                            return TPrimitiveTypeConverter<true, TTzSkiffParser<(x)>>(columnId); \
-                        } \
-                    } while (0)
-                CASE(EWireType::Int32);
-                CASE(EWireType::Int64);
-                CASE(EWireType::Uint16);
-                CASE(EWireType::Uint32);
-                CASE(EWireType::Uint64);
-        #undef CASE
-                default:
-                    break;
-            }
-            YT_ABORT();
-        }
-        case EWireType::Yson32:
-            if (required) {
-                return TYson32TypeConverterImpl<false>(columnId, ysonConverter);
-            } else {
-                return TYson32TypeConverterImpl<true>(columnId, ysonConverter);
-            }
+    YT_VERIFY(skiffSchema->GetWireType() == EWireType::Tuple);
+    const auto& children = skiffSchema->GetChildren();
+    YT_VERIFY(children.size() == 2);
+    const auto innerWireType = children[0]->GetWireType();
+    YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+    switch (innerWireType) {
+#define CASE(x) \
+        case x: \
+            do { \
+                if (required) { \
+                    return TPrimitiveTypeConverter<false, TTzTupleSkiffParser<(x)>>(columnId); \
+                } else { \
+                    return TPrimitiveTypeConverter<true, TTzTupleSkiffParser<(x)>>(columnId); \
+                } \
+            } while (0)
+        CASE(EWireType::Int32);
+        CASE(EWireType::Int64);
+        CASE(EWireType::Uint16);
+        CASE(EWireType::Uint32);
+        CASE(EWireType::Uint64);
+#undef CASE
         default:
-            YT_ABORT();
+            break;
     }
+    YT_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -256,96 +235,18 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
     auto [skiffSchema, optionalKind] = StripOptional(fieldDescription.Schema());
     auto wireType = skiffSchema->GetWireType();
     bool required = optionalKind == EOptionalKind::None;
-    switch (columnType) {
-        case ESimpleLogicalValueType::Int8:
-        case ESimpleLogicalValueType::Int16:
-        case ESimpleLogicalValueType::Int32:
-        case ESimpleLogicalValueType::Int64:
+    ValidateMatchesSimpleType(skiffSchema, columnType);
 
-        case ESimpleLogicalValueType::Interval:
-
-        case ESimpleLogicalValueType::Date32:
-        case ESimpleLogicalValueType::Datetime64:
-        case ESimpleLogicalValueType::Timestamp64:
-        case ESimpleLogicalValueType::Interval64:
-            ValidateWireTypeIsOneOf(
-                wireType,
-                {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Uint8:
-        case ESimpleLogicalValueType::Uint16:
-        case ESimpleLogicalValueType::Uint32:
-        case ESimpleLogicalValueType::Uint64:
-
-        case ESimpleLogicalValueType::Date:
-        case ESimpleLogicalValueType::Datetime:
-        case ESimpleLogicalValueType::Timestamp:
-            ValidateWireTypeIsOneOf(
-                wireType,
-                {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-            CheckTzType(skiffSchema, columnType);
-            return CreateTzTypeConverter(skiffSchema, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::String:
-        case ESimpleLogicalValueType::Json:
-        case ESimpleLogicalValueType::Utf8:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::String32, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Float:
-        case ESimpleLogicalValueType::Double:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Double, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Boolean:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Boolean, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Any:
-            ValidateWireTypeIsOneOf(
-                wireType,
-                {
-                    EWireType::Int8,
-                    EWireType::Int16,
-                    EWireType::Int32,
-                    EWireType::Int64,
-
-                    EWireType::Uint8,
-                    EWireType::Uint16,
-                    EWireType::Uint32,
-                    EWireType::Uint64,
-
-                    EWireType::Double,
-                    EWireType::Boolean,
-                    EWireType::String32,
-                    EWireType::Nothing,
-                    EWireType::Yson32,
-                });
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-
-        case ESimpleLogicalValueType::Null:
-        case ESimpleLogicalValueType::Void:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Nothing, EWireType::Yson32});
-            return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-        case ESimpleLogicalValueType::Uuid:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Uint128, EWireType::String32, EWireType::Yson32});
-            if (wireType == EWireType::Uint128) {
-                if (!required) {
-                    return CreatePrimitiveTypeConverter<true>(columnId, TUuidParser());
-                } else {
-                    return CreatePrimitiveTypeConverter<false>(columnId, TUuidParser());
-                }
-            } else {
-                return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
-            }
+    if (columnType == ESimpleLogicalValueType::Uuid && wireType == EWireType::Uint128) {
+        if (!required) {
+            return CreatePrimitiveTypeConverter<true>(columnId, TUuidParser());
+        } else {
+            return CreatePrimitiveTypeConverter<false>(columnId, TUuidParser());
+        }
+    } else if (IsTzType(columnType) && wireType == EWireType::Tuple) {
+        return CreateTzTupleConverter(skiffSchema, required, columnId);
+    } else {
+        return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
     }
 }
 

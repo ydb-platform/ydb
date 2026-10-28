@@ -1,4 +1,8 @@
 #include "change_record.h"
+#include "change_collector_cdc_stream.h"
+#include "datashard_impl.h"
+#include "datashard_user_db.h"
+#include "stream_scan_common.h"
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/protos/change_exchange.pb.h>
@@ -725,6 +729,245 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
 Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     using TCdcStream = TShardedTableOptions::TCdcStream;
+
+    NKikimrPQ::TPQConfig WithProtoSourceIdInfo();
+
+    class TSnapshotUserDb: public IDataShardUserDb {
+    public:
+        ui32 SnapshotReads = 0;
+        ui32 CurrentReads = 0;
+        bool PageFault = false;
+        bool Invisible = false;
+        NTable::ERowOp RowOp = NTable::ERowOp::Upsert;
+        TVector<NTable::TTag> LastTags;
+
+        NTable::EReady SelectRow(const TTableId&, TArrayRef<const TRawTypeValue>,
+                TArrayRef<const NTable::TTag> tags, NTable::TRowState& row,
+                NTable::TSelectStats& stats, const TMaybe<TRowVersion>& snapshot) override
+        {
+            if (snapshot) {
+                ++SnapshotReads;
+                stats.InvisibleRowSkips = Invisible;
+            } else {
+                ++CurrentReads;
+            }
+            LastTags.assign(tags.begin(), tags.end());
+            if (PageFault) {
+                return NTable::EReady::Page;
+            }
+            row.Init(tags.size());
+            row.Touch(RowOp);
+            if (RowOp != NTable::ERowOp::Erase) {
+                for (size_t pos = 0; pos < tags.size(); ++pos) {
+                    row.Set(pos, NTable::ECellOp::Set, TCell::Make(ui32(42)));
+                }
+            }
+            return RowOp == NTable::ERowOp::Erase ? NTable::EReady::Gone : NTable::EReady::Data;
+        }
+
+        NTable::EReady SelectRow(const TTableId& tableId, TArrayRef<const TRawTypeValue> key,
+                TArrayRef<const NTable::TTag> tags, NTable::TRowState& row,
+                const TMaybe<TRowVersion>& snapshot) override
+        {
+            NTable::TSelectStats stats;
+            return SelectRow(tableId, key, tags, row, stats, snapshot);
+        }
+
+        void UpsertRow(const TTableId&, TArrayRef<const TRawTypeValue>, TArrayRef<const NIceDb::TUpdateOp>,
+                ui32, TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void UpsertRow(const TTableId&, TArrayRef<const TRawTypeValue>, TArrayRef<const NIceDb::TUpdateOp>,
+                TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void ReplaceRow(const TTableId&, TArrayRef<const TRawTypeValue>, TArrayRef<const NIceDb::TUpdateOp>,
+                TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void InsertRow(const TTableId&, TArrayRef<const TRawTypeValue>, TArrayRef<const NIceDb::TUpdateOp>,
+                TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void UpdateRow(const TTableId&, TArrayRef<const TRawTypeValue>, TArrayRef<const NIceDb::TUpdateOp>,
+                TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void IncrementRow(const TTableId&, TArrayRef<const TRawTypeValue>, TArrayRef<const NIceDb::TUpdateOp>,
+                bool, TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void EraseRow(const TTableId&, TArrayRef<const TRawTypeValue>,
+                TIntrusivePtr<NACLib::TUserContext>) override { UNIT_FAIL("Unexpected write"); }
+        void CommitChanges(const TTableId&, ui64) override { UNIT_FAIL("Unexpected commit"); }
+    };
+
+    class TSnapshotSink: public IBaseChangeCollectorSink {
+    public:
+        struct TChange {
+            TVersionState Version;
+            TDataChange Body;
+        };
+
+        TVersionState Version{TRowVersion(100, 200), 123};
+        TVector<TChange> Changes;
+
+        TVersionState GetVersionState() override { return Version; }
+        void SetVersionState(const TVersionState& version) override { Version = version; }
+        void AddChange(const TTableId&, const TPathId&, TChangeRecord::EKind,
+                const TDataChange& body, TIntrusivePtr<NACLib::TUserContext>) override
+        {
+            Changes.push_back({Version, body});
+        }
+    };
+
+    template <typename TCallback>
+    void WithScanCollector(TCallback callback) {
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134), {}, WithProtoSourceIdInfo())
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableChangefeedInitialScan(true));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "Table", TShardedTableOptions().Columns({
+            {"a", "Uint32", true, false},
+            {"b", "Uint32", true, false},
+            {"value", "Uint32", false, false},
+        }));
+
+        TDataShard* shard = nullptr;
+        // Keep the scan from running while exercising the collector directly.
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+                shard = dynamic_cast<TDataShard*>(runtime.FindActor(ev->GetRecipientRewrite()));
+                UNIT_ASSERT(shard);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table", TCdcStream{
+            .Name = "Stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
+            .InitialState = NKikimrSchemeOp::ECdcStreamStateScan,
+        }));
+        runtime.WaitFor("scan request", [&] { return shard != nullptr; });
+
+        UNIT_ASSERT_VALUES_EQUAL(shard->GetUserTables().size(), 1);
+        const auto table = shard->GetUserTables().begin()->second;
+        const auto streamId = table->CdcStreams.begin()->first;
+        const TTableId tableId(streamId.OwnerId, shard->GetUserTables().begin()->first);
+        TSnapshotUserDb db;
+        TSnapshotSink sink;
+        TCdcStreamChangeCollector collector(shard, db, sink);
+        auto collect = [&](ui32 a, ui32 b, NTable::ERowOp op = NTable::ERowOp::Upsert) {
+            const TVector<TCell> cells{TCell::Make(a), TCell::Make(b)};
+            const auto key = NStreamScan::MakeKey(cells, table->KeyColumnTypes);
+            return collector.Collect(tableId, op, key, {}, {});
+        };
+        callback(*shard, tableId, streamId, collector, db, sink, collect);
+        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+    }
+
+    Y_UNIT_TEST(InitialScanCompletedPrefix) {
+        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
+                auto& collector, auto& db, auto& sink, auto collect) {
+            const auto& keyTypes = shard.GetUserTables().at(tableId.PathId.LocalPathId)->KeyColumnTypes;
+            const TVector<TCell> lastKey{TCell::Make(ui32(7)), TCell::Make(ui32(256))};
+            const auto lastRawKey = NStreamScan::MakeKey(lastKey, keyTypes);
+            UNIT_ASSERT(collector.NeedHistoricalPrecharge(tableId, lastRawKey));
+            shard.GetCdcStreamScanManager().Get(streamId)->LastKey = TSerializedCellVec(lastKey);
+
+            // A snapshot read would fault. Typed ordering must also handle 255 < 256.
+            db.PageFault = true;
+            for (auto [a, b] : {std::pair{6u, 1000u}, {7u, 255u}, {7u, 256u}}) {
+                const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
+                UNIT_ASSERT(!collector.NeedHistoricalPrecharge(tableId, NStreamScan::MakeKey(key, keyTypes)));
+                UNIT_ASSERT(collect(a, b));
+                UNIT_ASSERT(collect(a, b, NTable::ERowOp::Erase));
+                UNIT_ASSERT(collect(a, b, NTable::ERowOp::Reset));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 0);
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 9);
+            for (auto [a, b] : {std::pair{7u, 257u}, {8u, 0u}}) {
+                const TVector<TCell> key{TCell::Make(a), TCell::Make(b)};
+                UNIT_ASSERT(collector.NeedHistoricalPrecharge(tableId, NStreamScan::MakeKey(key, keyTypes)));
+            }
+            UNIT_ASSERT(!collect(7, 257));
+            UNIT_ASSERT(!collect(8, 0));
+            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 9);
+
+            // Image modes must still read the current row behind the frontier.
+            TUserTable::TPtr images = new TUserTable(*shard.GetUserTables().at(tableId.PathId.LocalPathId));
+            images->CdcStreams.at(streamId).Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
+            shard.SetUserTable(tableId.PathId, images);
+            UNIT_ASSERT(!collector.NeedHistoricalPrecharge(tableId, lastRawKey));
+            UNIT_ASSERT(!collect(7, 256));
+            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
+            UNIT_ASSERT_VALUES_EQUAL(db.CurrentReads, 1);
+            db.PageFault = false;
+            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Erase));
+            UNIT_ASSERT(sink.Changes.back().Body.HasErase());
+            UNIT_ASSERT(sink.Changes.back().Body.HasOldImage());
+            UNIT_ASSERT(!sink.Changes.back().Body.HasNewImage());
+        });
+    }
+
+    Y_UNIT_TEST(InitialScanSnapshotRetryAndOrdering) {
+        WithScanCollector([](auto& shard, const auto&, const auto& streamId,
+                auto& collector, auto& db, auto& sink, auto collect) {
+            db.PageFault = true;
+            UNIT_ASSERT(!collect(7, 256));
+            UNIT_ASSERT(sink.Changes.empty());
+            collector.OnRestart();
+            db.PageFault = false;
+            UNIT_ASSERT(collect(7, 256, NTable::ERowOp::Erase));
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 2);
+            UNIT_ASSERT(sink.Changes[0].Body.HasUpsert());
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[0].Version.WriteVersion,
+                shard.GetCdcStreamScanManager().Get(streamId)->SnapshotVersion);
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[0].Version.WriteTxId, 0);
+            UNIT_ASSERT(sink.Changes[1].Body.HasErase());
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[1].Version.WriteVersion, TRowVersion(100, 200));
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes[1].Version.WriteTxId, 123);
+            UNIT_ASSERT_VALUES_EQUAL(sink.Version.WriteTxId, 123);
+
+            db.Invisible = true;
+            UNIT_ASSERT(collect(7, 256));
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 3);
+            db.Invisible = false;
+            db.RowOp = NTable::ERowOp::Erase;
+            UNIT_ASSERT(collect(7, 256));
+            UNIT_ASSERT_VALUES_EQUAL(sink.Changes.size(), 4);
+        });
+    }
+
+    Y_UNIT_TEST(ValueSchemaCacheInvalidation) {
+        WithScanCollector([](auto& shard, const auto& tableId, const auto& streamId,
+                auto& collector, auto& db, auto&, auto collect) {
+            const auto original = shard.GetUserTables().at(tableId.PathId.LocalPathId);
+            UNIT_ASSERT(collect(1, 1));
+            const auto valueTag = original->Columns.rbegin()->first;
+            UNIT_ASSERT_VALUES_EQUAL(db.LastTags.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(db.LastTags[0], valueTag);
+            UNIT_ASSERT(collect(1, 2));
+
+            // A replacement schema must invalidate the cache even at the same version.
+            TUserTable::TPtr replacement = new TUserTable(*original);
+            replacement->Columns.erase(valueTag);
+            replacement->Columns.emplace(valueTag + 1,
+                TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "extra"));
+            shard.SetUserTable(tableId.PathId, replacement);
+            UNIT_ASSERT(collect(1, 3));
+            UNIT_ASSERT_VALUES_EQUAL(db.LastTags.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(db.LastTags[0], valueTag + 1);
+
+            // Also invalidate when the same schema object's version changes.
+            replacement->Columns.erase(valueTag + 1);
+            replacement->SetTableSchemaVersion(original->GetTableSchemaVersion() + 1);
+            UNIT_ASSERT(collect(1, 4));
+            UNIT_ASSERT(db.LastTags.empty());
+            collector.OnRestart();
+            UNIT_ASSERT(collect(1, 5));
+            UNIT_ASSERT(db.LastTags.empty());
+
+            shard.GetCdcStreamScanManager().Complete(streamId);
+            const auto reads = db.SnapshotReads;
+            UNIT_ASSERT(collect(1, 6));
+            UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, reads);
+        });
+    }
 
     class TStructRecord: public TStructRecordBase<ui32> {
     public:

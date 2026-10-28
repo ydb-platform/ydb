@@ -182,6 +182,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `s3_sync_try` | залить `PUBLIC_DIR` на публичный S3, чтобы ссылки из комментария открывались |
 | `upload_tests_results` | залить результаты тестов в таблицу `test_results` (это не `ci_metrics`) |
 | `runner_info` | одна строка на весь job, **до** цикла `ya make`: сколько ядер, RAM и диска у машины. Не длительность (`kind = info`), потому что железо за job не меняется. На дашборде: отфильтровать «медленно на 8 ядрах» от «медленно на 64». Не путать с `--runner`/`--usage` на фазе сборки — те пишутся в labels той фазы (спека на старте, занятость в конце) |
+| `github_proxy` | проба checkout, пишется в Init, до `ya make`: `labels.use_proxy`, скорости за 15 с приёма pack в `labels.direct_mbps` и `labels.proxy_mbps`. `value` — скорость выбранного пути, МБ/с |
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
 [`ya_evlog_phases.py`](ya_evlog_phases.py) по `ya_evlog.jsonl` — те же узлы,
@@ -196,7 +197,10 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 export GITHUB_TOKEN=...
 python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
 python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2
+python3 .github/scripts/utils/analytics/github_actions/export_runner_capacity.py
 ```
+
+`export_github_job_metrics.py`:
 
 - По умолчанию все активные workflow; `--workflow` / `CI_METRICS_WORKFLOW`
   сужает список.
@@ -211,6 +215,18 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
 
 В `analytics/ci_metrics_state` три поля: `export_watermark` (до какого
 момента выгрузили), `open_runs` (ещё идут), `failed_runs` (надо повторить).
+
+`export_runner_capacity.py` пишет снимок в `analytics/ci_capacity` (отдельная
+таблица, TTL 1 год, как у `ci_metrics`). В снимке квота Compute, сколько
+хостов relwithdebinfo / release-asan ещё влезает, каждый ghrun (busy / idle /
+queued) и очередь self-hosted / ghrun. `ubuntu-latest` и остальные GitHub-hosted
+в снимок не входят: они не едят квоту Compute. Список workflow runs не обрывается на короткой
+странице GitHub: иначе занятые VM попадают в idle. Если `in_progress` покрывает
+мало раннеров при длинной очереди, job не пишутся (state=`unknown`), квота
+остаётся. На раннере нужен `yc` с cloud-id, либо ключ
+`CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`, если профиля нет. Шаг в
+`collect_analytics_fast.yml` с `continue-on-error`, чтобы отсутствие `yc` не
+прятало выгрузку job.
 
 ## Тесты
 

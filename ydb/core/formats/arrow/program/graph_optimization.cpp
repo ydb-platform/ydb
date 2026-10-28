@@ -10,6 +10,9 @@
 #include "reserve.h"
 #include "stream_logic.h"
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
@@ -418,6 +421,11 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
     if (requiredDataColumnIds.size() != 1) {
         return false;
     }
+    for (const auto& [_, graphNode] : Nodes) {
+        if (graphNode->Is(EProcessorType::Filter)) {
+            return false;
+        }
+    }
 
     const ui32 columnId = *requiredDataColumnIds.begin();
 
@@ -567,6 +575,93 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
     } else {
         return std::nullopt;
     }
+}
+
+// ANDs one index check per hint into the kernel result. A check yields a constant column: all false
+// when the index denies the probe, all true otherwise. A deny means no row of the portion contains
+// the probe, and the kernel is false on every such row, so the AND changes no value. The rewrite
+// moves the kernel's only output edge, hence the single-consumer requirement.
+TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode) {
+    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
+        return false;
+    }
+    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetKernelLogic()) {
+        return false;
+    }
+    const auto& hints = calc->GetKernelLogic()->GetIndexHints();
+    if (hints.empty() || condNode->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    if (IndexesConstructed.contains(condNode->GetIdentifier())) {
+        return false;
+    }
+
+    struct TResolved {
+        TResourceAddress Addr;
+        TIndexCheckOperation Operation;
+        TString Value;
+    };
+    std::vector<TResolved> resolved;
+    for (const auto& hint : hints) {
+        if (hint.InputIndex >= calc->GetInput().size()) {
+            continue;
+        }
+        auto* dataNode = GetProducerVerified(calc->GetInput()[hint.InputIndex].GetColumnId());
+        if (auto addr = GetOriginalAddress(dataNode)) {
+            resolved.push_back(TResolved{*addr, hint.Operation, hint.Value});
+        }
+    }
+    if (resolved.empty()) {
+        return false;
+    }
+    IndexesConstructed.emplace(condNode->GetIdentifier());
+
+    auto* dest = condNode->GetOutputEdges().begin()->second;
+    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
+    RemoveEdge(condNode, dest, destResourceId);
+
+    std::vector<ui32> andInputs;
+    std::vector<TGraphNode*> andSources;
+    const ui32 calcResourceId = BuildNextResourceId();
+    RegisterProducer(calcResourceId, condNode);
+    calc->SetOutputResourceIdOnce(calcResourceId);
+    andInputs.push_back(calcResourceId);
+    andSources.push_back(condNode);
+
+    for (const auto& item : resolved) {
+        const ui32 constId = BuildNextResourceId();
+        auto scalar = std::make_shared<arrow::BinaryScalar>(
+            arrow::Buffer::FromString(std::string(item.Value.data(), item.Value.size())), arrow::binary());
+        auto constNode = AddNode(std::make_shared<TConstProcessor>(scalar, constId));
+        RegisterProducer(constId, constNode.get());
+
+        const ui32 fetchId = BuildNextResourceId();
+        IDataSource::TFetchIndexContext fetchContext(item.Addr.GetColumnId(),
+            IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(item.Addr.GetSubColumnName(), item.Operation));
+        auto fetchNode = AddNode(std::make_shared<TOriginalColumnDataProcessor>(fetchId, fetchContext));
+        RegisterProducer(fetchId, fetchNode.get());
+
+        const ui32 checkId = BuildNextResourceId();
+        const auto columnName = Resolver.GetColumnName(item.Addr.GetColumnId(), false);
+        IDataSource::TCheckIndexContext checkContext(item.Addr.GetColumnId(), item.Addr.GetSubColumnName(), item.Operation,
+            columnName.empty() ? "COLUMN_NAME_NOT_RESOLVED" : columnName);
+        auto checkNode = AddNode(std::make_shared<TIndexCheckerProcessor>(fetchId, constId, checkContext, checkId));
+        RegisterProducer(checkId, checkNode.get());
+        AddEdge(fetchNode.get(), checkNode.get(), fetchId);
+        AddEdge(constNode.get(), checkNode.get(), constId);
+        andInputs.push_back(checkId);
+        andSources.push_back(checkNode.get());
+    }
+
+    auto andNode = AddNode(std::make_shared<TStreamLogicProcessor>(
+        TColumnChainInfo::BuildVector(andInputs), TColumnChainInfo(destResourceId), NKernels::EOperation::And));
+    for (size_t i = 0; i < andInputs.size(); ++i) {
+        AddEdge(andSources[i], andNode.get(), andInputs[i]);
+    }
+    AddEdge(andNode.get(), dest, destResourceId);
+    ResetProducer(destResourceId, andNode.get());
+    return true;
 }
 
 TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
@@ -810,6 +905,17 @@ TConclusionStatus TGraph::Collapse() {
 
             {
                 auto conclusion = OptimizeConditionsForIndexes(n.get());
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                if (*conclusion) {
+                    hasChanges = true;
+                    break;
+                }
+            }
+
+            {
+                auto conclusion = OptimizeConditionsForPatternHints(n.get());
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }

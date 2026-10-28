@@ -1,9 +1,13 @@
 
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/inflight_guard.h>
+
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap::NImport {
 
@@ -24,6 +28,11 @@ private:
     NMonitoring::THistogramPtr HistogramWriteDurationMs;
     NMonitoring::THistogramPtr HistogramSaveProgressDurationMs;
 
+    std::optional<NCounters::TInflightGuard> AliveGuard;
+    std::optional<NCounters::TInflightGuard> ReadGuard;
+    std::optional<NCounters::TInflightGuard> WriteGuard;
+    std::optional<NCounters::TInflightGuard> SaveProgressGuard;
+
 public:
     TImportCounters()
         : TBase("ImportActor")
@@ -43,45 +52,47 @@ public:
             TBase::GetHistogram("Import/SaveProgress/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 
-    void OnReadStarted() const {
-        ReadInflight->Inc();
+    void OnReadStarted() {
+        ReadGuard.emplace(ReadInflight);
     }
 
-    void OnReadFinished(const TDuration duration) const {
-        ReadInflight->Dec();
+    void OnReadFinished(const TDuration duration) {
+        ReadGuard.reset();
         HistogramReadDurationMs->Collect(duration.MilliSeconds());
         BatchesReceived->Inc();
     }
 
-    void OnWriteStarted() const {
-        WriteInflight->Inc();
+    void OnWriteStarted() {
+        WriteGuard.emplace(WriteInflight);
     }
 
-    void OnWriteFinished(const TDuration duration) const {
-        WriteInflight->Dec();
+    void OnWriteFinished(const TDuration duration) {
+        WriteGuard.reset();
         HistogramWriteDurationMs->Collect(duration.MilliSeconds());
         BatchesWritten->Inc();
     }
 
-    void OnSaveProgressStarted() const {
-        SaveProgressInflight->Inc();
+    void OnSaveProgressStarted() {
+        SaveProgressGuard.emplace(SaveProgressInflight);
     }
 
-    void OnSaveProgressFinished(const TDuration duration) const {
-        SaveProgressInflight->Dec();
+    void OnSaveProgressFinished(const TDuration duration) {
+        SaveProgressGuard.reset();
         HistogramSaveProgressDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnOperationsCancelled() {
+        ReadGuard.reset();
+        WriteGuard.reset();
+        SaveProgressGuard.reset();
     }
 
     void OnError() const {
         ErrorsCount->Inc();
     }
 
-    void OnActorAlive() const {
-        AliveActors->Inc();
-    }
-
-    void OnActorDead() const {
-        AliveActors->Dec();
+    void OnActorAlive() {
+        AliveGuard.emplace(AliveActors);
     }
 };
 

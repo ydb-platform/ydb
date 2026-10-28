@@ -59,6 +59,7 @@ std::unique_ptr<TKikimrRunner> MakeS3TieringKikimrRunner(const bool enableReplac
     runnerSettings.SetS3ActorsFactory(s3ActorsFactory);
 
     NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetDisableOldSecretCreation(false);
     featureFlags.SetEnableColumnshardBool(true);
     featureFlags.SetEnableColumnStore(true);
     featureFlags.SetEnableTieringInColumnShard(true);

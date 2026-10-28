@@ -41,6 +41,7 @@
 /ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/kqp/ut/tli/ @ydb-platform/datashard
+/ydb/core/kqp/ut/query/kqp_analyze_ut.cpp  @ydb-platform/datashard
 
 /ydb/docs/ @ydb-platform/docs
 
@@ -231,6 +232,7 @@
 /ydb/core/tx/tiering @ydb-platform/cs
 /ydb/core/keyvalue @ydb-platform/cs
 /ydb/services/keyvalue @ydb-platform/cs
+/ydb/tests/olap @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage

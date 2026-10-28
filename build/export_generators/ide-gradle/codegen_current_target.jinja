@@ -15,6 +15,15 @@
 {%- set current_target_object_indexes_with_codegen_dirs = current_target_object_indexes -%}
 {#- Select only some runs with parents (depend runs) -#}
 {%- set some_runs_with_parents = some_runs|selectattr('_parent_object_index', 'in', current_target_object_indexes) -%}
+{%- set input_copy_files = current_target.target_commands|selectattr('macro', 'eq', 'copy_file')|selectattr('_parent_object_index', 'in', current_target_object_indexes) -%}
+
+{%- macro PatchCopiedInput(arg, object_index) -%}
+{%-     for copy in input_copy_files|selectattr('_parent_object_index', 'eq', object_index) -%}
+{%-         if copy.args[1] == arg or codegenBindir + '/' + copy.args[1] == arg -%}
+{{ PatchRoots(arg, false, copy['_object_index']) }}
+{%-         endif -%}
+{%-     endfor -%}
+{%- endmacro -%}
 
 {%- macro PatchArg(arg, object_index, ins, outs, is_path = false) -%}
 {%-     set in_bindir = arg|replace(codegenBindir, '') != arg -%}
@@ -34,7 +43,14 @@
 {%-     elif in_bindir or (is_path and arg[0] != '/') -%}
 {#-         relatives searching in bindir too -#}
 {%-         set dep_runs = some_runs_with_parents|selectattr('_parent_object_index', 'eq', object_index) -%}
-{%-         if dep_runs|length -%}
+{%-         set normalized_arg = arg -%}
+{%-         if not in_bindir -%}
+{%-             set normalized_arg = codegenBindir + "/" + arg -%}
+{%-         endif -%}
+{%-         set copied_arg = PatchCopiedInput(normalized_arg, object_index) -%}
+{%-         if copied_arg -%}
+{{ copied_arg }}
+{%-         elif dep_runs|length -%}
 {%-             set bindir_arg = codegenBindir + "/" + arg -%}
 {%-             set dep_outputs = dep_runs|selectattr('outputs')|map(attribute='outputs')|sum -%}
 {%-             set dep_out = dep_runs|selectattr('out')|map(attribute='out')|sum -%}

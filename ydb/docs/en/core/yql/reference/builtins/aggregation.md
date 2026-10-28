@@ -14,7 +14,7 @@ COUNT(T?)->Uint64
 
 Counting the number of rows in a row or columnar table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
 
-Like other aggregate functions, it can be combined with [GROUP BY](../syntax/select/group-by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. {% if select_statement != "SELECT STREAM" %}Use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) to count distinct values.{% endif %}
+Like other aggregate functions, it can be combined with [GROUP BY](../syntax/select/group-by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. Use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) to count distinct values.
 
 ### Examples
 
@@ -28,14 +28,9 @@ SELECT COUNT(*) FROM my_table;
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
 
-
-{% if select_statement != "SELECT STREAM" %}
-
 ```yql
 SELECT COUNT(DISTINCT value) FROM my_table;
 ```
-
-{% endif %}
 
 ## MIN and MAX {#min-max}
 
@@ -138,9 +133,6 @@ SELECT
 FROM my_table;
 ```
 
-
-{% if select_statement != "SELECT STREAM" %}
-
 {% note info %}
 
 To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get such a result, use a query like this:
@@ -153,8 +145,6 @@ FROM my_table;
 ```
 
 {% endnote %}
-
-{% endif %}
 
 ## SUM_IF and AVG_IF {#sum-if}
 
@@ -226,7 +216,7 @@ FROM my_table;
 
 {% note alert %}
 
-When the aggregate function `SOME` is called multiple times, it's **not** guaranteed that all the resulting values are taken from the same row of the source table. To get this guarantee, pack the values into any container and pass it to `SOME`. For example, in the case of a structure, you can apply [AsStruct](basic.md#asstruct)
+When the aggregate function `SOME` is called multiple times, it's **not** guaranteed that all the resulting values are taken from the same row of the source table. To get this guarantee, pack the values into any container and pass it to `SOME`. For example, in the case of a structure, you can apply [AsStruct](basic.md#as-container)
 
 {% endnote %}
 
@@ -289,7 +279,7 @@ If you know already that you have few distinct values, use the `AGGREGATE_LIST_D
 
 The order of elements in the result list depends on the implementation and can't be set externally. To return an ordered list, sort the result, for example, with [ListSort](list.md#listsort).
 
-To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE_LIST` function several times, but add all the needed values to a container, for example, via [AsList](basic.md#aslist) or [AsTuple](basic.md#astuple), then pass this container to a single `AGGREGATE_LIST` call.
+To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE_LIST` function several times, but add all the needed values to a container, for example, via [AsList](basic.md#as-container) or [AsTuple](basic.md#as-container), then pass this container to a single `AGGREGATE_LIST` call.
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/select/group-by.md).
 

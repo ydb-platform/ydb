@@ -242,6 +242,7 @@ private:
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
             , PairFilter_(std::move(pairFilter))
+            , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
 
         EFetchResult FetchValues(NUdf::TUnboxedValue* const* output) {
@@ -262,6 +263,7 @@ private:
                 Buffer_.reset();
                 BufferPos_ = 0;
             }
+            OutputRows_.Inc();
             return EFetchResult::One;
         }
 
@@ -293,6 +295,7 @@ private:
         std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
+        NYql::NUdf::TCounter OutputRows_;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {

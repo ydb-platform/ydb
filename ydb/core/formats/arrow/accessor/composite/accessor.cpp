@@ -36,10 +36,13 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
     ui32 currentIndex = 0;
     std::optional<IChunkedArray::TFullChunkedArrayAddress> arrAddress;
     std::vector<std::shared_ptr<IChunkedArray>> chunks;
+    if (!count) {
+        return std::make_shared<TCompositeChunkedArray>(std::move(chunks), count, GetDataType());
+    }
     while (currentIndex < offset + count) {
         arrAddress = GetArray(arrAddress, currentIndex, nullptr);
         const auto& arr = arrAddress->GetArray();
-        if (currentIndex + arr->GetRecordsCount() < offset) {
+        if (currentIndex + arr->GetRecordsCount() <= offset) {
         } else if (currentIndex >= offset && currentIndex + arr->GetRecordsCount() <= offset + count) {
             chunks.emplace_back(arr);
         } else {

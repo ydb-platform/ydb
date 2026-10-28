@@ -9,6 +9,7 @@ SIZE(MEDIUM)
 SRCS(
     kqp_flowcontrol_ut.cpp
     kqp_scan_ut.cpp
+    kqp_snapshot_ranges_ut.cpp
     kqp_split_ut.cpp
     kqp_point_consolidation_ut.cpp
 )

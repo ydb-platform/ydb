@@ -529,7 +529,9 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
         if py_files2res:
             # Compile original and generated sources into target for proper cython coverage calculation
             for files2res in (py_files2res, cpp_files2res):
-                unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
+                unit.onresource_files(
+                    ['DONT_COMPRESS'] + [x for name, path in sorted(files2res) for x in ('DEST', name, path)]
+                )
 
         if include_map:
             for cython in ['cython' if py3 else 'cython_py2']:

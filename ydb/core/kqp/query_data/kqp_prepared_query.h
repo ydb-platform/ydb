@@ -44,6 +44,16 @@ struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
     THashMap<NKikimr::TTableId, TIntrusivePtr<TTableConstInfo>> Map;
 };
 
+struct TQueryTable {
+    TString Path;
+    // Key ranges of the reads from this table, when every read is bounded by
+    // a key range known before execution: literals and parameters supplied
+    // with the query. Empty otherwise.
+    TVector<const NKqpProto::TKqpPhyKeyRange*> KeyRanges;
+};
+
+const NKqpProto::TKqpInternalSink* FindTableTruncateSink(const NKqpProto::TKqpPhyTx& tx);
+
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     const NKqpProto::TKqpPhyTx* Proto;
@@ -112,6 +122,12 @@ public:
         return Proto->GetTables();
     }
 
+    bool HasUnsafeTruncate() const {
+        return FindTableTruncateSink(*Proto) != nullptr;
+    }
+
+    NKikimrKqp::TKqpTableTruncateSettings GetUnsafeTruncate() const;
+
     const NKqpProto::TKqpSchemeOperation& GetSchemeOperation() const {
         return Proto->GetSchemeOperation();
     }
@@ -155,7 +171,7 @@ private:
     YDB_ACCESSOR(bool, UseKqpTasksGraphV2, false);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
-    TVector<TString> QueryTables;
+    TVector<TQueryTable> QueryTables;
     std::vector<TKqpPhyTxHolder::TConstPtr> Transactions;
     TIntrusivePtr<TTableConstInfoMap> TableConstInfoById;
 
@@ -198,7 +214,7 @@ public:
         return Proto->ByteSize();
     }
 
-    const TVector<TString>& GetQueryTables() const {
+    const TVector<TQueryTable>& GetQueryTables() const {
         return QueryTables;
     }
 

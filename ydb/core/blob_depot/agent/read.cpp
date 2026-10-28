@@ -348,6 +348,23 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TBlobDepotAgent::TQuery::HandleResolveDisconnected(const TRequestContext::TPtr& context) {
+        // the only tablet request issued by a read is the extra resolve after NODATA; physical reads go through the
+        // proxy and are not affected by the tablet disconnection
+        auto& readContext = context->Obtain<TReadContext>();
+        if (readContext.Terminated) {
+            return;
+        }
+        YDB_LOG_DEBUG("HandleResolveDisconnected",
+            {"marker", "BDA68"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"readId", readContext.GetTag()},
+            {"key", Agent.PrettyKey(readContext.ReadArg.Key)});
+        readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "BlobDepot tablet disconnected while"
+            " resolving BlobId# " << readContext.BlobWithoutData << " after NODATA");
+    }
+
     void TBlobDepotAgent::TQuery::IssueCheckIntegrity(TReadArg&& arg) {
         YDB_LOG_DEBUG("IssueCheckIntegrity",
             {"marker", "BDA62"},

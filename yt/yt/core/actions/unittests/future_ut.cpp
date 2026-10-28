@@ -2410,6 +2410,24 @@ TEST_F(TFutureTest, UniqueFutureGetOrCrashOnUnset)
     EXPECT_DEATH({ auto _ = future.GetOrCrash(); }, "IsSet");
 }
 
+TEST_F(TFutureTest, ApplyError)
+{
+    auto cb = BIND([] { return TError{}; });
+
+    EXPECT_TRUE(
+        OKFuture
+            .Apply(cb)
+            .GetOrCrash()
+            .IsOK());
+
+    EXPECT_TRUE(
+        OKFuture
+            .AsUnique()
+            .Apply(cb)
+            .GetOrCrash()
+            .IsOK());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -1,4 +1,4 @@
-IF (OS_LINUX)
+IF (OS_LINUX OR OS_DARWIN)
     PROGRAM(ydb_stress_tool)
 
     PEERDIR(
@@ -9,21 +9,26 @@ IF (OS_LINUX)
         ydb/core/blobstorage/lwtrace_probes
         ydb/core/blobstorage/pdisk
         ydb/core/load_test/blobstorage
-        ydb/core/load_test/ddisk
-        ydb/core/load_test/interconnect
         ydb/core/node_whiteboard
         ydb/core/tablet
-        ydb/library/actors/dnsresolver
         ydb/library/actors/interconnect
         ydb/library/pdisk_io
         ydb/tools/stress_tool/lib
         ydb/tools/stress_tool/proto
-        yql/essentials/minikql/comp_nodes/llvm16
-        yql/essentials/parser/pg_wrapper
-        yql/essentials/sql/pg
-        yt/yql/providers/yt/comp_nodes/dq/llvm16
-        yt/yql/providers/yt/comp_nodes/llvm16
     )
+
+    IF (OS_LINUX)
+        PEERDIR(
+            ydb/core/load_test/ddisk
+            ydb/core/load_test/interconnect
+            ydb/library/actors/dnsresolver
+            yql/essentials/minikql/comp_nodes/llvm16
+            yql/essentials/parser/pg_wrapper
+            yql/essentials/sql/pg
+            yt/yql/providers/yt/comp_nodes/dq/llvm16
+            yt/yql/providers/yt/comp_nodes/llvm16
+        )
+    ENDIF()
 
     SRCS(
         device_test_tool.cpp
@@ -32,6 +37,12 @@ IF (OS_LINUX)
     END()
 
     RECURSE_FOR_TESTS(
-        ut
+        ut_sector_map
     )
-ENDIF(OS_LINUX)
+
+    IF (OS_LINUX)
+        RECURSE_FOR_TESTS(
+            ut
+        )
+    ENDIF()
+ENDIF()

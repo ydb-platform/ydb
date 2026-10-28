@@ -38,6 +38,18 @@ TString CaseName(ETestedJoinAlgo algo, const TKeySchema& keySchema, ETestedPaylo
             case NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger:
                 name += "Integer";
                 break;
+            case NKikimr::NMiniKQL::ETestedJoinKeyType::kInt32:
+                name += "Int32";
+                break;
+            case NKikimr::NMiniKQL::ETestedJoinKeyType::kNullableInteger:
+                name += "NInteger";
+                break;
+            case NKikimr::NMiniKQL::ETestedJoinKeyType::kNullableInt32:
+                name += "NInt32";
+                break;
+            case NKikimr::NMiniKQL::ETestedJoinKeyType::kNullableString:
+                name += "NString";
+                break;
             }
         }
         return name;
@@ -49,6 +61,8 @@ TString CaseName(ETestedJoinAlgo algo, const TKeySchema& keySchema, ETestedPaylo
             return "Narrow";
         case ETestedPayload::kWide:
             return "Wide";
+        case ETestedPayload::kTpc:
+            return "Tpc";
         default:
             Y_ABORT("unreachable");
         }
@@ -70,7 +84,7 @@ TString CaseName(ETestedJoinAlgo algo, const TKeySchema& keySchema, ETestedPaylo
     if (filter != ETestedFilter::kNone) {
         filterName = "_F" + FilterOptionName(filter);
     }
-    const int payloadColumns = payload == ETestedPayload::kWide ? benchSettings.WidePayloadColumns : 1;
+    const int payloadColumns = payload == ETestedPayload::kWide ? benchSettings.WidePayloadColumns : payload == ETestedPayload::kTpc ? 4 : 1;
     const TString shapeName = "_S" + std::to_string(benchSettings.StringBytes) + "_P" + std::to_string(payloadColumns);
 
     return algoName + "_" + JoinKindOptionName(joinKind) + "_" + keyTypeName + "_" + payloadName + "_" +
@@ -108,12 +122,34 @@ TString KeySchemaOptionName(const TKeySchema& keySchema) {
         case ETestedJoinKeyType::kInteger:
             name += "int";
             break;
+        case ETestedJoinKeyType::kInt32:
+            name += "int32";
+            break;
+        case ETestedJoinKeyType::kNullableInteger:
+            name += "nint";
+            break;
+        case ETestedJoinKeyType::kNullableInt32:
+            name += "nint32";
+            break;
+        case ETestedJoinKeyType::kNullableString:
+            name += "nstring";
+            break;
         }
     }
     return name;
 }
 
-TString PayloadOptionName(ETestedPayload payload) { return payload == ETestedPayload::kWide ? "wide" : "narrow"; }
+TString PayloadOptionName(ETestedPayload payload) {
+    switch (payload) {
+    case ETestedPayload::kNarrow:
+        return "narrow";
+    case ETestedPayload::kWide:
+        return "wide";
+    case ETestedPayload::kTpc:
+        return "tpc";
+    }
+    Y_ABORT("unreachable");
+}
 
 TString FlavourOptionName(ETestedInputFlavour flavour) {
     return flavour == ETestedInputFlavour::kLittleRightTable ? "little-right" : "same-size";
@@ -170,8 +206,16 @@ TKeySchema ParseKeySchema(const TString& spec) {
             schema.push_back(ETestedJoinKeyType::kInteger);
         } else if (name == "string" || name == "s") {
             schema.push_back(ETestedJoinKeyType::kString);
+        } else if (name == "int32") {
+            schema.push_back(ETestedJoinKeyType::kInt32);
+        } else if (name == "nint" || name == "ni") {
+            schema.push_back(ETestedJoinKeyType::kNullableInteger);
+        } else if (name == "nint32") {
+            schema.push_back(ETestedJoinKeyType::kNullableInt32);
+        } else if (name == "nstring" || name == "ns") {
+            schema.push_back(ETestedJoinKeyType::kNullableString);
         } else {
-            throw std::runtime_error{"unknown key column type '" + TString(name) + "', expected int or string"};
+            throw std::runtime_error{"unknown key column type '" + TString(name) + "', expected int, int32, string, nint, nint32 or nstring"};
         }
     }
     if (schema.empty()) {

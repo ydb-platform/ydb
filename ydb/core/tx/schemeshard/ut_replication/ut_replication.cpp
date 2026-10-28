@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
     Y_UNIT_TEST(CreateWithoutInitialScan) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        runtime.GetAppData().ReplicationConfig.SetSkipInitialScan(true);
+        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
         ui64 txId = 100;
 
         TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));

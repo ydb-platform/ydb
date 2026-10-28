@@ -13,7 +13,11 @@ ENDIF()
 
 SIZE(LARGE)
 
-REQUIREMENTS(ram:16 cpu:2)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16 cpu:4)
+ELSE()
+    REQUIREMENTS(ram:16 cpu:2)
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
@@ -31,6 +35,9 @@ DEPENDS(
     ydb/apps/ydb
 )
 
+FORK_TESTS()
 FORK_TEST_FILES()
+FORK_SUBTESTS()
+SPLIT_FACTOR(8)
 
 END()

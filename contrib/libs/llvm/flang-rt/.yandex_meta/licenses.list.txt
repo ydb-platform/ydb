@@ -472,6 +472,15 @@ Copyright (c) 2003-2019 University of Illinois at Urbana-Champaign.
 All rights reserved.
 
 
+====================COPYRIGHT====================
+Copyright (c) 2007-2019 University of Illinois at Urbana-Champaign.
+All rights reserved.
+
+
+====================NCSA====================
+LLVM is open source software. You may freely distribute it under the terms of
+the license agreement found in LICENSE.txt.
+
 ====================NCSA====================
 Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
 ==============================================================================

@@ -1,6 +1,8 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
-DEPENDS(yql/essentials/udfs/common/stat)
+DEPENDS(
+    yql/essentials/udfs/common/stat/impl
+)
 
 TIMEOUT(300)
 

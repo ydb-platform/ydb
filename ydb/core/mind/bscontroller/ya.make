@@ -10,6 +10,7 @@ SRCS(
     bsc_audit.h
     bsc_audit.cpp
     bridge.cpp
+    bridge_sync_counters.h
     cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp

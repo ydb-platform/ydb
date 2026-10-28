@@ -1,0 +1,15 @@
+/* custom error: Expected bool type, but got: Optional<Int32> */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    1
+FROM (
+    SELECT
+        2 AS a
+)
+WHERE
+    (
+        SELECT
+            1 AS a
+    )
+;

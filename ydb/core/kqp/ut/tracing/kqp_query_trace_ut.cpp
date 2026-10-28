@@ -767,7 +767,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             if constexpr (Mvcc) {
                 request = std::make_unique<NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest>(TVector<TTableId>{}, 0);
             } else {
-                request = std::make_unique<NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest>(TVector<TString>{"/Root/table-1"}, 0);
+                TVector<NKikimrTxUserProxy::TCreateVolatileSnapshotTx::TTable> tables(1);
+                tables[0].SetTablePath("/Root/table-1");
+                request = std::make_unique<NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest>(std::move(tables), 0);
             }
             runtime.Send(new IEventHandle(manager, sender, request.release(), 0, 0, nullptr, NWilson::TTraceId(traceId)), 0, true);
             const auto result = runtime.GrabEdgeEventRethrow<NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse>(sender);
@@ -1531,6 +1533,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         spilling.SetRoot("./spilling/");
         MakeDirIfNotExist("./spilling");
         auto [runtime, server, sender] = CreateServer(1, config);
+        // Local file spilling does IO on real threads. Keep the legacy real waits,
+        // so that simulated time does not run ahead of spilling operations.
+        runtime.SetFastSimulatedTime(false);
         ExecSQL(runtime, sender, "CREATE TABLE `/Root/SpillData` (Key Uint64, Value String, PRIMARY KEY (Key));",
             0, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DDL);
         for (ui32 i = 0; i < 128; ++i) {

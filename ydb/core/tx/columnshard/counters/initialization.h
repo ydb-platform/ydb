@@ -9,9 +9,8 @@ class TCSInitialization: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
 
-    const NMonitoring::THistogramPtr HistogramTabletInitializationMs;
     const NMonitoring::THistogramPtr HistogramTxInitDurationMs;
-    const NMonitoring::THistogramPtr HistogramTxUpdateSchemaDurationMs;
+    const NMonitoring::THistogramPtr HistogramNormalizationDurationMs;
     const NMonitoring::THistogramPtr HistogramTxInitSchemaDurationMs;
     const NMonitoring::THistogramPtr HistogramActivateExecutorFromActivationDurationMs;
     const NMonitoring::THistogramPtr HistogramSwitchToWorkFromActivationDurationMs;
@@ -22,8 +21,8 @@ public:
         HistogramTxInitDurationMs->Collect(d.MilliSeconds());
     }
 
-    void OnTxUpdateSchemaFinished(const TDuration d) const {
-        HistogramTxUpdateSchemaDurationMs->Collect(d.MilliSeconds());
+    void OnNormalizationFinished(const TDuration d) const {
+        HistogramNormalizationDurationMs->Collect(d.MilliSeconds());
     }
 
     void OnTxInitSchemaFinished(const TDuration d) const {
@@ -41,9 +40,8 @@ public:
 
     TCSInitialization(TCommonCountersOwner& owner)
         : TBase(owner, "stage", "initialization")
-        , HistogramTabletInitializationMs(TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxUpdateSchemaDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramNormalizationDurationMs(TBase::GetHistogram("NormalizationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
         , HistogramActivateExecutorFromActivationDurationMs(
               TBase::GetHistogram("ActivateExecutorFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))

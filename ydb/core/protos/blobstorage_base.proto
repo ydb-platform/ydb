@@ -98,6 +98,16 @@ message TVDiskLocation {
 
 message TGroupInfo {
     message TFailRealm {
+        // Internal state; N states describe minimum copies of every confirmed blob.
+        // N0 makes no per-realm copy guarantee and does not imply an empty realm.
+        enum EState {
+            N0 = 0;
+            N1 = 1;
+            N2 = 2;
+            F = 3; // Failure.
+            R = 4; // Recovery.
+        }
+        optional EState State = 2 [default = N0];
         message TFailDomain {
             repeated TVDiskLocation VDiskLocations = 1;
         }

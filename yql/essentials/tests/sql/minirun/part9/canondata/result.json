@@ -1173,6 +1173,20 @@
             "uri": "https://{canondata_backend}/1773845/ae471a093458a945d95d0e4ade159a5e63f4725b/resource.tar.gz#test.test_select_yql-join_right_on_2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-join_v1_compat_ordered_legacy-default.txt-Debug]": [
+        {
+            "checksum": "3a9b066d199febf2a2e6a181d6b5116b",
+            "size": 712,
+            "uri": "https://{canondata_backend}/1600758/0d3f7747cd4b8b800de4c8a3d17f0010ffd3352c/resource.tar.gz#test.test_select_yql-join_v1_compat_ordered_legacy-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_v1_compat_ordered_legacy-default.txt-Results]": [
+        {
+            "checksum": "3e8183f44aa97f0e39c733844972ba88",
+            "size": 2325,
+            "uri": "https://{canondata_backend}/1600758/0d3f7747cd4b8b800de4c8a3d17f0010ffd3352c/resource.tar.gz#test.test_select_yql-join_v1_compat_ordered_legacy-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-named_node_expression-default.txt-Debug]": [
         {
             "checksum": "d039d3fe07cd04e48545203dfb29939e",
@@ -1269,6 +1283,20 @@
             "checksum": "e384238c7854a726f9b926a3f7cdad08",
             "size": 2484,
             "uri": "https://{canondata_backend}/1773845/ae471a093458a945d95d0e4ade159a5e63f4725b/resource.tar.gz#test.test_select_yql-window_pg_tutorial_5-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-window_shared_cumedist-default.txt-Debug]": [
+        {
+            "checksum": "fc40fe70e371398784686073234e8a91",
+            "size": 1522,
+            "uri": "https://{canondata_backend}/1925842/3c66c55be1b6b5192590e8b6ded33cb7aefc7e50/resource.tar.gz#test.test_select_yql-window_shared_cumedist-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-window_shared_cumedist-default.txt-Results]": [
+        {
+            "checksum": "2dbe6e998f8ff6b0721fb82583ac8a24",
+            "size": 1878,
+            "uri": "https://{canondata_backend}/1925842/3c66c55be1b6b5192590e8b6ded33cb7aefc7e50/resource.tar.gz#test.test_select_yql-window_shared_cumedist-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-window_sum_partition_by_1-default.txt-Debug]": [

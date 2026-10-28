@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         const auto& stats = merged->GetColumnsData().GetStats();
         UNIT_ASSERT_VALUES_EQUAL(stats.GetAccessorType(0), IChunkedArray::EType::Dictionary);
 
-        auto path = merged->GetPathAccessor("$.a", docs.size()).DetachResult();
+        auto path = merged->GetPathAccessor(ParseJsonPath("$.a").DetachResult(), docs.size()).DetachResult();
         TStringBuilder values;
         path->VisitValues([&](const std::optional<TStringBuf>& value) {
             values << (value ? *value : TStringBuf("<null>")) << ';';

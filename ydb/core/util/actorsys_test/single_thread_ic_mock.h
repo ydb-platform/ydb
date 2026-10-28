@@ -25,6 +25,8 @@ namespace NKikimr {
 
         std::unique_ptr<NActors::IActor> CreateProxyActor(ui32 nodeId, ui32 peerNodeId,
             TIntrusivePtr<NActors::TInterconnectProxyCommon> common);
+
+        void Reconnect(ui32 nodeId, ui32 peerNodeId);
     };
 
 }

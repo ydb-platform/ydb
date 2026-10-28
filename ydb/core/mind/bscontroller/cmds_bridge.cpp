@@ -28,7 +28,11 @@ namespace NKikimr::NBsController {
         for (size_t pileIndex = 0; pileIndex < current.PileSize(); ++pileIndex) {
             const auto& curPile = current.GetPile(pileIndex);
             const auto& updatedPile = updated.GetPile(pileIndex);
-            if (curPile.GetGroupId() != updatedPile.GetGroupId() ||
+            if (curPile.GetAbsent() != updatedPile.GetAbsent()) {
+                throw TExError() << "can't change set of piles for group state";
+            } else if (curPile.GetAbsent()) {
+                continue; // the group has no part in this pile
+            } else if (curPile.GetGroupId() != updatedPile.GetGroupId() ||
                     curPile.GetGroupGeneration() != updatedPile.GetGroupGeneration() ||
                     curPile.GetBecameUnsyncedGeneration() != updatedPile.GetBecameUnsyncedGeneration()) {
                 throw TExError() << "can't change group id for group state";

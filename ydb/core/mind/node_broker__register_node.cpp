@@ -19,6 +19,7 @@ public:
         , ScopeId(resolvedEv->Get()->ScopeId)
         , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
         , ResolveError(std::move(resolvedEv->Get()->Error))
+        , ImplicitPileName(std::move(resolvedEv->Get()->ImplicitPileName))
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -121,14 +122,23 @@ public:
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
             }
 
-            if (node.Location != loc && node.Location != TNodeLocation()) {
+            // node of the implicit pile may get the name of its pile, the pile of the node stays the same then
+            TNodeLocation expected = node.Location;
+            if (!expected.GetBridgePileName() && ImplicitPileName && loc.GetBridgePileName() == ImplicitPileName) {
+                NActorsInterconnect::TNodeLocation proto;
+                expected.Serialize(&proto, false);
+                proto.SetBridgePileName(*ImplicitPileName);
+                expected = TNodeLocation(proto);
+            }
+
+            if (expected != loc && node.Location != TNodeLocation()) {
                 auto errorText = TStringBuilder() << "Another location is registered for " << host << ":" << port
                     << ", expected = " << node.Location.ToString()
                     << ", got = " << loc.ToString();
 
                 YDB_LOG_WARN_CTX(ctx, errorText);
                 return Error(TStatus::WRONG_REQUEST, errorText, ctx);
-            } else if (node.Location.GetBridgePileName() != loc.GetBridgePileName()) {
+            } else if (expected.GetBridgePileName() != loc.GetBridgePileName()) {
                 return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             } else if (node.Location != loc) {
                 Self->Dirty.UpdateLocation(node, loc);
@@ -260,6 +270,7 @@ private:
     const NActors::TScopeId ScopeId;
     const TSubDomainKey ServicedSubDomain;
     TString ResolveError;
+    std::optional<TString> ImplicitPileName;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;

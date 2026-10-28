@@ -12,6 +12,7 @@ PEERDIR(
 
 TEST_SRCS(
     kikimr_config.py
+    test_all_tablets_alive_liveness_warden.py
     test_bs_config_invoke.py
 )
 

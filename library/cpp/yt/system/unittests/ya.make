@@ -3,6 +3,7 @@ GTEST()
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
+    access_spreader_ut.cpp
     atomic_object_ut.cpp
     copyable_atomic_ut.cpp
     count_down_latch_ut.cpp
@@ -13,12 +14,6 @@ SRCS(
     spin_lock_count_ut.cpp
     spin_wait_ut.cpp
 )
-
-IF (OS_LINUX)
-    SRCS(
-        cpu_id_ut.cpp
-    )
-ENDIF()
 
 IF (NOT OS_WINDOWS)
     SRC(spin_lock_fork_ut.cpp)
@@ -33,3 +28,9 @@ PEERDIR(
 )
 
 END()
+
+IF (OS_LINUX)
+    RECURSE(
+        access_spreader_dynamic_tls
+    )
+ENDIF()

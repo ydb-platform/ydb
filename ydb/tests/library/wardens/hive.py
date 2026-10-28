@@ -81,11 +81,17 @@ class AllTabletsAliveLivenessWarden(LivenessWarden):
                 _default=0
             )
 
-        if tablets_alive_count != tablets_count or state_done != 1:
+        # SUM(Hive/StateDone) adds one per static node that finished Hive init.
+        # A healthy 2dc cluster therefore reports 2, not exactly 1.
+        if tablets_alive_count != tablets_count or state_done < 1:
+            if tablets_alive_count != tablets_count:
+                reason = '%d non-active tablet(s)' % (tablets_count - tablets_alive_count)
+            else:
+                reason = 'Hive StateDone is %d' % state_done
             return [
-                'Liveness violation for Hive tablet counters: %d non-active tablet(s). '
+                'Liveness violation for Hive tablet counters: %s. '
                 'tablets alive - %d, tablets total - %d, state done - %d' % (
-                    tablets_count - tablets_alive_count,
+                    reason,
                     tablets_alive_count, tablets_count, state_done
                 )
             ]

@@ -754,11 +754,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         // Disable merge-by-size cluster-wide via the ICB control.
         TControlBoard::SetValue(0, runtime.GetAppData().Icb->SchemeShardControls.MergeBySizeEnabled);
 
-        // Let a full wave of stats through and give schemeshard time to react.
+        // Let stats from both distinct shards through and give schemeshard time to react.
+        // A merge needs stats from both neighbours (TryAddShardToMerge rejects a
+        // shard without stats), and blocked events are dropped when the blocker
+        // leaves scope. Waiting for two events is not enough: with a zero report
+        // interval both may come from the same shard, in which case only one
+        // shard's stats reach schemeshard while the control is off and the
+        // "no merge" check below would pass vacuously. Collect the sender
+        // datashard ids and unblock everything only after both are seen.
         {
             TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
-            runtime.WaitFor("stats from both shards", [&]{ return statsBlocker.size() >= 2; });
-            statsBlocker.Unblock(2);
+            THashSet<ui64> seenShards;
+            runtime.WaitFor("stats from both shards", [&]{
+                for (const auto& ev : statsBlocker) {
+                    seenShards.insert(ev->Get()->Record.GetDatashardId());
+                }
+                return seenShards.size() >= 2;
+            });
+            statsBlocker.Unblock();
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
 

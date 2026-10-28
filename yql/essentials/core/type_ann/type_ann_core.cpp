@@ -14571,11 +14571,12 @@ IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExp
             }
         }
 
-        if (cred == nullptr) {
+        const bool isMetaReplay = ctx.Types.QContext.CanRead() && ctx.Types.QContext.CaptureMode() == EQPlayerCaptureMode::MetaOnly;
+        if (cred == nullptr && !isMetaReplay) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "unknown token id: " << p1 << ", prefix: " << p0));
             return IGraphTransformer::TStatus::Error;
         }
-        if (cred->Content.empty()) {
+        if (cred && cred->Content.empty()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "got empty credential content for id: " << p1));
             return IGraphTransformer::TStatus::Error;
         }

@@ -1,0 +1,19 @@
+PRAGMA YqlSelect = 'force';
+
+$left = AsList(AsStruct(1 AS id, 'a' AS av), AsStruct(2 AS id, 'aa' AS av));
+$right = AsList(AsStruct(2 AS id, 'b' AS bv), AsStruct(3 AS id, 'bb' AS bv));
+$extra = AsList(AsStruct(7 AS id, 'c' AS cv));
+
+SELECT
+    *
+WITHOUT
+    c.id
+FROM
+    AS_TABLE($left) AS a
+FULL JOIN
+    AS_TABLE($right) AS b
+ON
+    a.id == b.id
+CROSS JOIN
+    AS_TABLE($extra) AS c
+;

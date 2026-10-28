@@ -2,6 +2,7 @@
 
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -185,6 +186,10 @@ public:
         }
 
         auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(streamPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
@@ -206,8 +211,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TProposeContext&) override {
-        Y_ABORT("no AbortPropose for TDropCdcStream");
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+        context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -440,6 +446,9 @@ public:
 
         // Validate and mark all streams for drop in single transaction
         for (const auto& streamPath : streamPaths) {
+            context.MemChanges.GrabPath(context.SS, streamPath.Base()->PathId);
+            context.DbChanges.PersistPath(streamPath.Base()->PathId);
+
             Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
             auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
@@ -478,6 +487,7 @@ public:
 
     void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
+        context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(StreamNames.size());
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -605,6 +615,7 @@ void DoDropStream(
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+        NCdcStreamAtTable::MaybeGuardIndexWithBaseCdcScanLock(outTx, workingDirPath, context);
 
         result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
     }

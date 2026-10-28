@@ -15,6 +15,85 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
 
+    Y_UNIT_TEST(HashCalculatorEmptyAndReset) {
+        const ui8 defaultKey[32] = {'p', 'o', 'l', 'y', '1', '3', '0', '5', 'V', 'e', 'c', 'K', 'e', 'y', '1',
+            'D', 'u', 'm', 'm', 'y', 'C', 'o', 'n', 's', 't', 'a', 'n', 't', 'V', 'a'};
+        const TString message = "PDisk legacy sector hash";
+        THashCalculator calculator;
+        for (ui32 pass = 0; pass != 4; ++pass) {
+            Poly1305Vec reference;
+            reference.SetKey(defaultKey, sizeof(defaultKey));
+            if (pass) {
+                calculator.Clear();
+                calculator.Clear();
+                calculator.Hash(message.data(), 7);
+                calculator.Hash(message.data() + 7, message.size() - 7);
+                reference.Update(reinterpret_cast<const ui8*>(message.data()), message.size());
+            }
+            ui8 expected[16];
+            reference.Finish(expected);
+            ui64 actual[2];
+            actual[0] = calculator.GetHashResult(&actual[1]);
+            UNIT_ASSERT_VALUES_EQUAL(memcmp(actual, expected, sizeof(expected)), 0);
+        }
+    }
+
+    Y_UNIT_TEST(HashCalculatorKeyChangesTakeEffectOnClear) {
+        const TString message = "A key change must not reset a message";
+        const ui8 key[3] = {1, 2, 3};
+        THashCalculator defaultKey;
+        defaultKey.Hash(message.data(), message.size());
+        const ui64 expectedDefault = defaultKey.GetHashResult();
+        THashCalculator calculator;
+        calculator.SetKey(key, sizeof(key));
+        calculator.Hash(message.data(), message.size());
+        UNIT_ASSERT_VALUES_EQUAL(calculator.GetHashResult(), expectedDefault);
+
+        ui8 expandedKey[32];
+        for (size_t i = 0; i < sizeof(expandedKey); ++i) {
+            expandedKey[i] = key[i % sizeof(key)];
+        }
+        Poly1305Vec reference;
+        reference.SetKey(expandedKey, sizeof(expandedKey));
+        reference.Update(reinterpret_cast<const ui8*>(message.data()), message.size());
+        ui8 expected[16];
+        reference.Finish(expected);
+
+        calculator.Clear();
+        calculator.Hash(message.data(), 7);
+        const ui8 nextKey[1] = {9};
+        calculator.SetKey(nextKey, sizeof(nextKey));
+        calculator.Hash(message.data() + 7, message.size() - 7);
+        ui64 actual[2];
+        actual[0] = calculator.GetHashResult(&actual[1]);
+        UNIT_ASSERT_VALUES_EQUAL(memcmp(actual, expected, sizeof(expected)), 0);
+        calculator.Clear();
+        calculator.Hash(message.data(), message.size());
+        THashCalculator next;
+        next.SetKey(nextKey, sizeof(nextKey));
+        next.Clear();
+        next.Hash(message.data(), message.size());
+        UNIT_ASSERT_VALUES_EQUAL(calculator.GetHashResult(), next.GetHashResult());
+    }
+
+    Y_UNIT_TEST(HashCalculatorKnownPoly1305Vector) {
+        // RFC 8439, section 2.5.2.
+        const ui8 key[32] = {
+            0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33, 0x7f, 0x44, 0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8,
+            0x01, 0x03, 0x80, 0x8a, 0xfb, 0x0d, 0xb2, 0xfd, 0x4a, 0xbf, 0xf6, 0xaf, 0x41, 0x49, 0xf5, 0x1b};
+        const ui8 expected[16] = {
+            0xa8, 0x06, 0x1d, 0xc1, 0x30, 0x51, 0x36, 0xc6, 0xc2, 0x2b, 0x8b, 0xaf, 0x0c, 0x01, 0x27, 0xa9};
+        const TString message = "Cryptographic Forum Research Group";
+        THashCalculator calculator;
+        TCypherKey cypherKey(key, sizeof(key));
+        UNIT_ASSERT(calculator.SetKey(cypherKey));
+        calculator.Clear();
+        calculator.Hash(message.data(), message.size());
+        ui64 actual[2];
+        actual[0] = calculator.GetHashResult(&actual[1]);
+        UNIT_ASSERT_VALUES_EQUAL(memcmp(actual, expected, sizeof(expected)), 0);
+    }
+
     Y_UNIT_TEST(TestMixedStreamCypher) {
         TStreamCypher cypher1;
         TStreamCypher cypher2;

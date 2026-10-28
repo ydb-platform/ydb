@@ -19,6 +19,7 @@ SRCS(
     blobstorage_executor_pool_mapping_ut.cpp
     blobstorage_node_warden_ut.cpp
     bind_queue_ut.cpp
+    distconf_selfheal_ut.cpp
     distconf_ut.cpp
     node_warden_cache_ut.cpp
 )

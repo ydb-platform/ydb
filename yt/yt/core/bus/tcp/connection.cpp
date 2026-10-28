@@ -951,7 +951,10 @@ void TConnection::OnEvent(EPollControl control)
     YT_TLOG_TRACE("Event processing started");
 
     // Update execution pool if needed.
-    if (auto multiplexingBand = MultiplexingBand_.load(); multiplexingBand != ActualMultiplexingBand_) {
+    if (auto multiplexingBand = MultiplexingBand_.load();
+        multiplexingBand != ActualMultiplexingBand_ ||
+        NeedResetInvoker_.exchange(false))
+    {
         Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
         ActualMultiplexingBand_ = multiplexingBand;
     }
@@ -1020,6 +1023,11 @@ void TConnection::OnShutdown()
         .With(error);
 
     Terminated_.Fire(error);
+}
+
+void TConnection::ResetInvoker()
+{
+    NeedResetInvoker_ = true;
 }
 
 void TConnection::OnSocketRead()

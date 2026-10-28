@@ -1,8 +1,8 @@
-YQL_UDF_TEST()
+YQL_UDF_MINITEST()
 
 DEPENDS(
-    yql/essentials/udfs/common/hyperloglog
-    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/hyperloglog/impl
+    yql/essentials/udfs/common/digest/impl
 )
 
 TIMEOUT(300)

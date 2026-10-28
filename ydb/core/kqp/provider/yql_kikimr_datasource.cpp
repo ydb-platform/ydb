@@ -460,7 +460,7 @@ protected:
             normalizedValue = "true";
         }
 
-        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::ISettingDispatcher::EStage::STATIC, NCommon::GetErrorCallback(pos, ctx))) {
             return false;
         }
 

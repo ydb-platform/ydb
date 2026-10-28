@@ -84,7 +84,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
 
     // apply proxy information before we try to start VDisks/PDisks
-    ApplyGroupInfoFromServiceSet(serviceSet);
+    ApplyGroupInfoFromServiceSet(serviceSet, isStatic, comprehensive);
 
     // merge new configuration into current one
     NKikimrBlobStorage::TNodeWardenServiceSet *target = isStatic ? &StaticServices : &DynamicServices;
@@ -263,6 +263,9 @@ void TNodeWarden::ApplyStateStorageConfig() {
         if (const auto& current = *which) {
             for (const auto& ringGroup : current->RingGroups) {
                 for (const auto& ring : ringGroup.Rings) {
+                    if (ring.IsDisabled) {
+                        continue;
+                    }
                     for (const auto& replicaId : ring.Replicas) {
                         if (replicaId.NodeId() == LocalNodeId) {
                             YDB_LOG_INFO("Local replica found",
@@ -400,11 +403,12 @@ void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {
 
     ConfigInFlight.emplace(cookie, [this, sender = ev->Sender, cookie = ev->Cookie](TEvBlobStorage::TEvControllerConfigResponse *ev) {
         auto response = std::make_unique<TEvNodeWardenBaseConfig>();
-        if (ev) {
-            auto *record = ev->Record.MutableResponse();
-            if (record->GetSuccess() && record->StatusSize() == 1) {
-                response->BaseConfig = std::move(*record->MutableStatus(0)->MutableBaseConfig());
-            }
+        if (!ev) {
+            response->ErrorReason = "pipe to BSC disconnected";
+        } else if (auto *record = ev->Record.MutableResponse(); record->GetSuccess() && record->StatusSize() == 1) {
+            response->BaseConfig = std::move(*record->MutableStatus(0)->MutableBaseConfig());
+        } else {
+            response->ErrorReason = TStringBuilder() << "BSC failed to provide base config: " << record->GetErrorDescription();
         }
         Send(sender, response.release(), 0, cookie);
     });

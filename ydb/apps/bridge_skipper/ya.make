@@ -1,0 +1,3 @@
+RECURSE(
+    ydbd_mock
+)

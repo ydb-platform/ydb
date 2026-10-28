@@ -8,7 +8,7 @@
 
 #include <util/string/cast.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/sql/v1/translation/node.h>
+#include <yql/essentials/sql/v1/translation/ddl_streaming_query.h>
 
 namespace NKikimr::NKqp {
 

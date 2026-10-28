@@ -102,6 +102,8 @@ private:
 
 TString DatabaseIdToDatabase(TStringBuf databaseId);
 
+bool IsServerlessDatabaseId(TStringBuf databaseId);
+
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message);
 
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig);

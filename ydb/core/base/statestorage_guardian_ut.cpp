@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/core/mon.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
@@ -294,6 +295,43 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardian) {
         UNIT_ASSERT_GE(replies, 2u);
         UNIT_ASSERT_VALUES_UNEQUAL_C(result->Get()->Status, NKikimrProto::OK,
             "the delete succeeded after a replica showed a newer configuration");
+    }
+
+    // A follower is registered at a replica; the monitoring page of the tablet must list it
+    Y_UNIT_TEST(MonitoringShowsFollowers) {
+        TTestBasicRuntime runtime;
+        SetupStateStorage(runtime, 0);
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), edge, new TEvStateStorage::TEvResolveReplicas(tabletId)));
+        auto resolved = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+        const TActorId replica = resolved->Get()->GetPlainReplicas().front();
+
+        // the record of the leader, then a follower
+        runtime.Send(new IEventHandle(replica, edge, new TEvStateStorage::TEvReplicaLookup(tabletId, 1, 0, 0)));
+        auto info = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaInfo>(edge);
+        auto update = MakeHolder<TEvStateStorage::TEvReplicaUpdate>();
+        update->Record.SetTabletID(tabletId);
+        update->Record.SetCookie(2);
+        ActorIdToProto(runtime.AllocateEdgeActor(), update->Record.MutableProposedLeader());
+        ActorIdToProto(runtime.AllocateEdgeActor(), update->Record.MutableProposedLeaderTablet());
+        update->Record.SetProposedGeneration(1);
+        update->Record.SetSignature(info->Get()->Record.GetSignature());
+        runtime.Send(new IEventHandle(replica, edge, update.Release()));
+        runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaInfo>(edge);
+        const TActorId follower = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(replica, runtime.AllocateEdgeActor(), new TEvStateStorage::TEvReplicaRegFollower(
+            tabletId, 1, follower, runtime.AllocateEdgeActor(), false, 0, 0)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        runtime.Register(CreateStateStorageMonitoringActor(tabletId, edge, ""));
+        auto page = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT(page);
+        TStringStream html;
+        page->Get()->Output(html);
+        UNIT_ASSERT_C(html.Str().Contains(follower.ToString()), html.Str());
     }
 
     // A replica is gone from the start. Its child must report it missing only after three seconds of failures, not

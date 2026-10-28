@@ -35,19 +35,23 @@ struct TFollowerGroup {
         FollowerCount = followerGroup.GetFollowerCount();
         AllowLeaderPromotion = followerGroup.GetAllowLeaderPromotion();
         AllowClientRead = followerGroup.GetAllowClientRead();
-        RequireAllDataCenters = followerGroup.GetRequireAllDataCenters();
+        SetRequireAllDataCenters(followerGroup.GetRequireAllDataCenters());
         {
             const auto& allowedNodes(followerGroup.GetAllowedNodeIDs());
             std::copy(allowedNodes.begin(), allowedNodes.end(), std::back_inserter(NodeFilter.AllowedNodes));
         }
         NodeFilter.AllowedDataCenters.MutableDataCenter()->CopyFrom(followerGroup.GetAllowedDataCenters());
-        if (RequireAllDataCenters) {
-            NodeFilter.MustBePrimaryPile = false;
-        }
         LocalNodeOnly = followerGroup.GetLocalNodeOnly();
         RequireDifferentNodes = followerGroup.GetRequireDifferentNodes();
         FollowerCountPerDataCenter = followerGroup.GetFollowerCountPerDataCenter();
         return *this;
+    }
+
+    void SetRequireAllDataCenters(bool requireAllDataCenters) {
+        RequireAllDataCenters = requireAllDataCenters;
+        if (RequireAllDataCenters) {
+            NodeFilter.MustBePrimaryPile = false;
+        }
     }
 
     ui32 GetRawFollowerCount() const {

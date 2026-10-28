@@ -105,6 +105,11 @@ message DescribeReplicationResult {
         DoneState done = 6;
         PausedState paused = 9;
     }
+    // Number of assigned global-consistency write transactions not yet completed
+    // by the controller, including transactions awaiting CommitWrites completion.
+    // Reported independently of include_stats; absent when unavailable or in row mode.
+    // Zero is a snapshot of current transactions, not proof of catching up with the source.
+    optional uint64 inflight_transactions = 10;
 }
 
 message DescribeTransferRequest {

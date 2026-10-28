@@ -205,6 +205,9 @@ void FillReplicationDescription(
         out.clear_availability_period();
     }
     ConvertState(inDesc.GetState(), out);
+    if (inDesc.HasInflightTransactions()) {
+        out.set_inflight_transactions(inDesc.GetInflightTransactions());
+    }
 
     for (const auto& target : inDesc.GetTargets()) {
         ConvertItem(target, *out.add_items());

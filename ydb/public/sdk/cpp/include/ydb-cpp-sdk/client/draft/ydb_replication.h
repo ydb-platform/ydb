@@ -160,6 +160,10 @@ public:
     EConsistencyLevel GetConsistencyLevel() const;
     const TGlobalConsistency& GetGlobalConsistency() const;
 
+    // Current assigned global transactions, including commits in progress.
+    // Missing means unavailable; zero does not imply that replication caught up.
+    const std::optional<uint64_t>& GetInflightTransactions() const;
+
     EState GetState() const;
     const TRunningState& GetRunningState() const;
     const TErrorState& GetErrorState() const;
@@ -171,6 +175,7 @@ private:
     std::vector<TItem> Items_;
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
+    std::optional<uint64_t> InflightTransactions_;
 
     std::variant<
         TRowConsistency,

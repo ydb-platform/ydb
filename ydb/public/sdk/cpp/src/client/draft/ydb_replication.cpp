@@ -127,6 +127,8 @@ NYdb::NIssue::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrFie
 
 TReplicationDescription::TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc)
     : ConnectionParams_(desc.connection_params())
+    , InflightTransactions_(desc.has_inflight_transactions()
+        ? std::make_optional(desc.inflight_transactions()) : std::nullopt)
 {
     if (desc.has_availability_period()) {
         const auto& period = desc.availability_period();
@@ -219,6 +221,10 @@ const TGlobalConsistency& TReplicationDescription::GetGlobalConsistency() const 
     return std::get<TGlobalConsistency>(ConsistencyLevel_);
 }
 
+
+const std::optional<uint64_t>& TReplicationDescription::GetInflightTransactions() const {
+    return InflightTransactions_;
+}
 
 TReplicationDescription::EState TReplicationDescription::GetState() const {
     return static_cast<EState>(State_.index());

@@ -227,6 +227,11 @@ public:
             Result->Record.MutableAvailabilityPeriod()->MutableDuration()->set_seconds(
                 AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
         }
+        if (replication->GetConfig().GetConsistencySettings().HasGlobal() && Self->GetSingle() == replication) {
+            // CommittingTxId is already included in AssignedTxIds. Entries are
+            // removed by TTxCommitChanges and restored from Schema::TxIds on restart.
+            Result->Record.SetInflightTransactions(Self->AssignedTxIds.size());
+        }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;

@@ -301,6 +301,7 @@ message TEvDescribeReplicationResult {
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
     optional TReplicationStats Stats = 7;
     optional TAvailabilityPeriod AvailabilityPeriod = 8;
+    optional uint64 InflightTransactions = 9;
 }
 
 message TControllerIdentity {

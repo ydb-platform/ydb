@@ -53,7 +53,6 @@ ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDist
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
-ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/kafka/tests py3test.sole chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_direct_batched_produce
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

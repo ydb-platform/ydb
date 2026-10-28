@@ -2,7 +2,7 @@
 
 [Data shards](../../../concepts/glossary.md#data-shard) serving [row-oriented tables](../../../concepts/datamodel/table.md#row-oriented-tables) may become overloaded for the following reasons:
 
-* A table is created without the [AUTO_PARTITIONING_BY_LOAD](../../../concepts/datamodel/table.md#AUTO_PARTITIONING_BY_LOAD) clause.
+* A table is created without the [AUTO_PARTITIONING_BY_LOAD](../../../concepts/datamodel/table.md#auto_partitioning_by_load) clause.
 
     In this case, {{ ydb-short-name }} does not split overloaded shards.
 
@@ -10,7 +10,7 @@
 
     If a data shard already has 10000 operations in its queue, new queries will return an "overloaded" error. Retry such queries using a randomized exponential back-off strategy. For more information, see [{#T}](../queries/overloaded-errors.md).
 
-* A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../concepts/datamodel/table.md#AUTO_PARTITIONING_MAX_PARTITIONS_COUNT) setting and has already reached its partition limit.
+* A table was created with the [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT](../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) setting and has already reached its partition limit.
 
 * An inefficient [primary key](../../../concepts/glossary.md#primary-key) that causes an imbalance in the distribution of queries across shards. A typical example is ingestion with a monotonically increasing primary key, which may lead to the overloaded "last" partition. For example, this could occur with an autoincrementing primary key using the serial data type.
 

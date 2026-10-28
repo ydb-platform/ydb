@@ -402,7 +402,7 @@ Table structure:
 
 | Column | Description |
 |--------|-------------|
-| `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | [SID](../concepts/glossary.md#access-sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
 | `IsLockedOut` | Indicates that user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
@@ -421,7 +421,7 @@ Table structure:
 
 | Column | Description |
 |--------|-------------|
-| `Sid` | [SID](../concepts/glossary.md#sid) of the group.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | [SID](../concepts/glossary.md#access-sid) of the group.<br />Type: `Utf8`.<br />Key: `0`. |
 
 ### Auth group members
 

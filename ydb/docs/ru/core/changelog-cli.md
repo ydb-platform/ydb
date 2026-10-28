@@ -129,7 +129,7 @@
 
 ### Исправления ошибок
 
-* Исправлена ошибка, при которой [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump` без уведомления пропускала объекты схемы неподдерживаемых типов и создавала для них пустые директории в целевой папке на файловой системе.
+* Исправлена ошибка, при которой [команда](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` без уведомления пропускала объекты схемы неподдерживаемых типов и создавала для них пустые директории в целевой папке на файловой системе.
 
 ## Версия 2.24.0 {#2-24-0}
 
@@ -213,8 +213,8 @@
   * Добавлена опция `--partition-size` в [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` для установки максимального размера партиции в мегабайтах для строчных таблиц.
   * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
 * Улучшена функциональность резервного копирования и восстановления:
-  * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
-  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: {% if feature_async_replication %}[таблицы-реплики](./concepts/async-replication.md){% else %}таблицы-реплики{% endif %} у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
+  * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
+  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump`: {% if feature_async_replication %}[таблицы-реплики](./concepts/async-replication.md){% else %}таблицы-реплики{% endif %} у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
 * Изменения, повышающие удобство использования CLI:
   * Вывод подробной справки (`-hh`) теперь показывает всё дерево подкоманд.
   * Добавлена автоматическая вставка парных скобок в интерактивном режиме `{{ ydb-cli }}`.
@@ -233,7 +233,7 @@
   * Добавлена поддержка coordination nodes при рекурсивном удалении.
 * Исправлен код возврата команды `{{ ydb-cli }} workload * run --check-canonical` при несовпадении результатов с каноническими.
 * Исправлена проблема, когда CLI пытался читать параметры из stdin даже при отсутствии данных.
-* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Исправлена ошибка авторизации при выполнении [команды](./reference/ydb-cli/export-import/tools-restore.md#db) `{{ ydb-cli }} admin database restore` при наличии нескольких учетных записей администраторов базы данных в восстанавливаемой резервной копии.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Исправлена ошибка авторизации при выполнении [команды](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} admin database restore` при наличии нескольких учетных записей администраторов базы данных в восстанавливаемой резервной копии.
 
 ## Версия 2.20.0 {#2-20-0}
 
@@ -252,7 +252,7 @@
 * **_(Требуется сервер v25.1+)_** Добавлена поддержка [внешних источников данных](./concepts/datamodel/external_data_source.md) и [внешних таблиц](./concepts/datamodel/external_table.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * **_(Экспериментально)_** Добавлена команда `{{ ydb-cli }} admin node config init` для инициализации директории с конфигурационными файлами узла.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/generate.md) `{{ ydb-cli }} admin cluster config generate` для генерации файла [конфигурации V2](./devops/configuration-management/configuration-v2/index.md) из [файла конфигурации V1](./devops/configuration-management/configuration-v2/index.md).
-* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены [команда](./reference/ydb-cli/export-import/tools-dump#cluster) `{{ ydb-cli }} admin cluster dump` и [команда](./reference/ydb-cli/export-import/tools-restore#cluster) `{{ ydb-cli }} admin cluster restore` для создания дампа кластера. Дамп кластера содержит список баз данных с метаданными, пользователей и группы, но не содержит схемные объекты.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены [команда](./reference/ydb-cli/export-import/tools-dump) `{{ ydb-cli }} admin cluster dump` и [команда](./reference/ydb-cli/export-import/tools-restore) `{{ ydb-cli }} admin cluster restore` для создания дампа кластера. Дамп кластера содержит список баз данных с метаданными, пользователей и группы, но не содержит схемные объекты.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены команды `{{ ydb-cli }} admin database dump` и `{{ ydb-cli }} admin database restore` для создания дампа базы данных. Такой дамп содержит метаданные базы данных, схемные объекты, данные в них, пользователей и группы.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `{{ ydb-cli }} admin cluster config fetch` добавлены новые опции `--dedicated-storage-section` и `--dedicated-cluster-section`, позволяющие получать части конфигурации для кластера и хранилища отдельно.
 

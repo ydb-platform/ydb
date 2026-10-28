@@ -275,7 +275,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , LastGranule(0)
 {
     InitDerivedState();
-    RegisterSchemaVersion(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(schema)));
+    RegisterSchemaVersion(snapshot, SchemaObjectsCache->GetOrInsertIndexInfo(std::move(schema)));
 }
 
 void TColumnEngineForLogs::InitDerivedState() {
@@ -345,7 +345,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         if (!indexInfo) {
             auto built = NOlap::TIndexInfo::BuildFromProto(diffView, lastIndexInfo, StoragesManager, SchemaObjectsCache);
             AFL_VERIFY(built);
-            indexInfo.emplace(SchemaObjectsCache->UpsertIndexInfo(std::move(*built)));
+            indexInfo.emplace(SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*built)));
         }
         if (diffView.IsCorrectToIgnorePreviouse(lastIndexInfo)) {
             MutableVersionedIndex().AddIgnoreSchemaVersionTo(lastIndexInfo.GetVersion(), schema.GetVersion());
@@ -367,7 +367,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         if (!indexInfo) {
             auto built = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
             AFL_VERIFY(built);
-            indexInfo.emplace(SchemaObjectsCache->UpsertIndexInfo(std::move(*built)));
+            indexInfo.emplace(SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*built)));
         }
     }
     RegisterSchemaVersion(snapshot, std::move(*indexInfo));
@@ -401,7 +401,7 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     }
 
     AFL_VERIFY(indexInfoOptional);
-    vIndex.AddIndex(snapshot, SchemaObjectsCache->UpsertIndexInfo(std::move(*indexInfoOptional)));
+    vIndex.AddIndex(snapshot, SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*indexInfoOptional)));
 }
 
 std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {

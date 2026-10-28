@@ -128,9 +128,10 @@ public:
         return GetRuntime().WaitFuture(std::move(future));
     }
 
-    TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads)
+    TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads, ui32 nodeCount = 1)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
+            .SetNodeCount(nodeCount)
             .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
         )
         , Server(Settings)

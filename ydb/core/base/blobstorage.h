@@ -1445,6 +1445,7 @@ struct TEvBlobStorage {
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
         bool IsMonitored = true;
+        bool IsIdempotent = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TabletId(origin.TabletId)
@@ -1453,6 +1454,7 @@ struct TEvBlobStorage {
             , IssuerGuid(origin.IssuerGuid)
             , WriteSource(origin.WriteSource)
             , IsMonitored(origin.IsMonitored)
+            , IsIdempotent(origin.IsIdempotent)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
@@ -1479,6 +1481,7 @@ struct TEvBlobStorage {
                 << " Generation# " << Generation
                 << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
+                << " IsIdempotent# " << IsIdempotent
                 << "}";
             return str.Str();
         }

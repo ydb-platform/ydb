@@ -17,6 +17,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     const TInstant Deadline;
     const ui64 IssuerGuid;
     const TWriteSource WriteSource;
+    const bool IsIdempotent;
     bool SeenAlready = false;
 
     TGroupQuorumTracker QuorumTracker;
@@ -58,9 +59,10 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     void Process(NKikimrProto::EReplyStatus status, const TVDiskID& vdisk, std::optional<ui64> incarnationGuid) {
         std::vector<TVDiskID> queryStatus, resend;
         if (status == NKikimrProto::ALREADY) {
-            // ALREADY means that newly arrived Block is the same or older than existing one; we treat it as ERROR here
-            // and reply with ALREADY only when no quorum could be obtained during the whole operation
-            SeenAlready = true;
+            SeenAlready = !IsIdempotent;
+            status = IsIdempotent ? NKikimrProto::OK : NKikimrProto::ERROR;
+        }
+        if (IsIdempotent && status == NKikimrProto::OK && !incarnationGuid) {
             status = NKikimrProto::ERROR;
         }
         switch (NKikimrProto::EReplyStatus newStatus = incarnationGuid
@@ -119,6 +121,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor {
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartBlock;
         auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, Deadline, IssuerGuid, WriteSource);
+        ev->IsIdempotent = IsIdempotent;
         ev->RestartCounter = counter;
         return ev;
     }
@@ -140,6 +143,7 @@ public:
         , Deadline(params.Common.Event->Deadline)
         , IssuerGuid(params.Common.Event->IssuerGuid)
         , WriteSource(params.Common.Event->WriteSource)
+        , IsIdempotent(params.Common.Event->IsIdempotent)
         , QuorumTracker(Info.Get())
     {}
 

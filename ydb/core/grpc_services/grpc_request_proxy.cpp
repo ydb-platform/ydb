@@ -138,12 +138,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-<<<<<<< HEAD
-        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
-=======
         requestBaseCtx->InitializePathNormalization(PathNormalizer);
-        requestBaseCtx->CountRequestPaths();
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
 
         LogRequest(event);
 

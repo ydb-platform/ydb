@@ -71,13 +71,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::StatisticsConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
     (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
-<<<<<<< HEAD
-=======
-    (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
-    (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
-    (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem,
->>>>>>> ee5bcab8394 (Load path aliases through actor config notifications (#56852))
 });
 
 const THashSet<ui32> NON_YAML_KINDS({

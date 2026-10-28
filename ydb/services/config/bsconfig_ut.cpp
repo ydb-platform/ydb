@@ -1683,6 +1683,143 @@ config:
         CheckApplicationOfEarlierCommitIsNotTakenForLaterOne(/*beforeValidation=*/ true);
     }
 
+    // The node serving the request asks to switch back to configuration v1, and the YAML of the replacement is the
+    // stored one. Nothing is to be written but the mode, and the mode must be switched: the next replacement through
+    // configuration v2 is refused then.
+    Y_UNIT_TEST(SwitchToV1WithUnchangedYaml) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        auto *runtime = server.GetRuntime();
+        auto makeYaml = [&](ui32 version) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  feature_flags:
+    switch_to_config_v1: true
+    switch_to_config_v2: false
+)", version) + HostsYaml(*runtime);
+        };
+        ReplaceConfig(server.GetChannel(), makeYaml(1), std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (!runtime->GetAppData(0).FeatureFlags.GetSwitchToConfigV1()
+                || runtime->GetAppData(0).FeatureFlags.GetSwitchToConfigV2()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "SwitchToConfigV1 was not applied on the gRPC node");
+            Sleep(TDuration::MilliSeconds(10));
+        }
+
+        // the same YAML once more, now with the request to switch to configuration v1
+        ReplaceConfig(server.GetChannel(), makeYaml(1), std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+
+        ReplaceConfig(server.GetChannel(), makeYaml(2), std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_C(resp.operation().status() != Ydb::StatusIds::SUCCESS, resp.operation().DebugString());
+            });
+    }
+
+    void CheckUnchangedYamlDoesNotEnableV2WithChangedConsoleConfig(bool reuseConsoleVersion) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        TKikimrWithGrpcAndRootSchema server;
+        EnableConfigV2(&server);
+        auto *runtime = server.GetRuntime();
+        auto makeYaml = [&](ui32 version, bool enableV2) {
+            return Sprintf(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: %u
+config:
+  feature_flags:
+    switch_to_config_v1: %s
+    switch_to_config_v2: %s
+)", version, enableV2 ? "false" : "true", enableV2 ? "true" : "false") + HostsYaml(*runtime);
+        };
+        const TString oldYaml = makeYaml(1, false);
+        ReplaceConfig(server.GetChannel(), oldYaml, std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+        auto waitForMode = [&](bool enableV2) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (runtime->GetAppData(0).FeatureFlags.GetSwitchToConfigV2() != enableV2
+                    || runtime->GetAppData(0).FeatureFlags.GetSwitchToConfigV1() == enableV2) {
+                UNIT_ASSERT_C(TInstant::Now() < deadline, "Configuration mode was not applied on the gRPC node");
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        };
+        waitForMode(false);
+
+        // BSC retains oldYaml when the unchanged replacement only switches its mode to v1.
+        ReplaceConfig(server.GetChannel(), oldYaml, std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+
+        auto stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(server.GetChannel());
+        auto replaceInV1 = [&](ui32 version, bool enableV2) {
+            Ydb::DynamicConfig::ReplaceConfigRequest request;
+            request.set_config(makeYaml(version, enableV2));
+            Ydb::DynamicConfig::ReplaceConfigResponse response;
+            grpc::ClientContext context;
+            AdjustCtxForDB(context);
+            stub->ReplaceConfig(&context, request, &response);
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        };
+        ui32 expectedVersion = 3;
+        if (reuseConsoleVersion) {
+            // Public DropConfig resets Console's version; recreating it can reuse BSC's retained version.
+            Ydb::DynamicConfig::DropConfigRequest request;
+            request.mutable_identity()->set_cluster("");
+            request.mutable_identity()->set_version(2);
+            Ydb::DynamicConfig::DropConfigResponse response;
+            grpc::ClientContext context;
+            AdjustCtxForDB(context);
+            stub->DropConfig(&context, request, &response);
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+            replaceInV1(0, false);
+            waitForMode(false);
+            expectedVersion = 2;
+        }
+        // Console changes independently in v1 and asks the gRPC node to enable v2 again.
+        replaceInV1(expectedVersion - 1, true);
+        waitForMode(true);
+
+        // Equality with BSC's retained YAML must not bypass the version returned by Console.
+        ReplaceConfig(server.GetChannel(), oldYaml, std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_C(resp.operation().status() != Ydb::StatusIds::SUCCESS, resp.operation().DebugString());
+                UNIT_ASSERT_C(resp.operation().issues_size(), resp.operation().DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(resp.operation().issues(0).message(), "cluster YAML config version mismatch");
+            });
+
+        ReplaceConfig(server.GetChannel(), makeYaml(expectedVersion, true), std::nullopt, std::nullopt, false, false,
+            [](const auto& resp) {
+                UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);
+            });
+        std::optional<TString> mainConfig, storageConfig;
+        FetchConfig(server.GetChannel(), false, false, mainConfig, storageConfig);
+        UNIT_ASSERT(mainConfig);
+        UNIT_ASSERT(!storageConfig);
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeYaml(*mainConfig), NormalizeYaml(makeYaml(expectedVersion, true)));
+    }
+
+    Y_UNIT_TEST(UnchangedYamlDoesNotEnableV2WithNewerConsoleConfig) {
+        CheckUnchangedYamlDoesNotEnableV2WithChangedConsoleConfig(/*reuseConsoleVersion=*/ false);
+    }
+
+    Y_UNIT_TEST(UnchangedYamlDoesNotEnableV2WithRecreatedConsoleConfig) {
+        CheckUnchangedYamlDoesNotEnableV2WithChangedConsoleConfig(/*reuseConsoleVersion=*/ true);
+    }
+
 }
 
 } // NKikimr::NGRpcService

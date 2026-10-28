@@ -284,7 +284,9 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TRpcBase::Bootstrap(ctx);
         auto *self = Self();
-        self->OnBootstrap();
+        if (!self->OnBootstrap()) {
+            return;
+        }
         const auto& request = *GetProtoRequest();
         auto shim = ConvertConfigReplaceRequest(request);
         if (shim.MainConfig) {
@@ -520,7 +522,9 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TRpcBase::Bootstrap(ctx);
         auto *self = Self();
-        self->OnBootstrap();
+        if (!self->OnBootstrap()) {
+            return;
+        }
 
         if (const auto& databaseName = self->Request_->GetDatabaseName()) {
             // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)

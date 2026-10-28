@@ -248,6 +248,12 @@ struct TEvPQ {
         EvProcessBatchKeysResult,
         EvResetOffsetRequest,
         EvResetOffsetResponse,
+        EvReadBalancerActorIdChanged,
+        EvPartitionMovingFinished,
+        EvPartitionMovingFinishedAck,
+        EvPartitionConsumerOffsets,
+        EvPartitionConsumerOffsetsAck,
+        EvTopicConfigurationMovingFinished,
         EvEnd,
     };
 
@@ -1112,6 +1118,14 @@ struct TEvPQ {
         NWilson::TSpan Span;
     };
 
+    struct TEvReadBalancerActorIdChanged : public TEventLocal<TEvReadBalancerActorIdChanged, EvReadBalancerActorIdChanged> {
+        explicit TEvReadBalancerActorIdChanged(const TActorId& readBalancerActorId)
+            : ReadBalancerActorId(readBalancerActorId)
+        {}
+
+        const TActorId ReadBalancerActorId;
+    };
+
     struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
         TEvSubDomainStatus() {
         }
@@ -1366,6 +1380,31 @@ struct TEvPQ {
         TString Consumer;
         ui32 PartitionId;
         ui64 Cookie;
+    };
+
+    struct TEvPartitionMovingFinished : public TEventPB<TEvPartitionMovingFinished, NKikimrPQ::TEvPartitionMovingFinished, EvPartitionMovingFinished> {
+        TEvPartitionMovingFinished() = default;
+
+        explicit TEvPartitionMovingFinished(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
+    struct TEvPartitionMovingFinishedAck : public TEventPB<TEvPartitionMovingFinishedAck, NKikimrPQ::TEvPartitionMovingFinishedAck, EvPartitionMovingFinishedAck> {
+        TEvPartitionMovingFinishedAck() = default;
+
+        explicit TEvPartitionMovingFinishedAck(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
+    struct TEvPartitionConsumerOffsets : public TEventPB<TEvPartitionConsumerOffsets, NKikimrPQ::TEvPartitionConsumerOffsets, EvPartitionConsumerOffsets> {
+    };
+
+    struct TEvPartitionConsumerOffsetsAck : public TEventPB<TEvPartitionConsumerOffsetsAck, NKikimrPQ::TEvPartitionConsumerOffsetsAck, EvPartitionConsumerOffsetsAck> {
+    };
+
+    struct TEvTopicConfigurationMovingFinished : public TEventLocal<TEvTopicConfigurationMovingFinished, EvTopicConfigurationMovingFinished> {
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {

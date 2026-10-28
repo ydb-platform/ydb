@@ -264,6 +264,7 @@ message TMirrorPartitionConfig {
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
     reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
+    optional bool IsForTopicMoving = 11 [default = false];
 }
 
 message TPartitionConfig {
@@ -363,6 +364,13 @@ message TOffloadConfig {
     }
 }
 
+enum ETopicMovingStatus {
+    Unspecified = 0;
+    MovingData = 1;
+    MovingConfiguration = 2;
+    MovingDone = 3;
+}
+
 message TPQTabletConfig {
     message TTopicId {
         // Id is the schemeshard PathId for FirstClass topics, or CM-provided OwnerId for federation topics.
@@ -409,6 +417,7 @@ message TPQTabletConfig {
     enum EConsumerType {
         CONSUMER_TYPE_STREAMING = 0;
         CONSUMER_TYPE_MLP = 1;
+        CONSUMER_TYPE_MOVING = 2;
     }
 
     enum EDeadLetterPolicy {
@@ -532,6 +541,10 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    optional ETopicMovingStatus MovingStatus = 50;
+
+    optional bool WriteAndReadDisabled = 51 [default = false];
 }
 
 message THeartbeat {

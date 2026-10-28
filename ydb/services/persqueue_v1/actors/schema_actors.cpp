@@ -196,6 +196,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     }
                     break;
                 }
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING: {
+                    break;
+                }
             }
 
             // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.

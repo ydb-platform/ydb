@@ -229,6 +229,19 @@ bool TPartition::IsActive() const {
     return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
+bool TPartition::IsTopicMovingFinishing(const TString& consumer) const {
+    bool consumerForTopicMoving = false;
+    for (const auto& consumerConfig : Config.GetConsumers()) {
+        if (consumerConfig.GetName() == consumer) {
+            consumerForTopicMoving =
+                consumerConfig.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING;
+            break;
+        }
+    }
+
+    return consumerForTopicMoving && Config.GetWriteAndReadDisabled();
+}
+
 bool TPartition::CanWrite() const {
     if (PartitionConfig == nullptr) {
         // Old format without AllPartitions configuration field.
@@ -3249,6 +3262,7 @@ void TPartition::RunPersist() {
 
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
     haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
+    haveChanges |= AddMovingConsumerOffsetsToPersistRequest(ctx);
 
     if (haveChanges) {
         WriteCycleStartTime = now;
@@ -5205,6 +5219,16 @@ void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
+    if (ReadBalancerActorId) {
+        Send(Mirrorer->Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx) {
+    ReadBalancerActorId = ev->Get()->ReadBalancerActorId;
+    if (Mirrorer) {
+        ctx.Send(Mirrorer->Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+    }
 }
 
 bool TPartition::IsQuotingEnabled() const

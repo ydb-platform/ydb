@@ -32,9 +32,10 @@ namespace NPQRBPrivate {
             struct State : Column<34, NScheme::NTypeIds::Uint32> {};
             struct DataSize : Column<35, NScheme::NTypeIds::Uint64> {};
             struct UsedReserveSize : Column<36, NScheme::NTypeIds::Uint64> {};
+            struct MovingDataFinished : Column<37, NScheme::NTypeIds::Bool> {};
 
             using TKey = TableKey<Partition>;
-            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize>;
+            using TColumns = TableColumns<Partition, TabletId, State, DataSize, UsedReserveSize, MovingDataFinished>;
         };
 
         struct Groups : Table<34> {

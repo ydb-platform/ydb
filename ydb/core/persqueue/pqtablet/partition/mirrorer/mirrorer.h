@@ -22,6 +22,7 @@ private:
     const TDuration CONSUMER_INIT_INTERVAL_START = TDuration::Seconds(1);
 
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
+    const TDuration MOVING_FINISHED_RETRY_INTERVAL = TDuration::Seconds(5);
 
     const TDuration LOG_STATE_INTERVAL = TDuration::Minutes(1);
     const TDuration INIT_TIMEOUT = TDuration::Minutes(2);
@@ -46,6 +47,8 @@ private:
             HFuncTraced(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionMovingFinishedAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -64,6 +67,8 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionMovingFinishedAck, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -121,6 +126,9 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionMovingFinishedAck::TPtr& ev, const TActorContext& ctx);
+    void TryNotifyMovingDataFinished(const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
@@ -141,6 +149,7 @@ public:
 
 private:
     const TActorId PartitionActor;
+    TActorId ReadBalancerActor;
     const NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     const bool IsLocalDC;
@@ -170,6 +179,10 @@ private:
 
     bool WaitNextReaderEventInFlight = false;
     bool CredentialsRequestInFlight = false;
+    bool MovingDataFinished = false;
+    bool MovingDataPersisted = false;
+    TInstant LastMovingDataNotification;
+    ui64 MovingDataNotificationCookie = 1;
 
     bool WasSuccessfulRecording = false;
     TInstant LastStateLogTimestamp;

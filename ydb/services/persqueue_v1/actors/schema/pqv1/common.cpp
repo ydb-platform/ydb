@@ -550,6 +550,14 @@ TResult ApplyChangesInt( // create and alter
         }
     }
 
+    if (auto it = settings.attributes().find("start_replication_in_dest_topic"); it != settings.attributes().end() && it->second == "true") {
+        pqTabletConfig->SetMovingStatus(NKikimrPQ::ETopicMovingStatus::MovingData);
+    }
+
+    if (auto it = settings.attributes().find("finish_replication_in_src_topic"); it != settings.attributes().end() && it->second == "true") {
+        pqTabletConfig->SetWriteAndReadDisabled(true);
+    }
+
     if (settings.has_metrics_level()) {
         pqTabletConfig->SetMetricsLevel(settings.metrics_level());
     } else {

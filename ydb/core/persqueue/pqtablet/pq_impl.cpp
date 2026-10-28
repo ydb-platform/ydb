@@ -1170,6 +1170,10 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     PQ_ENSURE(!partition.InitDone);
     partition.InitDone = true;
 
+    if (ReadBalancerActorId) {
+        ctx.Send(partition.Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+    }
+
     if (partitionId.IsSupportivePartition()) {
         for (auto& request : partition.PendingRequests) {
             HandleEventForSupportivePartition(request.Cookie,
@@ -1637,6 +1641,11 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
     auto& pqConfig = AppData(ctx)->PQConfig;
 
     PQ_ENSURE(req.CmdWriteSize());
+    if (Config.GetWriteAndReadDisabled()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+            "Write to topic is disabled");
+        return;
+    }
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
     if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
         MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
@@ -2010,7 +2019,10 @@ void TPersQueue::HandleReadRequest(
     PQ_ENSURE(req.HasCmdRead());
 
     auto cmd = req.GetCmdRead();
-    if (!cmd.HasOffset()) {
+    if (IsReadDisabled(Config, cmd.GetClientId())) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled");
+    } else if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no offset in read request: " << ToString(req).data());
     } else if (cmd.GetOffset() < 0) {
@@ -5419,14 +5431,32 @@ NTabletPipe::TClientConfig TPersQueue::GetPipeClientConfig()
     return config;
 }
 
+void TPersQueue::Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev) {
+    if (!InitCompleted) {
+        AddPendingEvent(ev.Release());
+        return;
+    }
+    const auto partitionId = ev->Get()->Record.GetPartitionId();
+    const auto partition = Partitions.find(TPartitionId{partitionId});
+    if (partition == Partitions.end()) {
+        LOG_W("Received consumer offsets for an unknown partition", {"partition", partitionId});
+        return;
+    }
+    Forward(ev, partition->second.Actor);
+}
+
 void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
 {
+    const bool readBalancerChanged = ReadBalancerActorId != ev->Sender;
     ReadBalancerActorId = ev->Sender;
 
     const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
     SubDomainOutOfSpace = event.SubDomainOutOfSpace();
 
     for (auto& p : Partitions) {
+        if (readBalancerChanged) {
+            ctx.Send(p.second.Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+        }
         ctx.Send(p.second.Actor, new TEvPQ::TEvSubDomainStatus(event.SubDomainOutOfSpace()));
     }
 }
@@ -5750,6 +5780,11 @@ void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext
 }
 
 void TPersQueue::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
+    if (IsReadDisabled(Config, ev->Get()->GetConsumer())) {
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(ev->Get()->GetPartitionId(),
+            Ydb::StatusIds::UNAVAILABLE, "Read from topic is disabled"), 0, ev->Cookie);
+        return;
+    }
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
@@ -5898,6 +5933,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
         HFuncTraced(TEvPQ::TEvTxDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+        hFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);

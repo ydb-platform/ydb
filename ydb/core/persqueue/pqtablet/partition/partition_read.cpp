@@ -149,7 +149,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         ctx.Send(request.Sender, response.Release());
     };
 
-    if (!IsActive()) {
+    if (!IsActive() || IsTopicMovingFinishing(request.ClientId)) {
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
         } else {
@@ -872,6 +872,13 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
+    // Cookie 0 is used for timestamp reads; internal reads also serve compaction.
+    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, read->ClientId)) {
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled", read->ReplyTo);
+        return;
+    }
+
     // Pass unresolved read->ReplyTo: ReplyError uses !!replyTo as IsInternal (see TEvRead::IsInternal).
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
@@ -957,6 +964,12 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
     userInfo->ReadsInQuotaQueue--;
+    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, user)) {
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled", read->ReplyTo);
+        OnReadRequestFinished(read->Cookie, 0, 0, user, ctx);
+        return;
+    }
     ui64 offset = read->Offset;
 
     auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
@@ -1223,6 +1236,13 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     if (subscription) {
         userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
+    }
+
+    if (info.Destination != 0 && !info.IsInternal && IsReadDisabled(Config, info.User)) {
+        ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled", info.ReplyTo);
+        OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);
+        return;
     }
 
     TVector<TRequestedBlob> blobs;

@@ -3094,6 +3094,84 @@ THolder<TEvPQ::TEvRead> MakeTestRead(
 
 } // namespace
 
+Y_UNIT_TEST_F(WriteAndReadDisabledAllowsOnlyMovingReads, TPartitionFixture)
+{
+    const TConfigParams initialConfig{
+        .Version = 1,
+        .Consumers = {{.Consumer = "client"}, {.Consumer = "moving"}},
+    };
+    CreatePartition({
+        .Partition = TPartitionId{0},
+        .Begin = 0,
+        .End = 10,
+        .Config = initialConfig,
+        .FillHead = true,
+    }, initialConfig);
+
+    auto expectRead = [&](ui64 cookie, const TString& consumer) {
+        SendEvent(MakeTestRead(cookie, 0, 1, consumer).Release());
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->GetPartitionResponse().GetCmdReadResult().ResultSize(), 1);
+    };
+    auto updateConfig = [&](bool disabled) {
+        Config.SetVersion(Config.GetVersion() + 1);
+        Config.SetWriteAndReadDisabled(disabled);
+        GetConsumer(Config, "moving")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MOVING);
+        SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+        WaitCmdWrite();
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitPartitionConfigChanged();
+    };
+
+    expectRead(41, "client");
+
+    // A read admitted before the alter must be checked again after quota approval.
+    TAutoPtr<IEventHandle> pendingQuota;
+    auto previousObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPQ::TEvApproveReadQuota::EventType
+            && ev->Get<TEvPQ::TEvApproveReadQuota>()->ReadRequest->Get()->Cookie == 42) {
+            pendingQuota = ev.Release();
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    SendEvent(MakeTestRead(42, 0, 1).Release());
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return bool(pendingQuota); };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
+    Ctx->Runtime->SetObserverFunc(previousObserver);
+
+    updateConfig(true);
+    Ctx->Runtime->Send(pendingQuota.Release(), 0, true);
+    WaitErrorResponse({.Cookie = 42, .ErrorCode = NPersQueue::NErrorCode::ERROR,
+        .Error = "Read from topic is disabled", .IsInternal = false});
+
+    for (const TString& consumer : {TString("client"), TString("unknown"), TString(CLIENTID_WITHOUT_CONSUMER)}) {
+        SendEvent(MakeTestRead(43, 0, 1, consumer).Release());
+        WaitErrorResponse({.Cookie = 43, .ErrorCode = NPersQueue::NErrorCode::ERROR,
+            .Error = "Read from topic is disabled", .IsInternal = false});
+    }
+    expectRead(44, "moving");
+
+    for (bool direct : {false, true}) {
+        for (size_t size : {size_t(10), size_t(600_KB)}) {
+            SendWrite(45, 0, "owner", 1, TString(size, 'x'), false, 1, direct);
+            WaitErrorResponse({.Cookie = 45, .ErrorCode = NPersQueue::NErrorCode::ERROR,
+                .Error = "Write to topic is disabled"});
+        }
+    }
+
+    updateConfig(false);
+    expectRead(46, "client");
+    SendWrite(47, 0, "owner", 10, "message", false, 1, true);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 47, .Status = NMsgBusProxy::MSTATUS_OK});
+}
+
 // ReplyError uses !!replyTo as IsInternal (same as TEvRead::IsInternal). Call sites must pass the
 // original ReplyTo override, not ReplyTo(cookie, …): the resolved id is always non-empty and would
 // mark every external error as internal.

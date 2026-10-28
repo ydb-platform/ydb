@@ -35,6 +35,7 @@ public:
         MarkUserDeprecated = 'u',
         MarkMLPSnapshot = 'S',
         MarkMLPWAL = 'w',
+        MarkTopicMoving = 't',
     };
 
     enum EServiceType : char {

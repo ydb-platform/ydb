@@ -201,6 +201,7 @@ private:
                      TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
+    bool IsTopicMovingFinishing(const TString& consumer) const;
     bool CanWrite() const;
     bool CanEnqueue() const;
 
@@ -272,6 +273,10 @@ private:
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionConsumerOffsets::TPtr& ev, const TActorContext& ctx);
+    bool AddMovingConsumerOffsetsToPersistRequest(const TActorContext& ctx);
+    void CompleteMovingConsumerOffsetsWrite(const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
@@ -655,6 +660,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -742,6 +749,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionConsumerOffsets, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
@@ -1030,6 +1039,15 @@ private:
     bool InitDone;
     bool NewPartition;
     ui64 PQRBCookie = 0;
+    TActorId ReadBalancerActorId;
+    // Source snapshot persisted atomically with the imported consumer offsets.
+    std::optional<NKikimrPQ::TEvPartitionConsumerOffsets> MovingConsumerOffsets;
+    struct TMovingConsumerOffsetsWrite {
+        NKikimrPQ::TEvPartitionConsumerOffsets Offsets;
+        TVector<std::pair<TActorId, ui64>> Replies;
+    };
+    TDeque<TMovingConsumerOffsetsWrite> PendingMovingConsumerOffsets;
+    std::optional<TMovingConsumerOffsetsWrite> MovingConsumerOffsetsWrite;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;

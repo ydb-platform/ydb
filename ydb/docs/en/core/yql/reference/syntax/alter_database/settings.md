@@ -12,10 +12,10 @@ ALTER DATABASE path SET (key = value, ...)
 
 * `path` — path to the database.
 * `key` — name of the setting to change:
-  * `MAX_PATHS` — [maximum number of paths](../../../../concepts/limits-ydb.md#scheme-object) (schema objects) in the database.
-  * `MAX_SHARDS` — [maximum number of tablets](../../../../concepts/limits-ydb.md#scheme-object) in the database.
-  * `MAX_CHILDREN_IN_DIR` — [maximum number of objects in a directory](../../../../concepts/limits-ydb.md#scheme-object).
-  * `MAX_SHARDS_IN_PATH` — [maximum number of tablets associated with a single schema object](../../../../concepts/limits-ydb.md#scheme-object). For example, the maximum number of partitions of one table.
+  * `MAX_PATHS` — [maximum number of paths](../../../../concepts/limits-ydb.md#schema-object) (schema objects) in the database.
+  * `MAX_SHARDS` — [maximum number of tablets](../../../../concepts/limits-ydb.md#schema-object) in the database.
+  * `MAX_CHILDREN_IN_DIR` — [maximum number of objects in a directory](../../../../concepts/limits-ydb.md#schema-object).
+  * `MAX_SHARDS_IN_PATH` — [maximum number of tablets associated with a single schema object](../../../../concepts/limits-ydb.md#schema-object). For example, the maximum number of partitions of one table.
 * `value` — new value for the setting.
 
 ## Examples

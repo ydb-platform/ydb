@@ -38,9 +38,9 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
     - **Authentication**. When a [user](../concepts/glossary.md#access-user) connects to a {{ ydb-short-name }} cluster, {{ ydb-short-name }} first identifies the user's account. This process is called [authentication](./authentication.md). {{ ydb-short-name }} supports various authentication modes. For more information, see [Authentication](./authentication.md).
 
-        Regardless of an authentication mode, after passing [authentication](./authentication.md), a user gets a [SID](./authorization.md#sid) and an authentication token.
+        Regardless of an authentication mode, after passing [authentication](./authentication.md), a user gets a [SID](../concepts/glossary.md#access-sid) and an authentication token.
 
-        - {{ ydb-short-name }} cluster uses a [SID](./authorization.md#sid) for user identification. For example, a SID for a local user is the user login. SIDs for external users also include information about the system where they were created. User SIDs can also be found in [system views](../dev/system-views.md#auth) describing the security configuration.
+        - {{ ydb-short-name }} cluster uses a [SID](../concepts/glossary.md#access-sid) for user identification. For example, a SID for a local user is the user login. SIDs for external users also include information about the system where they were created. User SIDs can also be found in [system views](../dev/system-views.md#auth) describing the security configuration.
 
         - The authentication token is used by {{ydb-short-name }} nodes to authorize user access before processing user requests.
 

@@ -292,7 +292,7 @@ The topic settings can be updated using the expression [ALTER TOPIC](../yql/refe
   * `retention_period`;
   * `retention_storage_mb`;
 
-* [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
+* [updating consumers](../yql/reference/syntax/alter-topic.md#add-consumer).
 
 ## CDC Purpose and Use {#best_practices}
 

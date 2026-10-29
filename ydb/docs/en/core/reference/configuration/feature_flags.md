@@ -35,5 +35,5 @@ Change the `feature_flags` settings only if you are sure of the consequences. In
 | `enable_topic_compactification_by_key` | Enabling topic compaction in [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_kafka_transactions` | Enabling transactions in [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_external_data_sources` | Enabling [external data sources](../../concepts/datamodel/external_data_source.md) |
-| `enable_grpc_audit` | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |
-| `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
+| `enable_grpc_audit` | Enabling [audit](../../security/audit-log.md#enabling-audit-log) of gRPC connection state changes |
+| `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#dump) |

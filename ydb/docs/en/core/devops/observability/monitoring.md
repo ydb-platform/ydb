@@ -2,6 +2,8 @@
 
 This page explains how to set up monitoring for a {{ ydb-short-name }} cluster.
 
+## Web interface metrics {#web-metrics}
+
 {{ ydb-short-name }} provides numerous system state metrics. Instant metric values can be viewed in the web interface:
 
 ```text

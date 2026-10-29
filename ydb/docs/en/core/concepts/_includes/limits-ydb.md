@@ -69,4 +69,4 @@ In previous versions of {{ ydb-short-name }}, queries were typically executed us
 | :--- | :--- |
 | Maximum number of resource pool classifiers | 1000 |
 
-Limits on resource counts are also constrained by schema object limits. See [above](#scheme-object).
+Limits on resource counts are also constrained by schema object limits. See [above](#schema-object).

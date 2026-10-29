@@ -16,7 +16,7 @@ See also [{#T}](yandex-enterprise-database.md).
 || **v25.4** | > | > | > ||
 || v.25.4.1.15 | 24.04.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.4.1.15/ydbd-25.4.1.15-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-4-1-15) ||
 || **v25.3** | > | > | > ||
-|| v.25.3.1.27 | 20.05.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.3.1.27/ydbd-25.3.1.27-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-3-1) ||
+|| v.25.3.1.27 | 20.05.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.3.1.27/ydbd-25.3.1.27-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-3-1-27) ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.24 | 28.01.26 | [Binary file](https://binaries.ydb.tech/release/25.2.1.24/ydbd-25.2.1.24-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10-rc | 21.09.25 | [Binary file](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-10-rc) ||
@@ -96,7 +96,7 @@ See also [{#T}](yandex-enterprise-database.md).
 || **v25.3** | > | > | > ||
 || v.25.3.1.27 | 20.05.26 | [https://github.com/ydb-platform/ydb/tree/25.3.1.27](https://github.com/ydb-platform/ydb/tree/25.3.1.27) | [See list](../changelog-server.md#25-3-1-27) ||
 || **v25.2** | > | > | > ||
-|| v.25.2.1.23  | 12.25 | [https://github.com/ydb-platform/ydb/tree/25.2.1.23](https://github.com/ydb-platform/ydb/tree/25.2.1.23) | [See list](../changelog-server.md#25-2-1-23) ||
+|| v.25.2.1.23  | 12.25 | [https://github.com/ydb-platform/ydb/tree/25.2.1.23](https://github.com/ydb-platform/ydb/tree/25.2.1.23) | [See list](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10-rc  | 21.09.25 | [https://github.com/ydb-platform/ydb/tree/25.2.1.10-rc](https://github.com/ydb-platform/ydb/tree/25.2.1.10-rc) | [See list](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||
 || v.25.1.4.7  | 15.09.25 | [https://github.com/ydb-platform/ydb/tree/25.1.4.7](https://github.com/ydb-platform/ydb/tree/25.1.4.7) | [See list](../changelog-server.md#25-1-4-7) ||

@@ -12,10 +12,10 @@ ALTER DATABASE path SET (key = value, ...)
 
 * `path` — путь к базе данных.
 * `key` — имя изменяемой настройки:
-  * `MAX_PATHS` — [максимальное количество путей](../../../../concepts/limits-ydb.md#scheme-object) (объектов в схеме) в базе данных.
-  * `MAX_SHARDS` — [максимальное количество таблеток](../../../../concepts/limits-ydb.md#scheme-object) в базе данных.
-  * `MAX_CHILDREN_IN_DIR` — [максимальное количество объектов в директории](../../../../concepts/limits-ydb.md#scheme-object).
-  * `MAX_SHARDS_IN_PATH` — [максимальное количество таблеток, ассоциированных с одним объектом схемы](../../../../concepts/limits-ydb.md#scheme-object). Например, максимальное количество партиций одной таблицы.
+  * `MAX_PATHS` — [максимальное количество путей](../../../../concepts/limits-ydb.md#schema-object) (объектов в схеме) в базе данных.
+  * `MAX_SHARDS` — [максимальное количество таблеток](../../../../concepts/limits-ydb.md#schema-object) в базе данных.
+  * `MAX_CHILDREN_IN_DIR` — [максимальное количество объектов в директории](../../../../concepts/limits-ydb.md#schema-object).
+  * `MAX_SHARDS_IN_PATH` — [максимальное количество таблеток, ассоциированных с одним объектом схемы](../../../../concepts/limits-ydb.md#schema-object). Например, максимальное количество партиций одной таблицы.
 * `value` — значение изменяемой настройки.
 
 ## Примеры

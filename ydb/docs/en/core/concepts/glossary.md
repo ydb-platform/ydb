@@ -225,6 +225,8 @@ A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki
 
 #### Local bloom index {#local-bloom-skip-index}
 
+#### Local min_max index {#local-min-max-index}
+
 A local Bloom index is a special case of a [local index](#local-index): a probabilistic filter on column values based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments where the searched value is guaranteed to be absent. For more information, see [Bloom indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
 
 #### Column family {#column-family}
@@ -451,7 +453,7 @@ The access level for a subject is configured using [access control lists](#acces
 
 In {{ ydb-short-name }}, there are [several such lists](../reference/configuration/security_config.md#security-access-levels) that define who has which [access levels](#access-level).
 
-Detailed information about access control lists, their hierarchy, and operating principles is provided in the [Access control lists](../security/authorization.md#access-level) section of the authorization documentation.
+Detailed information about access control lists, their hierarchy, and operating principles is provided in the [Access control lists](../security/authorization.md#right) section of the authorization documentation.
 
 ### Owner {#access-owner}
 

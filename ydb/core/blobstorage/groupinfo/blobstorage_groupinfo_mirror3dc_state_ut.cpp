@@ -1,5 +1,8 @@
 #include "blobstorage_groupinfo_mirror3dc_state.h"
 
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <algorithm>
 #include <array>
 
 namespace NKikimr {
@@ -27,7 +30,7 @@ constexpr TStateCase StateCases[] = {
     {{R::N0, R::N1, R::R}, G::DC_RECOVERY},
     {{R::N0, R::N2, R::N2}, G::NORMAL},
     {{R::N0, R::N2, R::F}, G::DC_FAILURE},
-    {{R::N0, R::N2, R::R}, G::DC_RECOVERY},
+    {{R::N0, R::N2, R::R}, std::nullopt},
     {{R::N0, R::F, R::F}, G::DC_SOLO_DISASTER},
     {{R::N0, R::F, R::R}, G::DC_SOLO_RECOVERY},
     {{R::N0, R::R, R::R}, std::nullopt},
@@ -37,13 +40,13 @@ constexpr TStateCase StateCases[] = {
     {{R::N1, R::N1, R::R}, G::DC_RECOVERY_INV1},
     {{R::N1, R::N2, R::N2}, G::NORMAL},
     {{R::N1, R::N2, R::F}, G::DC_FAILURE_INV1},
-    {{R::N1, R::N2, R::R}, G::DC_RECOVERY_INV1},
+    {{R::N1, R::N2, R::R}, std::nullopt},
     {{R::N1, R::F, R::F}, G::DC_SOLO_INV1},
     {{R::N1, R::F, R::R}, G::DC_SOLO_RECOVERY_INV1},
     {{R::N1, R::R, R::R}, std::nullopt},
     {{R::N2, R::N2, R::N2}, G::NORMAL},
     {{R::N2, R::N2, R::F}, G::DC_FAILURE_INV2},
-    {{R::N2, R::N2, R::R}, G::DC_RECOVERY_INV1},
+    {{R::N2, R::N2, R::R}, std::nullopt},
     {{R::N2, R::F, R::F}, G::DC_SOLO_INV2},
     {{R::N2, R::F, R::R}, G::DC_SOLO_RECOVERY_INV2},
     {{R::N2, R::R, R::R}, std::nullopt},
@@ -157,7 +160,7 @@ constexpr TTransitionCase TransitionCases[] = {
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV1.
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
-        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV1 with N2 realms.
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, false}, // N/N/R cannot retain N2 guarantees.
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE_INV1 -> DC_SOLO_INV1.
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
@@ -175,11 +178,11 @@ constexpr TTransitionCase TransitionCases[] = {
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::R},
         {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_RECOVERY_INV1 -> DC_FAILURE_INV1.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
-        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, true}, // DC_RECOVERY_INV1 -> NORMAL with N2 realms.
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, false}, // An unsupported source configuration cannot transition.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
         {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, false}, // Recovery does not preserve the INV2 group guarantee.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
-        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_RECOVERY_INV1 -> DC_FAILURE_INV1 with N2 realms.
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, false}, // N2/N2/R is an unsupported source.
     {{TFailRealm::N0, TFailRealm::F, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_DISASTER -> DC_SOLO_INV1.
     {{TFailRealm::N0, TFailRealm::F, TFailRealm::F},
@@ -219,7 +222,7 @@ constexpr TTransitionCase TransitionCases[] = {
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, false}, // The graph has no direct backward guarantee edge.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
-        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, true}, // DC_FAILURE_INV2 -> DC_RECOVERY_INV1 with N2 realms.
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, false}, // DC_FAILURE_INV2 must enter N1/N1/R.
 };
 
 constexpr bool CheckTransitions() {
@@ -264,5 +267,75 @@ static_assert(IsMirror3dcFailRealmRoleChange(TFailRealm::R, TFailRealm::N1));
 static_assert(!IsMirror3dcFailRealmRoleChange(TFailRealm::N0, TFailRealm::N2));
 static_assert(!IsMirror3dcFailRealmRoleChange(TFailRealm::R, TFailRealm::R));
 
+std::optional<EMirror3dcGroupState> GetExpectedGroupState(TMirror3dcFailRealmStates realms) {
+    std::sort(realms.begin(), realms.end());
+    for (const TStateCase& test : StateCases) {
+        if (test.Realms == realms) {
+            return test.Expected;
+        }
+    }
+    return std::nullopt;
+}
+
+bool IsExpectedTransition(const TMirror3dcFailRealmStates& before, const TMirror3dcFailRealmStates& after) {
+    const std::optional<EMirror3dcGroupState> from = GetExpectedGroupState(before);
+    const std::optional<EMirror3dcGroupState> to = GetExpectedGroupState(after);
+    if (!from || !to) {
+        return false;
+    }
+    unsigned beforeFailed = 0;
+    unsigned afterFailed = 0;
+    unsigned beforeRecovering = 0;
+    unsigned afterRecovering = 0;
+    for (unsigned realm = 0; realm < 3; ++realm) {
+        beforeFailed |= unsigned(before[realm] == TFailRealm::F) << realm;
+        afterFailed |= unsigned(after[realm] == TFailRealm::F) << realm;
+        beforeRecovering |= unsigned(before[realm] == TFailRealm::R) << realm;
+        afterRecovering |= unsigned(after[realm] == TFailRealm::R) << realm;
+    }
+    // Independent role masks catch relative permutations, including F <-> R swaps.
+    const unsigned changedRoles = (beforeFailed ^ afterFailed) | (beforeRecovering ^ afterRecovering);
+    if (changedRoles && (changedRoles & (changedRoles - 1))) {
+        return false;
+    }
+    if (before == after) {
+        return true;
+    }
+    // Derive the expected graph from scenario data, not the production edge table.
+    for (const TTransitionCase& test : TransitionCases) {
+        if (test.Allowed && GetExpectedGroupState(test.Before) == from && GetExpectedGroupState(test.After) == to) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TMirror3dcFailRealmStates DecodeRealmStates(unsigned code) {
+    constexpr EMirror3dcFailRealmState values[] = {
+        TFailRealm::N0, TFailRealm::N1, TFailRealm::N2, TFailRealm::F, TFailRealm::R,
+    };
+    TMirror3dcFailRealmStates result{};
+    for (unsigned realm = 0; realm < 3; ++realm) {
+        result[realm] = values[code % 5];
+        code /= 5;
+    }
+    return result;
+}
+
 } // namespace
+
+Y_UNIT_TEST_SUITE(TMirror3dcStateTransitionTest) {
+    Y_UNIT_TEST(AllOrderedTransitionsPreservePhysicalRealms) {
+        for (unsigned beforeCode = 0; beforeCode < 125; ++beforeCode) {
+            const TMirror3dcFailRealmStates before = DecodeRealmStates(beforeCode);
+            for (unsigned afterCode = 0; afterCode < 125; ++afterCode) {
+                const TMirror3dcFailRealmStates after = DecodeRealmStates(afterCode);
+                const bool expected = IsExpectedTransition(before, after);
+                const bool actual = IsAllowedMirror3dcFailRealmStateTransition(before, after);
+                UNIT_ASSERT_C(actual == expected, "beforeCode# " << beforeCode << " afterCode# " << afterCode);
+            }
+        }
+    }
+}
+
 } // namespace NKikimr

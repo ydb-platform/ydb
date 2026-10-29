@@ -84,7 +84,7 @@ enum class EMirror3dcGroupState {
     DC_FAILURE_INV2,           // N2/N2/F; I/I/X.
 
     DC_RECOVERY,               // N0/N0/R; N1/N0/R; I/I/I.
-    DC_RECOVERY_INV1,          // N1/N1/R; N2/N1/R; N2/N2/R; I/I/I.
+    DC_RECOVERY_INV1,          // N1/N1/R; I/I/I.
 
     DC_SOLO_DISASTER,          // N0/F/F; I/X/X.
     DC_SOLO_INV1,              // N1/F/F; I/X/X.
@@ -118,13 +118,14 @@ struct TMirror3dcGroupLayouts {
 
 // Realm identities do not affect the group classification. Mixed N states use
 // the weakest guarantee, e.g. N2/N0/F is DC_FAILURE, N2/N1/F is DC_FAILURE_INV1.
-// Unsupported combinations (including no N realm or multiple R realms) return nullopt.
+// Unsupported combinations (including no N realm, multiple R realms, or N2 in N/N/R) return nullopt.
 constexpr std::optional<EMirror3dcGroupState> GetMirror3dcGroupState(
         EMirror3dcFailRealmState first, EMirror3dcFailRealmState second, EMirror3dcFailRealmState third) {
     using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     unsigned failures = 0;
     unsigned recovering = 0;
     unsigned minCopies = 2;
+    bool hasTwoCopyGuarantee = false;
     const EMirror3dcFailRealmState realms[] = {first, second, third};
     for (const auto realm : realms) {
         switch (realm) {
@@ -137,6 +138,7 @@ constexpr std::optional<EMirror3dcGroupState> GetMirror3dcGroupState(
                 }
                 break;
             case R::N2:
+                hasTwoCopyGuarantee = true;
                 break;
             case R::F:
                 ++failures;
@@ -156,6 +158,10 @@ constexpr std::optional<EMirror3dcGroupState> GetMirror3dcGroupState(
         if (failures == 1) {
             return minCopies == 0 ? G::DC_SOLO_RECOVERY
                 : minCopies == 1 ? G::DC_SOLO_RECOVERY_INV1 : G::DC_SOLO_RECOVERY_INV2;
+        }
+        // W accepts 1+1+1, so neither normal realm can retain an N2 guarantee.
+        if (hasTwoCopyGuarantee) {
+            return std::nullopt;
         }
         return minCopies == 0 ? G::DC_RECOVERY : G::DC_RECOVERY_INV1;
     }

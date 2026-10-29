@@ -78,11 +78,13 @@ ap.add_argument("--ya-flags", default="")
 ap.add_argument("--list", action="store_true")
 ap.add_argument("specs", nargs="*")
 a = ap.parse_args()
-suite_dir = here
-if not os.path.isfile(os.path.join(suite_dir, "analytic_suite.py")):
-    suite_dir = os.path.join(os.path.abspath(a.repo), TARGET_DIR)
-if not os.path.isfile(os.path.join(suite_dir, "analytic_suite.py")):
-    ap.error("analytic_suite.py is missing; use a checkout containing the merged analytic suite")
+suite_dirs = [here, os.path.join(here, "bin"),
+              os.path.join(os.path.abspath(a.repo), TARGET_DIR, "bin")]
+suite_dir = next((directory for directory in suite_dirs
+                  if all(os.path.isfile(os.path.join(directory, name))
+                         for name in ("analytic_suite.py", "presets.json"))), None)
+if suite_dir is None:
+    ap.error("analytic_suite.py and presets.json are missing; use a checkout containing the merged analytic suite")
 suite = runpy.run_path(os.path.join(suite_dir, "analytic_suite.py"))
 BLOCKS = suite["BLOCKS"]
 byname = {c[0]: tuple(c[:7]) for c in suite["CASES"]}

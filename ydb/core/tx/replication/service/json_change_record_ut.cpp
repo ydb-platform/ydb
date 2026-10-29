@@ -563,8 +563,9 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         auto schema = MakeSchema();
         {
             auto proto = MakeBinaryUpsert();
-            proto.MutableCdcDataChange()->MutableReset()->CopyFrom(proto.GetCdcDataChange().GetUpsert());
-            proto.MutableCdcDataChange()->ClearUpsert();
+            // Reset shares the row-operation oneof with Upsert, so copy the cells first.
+            const auto upsert = proto.GetCdcDataChange().GetUpsert();
+            proto.MutableCdcDataChange()->MutableReset()->CopyFrom(upsert);
             auto record = TChangeRecordBuilder()
                 .WithSchema(schema)
                 .WithBody(proto.SerializeAsString())

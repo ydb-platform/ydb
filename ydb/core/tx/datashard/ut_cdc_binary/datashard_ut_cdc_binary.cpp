@@ -26,6 +26,7 @@ TUserTable::TPtr MakeTable() {
     table->Columns.emplace(7, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "alpha", false));
     table->Columns.emplace(3, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "zeta", false));
     table->KeyColumnIds = {10};
+    table->KeyColumnTypes = {NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)};
     return table;
 }
 

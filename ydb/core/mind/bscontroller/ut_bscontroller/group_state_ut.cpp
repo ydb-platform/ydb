@@ -38,10 +38,9 @@ public:
         }
     }
 
-    void Update(ui32 generation, const TFailRealmStates& states, ui32 recoveryHoldMask = 0) {
+    void Update(ui32 generation, const TFailRealmStates& states) {
         Info.Generation = generation;
         Info.States = states;
-        Info.RecoveryHoldMask = recoveryHoldMask;
         for (TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
             disk.Id.GroupGeneration = generation;
         }
@@ -176,26 +175,14 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(RecoveringRealmPromotesAfterReplication) {
         TGroupStateFixture fixture;
         fixture.Update(1, {TFailRealm::N2, TFailRealm::R, TFailRealm::F});
-        fixture.ReplyRound(3);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N1, TFailRealm::F}));
-    }
-
-    Y_UNIT_TEST(RecoveringRealmWaitsForAdministrativeInclude) {
-        TGroupStateFixture fixture;
-        const TFailRealmStates recovering{TFailRealm::N2, TFailRealm::R, TFailRealm::F};
-        fixture.Update(1, recovering, 1u << 1);
-        fixture.ReplyRound(3);
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
-        // R -> I changes the generation but retains internal R until current replication is confirmed.
-        fixture.Update(2, recovering);
         fixture.ReplyRound(3, {.DurabilityReplicated = false});
         fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
         fixture.ReplyRound(3);
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N1, TFailRealm::F}));
-        fixture.Update(3, {TFailRealm::N2, TFailRealm::N1, TFailRealm::F});
+        fixture.Update(2, {TFailRealm::N2, TFailRealm::N1, TFailRealm::F});
         fixture.ReplyRound(3);
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
     }
+
 }

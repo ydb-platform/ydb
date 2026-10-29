@@ -726,7 +726,6 @@ public:
         // Effective realm states; explicit overrides are stored separately from volatile DC-derived states.
         std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
         bool HasExplicitFailRealmStates = false;
-        ui32 FailRealmRecoveryHoldMask = 0; // Administrative R; persists across controller restarts.
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 

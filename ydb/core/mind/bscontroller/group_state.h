@@ -16,7 +16,6 @@ std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealm
 struct TGroupReplicationInfo {
     ui32 Generation = 0;
     TFailRealmStates States;
-    ui32 RecoveryHoldMask = 0;
     struct TVDisk {
         TVDiskID Id;
         TActorId ActorId;

@@ -613,22 +613,21 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const ui32 recoveringNode = promoted.GetRings(2).GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
         const TString recoveringDataCenter = env.NodeDataCenters.at(recoveringNode);
         UNIT_ASSERT(env.Invoke(env.Define({{recoveringDataCenter, TDataCenter::RECOVERING}})).GetSuccess());
-        const NKikimrBlobStorage::TGroupInfo held = env.ReadGroups().at(groupId);
-        env.Runtime->SimulateSleep(TDuration::Seconds(12));
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), held.SerializeAsString());
-        UNIT_ASSERT_VALUES_EQUAL(ui32(held.GetRings(2).GetState()), ui32(TFailRealm::R));
-        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        env.Runtime->SimulateSleep(TDuration::Seconds(6));
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), held.SerializeAsString());
-        UNIT_ASSERT(env.Invoke(env.Define({})).GetSuccess());
-        const NKikimrBlobStorage::TGroupInfo approved = env.ReadGroups().at(groupId);
-        UNIT_ASSERT_VALUES_EQUAL(approved.GetGroupGeneration(), held.GetGroupGeneration() + 1);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(approved.GetRings(2).GetState()), ui32(TFailRealm::R));
+        const NKikimrBlobStorage::TGroupInfo recovering = env.ReadGroups().at(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(recovering.GetRings(2).GetState()), ui32(TFailRealm::R));
+        // Administrative R does not hold the internal realm back after replication completes.
         env.Runtime->SimulateSleep(TDuration::Seconds(6));
         const NKikimrBlobStorage::TGroupInfo normal = env.ReadGroups().at(groupId);
         for (const NKikimrBlobStorage::TGroupInfo::TFailRealm& realm : normal.GetRings()) {
             UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(TFailRealm::N0));
         }
+        // An identical R policy must not undo completed recovery.
+        UNIT_ASSERT(env.Invoke(env.Define({{recoveringDataCenter, TDataCenter::RECOVERING}})).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), normal.SerializeAsString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), normal.SerializeAsString());
+        UNIT_ASSERT(env.Invoke(env.Define({})).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), normal.SerializeAsString());
         env.Runtime->SetEventFilter(previousFilter);
     }
 
@@ -758,17 +757,17 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         // Reapplying the same administrative policy preserves stronger N guarantees.
         UNIT_ASSERT(env.Invoke(env.Define({{recoveringDataCenter, TDataCenter::RECOVERING}})).GetSuccess());
-        const NKikimrBlobStorage::TGroupInfo held = env.ReadGroups().at(groupId);
-        UNIT_ASSERT_VALUES_EQUAL(held.GetGroupGeneration(), restored.GetGroupGeneration() + 1);
+        const NKikimrBlobStorage::TGroupInfo reapplied = env.ReadGroups().at(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(reapplied.GetGroupGeneration(), restored.GetGroupGeneration());
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(ui32(held.GetRings(realm).GetState()), ui32(states[realm]));
+            UNIT_ASSERT_VALUES_EQUAL(ui32(reapplied.GetRings(realm).GetState()), ui32(states[realm]));
         }
         UNIT_ASSERT(env.Invoke(env.Reset()).GetSuccess());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         env.CheckStates(env.ReadGroups(), TFailRealm::N0);
     }
 
-    Y_UNIT_TEST(DataCenterPolicyPreservesGuaranteesAndHoldsRecovery) {
+    Y_UNIT_TEST(DataCenterPolicyPreservesGuaranteesDuringRecovery) {
         using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         using TDataCenter = TDataCenterStatesEnv::TDataCenter;
         TDataCenterStatesEnv env;
@@ -800,17 +799,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(ui32(recovering.GetRings(1).GetState()), ui32(TFailRealm::R));
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), recovering.SerializeAsString());
-        // Releasing the persisted hold must invalidate status collected before administrative approval.
+        // Administrative inclusion does not change an internal R that is still recovering.
         UNIT_ASSERT(env.Invoke(env.Define({{failedDataCenter, TDataCenter::EXCLUDED}})).GetSuccess());
-        const NKikimrBlobStorage::TGroupInfo included = env.ReadGroups().at(groupId);
-        UNIT_ASSERT_VALUES_EQUAL(included.GetGroupGeneration(), recovering.GetGroupGeneration() + 1);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(included.GetRings(0).GetState()), ui32(TFailRealm::N2));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(included.GetRings(1).GetState()), ui32(TFailRealm::R));
-        NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, {TFailRealm::N2, TFailRealm::N1, TFailRealm::F});
-        stale.MutableCommand(0)->MutableDefineFailRealmStates()->MutableGroups(0)
-            ->SetExpectedGroupGeneration(recovering.GetGroupGeneration());
-        UNIT_ASSERT(!env.Invoke(stale).GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), included.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), recovering.SerializeAsString());
     }
 
 
@@ -836,7 +827,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             env.CheckStates(updated, realmState);
             for (const auto& [id, group] : updated) {
                 if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                    UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), previous.at(id).GetGroupGeneration() + 1);
+                    UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), previous.at(id).GetGroupGeneration() + (dcState != TDataCenter::INCLUDED));
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
                 }

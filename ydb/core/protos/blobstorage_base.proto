@@ -91,8 +91,6 @@ enum EEntityStatus {
 
 message TFailRealmStates {
     repeated TGroupInfo.TFailRealm.EState State = 1;
-    // Administrative R forbids promoting the corresponding internal R realm to N.
-    optional uint32 RecoveryHoldMask = 2;
 }
 
 message TFailRealmInfo {

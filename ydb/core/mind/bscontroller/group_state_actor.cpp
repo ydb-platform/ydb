@@ -97,10 +97,6 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             if (!target) {
                 continue;
             }
-            if (group->Info.States[realm] == NKikimrBlobStorage::TGroupInfo::TFailRealm::R
-                    && (group->Info.RecoveryHoldMask & (1u << realm))) {
-                continue;
-            }
             bool complete = true;
             ui32 disks = 0;
             for (ui32 index = 0; index < group->Info.VDisks.size(); ++index) {

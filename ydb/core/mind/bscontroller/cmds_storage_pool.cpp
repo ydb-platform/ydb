@@ -1189,8 +1189,9 @@ namespace NKikimr::NBsController {
                     throw TExError() << "unknown state for DataCenter# " << dc.GetName();
             }
         }
-        // Reapply even after restart, when volatile policy is empty but a persisted R hold remains.
-        DataCenterStates.Unshare() = std::move(states);
+        if (states != DataCenterStates.Get()) {
+            DataCenterStates.Unshare() = std::move(states);
+        }
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd,
@@ -1248,7 +1249,6 @@ namespace NKikimr::NBsController {
             TGroupInfo* group = Groups.FindForUpdate(groupId);
             group->HasExplicitFailRealmStates = false;
             group->FailRealmStates.reset();
-            group->FailRealmRecoveryHoldMask = 0;
             GroupContentChanged.insert(groupId);
         }
     }
@@ -1282,7 +1282,6 @@ namespace NKikimr::NBsController {
             }
             const std::array<TFailRealm::EState, 3> normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
             std::array<TFailRealm::EState, 3> states = group->FailRealmStates.value_or(normal);
-            ui32 recoveryHoldMask = 0;
             if (!dcStates.empty() || group->FailRealmStates) {
                 std::array<TString, 3> dataCenters;
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
@@ -1302,9 +1301,6 @@ namespace NKikimr::NBsController {
                 for (ui32 realm = 0; realm < 3; ++realm) {
                     if (const auto it = dcStates.find(dataCenters[realm]); it != dcStates.end()) {
                         states[realm] = it->second;
-                        if (it->second == TFailRealm::R) {
-                            recoveryHoldMask |= 1u << realm;
-                        }
                     } else if (states[realm] == TFailRealm::F) {
                         // Including a failed realm still requires recovery before it can become N.
                         states[realm] = TFailRealm::R;
@@ -1314,12 +1310,10 @@ namespace NKikimr::NBsController {
                     return TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId;
                 }
             }
-            const bool changed = group->FailRealmStates.value_or(normal) != states
-                || group->FailRealmRecoveryHoldMask != recoveryHoldMask;
+            const bool changed = group->FailRealmStates.value_or(normal) != states;
             if (changed) {
                 TGroupInfo* updated = Groups.FindForUpdate(groupId);
                 updated->FailRealmStates = states;
-                updated->FailRealmRecoveryHoldMask = recoveryHoldMask;
                 // Recovery must survive restart even before the satellite makes its first promotion.
                 if (std::find(states.begin(), states.end(), TFailRealm::R) != states.end()) {
                     updated->HasExplicitFailRealmStates = true;

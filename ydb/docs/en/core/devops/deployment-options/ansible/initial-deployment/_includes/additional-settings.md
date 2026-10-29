@@ -1,7 +1,7 @@
 There are several options to specify which {{ ydb-short-name }} executables you want to use for the cluster:
 
-- `ydb_version`: automatically download one of the [official {{ ydb-short-name }} releases](../../../../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
-- `ydb_archive`: a local filesystem path to a {{ ydb-short-name }} distribution archive [downloaded](../../../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
+- `ydb_version`: automatically download one of the [official {{ ydb-short-name }} releases](../../../../../downloads/ydb-open-source-database.md) by version number. For example, `23.4.11`.
+- `ydb_archive`: a local filesystem path to a {{ ydb-short-name }} distribution archive [downloaded](../../../../../downloads/ydb-open-source-database.md) or otherwise prepared in advance.
 
 Installing a [connector](../../../../../concepts/query_execution/federated_query/architecture.md#connectors) may be required for using [federated queries](../../../../../concepts/query_execution/federated_query/index.md). The playbook can deploy [fq-connector-go](../../../manual/federated-queries/connector-deployment.md#fq-connector-go) on hosts with dynamic nodes. Use the following settings:
 

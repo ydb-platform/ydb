@@ -69,6 +69,9 @@ namespace {
             } else if (to != to.FullID()) {
                 return generateError("Desired blob must be full one");
             }
+            if (from.TabletID() != tabletId || to.TabletID() != tabletId) {
+                return generateError("from and to must match tabletId");
+            }
             if (params.Has("json")) {
                 if (!TryFromString(params.Get("json"), json)) {
                     return generateError("Failed to parse json parameter -- must be an integer");

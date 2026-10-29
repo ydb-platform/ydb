@@ -1,0 +1,86 @@
+use crate::err::PyResult;
+use crate::ffi_ptr_ext::FfiPtrExt;
+use crate::py_result_ext::PyResultExt;
+use crate::{ffi, Bound, PyAny, Python};
+#[cfg(RustPython)]
+use crate::{
+    sync::PyOnceLock,
+    types::{PyType, PyTypeMethods},
+    Py,
+};
+
+/// Represents a Python [`types.GenericAlias`](https://docs.python.org/3/library/types.html#types.GenericAlias) object.
+///
+/// Values of this type are accessed via PyO3's smart pointers, e.g. as
+/// [`Py<PyGenericAlias>`][crate::Py] or [`Bound<'py, PyGenericAlias>`][Bound].
+///
+/// This type is particularly convenient for users implementing
+/// [`__class_getitem__`](https://docs.python.org/3/reference/datamodel.html#object.__class_getitem__)
+/// for PyO3 classes to allow runtime parameterization.
+#[repr(transparent)]
+pub struct PyGenericAlias(PyAny);
+
+#[cfg(not(RustPython))]
+pyobject_native_type!(
+    PyGenericAlias,
+    ffi::PyDictObject,
+    pyobject_native_static_type_object!(ffi::Py_GenericAliasType),
+    "builtins",
+    "GenericAlias"
+);
+
+#[cfg(RustPython)]
+pyobject_native_type!(
+    PyGenericAlias,
+    ffi::PyDictObject,
+    |py| {
+        static TYPE: PyOnceLock<Py<PyType>> = PyOnceLock::new();
+        TYPE.import(py, "types", "GenericAlias")
+            .unwrap()
+            .as_type_ptr()
+    },
+    "builtins",
+    "GenericAlias"
+);
+
+impl PyGenericAlias {
+    /// Creates a new Python GenericAlias object.
+    ///
+    /// origin should be a non-parameterized generic class.
+    /// args should be a tuple (possibly of length 1) of types which parameterize origin.
+    pub fn new<'py>(
+        py: Python<'py>,
+        origin: &Bound<'py, PyAny>,
+        args: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyGenericAlias>> {
+        unsafe {
+            ffi::Py_GenericAlias(origin.as_ptr(), args.as_ptr())
+                .assume_owned_or_err(py)
+                .cast_into_unchecked()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::instance::BoundObject;
+    use crate::types::any::PyAnyMethods;
+    use crate::Python;
+
+    use super::PyGenericAlias;
+
+    // Tests that PyGenericAlias::new is identical to types.GenericAlias
+    // created from Python.
+    #[test]
+    fn equivalency_test() {
+        Python::attach(|py| {
+            let list_int = py.eval(c"list[int]", None, None).unwrap().into_bound();
+
+            let cls = py.eval(c"list", None, None).unwrap().into_bound();
+            let key = py.eval(c"(int,)", None, None).unwrap().into_bound();
+            let generic_alias = PyGenericAlias::new(py, &cls, &key).unwrap();
+
+            assert!(generic_alias.eq(list_int).unwrap());
+        })
+    }
+}

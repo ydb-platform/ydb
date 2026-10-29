@@ -1,0 +1,39 @@
+[glib] Fix msan issue: unpoison memory that will be modifed by asm
+
+--- a/gobject/gclosure.c
++++ b/gobject/gclosure.c
+@@ -35,6 +35,8 @@
+ #include "gvaluetypes.h"
+ #include "gtype-private.h"
+ 
++#include <util/system/compiler.h>
++
+ 
+ /**
+  * SECTION:gclosure
+@@ -1456,6 +1458,12 @@ g_cclosure_marshal_generic (GClosure     *closure,
+     }
+ 
+   rvalue = g_alloca (MAX (rtype->size, sizeof (ffi_arg)));
++#if defined(_msan_enabled_)
++  /*
++   * Explicitly unpoison memory, because it will be modified by libffi in ASM (which is not tracked by msan)
++   */
++  __msan_unpoison(rvalue, MAX(rtype->size, sizeof(ffi_arg)));
++#endif
+ 
+   n_args = n_param_values + 1;
+   atypes = g_alloca (sizeof (ffi_type *) * n_args);
+@@ -1557,6 +1565,12 @@ g_cclosure_marshal_generic_va (GClosure *closure,
+     }
+ 
+   rvalue = g_alloca (MAX (rtype->size, sizeof (ffi_arg)));
++#if defined(_msan_enabled_)
++  /*
++   * Explicitly unpoison memory, because it will be modified by libffi in ASM (which is not tracked by msan)
++   */
++  __msan_unpoison(rvalue, MAX(rtype->size, sizeof(ffi_arg)));
++#endif
+ 
+   n_args = n_params + 2;
+   atypes = g_alloca (sizeof (ffi_type *) * n_args);

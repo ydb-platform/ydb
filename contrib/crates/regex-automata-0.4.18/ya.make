@@ -1,0 +1,135 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(regex_automata)
+
+CRATE_VERSION(0.4.18)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/dfa/accel.rs
+    src/dfa/automaton.rs
+    src/dfa/dense.rs
+    src/dfa/determinize.rs
+    src/dfa/minimize.rs
+    src/dfa/mod.rs
+    src/dfa/onepass.rs
+    src/dfa/regex.rs
+    src/dfa/remapper.rs
+    src/dfa/search.rs
+    src/dfa/sparse.rs
+    src/dfa/special.rs
+    src/dfa/start.rs
+    src/hybrid/dfa.rs
+    src/hybrid/error.rs
+    src/hybrid/id.rs
+    src/hybrid/mod.rs
+    src/hybrid/regex.rs
+    src/hybrid/search.rs
+    src/macros.rs
+    src/meta/error.rs
+    src/meta/limited.rs
+    src/meta/literal.rs
+    src/meta/mod.rs
+    src/meta/prefix.rs
+    src/meta/regex.rs
+    src/meta/reverse_inner.rs
+    src/meta/reverse_suffix.rs
+    src/meta/stopat.rs
+    src/meta/strategy.rs
+    src/meta/wrappers.rs
+    src/nfa/mod.rs
+    src/nfa/thompson/backtrack.rs
+    src/nfa/thompson/builder.rs
+    src/nfa/thompson/compiler.rs
+    src/nfa/thompson/error.rs
+    src/nfa/thompson/literal_trie.rs
+    src/nfa/thompson/map.rs
+    src/nfa/thompson/mod.rs
+    src/nfa/thompson/nfa.rs
+    src/nfa/thompson/pikevm.rs
+    src/nfa/thompson/range_trie.rs
+    src/util/alphabet.rs
+    src/util/captures.rs
+    src/util/determinize/mod.rs
+    src/util/determinize/state.rs
+    src/util/empty.rs
+    src/util/escape.rs
+    src/util/int.rs
+    src/util/interpolate.rs
+    src/util/iter.rs
+    src/util/lazy.rs
+    src/util/look.rs
+    src/util/memchr.rs
+    src/util/mod.rs
+    src/util/pool.rs
+    src/util/prefilter/aho_corasick.rs
+    src/util/prefilter/byteset.rs
+    src/util/prefilter/memchr.rs
+    src/util/prefilter/memmem.rs
+    src/util/prefilter/mod.rs
+    src/util/prefilter/teddy.rs
+    src/util/primitives.rs
+    src/util/search.rs
+    src/util/sparse_set.rs
+    src/util/start.rs
+    src/util/syntax.rs
+    src/util/unicode_data/mod.rs
+    src/util/unicode_data/perl_word.rs
+    src/util/utf8.rs
+    src/util/wire.rs
+)
+
+CRATE_INPUTS(
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    alloc
+    dfa-build
+    dfa-onepass
+    dfa-search
+    hybrid
+    meta
+    nfa-backtrack
+    nfa-pikevm
+    nfa-thompson
+    perf-inline
+    perf-literal
+    perf-literal-multisubstring
+    perf-literal-substring
+    std
+    syntax
+    unicode
+    unicode-age
+    unicode-bool
+    unicode-case
+    unicode-gencat
+    unicode-perl
+    unicode-script
+    unicode-segment
+    unicode-word-boundary
+)
+
+PEERDIR(
+    contrib/crates/aho-corasick-1.1.5
+    contrib/crates/memchr-2.8.3
+    contrib/crates/regex-syntax-0.8.11
+)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(0.4.18)
+ORIGINAL_SOURCE(https://static.crates.io/crates/regex-automata/regex-automata-0.4.18.crate)
+
+CRATE_FEATURES(
+    nfa
+    perf
+)
+
+END()

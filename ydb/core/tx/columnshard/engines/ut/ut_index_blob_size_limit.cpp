@@ -55,7 +55,7 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version) {
     auto cache = std::make_shared<TSchemaObjectsCache>();
     auto indexInfo = TIndexInfo::BuildFromProto(version, proto, TTestStoragesManager::GetInstance(), cache);
     UNIT_ASSERT(indexInfo);
-    return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*indexInfo)), TSnapshot(1, 1));
+    return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*indexInfo)), TSnapshot(1, 1));
 }
 
 std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {

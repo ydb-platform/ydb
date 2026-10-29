@@ -1,0 +1,7 @@
+default:
+  image: rust
+
+test:
+  stage: test
+  script:
+    - bash ./scripts/test.sh

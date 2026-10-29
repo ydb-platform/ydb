@@ -1300,7 +1300,13 @@ namespace NKikimr::NBsController {
                 }
                 for (ui32 realm = 0; realm < 3; ++realm) {
                     if (const auto it = dcStates.find(dataCenters[realm]); it != dcStates.end()) {
-                        states[realm] = it->second;
+                        const auto previous = Self.DataCenterStates.find(dataCenters[realm]);
+                        const bool wasRecovering = previous != Self.DataCenterStates.end()
+                            && previous->second == TFailRealm::R;
+                        // A policy update for another DC must not undo completed R -> N recovery.
+                        if (it->second != TFailRealm::R || !wasRecovering || states[realm] == TFailRealm::F) {
+                            states[realm] = it->second;
+                        }
                     } else if (states[realm] == TFailRealm::F) {
                         // Including a failed realm still requires recovery before it can become N.
                         states[realm] = TFailRealm::R;

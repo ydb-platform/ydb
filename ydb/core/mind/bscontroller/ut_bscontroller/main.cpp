@@ -802,6 +802,27 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         // Administrative inclusion does not change an internal R that is still recovering.
         UNIT_ASSERT(env.Invoke(env.Define({{failedDataCenter, TDataCenter::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), recovering.SerializeAsString());
+        UNIT_ASSERT(env.Invoke(env.Define({{recoveringDataCenter, TDataCenter::RECOVERING},
+            {failedDataCenter, TDataCenter::EXCLUDED}})).GetSuccess());
+        // Model completed recovery in all groups before excluding the remaining source DC.
+        for (const auto& [id, group] : env.ReadGroups()) {
+            if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
+                continue;
+            }
+            std::array<TFailRealm::EState, 3> states;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                states[realm] = group.GetRings(realm).GetState() == TFailRealm::F ? TFailRealm::F : TFailRealm::N2;
+            }
+            UNIT_ASSERT(env.Invoke(env.SetGroupStates(id, states)).GetSuccess());
+        }
+        const TString sourceDataCenter = env.NodeDataCenters.at(
+            original.GetRings(0).GetFailDomains(0).GetVDiskLocations(0).GetNodeID());
+        UNIT_ASSERT(env.Invoke(env.Define({{sourceDataCenter, TDataCenter::EXCLUDED},
+            {recoveringDataCenter, TDataCenter::RECOVERING}, {failedDataCenter, TDataCenter::EXCLUDED}})).GetSuccess());
+        const NKikimrBlobStorage::TGroupInfo solo = env.ReadGroups().at(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(solo.GetRings(0).GetState()), ui32(TFailRealm::F));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(solo.GetRings(1).GetState()), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(solo.GetRings(2).GetState()), ui32(TFailRealm::F));
     }
 
 

@@ -1015,6 +1015,56 @@ namespace {
 
         }
 
+        void TestLegacyReplicationAvailabilityPeriod(bool invalid) {
+            TTestEnv env(Runtime(), TTestEnvOptions().InitYdbDriver(true));
+            Runtime().GetAppData().ReplicationConfig.SetConsumerAvailabilityPeriodSeconds(7201);
+            ui64 txId = 100;
+            TestCreateReplication(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Replication"
+                Config {
+                    SrcConnectionParams { Endpoint: "localhost:2135" Database: "/MyRoot" }
+                    Specific { Targets { SrcPath: "/MyRoot/Table" DstPath: "/MyRoot/Replica" } }
+                }
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            size_t patched = 0;
+            auto observer = Runtime().AddObserver<TEvSchemeShard::TEvDescribeSchemeResult>([&](const auto& ev) {
+                auto* desc = ev->Get()->MutableRecord()->MutablePathDescription();
+                if (desc->GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeReplication) {
+                    return;
+                }
+
+                // Model the SchemeShard description of an existing replication.
+                auto* config = desc->MutableReplicationDescription()->MutableConfig();
+                config->ClearAvailabilityPeriod();
+                if (invalid) {
+                    config->MutableAvailabilityPeriod();
+                }
+                ++patched;
+            });
+            TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_path: "/MyRoot/Replication" destination_prefix: "Replication" }
+                }
+            )", S3Port()));
+            env.TestWaitNotification(Runtime(), txId);
+            UNIT_ASSERT(patched > 0);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            const TString file = "/Replication/create_async_replication.sql";
+            CheckPathWithChecksum(file);
+            const auto query = GetS3FileContent(file);
+            if (invalid) {
+                UNIT_ASSERT(!query.Contains("AVAILABILITY_PERIOD"));
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS(query, "AVAILABILITY_PERIOD = Interval('PT7201S')");
+                UNIT_ASSERT(!query.Contains("UNLIMITED"));
+            }
+        }
+
         void TestTransfer(const TString& scheme, const TString& expected) {
             auto options = TTestEnvOptions()
                 .InitYdbDriver(true);
@@ -5419,6 +5469,14 @@ state: STATE_ENABLED
         });
     }
 
+    Y_UNIT_TEST(ReplicationExportLegacyAvailabilityPeriod) {
+        TestLegacyReplicationAvailabilityPeriod(false);
+    }
+
+    Y_UNIT_TEST(ReplicationExportInvalidAvailabilityPeriod) {
+        TestLegacyReplicationAvailabilityPeriod(true);
+    }
+
     Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
         TString scheme = R"(
             Name: "Replication"
@@ -5450,6 +5508,7 @@ WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   USER = 'user',
   PASSWORD_SECRET_NAME = 'pwd-secret-name',
+  AVAILABILITY_PERIOD = 'UNLIMITED',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -5484,6 +5543,7 @@ FOR
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   TOKEN_SECRET_NAME = 'token-secret-name',
+  AVAILABILITY_PERIOD = 'UNLIMITED',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -5522,6 +5582,7 @@ FOR
   `/MyRoot/Table3` AS `/MyRoot/Table3Replica`
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  AVAILABILITY_PERIOD = 'UNLIMITED',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -5531,6 +5592,7 @@ WITH (
         TString scheme = R"(
             Name: "Replication"
             Config {
+                AvailabilityPeriod { Duration { seconds: 7201 nanos: 1 } }
                 SrcConnectionParams {
                     Endpoint: "localhost:2135"
                     Database: "/MyRoot"
@@ -5555,6 +5617,7 @@ FOR
   `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  AVAILABILITY_PERIOD = Interval('PT7201.001S'),
   CONSISTENCY_LEVEL = 'Global',
   COMMIT_INTERVAL = Interval('PT17S')
 );)";

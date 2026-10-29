@@ -263,17 +263,24 @@ public:
 
     // The stored result of a duplicate delivery carries the reply the writer never
     // saw. A missing result degrades to "nothing known"; a corrupt one is a bug
-    // (corrupted state or a buggy migration peer) and must not fail silently.
-    static bool ParseStoredWriteSeqNumResult(
+    // (corrupted state or a buggy migration peer) and is reported to the writer
+    // as an internal error instead of failing silently.
+    enum class EStoredWriteResultParse {
+        Missing,
+        Parsed,
+        Corrupt,
+    };
+
+    static EStoredWriteResultParse ParseStoredWriteSeqNumResult(
             const TWriteSeqNumState& state,
             NKikimrDataEvents::TEvWriteResult& parsed) {
         if (state.SerializedResult.empty()) {
-            return false;
+            return EStoredWriteResultParse::Missing;
         }
-        Y_ENSURE(parsed.ParseFromString(state.SerializedResult),
-            "Failed to parse stored write result for writer " << state.WriterIndex
-            << " seq num " << state.WriteSeqNum);
-        return true;
+        if (!parsed.ParseFromString(state.SerializedResult)) {
+            return EStoredWriteResultParse::Corrupt;
+        }
+        return EStoredWriteResultParse::Parsed;
     }
 
     // Validates this write's position in its writer's chain; on success records the new
@@ -320,6 +327,7 @@ public:
             ui64 MaxRequested = 0;
             ui64 Current = 0;
             bool isDuplicate = false;
+            bool SawFreshOp = false;
         };
         THashMap<ui64, TShardSeqNums> shard2seqnums;
         for (const auto& op : operations) {
@@ -356,7 +364,19 @@ public:
                 : lock->FindAncestorWriteSeqNumState(shardKey, writerIndex);
             Y_ENSURE(stored);
             NKikimrDataEvents::TEvWriteResult parsed;
-            if (!ParseStoredWriteSeqNumResult(*stored, parsed)) {
+            const auto parse = ParseStoredWriteSeqNumResult(*stored, parsed);
+            if (parse == EStoredWriteResultParse::Corrupt) {
+                // Crashing on the corrupt state would turn every redelivery into
+                // another tablet crash: report a deterministic error to the
+                // writer instead, so the request fails but the tablet keeps
+                // serving. The state is left as is: further deliveries of these
+                // positions see the same error.
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder()
+                    << "Failed to parse stored write result for writer " << writerIndex
+                    << " seq num " << stored->WriteSeqNum << " for DataShard " << shardKey);
+                return true;
+            }
+            if (parse == EStoredWriteResultParse::Missing) {
                 return false;
             }
             if (IsFatalWriteResultStatus(parsed.GetStatus())) {
@@ -451,10 +471,18 @@ public:
         // Mark already applied operations as duplicates so their rows are not
         // written again: all operations of a fully duplicate group (Max == current)
         // and leading positions of a mixed group (positions <= current).
-        // The writer acks batches in order and resends only unacknowledged
-        // operations, so already applied operations always form a prefix of the
-        // request: a duplicate after a fresh operation is a writer bug.
-        bool sawFreshOp = false;
+        // The writer acks batches of each shard in order and resends only
+        // unacknowledged operations, so already applied operations always form a
+        // prefix of their shard's operations in the request: a duplicate after a
+        // fresh operation of the same shard is a writer bug. Shards are tracked
+        // independently: their operations may interleave in any order (e.g. a
+        // merge re-route mixes the chains of several removed shards in one
+        // request, and the order depends on the re-route's map iteration).
+        // Operations of the current shard must come last: the writer flushes the
+        // re-routed batches of removed shards (ancestor chains) before its fresh
+        // current-shard writes, so an ancestor operation positioned after a
+        // current-shard operation is a writer bug.
+        bool sawCurrentShardOp = false;
         for (size_t iOp = 0; iOp < operations.size(); ++iOp) {
             const auto& op = operations[iOp];
             if (!op.GetWriteSeqNum().WriteSeqNum) {
@@ -462,18 +490,29 @@ public:
             }
             const ui64 shardId = op.GetOriginalShard();
             const ui64 shardKey = (shardId == 0 || shardId == tabletId) ? 0 : shardId;
-            const auto& seqnums = shard2seqnums.at(shardKey);
+            auto& seqnums = shard2seqnums.at(shardKey);
+            if (shardKey != 0 && sawCurrentShardOp) {
+                writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                    << "Uncommitted write " << writerIndex << ":" << op.GetWriteSeqNum().WriteSeqNum
+                    << " for DataShard " << shardKey
+                    << " is positioned after current shard writes in the request");
+                return EExecutionStatus::Executed;
+            }
             if (op.GetWriteSeqNum().WriteSeqNum <= seqnums.Current) {
-                if (sawFreshOp) {
+                if (seqnums.SawFreshOp) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                         << "Uncommitted write " << writerIndex << ":" << op.GetWriteSeqNum().WriteSeqNum
                         << " for DataShard " << shardKey
-                        << " duplicates a fresh operation: duplicates must form a prefix of the request");
+                        << " duplicates a fresh operation: duplicates must form a prefix"
+                        << " of the shard's operations in the request");
                     return EExecutionStatus::Executed;
                 }
                 writeOp->DuplicateWriteOpIdxs.insert(iOp);
             } else {
-                sawFreshOp = true;
+                seqnums.SawFreshOp = true;
+                if (shardKey == 0) {
+                    sawCurrentShardOp = true;
+                }
             }
         }
 

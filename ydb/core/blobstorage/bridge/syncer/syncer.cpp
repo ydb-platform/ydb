@@ -190,14 +190,14 @@ namespace NKikimr::NBridge {
                         YDB_LOG_CRIT("Incorrect barrier",
                             {"marker", "BRSS13"},
                             {"logId", LogId},
-                            {"#_Target.RecordGeneration", existingItem->RecordGeneration},
-                            {"#_Target.PerGenerationCounter", existingItem->PerGenerationCounter},
-                            {"#_Target.CollectGeneration", existingItem->CollectGeneration},
-                            {"#_Target.CollectStep", existingItem->CollectStep},
-                            {"#_Source.RecordGeneration", item.RecordGeneration},
-                            {"#_Source.PerGenerationCounter", item.PerGenerationCounter},
-                            {"#_Source.CollectGeneration", item.CollectGeneration},
-                            {"#_Source.CollectStep", item.CollectStep},
+                            {"targetRecordGeneration", existingItem->RecordGeneration},
+                            {"targetPerGenerationCounter", existingItem->PerGenerationCounter},
+                            {"targetCollectGeneration", existingItem->CollectGeneration},
+                            {"targetCollectStep", existingItem->CollectStep},
+                            {"sourceRecordGeneration", item.RecordGeneration},
+                            {"sourcePerGenerationCounter", item.PerGenerationCounter},
+                            {"sourceCollectGeneration", item.CollectGeneration},
+                            {"sourceCollectStep", item.CollectStep},
                             {"hard", hard});
                     }
                 }
@@ -404,9 +404,9 @@ namespace NKikimr::NBridge {
                     {"toTargetGroup", toTargetGroup}, \
                     {"msg", msg}, \
                     {"queriesInFlight", QueriesInFlight}, \
-                    {"#_PendingQueries.size", PendingQueries.size()}, \
+                    {"pendingQueriesSize", PendingQueries.size()}, \
                     {"maxQueriesInFlight", MaxQueriesInFlight}, \
-                    {"#_Payloads.size", Payloads.size()}); \
+                    {"payloadsSize", Payloads.size()}); \
                 msg.ForceGroupGeneration.emplace(toTargetGroup ? TargetGroupGeneration : SourceGroupGeneration); \
                 break; \
             }
@@ -634,9 +634,9 @@ namespace NKikimr::NBridge {
             {"marker", "BRSS14"},
             {"logId", LogId},
             {"status", msg.Status},
-            {"#_Blocks.size", msg.Blocks.size()},
-            {"#_Barriers.size", msg.Barriers.size()},
-            {"#_Blobs.size", msg.Blobs.size()},
+            {"blocksSize", msg.Blocks.size()},
+            {"barriersSize", msg.Barriers.size()},
+            {"blobsSize", msg.Blobs.size()},
             {"toTargetGroup", payload.ToTargetGroup});
 
         Y_ABORT_UNLESS(state.RequestInFlight);

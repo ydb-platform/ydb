@@ -6,7 +6,6 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
-
 #include <bit>
 
 #include <util/generic/ymath.h>

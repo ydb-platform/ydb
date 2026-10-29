@@ -2765,7 +2765,7 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
         YDB_LOG_ERROR("",
             {"error", "cannot parse portions metadata cache config"},
             {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"serviceConfigerror", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
@@ -2792,7 +2792,7 @@ void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSyste
         YDB_LOG_ERROR("",
             {"error", "cannot parse column data cache config"},
             {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"serviceConfigError", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
@@ -2941,7 +2941,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         YDB_LOG_ERROR("",
             {"error", "cannot parse composite conveyor config"},
             {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"serviceConfigError", serviceConfig.GetErrorMessage()},
             {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }

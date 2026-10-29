@@ -246,7 +246,7 @@
 
 #YDB Analytics TEAM:???
 
-#Federative query @uzhastik TEAM:@ydb-platform/fq
+#Federative query TEAM:@ydb-platform/fq
 /ydb/udfs/wasm @ydb-platform/fq
 /ydb/tests/functional/script_execution @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq

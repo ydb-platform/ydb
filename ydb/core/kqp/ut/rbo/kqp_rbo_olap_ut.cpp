@@ -3774,6 +3774,68 @@ Y_UNIT_TEST_SUITE(KqpRboOlapAggregations) {
         }
     }
 
+    // MIN, MAX and SOME over a Uuid column give the same result with aggregate pushdown enabled as without it.
+    Y_UNIT_TEST(AggregationMinMaxUuidGroupByPushdown) {
+        TKikimrRunner kikimr(NewRboSettings());
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE `/Root/UuidTable` (
+                    id Int64 NOT NULL,
+                    g Int64,
+                    u Uuid,
+                    PRIMARY KEY (id)
+                ) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        auto tableClient = kikimr.GetTableClient();
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [id, g, u] : std::vector<std::tuple<i64, i64, std::string>>{ { 1, 1, "11111111-1111-1111-1111-111111111111" },
+                     { 2, 1, "22222222-2222-2222-2222-222222222222" }, { 3, 2, "33333333-3333-3333-3333-333333333333" } }) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("id").Int64(id)
+                    .AddMember("g").OptionalInt64(g)
+                    .AddMember("u").BeginOptional().Uuid(NYdb::TUuidValue(u)).EndOptional()
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto result = tableClient.BulkUpsert("/Root/UuidTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString expected = R"([
+            [[1];2u;["11111111-1111-1111-1111-111111111111"];["22222222-2222-2222-2222-222222222222"]];
+            [[2];1u;["33333333-3333-3333-3333-333333333333"];["33333333-3333-3333-3333-333333333333"]]
+        ])";
+        const TString query = R"(
+            SELECT g, COUNT(u), MIN(u), MAX(u)
+            FROM `/Root/UuidTable`
+            GROUP BY g
+            ORDER BY g
+        )";
+        for (const bool pushdown : { false, true }) {
+            const TString fullQuery = TStringBuilder() << "--!syntax_v1\n"
+                << (pushdown ? "PRAGMA Kikimr.OptEnableOlapPushdownAggregate = \"true\";\n" : "") << query;
+            auto it = tableClient.StreamExecuteScanQuery(fullQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(expected, StreamResultToYson(it));
+        }
+        {
+            const TString someQuery = R"(
+                --!syntax_v1
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT g, SOME(u) FROM `/Root/UuidTable` WHERE g = 2 GROUP BY g
+            )";
+            auto it = tableClient.StreamExecuteScanQuery(someQuery).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([[[2];["33333333-3333-3333-3333-333333333333"]]])", StreamResultToYson(it));
+        }
+    }
+
     Y_UNIT_TEST(AggregationCountGroupByPushdown) {
         TKikimrRunner kikimr(NewRboSettings());
 

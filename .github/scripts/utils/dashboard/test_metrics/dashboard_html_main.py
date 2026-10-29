@@ -2070,6 +2070,22 @@ def build_html_dashboard(
       }}
     }})();
 
+    const CPU_BREAKDOWN = [
+      ['cpu_user_cores', 'CPU user + nice (monitor)', '#16a34a'],
+      ['cpu_system_cores', 'CPU system + IRQ (monitor)', '#2563eb'],
+      ['cpu_steal_cores', 'CPU steal (monitor)', '#9333ea'],
+      ['cpu_iowait_cores', 'CPU iowait (monitor)', '#d97706'],
+    ];
+    function cpuBreakdownTraces(ro, xs) {{
+      return CPU_BREAKDOWN
+        .filter(([key]) => Array.isArray(ro[key]) && ro[key].some(v => v != null))
+        .map(([key, name, color]) => ({{
+          x: xs, y: ro[key], mode: 'lines', name,
+          line: {{color, width: 2}}, legendrank: 1001,
+          hovertemplate: '%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>',
+        }}));
+    }}
+
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
       stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);
       attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
@@ -2080,6 +2096,7 @@ def build_html_dashboard(
         const ro = data.resources_overlay;
         const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
         Plotly.addTraces('cpuLayer', [
+          ...cpuBreakdownTraces(ro, xDisp),
           {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
           {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
         ]);
@@ -2130,6 +2147,7 @@ def build_html_dashboard(
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       Plotly.addTraces('cpuLayerSuite', [
+        ...cpuBreakdownTraces(ro, xDisp),
         {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor) outline', line: {{ color: '#000000', width: 8 }}, legendrank: 1000, showlegend: false, hoverinfo: 'skip' }},
         {{ x: xDisp, y: ro.cpu_total_cores || [], mode: 'lines', name: 'CPU total (monitor)', line: {{ color: '#ff1744', width: 6 }}, legendrank: 1000, hovertemplate: '%{{fullData.name}}: %{{y:.3f}} cores<extra></extra>' }},
       ]);
@@ -2264,7 +2282,7 @@ def build_html_dashboard(
       const bySuite = document.getElementById('layerBySuite')?.checked ?? true;
       const systemCpu = document.getElementById('layerSystemCpu')?.checked ?? true;
       const systemRam = document.getElementById('layerSystemRam')?.checked ?? true;
-      const CPU_OVERLAY_NAMES = ['CPU total (monitor)', 'CPU total (monitor) outline', 'CPU limit (provisioned)'];
+      const CPU_OVERLAY_NAMES = [...CPU_BREAKDOWN.map(([, name]) => name), 'CPU total (monitor)', 'CPU total (monitor) outline', 'CPU limit (provisioned)'];
       const RAM_OVERLAY_NAMES = ['RAM total (monitor)', 'RAM total (monitor) outline', 'RAM limit (provisioned)', 'RAM ya.make cgroup'];
       function setCpuVisibility(el) {{
         if (!el || !el.data || !window.Plotly) return;

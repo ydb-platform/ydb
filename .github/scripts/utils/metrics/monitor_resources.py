@@ -11,17 +11,34 @@ import time
 from pathlib import Path
 
 
-def read_proc_stat() -> tuple[float, float]:
-    """Read /proc/stat, return (total_jiffies, idle_jiffies including iowait)."""
+CPU_STATES = ("user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal")
+
+
+def read_proc_stat() -> dict[str, int]:
+    """Read aggregate CPU counters; guest times are already included in user/nice."""
     with open("/proc/stat") as f:
         line = f.readline()
     parts = line.split()
-    # user nice system idle iowait irq softirq steal. guest and guest_nice are already inside user and nice.
-    total = sum(int(x) for x in parts[1:9])
-    idle = int(parts[4]) if len(parts) > 4 else 0
-    iowait = int(parts[5]) if len(parts) > 5 else 0
-    idle += iowait
-    return float(total), float(idle)
+    return {name: int(parts[i]) if i < len(parts) else 0 for i, name in enumerate(CPU_STATES, 1)}
+
+
+def cpu_usage(prev: dict[str, int], curr: dict[str, int]) -> tuple[int, dict[str, float]]:
+    """Return elapsed CPU ticks and percentages of the whole host's capacity."""
+    # Linux iowait counters can decrease. Ignore negative deltas instead of
+    # letting them inflate CPU usage or produce negative percentages.
+    delta = {name: max(0, curr[name] - prev[name]) for name in CPU_STATES}
+    total = sum(delta.values())
+    user = delta["user"] + delta["nice"]
+    system = delta["system"] + delta["irq"] + delta["softirq"]
+    # Steal is time withheld by the hypervisor, not work performed by this VM.
+    ticks = {
+        "cpu_total_pct": user + system,
+        "cpu_user_pct": user,  # Includes nice.
+        "cpu_system_pct": system,  # Includes IRQ and softirq.
+        "cpu_steal_pct": delta["steal"],
+        "cpu_iowait_pct": delta["iowait"],
+    }
+    return total, {name: 100.0 * value / total if total else 0.0 for name, value in ticks.items()}
 
 
 def _read_cmdline(pid: int) -> str:
@@ -283,11 +300,9 @@ def run_monitor(
             if dt <= 0:
                 dt = interval_sec if interval_sec > 0 else 1.0
 
-            # CPU total (absolute)
+            # Host CPU execution and wait states.
             curr_stat = read_proc_stat()
-            total_delta = curr_stat[0] - prev_stat[0]
-            idle_delta = curr_stat[1] - prev_stat[1]
-            cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0
+            total_delta, cpu_metrics = cpu_usage(prev_stat, curr_stat)
             prev_stat = curr_stat
 
             # ya make process tree
@@ -341,7 +356,7 @@ def run_monitor(
                 "ts": round(ts, 3),
                 "ts_us": ts_us,
                 "dt_sec": round(dt, 6),
-                "cpu_total_pct": round(cpu_total_pct, 2),
+                **{name: round(value, 2) for name, value in cpu_metrics.items()},
                 "cpu_ya_pct": round(cpu_ya_pct, 2),
                 "ram_used_kb": ram_used_kb,
                 "ram_ya_kb": ram_ya_kb,

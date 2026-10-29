@@ -1045,6 +1045,11 @@ def _build_resources_overlay(
     max_evlog = max(float(r.get("end_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     xs_evlog: list[float] = []
     cpu_total_cores: list[float] = []
+    cpu_states = ("user", "system", "steal", "iowait")
+    cpu_breakdown = {
+        state: [] for state in cpu_states
+        if any(r.get(f"cpu_{state}_pct") is not None for r in records)
+    }
     ram_gb: list[float] = []
     disk_read_mb: list[float] = []
     disk_write_mb: list[float] = []
@@ -1055,6 +1060,9 @@ def _build_resources_overlay(
             continue
         xs_evlog.append(evlog_sec)
         cpu_total_cores.append(float(r.get("cpu_total_pct", 0) or 0) / 100.0 * cpu_cores)
+        for state, values in cpu_breakdown.items():
+            value = r.get(f"cpu_{state}_pct")
+            values.append(float(value) / 100.0 * cpu_cores if value is not None else None)
         ram_gb.append(float(r.get("ram_used_kb", 0) or 0) / (1024 * 1024))
         # Prefer normalized MB/s; fallback to legacy per-sample deltas.
         disk_read_mb.append(float(r.get("disk_read_mbps", r.get("disk_read_mb_delta", 0)) or 0))
@@ -1078,6 +1086,7 @@ def _build_resources_overlay(
     return {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
+        **{f"cpu_{state}_cores": values for state, values in cpu_breakdown.items()},
         "ram_gb": ram_gb,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,

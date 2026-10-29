@@ -160,6 +160,18 @@ def build_html_dashboard(
         go.Scatter(x=ts_str, y=cpu_ya_cores, mode="lines", name="CPU ya make (ядра)", line=dict(color="#60a5fa", dash="dash")),
         row=1, col=1,
     )
+    for key, label, color in (
+        ("cpu_user_pct", "CPU user + nice (ядра)", "#16a34a"),
+        ("cpu_system_pct", "CPU system + IRQ (ядра)", "#0891b2"),
+        ("cpu_steal_pct", "CPU steal (ядра)", "#9333ea"),
+        ("cpu_iowait_pct", "CPU iowait (ядра)", "#d97706"),
+    ):
+        if any(r.get(key) is not None for r in resources):
+            values = [r[key] / 100.0 * cpu_cores if r.get(key) is not None else None for r in resources]
+            fig.add_trace(
+                go.Scatter(x=ts_str, y=values, mode="lines", name=label, line=dict(color=color)),
+                row=1, col=1,
+            )
     fig.add_trace(
         go.Scatter(x=ts_str, y=ram_gb, mode="lines", name="RAM total (GB)", line=dict(color="#16a34a")),
         row=2, col=1,
@@ -252,6 +264,9 @@ def build_chromium_trace(resources: list[dict], output_path: Path) -> None:
         events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 5, "name": "disk_ya_read_mb", "args": {"value": r.get("disk_ya_read_mb_delta", 0)}})
         events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 6, "name": "disk_write_mb", "args": {"value": r.get("disk_write_mb_delta", 0)}})
         events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": 7, "name": "disk_ya_write_mb", "args": {"value": r.get("disk_ya_write_mb_delta", 0)}})
+        for tid, key in enumerate(("cpu_user_pct", "cpu_system_pct", "cpu_steal_pct", "cpu_iowait_pct"), 8):
+            if r.get(key) is not None:
+                events.append({"ph": "C", "ts": ts_us, "pid": 1, "tid": tid, "name": key, "args": {"value": r[key]}})
     output_path.write_text(json.dumps(events))
 
 

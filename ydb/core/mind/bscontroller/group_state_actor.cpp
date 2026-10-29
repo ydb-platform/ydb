@@ -63,7 +63,7 @@ std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealm
 
 class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     const TActorId ControllerId;
-    static constexpr ui32 GroupsPerRound = 16;
+    static constexpr ui32 GroupsPerRound = 64;
     static constexpr TDuration PollInterval = TDuration::Seconds(5);
     struct TGroup {
         TGroupReplicationInfo Info;
@@ -130,9 +130,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                 states[realm] = *target;
             }
         }
-        const bool hasFailedRealm = std::find(states.begin(), states.end(),
-            NKikimrBlobStorage::TGroupInfo::TFailRealm::F) != states.end();
-        if (!hasFailedRealm) {
+        const auto it = std::find(states.begin(), states.end(), NKikimrBlobStorage::TGroupInfo::TFailRealm::F);
+        if (it == states.end()) {
             using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
             for (ui32 realm = 0; realm < 3; ++realm) {
                 if (group->Info.States[realm] == TFailRealm::R && states[realm] != TFailRealm::R) {
@@ -236,8 +235,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         Queries.erase(it);
         TGroup& group = Groups.at(query.GroupId);
         const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
-        const bool matchingDisk = record.HasVDiskID()
-            && VDiskIDFromVDiskID(record.GetVDiskID()) == group.Info.VDisks[query.Disk].Id;
+        const TVDiskID reportedVDiskId = record.HasVDiskID() ? VDiskIDFromVDiskID(record.GetVDiskID()) : TVDiskID();
+        const bool matchingDisk = record.HasVDiskID() && reportedVDiskId == group.Info.VDisks[query.Disk].Id;
         group.Replicated[query.Disk] = matchingDisk && record.GetStatus() == NKikimrProto::OK
             && record.GetJoinedGroup() && record.GetReplicated()
             && record.GetDurabilityReplicated() && !record.GetIsReadOnly();

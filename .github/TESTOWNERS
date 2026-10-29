@@ -129,7 +129,6 @@
 /ydb/tools/include_sanitizer @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
 /ydb/tools/ydbd_slice @ydb-platform/engineering
-/ydb/tests/functional/tpc @ydb-platform/engineering
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering

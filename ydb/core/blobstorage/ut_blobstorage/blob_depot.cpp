@@ -599,20 +599,11 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
     }
 
 #ifndef KIKIMR_DISABLE_S3_OPS
-    // the value written to S3 has no blob parts; its integrity is checked by reading it from S3, and the check gets its
-    // answer
-    Y_UNIT_TEST(CheckIntegrityOfS3Value) {
-        TEnvironmentSetup env({
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
-            .SetupHive = true,
-        });
+    // creates the virtual group storing its data in the fake S3 bucket
+    ui32 CreateS3VirtualGroup(TEnvironmentSetup& env, const TString& bucket) {
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Seconds(20));
-
-        const TString bucket = "check-integrity";
-        auto& storage = *Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>();
-        storage.Clear();
+        Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->Clear();
 
         NKikimrBlobStorage::TConfigRequest request;
         {
@@ -641,17 +632,35 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
         const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        const ui32 groupId = response.GetStatus(1).GetGroupId(0);
         env.Sim(TDuration::Seconds(5));
+        return response.GetStatus(1).GetGroupId(0);
+    }
 
-        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        const TString data = "stored in S3";
-        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+    void PutToS3VirtualGroup(TEnvironmentSetup& env, const TActorId& edge, ui32 groupId, const TLogoBlobID& id,
+            const TString& data) {
         env.Runtime->WrapInActorContext(edge, [&] {
             SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
         });
         UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
             NKikimrProto::OK);
+    }
+
+    // the value written to S3 has no blob parts; its integrity is checked by reading it from S3, and the check gets its
+    // answer
+    Y_UNIT_TEST(CheckIntegrityOfS3Value) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .SetupHive = true,
+        });
+        const TString bucket = "check-integrity";
+        const ui32 groupId = CreateS3VirtualGroup(env, bucket);
+        auto& storage = *Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>();
+
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "stored in S3";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToS3VirtualGroup(env, edge, groupId, id, data);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetBucket(bucket).GetSize(), 1);
 
         auto check = [&] {
@@ -670,6 +679,72 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
         storage.Clear(); // the object disappears from S3
         UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::ERROR);
+    }
+
+    // the range query ends with error as soon as one of its S3 reads fails; the other reads complete after that, and
+    // their results are dropped instead of going to the query that is gone
+    Y_UNIT_TEST(S3ReadsCompletingAfterQueryEnd) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .SetupHive = true,
+        });
+        const ui32 groupId = CreateS3VirtualGroup(env, "query-end");
+
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "stored in S3";
+        for (ui32 step = 1; step <= 5; ++step) {
+            PutToS3VirtualGroup(env, edge, groupId, TLogoBlobID(100500, 1, step, 0, data.size(), 0), data);
+        }
+
+        // the first S3 read of the range fails, as if the wrapper was gone; the rest are held until the query ends with
+        // error and is gone
+        bool failed = false;
+        bool holdReads = true;
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NWrappers::NExternalStorage::TEvGetObjectResponse::EventType || !holdReads) {
+                return true;
+            } else if (failed) {
+                held.push_back(std::move(ev));
+                return false;
+            }
+            failed = true;
+            const TActorId recipient = ev->GetRecipientRewrite();
+            env.Runtime->Send(new IEventHandle(TEvents::TSystem::Undelivered, 0, recipient, ev->Sender, nullptr, 0),
+                recipient.NodeId());
+            return false;
+        };
+
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvRange(100500, TLogoBlobID(100500, 0, 0, 0, 0, 0),
+                TLogoBlobID(100500, Max<ui32>(), Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie),
+                false, TInstant::Max()));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::ERROR, res->Get()->ToString());
+        UNIT_ASSERT(failed);
+        env.Sim(TDuration::Seconds(1)); // let the agent finish with the query
+        UNIT_ASSERT(!held.empty());
+
+        // the reads complete after the query is gone
+        holdReads = false;
+        for (auto& ev : held) {
+            const ui32 nodeId = ev->GetRecipientRewrite().NodeId();
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        env.Sim(TDuration::Seconds(10));
+        env.Runtime->FilterFunction = {};
+
+        // the agent goes on serving queries
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(TLogoBlobID(100500, 1, 1, 0, data.size(), 0), 0, 0,
+                TInstant::Max(), NKikimrBlobStorage::FastRead));
+        });
+        auto getResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->Responses[0].Buffer.ConvertToString(), data);
     }
 #endif
 }

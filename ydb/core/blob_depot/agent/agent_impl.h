@@ -581,7 +581,11 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
 
-        void Invoke(std::function<void()> callback) { callback(); }
+        // called by helper actors through InvokeOtherActor, so no query is on the stack and the ended ones can go
+        void Invoke(std::function<void()> callback) {
+            callback();
+            DeletePendingQueries.Clear();
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

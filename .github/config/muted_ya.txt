@@ -225,6 +225,8 @@ ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnot
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-27-1-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-4-1_to_prestable-27-1-1-True]
+ydb/tests/compatibility/topics py3test.[test_kafka_topic.py */*] chunk
+ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility/topics test_cluster_discovery.py.TestClusterDiscoveryRestart.test_discover_clusters_after_restart[restart_prestable-27-1-1_to_stable-26-4-1]
 ydb/tests/compatibility/topics test_cluster_discovery.py.TestClusterDiscoveryRolling.test_discover_clusters_during_roll[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadRestart.test_direct_read_after_tx_write_and_version_change[restart_prestable-27-1-1_to_stable-26-4-1]
@@ -341,6 +343,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[13]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[14]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[15]
+ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestAiCommonPexpect.test_ai_session_context_remains_after_roundtrip_switch
 ydb/tests/olap/high_load ReadUpdateWrite.Load
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/kafka/tests py3test.sole chunk

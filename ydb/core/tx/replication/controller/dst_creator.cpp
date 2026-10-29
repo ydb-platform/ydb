@@ -295,7 +295,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (Attaching) {
+        if (DropIndexTx.HasDropIndex()) {
+            if (Cleanup) {
+                return DescribeDstPath();
+            }
+            ExecuteSchemeTx(DropIndexTx);
+        } else if (Attaching) {
             AttachDst();
         } else if (InitialScan) {
             CreateDst();
@@ -315,6 +320,45 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
         FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
         ExecuteSchemeTx(tx);
+    }
+
+    bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
+        return !InitialScan
+            && Kind == TReplication::ETargetKind::Table
+            && !Cleanup
+            && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+    }
+
+    void PrepareDropIndex(const NKikimrSchemeOp::TIndexDescription& index,
+            const NKikimrScheme::TEvDescribeSchemeResult& desc)
+    {
+        const auto parts = SplitPath(desc.GetPath());
+        Y_ABORT_UNLESS(!parts.empty());
+        DropIndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
+        DropIndexTx.SetInternal(true);
+        DropIndexTx.SetWorkingDir(TString(ExtractParent(desc.GetPath())));
+        DropIndexTx.MutableDropIndex()->SetTableName(parts.back());
+        DropIndexTx.MutableDropIndex()->SetIndexName(index.GetName());
+
+        // DROP INDEX is addressed by name. Bind it to the table and index we
+        // validated so a concurrent schema change cannot redirect the removal.
+        auto* tableCondition = DropIndexTx.AddApplyIf();
+        tableCondition->SetPathId(DstPathId.LocalPathId);
+        tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
+        DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
+        Attaching = false;
+        PrepareAttachment();
+    }
+
+    void PrepareAttachment() {
+        NeedToCheck = true;
+        if (PendingDstPathId) {
+            return AllocateTxId();
+        }
+        // Persist the path before either removing indexes or making it read-only.
+        PendingDstPathId = DstPathId;
+        Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
+        Become(&TThis::StateWaitForPrepareAttachDstResult);
     }
 
     void ExecuteSchemeTx(const NKikimrSchemeOp::TModifyScheme& tx) {
@@ -361,8 +405,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 NeedToCheck = true;
                 Attaching = false;
                 return SubscribeTx(record.GetPathCreateTxId());
-            } else if (Attaching) {
+            } else if (Attaching || DropIndexTx.HasDropIndex()) {
                 Attaching = false;
+                DropIndexTx.Clear();
                 Become(&TThis::StateDescribeDstPath);
                 return Retry();
             } else {
@@ -371,6 +416,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             break;
         case NKikimrScheme::StatusAlreadyExists:
             return DescribeDstPath();
+        case NKikimrScheme::StatusPreconditionFailed:
+        case NKikimrScheme::StatusPathDoesNotExist:
+            if (DropIndexTx.HasDropIndex()) {
+                return DescribeDstPath();
+            }
+            return Error(record.GetStatus(), record.GetReason());
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
@@ -402,6 +453,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
+        DropIndexTx.Clear();
         Send(PipeCache, new TEvPipeCache::TEvForward(
             PendingDstPathId
                 ? new TEvSchemeShard::TEvDescribeScheme(PendingDstPathId)
@@ -435,6 +487,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+            for (const auto& index : desc.GetTable().GetTableIndexes()) {
+                if (ShouldDropVectorIndex(index)) {
+                    return PrepareDropIndex(index, record);
+                }
+            }
             if (InitialScan || AttachmentComplete) {
                 return Success();
             }
@@ -443,14 +500,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
             Attaching = true;
-            NeedToCheck = true;
-            if (PendingDstPathId) {
-                return AllocateTxId();
-            }
-            // The controller must persist this path before SchemeShard may alter it.
-            PendingDstPathId = DstPathId;
-            Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
-            return Become(&TThis::StateWaitForPrepareAttachDstResult);
+            return PrepareAttachment();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
             if (!InitialScan) {
@@ -473,10 +523,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateWaitForPrepareAttachDstResult"});
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvPrivate::TEvPrepareAttachDstResult, AllocateTxId);
+            hFunc(TEvPrivate::TEvPrepareAttachDstResult, Handle);
         default:
             return StateBase(ev);
         }
+    }
+
+    void Handle(TEvPrivate::TEvPrepareAttachDstResult::TPtr&) {
+        PendingDstPathId = DstPathId;
+        AllocateTxId();
     }
 
     bool CheckScheme(const NKikimrSchemeOp::TPathDescription& desc, TString& error) const {
@@ -568,6 +623,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check indexes
         THashMap<TStringBuf, const NKikimrSchemeOp::TIndexDescription*> indexes;
         for (const auto& index : got.GetTableIndexes()) {
+            if (ShouldDropVectorIndex(index)) {
+                continue;
+            }
             indexes.emplace(index.GetName(), &index);
         }
 
@@ -888,6 +946,7 @@ private:
     ui64 TxId = 0;
     ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
+    NKikimrSchemeOp::TModifyScheme DropIndexTx;
     TActorId PipeCache;
     bool NeedToCheck = false;
     bool Attaching = false;

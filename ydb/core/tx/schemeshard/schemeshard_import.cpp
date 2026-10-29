@@ -168,7 +168,6 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     case TImportInfo::EState::Waiting:
         switch (GetMinState(importInfo)) {
         case TImportInfo::EState::GetScheme:
-        case TImportInfo::EState::DropReplicaPlaceholder:
         case TImportInfo::EState::CreateSchemeObject:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
@@ -272,7 +271,6 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
 
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
-        NIceDb::TUpdate<Schema::ImportItems::ReplicationConfig>(item.ReplicationConfig),
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
         NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath),
@@ -291,7 +289,6 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
 
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
-            NIceDb::TUpdate<Schema::ImportItems::ReplicationConfig>(item.ReplicationConfig),
             NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
             NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
             NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath)
@@ -353,7 +350,6 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
     const auto& item = importInfo.Items.at(itemIdx);
 
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::ReplicationConfig>(item.ReplicationConfig),
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
         NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),

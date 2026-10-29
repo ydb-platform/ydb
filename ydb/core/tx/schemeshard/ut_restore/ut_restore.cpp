@@ -5102,7 +5102,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     void CreateBootstrapReplication(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId,
-            const TString& name, const TString& dst, bool global, bool createPlaceholder = true) {
+            const TString& name, const TString& dst, bool global) {
         TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
             Name: "%s"
             Config {
@@ -5112,31 +5112,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", name.c_str(), dst.c_str(), global ? "Global" : "Row"));
         env.TestWaitNotification(runtime, txId);
-        if (createPlaceholder) {
-            const auto replication = DescribePath(runtime, "/MyRoot/" + name).GetPathDescription().GetSelf();
-            const auto tableName = TString(dst.substr(dst.rfind('/') + 1));
-            AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(CreateIndexedTableRequest(++txId, "/MyRoot", Sprintf(R"(
-                TableDescription {
-                    Name: "%s"
-                    Columns { Name: "key" Type: "Uint32" }
-                    Columns { Name: "value" Type: "Uint32" }
-                    Columns { Name: "ts" Type: "Uint64" }
-                    KeyColumnNames: ["key"]
-                    UniformPartitionsCount: 4
-                    ReplicationConfig {
-                        Mode: REPLICATION_MODE_READ_ONLY
-                        ConsistencyLevel: %s
-                        BootstrapReplication { OwnerId: %lu LocalId: %lu }
-                        AwaitingImport: true
-                    }
-                }
-            )", tableName.c_str(), global ? "CONSISTENCY_LEVEL_GLOBAL" : "CONSISTENCY_LEVEL_ROW",
-                replication.GetSchemeshardId(), replication.GetPathId()))));
-            TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
-            env.TestWaitNotification(runtime, txId);
-            UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, dst), 0);
-            UNIT_ASSERT_VALUES_EQUAL(GetTableShards(runtime, TTestTxConfig::SchemeShard, dst).size(), 4);
-        }
     }
 
     void ImportBootstrapTables(TTestBasicRuntime& runtime, TTestEnv& env,
@@ -5172,9 +5147,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         CreateBootstrapReplication(runtime, env, txId, "Unrelated", "/MyRoot/Other", true);
 
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
-        const auto placeholderId = DescribePath(runtime, "/MyRoot/Table1").GetPathId();
         ImportBootstrapTables(runtime, env);
-        UNIT_ASSERT(DescribePath(runtime, "/MyRoot/Table1").GetPathId() != placeholderId);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
         THashSet<ui64> pendingTtlShards;
@@ -5226,10 +5199,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencyLevel(), i == 1
                     ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
                     : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
-                UNIT_ASSERT(!config.GetAwaitingImport());
-                UNIT_ASSERT(config.HasBootstrapImportId());
-                UNIT_ASSERT_VALUES_EQUAL(GetTableShards(runtime, TTestTxConfig::SchemeShard,
-                    TStringBuilder() << "/MyRoot/Table" << i).size(), 1);
                 const auto replication = DescribePath(runtime, TStringBuilder() << "/MyRoot/Replication" << i);
                 UNIT_ASSERT_VALUES_EQUAL(config.GetBootstrapReplication().GetLocalId(),
                     replication.GetPathDescription().GetSelf().GetPathId());
@@ -5243,75 +5212,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ui64 txId = 1000;
         TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
         CreateBootstrapReplication(runtime, env, txId, "Replication1", "/MyRoot/Table2", true);
-        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot//Table2", true, false);
+        CreateBootstrapReplication(runtime, env, txId, "Replication2", "/MyRoot//Table2", true);
         ImportBootstrapTables(runtime, env, Ydb::StatusIds::BAD_REQUEST);
-        for (ui32 i : {1, 3}) {
+        for (ui32 i = 1; i <= 3; ++i) {
             TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/Table" << i), {NLs::PathNotExist});
         }
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table2"), 0);
-        UNIT_ASSERT(DescribePath(runtime, "/MyRoot/Table2").GetPathDescription().GetTable().GetReplicationConfig().GetAwaitingImport());
-    }
-
-    Y_UNIT_TEST_FLAG(ImportReplicationPlaceholderRebootAndConflicts, lostDropReply) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        ui64 txId = 1000;
-        CreateBootstrapReplication(runtime, env, txId, "Replication", "/MyRoot/Table", true);
-        const auto oldId = DescribePath(runtime, "/MyRoot/Table").GetPathId();
-        const auto data = GenerateTestData(R"(
-            columns { name: "key" type { optional_type { item { type_id: UINT32 } } } }
-            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
-            primary_key: "key"
-        )", {{"", 1}});
-        TPortManager portManager;
-        const auto port = portManager.GetPort();
-        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-        const auto request = Sprintf(R"(
-            ImportFromS3Settings {
-                endpoint: "localhost:%d" scheme: HTTP
-                items { source_prefix: "" destination_path: "/MyRoot/Table" }
-            }
-        )", port);
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> creates(runtime, [&](auto& ev) {
-            return ev->Get()->Record.TransactionSize()
-                && ev->Get()->Record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable;
-        });
-        ui64 dropTxId = 0;
-        auto dropObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
-            if (ev->Get()->Record.TransactionSize()
-                && ev->Get()->Record.GetTransaction(0).GetOperationType() == ESchemeOpDropTable) {
-                dropTxId = ev->Get()->Record.GetTxId();
-            }
-        });
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransactionResult> dropReplies(runtime, [&](auto& ev) {
-            return lostDropReply && dropTxId && ev->Get()->Record.GetTxId() == dropTxId;
-        });
-        const auto importId = ++txId;
-        TestImport(runtime, importId, "/MyRoot", request);
-        if (lostDropReply) {
-            runtime.WaitFor("placeholder DROP reply", [&] { return !dropReplies.empty(); });
-            env.TestWaitNotification(runtime, dropTxId);
-            dropReplies.Stop();
-            dropReplies.clear();
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        }
-        runtime.WaitFor("placeholder dropped, replacement pending", [&] { return !creates.empty(); });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { StandBy {} })",
-            {NKikimrScheme::StatusMultipleModifications});
-        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(Name: "Replication" State { Done { FailoverMode: FAILOVER_MODE_FORCE } })",
-            {NKikimrScheme::StatusMultipleModifications});
-        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication", {NKikimrScheme::StatusMultipleModifications});
-        TestImport(runtime, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
-        creates.Unblock().Stop();
-        env.TestWaitNotification(runtime, importId);
-        TestGetImport(runtime, importId, "/MyRoot");
-        UNIT_ASSERT(DescribePath(runtime, "/MyRoot/Table").GetPathId() != oldId);
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1);
-        TestImport(runtime, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1);
     }
 
     Y_UNIT_TEST_FLAG(ImportReplicationCancellation, drop) {

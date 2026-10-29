@@ -3963,7 +3963,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
-        DropReplicaPlaceholder = 8,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3999,7 +3998,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         NBackup::TMetadata Metadata;
         TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
-        NKikimrSchemeOp::TTableReplicationConfig ReplicationConfig;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

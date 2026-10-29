@@ -22,6 +22,6 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx);
 
 class TSchemeShard;
 
-bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain, ui64 importId = 0);
+bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain);
 
 } // NKikimr::NSchemeShard

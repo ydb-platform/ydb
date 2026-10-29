@@ -7,13 +7,6 @@
 #include "simd.h"
 #include "test_utils.h"
 
-// Only the test body needs the target attribute. Registration and dispatch must
-// remain executable on CPUs without the tested instruction set.
-#define Y_SIMD_UNIT_TEST(N, TARGET) \
-    Y_UNIT_TEST_IMPL_REGISTER(N, false, TCurrentTestCase) \
-    __attribute__((target(TARGET))) \
-    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
 template<typename TTraits>
 void Reverse(ui8* buf, ui8* result_buf, int len) {
     using TSimdUI8 = typename TTraits::template TSimd8<ui8>;
@@ -48,9 +41,9 @@ struct TTestFactory {
     }
 };
 
-Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
+Y_UNIT_TEST_SUITE(TSimdAVX2) {
     using namespace NSimd::NAVX2;
-    Y_SIMD_UNIT_TEST(SimdBool, "avx2") {
+    Y_SIMD_UNIT_TEST(SimdBool, AVX2) {
         TSimd8<bool> tr(true);
         TSimd8<bool> fal(false);
         UNIT_ASSERT_EQUAL(tr.All(), true);
@@ -68,7 +61,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
         TSimd8<bool> tr_m(_mm256_set_epi32(-1, -1, -1, -1, -1, -1, -1, -1));
         UNIT_ASSERT_EQUAL((tr_m == tr).All(), TSimd8<bool>(true).All());
     }
-    Y_SIMD_UNIT_TEST(SimdUInt8, "avx2") {
+    Y_SIMD_UNIT_TEST(SimdUInt8, AVX2) {
         __m256i x = _mm256_set1_epi8(0U);
         ui8 arr[32];
         for (auto &i : arr) {
@@ -97,7 +90,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
         UNIT_ASSERT_EQUAL((a.Shr<8>() == c).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(SimdInt8, "avx2") {
+    Y_SIMD_UNIT_TEST(SimdInt8, AVX2) {
         __m256i x = _mm256_set1_epi8(0);
         i8 arr[32];
         for (auto &i : arr) {
@@ -123,7 +116,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
         UNIT_ASSERT_EQUAL(((a - b) == a2).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(SimdTrait, "avx2") {
+    Y_SIMD_UNIT_TEST(SimdTrait, AVX2) {
 
         ui8 buf[1000];
         for (int i = 0; i < 1000; i += 1) {
@@ -136,7 +129,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
         }
     }
 
-    Y_SIMD_UNIT_TEST(Shuffle, "avx2") {
+    Y_SIMD_UNIT_TEST(Shuffle, AVX2) {
         TSimd8<i8> index(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
                         16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
         TSimd8<i8> tmp( 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
@@ -146,7 +139,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
                                                 7, 6, 5, 4, 3, 2, 1, 0, 7, 6, 5, 4, 3, 2, 1, 0)).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(Shuffle128, "avx2") {
+    Y_SIMD_UNIT_TEST(Shuffle128, AVX2) {
         TSimd8<i8> index(   0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1,
                             0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1);
         TSimd8<i8> tmp( 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
@@ -156,7 +149,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
                                                 0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0)).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(ShiftBytes, "avx2") {
+    Y_SIMD_UNIT_TEST(ShiftBytes, AVX2) {
         auto mask0 = NSimd::AdvanceBytesMask<NSimd::TSimdAVX2Traits>(5);
         auto mask1 = NSimd::AdvanceBytesMask<NSimd::TSimdAVX2Traits>(-5);
 
@@ -178,19 +171,19 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
         UNIT_ASSERT_EQUAL((Rotate5 == arr.template Rotate<-5>()).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(UnpackMask, "avx2") {
+    Y_SIMD_UNIT_TEST(UnpackMask, AVX2) {
         TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdAVX2Traits>(2, 1, false);
         unpackMask.Log<i8>(Cout);
         UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10, 11,
                                                     -1, 12, 13, -1, 14, 15, -1, 16, 17, -1, 18, 19, -1, 20, 21)).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(CRC, "avx2") {
+    Y_SIMD_UNIT_TEST(CRC, AVX2) {
         ui32 val = 0x454234;
         UNIT_ASSERT_EQUAL(TSimd8<i8>::CRC32u32(0, val), 1867938110);
     }
 
-    Y_SIMD_UNIT_TEST(Blend, "avx2") {
+    Y_SIMD_UNIT_TEST(Blend, AVX2) {
         ui8 to[32], from[32];
         for (ui8 i = 0; i < 32; i += 1) {
             to[i] = i;
@@ -217,9 +210,9 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdAVX2, NSimd::NTest::TAvx2TestSuite) {
     }
 }
 
-Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
+Y_UNIT_TEST_SUITE(TSimdSSE42) {
     using namespace NSimd::NSSE42;
-    Y_SIMD_UNIT_TEST(SimdBool, "sse4.2") {
+    Y_SIMD_UNIT_TEST(SimdBool, SSE42) {
         TSimd8<bool> tr(true);
         TSimd8<bool> fal(false);
         UNIT_ASSERT_EQUAL(tr.All(), true);
@@ -237,7 +230,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
         TSimd8<bool> tr_m(_mm_set_epi32(-1, -1, -1, -1));
         UNIT_ASSERT_EQUAL((tr_m == tr).All(), TSimd8<bool>(true).All());
     }
-    Y_SIMD_UNIT_TEST(SimdUInt8, "sse4.2") {
+    Y_SIMD_UNIT_TEST(SimdUInt8, SSE42) {
         __m128i x = _mm_set1_epi8(0U);
         ui8 arr[16];
         for (auto &i : arr) {
@@ -266,7 +259,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
         UNIT_ASSERT_EQUAL((a.Shr<8>() == c).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(SimdInt8, "sse4.2") {
+    Y_SIMD_UNIT_TEST(SimdInt8, SSE42) {
         __m128i x = _mm_set1_epi8(0);
         i8 arr[16];
         for (auto &i : arr) {
@@ -292,7 +285,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
         UNIT_ASSERT_EQUAL(((a - b) == a2).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(SimdTrait, "sse4.2") {
+    Y_SIMD_UNIT_TEST(SimdTrait, SSE42) {
 
         ui8 buf[1000];
         for (int i = 0; i < 1000; i += 1) {
@@ -305,7 +298,7 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
         }
     }
 
-    Y_SIMD_UNIT_TEST(ShiftBytes, "sse4.2") {
+    Y_SIMD_UNIT_TEST(ShiftBytes, SSE42) {
         auto mask0 = NSimd::AdvanceBytesMask<NSimd::TSimdSSE42Traits>(5);
         auto mask1 = NSimd::AdvanceBytesMask<NSimd::TSimdSSE42Traits>(-5);
 
@@ -328,19 +321,19 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
     }
 
 
-    Y_SIMD_UNIT_TEST(Shuffle, "sse4.2") {
+    Y_SIMD_UNIT_TEST(Shuffle, SSE42) {
         TSimd8<i8> index(0, -1, 2, -1, 4, -1, 6, -1, 0, -1, 2, -1, 4, -1, 6, -1);
         TSimd8<i8> tmp(0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7);
         TSimd8<i8> result = tmp.Shuffle(index);
         UNIT_ASSERT_EQUAL((result == TSimd8<i8>(0, 0, 2, 0, 4, 0, 6, 0, 0, 0, 2, 0, 4, 0, 6, 0)).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(UnpackMask, "sse4.2") {
+    Y_SIMD_UNIT_TEST(UnpackMask, SSE42) {
         TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdSSE42Traits>(2, 1, false);
         UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10)).All(), true);
     }
 
-    Y_SIMD_UNIT_TEST(Blend, "sse4.2") {
+    Y_SIMD_UNIT_TEST(Blend, SSE42) {
         ui8 to[16], from[16];
         for (ui8 i = 0; i < 16; i += 1) {
             to[i] = i;
@@ -366,8 +359,6 @@ Y_UNIT_TEST_SUITE_IMPL(TSimdSSE42, NSimd::NTest::TSse42TestSuite) {
         UNIT_ASSERT_EQUAL((v1.BlendVar(v2, blend) == res).All(), true);
     }
 }
-
-#undef Y_SIMD_UNIT_TEST
 
 Y_UNIT_TEST_SUITE(SimdFallback) {
     using namespace NSimd::NFallback;

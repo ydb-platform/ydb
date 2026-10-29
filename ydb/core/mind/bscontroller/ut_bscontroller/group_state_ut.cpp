@@ -72,6 +72,13 @@ public:
         }
     }
 
+    void AssertNoRequests() {
+        UNIT_ASSERT(Runtime.CaptureMailboxEvents(Controller.Hint(), Controller.NodeId()).empty());
+        for (const TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
+            UNIT_ASSERT(Runtime.CaptureMailboxEvents(disk.ActorId.Hint(), disk.ActorId.NodeId()).empty());
+        }
+    }
+
     TFailRealmStates GetProposal() {
         TEvBlobStorage::TEvControllerConfigRequest::TPtr result =
             Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(Controller);
@@ -103,6 +110,32 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         UNIT_ASSERT(GetReplicatedRealmState({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, 0) == TFailRealm::N1);
         UNIT_ASSERT(GetReplicatedRealmState({TFailRealm::N1, TFailRealm::F, TFailRealm::F}, 0) == TFailRealm::N2);
         UNIT_ASSERT(!GetReplicatedRealmState({TFailRealm::F, TFailRealm::F, TFailRealm::F}, 0));
+    }
+
+    Y_UNIT_TEST(NormalGroupDoesNotRequestPerRealmGuarantees) {
+        const TFailRealmStates normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            UNIT_ASSERT(!GetReplicatedRealmState(normal, realm));
+        }
+        TGroupStateFixture fixture;
+        fixture.Update(1, normal);
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
+        fixture.AssertNoRequests();
+    }
+
+    Y_UNIT_TEST(RecoveryWaitsForAllRealmsBeforeReturningToNormal) {
+        TGroupStateFixture fixture;
+        fixture.Update(1, {TFailRealm::N0, TFailRealm::N0, TFailRealm::R});
+        // R has finished, but one normal realm still lacks its first-copy guarantee.
+        fixture.ReplyRound(9, {.FailSecondRealm = true});
+        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N0, TFailRealm::R}));
+        fixture.Update(2, {TFailRealm::N1, TFailRealm::N0, TFailRealm::R});
+        fixture.ReplyRound(6);
+        const TFailRealmStates normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+        UNIT_ASSERT(fixture.GetProposal() == normal);
+        fixture.Update(3, normal);
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
+        fixture.AssertNoRequests();
     }
 
     Y_UNIT_TEST(WaitsForEveryDiskAndTracksChangedDurability) {

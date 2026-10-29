@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <algorithm>
 #include <map>
 
 namespace NKikimr::NBsController {
@@ -12,7 +13,8 @@ std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealm
         return std::nullopt;
     }
     const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(states[0], states[1], states[2]);
-    if (!state) {
+    if (!state || *state == EMirror3dcGroupState::NORMAL) {
+        // NORMAL writes may use 2+2 and omit any realm, so N1 is not a lasting per-realm guarantee.
         return std::nullopt;
     }
     const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
@@ -105,6 +107,24 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             }
             if (disks && complete) {
                 states[realm] = *target;
+            }
+        }
+        const bool hasFailedRealm = std::find(states.begin(), states.end(),
+            NKikimrBlobStorage::TGroupInfo::TFailRealm::F) != states.end();
+        if (!hasFailedRealm) {
+            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                if (group->Info.States[realm] == TFailRealm::R && states[realm] != TFailRealm::R) {
+                    // R alone may finish before a normal realm has its first copy.
+                    // Establish 1+1+1 before NORMAL allows writes to omit any realm again.
+                    const bool everyRealmHasCopy = std::find(states.begin(), states.end(), TFailRealm::N0) == states.end();
+                    if (everyRealmHasCopy) {
+                        states.fill(TFailRealm::N0);
+                    } else {
+                        states[realm] = TFailRealm::R;
+                    }
+                    break;
+                }
             }
         }
         if (states != group->Info.States) {

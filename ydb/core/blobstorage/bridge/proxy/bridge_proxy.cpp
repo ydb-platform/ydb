@@ -398,6 +398,8 @@ namespace NKikimr {
                         auto& existing = state.Responses[i];
                         auto& current = ev->Responses[i];
                         Y_ABORT_UNLESS(existing.Id == current.Id);
+                        const bool keep = existing.Keep || current.Keep;
+                        const bool doNotKeep = existing.DoNotKeep || current.DoNotKeep;
 
                         if (existing.Status == current.Status) {
                             // status did not change, so there is nothing to do, unless the piles have different data
@@ -422,8 +424,8 @@ namespace NKikimr {
                             existing = current;
                         }
 
-                        existing.Keep |= current.Keep;
-                        existing.DoNotKeep |= current.DoNotKeep;
+                        existing.Keep = keep;
+                        existing.DoNotKeep = doNotKeep;
                     }
                 }
 

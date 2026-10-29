@@ -2,6 +2,7 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
 
@@ -219,9 +220,73 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[2], 17, id, data), NKikimrProto::OK);
     }
 
+    void CheckGetMergeKeepsFlags(NKikimrProto::EReplyStatus otherStatus, bool reverseOrder) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+        const TString data = "blob with flags split between piles";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        for (ui32 pile : {0, 1}) {
+            PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data);
+        }
+
+        std::map<ui32, std::unique_ptr<IEventHandle>> replies;
+        bool hold = true;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                    auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                    UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
+                    auto& r = msg->Responses[0];
+                    UNIT_ASSERT_VALUES_EQUAL(r.Id, id);
+                    const bool firstPile = msg->GroupId == pileGroups[0];
+                    r.Keep = firstPile;
+                    r.DoNotKeep = !firstPile;
+                    if (firstPile) {
+                        r.Status = otherStatus;
+                        r.Buffer = {};
+                    }
+                    UNIT_ASSERT(replies.emplace(msg->GroupId, std::move(ev)).second);
+                    return false;
+                }
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        WaitUntil(env, [&] { return replies.size() == 2; }, "both pile replies", TDuration::Seconds(1), 30);
+        hold = false;
+        env.Runtime->Send(replies.at(pileGroups[reverseOrder ? 1 : 0]).release(), 1);
+        env.Sim(TDuration::MilliSeconds(10));
+        env.Runtime->Send(replies.at(pileGroups[reverseOrder ? 0 : 1]).release(), 1);
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        const auto& r = res->Get()->Responses[0];
+        UNIT_ASSERT_VALUES_EQUAL(r.Id, id);
+        UNIT_ASSERT_VALUES_EQUAL(r.Status, otherStatus == NKikimrProto::NODATA ? NKikimrProto::OK : NKikimrProto::ERROR);
+        UNIT_ASSERT_C(r.Keep, "merge lost Keep from the other pile");
+        UNIT_ASSERT_C(r.DoNotKeep, "merge lost DoNotKeep from the other pile");
+        env.Runtime->FilterFunction = {};
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
+
+    Y_UNIT_TEST_TWIN(GetMergeKeepsFlagsOnNodataReplacement, reverseOrder) {
+        CheckGetMergeKeepsFlags(NKikimrProto::NODATA, reverseOrder);
+    }
+
+    Y_UNIT_TEST_TWIN(GetMergeKeepsFlagsOnErrorReplacement, reverseOrder) {
+        CheckGetMergeKeepsFlags(NKikimrProto::ERROR, reverseOrder);
+    }
 
     // the blob missing in the pile being synced gets copied after barriers are; its Keep flag must be the one the source
     // pile has, not the one the read of the blob happened to see, otherwise the copy is behind the barrier unprotected

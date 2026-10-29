@@ -34,15 +34,15 @@ blob_storage_config:
     groups:
     - erasure_species: mirror-3-dc
       rings:
-      - realm_state: Invariant1
+      - state: Invariant1
         fail_domains:
         - vdisk_locations:
           - {node_id: 1, pdisk_category: SSD, path: /disk}
-      - realm_state: Excluded
+      - state: Excluded
         fail_domains:
         - vdisk_locations:
           - {node_id: 2, pdisk_category: SSD, path: /disk}
-      - realm_state: Recovering
+      - state: Recovering
         fail_domains:
         - vdisk_locations:
           - {node_id: 3, pdisk_category: SSD, path: /disk}
@@ -51,9 +51,9 @@ blob_storage_config:
         Parse(json, GetJsonToProtoConfig(false), config, true, nullptr, true);
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         const auto& group = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(0).GetRealmState()), ui32(TFailRealm::Invariant1));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(1).GetRealmState()), ui32(TFailRealm::Excluded));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetRealmState()), ui32(TFailRealm::Recovering));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(0).GetState()), ui32(TFailRealm::Invariant1));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(1).GetState()), ui32(TFailRealm::Excluded));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(2).GetState()), ui32(TFailRealm::Recovering));
     }
 
     Y_UNIT_TEST(EmptyOverrideMessagesKeepPresence) {

@@ -11816,7 +11816,7 @@ Y_UNIT_TEST_SUITE(TStaticFailRealmStates) {
         auto staleVDiskIds = appConfig;
         auto* staleGroup = staleVDiskIds.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
         staleGroup->SetGroupGeneration(2);
-        staleGroup->MutableRings(1)->SetRealmState(TFailRealm::Excluded);
+        staleGroup->MutableRings(1)->SetState(TFailRealm::Excluded);
         auto rejected = config;
         UNIT_ASSERT(!NStorage::DeriveStorageConfig(staleVDiskIds, &rejected, &error));
         auto update = [&](std::array<TFailRealm::EState, 3> states, bool bumpGeneration, bool allowed) {
@@ -11827,7 +11827,7 @@ Y_UNIT_TEST_SUITE(TStaticFailRealmStates) {
                 + bumpGeneration;
             proposedGroup->SetGroupGeneration(generation);
             for (ui32 realm = 0; realm < 3; ++realm) {
-                proposedGroup->MutableRings(realm)->SetRealmState(states[realm]);
+                proposedGroup->MutableRings(realm)->SetState(states[realm]);
             }
             for (auto& vdisk : *proposedSet->MutableVDisks()) {
                 vdisk.MutableVDiskID()->SetGroupGeneration(generation);
@@ -11841,7 +11841,7 @@ Y_UNIT_TEST_SUITE(TStaticFailRealmStates) {
                 const auto& result = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
                 UNIT_ASSERT_VALUES_EQUAL(result.GetGroupGeneration(), generation);
                 for (ui32 realm = 0; realm < 3; ++realm) {
-                    UNIT_ASSERT_VALUES_EQUAL(ui32(result.GetRings(realm).GetRealmState()), ui32(states[realm]));
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(result.GetRings(realm).GetState()), ui32(states[realm]));
                 }
             }
         };

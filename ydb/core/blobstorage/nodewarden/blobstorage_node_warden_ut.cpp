@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             node->SetPort(19000);
             node->MutableLocation()->SetDataCenter("dc" + ToString(nodeId));
             auto* ring = group->AddRings();
-            ring->SetRealmState(realm == 1 ? TFailRealm::Excluded : TFailRealm::Invariant0);
+            ring->SetState(realm == 1 ? TFailRealm::Excluded : TFailRealm::Invariant0);
             for (ui32 domain = 0; domain < 3; ++domain) {
                 auto* location = ring->AddFailDomains()->AddVDiskLocations();
                 location->SetNodeID(nodeId);
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
             // V1 owns the generation in its static config. Equal-generation state changes are ignored.
             auto updated = *record.Group;
-            updated.MutableRings(1)->SetRealmState(TFailRealm::Recovering);
+            updated.MutableRings(1)->SetState(TFailRealm::Recovering);
             warden.ApplyGroupInfo(0, 7, &updated, false, false);
             UNIT_ASSERT_VALUES_EQUAL(ui32(record.Info->GetFailRealmState(1)), ui32(TFailRealm::Excluded));
 

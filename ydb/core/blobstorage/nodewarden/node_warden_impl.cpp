@@ -1949,9 +1949,9 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
                 if (mirrorGenerations.contains(item.GetGroupID()) && previous.RingsSize() == item.RingsSize()) {
                     for (size_t realm = 0; realm < item.RingsSize(); ++realm) {
-                        previous.MutableRings(realm)->ClearRealmState();
-                        if (item.GetRings(realm).HasRealmState()) {
-                            previous.MutableRings(realm)->SetRealmState(item.GetRings(realm).GetRealmState());
+                        previous.MutableRings(realm)->ClearState();
+                        if (item.GetRings(realm).HasState()) {
+                            previous.MutableRings(realm)->SetState(item.GetRings(realm).GetState());
                         }
                     }
                 }

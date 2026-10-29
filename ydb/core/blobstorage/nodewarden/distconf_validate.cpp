@@ -168,8 +168,8 @@ namespace NKikimr::NStorage {
                     }
                     TFailRealmStates before, after;
                     for (ui32 realm = 0; realm < 3; ++realm) {
-                        before[realm] = currentGroup.GetRings(realm).GetRealmState();
-                        after[realm] = group.GetRings(realm).GetRealmState();
+                        before[realm] = currentGroup.GetRings(realm).GetState();
+                        after[realm] = group.GetRings(realm).GetState();
                     }
                     if (const auto result = ValidateFailRealmStateTransition(before, after); !result) {
                         return TStringBuilder() << "group# " << group.GetGroupID() << ": " << result.error();

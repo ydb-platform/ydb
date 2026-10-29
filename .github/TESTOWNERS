@@ -17,6 +17,7 @@
 /ydb/core/scheme @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
+/ydb/core/tx/long_tx_service @ydb-platform/datashard
 /ydb/core/mon_alloc @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 /ydb/core/statistics @ydb-platform/datashard
@@ -73,7 +74,10 @@
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
 #Security Team @azevaykin TEAM:@ydb-platform/security
-/ydb/tests/functional/encryption @ydb-platform/security
+/ydb/core/log_backend/ut @ydb-platform/security
+/ydb/mvp/core/ut @ydb-platform/security
+/ydb/mvp/meta @ydb-platform/security
+/ydb/tests/functional/mvp/meta @ydb-platform/security
 /ydb/tests/functional/mvp/oidc_proxy @ydb-platform/security
 /ydb/core/security @ydb-platform/security
 /ydb/library/login @ydb-platform/Security
@@ -87,7 +91,6 @@
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/tests/sql @slonn @ydb-platform/qp
-/ydb/udfs/wasm @ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
 /ydb/tests/functional/canonical @ydb-platform/qp
@@ -98,6 +101,7 @@
 /ydb/tests/functional/query_cache @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
+/ydb/core/path_aliasing/ut @ydb-platform/appteam
 /ydb/public/lib/idx_test/ut @ydb-platform/appteam
 /ydb/public/lib/json_value/ut @ydb-platform/appteam
 /ydb/public/lib/validation/ut @ydb-platform/appteam
@@ -131,6 +135,9 @@
 /ydb/tests/stress @ydb-platform/engineering
 
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
+/ydb/core/subsystems @ydb-platform/blobstorage
+/ydb/tests/functional/autoconfig @ydb-platform/blobstorage
+/ydb/tests/functional/encryption @ydb-platform/blobstorage
 /ydb/apps/bridge_skipper @ydb-platform/blobstorage
 /ydb/apps/dstool @ydb-platform/blobstorage
 /ydb/services/distributed_storage/ut @ydb-platform/blobstorage
@@ -170,19 +177,14 @@
 /ydb/core/grpc_services @ydb-platform/core
 /ydb/core/grpc_streaming/ut @ydb-platform/core
 /ydb/core/jaeger_tracing/ut @ydb-platform/core
-/ydb/core/log_backend/ut @ydb-platform/core
 /ydb/core/memory_controller/ut @ydb-platform/core
 /ydb/core/metering/ut @ydb-platform/core
 /ydb/core/mind @ydb-platform/core
 /ydb/core/mon @ydb-platform/core
-/ydb/core/path_aliasing/ut @ydb-platform/core
-/ydb/core/raw_socket/ut @ydb-platform/core
-/ydb/core/subsystems @ydb-platform/core
 /ydb/core/sys_view @ydb-platform/core
 /ydb/core/tablet/ut @ydb-platform/core
 /ydb/core/testlib/actors/ut @ydb-platform/core
 /ydb/core/tx/balance_coverage/ut @ydb-platform/core
-/ydb/core/tx/long_tx_service @ydb-platform/core
 /ydb/core/tx/mediator/ut @ydb-platform/core
 /ydb/core/tx/sequenceproxy/ut @ydb-platform/core
 /ydb/core/tx/sequenceshard @ydb-platform/core
@@ -192,17 +194,13 @@
 /ydb/core/tx/tx_proxy @ydb-platform/core
 /ydb/core/wrappers/ut @ydb-platform/core
 /ydb/core/ydb_convert @ydb-platform/core
-/ydb/mvp/core/ut @ydb-platform/core
-/ydb/mvp/meta @ydb-platform/core
 /ydb/services/cms/ut @ydb-platform/core
 /ydb/services/config/ut @ydb-platform/core
 /ydb/services/dynamic_config/ut @ydb-platform/core
 /ydb/services/rate_limiter/ut @ydb-platform/core
 /ydb/services/ydb/ut @ydb-platform/core
 /ydb/tests/functional/api @ydb-platform/core
-/ydb/tests/functional/autoconfig @ydb-platform/core
 /ydb/tests/functional/backup @ydb-platform/core
-/ydb/tests/functional/mvp/meta @ydb-platform/core
 /ydb/tests/functional/rename @ydb-platform/core
 /ydb/tests/functional/scheme_tests @ydb-platform/core
 /ydb/tests/functional/wardens @ydb-platform/core
@@ -221,6 +219,7 @@
 /ydb/tests/stress/scheme_board @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
+/ydb/core/raw_socket/ut @ydb-platform/topics
 /ydb/services/persqueue_cluster_discovery @ydb-platform/topics
 /ydb/services/sqs_topic @ydb-platform/topics
 /ydb/tests/functional/kafka @ydb-platform/topics
@@ -250,6 +249,7 @@
 #YDB Analytics TEAM:???
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
+/ydb/udfs/wasm @ydb-platform/fq
 /ydb/tests/functional/script_execution @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
 /ydb/tests/solomon @ydb-platform/fq

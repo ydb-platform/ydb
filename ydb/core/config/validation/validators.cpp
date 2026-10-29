@@ -15,7 +15,6 @@
 #include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/hash_set.h>
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>

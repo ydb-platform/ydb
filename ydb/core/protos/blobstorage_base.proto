@@ -91,6 +91,14 @@ enum EEntityStatus {
 
 message TFailRealmStates {
     repeated TGroupInfo.TFailRealm.EState State = 1;
+    // Administrative R forbids promoting the corresponding internal R realm to N.
+    optional uint32 RecoveryHoldMask = 2;
+}
+
+message TFailRealmInfo {
+    optional TGroupInfo.TFailRealm.EState State = 1 [default = N0];
+    // Empty if the location is unknown or the realm spans several data centers.
+    optional string DataCenter = 2;
 }
 
 message TVDiskLocation {

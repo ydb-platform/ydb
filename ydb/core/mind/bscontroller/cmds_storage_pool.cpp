@@ -5,10 +5,11 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <array>
+#include <algorithm>
 
 namespace NKikimr::NBsController {
 
-    static void UpdateFailRealmDataCenter(NKikimrBlobStorage::TBaseConfig::TGroup::TFailRealm* realm,
+    static void UpdateFailRealmDataCenter(NKikimrBlobStorage::TFailRealmInfo* realm,
             ui32 nodeId, const THostRecordMapImpl& hostRecords) {
         NActorsInterconnect::TNodeLocation location;
         if (hostRecords.GetHostId(nodeId)) {
@@ -1188,9 +1189,8 @@ namespace NKikimr::NBsController {
                     throw TExError() << "unknown state for DataCenter# " << dc.GetName();
             }
         }
-        if (states != DataCenterStates.Get()) {
-            DataCenterStates.Unshare() = std::move(states);
-        }
+        // Reapply even after restart, when volatile policy is empty but a persisted R hold remains.
+        DataCenterStates.Unshare() = std::move(states);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd,
@@ -1245,9 +1245,10 @@ namespace NKikimr::NBsController {
             }
         });
         for (TGroupId groupId : groups) {
-            if (Groups.Find(groupId)->HasExplicitFailRealmStates) {
-                Groups.FindForUpdate(groupId)->HasExplicitFailRealmStates = false;
-            }
+            TGroupInfo* group = Groups.FindForUpdate(groupId);
+            group->HasExplicitFailRealmStates = false;
+            group->FailRealmStates.reset();
+            group->FailRealmRecoveryHoldMask = 0;
             GroupContentChanged.insert(groupId);
         }
     }
@@ -1271,15 +1272,18 @@ namespace NKikimr::NBsController {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         for (const auto groupId : groups) {
             const auto* group = Groups.Find(groupId);
-            if (group->HasExplicitFailRealmStates || group->ErasureSpecies != TErasureType::ErasureMirror3dc
+            if ((group->HasExplicitFailRealmStates && !DataCenterStates.Changed())
+                    || group->ErasureSpecies != TErasureType::ErasureMirror3dc
                     || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()) {
                 continue;
             }
             if (group->Topology->GetTotalFailRealmsNum() != 3) {
                 return TStringBuilder() << "group# " << groupId << " must have three fail realms";
             }
-            std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-            if (!dcStates.empty()) {
+            const std::array<TFailRealm::EState, 3> normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+            std::array<TFailRealm::EState, 3> states = group->FailRealmStates.value_or(normal);
+            ui32 recoveryHoldMask = 0;
+            if (!dcStates.empty() || group->FailRealmStates) {
                 std::array<TString, 3> dataCenters;
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
                     if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
@@ -1298,24 +1302,29 @@ namespace NKikimr::NBsController {
                 for (ui32 realm = 0; realm < 3; ++realm) {
                     if (const auto it = dcStates.find(dataCenters[realm]); it != dcStates.end()) {
                         states[realm] = it->second;
+                        if (it->second == TFailRealm::R) {
+                            recoveryHoldMask |= 1u << realm;
+                        }
+                    } else if (states[realm] == TFailRealm::F) {
+                        // Including a failed realm still requires recovery before it can become N.
+                        states[realm] = TFailRealm::R;
                     }
                 }
                 if (!GetMirror3dcGroupState(states[0], states[1], states[2])) {
                     return TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId;
                 }
             }
-            const std::array<TFailRealm::EState, 3> normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-            const bool changed = group->FailRealmStates.value_or(normal) != states;
-            if (changed || (dcStates.empty() && group->FailRealmStates)) {
-                auto* updated = Groups.FindForUpdate(groupId);
-                if (dcStates.empty()) {
-                    updated->FailRealmStates.reset();
-                } else {
-                    updated->FailRealmStates = states;
+            const bool changed = group->FailRealmStates.value_or(normal) != states
+                || group->FailRealmRecoveryHoldMask != recoveryHoldMask;
+            if (changed) {
+                TGroupInfo* updated = Groups.FindForUpdate(groupId);
+                updated->FailRealmStates = states;
+                updated->FailRealmRecoveryHoldMask = recoveryHoldMask;
+                // Recovery must survive restart even before the satellite makes its first promotion.
+                if (std::find(states.begin(), states.end(), TFailRealm::R) != states.end()) {
+                    updated->HasExplicitFailRealmStates = true;
                 }
-                if (changed) {
-                    GroupContentChanged.insert(groupId);
-                }
+                GroupContentChanged.insert(groupId);
             }
         }
         return std::nullopt;

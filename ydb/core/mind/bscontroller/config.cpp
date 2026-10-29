@@ -692,11 +692,12 @@ namespace NKikimr::NBsController {
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (overlay->second) {
                     NKikimrBlobStorage::TFailRealmStates states;
-                    if (overlay->second->HasExplicitFailRealmStates) {
+                    if (overlay->second->HasExplicitFailRealmStates || overlay->second->FailRealmRecoveryHoldMask) {
                         Y_ABORT_UNLESS(overlay->second->FailRealmStates);
                         for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
                             states.AddState(value);
                         }
+                        states.SetRecoveryHoldMask(overlay->second->FailRealmRecoveryHoldMask);
                     }
                     db.Table<Schema::Group>().Key(overlay->first.GetRawId())
                         .Update<Schema::Group::FailRealmStates>(states);

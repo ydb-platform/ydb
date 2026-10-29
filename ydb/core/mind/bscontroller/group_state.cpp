@@ -8,7 +8,7 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
         return;
     }
     std::unique_ptr<TEvGroupState::TEvUpdate> message = std::make_unique<TEvGroupState::TEvUpdate>(groupId.GetRawId());
-    if (const TGroupInfo* group = FindGroup(groupId); group && group->HasExplicitFailRealmStates
+    if (const TGroupInfo* group = FindGroup(groupId); group
             && group->FailRealmStates && group->ErasureSpecies == TErasureType::ErasureMirror3dc
             && group->Topology->GetTotalFailRealmsNum() == 3
             && group->VDisksInGroup.size() == group->Topology->GetTotalVDisksNum()
@@ -16,6 +16,7 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
         message->Info.emplace();
         message->Info->Generation = group->Generation;
         message->Info->States = *group->FailRealmStates;
+        message->Info->RecoveryHoldMask = group->FailRealmRecoveryHoldMask;
         for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
             message->Info->VDisks.push_back({slot->GetVDiskId(),
                 MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId)});

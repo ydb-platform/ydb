@@ -279,6 +279,7 @@ public:
                             (*group.FailRealmStates)[realm] = states.GetState(realm);
                         }
                         group.HasExplicitFailRealmStates = true;
+                        group.FailRealmRecoveryHoldMask = states.GetRecoveryHoldMask();
                     }
                 }
 

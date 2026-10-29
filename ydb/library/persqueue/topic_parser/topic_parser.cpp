@@ -161,10 +161,13 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
     auto name = pqTabletConfig.GetTopicName();
     auto path = pqTabletConfig.GetTopicPath();
     if (name.empty()) {
-        AFL_ENSURE(!path.empty())("topic_path", path)("topic_name", name);
+        AFL_ENSURE(!path.empty(),
+            {"topic_path", path},
+            {"topic_name", name});
         TStringBuf pathBuf(path), fst, snd;
         auto res = pathBuf.TryRSplit("/", fst, snd);
-        AFL_ENSURE(res)("topic_path", path);
+        AFL_ENSURE(res,
+            {"topic_path", path});
         name = snd;
     } else if (path.empty()) {
         path = name;
@@ -285,7 +288,9 @@ TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride
 ) {
-    AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
+    AFL_ENSURE(Valid,
+        {"reason", Reason},
+        {"original_topic", OriginalTopic});
     auto* res = new TTopicNameConverter(FstClass, PQPrefix, pqTabletConfig,
         ydbDatabaseRootOverride, clientsideNameOverride);
     return TTopicConverterPtr(res);
@@ -583,8 +588,12 @@ const TMaybe<TString>& TDiscoveryConverter::GetSecondaryPath(const TString& data
     if (!database.empty()) {
         SetDatabase(database);
     }
-    AFL_ENSURE(!PendingDatabase)("database", database)("original_topic", OriginalTopic);
-    AFL_ENSURE(SecondaryPath.Defined())("database", database)("original_topic", OriginalTopic);
+    AFL_ENSURE(!PendingDatabase,
+        {"database", database},
+        {"original_topic", OriginalTopic});
+    AFL_ENSURE(SecondaryPath.Defined(),
+        {"database", database},
+        {"original_topic", OriginalTopic});
     return SecondaryPath;
 }
 
@@ -599,7 +608,9 @@ void TDiscoveryConverter::SetDatabase(const TString& database) {
     if (!Database.Defined()) {
         Database = NormalizeFullPath(database);
     }
-    AFL_ENSURE(!FullModernName.empty())("database", database)("original_topic", OriginalTopic);
+    AFL_ENSURE(!FullModernName.empty(),
+        {"database", database},
+        {"original_topic", OriginalTopic});
     if (!SecondaryPath.Defined()) {
         SecondaryPath = NKikimr::JoinPath({*Database, FullModernName});
         NormalizeAsFullPath(SecondaryPath.GetRef());
@@ -706,11 +717,15 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
         NormalizeAsFullPath(res->PrimaryPath);
     }
     if (res->IsValid()) {
-        AFL_ENSURE(res->Account_.Defined())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->LegacyProducer.empty())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->LegacyLogtype.empty())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->Dc.empty())("scheme_name", schemeName)("database", database);
-        AFL_ENSURE(!res->FullLegacyName.empty())("scheme_name", schemeName)("database", database);
+        YDB_LOG_CREATE_CONTEXT(
+            {"scheme_name", schemeName},
+            {"database", database});
+
+        AFL_ENSURE(res->Account_.Defined());
+        AFL_ENSURE(!res->LegacyProducer.empty());
+        AFL_ENSURE(!res->LegacyLogtype.empty());
+        AFL_ENSURE(!res->Dc.empty());
+        AFL_ENSURE(!res->FullLegacyName.empty());
         res->Account = *res->Account_;
         res->InternalName = res->FullLegacyName;
     }
@@ -800,8 +815,12 @@ TString TTopicNameConverter::GetInternalName() const {
 }
 
 const TString& TTopicNameConverter::GetClientsideName() const {
-    AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
-    AFL_ENSURE(!ClientsideName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+    AFL_ENSURE(Valid,
+        {"reason", Reason},
+        {"original_topic", OriginalTopic});
+    AFL_ENSURE(!ClientsideName.empty(),
+        {"original_topic", OriginalTopic},
+        {"primary_path", PrimaryPath});
     return ClientsideName;
 }
 
@@ -862,7 +881,9 @@ TString TTopicNameConverter::GetTopicForSrcIdHash() const {
 }
 
 TString TTopicNameConverter::GetSecondaryPath() const {
-    AFL_ENSURE(Valid)("reason", Reason)("original_topic", OriginalTopic);
+    AFL_ENSURE(Valid,
+        {"reason", Reason},
+        {"original_topic", OriginalTopic});
     if (!FstClass) {
         AFL_ENSURE(SecondaryPath.Defined())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
         return *SecondaryPath;

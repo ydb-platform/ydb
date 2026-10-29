@@ -122,14 +122,18 @@ public:
     }
 
     void RestorePrimaryPath() {
-        AFL_ENSURE(!OriginalPath.empty())("original_path", OriginalPath)("primary_path", PrimaryPath);
+        AFL_ENSURE(!OriginalPath.empty(),
+            {"original_path", OriginalPath},
+            {"primary_path", PrimaryPath});
         PrimaryPath = OriginalPath;
         OriginalPath.clear();
     }
 
     // Only for control plane
     const TString& GetFullModernName() const {
-        AFL_ENSURE(!FullModernName.empty())("original_topic", OriginalTopic)("primary_path", PrimaryPath);
+        AFL_ENSURE(!FullModernName.empty(),
+            {"original_topic", OriginalTopic},
+            {"primary_path", PrimaryPath});
         return FullModernName;
     }
 

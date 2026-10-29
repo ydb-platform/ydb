@@ -370,8 +370,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         // In N/R/F, E fits in N alone; copies in R do not change that failure threshold.
         CheckBlobStateCase({R::N1, R::R, R::F}, {2, 2, 0}, {1, 0, 3}, G::EBS_DISINTEGRATED);
         CheckBlobStateCase({R::N2, R::R, R::F}, {2, 2, 0}, {1, 0, 3}, G::EBS_FULL);
-        // E = 1+1+1 OR 2+2: an error in R completes the hidden 1+1+1 alternative.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 0}, G::EBS_FULL);
+        // N2/N2/R is RECOVERY_INV1: E = 1+1 can be hidden in N alone, regardless of R.
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 0}, G::EBS_DISINTEGRATED);
         CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 3}, G::EBS_DISINTEGRATED);
     }
 
@@ -393,15 +393,15 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(RecoveryFailuresParticipateInEachEnsuredAlternative) {
-        // E = 1+1+1 OR 2+2: R may hide a copy in 1+1+1, but cannot replace N in 2+2.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 1}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 3}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 0, 2}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 0}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 3}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        // Explicit E = 1+1+1 OR 2+2: R may hide a copy in 1+1+1, but cannot replace N in 2+2.
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 1}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 3}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 0, 2}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 0}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 3}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
         // Explicit E = 1+1+1 requires uncertainty in all three realms; known 1+1+1 still satisfies W.
         CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111);
         CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 3}, G::EBS_DISINTEGRATED, L::LAYOUT_111);
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     Y_UNIT_TEST(RecoveryNeedsBothNormalRealms) {
         // N0/N0/R (DC_RECOVERY):      W = 1+1+1 OR 2+2.
         // N1/N1/R (DC_RECOVERY_INV1): W = 1+1+1 OR 2+2.
-        // N2/N2/R (DC_RECOVERY_INV2): W = 1+1+1 OR 2+2.
+        // N2/N2/R (DC_RECOVERY_INV1): W = 1+1+1 OR 2+2.
         for (const auto state : {R::N0, R::N1, R::N2}) {
             // W = 1+1+1 OR 2+2: 1+1+1 is satisfied across N/N/R.
             CheckCase({state, state, R::R}, {1, 1, 1}, true);

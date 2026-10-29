@@ -48,31 +48,27 @@ namespace NKikimr {
 // |                                                                    v       v                               v       v                                               v       |
 // |   +---------------------------------+             +----------------+-------+--------+             +--------+-------+----------------+             +----------------+-------+--------+
 // +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |------------>|           DC_SOLO_INV1          |<----------->|      DC_SOLO_RECOVERY_INV1      |
-// |   | N1/N1/R                   I/I/I |             | N1/N1/F                   I/I/X |             | N1/F/F                    I/X/X |             | N1/R/F                    I/I/X |
-// |   | D: 1+1+1                        |             | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
-// |   | E: 1+1                          |             | E: 1+1                          |------+      | E: 1                            |             | E: 1                            |
-// |   +---------------------------------+             +----------------+-------+--------+      |      +----------------+----------------+             +---------------------------------+
-// |                                                                    |       ^               |                       |
-// |                                                                    |       |               | opt (required N2)     |
-// |                                                                    |       |               |                       |
-// |                                                                    |       |               |                       |
-// |                                                                    |       |               +---------------+       |
-// |                                                                    |       |                               |       |
-// |                                                                    |       +-------------------------------=-------=-------------------------------------------------------+
-// |                                                                    v                                       v       v                                                       |
-// |   +---------------------------------+             +----------------+----------------+             +--------+-------+----------------+             +------------------------+--------+
-// +<--|         DC_RECOVERY_INV2        |------------>|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
-//     | N2/N2/R                   I/I/I |             | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
-//     | D: 1+1+1                        |             | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
-//     | E: 1+1+1 OR 2+2                 |             | E: 2+2                          |             | E: 2                            |             | E: 2                            |
-//     +---------------------------------+             +---------------------------------+             +---------------------------------+             +---------------------------------+
+//     | N1/N1/R                   I/I/I |             | N1/N1/F                   I/I/X |             | N1/F/F                    I/X/X |             | N1/R/F                    I/I/X |
+//     | D: 1+1+1                        |<-----+      | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
+//     | E: 1+1                          |      |      | E: 1+1                          |------+      | E: 1                            |             | E: 1                            |
+//     +---------------------------------+      |      +----------------+-------+--------+      |      +----------------+----------------+             +---------------------------------+
+//                                              |                       |       ^               |                       |
+//                                              |                       |       |               | opt (required N2)     |
+//                                              |                       |       |               |                       |
+//                                              |                       |       |               |                       |
+//                                              |                       |       |               +---------------+       |
+//                                              |                       |       |                               |       |
+//                                              |                       |       +-------------------------------=-------=-------------------------------------------------------+
+//                                              |                       v                                       v       v                                                       |
+//                                              |      +----------------+----------------+             +--------+-------+----------------+             +------------------------+--------+
+//                                              +------|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
+//                                                     | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
+//                                                     | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
+//                                                     | E: 2+2                          |             | E: 2                            |             | E: 2                            |
+//                                                     +---------------------------------+             +---------------------------------+             +---------------------------------+
 //
 //     ADMIN: I/I/I                                    ADMIN: I/I/X                                    ADMIN: I/X/X                                    ADMIN: I/I/X
 //     W: 1+1+1 OR 2+2                                 W: 2+2                                          W: 2                                            W: 2+2
-//
-// Additional directed recovery links between different rows:
-// DC_FAILURE_INV1 -> DC_RECOVERY_INV2.
-// DC_FAILURE_INV2 -> DC_RECOVERY_INV1.
 //
 // + marks turns/junctions; = is a crossing WITHOUT a connection.
 // Optional (opt) transitions require the target guarantee in the selected surviving realm
@@ -88,8 +84,7 @@ enum class EMirror3dcGroupState {
     DC_FAILURE_INV2,           // N2/N2/F; I/I/X.
 
     DC_RECOVERY,               // N0/N0/R; N1/N0/R; I/I/I.
-    DC_RECOVERY_INV1,          // N1/N1/R; N2/N1/R; I/I/I.
-    DC_RECOVERY_INV2,          // N2/N2/R; I/I/I.
+    DC_RECOVERY_INV1,          // N1/N1/R; N2/N1/R; N2/N2/R; I/I/I.
 
     DC_SOLO_DISASTER,          // N0/F/F; I/X/X.
     DC_SOLO_INV1,              // N1/F/F; I/X/X.
@@ -162,8 +157,7 @@ constexpr std::optional<EMirror3dcGroupState> GetMirror3dcGroupState(
             return minCopies == 0 ? G::DC_SOLO_RECOVERY
                 : minCopies == 1 ? G::DC_SOLO_RECOVERY_INV1 : G::DC_SOLO_RECOVERY_INV2;
         }
-        return minCopies == 0 ? G::DC_RECOVERY
-            : minCopies == 1 ? G::DC_RECOVERY_INV1 : G::DC_RECOVERY_INV2;
+        return minCopies == 0 ? G::DC_RECOVERY : G::DC_RECOVERY_INV1;
     }
     if (failures == 2) {
         return minCopies == 0 ? G::DC_SOLO_DISASTER
@@ -183,7 +177,6 @@ constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror
     using L = EMirror3dcLayout;
     switch (state) {
         case G::NORMAL:
-        case G::DC_RECOVERY_INV2:
             return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_111_22};
         case G::DC_FAILURE:
             return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_11_2};
@@ -226,7 +219,6 @@ inline constexpr TMirror3dcGroupStateTransition Mirror3dcAllowedGroupTransitions
 
     {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_FAILURE_INV2},
     {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV1},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV2},
     {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV1},
     {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV2},
 
@@ -239,8 +231,6 @@ inline constexpr TMirror3dcGroupStateTransition Mirror3dcAllowedGroupTransitions
     {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::NORMAL},
     {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1},
 
-    {EMirror3dcGroupState::DC_RECOVERY_INV2, EMirror3dcGroupState::NORMAL},
-    {EMirror3dcGroupState::DC_RECOVERY_INV2, EMirror3dcGroupState::DC_FAILURE_INV2},
 
     {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_INV1},
     {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_RECOVERY},

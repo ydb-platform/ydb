@@ -43,7 +43,7 @@ constexpr TStateCase StateCases[] = {
     {{R::N1, R::R, R::R}, std::nullopt},
     {{R::N2, R::N2, R::N2}, G::NORMAL},
     {{R::N2, R::N2, R::F}, G::DC_FAILURE_INV2},
-    {{R::N2, R::N2, R::R}, G::DC_RECOVERY_INV2},
+    {{R::N2, R::N2, R::R}, G::DC_RECOVERY_INV1},
     {{R::N2, R::F, R::F}, G::DC_SOLO_INV2},
     {{R::N2, R::F, R::R}, G::DC_SOLO_RECOVERY_INV2},
     {{R::N2, R::R, R::R}, std::nullopt},
@@ -102,7 +102,6 @@ constexpr TLayoutCase LayoutCases[] = {
     {G::DC_FAILURE_INV2, L::LAYOUT_22, L::LAYOUT_22, L::LAYOUT_22},
     {G::DC_RECOVERY, L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_11_2},
     {G::DC_RECOVERY_INV1, L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_11},
-    {G::DC_RECOVERY_INV2, L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_111_22},
     {G::DC_SOLO_DISASTER, L::LAYOUT_2, L::LAYOUT_1, L::LAYOUT_0},
     {G::DC_SOLO_INV1, L::LAYOUT_2, L::LAYOUT_2, L::LAYOUT_1},
     {G::DC_SOLO_INV2, L::LAYOUT_2, L::LAYOUT_2, L::LAYOUT_2},
@@ -158,7 +157,7 @@ constexpr TTransitionCase TransitionCases[] = {
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV1.
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
-        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV2.
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV1 with N2 realms.
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE_INV1 -> DC_SOLO_INV1.
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
@@ -176,9 +175,11 @@ constexpr TTransitionCase TransitionCases[] = {
     {{TFailRealm::N1, TFailRealm::N1, TFailRealm::R},
         {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_RECOVERY_INV1 -> DC_FAILURE_INV1.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
-        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, true}, // DC_RECOVERY_INV2 -> NORMAL.
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, true}, // DC_RECOVERY_INV1 -> NORMAL with N2 realms.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
-        {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, true}, // DC_RECOVERY_INV2 -> DC_FAILURE_INV2.
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, false}, // Recovery does not preserve the INV2 group guarantee.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_RECOVERY_INV1 -> DC_FAILURE_INV1 with N2 realms.
     {{TFailRealm::N0, TFailRealm::F, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_DISASTER -> DC_SOLO_INV1.
     {{TFailRealm::N0, TFailRealm::F, TFailRealm::F},
@@ -218,7 +219,7 @@ constexpr TTransitionCase TransitionCases[] = {
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
         {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, false}, // The graph has no direct backward guarantee edge.
     {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
-        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, false}, // The specification routes FAILURE_INV2 to RECOVERY_INV1.
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, true}, // DC_FAILURE_INV2 -> DC_RECOVERY_INV1 with N2 realms.
 };
 
 constexpr bool CheckTransitions() {

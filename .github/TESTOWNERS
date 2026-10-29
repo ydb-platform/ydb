@@ -121,8 +121,6 @@
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/tests/example @ydb-platform/engineering
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
-/ydb/tests/functional/restarts @ydb-platform/engineering
-/ydb/tests/functional/minidumps @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
 /ydb/tools/cfg @ydb-platform/engineering
@@ -203,6 +201,12 @@
 /ydb/tests/functional/rename @ydb-platform/core
 /ydb/tests/functional/scheme_tests @ydb-platform/core
 /ydb/tests/functional/wardens @ydb-platform/core
+/ydb/tests/functional/backup_collection @ydb-platform/core
+/ydb/tests/functional/cms @ydb-platform/core
+/ydb/tests/functional/serverless @ydb-platform/core
+/ydb/tests/functional/replication @ydb-platform/core
+/ydb/tests/functional/restarts @ydb-platform/core
+/ydb/tests/functional/minidumps @ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core
 /ydb/core/tx/replication @ydb-platform/core
@@ -211,10 +215,6 @@
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
-/ydb/tests/functional/backup_collection @ydb-platform/core
-/ydb/tests/functional/cms @ydb-platform/core
-/ydb/tests/functional/serverless @ydb-platform/core
-/ydb/tests/functional/replication @ydb-platform/core
 /ydb/tests/stress/scheme_board @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics

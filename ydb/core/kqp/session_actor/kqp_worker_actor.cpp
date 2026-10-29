@@ -126,7 +126,7 @@ public:
         }
 
         Config->ApplyServiceConfig(Settings.TableService);
-        if (auto normalizer = AppData()->PathNormalizer) {
+        if (auto normalizer = AppData()->GetPathNormalizer()) {
             Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
         }
 

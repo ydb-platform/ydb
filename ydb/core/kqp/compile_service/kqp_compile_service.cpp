@@ -272,7 +272,7 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        PathNormalizer = AppData(ctx)->PathNormalizer;
+        PathNormalizer = AppData(ctx)->GetPathNormalizer();
 
         QueryReplayBackend.Reset(CreateQueryReplayBackend(TableServiceConfig, Counters, QueryReplayFactory));
         // Subscribe for TableService config changes

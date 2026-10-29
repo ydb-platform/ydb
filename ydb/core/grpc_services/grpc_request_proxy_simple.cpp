@@ -175,7 +175,7 @@ private:
 };
 
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
-    PathNormalizer = AppData(ctx)->PathNormalizer;
+    PathNormalizer = AppData(ctx)->GetPathNormalizer();
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
          new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
              NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}), IEventHandle::FlagTrackDelivery);

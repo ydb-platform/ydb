@@ -59,7 +59,6 @@ ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndP
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
-ydb/core/viewer/tests test.py.TestViewer.test_async_replication_describe
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.GetAllStartPartitionSessions

@@ -15,6 +15,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/audit
     ydb/core/testlib
     ydb/core/kqp
     ydb/core/kqp/event_log
@@ -26,6 +27,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
+    ydb/core/security
     ydb/core/wrappers
 )
 

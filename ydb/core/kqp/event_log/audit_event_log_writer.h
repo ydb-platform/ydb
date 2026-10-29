@@ -71,33 +71,34 @@ public:
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
 
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("tx_id"),
-            std::make_shared<TDBLogMessageStringValueColumn>("paths"),
-            std::make_shared<TDBLogMessageStringValueColumn>("new_owner"),
-            std::make_shared<TDBLogMessageStringValueColumn>("acl_add"),
-            std::make_shared<TDBLogMessageStringValueColumn>("user_attrs_add"),
-            std::make_shared<TDBLogMessageStringValueColumn>("user_attrs_remove"),
-            std::make_shared<TDBLogMessageStringValueColumn>("login_user"),
-            std::make_shared<TDBLogMessageStringValueColumn>("login_group"),
-            std::make_shared<TDBLogMessageStringValueColumn>("login_member"),
-            std::make_shared<TDBLogMessageStringValueColumn>("login_user_change"),
-            std::make_shared<TDBLogMessageStringValueColumn>("login_user_level"),
+            std::make_shared<TDBLogMessageStringValueColumn>("paths", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("new_owner", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("acl_add", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("user_attrs_add", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("user_attrs_remove", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("login_user", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("login_group", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("login_member", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("login_user_change", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("login_user_level", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("audit_event_id"),
             std::make_shared<TDBLogMessageStringValueColumn>("uid"),
             std::make_shared<TDBLogMessageStringValueColumn>("start_time"),
             std::make_shared<TDBLogMessageStringValueColumn>("end_time"),
-            std::make_shared<TDBLogMessageStringValueColumn>("last_login"),
-            std::make_shared<TDBLogMessageStringValueColumn>("export_type"),
+            std::make_shared<TDBLogMessageStringValueColumn>("last_login", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("export_type", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("export_item_count"),
-            std::make_shared<TDBLogMessageStringValueColumn>("export_yt_prefix"),
-            std::make_shared<TDBLogMessageStringValueColumn>("export_s3_bucket"),
-            std::make_shared<TDBLogMessageStringValueColumn>("export_s3_prefix"),
-            std::make_shared<TDBLogMessageStringValueColumn>("import_type"),
+            std::make_shared<TDBLogMessageStringValueColumn>("export_yt_prefix", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("export_s3_bucket", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("export_s3_prefix", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("import_type", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("import_item_count"),
-            std::make_shared<TDBLogMessageStringValueColumn>("import_s3_bucket"),
-            std::make_shared<TDBLogMessageStringValueColumn>("import_s3_prefix"),
+            std::make_shared<TDBLogMessageStringValueColumn>("import_s3_bucket", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("import_s3_prefix", dict),
         };
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
@@ -112,9 +113,11 @@ public:
     }
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
+        auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
+
         auto result = TBaseAuditEventLogWriter::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
-            std::make_shared<TDBLogMessageStringValueColumn>("grpc_method"),
+            std::make_shared<TDBLogMessageStringValueColumn>("grpc_method", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("request"),
             std::make_shared<TDBLogMessageStringValueColumn>("start_time"),
             std::make_shared<TDBLogMessageStringValueColumn>("end_time"),
@@ -124,8 +127,8 @@ public:
             std::make_shared<TDBLogMessageStringValueColumn>("query_text"),
             std::make_shared<TDBLogMessageStringValueColumn>("prepared_query_id"),
             std::make_shared<TDBLogMessageStringValueColumn>("program_text"),
-            std::make_shared<TDBLogMessageStringValueColumn>("schema_changes"),
-            std::make_shared<TDBLogMessageStringValueColumn>("table"),
+            std::make_shared<TDBLogMessageStringValueColumn>("schema_changes", dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("table", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("row_count"),
             std::make_shared<TDBLogMessageStringValueColumn>("tablet_id"),
         };
@@ -143,8 +146,6 @@ public:
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TBaseAuditEventLogWriter::GetColumns();
-        TVector<std::shared_ptr<TEventLogColumn>> ownColumns;
-        std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
 };
@@ -246,8 +247,6 @@ public:
 
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto result = TBaseAuditEventLogWriter::GetColumns();
-        TVector<std::shared_ptr<TEventLogColumn>> ownColumns;
-        std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
 };

@@ -11,6 +11,8 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
+#include <ydb/core/audit/audit_log.h>
+
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -19,6 +21,8 @@
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/wrappers/fake_storage.h>
+
+#include <ydb/core/security/login_page.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -91,18 +95,27 @@ namespace {
     }
 
     std::optional<TQueryResult> ExecuteQueryAndFetchData(TKikimrRunner& kikimr, const TString& query) {
-        for(unsigned i = 100;i > 0;i--) {
+        for(unsigned i = 10;i > 0;i--) {
+            Cerr << "DEBUG: get client " << Endl;
             auto client = kikimr.GetTableClient();
+            Cerr << "DEBUG: execute " << query << Endl;
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            Cerr << "DEBUG: it received" << Endl;
+
             if (!it.IsSuccess()) {
+                Cerr << "DEBUG: status=" << it.GetStatus() << " issues=" << it.GetIssues() << Endl;
                 Sleep(TDuration::MilliSeconds(100));
                 continue;
             }
+            Cerr << "DEBUG: Fetch stream data" << Endl;
             auto result = FetchStreamData(it, i == 1);
+            Cerr << "DEBUG: data fetched" << Endl;
             if (!result.has_value()) {
+                Cerr << "DEBUG: empty result" << Endl;
                 Sleep(TDuration::MilliSeconds(100));
                 continue;
             }
+            Cerr << "DEBUG: return data" << Endl;
             return result.value();
         }
         return {};
@@ -123,11 +136,11 @@ namespace {
 
     template <typename C>
     bool WaitCondition(const C& cond) {
-        for(unsigned i=0; i < 100; i++) {
+        for(unsigned i=0; i < 10; i++) {
             if (cond()) {
                 return true;
             }
-            Sleep(TDuration::MilliSeconds(100));
+            Sleep(TDuration::Seconds(1));
         }
         return false;
     }
@@ -268,8 +281,9 @@ struct TEnvironment {
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
             auto settings = runtime->GetLogSettings(i);
             settings->DefPriority = NActors::NLog::PRI_TRACE;
-            auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
+            ::NKikimr::NAudit::AUDIT_LOG_ENABLED.store(true);
 
+            auto sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
             if (Writer != nullptr) {
                 (*sinks)[""] = Writer;
             }
@@ -284,6 +298,7 @@ struct TEnvironment {
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
         runtime->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
+        runtime->SetLogPriority(NKikimrServices::AUDIT_LOG_WRITER, NActors::NLog::PRI_NOTICE);
     }
 
     void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
@@ -299,6 +314,19 @@ struct TEnvironment {
             auto client = kikimrPtr->GetTableClient();
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
         });
+    }
+
+    void CheckSomethingWritten(const TString& from) {
+        TStringBuilder query;
+        query << "select * from `" << from << "`";
+        std::optional<TQueryResult> result;
+        UNIT_ASSERT(WaitCondition( [&]()->bool {
+            result = ExecuteQueryAndFetchData(Kikimr, query);
+            return result.has_value() && result.value().size() > 0;
+        }));
+
+        Cerr << "RESULT OF " << query << ":" << Endl;
+        Dump(result.value());
     }
 };
 
@@ -325,10 +353,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:318")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:320")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:322")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:323")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:346")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:348")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:350")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:351")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -697,32 +725,119 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         auto status = result.GetStatus();
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        // check tli_datashard content
+        // check written
+        env.CheckSomethingWritten("/Root/tli_datashard/tli_datashard");
+        env.CheckSomethingWritten("/Root/tli_session/tli_session");
+    }
 
+    void EatWholeString(NHttp::THttpIncomingRequestPtr request, const TString& data) {
+        auto size = std::min(request->Avail(), data.size());
+        memcpy(request->Pos(), data.data(), size);
+        request->Advance(size);
+    }
+
+    NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TString& password) {
+        TString payload = [](const auto& user, const auto& password) {
+            NJson::TJsonValue value;
+            value["user"] = user;
+            value["password"] = password;
+            return NJson::WriteJson(value, false);
+        }(user, password);
+        TStringBuilder text;
+        text << "POST /login HTTP/1.1\r\n"
+            << "Host: test.ydb\r\n"
+            << "Content-Type: application/json\r\n"
+            << "Content-Length: " << payload.size() << "\r\n"
+            << "\r\n"
+            << payload;
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatWholeString(request, text);
+        // WebLoginService will crash without address
+        request->Address = std::make_shared<TSockAddrInet>("127.0.0.1", 0);
+        return request;
+    }
+
+    NHttp::THttpIncomingRequestPtr MakeLogoutRequest(
+    const TString& cookieName,
+    const TString& cookieValue)
+    {
+        TStringBuilder text;
+        text << "POST /logout HTTP/1.1\r\n"
+            << "Host: test.ydb\r\n"
+            << "Content-Type: text/plain\r\n"
+            << "Cookie: " << cookieName << "=" << cookieValue << "\r\n";
+        text << "\r\n";
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatWholeString(request, text);
+        // WebLoginService will crash without address
+        request->Address = std::make_shared<TSockAddrInet>("127.0.0.1", 0);
+        return request;
+    }
+
+    Y_UNIT_TEST(AuditLog) {
+        using namespace NYdb;
+        using namespace NYdb::NQuery;
+
+        TEnvironment env;
+        env.AddSinks.push_back(std::make_shared<NAudit::TSchemeShardEventLogWriter>(
+            TColumnShardLogWriter::TDatabaseSettings{
+                .DatabasePath = "/Root",
+                .StoreName = "audit_schemeshard",
+                .TableName = "audit_schemeshard",
+                .FlushBatchSize = 0}));
+        env.AddSinks.push_back(std::make_shared<NAudit::TGrpcLoginEventLogWriter>(
+            TColumnShardLogWriter::TDatabaseSettings{
+                .DatabasePath = "/Root",
+                .StoreName = "audit_grpc_login",
+                .TableName = "audit_grpc_login",
+                .FlushBatchSize = 0}));
+        env.UpdateSinks();
+
+        // create user
+        auto client = env.Kikimr.GetQueryClient();
+        auto sessionVictim = client.GetSession().GetValueSync().GetSession();
+        auto sessionBreaker = client.GetSession().GetValueSync().GetSession();
+
+        // Create table
+        NKqp::AssertSuccessResult(sessionVictim.ExecuteQuery(R"(CREATE USER user1 PASSWORD 'password1';)",TTxControl::NoTx()).GetValueSync());
+
+        // emulate login
+        auto* runtime = env.Kikimr.GetTestServer().GetRuntime();
+
+        const auto edge = runtime->AllocateEdgeActor();
+
+        const auto webLoginService = runtime->Register(CreateWebLoginService());
+
+        // Login
+        TString ydbSessionId;
         {
-            std::optional<TQueryResult> result;
-            WaitCondition([&]()->bool {
-                result = ExecuteQueryAndFetchData(env.Kikimr, "select message, breaker_query_span_id, victim_query_span_id "
-                    "from `/Root/tli_datashard/tli_datashard`");
-                return result.has_value() && result.value().size() >= 2;
-            });
+            runtime->Send(new IEventHandle(webLoginService, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLoginRequest("user1", "password1")
+            )));
 
-            Cerr << "DATASHARD_RESULT:" << Endl;
-            Dump(result.value());
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+            UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "200");
+            NHttp::THeaders headers(responseEv->Response->Headers);
+            NHttp::TCookies cookies(headers["Set-Cookie"]);
+            ydbSessionId = cookies["ydb_session_id"];
         }
 
-        // check tli_session content
+        // Logout
         {
-            std::optional<TQueryResult> result;
-            WaitCondition( [&]()->bool {
-                result = ExecuteQueryAndFetchData(env.Kikimr, "select message, breaker_tx_span_id, victim_tx_span_id, query_span_id, query_text "
-                    "from `/Root/tli_session/tli_session`");
-                return result.has_value() && result.value().size() >= 1;
-            });
+            runtime->Send(new IEventHandle(webLoginService, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
+                MakeLogoutRequest("ydb_session_id", ydbSessionId)
+            )));
 
-            Cerr << "SESSION_RESULT:" << Endl;
-            Dump(result.value());
+            TAutoPtr<IEventHandle> handle;
+            auto responseEv = runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            Y_UNUSED(responseEv);
         }
+
+        // check
+        env.CheckSomethingWritten("/Root/audit_grpc_login/audit_grpc_login");
+        env.CheckSomethingWritten("/Root/audit_schemeshard/audit_schemeshard");
     }
 }
 

@@ -174,6 +174,7 @@ namespace NKikimr::NBlobDepot {
             cFunc(TEvPrivate::EvRetryAssimilate, HandleRetryAssimilate);
             cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
+            cFunc(TEvPrivate::EvRestartScanDataForCopying, RestartScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
             cFunc(TEvPrivate::EvUpdateBytesCopiedQ, UpdateBytesCopiedQ);
             cFunc(TEvents::TSystem::Poison, PassAway);
@@ -524,15 +525,23 @@ namespace NKikimr::NBlobDepot {
                 // there are some unprocessed get queries, still have to wait
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
+            } else if (std::exchange(CopyReadErrors, false)) { // some blobs couldn't be read, try them again later
+                TActivationContext::Schedule(CopyRetryBackoff.Next(), new IEventHandle(
+                    TEvPrivate::EvRestartScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
             } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
-                LastScannedKey.reset();
-                LastPlanScannedKey.reset();
-                EntriesToProcess = PlanningComplete = ActionInProgress = false;
-                LeastBlobQueue.clear();
-                Action();
+                CopyRetryBackoff.Reset();
+                RestartScanDataForCopying();
             }
             break;
         }
+    }
+
+    void TAssimilator::RestartScanDataForCopying() {
+        LastScannedKey.reset();
+        LastPlanScannedKey.reset();
+        EntriesToProcess = PlanningComplete = ActionInProgress = false;
+        LeastBlobQueue.clear();
+        Action();
     }
 
     void TAssimilator::HandleResumeScanDataForCopying() {
@@ -597,6 +606,7 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     ++Self->AsStats.BlobsReadError;
+                    CopyReadErrors = true;
                     continue;
             }
 

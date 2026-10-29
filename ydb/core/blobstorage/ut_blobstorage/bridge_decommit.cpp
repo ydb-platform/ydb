@@ -878,4 +878,56 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::NODATA);
         UNIT_ASSERT_VALUES_EQUAL(sourceReads, 0);
     }
+
+    // reads of the group being decommitted fail for a while; the assimilator retries them with a backoff instead of
+    // rescanning its data in a loop, and copies the blobs once reads succeed again
+    Y_UNIT_TEST(FailedReadsRetriedWithBackoff) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        SetupSchemeCacheStub(env);
+
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+
+        bool failReads = true;
+        ui32 numReads = 0;
+        TFilterChain chain(env);
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (!ev->HasEvent()) {
+                return true;
+            }
+            const auto typeOf = [&](const TActorId& actorId) {
+                IActor *actor = env.Runtime->GetActor(actorId);
+                return actor ? TypeName(*actor) : TString();
+            };
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && typeOf(ev->Sender).EndsWith("::TGroupAssimilator")) {
+                if (failReads && ++numReads == 1000) {
+                    failReads = false; // no backoff, don't spin the test forever
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && failReads &&
+                    typeOf(ev->GetRecipientRewrite()).EndsWith("::TGroupAssimilator")) {
+                auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                    msg->Responses[i].Status = NKikimrProto::ERROR;
+                }
+            }
+            return true;
+        });
+
+        const auto response = DecommitGroup(env, groupId);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return numReads != 0; }, "assimilator reads", TDuration::Seconds(1), 120);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(failReads);
+        UNIT_ASSERT_LE_C(numReads, 100, numReads);
+        UNIT_ASSERT(GetDecommitStatus(env, groupId) == NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
+
+        failReads = false;
+        WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::DONE);
+        checker.CheckAll();
+    }
 }

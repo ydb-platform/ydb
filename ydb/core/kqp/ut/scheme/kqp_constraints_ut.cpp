@@ -772,8 +772,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 const size_t scansBefore = scans;
                 const auto altered = kikimr.RunCall([&] { return session.ExecuteQuery(alter, TTxControl::NoTx()).GetValueSync(); });
                 if (!defaultColumns.empty() && defaultColumns.size() != testCase.ColumnCount) {
-                    UNIT_ASSERT_C(!altered.IsSuccess(), alter);
-                    UNIT_ASSERT_STRING_CONTAINS(altered.GetIssues().ToString(), "Only ADD COLUMN DEFAULT");
+                    UNIT_ASSERT_VALUES_EQUAL_C(altered.GetStatus(), EStatus::UNSUPPORTED, alter << ": " << altered.GetIssues().ToString());
+                    UNIT_ASSERT_STRING_CONTAINS(altered.GetIssues().ToString(),
+                        "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
                     UNIT_ASSERT_VALUES_EQUAL(scans, scansBefore);
                     const auto after = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/" + table).GetValueSync(); });
                     UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToString());
@@ -875,8 +876,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             }
             alter << ";";
             const auto rejected = kikimr.RunCall([&] { return session.ExecuteQuery(alter, TTxControl::NoTx()).GetValueSync(); });
-            UNIT_ASSERT_C(!rejected.IsSuccess(), alter);
-            UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Only ADD COLUMN DEFAULT");
+            UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::UNSUPPORTED, alter << ": " << rejected.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(),
+                "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
             UNIT_ASSERT_VALUES_EQUAL(scans, 0);
             const auto after = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/t").GetValueSync(); });
             UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToString());
@@ -942,6 +944,11 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                             << (dropFirst ? TString(adds) : drops) << ";";
                         const auto result = execute(query);
                         UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), defaultCount == 0, query << ": " << result.GetIssues().ToString());
+                        if (defaultCount) {
+                            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
+                            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                                "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
+                        }
                         UNIT_ASSERT_VALUES_EQUAL(scans, 0);
 
                         const auto describe = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/t").GetValueSync(); });
@@ -1027,6 +1034,11 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                         << (otherFirst ? TString(adds) : other) << ";";
                     const auto altered = execute(query);
                     UNIT_ASSERT_VALUES_EQUAL_C(altered.IsSuccess(), defaultCount == 0, query << ": " << altered.GetIssues().ToString());
+                    if (defaultCount) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(altered.GetStatus(), EStatus::UNSUPPORTED, altered.GetIssues().ToString());
+                        UNIT_ASSERT_STRING_CONTAINS(altered.GetIssues().ToString(),
+                            "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
+                    }
                     UNIT_ASSERT_VALUES_EQUAL(scans, 0);
                     const auto describe = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/t").GetValueSync(); });
                     UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
@@ -1070,11 +1082,48 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             << "ALTER TABLE TestTable ADD COLUMN Added Uint32" << (DefaultColumn ? " DEFAULT 20" : "")
             << ", ADD COLUMN Built Uint32 DEFAULT 10, DROP COLUMN Added, DROP COLUMN Value;",
             TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(!rejected.IsSuccess(), "Adding and dropping the same column must fail");
+        // KQP checks DROP against the existing schema before submitting a column build.
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::GENERIC_ERROR, rejected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Column \"Added\" does not exist");
 
         auto result = execute("SELECT * FROM TestTable ORDER BY Key;");
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).GetColumnsMeta().size(), 2);
         CompareYson("[[1u;[42u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableGeneratedColumnCannotBeCombined, PlainColumnFirst) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        const auto execute = [&](const TString& query) {
+            return kikimr.RunCall([&] { return session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+        };
+        const auto success = [&](const TString& query) {
+            auto result = execute(query);
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        success("CREATE TABLE t (Key Uint32 NOT NULL, Value Uint32, PRIMARY KEY (Key));");
+        success("UPSERT INTO t (Key, Value) VALUES (1, 42);");
+        size_t scans = 0;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
+        const TString generated = "ADD COLUMN __ydb_row_id Uint64 NOT NULL";
+        const TString plain = "ADD COLUMN Plain Uint32";
+        auto rejected = execute(TStringBuilder() << "ALTER TABLE t "
+            << (PlainColumnFirst ? plain : generated) << ", " << (PlainColumnFirst ? generated : plain) << ";");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::UNSUPPORTED, rejected.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(),
+            "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        const auto rows = success("SELECT * FROM t;");
+        UNIT_ASSERT_VALUES_EQUAL(rows.GetResultSet(0).GetColumnsMeta().size(), 2);
+        CompareYson("[[1u;[42u]]]", FormatResultSetYson(rows.GetResultSet(0)));
+
+        success("ALTER TABLE t " + generated + ";");
+        const auto generatedRows = success("SELECT Key, Value, __ydb_row_id FROM t;");
+        UNIT_ASSERT_VALUES_EQUAL(generatedRows.GetResultSet(0).GetColumnsMeta().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(generatedRows.GetResultSet(0).RowsCount(), 1);
+        UNIT_ASSERT(scans > 0);
     }
 
     Y_UNIT_TEST_TWIN(DefaultValuesForTable, EnableCompileTimeDefaults) {

@@ -55,7 +55,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                 ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
                 TAutoPtr<IEventHandle> handle;
                 auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-                UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response->Record.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::UNSUPPORTED, response->Record.DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(response->Record.DebugString(),
+                    "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
                 UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString(), original);
             }
         }
@@ -117,7 +119,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
             TAutoPtr<IEventHandle> handle;
             auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, change << ": " << response->Record.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::UNSUPPORTED, change << ": " << response->Record.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response->Record.DebugString(),
+                "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
             const auto table = DescribePath(runtime, "/MyRoot/Table");
             UNIT_ASSERT_VALUES_EQUAL_C(table.GetPathDescription().GetTable().SerializeAsString(), original, change);
             TestDescribeResult(table, {
@@ -147,6 +151,48 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             NLs::CheckColumns("Table", {"key", "value", "default_value"}, {}, {"key"}, true),
         });
         UNIT_ASSERT(scans > 0);
+    }
+
+    Y_UNIT_TEST(AlterPayloadMissingBuildColumnsRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto original = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString();
+        size_t scans = 0;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
+        Ydb::TypedValue literal;
+        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_uint32_value(10);
+        for (ui32 payloadColumns : {0, 1}) {
+            auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_one", literal);
+            auto* settings = request->Record.MutableSettings();
+            auto* second = settings->mutable_column_build_operation()->add_column();
+            second->CopyFrom(settings->column_build_operation().column(0));
+            second->SetColumnName("default_two");
+            NKikimrSchemeOp::TModifyScheme payload;
+            payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            auto* alter = payload.MutableAlterTable();
+            alter->SetName("Table");
+            if (payloadColumns) {
+                alter->AddColumns()->SetName("default_one");
+            }
+            settings->MutableAlterMainTablePayload()->PackFrom(payload);
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response->Record.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response->Record.DebugString(), "ALTER TABLE payload is missing columns to build");
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString(), original);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
     }
 
     Y_UNIT_TEST(InvalidAlterPayload) {

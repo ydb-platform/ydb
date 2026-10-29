@@ -8,6 +8,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
+#include <google/protobuf/unknown_field_set.h>
+
 #include <util/generic/hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -18,6 +20,21 @@ static constexpr ui32 DefaultMaxShardsInFlight = 32;
 
 using namespace NTabletFlatExecutor;
 using NKikimrSchemeOp::EIndexType;
+
+static bool HasOnlyFields(const google::protobuf::Message& message, const THashSet<TString>& allowedFields) {
+    const auto* reflection = message.GetReflection();
+    if (!reflection->GetUnknownFields(message).empty()) {
+        return false;
+    }
+    std::vector<const google::protobuf::FieldDescriptor*> fields;
+    reflection->ListFields(message, &fields);
+    for (const auto* field : fields) {
+        if (!allowedFields.contains(field->name())) {
+            return false;
+        }
+    }
+    return true;
+}
 
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
@@ -298,19 +315,15 @@ public:
                     return makeReply("invalid ALTER TABLE payload for column build");
                 }
                 // The payload must contain only additions represented in the build settings.
-                auto extraAlter = modifyScheme.GetAlterTable();
-                extraAlter.ClearName();
-                extraAlter.ClearColumns();
+                const auto& alter = modifyScheme.GetAlterTable();
                 // KQP also supplies an empty PartitionConfig for ADD COLUMN alone.
-                if (extraAlter.GetPartitionConfig().ByteSizeLong() == 0) {
-                    extraAlter.ClearPartitionConfig();
-                }
-                bool onlyDefaultColumns = extraAlter.ByteSizeLong() == 0;
+                bool onlyDefaultColumns = HasOnlyFields(alter, {"Name", "Columns", "PartitionConfig"})
+                    && HasOnlyFields(alter.GetPartitionConfig(), {});
                 THashSet<TString> columnsToBuild;
                 for (const auto& column : settings.column_build_operation().column()) {
                     columnsToBuild.insert(column.GetColumnName());
                 }
-                for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
+                for (const auto& column : alter.GetColumns()) {
                     // Also reject repeated descriptors rather than silently ignoring them.
                     if (!columnsToBuild.erase(column.GetName())) {
                         onlyDefaultColumns = false;
@@ -318,7 +331,11 @@ public:
                     }
                 }
                 if (!onlyDefaultColumns) {
-                    return makeReply("Only ADD COLUMN DEFAULT operations are allowed when building columns with DEFAULT");
+                    return Reply(Ydb::StatusIds::UNSUPPORTED,
+                        "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
+                }
+                if (!columnsToBuild.empty()) {
+                    return makeReply("ALTER TABLE payload is missing columns to build");
                 }
             }
 

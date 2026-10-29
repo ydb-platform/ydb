@@ -8,6 +8,8 @@
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
+
 #include <google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -53,11 +55,10 @@ struct TReplicationStrategy : public IStrategy {
                         "Availability period must be a positive, representable duration");
                     return true;
                 }
-                google::protobuf::Duration normalized;
-                SetDuration(GetDuration(duration), normalized);
-                if (!google::protobuf::util::TimeUtil::IsDurationValid(normalized)) {
+
+                if (GetDuration(duration).MicroSeconds() >= NYql::NUdf::MAX_TIMESTAMP) {
                     result.SetError(NKikimrScheme::StatusInvalidParameter,
-                        "Availability period cannot be represented after rounding to milliseconds");
+                        "Availability period cannot be represented as SQL Interval after rounding to milliseconds");
                     return true;
                 }
             } else if (!period.HasUnlimited()) {

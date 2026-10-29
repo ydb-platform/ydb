@@ -4,13 +4,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
 #include <format>
+#include <optional>
 
 namespace NYdb::NDump {
 
@@ -44,24 +45,27 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
-TString AvailabilityPeriodOption(const NReplication::TReplicationDescription& desc) {
+std::optional<TString> AvailabilityPeriodOption(const NReplication::TReplicationDescription& desc) {
     using EKind = NReplication::TReplicationDescription::EAvailabilityPeriodKind;
     switch (desc.GetAvailabilityPeriodKind()) {
     case EKind::Unlimited:
         return BuildOption("AVAILABILITY_PERIOD", Quote("UNLIMITED"));
     case EKind::Finite: {
         const auto value = *desc.GetAvailabilityPeriod();
+        if (value.MicroSeconds() >= NYql::NUdf::MAX_TIMESTAMP) {
+            return std::nullopt;
+        }
+
         const auto interval = value.MilliSecondsOfSecond()
             ? TString(std::format("Interval('PT{}.{:03}S')", value.Seconds(), value.MilliSecondsOfSecond()))
             : Interval(value);
         return BuildOption("AVAILABILITY_PERIOD", interval);
     }
     case EKind::Unknown:
-        ythrow yexception() << "Cannot dump replication: availability period is unknown; the server did not report its policy";
     case EKind::Invalid:
-        ythrow yexception() << "Cannot dump replication: server reported an invalid availability period";
+        return std::nullopt;
     }
-    ythrow yexception() << "Cannot dump replication: unsupported availability period";
+    return std::nullopt;
 }
 
 TString GetSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix) {
@@ -144,7 +148,9 @@ TString BuildCreateReplicationQuery(
     const auto& params = desc.GetConnectionParams();
     AddConnectionOptions(params, opts);
 
-    opts.push_back(AvailabilityPeriodOption(desc));
+    if (auto option = AvailabilityPeriodOption(desc)) {
+        opts.push_back(std::move(*option));
+    }
     opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
     if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
         opts.push_back(BuildOption("COMMIT_INTERVAL", Interval(desc.GetGlobalConsistency().GetCommitInterval())));

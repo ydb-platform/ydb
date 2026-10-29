@@ -223,6 +223,9 @@ public:
         Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
         if (replication->GetConfig().HasAvailabilityPeriod()) {
             Result->Record.MutableAvailabilityPeriod()->CopyFrom(replication->GetConfig().GetAvailabilityPeriod());
+        } else if (!replication->GetConfig().HasTransferSpecific()) {
+            Result->Record.MutableAvailabilityPeriod()->MutableDuration()->set_seconds(
+                AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
         }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;

@@ -1,6 +1,12 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/ydb_convert/replication_description.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 using namespace NSchemeShardUT_Private;
 
@@ -120,9 +126,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         check();
     }
 
-    Y_UNIT_TEST(AvailabilityPeriodLegacyControllerConfig) {
+    Y_UNIT_TEST_FLAG(AvailabilityPeriodLegacyControllerConfig, CustomDefault) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        if (CustomDefault) {
+            runtime.GetAppData().ReplicationConfig.SetConsumerAvailabilityPeriodSeconds(7201);
+        }
+        const auto seconds = runtime.GetAppData().ReplicationConfig.GetConsumerAvailabilityPeriodSeconds();
         using namespace NKikimr::NReplication;
         auto observer = runtime.AddObserver<TEvController::TEvCreateReplication>([](const auto& ev) {
             ev->Get()->Record.MutableConfig()->ClearAvailabilityPeriod();
@@ -141,7 +151,26 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             runtime.SendToPipe(controller, edge, request.Release());
             const auto result = runtime.GrabEdgeEvent<TEvController::TEvDescribeReplicationResult>(edge);
             UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
-            UNIT_ASSERT(!result->Get()->Record.HasAvailabilityPeriod());
+            const auto& record = result->Get()->Record;
+            UNIT_ASSERT(record.HasAvailabilityPeriod());
+            UNIT_ASSERT(record.GetAvailabilityPeriod().HasDuration());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetAvailabilityPeriod().GetDuration().seconds(), seconds);
+
+            Ydb::Replication::DescribeReplicationResult proto;
+            FillReplicationDescription(proto, record);
+            const NYdb::NReplication::TReplicationDescription description(proto);
+            UNIT_ASSERT(description.GetAvailabilityPeriodKind() ==
+                NYdb::NReplication::TReplicationDescription::EAvailabilityPeriodKind::Finite);
+            UNIT_ASSERT_VALUES_EQUAL(*description.GetAvailabilityPeriod(), TDuration::Seconds(seconds));
+            const auto query = NYdb::NDump::BuildCreateReplicationQuery("/MyRoot", "/MyRoot", "Replication", description);
+            UNIT_ASSERT_STRING_CONTAINS(query, TStringBuilder() << "AVAILABILITY_PERIOD = Interval('PT" << seconds << "S')");
+
+            const auto stored = ReadSystemTable(runtime, controller, "Replications", {"Id"}, {"Config"});
+            const auto& rows = stored.GetValue().GetStruct(0).GetOptional().GetStruct(0);
+            UNIT_ASSERT_VALUES_EQUAL(rows.ListSize(), 1);
+            NKikimrReplication::TReplicationConfig config;
+            UNIT_ASSERT(config.ParseFromString(rows.GetList(0).GetStruct(0).GetOptional().GetBytes()));
+            UNIT_ASSERT(!config.HasAvailabilityPeriod());
         };
         check();
         RebootTablet(runtime, controller, runtime.AllocateEdgeActor());
@@ -162,6 +191,40 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
         }
         // Failed validation must not reserve the name or leave a partial object.
+        TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AvailabilityPeriodSqlIntervalBoundary) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        ui64 txId = 100;
+        const auto lastValid = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        const auto scheme = [&](const TString& name, TDuration value) {
+            return AvailabilityScheme(name, TStringBuilder() << "Duration { seconds: " << value.Seconds()
+                << " nanos: " << value.NanoSecondsOfSecond() << " }");
+        };
+
+        for (const auto value : {lastValid - TDuration::MicroSeconds(1), lastValid}) {
+            const TString name = TStringBuilder() << "Valid" << txId;
+            TestCreateReplication(runtime, ++txId, "/MyRoot", scheme(name, value));
+            env.TestWaitNotification(runtime, txId);
+            const auto desc = DescribePath(runtime, "/MyRoot/" + name);
+            const auto& duration = desc.GetPathDescription().GetReplicationDescription()
+                .GetConfig().GetAvailabilityPeriod().GetDuration();
+            UNIT_ASSERT_VALUES_EQUAL(duration.seconds(), lastValid.Seconds());
+            UNIT_ASSERT_VALUES_EQUAL(duration.nanos(), lastValid.NanoSecondsOfSecond());
+        }
+
+        for (const auto value : {lastValid + TDuration::MicroSeconds(1),
+                TDuration::MicroSeconds(NYql::NUdf::MAX_TIMESTAMP), lastValid + TDuration::Days(1)})
+        {
+            TestCreateReplication(runtime, ++txId, "/MyRoot", scheme("Replication", value),
+                {NKikimrScheme::StatusInvalidParameter});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {NLs::PathNotExist});
+        }
+
         TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
         env.TestWaitNotification(runtime, txId);
     }

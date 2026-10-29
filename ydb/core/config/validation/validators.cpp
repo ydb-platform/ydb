@@ -427,7 +427,8 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     disabledCnt++;
                 }
             }
-            if (disabledCnt > rg.NToSelect / 2 - 1) { // -1 ring for rolling restart
+            const ui32 maxDisabled = rg.NToSelect > 1 ? (rg.NToSelect - 2) / 2 : 0;
+            if (disabledCnt > maxDisabled) { // keep one ring available for rolling restart
                 return TStringBuilder() << "New " << name << " configuration disabled too many rings";
             }
         }
@@ -458,7 +459,7 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     << " to# " << SingleLineProto(newSSConfig);
             }
         }
-        if (disabledCnt > fromInfoGroup.NToSelect / 2) {
+        if (disabledCnt > (fromInfoGroup.NToSelect - 1) / 2) {
             return TStringBuilder() << name << " configuration disabled too many rings"
                 << " from# " << SingleLineProto(oldSSConfig)
                 << " to# " << SingleLineProto(newSSConfig);

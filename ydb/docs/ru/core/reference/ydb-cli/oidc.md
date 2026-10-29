@@ -151,53 +151,57 @@ chmod 700 /home/user/.config/ydb
 
 Если команда завершилась с ошибкой, проверьте параметры выбранного режима, доступность IdP и его настройки. Сообщения об ошибках и правила повторных попыток описаны в [справочнике SDK](../ydb-sdk/auth.md#oidc-errors).
 
-**Код устройства:**
+{% list tabs %}
 
-Для приложения `ydb-cli` IdP должен разрешать вход по коду устройства. При необходимости подтвердите вход в браузере. Параметр `--force` разрешает вывод токена в стандартный поток вывода.
+- Код устройства (device)
 
-Без профиля:
+  Для приложения `ydb-cli` IdP должен разрешать вход по коду устройства. При необходимости подтвердите вход в браузере. Параметр `--force` разрешает вывод токена в стандартный поток вывода.
 
-```bash
-umask 077
-{{ ydb-cli }} \
-  -e grpcs://ydb.example.com:2135 -d /Root/mydb \
-  --oidc-issuer https://idp.example.com/realms/ydb \
-  --oidc-flow device \
-  --oidc-client-id ydb-cli \
-  --oidc-scope offline_access \
-  auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
-```
+  Без профиля:
 
-Если профиль `oidc-device` уже создан, используйте его. Создание профиля показано на вкладке «Код устройства (device)» в [примерах подключения](#connection-examples):
+  ```bash
+  umask 077
+  {{ ydb-cli }} \
+    -e grpcs://ydb.example.com:2135 -d /Root/mydb \
+    --oidc-issuer https://idp.example.com/realms/ydb \
+    --oidc-flow device \
+    --oidc-client-id ydb-cli \
+    --oidc-scope offline_access \
+    auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
+  ```
 
-```bash
-umask 077
-{{ ydb-cli }} --profile oidc-device auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
-```
+  Если профиль `oidc-device` уже создан, используйте его. Создание профиля показано на вкладке «Код устройства (device)» в [примерах подключения](#connection-examples):
 
-**Секрет приложения:**
+  ```bash
+  umask 077
+  {{ ydb-cli }} --profile oidc-device auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
+  ```
 
-Сохраните секрет зарегистрированного приложения `ydb-service` в файле (например, `/home/user/.config/ydb/client-secret.txt`), доступном только владельцу.
+- Секрет приложения (client)
 
-Без профиля:
+  Сохраните секрет зарегистрированного приложения `ydb-service` в файле (например, `/home/user/.config/ydb/client-secret.txt`), доступном только владельцу.
 
-```bash
-umask 077
-{{ ydb-cli }} \
-  -e grpcs://ydb.example.com:2135 -d /Root/mydb \
-  --oidc-issuer https://idp.example.com/realms/ydb \
-  --oidc-flow client \
-  --oidc-client-id ydb-service \
-  --oidc-client-secret-file /home/user/.config/ydb/client-secret.txt \
-  auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
-```
+  Без профиля:
 
-Если профиль `oidc-client` уже создан, используйте его. Создание профиля показано на вкладке «Секрет приложения (client)» в [примерах подключения](#connection-examples):
+  ```bash
+  umask 077
+  {{ ydb-cli }} \
+    -e grpcs://ydb.example.com:2135 -d /Root/mydb \
+    --oidc-issuer https://idp.example.com/realms/ydb \
+    --oidc-flow client \
+    --oidc-client-id ydb-service \
+    --oidc-client-secret-file /home/user/.config/ydb/client-secret.txt \
+    auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
+  ```
 
-```bash
-umask 077
-{{ ydb-cli }} --profile oidc-client auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
-```
+  Если профиль `oidc-client` уже создан, используйте его. Создание профиля показано на вкладке «Секрет приложения (client)» в [примерах подключения](#connection-examples):
+
+  ```bash
+  umask 077
+  {{ ydb-cli }} --profile oidc-client auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
+  ```
+
+{% endlist %}
 
 ### Подключение к базе данных {#connection-examples}
 

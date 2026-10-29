@@ -369,6 +369,84 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         TestPublicationAckDoesNotAdvanceFullSync(12345);
     }
 
+    Y_UNIT_TEST(PublicationCookiesSurviveReconnectMerge) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}}, 1));
+        const auto edge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        constexpr ui64 generation = 1;
+        const TPathId pathId(owner, 100);
+        const auto info = GetStateStorageInfo(runtime);
+        const auto replica = runtime.GetLocalServiceId(info->RingGroups.front().Rings.front().Replicas.front());
+
+        TActorId child;
+        auto handshakes = runtime.AddObserver<NInternalEvents::TEvHandshakeResponse>([&](auto& ev) {
+            if (ev->Sender == replica) {
+                child = ev->Recipient;
+            }
+        });
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto& ev) {
+            if (ev->Sender == replica) {
+                ++committed;
+            }
+        });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, generation, {}, 0));
+        runtime.WaitFor("replica child initialization", [&] { return child && committed == 1; }, TDuration::Seconds(10));
+        runtime.EnableScheduleForActor(child, true);
+
+        bool blockFirstAck = true;
+        TBlockEvents<TUpdateAck> oldAck(runtime, [&](const TUpdateAck::TPtr& ev) {
+            if (blockFirstAck && ev->Sender == replica && ev->Recipient == child && ev->Get()->GetPathId() == pathId) {
+                blockFirstAck = false;
+                return true;
+            }
+            return false;
+        });
+        auto publish = [&](ui64 version, ui64 cookie) {
+            auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            desc->Record = GenerateDescribe("/Root/TestPath", pathId, version);
+            desc->Record.SetStatus(NKikimrScheme::StatusSuccess);
+            runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        };
+
+        constexpr ui64 firstCookie = 12345;
+        constexpr ui64 secondCookie = 12346;
+        publish(1, firstCookie);
+        runtime.WaitFor("first publication reaches replica", [&] { return oldAck.size() == 1; }, TDuration::Seconds(10));
+
+        TBlockEvents<NInternalEvents::TEvHandshakeResponse> reconnect(runtime, [&](const auto& ev) {
+            return ev->Sender == replica && ev->Recipient == child;
+        });
+        runtime.Send(new IEventHandle(child, replica, new TEvInterconnect::TEvNodeDisconnected(replica.NodeId())));
+        runtime.WaitFor("reconnect handshake", [&] { return reconnect.size() == 1; }, TDuration::Seconds(10));
+
+        bool secondQueued = false;
+        auto updates = runtime.AddObserver<NInternalEvents::TEvUpdate>([&](auto& ev) {
+            if (ev->Recipient == child && ev->Get()->GetPathId() == pathId) {
+                const auto& record = static_cast<NInternalEvents::TEvUpdateBuilder*>(ev->Get())->Record;
+                secondQueued = GetPathVersion(record) == 2;
+            }
+        });
+        publish(2, secondCookie);
+        runtime.WaitFor("second publication queued during reconnect", [&] { return secondQueued; }, TDuration::Seconds(10));
+
+        reconnect.Stop().Unblock();
+        TSet<ui64> cookies;
+        for (size_t i = 0; i != 2; ++i) {
+            auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(ack->Get()->GetPathId(), pathId);
+            cookies.insert(ack->Cookie);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(cookies.size(), 2);
+        UNIT_ASSERT(cookies.contains(firstCookie));
+        UNIT_ASSERT(cookies.contains(secondCookie));
+
+        oldAck.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 0,
+            "the stale pre-reconnect ACK must not complete either publication twice");
+    }
+
     void TestPublicationSurvivesReplicaReplacement(bool deletion, bool deleteAfterPublication = false) {
         TTestBasicRuntime runtime;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}, {}}, ReplicasInRingGroup));

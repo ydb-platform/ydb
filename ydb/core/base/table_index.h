@@ -59,6 +59,9 @@ std::span<const std::string_view> GetImplTables(
     std::span<const TString> indexKeys);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
+// Impl tables of other indexes are independent replication targets. Async index impl tables are
+// maintained by the destination's own change exchange, and local indexes have no impl tables.
+bool HasReplicatedImplTables(NKikimrSchemeOp::EIndexType indexType);
 
 namespace NKMeans {
 

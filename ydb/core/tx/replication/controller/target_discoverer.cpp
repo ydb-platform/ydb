@@ -8,6 +8,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -23,6 +24,42 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
+
+namespace {
+
+    std::optional<NKikimrSchemeOp::EIndexType> ConvertIndexType(NYdb::NTable::EIndexType type, bool enableCompactFulltext) {
+        // The SDK does not distinguish compact fulltext indexes from regular ones, while the set
+        // of their impl tables differs (e.g. a compact relevance index has no dict table).
+        switch (type) {
+        case NYdb::NTable::EIndexType::GlobalSync:
+            return NKikimrSchemeOp::EIndexTypeGlobal;
+        case NYdb::NTable::EIndexType::GlobalAsync:
+            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        case NYdb::NTable::EIndexType::GlobalUnique:
+            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        case NYdb::NTable::EIndexType::GlobalVectorKMeansTree:
+            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        case NYdb::NTable::EIndexType::GlobalHnsw:
+            return NKikimrSchemeOp::EIndexTypeGlobalHnsw;
+        case NYdb::NTable::EIndexType::GlobalFulltextPlain:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        case NYdb::NTable::EIndexType::GlobalFulltextRelevance:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+                : NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        case NYdb::NTable::EIndexType::GlobalJson:
+            return enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson;
+        default:
+            // Local indexes are a part of the table itself, there is nothing to replicate.
+            return std::nullopt;
+        }
+    }
+
+} // anonymous
 
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     void DescribePath(ui32 idx) {
@@ -155,24 +192,58 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"kind", target.Kind});
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
-                switch (index.GetIndexType()) {
-                case NYdb::NTable::EIndexType::GlobalSync:
-                case NYdb::NTable::EIndexType::GlobalUnique:
-                    break;
-                default:
-                    continue;
-                }
+                const auto indexSrcPath = CanonizePath(ChildPath(SplitPath(path.first),
+                    TString{index.GetIndexName()}));
+                const auto indexDstPath = CanonizePath(ChildPath(SplitPath(path.second),
+                    TString{index.GetIndexName()}));
 
-                const auto& target = ToAdd.emplace_back(
-                    TReplication::ETargetKind::IndexTable,
-                    std::make_shared<TTargetIndexTable::TIndexTableConfig>(
-                        CanonizePath(ChildPath(SplitPath(path.first), TString{index.GetIndexName()})),
-                        CanonizePath(ChildPath(SplitPath(path.second), {TString{index.GetIndexName()}, "indexImplTable"}))
-                    ));
-                YDB_LOG_INFO("Add target",
-                    {"srcPath", target.Config->GetSrcPath()},
-                    {"dstPath", target.Config->GetDstPath()},
-                    {"kind", target.Kind});
+                if (index.GetIndexType() != NYdb::NTable::EIndexType::GlobalAsync) {
+                    // Async indexes are maintained by the destination's own change exchange.
+                    // Other index types (fulltext, vector, json) are replicated as their impl
+                    // tables: their names are defined by the index type and its keys.
+                    const auto indexType = ConvertIndexType(index.GetIndexType(),
+                        AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
+                    if (!indexType) {
+                        YDB_LOG_DEBUG("Skip target for local index",
+                            {"path", indexSrcPath},
+                            {"type", index.GetIndexType()});
+                        continue;
+                    }
+
+                    TVector<TString> indexColumns;
+                    for (const auto& column : index.GetIndexColumns()) {
+                        indexColumns.emplace_back(column.data(), column.size());
+                    }
+
+                    if (*indexType == NKikimrSchemeOp::EIndexTypeGlobal
+                        || *indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique)
+                    {
+                        // Secondary indexes are replicated as a whole: the source is the index and
+                        // the stream lives on its only impl table.
+                        const auto& target = ToAdd.emplace_back(
+                            TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                indexSrcPath,
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable)));
+                        YDB_LOG_INFO("Add target",
+                            {"srcPath", target.Config->GetSrcPath()},
+                            {"dstPath", target.Config->GetDstPath()},
+                            {"kind", target.Kind});
+                        continue;
+                    }
+
+                    for (const auto implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
+                        const auto& target = ToAdd.emplace_back(
+                            TReplication::ETargetKind::IndexTable,
+                            std::make_shared<TTargetIndexTable::TIndexTableConfig>(
+                                CanonizePath(TStringBuilder() << indexSrcPath << '/' << implTable),
+                                CanonizePath(TStringBuilder() << indexDstPath << '/' << implTable)));
+                        YDB_LOG_INFO("Add target",
+                            {"srcPath", target.Config->GetSrcPath()},
+                            {"dstPath", target.Config->GetDstPath()},
+                            {"kind", target.Kind});
+                    }
+                }
             }
         } else {
             YDB_LOG_ERROR("Describe table failed",

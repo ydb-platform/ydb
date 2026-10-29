@@ -5,9 +5,10 @@
 #include "topic_mirror.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/persqueue/public/schema/schema_propose.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -307,25 +308,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
         }
 
-        // filter out unsupported index types
+        // only async indexes are unsupported without the EnableAsyncIndexReplication feature flag
         auto& indexes = *scheme.mutable_indexes();
         for (auto it = indexes.begin(); it != indexes.end();) {
-            switch (it->type_case()) {
-            case Ydb::Table::TableIndex::kGlobalIndex:
-            case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-                ++it;
-                continue;
-            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
-                    ++it;
-                } else {
-                    it = indexes.erase(it);
-                }
-                continue;
-            default:
+            if (it->type_case() == Ydb::Table::TableIndex::kGlobalAsyncIndex &&
+                !AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
                 it = indexes.erase(it);
-                break;
+                continue;
             }
+            ++it;
         }
 
         Ydb::StatusIds::StatusCode status;
@@ -373,10 +364,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
+                // Local indexes live inside the table and have no impl tables to replicate.
                 // Async indexes are maintained by the destination's own change exchange.
-                // Only synchronous index tables have independent replication targets.
-                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
-                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Other index tables have independent replication targets.
+                if (NTableIndex::HasReplicatedImplTables(index.GetType())) {
+                    for (auto& implTable : *index.MutableIndexImplTableDescriptions()) {
+                        FillReplicationConfig(*implTable.MutableReplicationConfig());
+                    }
                 }
             }
         }
@@ -455,9 +449,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (DropIndexTx.HasDropIndex()) {
-            ExecuteSchemeTx(DropIndexTx);
-        } else if (SwitchoverTx.HasAlterTable()) {
+        if (SwitchoverTx.HasAlterTable()) {
             ExecuteSchemeTx(SwitchoverTx);
         } else if (InitialScan || CreatePlaceholder || Kind == TReplication::ETargetKind::Topic) {
             CreateDst();
@@ -468,33 +460,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void CreateDst() {
         ExecuteSchemeTx(TxBody);
-    }
-
-    bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
-        return !InitialScan && !CreatePlaceholder
-            && Kind == TReplication::ETargetKind::Table
-            && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-    }
-
-    void PrepareDropIndex(const NKikimrSchemeOp::TIndexDescription& index,
-            const NKikimrScheme::TEvDescribeSchemeResult& desc)
-    {
-        const auto parts = SplitPath(desc.GetPath());
-        Y_ABORT_UNLESS(!parts.empty());
-        DropIndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
-        DropIndexTx.SetInternal(true);
-        DropIndexTx.SetWorkingDir(TString(ExtractParent(desc.GetPath())));
-        DropIndexTx.MutableDropIndex()->SetTableName(parts.back());
-        DropIndexTx.MutableDropIndex()->SetIndexName(index.GetName());
-
-        // DROP INDEX is addressed by name. Bind it to the table and index we
-        // validated so a concurrent schema change cannot redirect the removal.
-        auto* tableCondition = DropIndexTx.AddApplyIf();
-        tableCondition->SetPathId(DstPathId.LocalPathId);
-        tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
-        DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
-        NeedToCheck = true;
-        AllocateTxId();
     }
 
     void PrepareSwitchover(const NKikimrScheme::TEvDescribeSchemeResult& desc) {
@@ -564,10 +529,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
                 return SubscribeTx(record.GetPathCreateTxId());
-            } else if (DropIndexTx.HasDropIndex()) {
-                DropIndexTx.Clear();
-                Become(&TThis::StateDescribeDstPath);
-                return Retry();
             } else if (SwitchoverTx.HasAlterTable()) {
                 SwitchoverTx.Clear();
                 Become(&TThis::StateDescribeDstPath);
@@ -580,9 +541,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return DescribeDstPath();
         case NKikimrScheme::StatusPreconditionFailed:
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (DropIndexTx.HasDropIndex()) {
-                return DescribeDstPath();
-            }
             if (SwitchoverTx.HasAlterTable()) {
                 // Either the ApplyIf no longer holds -- the destination moved under us, possibly
                 // because the demote itself committed and its reply was lost -- or the alter is
@@ -626,7 +584,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
-        DropIndexTx.Clear();
         Send(PipeCache, new TEvPipeCache::TEvForward(
             new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
@@ -661,11 +618,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (!IsOwnedByThisReplication(desc.GetTable())) {
                 return Error(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
                     << "`" << DstPath << "` is owned by another replication");
-            }
-            for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                if (ShouldDropVectorIndex(index)) {
-                    return PrepareDropIndex(index, record);
-                }
             }
             if (NeedsSwitchover(desc.GetTable())) {
                 const auto version = desc.GetSelf().GetPathVersion();
@@ -865,9 +817,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check indexes
         THashMap<TStringBuf, const NKikimrSchemeOp::TIndexDescription*> indexes;
         for (const auto& index : got.GetTableIndexes()) {
-            if (ShouldDropVectorIndex(index)) {
-                continue;
-            }
             indexes.emplace(index.GetName(), &index);
         }
 
@@ -1188,7 +1137,6 @@ private:
     ui64 TxId = 0;
     ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
-    NKikimrSchemeOp::TModifyScheme DropIndexTx;
     NKikimrSchemeOp::TModifyScheme SwitchoverTx;
     ui64 SwitchoverPathVersion = 0;
     struct TRefusal {

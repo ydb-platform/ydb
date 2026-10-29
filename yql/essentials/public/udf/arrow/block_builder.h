@@ -94,6 +94,7 @@ public:
         , MaxBlockSizeInBytes_(typeInfoHelper.GetMaxBlockBytes())
         , MinFillPercentage_(params.MinFillPercentage)
         , TotalAllocated_(params.TotalAllocated)
+        , EmptyArray_(MakeEmptyArray(ArrowType_, Pool_))
     {
         Y_ABORT_UNLESS(ArrowType_);
         Y_ABORT_UNLESS(maxLen > 0);
@@ -226,7 +227,7 @@ public:
 
     arrow::Datum Build(bool finish) final {
         auto tree = BuildTree(finish);
-        return ToChunkedArray(*tree, Pool_);
+        return ToChunkedArray(*tree, EmptyArray_);
     }
 
     TBlockArrayTree::Ptr BuildTree(bool finish) {
@@ -284,6 +285,7 @@ protected:
 private:
     size_t CurrLen_ = 0;
     size_t* TotalAllocated_ = nullptr;
+    const std::shared_ptr<arrow::ArrayData> EmptyArray_;
 };
 
 template <typename TLayout, bool Nullable, typename TDerived>

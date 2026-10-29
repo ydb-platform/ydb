@@ -1222,22 +1222,21 @@ namespace NKikimr::NBsController {
             const auto previous = isNew ? normal : existing->second->FailRealmStates.value_or(normal);
             auto states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
             if (!ResetDataCenterStates && (DataCenterStates.Changed() || isNew)) {
-                std::array<std::optional<TFailRealm::EState>, 3> targets;
+                std::array<bool, 3> changedRealms{};
                 std::array<bool, 3> excludedRealms{};
+                std::array<bool, 3> reincludedRealms{};
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
                     if (DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
                         break;
                     }
                     if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
-                        return std::unexpected<TString>(TStringBuilder() << "node# " << slot->VSlotId.NodeId << " has no known DataCenter");
+                        return std::unexpected<TString>(TStringBuilder() << "node# " << slot->VSlotId.NodeId << " has no known HostRecord");
                     }
                     NActorsInterconnect::TNodeLocation location;
                     HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
-                    if (!location.HasDataCenter() || location.GetDataCenter().empty()) {
-                        return std::unexpected<TString>(TStringBuilder() << "node# " << slot->VSlotId.NodeId << " has no known DataCenter");
-                    }
                     const auto& name = location.GetDataCenter();
                     const auto isExcluded = [&name](const TDataCenterStates& states) {
+                        // Missing and unlisted datacenters are included.
                         const auto it = states.find(name);
                         return it != states.end()
                             && it->second == NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EXCLUDED;
@@ -1245,34 +1244,21 @@ namespace NKikimr::NBsController {
                     const bool wasExcluded = !isNew && isExcluded(Self.DataCenterStates);
                     const bool excluded = isExcluded(DataCenterStates.Get());
                     const ui32 realm = slot->RingIdx;
+                    changedRealms[realm] |= wasExcluded != excluded;
                     excludedRealms[realm] |= excluded;
-                    if (wasExcluded == excluded) {
-                        continue;
-                    }
-                    const auto target = excluded ? TFailRealm::Excluded : TFailRealm::Recovering;
-                    if (targets[realm] && *targets[realm] != target) {
-                        return std::unexpected<TString>(TStringBuilder() << "conflicting datacenter transitions for group# " << groupId << " realm# " << realm);
-                    }
-                    targets[realm] = target;
+                    reincludedRealms[realm] |= wasExcluded && !excluded;
                 }
                 for (ui32 realm = 0; realm < 3; ++realm) {
-                    if (!targets[realm]) {
+                    if (!changedRealms[realm]) {
                         continue;
                     }
-                    if (*targets[realm] == TFailRealm::Recovering && excludedRealms[realm]) {
-                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
-                            << " still contains an excluded datacenter");
-                    }
-                    if (*targets[realm] == TFailRealm::Recovering && states[realm] != TFailRealm::Excluded) {
+                    if (reincludedRealms[realm] && states[realm] != TFailRealm::Excluded) {
                         // RFC 190 explicitly requires manual repair via DefineFailRealmStates, even with force.
                         return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
                             << " is writing to an excluded datacenter; repair its fail realm state first");
                     }
-                    if (*targets[realm] == TFailRealm::Excluded && states[realm] == TFailRealm::Excluded && !suppressFailModelChecking) {
-                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
-                            << " is already excluded; IgnoreGroupFailModelChecks is required");
-                    }
-                    states[realm] = *targets[realm];
+                    const TFailRealm::EState target = excludedRealms[realm] ? TFailRealm::Excluded : TFailRealm::Recovering;
+                    states[realm] = target;
                     GroupContentChanged.insert(groupId);
                 }
             }

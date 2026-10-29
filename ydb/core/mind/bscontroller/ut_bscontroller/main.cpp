@@ -552,7 +552,8 @@ namespace {
             return result;
         }
 
-        void CheckStates(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups, TFailRealm::EState state) const {
+        void CheckStates(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups, TFailRealm::EState state,
+                const TString& dataCenter = "2") const {
             for (const auto& [id, group] : groups) {
                 if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
                     continue;
@@ -560,7 +561,7 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(group.RingsSize(), 3);
                 for (const auto& realm : group.GetRings()) {
                     const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
-                    const auto expected = NodeDataCenters.at(node) == "2" ? state : TFailRealm::Invariant0;
+                    const auto expected = NodeDataCenters.at(node) == dataCenter ? state : TFailRealm::Invariant0;
                     UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(expected));
                 }
             }
@@ -857,9 +858,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         UNIT_ASSERT(env.Invoke(env.DefineRealms(groups)).GetSuccess());
         auto exclude = env.Define({{"2", DC::EXCLUDED}});
-        UNIT_ASSERT(!env.Invoke(exclude).GetSuccess()); // DC included but its realm already excluded.
-        exclude.SetIgnoreGroupFailModelChecks(true);
         const auto beforeExclude = env.ReadGroups();
+        // Excluding an already-excluded realm is an idempotent transition, without force.
         UNIT_ASSERT(env.Invoke(exclude).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             const bool mirror = group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc;
@@ -933,29 +933,82 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
         UNIT_ASSERT(env.Invoke(env.CompleteRecovery(), false, hosts).GetSuccess());
         const TString& originalDataCenter = env.NodeDataCenters.at(selectedNode);
-        auto response = env.Invoke(env.Define({{originalDataCenter, DC::EXCLUDED}, {"isolated", DC::EXCLUDED}}), false, hosts);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto excluded = env.ReadGroups();
-        for (const TString& retained : {originalDataCenter, TString("isolated")}) {
-            for (const bool force : {false, true}) {
-                auto request = env.Define({{retained, DC::EXCLUDED}});
-                request.SetIgnoreGroupFailModelChecks(force);
-                response = env.Invoke(request, false, hosts);
-                UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-                UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "still contains an excluded datacenter");
-                for (const auto& [id, group] : env.ReadGroups()) {
-                    UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), excluded.at(id).SerializeAsString());
+        const auto checkStates = [&](R::EState selected, R::EState other) {
+            for (const auto& [id, group] : env.ReadGroups()) {
+                if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
+                    continue;
+                }
+                for (const auto& realm : group.GetRings()) {
+                    bool containsSelected = false;
+                    bool containsOriginalDataCenter = false;
+                    for (const auto& domain : realm.GetFailDomains()) {
+                        for (const auto& location : domain.GetVDiskLocations()) {
+                            containsSelected |= location.GetNodeID() == selectedNode;
+                            containsOriginalDataCenter |= env.NodeDataCenters.at(location.GetNodeID()) == originalDataCenter;
+                        }
+                    }
+                    const R::EState expected = containsSelected ? selected : containsOriginalDataCenter ? other : R::Invariant0;
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(expected));
                 }
             }
+        };
+        for (const TString& retained : {originalDataCenter, TString("isolated")}) {
+            auto response = env.Invoke(env.Define({{originalDataCenter, DC::EXCLUDED}, {"isolated", DC::EXCLUDED}}), false, hosts);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            checkStates(R::Excluded, R::Excluded);
+            const auto request = env.Define({{retained, DC::EXCLUDED}});
+            response = env.Invoke(request, false, hosts);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            // Returning only one DC leaves a shared realm excluded.
+            checkStates(R::Excluded, retained == originalDataCenter ? R::Excluded : R::Recovering);
+            const auto beforeRepeat = env.ReadGroups();
+            UNIT_ASSERT(env.Invoke(request, false, hosts).GetSuccess());
+            for (const auto& [id, group] : env.ReadGroups()) {
+                UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), beforeRepeat.at(id).SerializeAsString());
+            }
         }
+        // Opposite DC transitions in the same realm are resolved by the worst final state.
+        auto response = env.Invoke(env.Define({{originalDataCenter, DC::EXCLUDED}}), false, hosts);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkStates(R::Excluded, R::Excluded);
+        response = env.Invoke(env.Define({{"isolated", DC::EXCLUDED}}), false, hosts);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        checkStates(R::Excluded, R::Recovering);
         response = env.Invoke(env.Define({}), false, hosts);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        for (const auto& [id, group] : env.ReadGroups()) {
-            for (size_t realm = 0; realm < group.RingsSize(); ++realm) {
-                const R::EState expected = excluded.at(id).GetRings(realm).GetRealmState() == R::Excluded
-                    ? R::Recovering : R::Invariant0;
-                UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(realm).GetRealmState()), ui32(expected));
+        checkStates(R::Recovering, R::Recovering);
+    }
+
+    Y_UNIT_TEST(DataCenterStatesAllowUndefinedDataCenters) {
+        using DC = TDataCenterStatesEnv::TDataCenter;
+        using R = TDataCenterStatesEnv::TFailRealm;
+        TDataCenterStatesEnv env;
+        for (const ui32 kind : {0u, 1u, 2u}) {
+            NKikimrBlobStorage::TStorageConfig hostConfig;
+            for (const auto& [host, port, id] : env.GetNodes()) {
+                auto* node = hostConfig.AddAllNodes();
+                node->SetHost(host);
+                node->SetPort(port);
+                node->SetNodeId(id);
+                node->MutableLocation()->SetDataCenter(env.NodeDataCenters.at(id));
+                if (env.NodeDataCenters.at(id) == "2") {
+                    if (kind == 0) {
+                        node->MutableLocation()->ClearDataCenter();
+                    } else {
+                        node->MutableLocation()->SetDataCenter(kind == 1 ? "" : "unlisted");
+                    }
+                }
             }
+            const auto hosts = std::make_shared<THostRecordMapImpl>(hostConfig);
+            auto response = env.Invoke(env.Define({{"1", DC::EXCLUDED}}), false, hosts);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            env.CheckStates(env.ReadGroups(), R::Excluded, "1");
+            response = env.Invoke(env.Define({}), false, hosts);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            env.CheckStates(env.ReadGroups(), R::Recovering, "1");
+            response = env.Invoke(env.CompleteRecovery(), false, hosts);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            env.CheckStates(env.ReadGroups(), R::Invariant0);
         }
     }
 

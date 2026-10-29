@@ -261,15 +261,13 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
         }
     }
 
-    if constexpr (requires { &TTraits::MakePg; }) {
-        TPgTypeInspector typePg(typeInfoHelper, type);
-        if (typePg) {
-            auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
-            if constexpr (TTraits::PassType) {
-                return TTraits::MakePg(*desc, pgBuilder, type, std::forward<TArgs>(args)...);
-            } else {
-                return TTraits::MakePg(*desc, pgBuilder, std::forward<TArgs>(args)...);
-            }
+    TPgTypeInspector typePg(typeInfoHelper, type);
+    if (typePg) {
+        auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
+        if constexpr (TTraits::PassType) {
+            return TTraits::MakePg(*desc, pgBuilder, type, std::forward<TArgs>(args)...);
+        } else {
+            return TTraits::MakePg(*desc, pgBuilder, std::forward<TArgs>(args)...);
         }
     }
 

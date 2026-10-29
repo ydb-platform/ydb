@@ -1,4 +1,5 @@
 #include "scalar_layout_converter.h"
+#include "layout_converter_traits.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -7,7 +8,6 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
-#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -916,7 +916,6 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     Y_ENSURE(types.size() == roles.size());
     for (size_t i = 0; i < types.size(); ++i) {
         auto* type = types[i];
-        EnsureNoPgTypes(type);
         auto* unpacked = type;
         while (unpacked->IsTagged()) {
             unpacked = static_cast<TTaggedType*>(unpacked)->GetBaseType();
@@ -935,7 +934,7 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
             packers.emplace_back(std::make_unique<TSerializedColumnDataExtractor>(
                 type, roles[i] == NPackedTuple::EColumnRole::Key, unpacked, optional || unpacked->IsNull()));
         } else {
-            packers.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, type));
+            packers.emplace_back(NLayoutConverter::DispatchLayoutTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, type));
         }
     }
 

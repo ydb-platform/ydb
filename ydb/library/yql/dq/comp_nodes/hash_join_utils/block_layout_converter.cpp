@@ -1,10 +1,10 @@
 #include "block_layout_converter.h"
+#include "layout_converter_traits.h"
 #include "better_mkql_ensure.h"
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
-#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -839,8 +839,7 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     TVector<IColumnDataExtractor::TPtr> extractors;
 
     for (auto type: types) {
-        EnsureNoPgTypes(type);
-        extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool));
+        extractors.emplace_back(NLayoutConverter::DispatchLayoutTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, pool));
     }
 
     return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles, rememberNullBitmaps);

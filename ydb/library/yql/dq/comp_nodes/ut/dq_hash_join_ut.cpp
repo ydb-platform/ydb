@@ -2736,6 +2736,83 @@ void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
+    Y_UNIT_TEST_TWIN(RejectPgTypes, BlockJoin) {
+        constexpr size_t TypeCount = 12;
+        auto check = [&](ui32 typeId, size_t typeIndex, ui32 column, bool left) {
+            // A failed graph construction leaves its nodes unusable for another build.
+            bool wrapCalled = false;
+            TDqSetup<false> setup(GetDqNodeFactory(
+                [&](TCallable& callable, const TComputationNodeFactoryContext&) -> IComputationNode* {
+                    if (callable.GetType()->GetName() == (BlockJoin ? "DqBlockHashJoin" : "DqScalarHashJoin")) {
+                        wrapCalled = true;
+                    }
+                    return nullptr;
+                }));
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+            auto* pgType = pb.NewPgType(typeId);
+            auto* structType = pb.NewStructType({{"value", pgType}});
+            const std::array<TType*, TypeCount> types = {
+                pgType,
+                pb.NewOptionalType(pgType),
+                pb.NewOptionalType(pb.NewOptionalType(pgType)),
+                pb.NewTaggedType(pgType, "pg"),
+                structType,
+                pb.NewOptionalType(structType),
+                pb.NewTupleType({intType, structType}),
+                pb.NewListType(structType),
+                pb.NewDictType(pgType, intType, false),
+                pb.NewDictType(intType, structType, false),
+                pb.NewVariantType(pb.NewTupleType({intType, structType})),
+                pb.NewTaggedType(pb.NewOptionalType(structType), "nested_pg"),
+            };
+            auto source = [&](TVector<TType*> columns) {
+                if constexpr (BlockJoin) {
+                    for (auto*& type : columns) {
+                        type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                    }
+                    columns.push_back(pb.LastScalarIndexBlock());
+                }
+                auto* multi = pb.NewMultiType(columns);
+                auto* inputType = BlockJoin ? pb.NewStreamType(multi) : pb.NewFlowType(multi);
+                TCallableBuilder builder(*setup.Env, "ExternalNode", inputType);
+                return TRuntimeNode(builder.Build(), false);
+            };
+            auto* returnType = BlockJoin
+                ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(intType, TBlockType::EShape::Many),
+                                                    pb.LastScalarIndexBlock()}))
+                : pb.NewFlowType(pb.NewMultiType({intType}));
+            TVector<TType*> columns = {intType, intType};
+            columns[column] = types[typeIndex];
+            const auto badSource = source(columns);
+            const auto goodSource = source({intType, intType});
+            const auto lhs = left ? badSource : goodSource;
+            const auto rhs = left ? goodSource : badSource;
+            const auto join = BlockJoin
+                ? pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType)
+                : pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+                "PG types are not supported in hash join");
+            UNIT_ASSERT_C(wrapCalled, "PG types must be rejected in the hash join wrapper");
+        };
+        for (ui32 typeId : {23u, 25u}) { // int4 (by value), text (by reference)
+            for (size_t typeIndex = 0; typeIndex < TypeCount; ++typeIndex) {
+                for (ui32 column : {0u, 1u}) { // key, payload
+                    for (bool left : {false, true}) {
+                        check(typeId, typeIndex, column, left);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AcceptTypesWithoutPg, BlockJoin) {
+        Test(BasicInnerJoinTestData(), BlockJoin, false);
+        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), BlockJoin, false);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);

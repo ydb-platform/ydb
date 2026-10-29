@@ -13,6 +13,7 @@ SRCS(
     schema.cpp
     sequenceshard.cpp
     sequenceshard_impl.cpp
+    tx_advance_sequence.cpp
     tx_allocate_sequence.cpp
     tx_create_sequence.cpp
     tx_drop_sequence.cpp

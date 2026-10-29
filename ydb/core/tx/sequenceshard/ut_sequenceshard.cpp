@@ -3,6 +3,17 @@
 namespace NKikimr {
 namespace NSequenceShard {
 
+    void CheckAdvance(TTestContext& ctx, TPathId pathId, i64 observedMin, i64 observedMax, i64 expectedNext, bool expectedUsed) {
+        auto result = ctx.AdvanceSequence(
+            TEvSequenceShard::TEvAdvanceSequence::Build(pathId)
+                .SetObserved(observedMin, observedMax)
+                .Done());
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(),
+            NKikimrTxSequenceShard::TEvAdvanceSequenceResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetNextValue(), expectedNext);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetNextUsed(), expectedUsed);
+    }
+
     Y_UNIT_TEST_SUITE(SequenceShardTests) {
 
         Y_UNIT_TEST(Basics) {
@@ -444,6 +455,182 @@ namespace NSequenceShard {
                     NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS);
                 UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationStart(), -11);
                 UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationCount(), 10u);
+            }
+        }
+
+        Y_UNIT_TEST(AdvanceSequence) {
+            TTestContext ctx;
+            ctx.Setup();
+
+            const TPathId pathId(123, 42);
+            ctx.SwitchToUnmarked();
+
+            {
+                auto createResult = ctx.CreateSequence(
+                    TEvSequenceShard::TEvCreateSequence::Build(pathId)
+                        .SetMinValue(1)
+                        .SetMaxValue(100)
+                        .SetStartValue(1)
+                        .SetCycle(false)
+                        .Done());
+                UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
+            }
+
+            // The observed value may be exactly the value the sequence was about to hand out
+            CheckAdvance(ctx, pathId, 1, 1, 1, true);
+            {
+                auto allocateResult = ctx.AllocateSequence(pathId);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationStart(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationCount(), 1u);
+            }
+
+            // A batch above the current position increases NextValue
+            CheckAdvance(ctx, pathId, 10, 20, 20, true);
+
+            // A batch behind the current position changes nothing
+            CheckAdvance(ctx, pathId, 5, 6, 20, true);
+
+            // A batch ending exactly at an already used value changes nothing
+            CheckAdvance(ctx, pathId, 15, 20, 20, true);
+
+            // The next batch continues from where the previous one stopped
+            CheckAdvance(ctx, pathId, 20, 21, 21, true);
+
+            // Reaching the last value exhausts the sequence
+            CheckAdvance(ctx, pathId, 99, 100, 100, true);
+            {
+                auto allocateResult = ctx.AllocateSequence(pathId);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_OVERFLOW);
+            }
+
+            // An exhausted sequence stays exhausted
+            CheckAdvance(ctx, pathId, 50, 60, 100, true);
+
+            // Unknown sequences are reported
+            {
+                auto result = ctx.AdvanceSequence(
+                    TEvSequenceShard::TEvAdvanceSequence::Build(TPathId(123, 99))
+                        .SetObserved(1, 2)
+                        .Done());
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAdvanceSequenceResult::SEQUENCE_NOT_FOUND);
+            }
+        }
+
+        // The sequence aligns with the start + N*increment grid.
+        Y_UNIT_TEST(AdvanceSequenceAlignsIncrement) {
+            TTestContext ctx;
+            ctx.Setup();
+
+            const TPathId pathId(123, 42);
+            ctx.SwitchToUnmarked();
+
+            {
+                auto createResult = ctx.CreateSequence(
+                    TEvSequenceShard::TEvCreateSequence::Build(pathId)
+                        .SetMinValue(1)
+                        .SetMaxValue(100)
+                        .SetStartValue(1)
+                        .SetIncrement(5)
+                        .SetCycle(false)
+                        .Done());
+                UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
+            }
+
+            CheckAdvance(ctx, pathId, 10, 12, 11, true);
+
+            {
+                auto allocateResult = ctx.AllocateSequence(pathId);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationStart(), 16);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationCount(), 1);
+            }
+        }
+
+        // Basic cyclic sequence support.
+        Y_UNIT_TEST(AdvanceSequenceCyclic) {
+            TTestContext ctx;
+            ctx.Setup();
+
+            const TPathId pathId(123, 42);
+            ctx.SwitchToUnmarked();
+
+            {
+                auto createResult = ctx.CreateSequence(
+                    TEvSequenceShard::TEvCreateSequence::Build(pathId)
+                        .SetMinValue(1)
+                        .SetMaxValue(1000)
+                        .SetStartValue(1)
+                        .SetIncrement(4) // 1..5....997
+                        .SetCycle(true)
+                        .Done());
+                UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
+            }
+
+            // exhaust the whole range
+            CheckAdvance(ctx, pathId, 1, 2000, 997, true);
+
+            // cycle and restart from the beginning
+            CheckAdvance(ctx, pathId, 1, 10, 9, true);
+
+            {
+                auto allocateResult = ctx.AllocateSequence(pathId);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationStart(), 13);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationCount(), 1);
+            }
+        }
+
+        Y_UNIT_TEST(AdvanceSequenceDescending) {
+            TTestContext ctx;
+            ctx.Setup();
+
+            const TPathId pathId(123, 42);
+            ctx.SwitchToUnmarked();
+
+            {
+                auto createResult = ctx.CreateSequence(
+                    TEvSequenceShard::TEvCreateSequence::Build(pathId)
+                        .SetMinValue(-100)
+                        .SetMaxValue(-1)
+                        .SetStartValue(-1)
+                        .SetIncrement(-1)
+                        .SetCycle(false)
+                        .Done());
+                UNIT_ASSERT_VALUES_EQUAL(createResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
+            }
+
+            // The observed value may be exactly the value the sequence was about to hand out
+            CheckAdvance(ctx, pathId, -1, -1, -1, true);
+            {
+                auto allocateResult = ctx.AllocateSequence(pathId);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAllocateSequenceResult::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationStart(), -2);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetAllocationCount(), 1);
+            }
+
+            // A batch below the current position decreases NextValue
+            CheckAdvance(ctx, pathId, -10, -5, -10, true);
+
+            // A batch below the current position changes nothing
+            CheckAdvance(ctx, pathId, -5, -2, -10, true);
+
+            // Reaching the lower bound exhausts the sequence
+            CheckAdvance(ctx, pathId, -100, -99, -100, true);
+            {
+                auto allocateResult = ctx.AllocateSequence(pathId);
+                UNIT_ASSERT_VALUES_EQUAL(allocateResult->Record.GetStatus(),
+                    NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_OVERFLOW);
             }
         }
 

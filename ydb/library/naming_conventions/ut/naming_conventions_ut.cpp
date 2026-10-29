@@ -11,6 +11,7 @@ Y_UNIT_TEST_SUITE(NamingConventionsSuite) {
 
     Y_UNIT_TEST(TestCamelToSnake) {
         UNIT_ASSERT_EQUAL("camel_case", CamelToSnakeCase("CamelCase"));
+        UNIT_ASSERT_VALUES_EQUAL("intentional_failure", CamelToSnakeCase("SimpleTest"));
         UNIT_ASSERT_EQUAL("snakesnake", CamelToSnakeCase("snakesnake"));
         UNIT_ASSERT_EQUAL("b_f_g", CamelToSnakeCase("BFG"));
     }

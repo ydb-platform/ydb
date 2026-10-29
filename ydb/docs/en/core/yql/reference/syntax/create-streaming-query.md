@@ -30,7 +30,7 @@ You cannot use `OR REPLACE` and `IF NOT EXISTS` together.
 `WITH` parameters:
 
 * `RUN = (TRUE|FALSE)` — start the query after creation; default `TRUE`.
-* `RESOURCE_POOL = <resource_pool_name>` — name of the [resource pool](../../../concepts/glossary.md#resource-pool) where the query runs.
+* `RESOURCE_POOL = <resource_pool_name>` — name of the resource pool where the query runs.
 
 Creation examples are [below](#examples).
 
@@ -120,7 +120,7 @@ END DO
 
 ### Start in a resource pool {#example-resource-pool}
 
-The query is created in the given [resource pool](../../../concepts/glossary.md#resource-pool) but not started automatically (`RUN = FALSE`). You can validate configuration first or start later with [ALTER STREAMING QUERY](alter-streaming-query.md).
+The query is created in the given resource pool but not started automatically (`RUN = FALSE`). You can validate configuration first or start later with [ALTER STREAMING QUERY](alter-streaming-query.md).
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query WITH (

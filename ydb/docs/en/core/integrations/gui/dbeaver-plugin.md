@@ -8,10 +8,10 @@
 
 - Connecting to {{ ydb-name }} with all [authentication](../../security/authentication.md) methods: anonymous, static, token-based, service account, and metadata.
 - Hierarchical object navigator: tables, topics, external data sources, external tables, views.
-- System objects: [system views](../../dev/system-views.md) (`.sys`), [resource pools](../../concepts/glossary.md#resource-pool), and [resource pool classifiers](../../concepts/glossary.md#resource-pool-classifier).
+- System objects: [system views](../../dev/system-views.md) (`.sys`), resource pools, and resource pool classifiers.
 - [YQL](../../concepts/glossary.md#yql) editor with syntax highlighting for 150+ keywords and built-in functions.
 - Query execution plan visualization (`EXPLAIN` / `EXPLAIN ANALYZE`).
-- Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
+- Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md).
 - Cluster dashboard: CPU load, disk usage, memory usage, network traffic, node status (updates every 5 seconds).
 - [Access control (ACL)](../../security/authorization.md#right) management: granting, revoking, and viewing permissions.
 - [Streaming query](../../concepts/glossary.md#streaming-query) management: viewing, modifying, starting, and stopping.
@@ -196,7 +196,7 @@ After connection, the **Database Navigator** panel displays the {{ ydb-short-nam
 - **External Data Sources** — [external data sources](../../concepts/glossary.md#external-data-source).
 - **External Tables** — [external tables](../../concepts/glossary.md#external-table).
 - **System Views (.sys)** — [system views](../../dev/system-views.md), such as `partition_stats`, `query_sessions`.
-- **Resource Pools** — [resource pools](../../concepts/glossary.md#resource-pool).
+- **Resource Pools** — resource pools.
 
 ## Working with the plugin {#capabilities}
 
@@ -229,7 +229,7 @@ Click **Explain** (or `Ctrl+Shift+E`) to get the [query execution plan](../../de
 
 ### Session manager {#session-manager}
 
-Select the menu item **Tools → Sessions Manager**, or right-click the connection and select the corresponding item. The opened view displays all active sessions with the current query, state, and duration (data from the system view [`.sys/query_sessions`](../../dev/system-views.md#query-sessions)). The **Hide Idle** checkbox hides sessions without an active query.
+Select the menu item **Tools → Sessions Manager**, or right-click the connection and select the corresponding item. The opened view displays all active sessions with the current query, state, and duration (data from the system view [`.sys/query_sessions`](../../dev/system-views.md)). The **Hide Idle** checkbox hides sessions without an active query.
 
 ### Cluster dashboard {#cluster-dashboard}
 

@@ -21,7 +21,7 @@ table_service_config:
 
 ### Directory Configuration
 
-#### local_file_config.root
+#### local_file_config.root {#local-file-config-root}
 
 **Type:** `string`  
 **Default:** `""` (temporary directory)  
@@ -64,7 +64,7 @@ Spilling is only performed on [database nodes](../../concepts/glossary.md#databa
 
 - `Permission denied` — insufficient directory access permissions. See [{#T}](../../troubleshooting/spilling/permission-denied.md)
 
-#### local_file_config.max_total_size
+#### local_file_config.max_total_size {#local-file-config-max-total-size}
 
 **Type:** `uint64`  
 **Default:** `21474836480` (20 GiB)  
@@ -86,11 +86,11 @@ I/O pool threads for spilling are created in addition to threads allocated for t
 
 **Important:** The spilling thread pool is separate from the actor system thread pools.
 
-For information about configuring actor system thread pools and their impact on system performance, see [Actor System Configuration](index.md#actor-system) and [Changing Actor System Configuration](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). For Configuration V2, the actor system settings are described in the [Configuration V2 settings](../../devops/configuration-management/configuration-v2/config-settings.md).
+For information about configuring actor system thread pools and their impact on system performance, see [Actor System Configuration](actor_system_config.md) and [Changing Actor System Configuration](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). For Configuration V2, the actor system settings are described in the [Configuration V2 settings](../../devops/configuration-management/configuration-v2/config-settings.md).
 
 {% endnote %}
 
-#### local_file_config.io_thread_pool.workers_count
+#### local_file_config.io_thread_pool.workers_count {#workerscount}
 
 **Type:** `uint32`  
 **Default:** `2`  
@@ -133,7 +133,7 @@ However, it's important to consider that spilling itself requires memory. If you
 
 {% endnote %}
 
-### File System Requirements
+### File System Requirements {#file-system-requirements}
 
 #### File Descriptors
 
@@ -181,7 +181,7 @@ table_service_config:
 
 The following parameters control the enabling and disabling of various spilling types. They should typically only be changed when there are specific system requirements.
 
-##### local_file_config.enable
+##### local_file_config.enable {#local-file-config-enable}
 
 **Location:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Type:** `boolean`  

@@ -8,11 +8,11 @@
 
 - Connecting to {{ ydb-name }} with all [authentication](../../security/authentication.md) methods: anonymous, static, token-based, service account, and metadata.
 - Hierarchical object navigator: tables ([row](../../concepts/glossary.md#row-oriented-table) and [column](../../concepts/glossary.md#column-oriented-table)), [topics](../../concepts/datamodel/topic.md), [views](../../concepts/datamodel/view.md), [external data sources](../../concepts/glossary.md#external-data-source), [external tables](../../concepts/glossary.md#external-table), [transfers](../../concepts/transfer.md), [streaming queries](../../concepts/glossary.md#streaming-query).
-- System objects: [system views](../../dev/system-views.md) (`.sys`), [resource pools](../../concepts/glossary.md#resource-pool).
+- System objects: [system views](../../dev/system-views.md) (`.sys`), resource pools.
 - [YQL](../../concepts/glossary.md#yql) editor with syntax highlighting, autocompletion of tables and columns.
 - Query execution and result visualization: table, JSON, diagram.
 - Visualization of the [query execution plan](../../dev/query-execution-optimization/query-plans-optimization.md) (`EXPLAIN`).
-- Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
+- Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md).
 - Cluster dashboard based on [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): CPU load, memory usage, network traffic (updates every 10 seconds).
 - Management of [access rights (ACL)](../../security/authorization.md#right): viewing permissions on database objects.
 - Generation of DDL scripts ( [`CREATE`](../../yql/reference/syntax/create_table/index.md)) for any database object.
@@ -146,7 +146,7 @@ After connecting, click the connection in the **Connections** panel — the **Na
 - **Topics** — [topics](../../concepts/datamodel/topic.md).
 - **External Data Sources** — [external data sources](../../concepts/glossary.md#external-data-source).
 - **External Tables** — [external tables](../../concepts/glossary.md#external-table).
-- **Resource Pools** — [resource pools](../../concepts/glossary.md#resource-pool).
+- **Resource Pools** — resource pools.
 - **Transfers** — data transfers.
 - **Streaming Queries** — [streaming queries](../../concepts/glossary.md#streaming-query).
 
@@ -188,7 +188,7 @@ Select **Explain YQL Query** in the editor context menu or in the command palett
 
 ### Session manager {#session-manager}
 
-The **Sessions** panel (Activity Bar → YDB) displays all active sessions with the current query, state, and duration (data from the system view [`.sys/query_sessions`](../../dev/system-views.md#query-sessions)). The **Toggle Hide Idle** button hides sessions without an active query.
+The **Sessions** panel (Activity Bar → YDB) displays all active sessions with the current query, state, and duration (data from the system view [`.sys/query_sessions`](../../dev/system-views.md)). The **Toggle Hide Idle** button hides sessions without an active query.
 
 ### Cluster dashboard {#cluster-dashboard}
 

@@ -459,6 +459,6 @@ END DO
 
 Подробнее о функциях:
 
-- [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
+- [String::SplitToList](../../yql/reference/udf/list/string.md#SplitToList)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)
 - [FLATTEN LIST BY](../../yql/reference/syntax/select/flatten.md#flatten-by).

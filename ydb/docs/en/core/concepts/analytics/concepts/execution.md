@@ -37,4 +37,4 @@ Analytical queries can require large amounts of RAM, especially for `JOIN` and `
 
 In a corporate DWH, different teams often run different types of workloads. To prevent these workloads from interfering with each other, {{ydb-short-name}} has a built-in resource manager.
 
-* Workload Manager: the built-in `workload manager` allows you to create resource pools and, using [classifiers](../../../concepts/glossary#resource-pool-classifier), assign queries from different user groups to different pools. This mechanism solves the "noisy neighbor" problem, where a single resource-intensive query can slow down the system for all other users.
+* Workload Manager: the built-in `workload manager` allows you to create resource pools and, using classifiers, assign queries from different user groups to different pools. This mechanism solves the "noisy neighbor" problem, where a single resource-intensive query can slow down the system for all other users.

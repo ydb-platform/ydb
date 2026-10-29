@@ -2,13 +2,13 @@
 
 {% include [feature_enterprise.md](../_includes/feature_enterprise.md) %}
 
-This article describes a special operating mode of the {{ ydb-short-name }} cluster in which data is stored with synchronous replication between multiple parts of the cluster called [pile](glossary.md#pile).
+This article describes a special operating mode of the {{ ydb-short-name }} cluster in which data is stored with synchronous replication between multiple parts of the cluster called **pile**.
 
 The bridge mode is an extension on top of the basic distributed storage modes: each pile is built using one of the {{ ydb-short-name }} [operating modes](topology.md#cluster-config) (for example, `mirror-3-dc` or `block-4-2`) and is fault-tolerant on its own; bridge adds synchronous replication between piles on top of that, plus managed failover/switchover of load between them. This provides an extra layer of fault tolerance on top of the chosen topologies. Bridge mode requires more hardware and is more complex to operate; it is especially useful for clusters deployed across two data centers and for systems with higher availability requirements — for example, when you need to remain available if three out of four data centers fail.
 
 ## Description of the mode {#description}
 
-In bridge mode, cluster nodes are split into several [piles](glossary.md#pile) (typically one pile per datacenter). If one of the piles fails, the cluster becomes unavailable until the command to disable that pile is executed. After it is disabled, the cluster resumes operation.
+In bridge mode, cluster nodes are split into several **piles** (typically one pile per datacenter). If one of the piles fails, the cluster becomes unavailable until the command to disable that pile is executed. After it is disabled, the cluster resumes operation.
 
 {{ ydb-short-name }} supports an arbitrary number of piles; however, for simplicity, the following discussion considers the case of two piles.
 

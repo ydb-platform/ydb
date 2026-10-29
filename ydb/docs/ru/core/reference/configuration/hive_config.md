@@ -82,7 +82,7 @@ hive_config:
 || `min_cpuscatter_to_balance` | MinCPUScatterToBalance | Вещественное число | Порог метрики Scatter для ресурса CPU. | 0.5 ||
 || `min_memory_scatter_to_balance` | MinMemoryScatterToBalance | Вещественное число | Порог метрики Scatter для ресурса Memory.| 0.5  ||
 || `min_network_scatter_to_balance` | MinNetworkScatterToBalance | Вещественное число | Порог метрики Scatter для ресурса Network. | 0.5 ||
-|| `min_counter_scatter_to_balance` | MinCounterScatterToBalance | Вещественное число | Порог метрики Scatter для фиктивного ресурса [Counter](../../contributor/hive.md#counter). | 0.02 ||
+|| `min_counter_scatter_to_balance` | MinCounterScatterToBalance | Вещественное число | Порог метрики Scatter для фиктивного ресурса [Counter](../../contributor/hive.md#resources). | 0.02 ||
 || `min_node_usage_to_balance` | MinNodeUsageToBalance | Вещественное число | Потребление ресурсов на узле ниже данного значения приравнивается к данному значению. Используется для того, чтобы не балансировать таблетки между малозагруженными узлами. | 0.1 ||
 || `max_node_usage_to_kick` | MaxNodeUsageToKick | Вещественное число | Порог потребления ресурсов на узле для запуска emergency-автобалансировки. | 0.9 ||
 || `node_usage_range_to_kick` | NodeUsageRangeToKick | Вещественное число | Минимальная разница в уровне потребления ресурсов между узлами, ниже которой автобалансировка считается нецелесообразной. | 0.2 ||

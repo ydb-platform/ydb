@@ -49,8 +49,6 @@ Parameters specific to full-text indexes:
 
 ### Parameters of the local min_max index {#local-min-max}
 
-{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
-
 {% if backend_name == "YDB" and oss == true %}
 
 You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
@@ -68,16 +66,6 @@ Features of local bloom indexes:
 {% note info "Limitations" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
-
-{% endnote %}
-
-Features of the local min_max index:
-
-{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
-
-{% note info "Limitations" %}
-
-{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
 
 {% endnote %}
 
@@ -152,24 +140,13 @@ ALTER TABLE `/Root/Table`
   );
 ```
 
-
-min_max index:
-
-
-```yql
-ALTER TABLE `/Root/Table`
-  ADD INDEX idx_created_at LOCAL USING min_max
-  ON (created_at);
-```
-
-
 ## Changing index parameters {#alter-index}
 
-Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
+Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные]({{ concept_secondary_index }}#sync) или [асинхронные]({{ concept_secondary_index }}#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
 
 {% note info %}
 
-Currently, setting partitioning parameters for secondary indexes when creating an index is not supported either in the [`ALTER TABLE ADD INDEX`](#add-index) statement or in the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statement.
+В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table/secondary_index.md).
 
 {% endnote %}
 
@@ -195,7 +172,6 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` and `CASE_SENSITIVE` (only for `bloom_ngram_filter`)
-  * The min_max index does not support `ALTER INDEX`.
 
 {% note info %}
 

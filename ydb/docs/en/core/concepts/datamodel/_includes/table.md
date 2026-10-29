@@ -167,10 +167,6 @@ The speed of the rename operation is determined by the type of data transactions
 * [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
-### Column groups {#column-groups}
-
-{{ ydb-short-name }} lets you group table columns to optimize storage and access. Column groups improve partial row read performance by splitting column storage into separate groups. See [creating column groups](../../../yql/reference/syntax/create_table/family.md) and [changing column groups](../../../yql/reference/syntax/alter_table/family.md).
-
 ### Local Bloom skip indexes {#bloom-filter}
 
 Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) allows more efficiently determining the absence of keys in a table during multiple point lookups by primary key, reducing the number of required disk I/O operations at the cost of increased memory consumption.
@@ -278,7 +274,7 @@ In column-oriented and row-oriented tables you can define [local Bloom skip inde
 
 ### Local min_max index {#local-min-max-index}
 
-In columnar tables, you can define a [local min_max index](../../glossary.md#local-min-max-index) on columns using `LOCAL USING min_max`. The index is defined when [creating a table](../../../yql/reference/syntax/create_table/min_max_index.md) or added via [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). For more details: [local indexes](../../query_execution/local_indexes.md), [min_max index](../../../dev/min_max-skip-index.md).
+In columnar tables, you can define a local min_max index on columns using `LOCAL USING min_max`. The index is defined when [creating a table](../../../yql/reference/syntax/create_table/min_max_index.md) or added via [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). For more details: [local indexes](../../query_execution/local_indexes.md), [min_max index](../../../dev/min_max-skip-index.md).
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 

@@ -6,30 +6,16 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
-#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/string/printf.h>
 #include <util/string/vector.h>
 
-#include <optional>
 #include <utility>
 
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
-
-TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix) {
-    if (!stripAliasPrefix) {
-        return TString(columnName);
-    }
-
-    const auto it = columnName.find('.');
-    if (it == TStringBuf::npos) {
-        return TString(columnName);
-    }
-    return TString(columnName.substr(it + 1));
-}
 
 namespace {
 

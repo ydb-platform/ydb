@@ -6,11 +6,8 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-
-#include <cstddef>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -38,7 +35,6 @@ public:
 TOlapFilterInspection InspectOlapExpression(const NYql::TExprNode::TPtr& node);
 TOlapFilterInspection InspectOlapProcessLambda(const NYql::TExprNode::TPtr& lambda);
 
-TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix);
 TString FormatOlapFilter(const NYql::NNodes::TKqpOlapFilter& filter);
 
 } // namespace NKikimr::NKqp::NOpt

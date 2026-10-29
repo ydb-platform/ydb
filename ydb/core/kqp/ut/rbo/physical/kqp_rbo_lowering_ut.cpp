@@ -6,9 +6,11 @@
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_source_builder.h>
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_lookup_join_builder.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 
+#include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -481,6 +483,64 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                     }
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(TextPlansReuseExplainRanges) {
+        const auto compile = [](TStringBuf expression, NYql::TExprContext& ctx) {
+            const auto ast = NYql::ParseAst(TStringBuilder() << "((return " << expression << "))");
+            UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+            NYql::TExprNode::TPtr node;
+            UNIT_ASSERT_C(NYql::CompileExpr(*ast.Root, node, ctx, nullptr, nullptr), ctx.IssueManager.GetIssues().ToString());
+            return node;
+        };
+        NYql::TExprContext ctx;
+        const NYql::TPositionHandle pos;
+        TInfoUnitRegistry registry;
+        const auto a = registry.Add(TInfoUnit("t", "a"));
+        const auto table = Build<TKqpTable>(ctx, pos)
+            .Path().Build("/Root/table").PathId().Build("1:1")
+            .SysView().Build("").Version().Build("1").Done().Ptr();
+        const auto point = compile("(RangeFinalize (RangeFor '== (Int64 '1) (DataType 'Int64)))", ctx);
+        const auto literal = compile("'((KqlKeyInc (Int64 '1)) (KqlKeyInc (Int64 '1)))", ctx);
+        const auto parameter = compile("(RangeFor '>= (Parameter '$lo (DataType 'Int64)) (DataType 'Int64))", ctx);
+        NYql::TTypeAnnotationContext types;
+        const auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
+        const auto evaluated = NOpt::EvaluateReadRanges(point, 1, ctx, types, *functionRegistry);
+        UNIT_ASSERT(evaluated);
+
+        for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
+            TOpRead read("t", {a}, storage, table, nullptr, nullptr, std::nullopt, std::nullopt,
+                ESortDir::None, TPhysicalOpProps{}, pos);
+            for (const bool useLiteral : {false, true}) {
+                read.RangeInfo = TOpRead::TRangeInfo{
+                    .ComputeNode = point, .KeyColumns = {"_alias_t\\.nested.a"}, .UsedPrefixLen = 1,
+                    .LiteralRange = useLiteral ? literal : nullptr, .EvaluatedRanges = evaluated,
+                };
+                const auto json = read.ToJson(0, registry);
+                const auto text = read.ToString(ctx, registry);
+                UNIT_ASSERT_VALUES_EQUAL(json["ReadRanges"].GetArray().front().GetStringSafe(), "[{a: 1}, {a: 1}]");
+                UNIT_ASSERT_STRING_CONTAINS(text, "Ranges: [[{a: 1}, {a: 1}]]");
+                UNIT_ASSERT(!text.Contains("RangeFor"));
+                UNIT_ASSERT(!text.Contains("Literal range:"));
+            }
+
+            read.RangeInfo = TOpRead::TRangeInfo{.ComputeNode = parameter, .KeyColumns = {"t.a"}, .UsedPrefixLen = 1};
+            UNIT_ASSERT_VALUES_EQUAL(read.ToJson(0, registry)["ReadRangesExpression"].GetStringSafe(), "a ∈ [$lo, +∞)");
+            UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "Ranges expression: (a ∈ [$lo, +∞))");
+
+            // Empty evaluated ranges are still a description, not a reason to fall back to the expression.
+            read.RangeInfo->EvaluatedRanges = compile("(List (ListType (DataType 'Int64)))", ctx);
+            UNIT_ASSERT(read.ToJson(0, registry)["ReadRanges"].GetArray().empty());
+            UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "Ranges: []");
+
+            // Opaque range programs remain available in the optimizer's diagnostic text.
+            read.RangeInfo = TOpRead::TRangeInfo{
+                .ComputeNode = compile("(Parameter '$ranges (ListType (DataType 'Int64)))", ctx), .KeyColumns = {"t.a"},
+            };
+            UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "$ranges");
+            read.RangeInfo = TOpRead::TRangeInfo{};
+            UNIT_ASSERT(!read.ToString(ctx, registry).Contains("Ranges:"));
         }
     }
 

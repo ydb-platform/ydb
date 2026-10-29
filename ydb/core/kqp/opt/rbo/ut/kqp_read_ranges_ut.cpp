@@ -1,6 +1,4 @@
-#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_evaluate.h>
 #include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
-#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_structure.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -46,12 +44,15 @@ std::optional<TVector<TString>> Describe(TStringBuf expression, const TVector<TS
 
 TString DescribeLiteral(TStringBuf expression, const TVector<TString>& keys) {
     NYql::TExprContext ctx;
-    return DescribeLiteralKeyRange(Compile(expression, ctx), keys);
+    const auto description = DescribeReadRanges(Compile(expression, ctx), nullptr, nullptr, keys);
+    UNIT_ASSERT(description.Ranges);
+    UNIT_ASSERT_VALUES_EQUAL(description.Ranges->size(), 1);
+    return description.Ranges->front();
 }
 
 void AssertExpression(TStringBuf expression, const TVector<TString>& keys, TStringBuf expected) {
     NYql::TExprContext ctx;
-    const auto actual = NReadRanges::DescribeRangesStructure(Compile(expression, ctx), keys);
+    const auto actual = DescribeReadRanges(nullptr, nullptr, Compile(expression, ctx), keys).Expression;
     UNIT_ASSERT(actual);
     UNIT_ASSERT_VALUES_EQUAL(*actual, expected);
 }
@@ -529,7 +530,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         SubstGlobal(duplicated, "(Nth t '1)", "(Nth t '0)");
         for (const auto& expression : {projected, duplicated}) {
             NYql::TExprContext ctx;
-            UNIT_ASSERT(!NReadRanges::DescribeRangesStructure(Compile(expression, ctx), {"a", "b"}));
+            UNIT_ASSERT(!DescribeReadRanges(nullptr, nullptr, Compile(expression, ctx), {"a", "b"}).Expression);
         }
     }
 

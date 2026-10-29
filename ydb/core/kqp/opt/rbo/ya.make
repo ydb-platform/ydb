@@ -7,11 +7,7 @@ SRCS(
     kqp_expression.cpp
     kqp_olap_aggregate.cpp
     kqp_olap_expr_inspection.cpp
-    kqp_read_ranges_evaluate.cpp
     kqp_read_ranges_explain.cpp
-    kqp_read_ranges_model.cpp
-    kqp_read_ranges_sql_in.cpp
-    kqp_read_ranges_structure.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
     kqp_plan_props.cpp

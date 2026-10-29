@@ -6,7 +6,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_evaluate.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 
 namespace NKikimr::NKqp {
 

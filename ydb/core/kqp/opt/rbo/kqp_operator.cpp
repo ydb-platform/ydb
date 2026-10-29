@@ -377,11 +377,6 @@ static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
     return std::nullopt;
 }
 
-TString StripAliasPrefix(const TString& column) {
-    const auto dot = column.rfind('.');
-    return (dot != TString::npos) ? column.substr(dot + 1) : column;
-}
-
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto res = IOperator::ToJson(explainFlags, registry);
 
@@ -422,7 +417,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         TVector<TString> rangedKeys;
         rangedKeys.reserve(usedLen);
         for (size_t i = 0; i < usedLen; ++i) {
-            rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
+            rangedKeys.push_back(SplitAliasedMemberName(RangeInfo->KeyColumns[i]).second);
         }
 
         const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges,
@@ -482,11 +477,16 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
         }
         res << " OlapFilter: (" << PrintRBOExpression(NOpt::TOlapFilterInspector::RenameColumns(OlapFilterLambda, names, ctx), ctx) << ")";
     }
-    if (const auto ranges = GetRanges()) {
-        res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
-    }
-    if (const auto literalRange = GetLiteralRange()) {
-        res << " Literal range: (" << PrintRBOExpression(literalRange, ctx) << ")";
+    if (RangeInfo) {
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges,
+                                                          RangeInfo->ComputeNode, RangeInfo->KeyColumns);
+        if (description.Ranges) {
+            res << " Ranges: [" << JoinSeq(", ", *description.Ranges) << "]";
+        } else if (description.Expression) {
+            res << " Ranges expression: (" << *description.Expression << ")";
+        } else if (RangeInfo->ComputeNode) {
+            res << " Ranges: (" << PrintRBOExpression(RangeInfo->ComputeNode, ctx) << ")";
+        }
     }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");

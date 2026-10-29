@@ -16,6 +16,7 @@ class TJsonNodeList : public TViewerPipeClient {
     std::unordered_set<TString> StoragePoolNames;
     bool IncludeStorage = false;
     bool IncludeRootStaticPool = false;
+    bool StoragePoolsFromCache = false;
     using TBase = TViewerPipeClient;
     using TThis = TJsonNodeList;
 
@@ -28,6 +29,8 @@ class TJsonNodeList : public TViewerPipeClient {
     void RequestStorageData() {
         if (!StoragePoolNames.empty()) {
             StoragePools = MakeCachedRequestBSControllerPools();
+            // Cached responses are already complete; pipe requests finish asynchronously.
+            StoragePoolsFromCache = StoragePools.IsOk();
         }
         Groups = MakeCachedRequestBSControllerGroups();
         VSlots = MakeCachedRequestBSControllerVSlots();
@@ -169,7 +172,7 @@ public:
         std::unordered_set<TNodeId> storageNodeIds;
         if (IncludeStorage && IsDatabaseRequest()) {
             const auto result = NodesInfo.IsOk() ? CollectStorageNodes(storageNodeIds) : EStorageNodesResult::Error;
-            if (result == EStorageNodesResult::MissingPool && UseCache) {
+            if (result == EStorageNodesResult::MissingPool && StoragePoolsFromCache) {
                 // Navigation may already know a pool missing from the cached controller snapshot.
                 // Refresh all storage data once, keeping the original request deadline.
                 UseCache = false;
@@ -250,13 +253,13 @@ public:
                     type: string
                 - name: include_storage
                   in: query
-                  description: Also include nodes hosting groups from the database's storage pools, including donor nodes present in controller data. Requires viewer access when expanding a database's node list. The root domain also includes its static storage groups. Has no effect for serverless databases or without a database filter; serverless databases retain their ordinary endpoint list.
+                  description: Also include nodes hosting groups from the database's storage pools, including donor nodes present in controller data. Returns a single deduplicated array of endpoint and storage nodes without role labels. Requires viewer access when expanding a database's node list. The root domain also includes its static storage groups. Has no effect for serverless databases or without a database filter; serverless databases retain their ordinary endpoint list.
                   schema:
                     type: boolean
                     default: false
                 - name: use_cache
                   in: query
-                  description: Use cached storage topology, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. A missing pool triggers one refresh without the cache. Set false to request fresh controller data. Has no effect when storage-node expansion is not performed.
+                  description: Use cached storage topology, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. A required pool missing from a cached pool response triggers one refresh without the cache. A cache miss or false causes full-cluster controller system-view reads before database filtering. Has no effect when storage-node expansion is not performed.
                   schema:
                     type: boolean
                     default: true
@@ -264,7 +267,7 @@ public:
                     403:
                         description: Insufficient permissions to include storage nodes
                     500:
-                        description: Failed to resolve the requested storage node metadata
+                        description: Storage-node metadata could not be resolved because controller data is unavailable or a required pool is absent from its system-view snapshot. A missing pool can be transient after pool creation even without the Viewer cache; no partial node list is returned.
                     504:
                         description: Timed out while resolving node metadata
                     200:

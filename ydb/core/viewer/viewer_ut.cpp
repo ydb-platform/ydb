@@ -589,6 +589,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool EmptyPools = false;
         bool MissingPool = false;
         bool DropVSlots = false;
+        bool FailBscPipe = false;
         bool RootDatabase = false;
         bool OldGenerationDonor = false;
         std::optional<bool> UseCache = false;
@@ -622,6 +623,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         std::unordered_set<ui32> storageRequestTypes;
         std::array<ui32, 3> storageResponses = {};
         bool resolvedSharedDatabase = false;
+        bool bscPipeFailureInjected = false;
         auto makePools = [](bool missingPool) {
             auto response = std::make_shared<NSysView::TEvSysView::TEvGetStoragePoolsResponse>();
             for (auto [boxId, poolId] : {std::pair<ui64, ui64>{1, 7}, {1, 8}, {2, 7}}) {
@@ -682,7 +684,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (!isNodeListActor(event->GetRecipientRewrite())) {
                 return;
             }
+            // A failed connection cannot deliver controller data, including responses already in flight.
+            if (options.FailBscPipe && (
+                    event->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse ||
+                    event->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse ||
+                    event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse)) {
+                event.Reset();
+                return;
+            }
             switch (event->GetTypeRewrite()) {
+                case TEvTabletPipe::EvClientConnected: {
+                    const auto* previous = event->Get<TEvTabletPipe::TEvClientConnected>();
+                    if (options.FailBscPipe && previous->TabletId == MakeBSControllerID()) {
+                        bscPipeFailureInjected = true;
+                        auto response = MakeHolder<TEvTabletPipe::TEvClientConnected>(
+                            previous->TabletId, NKikimrProto::ERROR, previous->ClientId,
+                            TActorId(), false, false, previous->Generation);
+                        IEventHandle::TPtr replacement(new IEventHandle(event->Recipient, event->Sender,
+                            response.Release(), event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+                        event.Swap(replacement);
+                    }
+                    break;
+                }
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto* response = event->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
                     auto& entry = response->Request->ResultSet.front();
@@ -822,6 +845,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
             return;
         }
+        if (options.FailBscPipe) {
+            UNIT_ASSERT(bscPipeFailureInjected);
+            UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 500"), response->Answer);
+            UNIT_ASSERT_C(response->Answer.Contains("Failed to resolve database storage nodes"), response->Answer);
+            return;
+        }
         std::array<ui32, 3> expectedResponses = {};
         if (includeStorage && (!options.EmptyPools || options.RootDatabase)) {
             expectedResponses = {options.EmptyPools ? 0u : 1u, 1, 1};
@@ -837,7 +866,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
         if (options.MissingPool || options.DropVSlots) {
             UNIT_ASSERT_C(response->Answer.StartsWith(options.DropVSlots ? "HTTP/1.1 504" : "HTTP/1.1 500"), response->Answer);
-            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(),
+                std::count_if(expectedResponses.begin(), expectedResponses.end(), [](ui32 count) { return count != 0; }));
             return;
         }
         UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
@@ -924,9 +954,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .ExpectedStorageResponses = {{1, 2, 2}}});
     }
 
-    Y_UNIT_TEST(NodeListStorageMissingPoolRefreshIsBounded) {
+    Y_UNIT_TEST(NodeListStorageMissingPoolDoesNotRetryFreshData) {
         CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
-            .ExpectedStorageResponses = {{2, 2, 2}}});
+            .ExpectedStorageResponses = {{1, 1, 1}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingFreshPoolDoesNotRefreshCachedGroups) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 0}}});
     }
 
     Y_UNIT_TEST(NodeListStorageMissingPoolAfterCacheRefreshFails) {
@@ -972,6 +1007,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodeListStorageTimeout) {
         CheckNodeListStorage({.IncludeStorage = true, .DropVSlots = true});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePipeConnectionFailure) {
+        CheckNodeListStorage({.IncludeStorage = true, .FailBscPipe = true});
     }
 
     Y_UNIT_TEST(NodeListStorageRequiresViewerAccess) {

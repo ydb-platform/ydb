@@ -3578,7 +3578,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         // CDC preserves key order, but records from different topic partitions may interleave.
         auto waitForRecords = [&](const TVector<TString>& expected) {
-            WaitFor(runtime, [&] {
+            for (ui32 attempt = 0; attempt < 100; ++attempt) {
                 TVector<TString> actual;
                 const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
                 for (const auto& partition : topic.GetPartitions()) {
@@ -3598,22 +3598,28 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     }
                     UNIT_ASSERT_C(found, "Unexpected CDC record: " << record);
                 }
-                return actual.size() == expected.size();
-            }, "CDC records across the recovered topic partitions");
+                if (actual.size() == expected.size()) {
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("CDC records did not arrive across the recovered topic partitions");
         };
         waitForRecords({
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });
+        // CDC hashes the JSON key, then the topic chooser hashes that partition key.
+        // These updates route to opposite children of the 'a' boundary.
         ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES (4, 40), (8, 80);
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11), (8, 80);
         )");
         waitForRecords({
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
-            R"({"update":{"value":40},"key":[4]})",
+            R"({"update":{"value":11},"key":[1]})",
             R"({"update":{"value":80},"key":[8]})",
         });
         UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(),
@@ -3625,10 +3631,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         if (!topicAutoPartitioning) {
             checkDisabledScaling();
         }
-        WaitFor(runtime, [&] {
-            return DescribePath(runtime, schemeShard, "/Root/Table/Stream")
-                .GetPathDescription().GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady;
-        }, "initial scan completes after recovery");
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            const auto describe = DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NKikimrScheme::StatusSuccess);
+            UNIT_ASSERT(describe.GetPathDescription().HasCdcStreamDescription());
+            if (describe.GetPathDescription().GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+                return;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Initial scan did not complete after recovery");
     }
 
     Y_UNIT_TEST(InitialScanTopicSplitAfterSchemeShardRecovery) {

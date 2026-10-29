@@ -16,6 +16,20 @@ namespace NBsController {
 
 static const char *DataSizeSuffix[] = {"B", "KiB", "MiB", "GiB", nullptr};
 
+static void RenderFailRealmStates(IOutputStream& out,
+        const std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>>& states) {
+    if (!states) {
+        out << "-";
+        return;
+    }
+    for (ui32 realm = 0; realm < states->size(); ++realm) {
+        if (realm) {
+            out << '/';
+        }
+        out << NKikimrBlobStorage::TGroupInfo::TFailRealm::EState_Name((*states)[realm]);
+    }
+}
+
 static void RenderBytesCell(IOutputStream& out, ui64 bytes) {
     HTML(out) {
         TABLED_ATTRS({{"data-text", ToString(bytes)}}) {
@@ -1511,6 +1525,9 @@ void TBlobStorageController::RenderGroupDetail(IOutputStream &out, TGroupId grou
         }
 
         if (TGroupInfo *group = FindGroup(groupId)) {
+            out << "<p>Fail realm states (0/1/2): ";
+            RenderFailRealmStates(out, group->FailRealmStates);
+            out << "</p>";
             RenderVSlotTable(out, [&] {
                 std::vector<const TVSlotInfo*> donors;
                 for (const TVSlotInfo *slot : group->VDisksInGroup) {
@@ -1648,6 +1665,9 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                 TABLER() {
                     TAG_ATTRS(TTableH, {{"title", "GroupId:Gen"}}) { out << "ID"; }
                     TABLEH() { out << "Erasure species"; }
+                    TAG_ATTRS(TTableH, {{"title", "Internal states of physical fail realms 0/1/2"}}) {
+                        out << "Fail realm states";
+                    }
                     TABLEH() { out << "Storage pool"; }
                     TABLEH() { out << "Encryption mode"; }
                     TABLEH() { out << "Life cycle phase"; }
@@ -1713,6 +1733,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             }
 
             TABLED() { out << TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies); }
+            TABLED() { RenderFailRealmStates(out, group.FailRealmStates); }
             TABLED() { out << storagePool; }
             TABLED() { out << group.EncryptionMode; }
             TABLED() { out << group.LifeCyclePhase; }

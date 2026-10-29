@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             Sync();
         }
 
-        void Sync() {
+        NKikimrReplication::TEvDescribeReplicationResult Describe() {
             auto request = MakeHolder<TEvController::TEvDescribeReplication>();
             PathId.ToProto(request->Record.MutablePathId());
 
@@ -152,6 +152,29 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             UNIT_ASSERT_C(response->Get()->Record.GetStatus()
                 == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
                 response->Get()->Record.ShortDebugString());
+            return response->Get()->Record;
+        }
+
+        void Sync() {
+            Describe();
+        }
+
+        void ReportLag(ui32 node, TDuration lag) {
+            Env.GetRuntime().Send(new IEventHandle(Controller, Edges[node],
+                new TEvService::TEvWorkerStatus(Worker, lag)));
+            Sync();
+        }
+
+        void ExpectLag(std::optional<TDuration> lag) {
+            const auto desc = Describe();
+            UNIT_ASSERT_VALUES_EQUAL(desc.TargetsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTargets(0).HasLagMilliSeconds(), lag.has_value());
+            UNIT_ASSERT(desc.GetState().HasStandBy());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetState().GetStandBy().HasLagMilliSeconds(), lag.has_value());
+            if (lag) {
+                UNIT_ASSERT_VALUES_EQUAL(desc.GetTargets(0).GetLagMilliSeconds(), lag->MilliSeconds());
+                UNIT_ASSERT_VALUES_EQUAL(desc.GetState().GetStandBy().GetLagMilliSeconds(), lag->MilliSeconds());
+            }
         }
 
         void Status(ui32 node, bool hasWorker = true) {
@@ -190,6 +213,293 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), Worker);
         }
     };
+
+    Y_UNIT_TEST(LagUnavailableAfterStopWhileWaitingInBootQueue) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.ExpectLag(TDuration::Seconds(5));
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        s.ExpectLag(std::nullopt);
+
+        s.ProcessQueues();
+        s.ExpectRun(0);
+        s.ExpectLag(std::nullopt); // Starting alone cannot revive the previous sample.
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLag(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(LagCannotBeRestoredByReportAfterWorkerError) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Seconds(5));
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+                NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "reader failed")));
+        s.Sync();
+        s.ReportLag(0, TDuration::Zero());
+        const auto desc = s.Describe();
+        UNIT_ASSERT(desc.GetState().HasError());
+        UNIT_ASSERT_VALUES_EQUAL(desc.TargetsSize(), 1);
+        UNIT_ASSERT(!desc.GetTargets(0).HasLagMilliSeconds());
+    }
+
+    Y_UNIT_TEST(LagStaysUnavailableWhileBootQueueHasNoReadySession) {
+        TSetup s(1);
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.Disconnect(0);
+        s.ProcessQueues();
+        s.ExpectLag(std::nullopt);
+        // The mock service does not reply to the restored handshake. Queue
+        // processing keeps retrying, but cannot attach the worker for 70 seconds.
+        s.Env.GetRuntime().SimulateSleep(TDuration::Seconds(70));
+        s.ExpectLag(std::nullopt);
+        s.Status(0, false);
+        s.ProcessQueues();
+        s.ExpectRun(0);
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(0, TDuration::Zero());
+        s.ExpectLag(TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(LagCannotBeRestoredByReportWhileStopping) {
+        TSetup s(1);
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.Env.SendAsync(s.Controller, new TEvPrivate::TEvRemoveWorker(
+            s.Worker.ReplicationId(), s.Worker.TargetId(), s.Worker.WorkerId()));
+        s.Sync();
+        s.ProcessQueues();
+        s.ExpectStop(0);
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(0, TDuration::Zero());
+        s.Status(0); // Same-owner status does not undo a pending stop.
+        s.ReportLag(0, TDuration::Zero());
+        s.ExpectLag(std::nullopt);
+    }
+
+    Y_UNIT_TEST(LagUnavailableAfterSessionLossAndReattachment) {
+        TSetup s(2);
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.Disconnect(0);
+        s.ExpectLag(std::nullopt);
+        // Adopt the worker on another service without processing BootQueue.
+        s.Status(1);
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(0, TDuration::Seconds(9));
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(1, TDuration::Seconds(2));
+        s.ExpectLag(TDuration::Seconds(2));
+        s.Status(1); // Repeating status for the current owner preserves freshness.
+        s.ExpectLag(TDuration::Seconds(2));
+    }
+
+    Y_UNIT_TEST(LagRejectsFormerSessionReportsAndStops) {
+        TSetup s(2);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.Status(1); // Ownership moves while the former service session still exists.
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(0, TDuration::Seconds(9));
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(1, TDuration::Seconds(2));
+        s.ProcessQueues();
+        s.ExpectStop(0); // Stopping the former copy cannot invalidate the current owner.
+        s.ExpectLag(TDuration::Seconds(2));
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        s.ExpectLag(TDuration::Seconds(2));
+    }
+
+    Y_UNIT_TEST(LagExpiresWithoutReportsOrQueueProgress) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        ui32 expirations = 0;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == TEvPrivate::EvProcessQueues) {
+                ev.Reset();
+            } else if (ev->GetTypeRewrite() == TEvPrivate::EvExpireWorkerLag) {
+                ++expirations;
+            }
+        });
+        s.ReportLag(0, TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(59));
+        s.ExpectLag(TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        // These are real scheduled expiry events, not manually delivered checks.
+        UNIT_ASSERT_GT(expirations, 0);
+        s.ExpectLag(std::nullopt);
+        s.ReportLag(0, TDuration::Seconds(3));
+        s.ExpectLag(TDuration::Seconds(3));
+    }
+
+    Y_UNIT_TEST(LagPeriodicIdleReportsRemainAvailable) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Zero());
+        // No topic records are produced. The slowest healthy report interval is 14s.
+        for (ui32 i = 0; i < 7; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(14));
+            s.ExpectLag(TDuration::Zero());
+            s.ReportLag(0, TDuration::Zero());
+        }
+    }
+
+    Y_UNIT_TEST(LagMissingValueAndAckDoNotRefreshReport) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(50));
+        auto info = MakeHolder<TEvService::TEvWorkerStatus>(s.Worker, TDuration::Zero());
+        info->Record.ClearLagMilliSeconds();
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0], info.Release()));
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING)));
+        auto stats = MakeHolder<TEvService::TEvWorkerStatus>(s.Worker, TDuration::Zero());
+        stats->Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0], stats.Release()));
+        s.Sync();
+        s.ExpectLag(TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(11));
+        s.ExpectLag(std::nullopt);
+    }
+
+    class TLagExpiryProbe {
+        TTestActorRuntime& Runtime;
+        TTestActorRuntime::TScheduledEventFilter PreviousFilter;
+        TTestActorRuntime::TEventObserverHolder Observer;
+
+    public:
+        ui32 Scheduled = 0;
+        ui32 Delivered = 0;
+
+        explicit TLagExpiryProbe(TTestActorRuntime& runtime, const TActorId& controller)
+            : Runtime(runtime)
+            , PreviousFilter(runtime.SetScheduledEventFilter([this, controller](TTestActorRuntimeBase& runtime,
+                    TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+                deadline = runtime.GetCurrentTime() + delay;
+                if (ev->GetRecipientRewrite() == controller && ev->GetTypeRewrite() == TEvPrivate::EvExpireWorkerLag) {
+                    ++Scheduled;
+                }
+                return false;
+            }))
+            , Observer(runtime.AddObserver<TEvPrivate::TEvExpireWorkerLag>(
+                [this, controller](TEvPrivate::TEvExpireWorkerLag::TPtr& ev) {
+                    if (ev->GetRecipientRewrite() == controller) {
+                        ++Delivered;
+                    }
+                }))
+        {}
+
+        ~TLagExpiryProbe() {
+            Runtime.SetScheduledEventFilter(PreviousFilter);
+        }
+    };
+
+    Y_UNIT_TEST(LagRefreshKeepsEarlierWakeupAndReschedulesAtNewDeadline) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        TLagExpiryProbe probe(runtime, s.Controller);
+        s.ReportLag(0, TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(30));
+        for (ui32 i = 0; i < 10; ++i) {
+            s.ReportLag(0, TDuration::Zero());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 1);
+
+        runtime.SimulateSleep(TDuration::Seconds(31));
+        s.ExpectLag(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 1);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 2);
+        runtime.SimulateSleep(TDuration::Seconds(28));
+        s.ExpectLag(TDuration::Zero());
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        s.ExpectLag(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 2);
+        runtime.SimulateSleep(TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 2);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 2);
+    }
+
+    Y_UNIT_TEST(LagRemovalAndReuseKeepOnePendingWakeup) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        TLagExpiryProbe probe(runtime, s.Controller);
+        s.ReportLag(0, TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        s.Env.SendAsync(s.Controller, new TEvPrivate::TEvRemoveWorker(
+            s.Worker.ReplicationId(), s.Worker.TargetId(), s.Worker.WorkerId()));
+        s.Sync();
+        s.ProcessQueues();
+        s.ExpectStop(0);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        // Worker removal completes synchronously on this branch.
+
+        // Removal emptied the expiry queue, but its timer is still pending.
+        // Re-adopting the same identity must replace every old aggregation entry.
+        s.Status(0);
+        s.ReportLag(0, TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 1);
+        runtime.SimulateSleep(TDuration::Seconds(41));
+        s.ExpectLag(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 1);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 2);
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        s.ExpectLag(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 2);
+    }
+
+    Y_UNIT_TEST(LagEqualDeadlinesExpireInBoundedMailboxBatches) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        TLagExpiryProbe probe(runtime, s.Controller);
+        constexpr ui32 WorkerCount = 251;
+        TVector<TWorkerId> workers;
+        auto status = MakeHolder<TEvService::TEvStatus>();
+        for (ui32 i = 0; i < WorkerCount; ++i) {
+            workers.emplace_back(s.Worker.ReplicationId(), s.Worker.TargetId(), s.Worker.WorkerId() + i);
+            workers.back().Serialize(*status->Record.AddWorkers());
+        }
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0], status.Release()));
+        s.Sync();
+        const auto reportedAt = runtime.GetCurrentMonotonicTime();
+        for (const auto& worker : workers) {
+            runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+                new TEvService::TEvWorkerStatus(worker, TDuration::Zero())));
+        }
+        s.Sync();
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GetCurrentMonotonicTime(), reportedAt);
+        s.ExpectLag(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 1);
+
+        const auto edge = runtime.AllocateEdgeActor();
+        ui32 batches = 0;
+        bool describeBetweenBatches = false;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetRecipientRewrite() == s.Controller && ev->GetTypeRewrite() == TEvPrivate::EvExpireWorkerLag) {
+                if (++batches == 1) {
+                    auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+                    s.PathId.ToProto(request->Record.MutablePathId());
+                    runtime.Send(new IEventHandle(s.Controller, edge, request.Release()), 0, true);
+                }
+            } else if (ev->GetTypeRewrite() == TEvController::EvDescribeReplication && ev->Sender == edge) {
+                describeBetweenBatches = batches == 1;
+            }
+        });
+        runtime.SimulateSleep(TDuration::Seconds(61));
+        s.ExpectLag(std::nullopt);
+        UNIT_ASSERT_C(describeBetweenBatches, "expiry continuation did not yield the mailbox");
+        UNIT_ASSERT_VALUES_EQUAL(batches, 3); // 100, 100, 51 workers.
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 3);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 1); // Continuations are sent, not timed.
+        runtime.SimulateSleep(TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(probe.Delivered, 3);
+        UNIT_ASSERT_VALUES_EQUAL(probe.Scheduled, 1);
+    }
 
     void RecoverWithSecret(bool adopt, bool secretFirst, bool disconnect, bool readSource = false) {
         TSetup s(1, true);

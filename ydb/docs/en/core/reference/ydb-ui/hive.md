@@ -2,7 +2,7 @@
 
 The Hive web-viewer provides an interface for working with Hive.
 Hive can be shared by a cluster or be tenant.
-You can go to the Hive web-viewer from the {{ ydb-short-name }} Monitoring.
+You can go to the Hive web-viewer page via the Developer UI link from the Tablets tab in [{{ ydb-ui-name }}](index.md). To access the page, you must be authenticated as a user included in the `monitoring_allowed_sids` list in the [cluster security configuration](../configuration/security_config.md#security-access-levels).
 
 ## Home page
 

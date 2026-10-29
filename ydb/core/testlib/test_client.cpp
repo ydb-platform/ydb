@@ -555,7 +555,7 @@ namespace Tests {
 
             const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
             if (pathMapping.RulesSize()) {
-                appData.SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping));
+                appData.SetPathNormalizer(std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping, appData.Counters));
             }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)

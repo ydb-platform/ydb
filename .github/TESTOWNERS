@@ -124,7 +124,6 @@
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
-/ydb/tools/include_sanitizer @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
 /ydb/tools/ydbd_slice @ydb-platform/engineering
 /ydb/tests/compatibility @ydb-platform/engineering

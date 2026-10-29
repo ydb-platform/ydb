@@ -634,7 +634,7 @@ runs:
             # sed is to remove richness (tags like '[[rst]]')
             (( \
               cat $CURRENT_REPORT \
-              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
+              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type == "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
             echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
@@ -662,11 +662,19 @@ runs:
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || TRANSFORM_RC=$?
           analytics end transform_build_results --rc "$TRANSFORM_RC"
+          if [ "$TRANSFORM_RC" -ne 0 ]; then
+            echo "::error::Test report processing failed; results cannot be trusted"
+            exit "$TRANSFORM_RC"
+          fi
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
           analytics start fail_checker
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          if [ "$TESTS_RESULT" -ne 0 ] && [ "$TESTS_RESULT" -ne 255 ]; then
+            echo "::error::Test report validation failed"
+            exit "$TESTS_RESULT"
+          fi
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
           analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
           if [ $TESTS_RESULT = 0 ]; then

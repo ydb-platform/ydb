@@ -603,7 +603,7 @@ TString ValidateStateStorageConfig(
                             << " ring #" << ringIndex << " differs";
                     }
                 }
-                if (disabledCnt > oldGroup.NToSelect / 2) {
+                if (disabledCnt > (oldGroup.NToSelect - 1) / 2) {
                     return TStringBuilder() << name << " ring group #" << groupIndex
                         << " configuration disabled too many rings";
                 }

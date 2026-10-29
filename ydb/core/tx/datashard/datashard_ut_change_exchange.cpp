@@ -3504,12 +3504,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
 
-        // Keep all synthetic keys in the left child so record order is deterministic.
         AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
             Name: "streamImpl"
             Split {
                 Partition: 0
-                SplitBoundary: '\377'
+                SplitBoundary: 'a'
             }
         )")));
         TestModificationResults(runtime, splitTxId, {topicAutoPartitioning
@@ -3577,22 +3576,52 @@ Y_UNIT_TEST_SUITE(Cdc) {
             WaitTxNotification(server, edgeActor, splitTxId);
         }
 
-        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+        // CDC preserves key order, but records from different topic partitions may interleave.
+        auto waitForRecords = [&](const TVector<TString>& expected) {
+            WaitFor(runtime, [&] {
+                TVector<TString> actual;
+                const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+                for (const auto& partition : topic.GetPartitions()) {
+                    for (const auto& record : GetRecords(runtime, edgeActor, "/Root/Table/Stream", partition.GetPartitionId())) {
+                        actual.push_back(record.second);
+                    }
+                }
+                UNIT_ASSERT_C(actual.size() <= expected.size(), "Unexpected or duplicated CDC records");
+                TVector<bool> matched(expected.size(), false);
+                for (const auto& record : actual) {
+                    bool found = false;
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        if (!matched[i] && AreJsonsEqual(record, expected[i])) {
+                            matched[i] = found = true;
+                            break;
+                        }
+                    }
+                    UNIT_ASSERT_C(found, "Unexpected CDC record: " << record);
+                }
+                return actual.size() == expected.size();
+            }, "CDC records across the recovered topic partitions");
+        };
+        waitForRecords({
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });
         ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/Table` (key, value) VALUES (4, 40);
+            UPSERT INTO `/Root/Table` (key, value) VALUES (4, 40), (8, 80);
         )");
-        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+        waitForRecords({
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
             R"({"update":{"value":40},"key":[4]})",
+            R"({"update":{"value":80},"key":[8]})",
         });
         UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(),
             topicAutoPartitioning ? 3 : 1);
+        if (topicAutoPartitioning) {
+            UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 1).empty(), "Left child must serve CDC records");
+            UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 2).empty(), "Right child must serve CDC records");
+        }
         if (!topicAutoPartitioning) {
             checkDisabledScaling();
         }

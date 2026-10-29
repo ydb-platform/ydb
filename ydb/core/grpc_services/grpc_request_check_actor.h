@@ -3,7 +3,6 @@
 #include "audit_log.h"
 #include "audit_dml_operations.h"
 #include "service_ratelimiter_events.h"
-#include "grpc_request_proxy.h"
 #include "grpc_request_proxy_handle_methods.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
@@ -258,15 +257,29 @@ public:
         Initialize(schemeData, rootAttributes);
     }
 
-    // UnauthenticatedGrpcMethods is read from AppData, which requires an actor
-    // activation. The secure-request bootstrap calls this before checking the token.
+    // Feature flags are read from AppData, which requires an actor activation.
+    // The secure-request bootstrap calls this before checking the token.
     void PrepareAuthentication() {
+        if (!AppData()->FeatureFlags.GetEnableAnonymousDiscovery()) {
+            return;
+        }
+
         // An empty auth header still leaves SecurityToken empty and hides a client
         // certificate. Do not treat that request as anonymous.
         const bool hasCertificate = !GrpcRequestBaseCtx_->FindClientCertPropertyValues().empty();
-        if (TBase::GetSecurityToken().empty() && !hasCertificate && IsAnonymousGrpcMethodAllowed(*GrpcRequestBaseCtx_)) {
-            TBase::SetAllowMissingToken();
+        if (!TBase::GetSecurityToken().empty() || hasCertificate) {
+            return;
         }
+
+        const TString method = GrpcRequestBaseCtx_->GetRpcMethodName();
+        if (method != "NKikimrClient.TGRpcServer/ChooseProxy"
+            && method != "Ydb.Discovery.V1.DiscoveryService/ListEndpoints") {
+            return;
+        }
+
+        YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY, "Allow grpc method without token",
+            {"method", method});
+        TBase::SetAllowMissingToken();
     }
 
     void Bootstrap(const TActorContext& ctx) {

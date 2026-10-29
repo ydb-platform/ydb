@@ -319,8 +319,6 @@ message TDomainsConfig {
         optional bool DisableBuiltinAccess = 21;
         optional bool HideAuthenticationFailureReasons = 22 [default = true];
         optional bool AlwaysSetSystemOwner = 23 [default = false];
-        // Full gRPC names (Service/Method) that may be called with no credentials.
-        repeated string UnauthenticatedGrpcMethods = 24;
     }
 
     repeated TDomain Domain = 1;

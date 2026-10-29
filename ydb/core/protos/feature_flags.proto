@@ -496,4 +496,7 @@ message TFeatureFlags {
     // write quota.
     optional bool EnablePQWriteQuotaAccountingFix = 394 [default = false];
     optional bool EnableColumnShardStats = 395 [default = false];
+    // Temporary: ChooseProxy and ListEndpoints may omit credentials until old SDKs send a token.
+    // A presented token or client certificate is still checked. LOGBROKER-10668.
+    optional bool EnableAnonymousDiscovery = 396 [default = false];
 }

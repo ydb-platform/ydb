@@ -157,11 +157,6 @@ TMapBuilder SecurityConfigBuilder() {
     .Bool("enforce_user_token_requirement", [](auto& enforceUserTokenRequirements){
       enforceUserTokenRequirements.Optional();
     })
-    .Array("unauthenticated_grpc_methods", [](auto& methods){
-      methods
-      .Optional()
-      .StringItem([](auto&){});
-    })
     .Optional();
   });
 }

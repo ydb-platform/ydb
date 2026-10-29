@@ -448,35 +448,6 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
     }
 }
 
-bool IsAnonymousGrpcMethodAllowed(const IRequestProxyCtx& ctx) {
-    const TString method = ctx.GetRpcMethodName();
-    if (!method) {
-        return false;
-    }
-
-    const auto& allowed = AppData()->DomainsConfig.GetSecurityConfig().GetUnauthenticatedGrpcMethods();
-    bool listed = false;
-    for (const auto& name : allowed) {
-        if (name == method) {
-            listed = true;
-            break;
-        }
-    }
-    if (!listed) {
-        return false;
-    }
-
-    if (ctx.GetAuditMode().IsModifying) {
-        YDB_LOG_WARN_CTX(*TlsActivationContext, "UnauthenticatedGrpcMethods entry ignored for modifying method",
-            {"method", method});
-        return false;
-    }
-
-    YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Allow grpc method without token",
-        {"method", method});
-    return true;
-}
-
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
     if (state.State == NYdbGrpc::TAuthState::AS_OK) {

@@ -1,5 +1,44 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.35.0 {#2-35-0}
+
+Дата выхода 30 октября 2026. Для обновления до версии **2.35.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена поддержка рекурсивного удаления томов Solomon (KeyValue), пулов ресурсов и коллекций резервных копий с помощью [команды](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir --recursive`.
+
+### Исправления ошибок
+
+* Исправлен пропуск директорий, имена которых начинаются с `~`, в [команде](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir --recursive`.
+* Исправлен пропуск пользовательских директорий, имена которых начинаются с `~`, в [команде](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команде](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. Временные директории, имена которых начинаются с `~backup_` или `export-`, по-прежнему исключаются.
+
+## Версия 2.34.0 {#2-34-0}
+
+Дата выхода 18 октября 2026. Для обновления до версии **2.34.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена поддержка [аутентификации OpenID Connect (OIDC)](./security/authentication.md#external-idp) с готовыми токенами, учётными данными клиента или авторизацией устройства. Параметры можно задать в YAML-файле с помощью опции `--oidc-config`, опциями `--oidc-*`, через переменные окружения или профили соединения.
+* Добавлена поддержка колоночных (OLAP) таблиц в [команду](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. При восстановлении колоночных таблиц опция `--import-data` не поддерживается: вместо неё автоматически используется `--bulk-upsert`.
+* Добавлена возможность повторять опцию `--pile` в [команде](./reference/ydb-cli/commands/bridge/failover.md) `{{ ydb-cli }} admin cluster bridge failover`, чтобы отключить несколько недоступных pile за одну операцию.
+* Добавлен формат вывода `--format svg` в [команду](./reference/ydb-cli/sql.md) `{{ ydb-cli }} sql` для сохранения планов запросов в SVG при использовании опций `--explain` или `--explain-analyze`.
+* Добавлена опция `--content-based-deduplication` в [команду](./reference/ydb-cli/topic-create.md) `{{ ydb-cli }} topic create` и [команду](./reference/ydb-cli/topic-alter.md) `{{ ydb-cli }} topic alter` для настройки дедупликации сообщений по содержимому.
+* Добавлена опция `--aws-sdk-log` в команды `{{ ydb-cli }} workload sqs run read|write` для включения отладочных логов AWS SDK.
+* Добавлена поддержка операции `setnotnull`, устанавливающей ограничение `NOT NULL`, в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
+
+### Улучшения
+
+* Ускорена локальная проверка селекторов YAML-конфигурации в [команде](./reference/ydb-cli/commands/configuration/cluster/replace.md) `{{ ydb-cli }} admin cluster config replace` и команде `{{ ydb-cli }} admin database config replace`.
+
+### Исправления ошибок
+
+* Исправлена ошибка [команды](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir --recursive` при удалении директории, содержащей секреты схемы.
+* Исправлены отображение прогресса, скорости, оставшегося времени и итоговая статистика чтения в [команде](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file parquet`.
+* Исправлены ложные несовпадения с эталонными результатами для пустых опциональных значений `String` и `Utf8` в [командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run --check-canonical`.
+* Исправлена утечка памяти при закрытии производителей сообщений в [командах](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`.
+* Исправлена ошибка восстановления значений NaN и бесконечности типов `Float` и `Double` из локальных резервных копий в [команде](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. Сообщения об ошибках разбора теперь содержат файл, строку, столбец и проблемное значение.
+
 ## Версия 2.33.0 {#2-33-0}
 
 Дата выхода 23 июня 2026. Для обновления до версии **2.33.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).

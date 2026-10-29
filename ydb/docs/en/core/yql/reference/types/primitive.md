@@ -115,6 +115,14 @@ The Double type is used to store numbers (JSON Number) in JsonDocument and for a
 {% endnote %}
 ## Date and time {#datetime}
 
+### Basic range {#datetime-basic}
+
+Types `Date`, `Datetime`, `Timestamp`, `Interval`, and related timezone-aware variants.
+
+### Extended range {#datetime-extended}
+
+Types `Date32`, `Datetime64`, `Timestamp64`, `Interval64`, and related timezone-aware variants.
+
 #|
 || Type | Description | Possible values | Size (bytes) | Notes ||
 

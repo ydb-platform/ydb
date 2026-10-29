@@ -67,7 +67,7 @@ Functions for ASCII strings:
   ```text
   String::SplitToList( String?, String,
   [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>
-  ```
+  ``` {#splittolist}
 
   The first argument is the source string
   The second argument is a delimiter

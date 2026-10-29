@@ -601,7 +601,7 @@ Release date: August 20, 2024.
 ### Functionality
 
 * Added the ability to set [maintenance task priorities](./devops/concepts/maintenance-without-downtime.md#priority) in the [cluster management system](./concepts/glossary.md#cms).
-* Added a setting to enable [stable names](./reference/configuration/node_broker_config.md) for cluster nodes within a tenant.
+* Added a setting to enable [stable names](./reference/configuration/node_broker_config.md#node-broker-config) for cluster nodes within a tenant.
 * Enabled retrieval of nested groups from the [LDAP server](./security/authentication.md#ldap), improved host parsing in the [LDAP-configuration](./reference/configuration/auth_config.md#ldap-auth-config), and added an option to disable built-in authentication via login and password.
 * Added support for authenticating [dynamic nodes](./concepts/glossary.md#dynamic) using SSL-certificates.
 * Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without a restart.
@@ -695,6 +695,8 @@ Release date: May 14, 2024.
 * [Fixed a bug](https://github.com/ydb-platform/ydb/pull/2126) causing memory leaks that appeared when copying topic data between clusters. These could cause `ydbd` server processes to terminate due to out-of-memory issues.
 
 ## Version 23.3 {#23-3}
+
+### Version 23.3.17 {#23-3-17}
 
 Release date: October 12, 2023.
 

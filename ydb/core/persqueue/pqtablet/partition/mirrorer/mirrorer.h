@@ -169,8 +169,7 @@ private:
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
-    TDeque<NKikimrPQ::TReplicationDataPayload> ReplicationDataQueue;
-    TDeque<NKikimrPQ::TReplicationDataPayload> ReplicationDataInFlight;
+    bool ReplicationDataInFlight = false;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
@@ -205,6 +204,9 @@ private:
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
+
+    y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
+    TMaybe<ui64> MirroredOffsetToSend;
 };
 
 bool AppendToWriteRequest(

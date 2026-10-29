@@ -329,8 +329,6 @@ message TEvCheckMessageDeduplicationResponse {
 
 message TReplicationDataPayload {
     map<string, uint64> OffsetsByConsumers = 1;
-    optional uint64 StartOffset = 2;
-    optional uint64 EndOffset = 3;
 }
 
 message TEvReplicationData {

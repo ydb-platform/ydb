@@ -291,12 +291,9 @@ TReadSessionEvent::TDataReceivedEvent MakeDataEvent(
 }
 
 TReadSessionEvent::TDataReceivedEvent MakeReplicationDataEvent(
-    const TIntrusivePtr<TMockPartitionSession>& partition, ui64 consumerOffset,
-    ui64 startOffset = 0, ui64 endOffset = 0)
+    const TIntrusivePtr<TMockPartitionSession>& partition, ui64 consumerOffset)
 {
     NKikimrPQ::TReplicationDataPayload payload;
-    payload.SetStartOffset(startOffset);
-    payload.SetEndOffset(endOffset);
     (*payload.MutableOffsetsByConsumers())["consumer"] = consumerOffset;
     auto message = MakeCompressed(partition, 0, payload.SerializeAsString());
     message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
@@ -512,9 +509,9 @@ struct TMirrorerEnv {
         Dispatch();
     }
 
-    void PushReplicationData(ui64 consumerOffset = 0, ui64 startOffset = 0, ui64 endOffset = 0) {
+    void PushReplicationData(ui64 consumerOffset = 0) {
         Factory.Session(0).PushEvent(MakeReplicationDataEvent(
-            Factory.Session(0).Partition, consumerOffset, startOffset, endOffset));
+            Factory.Session(0).Partition, consumerOffset));
         Dispatch();
     }
 
@@ -768,9 +765,9 @@ Y_UNIT_TEST(StatusWrongSessionIgnored) {
 }
 
 Y_UNIT_TEST(ReplicationDataBatchesQueuedOffsetsAndWaitsForAck) {
-    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    TMirrorerEnv env({.EndOffset = 10, .MirrorConsumerOffsets = true});
     env.Advance(TDuration::Seconds(1));
-    env.StartSession(0, 0, 0);
+    env.StartSession(0, 10, 10);
     env.PushReplicationData(5);
     env.PushReplicationData(7);
     env.PushReplicationData(9);
@@ -783,10 +780,9 @@ Y_UNIT_TEST(ReplicationDataBatchesQueuedOffsetsAndWaitsForAck) {
 
     env.AckReplicationData();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2);
-    const auto& batch = env.CapturedReplicationData.back()->Data;
-    UNIT_ASSERT_VALUES_EQUAL(batch.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(batch[0].GetOffsetsByConsumers().at("consumer"), 7);
-    UNIT_ASSERT_VALUES_EQUAL(batch[1].GetOffsetsByConsumers().at("consumer"), 9);
+    const auto& offsets = env.CapturedReplicationData.back()->OffsetsByConsumers;
+    UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(offsets.at("consumer"), 9);
     UNIT_ASSERT(env.CapturedRequests.empty());
 }
 
@@ -794,36 +790,31 @@ Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
     TMirrorerEnv env({.MirrorConsumerOffsets = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 2);
-    env.PushReplicationData(1, 0, 1);
-    env.PushReplicationData(2, 0, 2);
+    env.PushReplicationData(1);
+    env.PushReplicationData(2);
     UNIT_ASSERT(env.CapturedReplicationData.empty());
 
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
     env.Dispatch();
     UNIT_ASSERT(env.CapturedReplicationData.empty());
     env.AckWrite(0);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 1);
-    env.AckReplicationData();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
 
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 1));
     env.Dispatch();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
     env.AckWrite(1);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 2);
 }
 
 Y_UNIT_TEST(ReplicationDataForEmptySourceDoesNotWaitForMessages) {
     TMirrorerEnv env({.MirrorConsumerOffsets = true});
     env.Advance(TDuration::Seconds(1));
-    env.StartSession(0, 0, 10);
-    env.PushReplicationData(10, 10, 10);
+    env.StartSession(0, 0, 0);
+    env.PushReplicationData();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetStartOffset(), 10);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 10);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 0);
     UNIT_ASSERT(env.CapturedRequests.empty());
 }
 

@@ -47,6 +47,10 @@ inputs:
     type: boolean
     default: true
     description: "run tests"
+  prebuild:
+    type: boolean
+    default: false
+    description: "Run ya make --build-only-test-deps before tests to fill the local cache"
   test_retry_count:
     type: string
     default: ""
@@ -217,6 +221,7 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
+        PREBUILD: ${{ inputs.prebuild }}
       run: |
         set -ex
         . .github/scripts/utils/analytics/github_actions/analytics.sh
@@ -424,6 +429,9 @@ runs:
           done
           if [ true = ${{ inputs.run_tests }} ]; then
             YA_MAKE_COMMAND+=" --retest"
+          fi
+          if [ "${PREBUILD}" = "true" ]; then
+            . .github/actions/test_ya/prebuild.sh
           fi
           $YA_MAKE_COMMAND -k --cache-tests \
             --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \

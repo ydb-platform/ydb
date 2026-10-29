@@ -425,8 +425,8 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
             rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
         }
 
-        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges, RangeInfo->ComputeNode, RangeInfo->KeyColumns,
-                                                          RangeInfo->ExpectedMaxRanges);
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges,
+                                                          RangeInfo->ComputeNode, RangeInfo->KeyColumns);
         if (description.Ranges) {
             NJson::TJsonValue readRanges(NJson::EJsonValueType::JSON_ARRAY);
             for (const auto& range : *description.Ranges) {

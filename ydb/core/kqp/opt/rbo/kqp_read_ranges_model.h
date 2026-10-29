@@ -10,23 +10,8 @@
 
 #include <optional>
 
-// The values and ranges explain describes the key ranges of a read with. Values of a data type keep their runtime
-// representation and are ordered by the runtime comparator, so explain orders them exactly as MiniKQL does.
+// Parsing and formatting of literal key ranges. All range arithmetic is performed by MiniKQL.
 namespace NKikimr::NKqp::NOpt::NReadRanges {
-
-// The type of a key column, as RangeFor and casts name it.
-struct TKeyType {
-    std::optional<NYql::NUdf::EDataSlot> Slot; // a data type, or else a Pg type
-    ui8 Precision = 0;                         // of a Decimal
-    ui8 Scale = 0;
-    TString PgType;
-    ui32 OptionalDepth = 0;
-};
-
-std::optional<TKeyType> ParseKeyType(const NYql::TExprNode& node);
-
-// Float and Decimal keys have NaN, which compares unequal to everything and is ordered after every other value.
-bool HasNaN(const TKeyType& type);
 
 // A finite key value. NULL is ordered before every other value, as an empty Optional is in MiniKQL.
 struct TKeyValue {
@@ -46,38 +31,8 @@ struct TKeyValue {
     NYql::NUdf::TUnboxedValuePod Value; // every other data type
 };
 
-// A literal key value, possibly NULL or cast. nullopt if the value is not a literal or its cast is not known.
+// A literal key value, possibly NULL. Does not evaluate casts or other expressions.
 std::optional<TKeyValue> ParseKeyValue(const NYql::TExprNode::TPtr& node);
-
-TKeyValue MakeNaN(const TKeyType& type);
-
-// The result of converting a value to a key type: the value, NULL, or unknown when explain does not know the result.
-struct TConversion {
-    enum class EStatus {
-        Value,
-        Null,
-        Unknown,
-    };
-
-    EStatus Status = EStatus::Unknown;
-    TKeyValue Value;
-};
-
-// StrictCast of a value to the key type, which is NULL when the value has no exact counterpart.
-TConversion CastToKey(const TKeyValue& value, const TKeyType& type);
-
-// RoundDown or RoundUp of a value to the key type, for a value StrictCast makes NULL.
-TConversion RoundToKey(const TKeyValue& value, const TKeyType& type, bool down);
-
-// The end of the wide point [value, value + 1) that RangeFor '=== builds for an integral or date value. nullopt for
-// the largest value, whose wide point is the point itself, or for a value of another type.
-std::optional<TKeyValue> WidePointEnd(const TKeyValue& value);
-
-// NextValue of a String or Utf8 value: the smallest value that does not start with it. nullopt if there is none.
-std::optional<TKeyValue> NextKeyValue(const TKeyValue& value);
-
-// nullopt if the order of the values is not known.
-std::optional<int> CompareKeyValues(const TKeyValue& left, const TKeyValue& right);
 
 TString FormatKeyValue(const TKeyValue& value);
 

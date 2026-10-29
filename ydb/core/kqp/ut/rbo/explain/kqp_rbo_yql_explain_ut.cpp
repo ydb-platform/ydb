@@ -513,8 +513,61 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(expression.StartsWith("a ∈ ") && expression.Contains("$p") && expression.Contains("[10, +∞)"), parameterPlan);
     }
 
-    // TEMPORARY: prints explain plans that show how read ranges are described. Not for commit.
-    Y_UNIT_TEST(RangeDisplayShowcase) {
+    Y_UNIT_TEST(ExplainRangeNonDeterministic) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto schema = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/range_review` (a Int64 NOT NULL, PRIMARY KEY (a));
+            CREATE TABLE `/Root/range_clock` (a Timestamp NOT NULL, PRIMARY KEY (a));
+        )").GetValueSync();
+        UNIT_ASSERT_C(schema.IsSuccess(), schema.GetIssues().ToString());
+        const TStringBuf queries[] = {
+            "SELECT * FROM `/Root/range_review` WHERE a < CAST(RandomNumber(1) % 1000000ul AS Int64) OR a = -1;",
+            "SELECT * FROM `/Root/range_review` WHERE a < CAST(YQL::RandomNumber() % 1000000ul AS Int64) OR a = -1;",
+            "SELECT * FROM `/Root/range_clock` WHERE a < CurrentUtcTimestamp() OR a = Timestamp('2000-01-01T00:00:00Z');",
+        };
+        for (const auto query : queries) {
+            const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder() << "PRAGMA YqlSelect = 'force'; " << query);
+            const auto simplified = GetSimplifiedPlan(plan);
+            const auto* read = FindOperatorByStringField(simplified, "Name", "TableRangeScan");
+            UNIT_ASSERT_C(read, plan);
+            UNIT_ASSERT_C(!read->GetMapSafe().contains("ReadRanges"), query << ": " << plan);
+            UNIT_ASSERT_C(read->GetMapSafe().contains("ReadRangesExpression"), query << ": " << plan);
+        }
+    }
+
+    Y_UNIT_TEST(ExplainRangeEvaluationLimits) {
+        TExplainPlanTestContext testContext;
+        struct TCase {
+            size_t Count;
+            size_t Step;
+            bool Evaluated;
+        };
+        // Adjacent inputs can merge below the display limit; disjoint outputs and oversized inputs fall back.
+        for (const auto test : {TCase{256, 1, true}, TCase{257, 1, false}, TCase{21, 2, false}}) {
+            TStringBuilder query;
+            query << "PRAGMA YqlSelect = 'force'; SELECT * FROM `/Root/t1` WHERE a IN (";
+            for (size_t i = 0; i < test.Count; ++i) {
+                if (i) {
+                    query << ',';
+                }
+                query << i * test.Step;
+            }
+            query << ");";
+            const auto plan = ExecuteExplain(testContext.GetSession(), query);
+            const auto simplified = GetSimplifiedPlan(plan);
+            const auto* read = FindOperatorByStringField(simplified, "Name", "TableRangeScan");
+            UNIT_ASSERT_C(read, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(read->GetMapSafe().contains("ReadRanges"), test.Evaluated, plan);
+            UNIT_ASSERT_VALUES_EQUAL_C(read->GetMapSafe().contains("ReadRangesExpression"), !test.Evaluated, plan);
+            if (test.Evaluated) {
+                UNIT_ASSERT_C(StringArrayFieldContains(*read, "ReadRanges", "[{a: 0}, {a: 256})"), plan);
+            }
+        }
+    }
+
+    // Exact expectations for every supported case from the range-display showcase.
+    Y_UNIT_TEST(ExplainRangeDisplayShowcase) {
         TExplainPlanTestContext testContext;
         auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
         const std::pair<TStringBuf, TStringBuf> tables[] = {
@@ -526,7 +579,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"sc_utf8", "(u Utf8 NOT NULL, v Int64, PRIMARY KEY (u))"},
             {"sc_i8", "(k Int8 NOT NULL, v Int64, PRIMARY KEY (k))"},
             {"sc_u32", "(k Uint32 NOT NULL, v Int64, PRIMARY KEY (k))"},
-            {"sc_double", "(k Double NOT NULL, v Int64, PRIMARY KEY (k))"},
             {"sc_dec", "(k Decimal(10, 2) NOT NULL, v Int64, PRIMARY KEY (k))"},
             {"sc_date", "(k Date NOT NULL, v Int64, PRIMARY KEY (k))"},
             {"sc_dt", "(k Datetime NOT NULL, v Int64, PRIMARY KEY (k))"},
@@ -535,113 +587,121 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"sc_uuid", "(k Uuid NOT NULL, v Int64, PRIMARY KEY (k))"},
             {"sc_bool", "(k Bool NOT NULL, v Int64, PRIMARY KEY (k))"},
         };
-        THashSet<TString> created;
         for (const auto& [name, schema] : tables) {
             auto result = tableSession.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `/Root/" << name << "` " << schema << ";").GetValueSync();
-            if (result.IsSuccess()) {
-                created.insert(TString(name));
-            } else {
-                Cout << "TABLE NOT CREATED: " << name << " " << schema << Endl << result.GetIssues().ToString() << Endl;
-            }
+            UNIT_ASSERT_C(result.IsSuccess(), name << ": " << result.GetIssues().ToString());
         }
 
         struct TCase {
             TStringBuf Title;
             TStringBuf Table;
             TStringBuf Query;
+            TVector<TString> Ranges;
+            TStringBuf Expression;
+            bool FullScan = false;
         };
         const TCase cases[] = {
-            {"Point on the whole key", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b = 10;"},
-            {"Range on the second key column", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b >= 10 AND b < 20;"},
-            {"Key prefix", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1;"},
-            {"Greater than", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 5;"},
-            {"Closed interval", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a >= 5 AND a <= 10;"},
-            {"BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a BETWEEN 5 AND 10;"},
-            {"Disjoint ranges from OR", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a >= 10;"},
-            {"Not equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a != 5;"},
-            {"IN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3);"},
-            {"IN times a point", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b = 7;"},
-            {"IN times BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b BETWEEN 10 AND 20;"},
-            {"OR of composite conditions", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a = 1 AND b < 5) OR (a = 3 AND b >= 10);"},
-            {"Overlapping ranges merge", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a < 7 OR a = 20;"},
-            {"A column after a range goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 1 AND b = 5;"},
-            {"A non-key condition goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b > 5 AND c = 7;"},
-            {"OR across key columns", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 OR b = 2;"},
-            {"Tuple IN in key order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a, b) IN ((1, 10), (2, 20));"},
-            {"Tuple IN in another order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (b, a) IN ((10, 1), (20, 2));"},
-            {"IN with 15 values", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);"},
-            {"IN with 25 values: more ranges than listed", "sc_row",
-             "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);"},
-            {"Product of IN lists: 24 ranges", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3) AND b IN (1, 2, 3, 4, 5, 6, 7, 8);"},
+            {"Point on the whole key", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b = 10;", {"[{a: 1, b: 10}, {a: 1, b: 10}]"}},
+            {"Range on the second key column", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b >= 10 AND b < 20;", {"[{a: 1, b: 10}, {a: 1, b: 20})"}},
+            {"Key prefix", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1;", {"({a: 1, b: -∞}, {a: 1, b: +∞})"}},
+            {"Greater than", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 5;", {"({a: 5, b: +∞}, {a: +∞, b: +∞})"}},
+            {"Closed interval", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a >= 5 AND a <= 10;", {"({a: 5, b: -∞}, {a: 10, b: +∞})"}},
+            {"BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a BETWEEN 5 AND 10;", {"({a: 5, b: -∞}, {a: 10, b: +∞})"}},
+            {"Disjoint ranges from OR", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a >= 10;", {"({a: -∞, b: -∞}, {a: 5, b: -∞})", "({a: 10, b: -∞}, {a: +∞, b: +∞})"}},
+            {"Not equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a != 5;", {"({a: -∞, b: -∞}, {a: 5, b: -∞})", "({a: 5, b: +∞}, {a: +∞, b: +∞})"}},
+            {"IN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3);", {"({a: 1, b: -∞}, {a: 4, b: -∞})"}},
+            {"IN times a point", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b = 7;", {"[{a: 1, b: 7}, {a: 1, b: 7}]", "[{a: 2, b: 7}, {a: 2, b: 7}]"}},
+            {"IN times BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b BETWEEN 10 AND 20;", {"[{a: 1, b: 10}, {a: 1, b: 20}]", "[{a: 2, b: 10}, {a: 2, b: 20}]"}},
+            {"OR of composite conditions", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a = 1 AND b < 5) OR (a = 3 AND b >= 10);", {"({a: 1, b: -∞}, {a: 1, b: 5})", "[{a: 3, b: 10}, {a: 3, b: +∞})"}},
+            {"Overlapping ranges merge", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a < 7 OR a = 20;", {"({a: -∞, b: -∞}, {a: 7, b: -∞})", "({a: 20, b: -∞}, {a: 20, b: +∞})"}},
+            {"A column after a range goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 1 AND b = 5;", {"({a: 1, b: +∞}, {a: +∞, b: +∞})"}},
+            {"A non-key condition goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b > 5 AND c = 7;", {"({a: 1, b: 5}, {a: 1, b: +∞})"}},
+            {"OR across key columns", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 OR b = 2;", {}, "", true},
+            {"Tuple IN in key order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a, b) IN ((1, 10), (2, 20));", {"[{a: 1, b: 10}, {a: 1, b: 10}]", "[{a: 2, b: 20}, {a: 2, b: 20}]"}},
+            {"Tuple IN in another order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (b, a) IN ((10, 1), (20, 2));", {"[{a: 1, b: 10}, {a: 1, b: 10}]", "[{a: 2, b: 20}, {a: 2, b: 20}]"}},
+            {"IN with 15 values", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);", {"({a: 1, b: -∞}, {a: 16, b: -∞})"}},
+            {"IN with 25 values merges to one range", "sc_row",
+             "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);", {"({a: 1, b: -∞}, {a: 26, b: -∞})"}},
+            {"Product of IN lists: 24 inputs merge to three ranges", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3) AND b IN (1, 2, 3, 4, 5, 6, 7, 8);", {"[{a: 1, b: 1}, {a: 1, b: 9})", "[{a: 2, b: 1}, {a: 2, b: 9})", "[{a: 3, b: 1}, {a: 3, b: 9})"}},
 
-            {"Parameter: literal range", "sc_row", "DECLARE $a AS Int64; SELECT * FROM `/Root/sc_row` WHERE a = $a;"},
-            {"Parameters: literal interval", "sc_row", "DECLARE $lo AS Int64; DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a >= $lo AND a < $hi;"},
-            {"Parameter in a multi-range read", "sc_row", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b >= 10 AND b < $hi;"},
-            {"Parameter in OR", "sc_row", "DECLARE $p AS Int64; SELECT * FROM `/Root/sc_row` WHERE a < $p OR a >= 10;"},
-            {"IN over a list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $list;"},
-            {"Tuple IN over a parameter", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (a, b) IN $pairs;"},
-            {"Condition that does not depend on the row", "sc_row", "DECLARE $flag AS Bool; SELECT * FROM `/Root/sc_row` WHERE a = 1 OR $flag;"},
+            {"Parameter: literal range", "sc_row", "DECLARE $a AS Int64; SELECT * FROM `/Root/sc_row` WHERE a = $a;", {"({a: $a, b: -∞}, {a: $a, b: +∞})"}},
+            {"Parameters: literal interval", "sc_row", "DECLARE $lo AS Int64; DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a >= $lo AND a < $hi;", {"({a: $lo, b: -∞}, {a: $hi, b: -∞})"}},
+            {"Parameter in a multi-range read", "sc_row", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b >= 10 AND b < $hi;", {}, "a ∈ {1, 2} × b ∈ [10, $hi)"},
+            {"Parameter in OR", "sc_row", "DECLARE $p AS Int64; SELECT * FROM `/Root/sc_row` WHERE a < $p OR a >= 10;", {}, "a ∈ (-∞, $p) ∪ [10, +∞)"},
+            {"IN over a list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $list;", {}, "a ∈ $list"},
+            {"Tuple IN over a parameter", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (a, b) IN $pairs;", {}, "(a, b) ∈ $pairs"},
+            {"Condition that does not depend on the row", "sc_row", "DECLARE $flag AS Bool; SELECT * FROM `/Root/sc_row` WHERE a = 1 OR $flag;", {}, "a ∈ {1} ∪ (a ∈ (-∞, +∞) if $flag)"},
 
-            {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;"},
-            {"Fraction on an integer key: less", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 2.5;"},
-            {"Value above Int8: less", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k < 300;"},
-            {"Value above Int8: greater", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k > 300;"},
-            {"Value above Int8: equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k = 300;"},
-            {"Value above Int8: not equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k != 300;"},
-            {"Uint32 key", "sc_u32", "SELECT * FROM `/Root/sc_u32` WHERE k > 4000000000;"},
+            {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;", {}},
+            {"Fraction on an integer key: less", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 2.5;", {}, "", true},
+            {"Value above Int8: less", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k < 300;", {"({k: -∞}, {k: 127}]"}},
+            {"Value above Int8: greater", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k > 300;", {}},
+            {"Value above Int8: equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k = 300;", {}},
+            {"Value above Int8: not equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k != 300;", {"({k: -∞}, {k: +∞})"}},
+            {"Uint32 key", "sc_u32", "SELECT * FROM `/Root/sc_u32` WHERE k > 4000000000;", {"({k: 4000000000}, {k: +∞})"}},
 
-            {"Nullable key: less", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k < 5;"},
-            {"Nullable key: IS NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NULL;"},
-            {"Nullable key: IS NOT NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NOT NULL;"},
-            {"Nullable key: value or NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k = 5 OR k IS NULL;"},
+            {"Nullable key: less", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k < 5;", {"({k: NULL}, {k: 5})"}},
+            {"Nullable key: IS NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NULL;", {"[{k: NULL}, {k: NULL}]"}},
+            {"Nullable key: IS NOT NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NOT NULL;", {"({k: NULL}, {k: +∞})"}},
+            {"Nullable key: value or NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k = 5 OR k IS NULL;", {"[{k: NULL}, {k: NULL}]", "[{k: 5}, {k: 5}]"}},
 
-            {"String: point", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'abc';"},
-            {"String: interval", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s >= 'abc' AND s < 'abd';"},
-            {"String: StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, 'ab');"},
-            {"String: LIKE prefix", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s LIKE 'ab%';"},
-            {"String: NOT StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE NOT StartsWith(s, 'ab');"},
-            {"String: StartsWith a parameter", "sc_str", "DECLARE $p AS String; SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, $p);"},
-            {"String: quotes and separators", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'a\"b, c: 1';"},
-            {"String: non-UTF-8 bytes", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = '\\xff\\xfe';"},
-            {"Utf8: StartsWith", "sc_utf8", "SELECT * FROM `/Root/sc_utf8` WHERE StartsWith(u, 'при');"},
+            {"String: point", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'abc';", {"[{s: \"abc\"}, {s: \"abc\"}]"}},
+            {"String: interval", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s >= 'abc' AND s < 'abd';", {"[{s: \"abc\"}, {s: \"abd\"})"}},
+            {"String: StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, 'ab');", {"[{s: \"ab\"}, {s: \"ac\"})"}},
+            {"String: LIKE prefix", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s LIKE 'ab%';", {"[{s: \"ab\"}, {s: \"ac\"})"}},
+            {"String: NOT StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE NOT StartsWith(s, 'ab');", {"({s: -∞}, {s: \"ab\"})", "[{s: \"ac\"}, {s: +∞})"}},
+            {"String: StartsWith a parameter", "sc_str", "DECLARE $p AS String; SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, $p);", {}, "s ∈ StartsWith($p)"},
+            {"String: quotes and separators", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'a\"b, c: 1';", {"[{s: \"a\\\"b, c: 1\"}, {s: \"a\\\"b, c: 1\"}]"}},
+            {"String: non-UTF-8 bytes", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = '\\xff\\xfe';", {"[{s: \"\\xFF\\xFE\"}, {s: \"\\xFF\\xFE\"}]"}},
+            {"Utf8: StartsWith", "sc_utf8", "SELECT * FROM `/Root/sc_utf8` WHERE StartsWith(u, 'при');", {"[{u: \"при\"}, {u: \"прй\"})"}},
 
-            {"Double key", "sc_double", "SELECT * FROM `/Root/sc_double` WHERE k > 5;"},
-            {"Decimal key", "sc_dec", "SELECT * FROM `/Root/sc_dec` WHERE k < Decimal('1.5', 10, 2);"},
-            {"Date key: month", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k >= Date('2024-01-01') AND k < Date('2024-02-01');"},
-            {"Date key: point", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k = Date('2024-01-01');"},
-            {"Datetime key", "sc_dt", "SELECT * FROM `/Root/sc_dt` WHERE k BETWEEN Datetime('2024-01-01T00:00:00Z') AND Datetime('2024-01-02T00:00:00Z');"},
-            {"Timestamp key", "sc_ts", "SELECT * FROM `/Root/sc_ts` WHERE k >= Timestamp('2024-01-01T00:00:00Z');"},
-            {"Interval key", "sc_interval", "SELECT * FROM `/Root/sc_interval` WHERE k > Interval('PT1H');"},
-            {"Uuid key: point", "sc_uuid", "SELECT * FROM `/Root/sc_uuid` WHERE k = Uuid('00112233-4455-6677-8899-aabbccddeeff');"},
+
+            {"Decimal key", "sc_dec", "SELECT * FROM `/Root/sc_dec` WHERE k < Decimal('1.5', 10, 2);", {"({k: -∞}, {k: 1.5})"}},
+            {"Date key: month", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k >= Date('2024-01-01') AND k < Date('2024-02-01');", {"[{k: 2024-01-01}, {k: 2024-02-01})"}},
+            {"Date key: point", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k = Date('2024-01-01');", {"[{k: 2024-01-01}, {k: 2024-01-01}]"}},
+            {"Datetime key", "sc_dt", "SELECT * FROM `/Root/sc_dt` WHERE k BETWEEN Datetime('2024-01-01T00:00:00Z') AND Datetime('2024-01-02T00:00:00Z');", {"[{k: 2024-01-01T00:00:00Z}, {k: 2024-01-02T00:00:00Z}]"}},
+            {"Timestamp key", "sc_ts", "SELECT * FROM `/Root/sc_ts` WHERE k >= Timestamp('2024-01-01T00:00:00Z');", {"[{k: 2024-01-01T00:00:00.000000Z}, {k: +∞})"}},
+            {"Interval key", "sc_interval", "SELECT * FROM `/Root/sc_interval` WHERE k > Interval('PT1H');", {"({k: 3600000000}, {k: +∞})"}},
+            {"Uuid key: point", "sc_uuid", "SELECT * FROM `/Root/sc_uuid` WHERE k = Uuid('00112233-4455-6677-8899-aabbccddeeff');", {"[{k: 00112233-4455-6677-8899-aabbccddeeff}, {k: 00112233-4455-6677-8899-aabbccddeeff}]"}},
             {"Uuid key: two points", "sc_uuid",
-             "SELECT * FROM `/Root/sc_uuid` WHERE k IN (Uuid('00112233-4455-6677-8899-aabbccddeeff'), Uuid('ffeeddcc-bbaa-9988-7766-554433221100'));"},
-            {"Bool key", "sc_bool", "SELECT * FROM `/Root/sc_bool` WHERE k = true;"},
+             "SELECT * FROM `/Root/sc_uuid` WHERE k IN (Uuid('00112233-4455-6677-8899-aabbccddeeff'), Uuid('ffeeddcc-bbaa-9988-7766-554433221100'));", {"[{k: 00112233-4455-6677-8899-aabbccddeeff}, {k: 00112233-4455-6677-8899-aabbccddeeff}]", "[{k: ffeeddcc-bbaa-9988-7766-554433221100}, {k: ffeeddcc-bbaa-9988-7766-554433221100}]"}},
+            {"Bool key", "sc_bool", "SELECT * FROM `/Root/sc_bool` WHERE k = true;", {"[{k: true}, {k: true}]"}},
 
-            {"Column table: OR of composite conditions", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE ((a = 1 AND b < 5) OR (a = 3 AND b >= 10)) AND c = 7;"},
-            {"Column table: IN times a point", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b = 7;"},
-            {"Column table: parameter", "sc_col", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b < $hi;"},
+            {"Column table: OR of composite conditions", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE ((a = 1 AND b < 5) OR (a = 3 AND b >= 10)) AND c = 7;", {"({a: 1, b: -∞}, {a: 1, b: 5})", "[{a: 3, b: 10}, {a: 3, b: +∞})"}},
+            {"Column table: IN times a point", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b = 7;", {"[{a: 1, b: 7}, {a: 1, b: 7}]", "[{a: 2, b: 7}, {a: 2, b: 7}]"}},
+            {"Column table: parameter", "sc_col", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b < $hi;", {}, "a ∈ {1, 2} × b ∈ (-∞, $hi)"},
 
-            {"Secondary index: point", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c = 5;"},
-            {"Secondary index: IN", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c IN (1, 2);"},
-            {"Secondary index: range", "sc_idx", "SELECT a FROM `/Root/sc_idx` WHERE c > 5 AND c < 10;"},
+            {"Secondary index: point", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c = 5;", {"({c: 5, a: -∞}, {c: 5, a: +∞})"}},
+            {"Secondary index: IN", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c IN (1, 2);", {"({c: 1, a: -∞}, {c: 3, a: -∞})"}},
+            {"Secondary index: range", "sc_idx", "SELECT a FROM `/Root/sc_idx` WHERE c > 5 AND c < 10;", {"({c: 5, a: +∞}, {c: 10, a: -∞})"}},
         };
-        size_t number = 0;
-        for (const auto& [title, table, query] : cases) {
-            Cout << Endl << "==================== " << ++number << ". " << title << Endl << query << Endl;
-            if (!created.contains(table)) {
-                Cout << "SKIPPED: table " << table << " was not created" << Endl;
-                continue;
-            }
-            auto result = testContext.GetSession().ExecuteQuery(
-                TStringBuilder() << "PRAGMA YqlSelect = 'force'; " << query,
+        for (const auto& test : cases) {
+            const auto result = testContext.GetSession().ExecuteQuery(
+                TStringBuilder() << "PRAGMA YqlSelect = 'force'; " << test.Query,
                 NYdb::NQuery::TTxControl::NoTx(),
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
             ).ExtractValueSync();
-            if (!result.IsSuccess()) {
-                Cout << "EXPLAIN FAILED: " << result.GetIssues().ToString() << Endl;
-                continue;
+            UNIT_ASSERT_C(result.IsSuccess(), test.Title << ": " << result.GetIssues().ToString());
+            const auto plan = TString{*result.GetStats()->GetPlan()};
+            const auto simplified = GetSimplifiedPlan(plan);
+            const auto* read = FindOperatorByStringField(simplified, "Name", test.FullScan ? "TableFullScan" : "TableRangeScan");
+            UNIT_ASSERT_C(read, test.Title << ": " << plan);
+            UNIT_ASSERT_C(GetStringField(*read, "Table").StartsWith(test.Table), test.Title << ": " << plan);
+            const auto& fields = read->GetMapSafe();
+            if (test.FullScan || !test.Expression.empty()) {
+                UNIT_ASSERT_C(!fields.contains("ReadRanges"), test.Title << ": " << plan);
+                if (!test.Expression.empty()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*read, "ReadRangesExpression"), test.Expression, test.Title << ": " << plan);
+                }
+            } else {
+                UNIT_ASSERT_C(fields.contains("ReadRanges"), test.Title << ": " << plan);
+                UNIT_ASSERT_C(!fields.contains("ReadRangesExpression"), test.Title << ": " << plan);
+                const auto& ranges = fields.at("ReadRanges").GetArraySafe();
+                UNIT_ASSERT_VALUES_EQUAL_C(ranges.size(), test.Ranges.size(), test.Title << ": " << plan);
+                for (size_t i = 0; i < ranges.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(ranges[i].GetStringSafe(), test.Ranges[i], test.Title << ": " << plan);
+                }
             }
-            PrintPlan(TString{*result.GetStats()->GetPlan()}, /*analyzeMode=*/false);
         }
     }
 

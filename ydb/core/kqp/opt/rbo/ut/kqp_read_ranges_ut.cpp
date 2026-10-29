@@ -1,10 +1,15 @@
-#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_calculator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_evaluate.h>
 #include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 #include <ydb/core/kqp/opt/rbo/kqp_read_ranges_structure.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NKqp::NOpt {
 namespace {
@@ -17,17 +22,25 @@ NYql::TExprNode::TPtr Compile(TStringBuf expression, NYql::TExprContext& ctx) {
     return node;
 }
 
-std::optional<TVector<TString>> Describe(TStringBuf expression, const TVector<TString>& keys, size_t maxRanges = Max<size_t>()) {
+const NMiniKQL::IFunctionRegistry& FunctionRegistry() {
+    static const auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
+    return *registry;
+}
+
+std::optional<TVector<TString>> Describe(TStringBuf expression, const TVector<TString>& keys, size_t maxRanges = MaxExplainedReadRanges) {
     NYql::TExprContext ctx;
-    const auto list = NReadRanges::CalculateRanges(Compile(expression, ctx));
-    if (!list || list->Width > keys.size() || list->Ranges.size() > maxRanges) {
+    NYql::TTypeAnnotationContext types;
+    auto ranges = Compile(expression, ctx);
+    // The extractor finalizes its internal range representation before handing it to the read source.
+    if (!ranges->IsCallable("RangeFinalize")) {
+        ranges = ctx.NewCallable(ranges->Pos(), "RangeFinalize", {ranges});
+    }
+    const auto evaluated = EvaluateReadRanges(ranges, MaxEvaluatedRangeInputs, ctx, types, FunctionRegistry());
+    auto description = DescribeReadRanges(nullptr, evaluated, nullptr, keys);
+    if (description.Ranges && description.Ranges->size() > maxRanges) {
         return std::nullopt;
     }
-    TVector<TString> result;
-    for (const auto& range : list->Ranges) {
-        result.push_back(NReadRanges::FormatRange(range, keys));
-    }
-    return result;
+    return description.Ranges;
 }
 
 TString DescribeLiteral(TStringBuf expression, const TVector<TString>& keys) {
@@ -168,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertRanges(R"(
             (AsRange '(
                 '((Just (Nothing (OptionalType (DataType 'String)))) (Int32 '1))
-                '((Just (String 'a1)) (Int32 '0))))
+                '((Just (Just (String 'a1))) (Int32 '0))))
         )", {"key"}, {"[{key: NULL}, {key: \"a1\"})"});
         AssertRanges(R"(
             (RangeFor '== (String '"a,\"b") (DataType 'String))
@@ -243,7 +256,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
             (RangeMultiply (Uint64 '100)
                 (RangeFor '=== (Int64 '1) (DataType 'Int64))
                 (RangeFor '== (Int64 '2) (DataType 'Int64)))
-        )", {"a", "b"}, {"({a: 1, b: -∞}, {a: 2, b: -∞})"});
+        )", {"a", "b"}, {"({a: 1, b: -∞}, {a: 1, b: +∞})"});
     }
 
     Y_UNIT_TEST(NullableKeyRangesStartAfterNull) {
@@ -251,7 +264,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
             (RangeFor '< (Int64 '5) (OptionalType (DataType 'Int64)))
         )", {"a"}, {"({a: NULL}, {a: 5})"});
         AssertRanges(R"(
-            (RangeFor 'NotExists (Nothing (OptionalType (DataType 'Int64))) (OptionalType (DataType 'Int64)))
+            (RangeFor 'NotExists (Void) (OptionalType (DataType 'Int64)))
         )", {"a"}, {"[{a: NULL}, {a: NULL}]"});
         AssertRanges(R"(
             (RangeFor '== (Nothing (OptionalType (DataType 'Int64))) (OptionalType (DataType 'Int64)))
@@ -280,12 +293,12 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         )", {"id"}, {"({id: 5}, {id: +∞})"});
     }
 
-    Y_UNIT_TEST(UnorderedLiteralsAreUnknown) {
-        UNIT_ASSERT(!Describe(R"(
+    Y_UNIT_TEST(PgTextUsesRuntimeOrdering) {
+        AssertRanges(R"(
             (RangeIntersect
                 (RangeFor '> (PgConst 'a (PgType 'text)) (PgType 'text))
                 (RangeFor '< (PgConst 'b (PgType 'text)) (PgType 'text)))
-        )", {"name"}));
+        )", {"name"}, {"({name: \"a\"}, {name: \"b\"})"});
     }
 
     Y_UNIT_TEST(LiteralRangePadsMissingColumns) {
@@ -314,11 +327,73 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         )", {"a"}), "[{a: NULL}, {a: NULL}]");
     }
 
-    Y_UNIT_TEST(CalculationStopsAtBudgetAndDisplayLimit) {
-        UNIT_ASSERT(Describe(PointsUnion(1000), {"a"}));
-        UNIT_ASSERT(!Describe(PointsUnion(1001), {"a"}));
+    Y_UNIT_TEST(EvaluationStopsAtDisplayLimit) {
+        UNIT_ASSERT(Describe(PointsUnion(MaxExplainedReadRanges), {"a"}));
+        UNIT_ASSERT(!Describe(PointsUnion(MaxExplainedReadRanges + 1), {"a"}));
         UNIT_ASSERT(Describe(PointsUnion(3), {"a"}, 3));
         UNIT_ASSERT(!Describe(PointsUnion(3), {"a"}, 2));
+    }
+
+    Y_UNIT_TEST(EvaluationBoundsInputsBeforeComputing) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext types;
+        const auto point = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
+        UNIT_ASSERT(EvaluateReadRanges(point, MaxEvaluatedRangeInputs, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!EvaluateReadRanges(point, MaxEvaluatedRangeInputs + 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!EvaluateReadRanges(point, {}, ctx, types, FunctionRegistry()));
+        const auto manyNodes = Compile(PointsUnion(MaxRangeEvaluationNodes), ctx);
+        UNIT_ASSERT(!EvaluateReadRanges(manyNodes, 1, ctx, types, FunctionRegistry()));
+        const auto largeValue = Compile(TStringBuilder() << "(RangeFor '== (String '\""
+            << TString(MaxRangeEvaluationBytes + 1, 'x') << "\") (DataType 'String))", ctx);
+        UNIT_ASSERT(!EvaluateReadRanges(largeValue, 1, ctx, types, FunctionRegistry()));
+
+        // Every shared value is also reachable by a short path; visiting it once must not hide the deep path.
+        const auto one = Compile("(Int64 '1)", ctx);
+        const auto condition = Compile("(Bool 'true)", ctx);
+        NYql::TExprNode::TListType values{one};
+        for (size_t i = 0; i < 70; ++i) {
+            values.push_back(ctx.NewCallable(one->Pos(), "If", {condition, values.back(), one}));
+        }
+        Reverse(values.begin(), values.end());
+        const auto list = ctx.NewCallable(one->Pos(), "AsList", std::move(values));
+        auto first = ctx.NewCallable(one->Pos(), "Nth", {list, ctx.NewAtom(one->Pos(), "0")});
+        const auto deepRange = ctx.ChangeChild(*point, 1, std::move(first));
+        UNIT_ASSERT(!EvaluateReadRanges(deepRange, 1, ctx, types, FunctionRegistry()));
+    }
+
+    Y_UNIT_TEST(EvaluationRejectsRuntimeAndUnboundedExpressions) {
+        for (const auto value : {"(RandomNumber)", "(CurrentUtcTimestamp)",
+                                 "(Parameter '$p (DataType 'Int64))", "(Apply (Udf 'Random.Next))"}) {
+            UNIT_ASSERT(!Describe(TStringBuilder() << "(RangeFor '== " << value << " (DataType 'Int64))", {"a"}));
+        }
+        UNIT_ASSERT(!Describe(SqlIn("(Just (ListFromRange (Int64 '0) (Int64 '1000000000)))", 10000), {"a"}));
+    }
+
+    Y_UNIT_TEST(EvaluationFailureDoesNotChangeQueryContext) {
+        NYql::TExprContext ctx;
+        NYql::TTypeAnnotationContext types;
+        const auto point = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
+        const auto failing = ctx.NewCallable(point->Pos(), "Ensure", {
+            point, ctx.NewCallable(point->Pos(), "Bool", {ctx.NewAtom(point->Pos(), "false")}),
+            ctx.NewCallable(point->Pos(), "String", {ctx.NewAtom(point->Pos(), "range evaluation failure")})});
+        ctx.AddError(NYql::TIssue({}, "existing query issue"));
+        const auto issues = ctx.IssueManager.GetIssues().ToString();
+        ctx.Step.Done(NYql::TExprStep::ExprEval);
+        UNIT_ASSERT(!EvaluateReadRanges(failing, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().ToString(), issues);
+        UNIT_ASSERT(ctx.Step.IsDone(NYql::TExprStep::ExprEval));
+        UNIT_ASSERT(!point->GetTypeAnn());
+        const auto invalid = Compile("(RangeFor 'invalid (Int64 '1) (DataType 'Int64))", ctx);
+        UNIT_ASSERT(!EvaluateReadRanges(invalid, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().ToString(), issues);
+        UNIT_ASSERT(ctx.Step.IsDone(NYql::TExprStep::ExprEval));
+        UNIT_ASSERT(EvaluateReadRanges(point, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().ToString(), issues);
+        UNIT_ASSERT(ctx.Step.IsDone(NYql::TExprStep::ExprEval));
+        UNIT_ASSERT(!point->GetTypeAnn());
+        const auto fallback = DescribeReadRanges(nullptr, nullptr, point, {"a"});
+        UNIT_ASSERT(!fallback.Ranges);
+        UNIT_ASSERT_VALUES_EQUAL(*fallback.Expression, "a ∈ {1}");
     }
 
     Y_UNIT_TEST(ExpressionShowsUnknownValues) {
@@ -361,7 +436,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertExpression(PointsUnion(12), {"a"}, "a ∈ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, … 2 more}");
     }
 
-    Y_UNIT_TEST(SqlInIsCalculated) {
+    Y_UNIT_TEST(SqlInIsEvaluated) {
         const TString expression = TStringBuilder() << "(RangeFinalize (RangeMultiply (Uint64 '10000) "
             << SqlIn(TupleList, 10000) << " (RangeFor '=== (Int32 '7) (DataType 'Int64))))";
         AssertRanges(expression, {"a", "b"}, {"[{a: 1, b: 7}, {a: 1, b: 7}]", "[{a: 2, b: 7}, {a: 2, b: 7}]"});
@@ -387,7 +462,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertExpression(expression, {"a"}, "a ∈ $list");
     }
 
-    Y_UNIT_TEST(TupleSqlInIsCalculatedInKeyOrder) {
+    Y_UNIT_TEST(TupleSqlInIsEvaluatedInKeyOrder) {
         const TString expression = TStringBuilder() << "(RangeFinalize " << TupleSqlIn(PairList, 10000) << ")";
         AssertRanges(expression, {"a", "b"}, {"[{a: 1, b: 10}, {a: 1, b: 10}]", "[{a: 2, b: 20}, {a: 2, b: 20}]"});
         AssertExpression(expression, {"a", "b"}, "(a, b) ∈ {(1, 10), (2, 20)}");

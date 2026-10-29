@@ -7,7 +7,7 @@ SRCS(
     kqp_expression.cpp
     kqp_olap_aggregate.cpp
     kqp_olap_expr_inspection.cpp
-    kqp_read_ranges_calculator.cpp
+    kqp_read_ranges_evaluate.cpp
     kqp_read_ranges_explain.cpp
     kqp_read_ranges_model.cpp
     kqp_read_ranges_sql_in.cpp
@@ -58,6 +58,10 @@ PEERDIR(
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/mkql
     yql/essentials/public/decimal
     yql/essentials/types/uuid
     yql/essentials/utils

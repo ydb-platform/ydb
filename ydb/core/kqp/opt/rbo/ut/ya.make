@@ -9,6 +9,8 @@ PEERDIR(
     library/cpp/containers/absl
     library/cpp/containers/stack_vector
     ydb/core/kqp/opt/rbo
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
 )

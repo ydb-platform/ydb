@@ -2,7 +2,6 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 
-#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -20,10 +19,10 @@ struct TReadRangesDescription {
 // The most ranges explain lists. A read with more ranges is described by the structure of its expression.
 constexpr size_t MaxExplainedReadRanges = 20;
 
-// The ranges of a read from the predicate extractor: its literal range when there is one, and its ranges expression.
+// Prefer the extractor's literal range, then a successfully evaluated list, otherwise describe the expression.
 TReadRangesDescription DescribeReadRanges(const NYql::TExprNode::TPtr& literalRange, const NYql::TExprNode::TPtr& evaluatedRanges,
                                           const NYql::TExprNode::TPtr& ranges,
-                                          const TVector<TString>& keyColumns, TMaybe<size_t> expectedMaxRanges);
+                                          const TVector<TString>& keyColumns);
 
 // Describes a KqlKeyRange with literal or parameter bounds as one interval over all key columns.
 TString DescribeLiteralKeyRange(const NYql::TExprNode::TPtr& keyRange, const TVector<TString>& keyColumns);

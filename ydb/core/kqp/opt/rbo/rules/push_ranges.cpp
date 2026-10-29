@@ -6,9 +6,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/services/yql_transform_pipeline.h>
-
-#include <util/system/env.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_evaluate.h>
 
 namespace NKikimr::NKqp {
 
@@ -157,52 +155,6 @@ TExprNode::TPtr GetLiteralBoundValue(const TExprNode::TPtr& value, const TTypeAn
     auto folded = ctx.NewCallable(value->Pos(), "String", {TCoDataCtor(value->HeadPtr()).Literal().Ptr()});
     folded->SetTypeAnn(type);
     return folded;
-}
-
-// Computes the ranges with MiniKQL at compile time, for explain. Null if they depend on parameters or the evaluation
-// fails, which never fails the query.
-TExprNode::TPtr EvaluateRanges(const TExprNode::TPtr& ranges, TRBOContext& rboCtx) {
-    auto& ctx = rboCtx.ExprCtx;
-    if (FindNode(ranges, [](const TExprNode::TPtr& node) { return node->IsCallable("Parameter"); })) {
-        return nullptr;
-    }
-
-    TNodeOnNodeOwnedMap clones;
-    auto copy = ctx.DeepCopy(*ranges, ctx, clones, false, true, true);
-    if (GetEnv("DEBUG_RANGES_FAIL")) {
-        copy = ctx.Builder(ranges->Pos())
-            .Callable("Ensure")
-                .Add(0, copy)
-                .Callable(1, "Bool").Atom(0, "false").Seal()
-                .Callable(2, "String").Atom(0, "forced failure").Seal()
-            .Seal().Build();
-    }
-    const auto started = TInstant::Now();
-    auto root = ctx.NewCallable(ranges->Pos(), "EvaluateExpr", {copy});
-    auto evaluator = TTransformationPipeline(&rboCtx.TypeCtx)
-        .AddServiceTransformers()
-        .AddPreTypeAnnotation()
-        .AddExpressionEvaluation(rboCtx.FuncRegistry).Build(false);
-
-    const auto steps = ctx.Step;
-    ctx.IssueManager.Mute(/*onlyWarnings=*/false);
-    IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Error;
-    try {
-        ctx.Step.Repeat(TExprStep::ExprEval);
-        do {
-            status = evaluator->Transform(root, root, ctx);
-        } while (status == IGraphTransformer::TStatus::Repeat);
-    } catch (...) {
-        status = IGraphTransformer::TStatus::Error;
-    }
-    ctx.IssueManager.Unmute();
-    ctx.Step = steps;
-
-    Cerr << "EVAL_TIME " << (TInstant::Now() - started).MicroSeconds() << "us status=" << status << " issues=" << ctx.IssueManager.GetIssues().Size() << Endl;
-    if (status != IGraphTransformer::TStatus::Ok || root->IsCallable("EvaluateExpr")) {
-        return nullptr;
-    }
-    return root;
 }
 
 // Returns the ranges as a KqlKeyRange, which the read source takes as is, when the extractor found them to be a single
@@ -715,9 +667,10 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
         rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, lookupKeyColumns, *schemeType, read->Pos, ctx);
-    if (!rangeInfo.LiteralRange) {
-        rangeInfo.EvaluatedRanges = EvaluateRanges(rangeInfo.ComputeNode, rboCtx);
-    }
+        if (!rangeInfo.LiteralRange) {
+            rangeInfo.EvaluatedRanges = NOpt::EvaluateReadRanges(rangeInfo.ComputeNode, rangeInfo.ExpectedMaxRanges,
+                ctx, rboCtx.TypeCtx, rboCtx.FuncRegistry);
+        }
 
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
@@ -789,7 +742,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     // Only the row storage read source takes a literal range, but explain shows it for any storage.
     rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
     if (!rangeInfo.LiteralRange) {
-        rangeInfo.EvaluatedRanges = EvaluateRanges(rangeInfo.ComputeNode, rboCtx);
+        rangeInfo.EvaluatedRanges = NOpt::EvaluateReadRanges(rangeInfo.ComputeNode, rangeInfo.ExpectedMaxRanges,
+            ctx, rboCtx.TypeCtx, rboCtx.FuncRegistry);
     }
     if (rangeInfo.LiteralRange) {
         YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);

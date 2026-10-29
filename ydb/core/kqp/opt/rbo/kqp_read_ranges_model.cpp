@@ -6,7 +6,6 @@
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/types/uuid/uuid.h>
-#include <yql/essentials/utils/utf8.h>
 
 #include <util/charset/utf8.h>
 #include <util/datetime/base.h>
@@ -23,27 +22,9 @@ namespace NKikimr::NKqp::NOpt::NReadRanges {
 using namespace NYql;
 using namespace NYql::NNodes;
 using NUdf::EDataSlot;
-using NUdf::EDataTypeFeatures;
 using NDecimal::TInt128;
 
 namespace {
-
-bool HasFeatures(EDataSlot slot, ui32 features) {
-    return NUdf::GetDataTypeInfo(slot).Features & features;
-}
-
-bool IsIntegral(EDataSlot slot) {
-    return HasFeatures(slot, EDataTypeFeatures::IntegralType);
-}
-
-bool IsFloat(EDataSlot slot) {
-    return HasFeatures(slot, EDataTypeFeatures::FloatType);
-}
-
-// String, Utf8 and Uuid values are bytes, ordered as MiniKQL orders strings.
-bool IsBytes(EDataSlot slot) {
-    return slot == EDataSlot::String || slot == EDataSlot::Utf8 || slot == EDataSlot::Uuid;
-}
 
 // The integer an integral, date or interval value holds.
 std::optional<TInt128> GetInteger(const TKeyValue& value) {
@@ -66,42 +47,6 @@ std::optional<TInt128> GetInteger(const TKeyValue& value) {
         case EDataSlot::Timestamp64: return pod.Get<i64>();
         case EDataSlot::Interval64: return pod.Get<i64>();
         default: return std::nullopt;
-    }
-}
-
-template <typename T>
-std::optional<NUdf::TUnboxedValuePod> MakeBounded(TInt128 value) {
-    if (value < TInt128(std::numeric_limits<T>::min()) || value > TInt128(std::numeric_limits<T>::max())) {
-        return std::nullopt;
-    }
-    return NUdf::TUnboxedValuePod(static_cast<T>(value));
-}
-
-// The value of an integral type, nullopt if the type cannot hold it.
-std::optional<NUdf::TUnboxedValuePod> MakeIntegral(EDataSlot slot, TInt128 value) {
-    switch (slot) {
-        case EDataSlot::Int8: return MakeBounded<i8>(value);
-        case EDataSlot::Uint8: return MakeBounded<ui8>(value);
-        case EDataSlot::Int16: return MakeBounded<i16>(value);
-        case EDataSlot::Uint16: return MakeBounded<ui16>(value);
-        case EDataSlot::Int32: return MakeBounded<i32>(value);
-        case EDataSlot::Uint32: return MakeBounded<ui32>(value);
-        case EDataSlot::Int64: return MakeBounded<i64>(value);
-        case EDataSlot::Uint64: return MakeBounded<ui64>(value);
-        default: return std::nullopt;
-    }
-}
-
-std::pair<TInt128, TInt128> GetIntegralBounds(EDataSlot slot) {
-    switch (slot) {
-        case EDataSlot::Int8: return {Min<i8>(), Max<i8>()};
-        case EDataSlot::Uint8: return {0, Max<ui8>()};
-        case EDataSlot::Int16: return {Min<i16>(), Max<i16>()};
-        case EDataSlot::Uint16: return {0, Max<ui16>()};
-        case EDataSlot::Int32: return {Min<i32>(), Max<i32>()};
-        case EDataSlot::Uint32: return {0, Max<ui32>()};
-        case EDataSlot::Int64: return {Min<i64>(), Max<i64>()};
-        default: return {0, Max<ui64>()};
     }
 }
 
@@ -243,11 +188,16 @@ std::optional<TBoundary> ParseBoundary(const TExprNode& node, bool isLeft) {
             continue;
         }
         if (element->IsCallable({"SafeCast", "StrictCast"}) && element->ChildrenSize() == 2 && element->Head().IsCallable("Nothing")) {
-            const auto type = ParseKeyType(element->Tail());
-            if (!type || type->OptionalDepth == 0) {
+            const TExprNode* type = &element->Tail();
+            size_t depth = 0;
+            while (type->IsCallable("OptionalType") && type->ChildrenSize() == 1) {
+                ++depth;
+                type = &type->Head();
+            }
+            if (!depth) {
                 return std::nullopt;
             }
-            elements.push_back({.Infinite = type->OptionalDepth == 1});
+            elements.push_back({.Infinite = depth == 1});
             continue;
         }
         auto value = ParseKeyValue(element);
@@ -288,59 +238,12 @@ bool IsBoundaryRead(const TBoundary& boundary, size_t width) {
 
 } // namespace
 
-std::optional<TKeyType> ParseKeyType(const TExprNode& node) {
-    if (node.IsCallable("OptionalType") && node.ChildrenSize() == 1) {
-        auto result = ParseKeyType(node.Head());
-        if (result) {
-            ++result->OptionalDepth;
-        }
-        return result;
-    }
-    if (node.IsCallable("DataType") && node.ChildrenSize() > 0 && node.Head().IsAtom()) {
-        const auto slot = NUdf::FindDataSlot(node.Head().Content());
-        if (!slot) {
-            return std::nullopt;
-        }
-        TKeyType result{.Slot = *slot};
-        if (*slot == EDataSlot::Decimal && (node.ChildrenSize() != 3 || !TryFromString(node.Child(1)->Content(), result.Precision)
-                                            || !TryFromString(node.Child(2)->Content(), result.Scale))) {
-            return std::nullopt;
-        }
-        return result;
-    }
-    if (node.IsCallable("PgType") && node.ChildrenSize() == 1 && node.Head().IsAtom()) {
-        return TKeyType{.PgType = TString(node.Head().Content())};
-    }
-    return std::nullopt;
-}
-
-bool HasNaN(const TKeyType& type) {
-    return type.Slot && (IsFloat(*type.Slot) || *type.Slot == EDataSlot::Decimal);
-}
-
 std::optional<TKeyValue> ParseKeyValue(const TExprNode::TPtr& node) {
     if (node->IsCallable("Nothing")) {
         return TKeyValue{};
     }
     if (node->IsCallable("Just") && node->ChildrenSize() == 1) {
         return ParseKeyValue(node->HeadPtr());
-    }
-    if (node->IsCallable({"SafeCast", "StrictCast"}) && node->ChildrenSize() == 2) {
-        const auto value = ParseKeyValue(node->HeadPtr());
-        const auto type = ParseKeyType(node->Tail());
-        if (!value || !type) {
-            return std::nullopt;
-        }
-        const auto conversion = CastToKey(*value, *type);
-        if (conversion.Status == TConversion::EStatus::Unknown) {
-            return std::nullopt;
-        }
-        // StrictCast makes a value without an exact counterpart NULL, while SafeCast may round it, as it does a fraction.
-        if (conversion.Status == TConversion::EStatus::Null && value->Kind != TKeyValue::EKind::Null && node->IsCallable("SafeCast")
-            && IsFloat(value->Slot)) {
-            return std::nullopt;
-        }
-        return conversion.Status == TConversion::EStatus::Value ? conversion.Value : TKeyValue{};
     }
     if (node->IsCallable("ToString") && node->ChildrenSize() == 1) {
         auto value = ParseKeyValue(node->HeadPtr());
@@ -362,210 +265,6 @@ std::optional<TKeyValue> ParseKeyValue(const TExprNode::TPtr& node) {
                          .Bytes = TString(pg.Cast().Value().Value())};
     }
     return std::nullopt;
-}
-
-TKeyValue MakeNaN(const TKeyType& type) {
-    TKeyValue result{.Kind = TKeyValue::EKind::Data, .Slot = *type.Slot, .Precision = type.Precision, .Scale = type.Scale};
-    if (*type.Slot == EDataSlot::Float) {
-        result.Value = NUdf::TUnboxedValuePod(std::numeric_limits<float>::quiet_NaN());
-    } else if (*type.Slot == EDataSlot::Double) {
-        result.Value = NUdf::TUnboxedValuePod(std::numeric_limits<double>::quiet_NaN());
-    } else {
-        result.Value = NUdf::TUnboxedValuePod(NDecimal::Nan());
-    }
-    return result;
-}
-
-TConversion CastToKey(const TKeyValue& value, const TKeyType& type) {
-    using EStatus = TConversion::EStatus;
-    auto convert = [&](EDataSlot slot, NUdf::TUnboxedValuePod pod) {
-        TKeyValue result = value;
-        result.Slot = slot;
-        result.Value = pod;
-        return TConversion{.Status = EStatus::Value, .Value = std::move(result)};
-    };
-
-    if (value.Kind == TKeyValue::EKind::Null) {
-        return {.Status = EStatus::Null};
-    }
-    if (!type.Slot) {
-        if (value.Kind == TKeyValue::EKind::Pg && value.PgType == type.PgType) {
-            return {.Status = EStatus::Value, .Value = value};
-        }
-        return {};
-    }
-    if (value.Kind != TKeyValue::EKind::Data) {
-        return {};
-    }
-
-    const auto from = value.Slot;
-    const auto to = *type.Slot;
-    if (from == to) {
-        if (to == EDataSlot::Decimal && (value.Precision != type.Precision || value.Scale != type.Scale)) {
-            return {};
-        }
-        return {.Status = EStatus::Value, .Value = value};
-    }
-    if (from == EDataSlot::Utf8 && to == EDataSlot::String) {
-        return convert(to, value.Value);
-    }
-    if (from == EDataSlot::String && to == EDataSlot::Utf8) {
-        return IsUtf(value.Bytes) ? convert(to, value.Value) : TConversion{.Status = EStatus::Null};
-    }
-    if (IsIntegral(from) && IsIntegral(to)) {
-        const auto converted = MakeIntegral(to, *GetInteger(value));
-        return converted ? convert(to, *converted) : TConversion{.Status = EStatus::Null};
-    }
-    if (IsFloat(from) && IsIntegral(to)) {
-        // Only a whole number within the bounds of the type converts without a loss.
-        const double number = from == EDataSlot::Float ? value.Value.Get<float>() : value.Value.Get<double>();
-        const auto [min, max] = GetIntegralBounds(to);
-        if (!std::isfinite(number) || std::trunc(number) != number || number < static_cast<double>(min) || number > static_cast<double>(max)) {
-            return {.Status = EStatus::Null};
-        }
-        const auto converted = MakeIntegral(to, static_cast<TInt128>(number));
-        return converted ? convert(to, *converted) : TConversion{.Status = EStatus::Null};
-    }
-    // Conversions YQL makes without a loss, such as Int32 to Double.
-    const auto castResult = NUdf::GetCastResult(from, to);
-    if (castResult && *castResult == NUdf::ECastOptions::Complete && IsFloat(to)) {
-        double converted;
-        if (IsIntegral(from)) {
-            converted = static_cast<double>(*GetInteger(value));
-        } else if (from == EDataSlot::Float) {
-            converted = value.Value.Get<float>();
-        } else {
-            return {};
-        }
-        return convert(to, to == EDataSlot::Float ? NUdf::TUnboxedValuePod(static_cast<float>(converted))
-                                                  : NUdf::TUnboxedValuePod(converted));
-    }
-    return {};
-}
-
-TConversion RoundToKey(const TKeyValue& value, const TKeyType& type, bool down) {
-    using EStatus = TConversion::EStatus;
-    if (value.Kind != TKeyValue::EKind::Data || !type.Slot) {
-        return {};
-    }
-    const auto from = value.Slot;
-    const auto to = *type.Slot;
-    TKeyValue result = value;
-    result.Slot = to;
-    if (IsIntegral(from) && IsIntegral(to)) {
-        // As the runtime rounds integers: a value past the bounds of the type rounds to the nearer bound or to NULL.
-        const auto integer = *GetInteger(value);
-        const auto [min, max] = GetIntegralBounds(to);
-        if (integer < min) {
-            if (down) {
-                return {.Status = EStatus::Null};
-            }
-            result.Value = *MakeIntegral(to, min);
-        } else if (integer > max) {
-            if (!down) {
-                return {.Status = EStatus::Null};
-            }
-            result.Value = *MakeIntegral(to, max);
-        } else {
-            result.Value = *MakeIntegral(to, integer);
-        }
-        return {.Status = EStatus::Value, .Value = std::move(result)};
-    }
-    if (from == EDataSlot::String && to == EDataSlot::Utf8) {
-        const auto rounded = NYql::RoundToNearestValidUtf8(value.Bytes, down);
-        if (!rounded) {
-            return {.Status = EStatus::Null};
-        }
-        result.Bytes = TString(*rounded);
-        return {.Status = EStatus::Value, .Value = std::move(result)};
-    }
-    return {};
-}
-
-std::optional<TKeyValue> WidePointEnd(const TKeyValue& value) {
-    if (value.Kind != TKeyValue::EKind::Data) {
-        return std::nullopt;
-    }
-    // The largest value of every type below, as MakeWidePointRangeLambda in yql_opt_range.cpp has it.
-    TInt128 max;
-    switch (value.Slot) {
-        case EDataSlot::Date: max = NUdf::MAX_DATE - 1; break;
-        case EDataSlot::Datetime: max = NUdf::MAX_DATETIME - 1; break;
-        case EDataSlot::Timestamp: max = NUdf::MAX_TIMESTAMP - 1; break;
-        case EDataSlot::Date32: max = NUdf::MAX_DATE32; break;
-        case EDataSlot::Datetime64: max = NUdf::MAX_DATETIME64; break;
-        case EDataSlot::Timestamp64: max = NUdf::MAX_TIMESTAMP64; break;
-        default:
-            if (!IsIntegral(value.Slot)) {
-                return std::nullopt;
-            }
-            max = GetIntegralBounds(value.Slot).second;
-    }
-    const auto integer = *GetInteger(value);
-    if (integer >= max) {
-        return std::nullopt;
-    }
-    TKeyValue result = value;
-    switch (value.Slot) {
-        case EDataSlot::Date: result.Value = NUdf::TUnboxedValuePod(static_cast<ui16>(integer + 1)); break;
-        case EDataSlot::Datetime: result.Value = NUdf::TUnboxedValuePod(static_cast<ui32>(integer + 1)); break;
-        case EDataSlot::Timestamp: result.Value = NUdf::TUnboxedValuePod(static_cast<ui64>(integer + 1)); break;
-        case EDataSlot::Date32: result.Value = NUdf::TUnboxedValuePod(static_cast<i32>(integer + 1)); break;
-        case EDataSlot::Datetime64:
-        case EDataSlot::Timestamp64:
-            result.Value = NUdf::TUnboxedValuePod(static_cast<i64>(integer + 1));
-            break;
-        default:
-            result.Value = *MakeIntegral(value.Slot, integer + 1);
-    }
-    return result;
-}
-
-std::optional<TKeyValue> NextKeyValue(const TKeyValue& value) {
-    Y_ENSURE(value.Kind == TKeyValue::EKind::Data && (value.Slot == EDataSlot::String || value.Slot == EDataSlot::Utf8));
-    const auto next = value.Slot == EDataSlot::Utf8 ? NYql::NextValidUtf8(value.Bytes) : NYql::NextLexicographicString(value.Bytes);
-    if (!next) {
-        return std::nullopt;
-    }
-    TKeyValue result = value;
-    result.Bytes = TString(*next);
-    return result;
-}
-
-std::optional<int> CompareKeyValues(const TKeyValue& left, const TKeyValue& right) {
-    using EKind = TKeyValue::EKind;
-    if (left.Kind == EKind::Parameter || right.Kind == EKind::Parameter) {
-        return std::nullopt;
-    }
-    if (left.Kind == EKind::Null || right.Kind == EKind::Null) {
-        return int(right.Kind == EKind::Null) - int(left.Kind == EKind::Null);
-    }
-    if (left.Kind != right.Kind) {
-        return std::nullopt;
-    }
-    if (left.Kind == EKind::Pg) {
-        // Only Pg integers have an order explain knows; text follows a collation.
-        if (left.PgType != right.PgType) {
-            return std::nullopt;
-        }
-        if (left.Bytes == right.Bytes) {
-            return 0;
-        }
-        i64 l, r;
-        if ((left.PgType == "int2" || left.PgType == "int4" || left.PgType == "int8")
-            && TryFromString(left.Bytes, l) && TryFromString(right.Bytes, r)) {
-            return (l > r) - (l < r);
-        }
-        return std::nullopt;
-    }
-    if (left.Slot != right.Slot || (left.Slot == EDataSlot::Decimal && (left.Precision != right.Precision || left.Scale != right.Scale))) {
-        return std::nullopt;
-    }
-    if (IsBytes(left.Slot)) {
-        const int cmp = left.Bytes.compare(right.Bytes);
-        return (cmp > 0) - (cmp < 0);
-    }
-    return NUdf::CompareValues(left.Slot, left.Value, right.Value);
 }
 
 TString FormatKeyValue(const TKeyValue& value) {

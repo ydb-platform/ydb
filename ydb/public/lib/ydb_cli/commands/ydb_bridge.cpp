@@ -93,11 +93,6 @@ void TCommandBridgeUpdate::Config(TConfig& config) {
         .RequiredArgument("NAME:STATE").Handler([this](const TString& value) {
             PileStateUpdates.push_back(value);
         });
-    config.Opts->AddLongOption("quorum-pile", "Deprecated and ignored: the update is committed by the quorum of every pile"
-            " taking part in the configuration quorum in the new state; set an unavailable pile DISCONNECTED instead.")
-        .RequiredArgument("NAME").Handler([this](const TString& value) {
-            QuorumPiles.push_back(value);
-        });
     config.Opts->AddLongOption('f', "file", "Path to a JSON file with state updates.")
         .RequiredArgument("PATH").StoreResult(&FilePath);
     config.Opts->MutuallyExclusive("set", "file");
@@ -152,10 +147,6 @@ void TCommandBridgeUpdate::Parse(TConfig& config) {
 int TCommandBridgeUpdate::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
-
-    if (!QuorumPiles.empty()) {
-        Cerr << "Warning: --quorum-pile is deprecated and ignored." << Endl;
-    }
 
     auto result = client.UpdateClusterState(Updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);

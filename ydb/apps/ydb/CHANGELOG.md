@@ -1,4 +1,3 @@
-* Deprecated the `--quorum-pile` option of `ydb admin cluster bridge update`: the update always uses every pile taking part in the configuration quorum in the new state; the option now prints a warning.
 * Added `--skip-storage-pool-conversion` option to `ydb admin cluster bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
 * Added `ydb admin cluster bridge remove-pile` command to remove a DISCONNECTED pile from a bridged cluster along with all its data (asks for confirmation unless `-y` is given).
 * Added `ydb admin cluster bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin cluster bridge list`.

@@ -369,7 +369,8 @@ message TOffloadConfig {
 enum ETopicReplicationStatus {
     Unspecified = 0;
     ReplicationData = 1;
-    ReplicationConfiguration = 2;
+    reserved 2;
+    reserved "ReplicationConfiguration";
     ReplicationDone = 3;
 }
 

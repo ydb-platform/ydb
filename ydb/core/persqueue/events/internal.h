@@ -1402,9 +1402,6 @@ struct TEvPQ {
         }
     };
 
-    struct TEvTopicConfigurationReplicationFinished : public TEventLocal<TEvTopicConfigurationReplicationFinished, EvTopicConfigurationReplicationFinished> {
-    };
-
     struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
         TDeque<NKikimrPQ::TReplicationDataPayload> Data;
     };

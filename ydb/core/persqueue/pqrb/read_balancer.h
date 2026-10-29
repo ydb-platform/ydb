@@ -108,9 +108,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
     void ScheduleWaitingReplicationData(const TActorContext& ctx);
     void CheckReplicationDataFinished(const TActorContext& ctx);
-    void RequestReplicationStatus(NKikimrPQ::ETopicReplicationStatus status, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx);
-    void StartTopicConfigurationReplicator(const TActorContext& ctx);
+    void RequestReplicationDone(const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
 
     void Die(const TActorContext& ctx) override;
@@ -308,7 +306,6 @@ private:
     static constexpr ui64 WAITING_REPLICATION_DATA_WAKEUP_TAG = 12;
     bool WaitingReplicationDataScheduled = false;
     TActorId ReplicationStatusRequestActor;
-    TActorId TopicConfigurationReplicatorActor;
     TInstant ReplicationStatusUpdateDeadline;
 
     struct TPartitionsLocationRequest {

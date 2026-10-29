@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
             if (status == "3") {
                 break;
             }
-            UNIT_ASSERT_C(status == "1" || status == "2", status);
+            UNIT_ASSERT_VALUES_EQUAL(status, "1");
             Sleep(TDuration::MilliSeconds(200));
         }
         UNIT_ASSERT_VALUES_EQUAL_C(status, "3", "Timed out waiting for ReplicationDone through PQv1 DescribeTopic");

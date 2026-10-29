@@ -8,7 +8,6 @@
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
 #include "replication_status_request.h"
-#include "topic_configuration_replicator_factory.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
@@ -121,9 +120,6 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
     if (ReplicationStatusRequestActor) {
         ctx.Send(ReplicationStatusRequestActor, new TEvents::TEvPoisonPill());
     }
-    if (TopicConfigurationReplicatorActor) {
-        ctx.Send(TopicConfigurationReplicatorActor, new TEvents::TEvPoisonPill());
-    }
     TActor<TPersQueueReadBalancer>::Die(ctx);
 }
 
@@ -183,7 +179,6 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
 
     ScheduleWaitingReplicationData(ctx);
-    StartTopicConfigurationReplicator(ctx);
     ProcessPartitionsLocationQueue(ctx);
     ProcessMLPGetPartitionRequests(ctx);
 }
@@ -245,12 +240,12 @@ void TPersQueueReadBalancer::CheckReplicationDataFinished(const TActorContext& c
     LOG_D("Checked partition replication progress", {"all_partitions_synced", allPartitionsSynced});
     if (allPartitionsSynced && WaitingResponse.empty()
         && (!PartitionsScaleManager || !PartitionsScaleManager->HasPendingScaleRequests())) {
-        RequestReplicationStatus(NKikimrPQ::ReplicationConfiguration, ctx);
+        RequestReplicationDone(ctx);
     }
     ScheduleWaitingReplicationData(ctx);
 }
 
-void TPersQueueReadBalancer::RequestReplicationStatus(NKikimrPQ::ETopicReplicationStatus status, const TActorContext& ctx) {
+void TPersQueueReadBalancer::RequestReplicationDone(const TActorContext& ctx) {
     if (ReplicationStatusRequestActor || ctx.Now() < ReplicationStatusUpdateDeadline || !WaitingResponse.empty()) {
         return;
     }
@@ -279,10 +274,8 @@ void TPersQueueReadBalancer::RequestReplicationStatus(NKikimrPQ::ETopicReplicati
     config->CopyFrom(TabletConfig);
     // SchemeShard preserves the current key schema; specifying it in alter is forbidden.
     config->ClearPartitionKeySchema();
-    config->SetReplicationStatus(status);
-    if (status == NKikimrPQ::ReplicationDone) {
-        config->MutablePartitionConfig()->ClearMirrorFrom();
-    }
+    config->SetReplicationStatus(NKikimrPQ::ReplicationDone);
+    config->MutablePartitionConfig()->ClearMirrorFrom();
 
     ReplicationStatusRequestActor = ctx.Register(CreateReplicationStatusRequest(SelfId(), std::move(proposal)));
 }
@@ -374,10 +367,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     Path = std::move(record.GetPath());
     TxId = record.GetTxId();
     TabletConfig = std::move(record.GetTabletConfig());
-    if (TopicConfigurationReplicatorActor) {
-        ctx.Send(TopicConfigurationReplicatorActor, new TEvents::TEvPoisonPill());
-        TopicConfigurationReplicatorActor = {};
-    }
     if (ReplicationStatusRequestActor) {
         ctx.Send(ReplicationStatusRequestActor, new TEvents::TEvPoisonPill());
         ReplicationStatusRequestActor = {};
@@ -1007,22 +996,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr&
 // Autoscaling
 //
 
-void TPersQueueReadBalancer::StartTopicConfigurationReplicator(const TActorContext& ctx) {
-    if (!TopicConfigurationReplicatorActor && TabletConfig.GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration
-        && MirroringEnabled(TabletConfig))
-    {
-        TopicConfigurationReplicatorActor = ctx.Register(CreateTopicConfigurationReplicator(
-            TabletID(), SelfId(), TabletConfig.GetPartitionConfig().GetMirrorFrom()));
-    }
-}
-
-void TPersQueueReadBalancer::Handle(TEvPQ::TEvTopicConfigurationReplicationFinished::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != TopicConfigurationReplicatorActor || TabletConfig.GetReplicationStatus() != NKikimrPQ::ReplicationConfiguration) {
-        return;
-    }
-    RequestReplicationStatus(NKikimrPQ::ReplicationDone, ctx);
-}
-
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
@@ -1315,7 +1288,6 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         // from PQ
         HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
         HFunc(TEvPQ::TEvPartitionReplicationFinished, Handle);
-        HFunc(TEvPQ::TEvTopicConfigurationReplicationFinished, Handle);
         // from TPartitionScaleRequest
         HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);

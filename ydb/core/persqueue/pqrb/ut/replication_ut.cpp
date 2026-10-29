@@ -1,6 +1,5 @@
 #include "pqrb_ut_common.h"
 
-#include <ydb/core/persqueue/pqrb/topic_configuration_replicator.h>
 #include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 
 #include <ydb/core/base/blobstorage.h>
@@ -26,7 +25,7 @@ void RestartBalancer(TTestContext& tc) {
 
 Y_UNIT_TEST_SUITE(TPqrbReplication) {
 
-Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
+Y_UNIT_TEST(RequestReplicationDoneOnlyAfterAllPartitionsFinish) {
     TTestContext tc;
     tc.Prepare();
     tc.Runtime->SetScheduledLimit(10000);
@@ -76,7 +75,7 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
     UNIT_ASSERT(modify.GetApplyIf(0).GetCheckEntityVersion());
     const auto& config = modify.GetAlterPersQueueGroup().GetPQTabletConfig();
     UNIT_ASSERT_VALUES_EQUAL(modify.GetAlterPersQueueGroup().GetName(), update.Topic);
-    UNIT_ASSERT(config.GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration);
+    UNIT_ASSERT(config.GetReplicationStatus() == NKikimrPQ::ReplicationDone);
     UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetName(), "client");
     const auto firstVersion = modify.GetApplyIf(0).GetPathVersion();
@@ -105,7 +104,7 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
         .GetTransaction().GetModifyScheme().GetApplyIf(0).GetPathVersion() > firstVersion);
 
     // SchemeShard's config update is the authoritative completion of the transition.
-    update.ReplicationStatus = NKikimrPQ::ReplicationConfiguration;
+    update.ReplicationStatus = NKikimrPQ::ReplicationDone;
     SendBalancerUpdate(tc, update);
     checkProgress();
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
@@ -149,7 +148,7 @@ Y_UNIT_TEST(CombinedCompletionWhenSplitMergeDisabled) {
     const auto& alter = proposals.front()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record
         .GetTransaction().GetModifyScheme().GetAlterPersQueueGroup();
     UNIT_ASSERT_VALUES_EQUAL(alter.SplitSize(), 0);
-    UNIT_ASSERT(alter.GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration);
+    UNIT_ASSERT(alter.GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationDone);
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 
@@ -215,73 +214,7 @@ Y_UNIT_TEST(CombinedCompletionWaitsForSplitAndChildren) {
     checkProgress();
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 2);
     UNIT_ASSERT(proposals.back()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction()
-        .GetModifyScheme().GetAlterPersQueueGroup().GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration);
-    tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
-}
-
-Y_UNIT_TEST(ConfigurationReplicationDoneRequest) {
-    TTestContext tc;
-    tc.Prepare();
-    tc.Runtime->SetScheduledLimit(10000);
-    PQTabletPrepare({}, {{"client", false}}, tc);
-    TProposeCapture proxy;
-    InstallProposeCapture(tc, proxy);
-    TActorId replicator;
-    TVector<THolder<IEventHandle>> proposals;
-    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvPersQueue::TEvUpdateBalancerConfig::EventType) {
-            auto& config = *ev->Get<TEvPersQueue::TEvUpdateBalancerConfig>()->Record.MutableTabletConfig();
-            config.MutablePartitionConfig()->MutableMirrorFrom()->SetTopic("source");
-        } else if (ev->GetTypeRewrite() == TEvents::TEvBootstrap::EventType
-            && dynamic_cast<TTopicConfigurationReplicator*>(tc.Runtime->FindActor(ev->Recipient))) {
-            replicator = ev->Recipient;
-        } else if (ev->GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType) {
-            proposals.emplace_back(ev.Release());
-            return TTestActorRuntimeBase::EEventAction::DROP;
-        }
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
-    });
-    TBalancerUpdate update{
-        .Partitions = {{0, {tc.TabletId, 1}}},
-        .ReplicationStatus = NKikimrPQ::ReplicationConfiguration,
-        .DatabasePath = "/Root",
-    };
-    SendBalancerUpdate(tc, update);
-    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
-    UNIT_ASSERT(replicator);
-    tc.Runtime->EnableScheduleForActor(replicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
-    auto complete = [&](const TActorId& sender) {
-        ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, sender, new TEvPQ::TEvTopicConfigurationReplicationFinished());
-        tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
-    };
-    complete(tc.Edge); // Unrelated sender cannot finish the move.
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
-    complete(replicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
-    const auto& modify = proposals.back()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction().GetModifyScheme();
-    UNIT_ASSERT(modify.GetAlterPersQueueGroup().GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationDone);
-    UNIT_ASSERT(modify.GetApplyIf(0).GetCheckEntityVersion());
-    complete(replicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
-    tc.Runtime->Send(new IEventHandle(proposals.back()->Sender, tc.Edge,
-        new TEvTxUserProxy::TEvProposeTransactionStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError)));
-    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
-    tc.Runtime->SimulateSleep(TDuration::Seconds(6));
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 2);
-    const auto oldReplicator = replicator;
-    SendBalancerUpdate(tc, update);
-    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
-    UNIT_ASSERT(replicator != oldReplicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
-    complete(oldReplicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
-    complete(replicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
-    update.ReplicationStatus = NKikimrPQ::ReplicationDone;
-    SendBalancerUpdate(tc, update);
-    complete(replicator);
-    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
+        .GetModifyScheme().GetAlterPersQueueGroup().GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationDone);
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 

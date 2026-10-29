@@ -1,6 +1,3 @@
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 
@@ -29,7 +26,6 @@ struct TPathAliasesFixture {
         , Kikimr(Settings)
         , Session(CreateSession())
         , Edge(Runtime().AllocateEdgeActor())
-        , Service(MakeKqpCompileServiceID(Runtime().GetNodeId()))
     {
         for (const auto* directory : {"/Root/Before", "/Root/After"}) {
             auto result = Kikimr.RunCall([&] {
@@ -68,9 +64,7 @@ struct TPathAliasesFixture {
         UNIT_ASSERT_C(result.IsSuccess(), path << ": " << result.GetIssues().ToString());
     }
 
-    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> Notification(TStringBuf destination) {
-        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        *notification->Record.MutableConfig()->MutableTableServiceConfig() = Settings.AppConfig.GetTableServiceConfig();
+    void Update(TStringBuf destination) {
         std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer;
         if (!destination.empty()) {
             NKikimrConfig::TPathRewriteConfig mapping;
@@ -79,13 +73,7 @@ struct TPathAliasesFixture {
             rule->SetDst(TString(destination));
             normalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(mapping);
         }
-        notification->PathNormalizer = std::move(normalizer);
-        return notification;
-    }
-
-    void Update(TStringBuf destination) {
-        Runtime().Send(new IEventHandle(Service, Edge, Notification(destination).Release()));
-        UNIT_ASSERT(Runtime().GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(Edge, TDuration::Seconds(30)));
+        Runtime().GetAppData().SetPathNormalizer(std::move(normalizer));
     }
 
     void CheckScript(const TString& path, const TString& expected, bool streaming = false) {
@@ -110,7 +98,6 @@ struct TPathAliasesFixture {
     TKikimrRunner Kikimr;
     NYdb::NTable::TSession Session;
     TActorId Edge;
-    TActorId Service;
 };
 
 } // namespace
@@ -168,31 +155,16 @@ Y_UNIT_TEST_SUITE(KqpWorkerPathAliases) {
         fixture.CheckScript("/Alias/Rows", "[[1u]]");
     }
 
-    Y_UNIT_TEST(DispatchedQueryKeepsItsAliases) {
+    Y_UNIT_TEST(SnapshotSurvivesUpdateAndDisable) {
         TPathAliasesFixture fixture;
-        TAutoPtr<IEventHandle> held;
-        bool switched = false;
-        auto previous = fixture.Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (!switched && ev->GetTypeRewrite() == TEvKqp::TEvWorkerQueryRequest::EventType
-                && ev->Recipient != fixture.Service) {
-                switched = true;
-                held = ev.Release();
-                fixture.Runtime().Send(new IEventHandle(fixture.Service, fixture.Edge,
-                    fixture.Notification("/Root/After").Release()));
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (held && ev->GetTypeRewrite() == NConsole::TEvConsole::TEvConfigNotificationResponse::EventType
-                && ev->Recipient == fixture.Edge) {
-                fixture.Runtime().Send(held.Release());
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        Y_DEFER { fixture.Runtime().SetObserverFunc(previous); };
-
-        fixture.CheckScript("/Alias/Rows", "[[1u]]");
-        UNIT_ASSERT(switched);
-        UNIT_ASSERT(!held);
+        const auto snapshot = fixture.Runtime().GetAppData().GetPathNormalizer();
+        UNIT_ASSERT(snapshot);
+        fixture.Update("/Root/After");
+        UNIT_ASSERT_VALUES_EQUAL(snapshot->NormalizePath("/Alias/Rows"), "/Root/Before/Rows");
         fixture.CheckScript("/Alias/Rows", "[[2u]]");
+        fixture.Update({});
+        UNIT_ASSERT(!fixture.Runtime().GetAppData().GetPathNormalizer());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot->NormalizePath("/Alias/Rows"), "/Root/Before/Rows");
     }
 }
 

@@ -167,8 +167,7 @@ public:
         Y_UNUSED(ctx);
     }
 
-    void HandleReady(TEvKqp::TEvWorkerQueryRequest::TPtr &workerEv, const TActorContext &ctx) {
-        auto ev = workerEv->Get()->ReleaseRequest();
+    void HandleReady(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
         if (!CheckRequest(ev->Get()->GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
             return;
@@ -190,7 +189,7 @@ public:
         QueryState->RequestEv.reset(ev->Release().Release());
 
         Config->NormalizePath = {};
-        if (auto normalizer = workerEv->Get()->PathNormalizer) {
+        if (auto normalizer = AppData(ctx)->GetPathNormalizer()) {
             Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
         }
 
@@ -304,8 +303,7 @@ public:
         }
     }
 
-    void HandlePerformQuery(TEvKqp::TEvWorkerQueryRequest::TPtr &workerEv, const TActorContext &ctx) {
-        auto ev = workerEv->Get()->ReleaseRequest();
+    void HandlePerformQuery(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ReplyBusy(ev, ctx);
     }
 
@@ -338,8 +336,7 @@ public:
         }
     }
 
-    void HandlePerformCleanup(TEvKqp::TEvWorkerQueryRequest::TPtr &workerEv, const TActorContext &ctx) {
-        auto ev = workerEv->Get()->ReleaseRequest();
+    void HandlePerformCleanup(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
         ui64 proxyRequestId = ev->Cookie;
 
         if (!CheckRequest(ev->Get()->GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
@@ -390,7 +387,7 @@ public:
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvWorkerQueryRequest, HandleReady);
+                HFunc(TEvKqp::TEvQueryRequest, HandleReady);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvContinueProcess, HandleReady);
             default:
@@ -404,7 +401,7 @@ public:
     STFUNC(PerformQueryState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvWorkerQueryRequest, HandlePerformQuery);
+                HFunc(TEvKqp::TEvQueryRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
             default:
@@ -418,7 +415,7 @@ public:
     STFUNC(PerformCleanupState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvWorkerQueryRequest, HandlePerformCleanup);
+                HFunc(TEvKqp::TEvQueryRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
             default:

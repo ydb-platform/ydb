@@ -17,10 +17,6 @@
 #include <ydb/library/actors/core/event_load.h>
 #include <contrib/libs/protobuf/src/google/protobuf/map.h>
 
-namespace NKikimr::NPathAliasing {
-class TPathNormalizer;
-}
-
 namespace NKikimr::NKqp {
 
 struct TEvKqp {
@@ -41,19 +37,6 @@ struct TEvKqp {
     using TEvQueryRequestRemote = NPrivateEvents::TEvQueryRequestRemote;
 
     using TEvQueryRequest = NPrivateEvents::TEvQueryRequest;
-
-    struct TEvWorkerQueryRequest : public TEventLocal<TEvWorkerQueryRequest, TKqpEvents::EvWorkerQueryRequest> {
-        explicit TEvWorkerQueryRequest(TAutoPtr<IEventHandle> request)
-            : Request(std::move(request))
-        {}
-
-        TEvQueryRequest::TPtr ReleaseRequest() {
-            return static_cast<TEventHandle<TEvQueryRequest>*>(Request.Release());
-        }
-
-        TAutoPtr<IEventHandle> Request;
-        std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
-    };
 
     struct TEvCloseSessionRequest : public TEventPB<TEvCloseSessionRequest,
         NKikimrKqp::TEvCloseSessionRequest, TKqpEvents::EvCloseSessionRequest> {};

@@ -59,7 +59,6 @@ struct TKqpEvents {
         EvKillSessionResponse,
         EvGetVectorIndexLevelsCacheRequest,
         EvGetVectorIndexLevelsCacheResponse,
-        EvWorkerQueryRequest,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

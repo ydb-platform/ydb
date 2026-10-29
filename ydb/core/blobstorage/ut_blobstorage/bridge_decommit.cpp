@@ -337,9 +337,118 @@ namespace {
         return vanished;
     }
 
+    void CheckIntegrityAfterDecommit(bool lateResolve) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        // The checker warms up the agent using other keys; this key is first resolved by the integrity check below.
+        const TString data = "integrity check across decommission";
+        const TLogoBlobID id(100501, 1, 1, 0, data.size(), 0);
+        const ui32 nodeId = 1;
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+        TActorId agent;
+        bool doneConfigured = false;
+        bool staleMappingRetried = false;
+        bool freshMappingResolved = false;
+        TFilterChain chain(env);
+        chain.Add([&](ui32 eventNodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (eventNodeId != nodeId) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobDepot::TEvResolveResult::EventType) {
+                for (const auto& key : ev->Get<TEvBlobDepot::TEvResolveResult>()->Record.GetResolvedKeys()) {
+                    if (key.GetKey() == id.AsBinaryString() && key.ValueChainSize()) {
+                        agent = ev->Recipient;
+                        if (staleMappingRetried && key.GetValueChain(0).GetGroupId() != groupId) {
+                            freshMappingResolved = true;
+                        }
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy && ev->Recipient == agent) {
+                const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                doneConfigured |= info && info->GroupID.GetRawId() == groupId &&
+                    info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrityResult && ev->Sender == agent &&
+                    ev->Recipient == agent) {
+                const auto& msg = *ev->Get<TEvBlobStorage::TEvCheckIntegrityResult>();
+                UNIT_ASSERT(doneConfigured);
+                UNIT_ASSERT_VALUES_EQUAL(msg.Status, NKikimrProto::NODATA);
+                UNIT_ASSERT_VALUES_EQUAL(msg.Id, id);
+                UNIT_ASSERT(msg.ExecutionRelay);
+                staleMappingRetried = true;
+            }
+            return true;
+        });
+        TEventHold *resolveHold = nullptr;
+        if (lateResolve) {
+            resolveHold = &chain.AddHold([&](IEventHandle& ev) {
+                if (ev.GetTypeRewrite() != TEvBlobDepot::TEvResolveResult::EventType ||
+                        ev.Recipient.NodeId() != nodeId) {
+                    return false;
+                }
+                for (const auto& key : ev.Get<TEvBlobDepot::TEvResolveResult>()->Record.GetResolvedKeys()) {
+                    if (key.GetKey() == id.AsBinaryString() && key.ValueChainSize() &&
+                            key.GetValueChain(0).GetGroupId() == groupId) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+        auto sendCheck = [&] {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCheckIntegrity(id, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+        };
+        auto expectSuccess = [&] {
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Minutes(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+            agent = result->Sender;
+        };
+        RunDecommission(env, chain, checker, groupId, {}, {
+            .InProgress = [&] {
+                sendCheck();
+                if (lateResolve) {
+                    resolveHold->WaitForHeld();
+                } else {
+                    expectSuccess(); // retain the old mapping in the agent's cache
+                }
+                UNIT_ASSERT(agent);
+            },
+            .Done = [&] {
+                WaitUntil(env, [&] { return doneConfigured; }, "agent configured after decommission");
+                env.Sim(TDuration::MilliSeconds(1)); // allow the config handler to remove the physical proxy
+                if (lateResolve) {
+                    resolveHold->Release();
+                } else {
+                    sendCheck();
+                }
+                expectSuccess();
+                UNIT_ASSERT(staleMappingRetried);
+                UNIT_ASSERT(freshMappingResolved);
+            },
+        });
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BridgeDecommit) {
+
+    Y_UNIT_TEST(CheckIntegrityUsesCachedMappingAfterDone) {
+        CheckIntegrityAfterDecommit(false);
+    }
+
+    Y_UNIT_TEST(CheckIntegrityUsesLateMappingAfterDone) {
+        CheckIntegrityAfterDecommit(true);
+    }
 
     // bridge proxy group with its own pile groups is decommitted as a whole, pile groups vanish along with their VDisks
     Y_UNIT_TEST(DecommitProxyGroup) {

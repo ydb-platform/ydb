@@ -914,6 +914,14 @@ private:
             return Fallback();
         }
 
+        if (!State->TypeCtx->ForceDq) {
+            for (auto* integration : GetUniqueIntegrations(*State->TypeCtx)) {
+                if (!integration->AllowExecuteInDq(*input, ctx)) {
+                    return Fallback();
+                }
+            }
+        }
+
         TInstant startTime = TInstant::Now();
         ui64 executionTimeout = State->Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout);
 

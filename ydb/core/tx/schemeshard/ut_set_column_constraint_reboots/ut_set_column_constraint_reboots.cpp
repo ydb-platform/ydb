@@ -11,8 +11,8 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SetNotNullOnSingleColumn, 4, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
 
             const TString root = "/MyRoot";
@@ -50,8 +50,8 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SetNotNullShouldBeFailed, 8, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
 
             const TString root = "/MyRoot";
@@ -109,8 +109,8 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SetNotNullOnManyColumnsWithManyShards, 8, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
 
             const TString root = "/MyRoot";

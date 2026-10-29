@@ -1,6 +1,10 @@
+* Fixed Query session shutdown racing with session pool return.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0
+
+* Added recognition of Solomon volumes in Scheme API results and a draft `NKeyValue::TKeyValueClient::DropVolume()` method.
 
 * Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
 

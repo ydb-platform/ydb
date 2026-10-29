@@ -33,22 +33,22 @@ namespace NTable {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
-            auto *collection = partStore->PageCollections.at(groupId.Index).Get();
+            Y_ENSURE(!NPage::IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
 
-            // index pages must be loaded for traversal; data pages counted from metadata
-            switch (location.Type) {
-                case EPage::FlatIndex:
-                case EPage::BTreeIndex:
-                case EPage::BTreeIndexV2:
-                    // need index pages to continue counting
-                    // do not count index
-                    // if these pages are not in memory, data won't be counted in precharge
-                    return Env->TryGetPage(part, location, groupId);
-                default:
-                    AddPageSize(collection, location);
-                    return nullptr;
-            }
+            auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
+            auto *collection = partStore->PageCollections.at(part->DataSlot(groupId)).Get();
+
+            // data pages are counted from metadata
+            AddPageSize(collection, location);
+            return nullptr;
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
+        {
+            // need index pages to continue counting
+            // do not count index
+            // if these pages are not in memory, data won't be counted in precharge
+            return Env->TryGetIndexPage(part, location, groupId);
         }
 
         ui64 GetSize() const {

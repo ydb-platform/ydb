@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         Retention,
     };
 
-    void MissingSourceDnsName(EBootstrapStage stage) {
+    void MissingSourceDnsName(EBootstrapStage stage, TDuration responseDelay = TDuration::Zero()) {
         TEnv env(true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
@@ -65,6 +65,26 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         }));
 
         TActorId creator;
+        bool responseDelayed = false;
+        auto delayedResponse = runtime.AddObserver<TEvYdbProxy::TEvAlterTableResponse>(
+            [&](TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+                if (!responseDelay || responseDelayed) {
+                    return;
+                }
+                if (ev->Sender != env.GetYdbProxy() || ev->GetRecipientRewrite() != creator) {
+                    return;
+                }
+                if (!ev->Get()->Result.IsSuccess()) {
+                    return;
+                }
+
+                responseDelayed = true;
+                // Visit a timestamp past the old deadline before delivering the response.
+                runtime.Schedule(new IEventHandle(env.GetSender(), env.GetSender(), new TEvents::TEvWakeup()),
+                    responseDelay - TDuration::Seconds(1));
+                runtime.Schedule(ev.Release(), responseDelay);
+            });
+
         TVector<TInstant> attempts;
         const auto requestType = stage == EBootstrapStage::Changefeed
             ? TEvYdbProxy::TEvAlterTableRequest::EventType
@@ -100,21 +120,28 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             "Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
         runtime.EnableScheduleForActor(creator);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
+        const auto startedAt = runtime.GetCurrentTime();
         runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
-            env.GetSender(), TDuration::Seconds(60));
+        // Real SDK requests progress independently of simulated time. The test
+        // runner's wall-clock timeout bounds these waits.
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
         UNIT_ASSERT(result);
         UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 3);
         UNIT_ASSERT(attempts[1] - attempts[0] >= TDuration::Seconds(10));
         UNIT_ASSERT(attempts[2] - attempts[1] >= TDuration::Seconds(10));
 
+        if (responseDelay) {
+            UNIT_ASSERT(responseDelayed);
+            UNIT_ASSERT(runtime.GetCurrentTime() - startedAt >= responseDelay);
+        }
+
         const auto desc = env.GetDescription("/Root/Table");
         const auto& streams = desc.GetPathDescription().GetTable().GetCdcStreams();
         UNIT_ASSERT_VALUES_EQUAL(streams.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(streams.at(0).GetName(), "Stream");
         env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeTopicRequest("/Root/Table/Stream", {}));
-        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender(), TDuration::Seconds(30));
+        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
         UNIT_ASSERT(topic);
         UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
         const auto& consumers = topic->Get()->Result.GetTopicDescription().GetConsumers();
@@ -128,6 +155,10 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(MissingSourceDnsNameDuringConsumerCreationRetries) {
         MissingSourceDnsName(EBootstrapStage::Consumer);
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameWaitsBeyondSimulatedMinute) {
+        MissingSourceDnsName(EBootstrapStage::Consumer, TDuration::Minutes(2));
     }
 
     Y_UNIT_TEST(MissingSourceDnsNameDuringRetentionUpdateRetries) {

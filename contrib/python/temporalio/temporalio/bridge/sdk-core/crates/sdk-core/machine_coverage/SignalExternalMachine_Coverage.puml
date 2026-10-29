@@ -1,0 +1,12 @@
+@startuml
+Created -[#blue]-> SignalExternalCommandCreated: Schedule
+SignalExternalCommandCreated -[#blue]-> SignalExternalCommandCreated: CommandSignalExternalWorkflowExecution
+SignalExternalCommandCreated -[#blue]-> Cancelled: Cancel
+SignalExternalCommandCreated -[#blue]-> SignalExternalCommandRecorded: SignalExternalWorkflowExecutionInitiated
+SignalExternalCommandRecorded --> SignalExternalCommandRecorded: Cancel
+SignalExternalCommandRecorded -[#blue]-> Signaled: ExternalWorkflowExecutionSignaled
+SignalExternalCommandRecorded -[#blue]-> Failed: SignalExternalWorkflowExecutionFailed
+Cancelled -[#blue]-> Cancelled: Cancel
+Signaled -[#blue]-> Signaled: Cancel
+Failed --> [*]
+@enduml

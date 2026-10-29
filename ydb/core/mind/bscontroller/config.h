@@ -445,6 +445,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd, TStatus& status);
 
             template<typename TCallback>
             void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);

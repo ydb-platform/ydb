@@ -686,6 +686,20 @@ namespace NKikimr::NBsController {
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);
 
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (overlay->second) {
+                    NKikimrBlobStorage::TFailRealmStates states;
+                    if (overlay->second->HasExplicitFailRealmStates) {
+                        Y_ABORT_UNLESS(overlay->second->FailRealmStates);
+                        for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
+                            states.AddState(value);
+                        }
+                    }
+                    db.Table<Schema::Group>().Key(overlay->first.GetRawId())
+                        .Update<Schema::Group::FailRealmStates>(states);
+                }
+            }
+
             // apply group to storage pool mapping
             for (auto&& [base, overlay] : state.Groups.Diff()) {
                 using Table = Schema::GroupStoragePool;

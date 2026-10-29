@@ -293,7 +293,7 @@ family {
 
 #### partitioning_settings {#partitioning-settings}
 
-Аргумент `partitioning_settings` описывает [настройки партицирования](../concepts/datamodel/table.md#partitioning).
+Аргумент `partitioning_settings` описывает [настройки партицирования](../concepts/datamodel/table.md#partitioning_row_table).
 
 Пример:
 

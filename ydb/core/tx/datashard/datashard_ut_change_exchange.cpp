@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -3432,7 +3433,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
     }
 
-    void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false) {
+    void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -3486,11 +3487,19 @@ Y_UNIT_TEST_SUITE(Cdc) {
         constexpr ui64 splitTxId = 100000;
         THashSet<ui64> preparedTablets;
         ui64 minStep = 0;
+        TActorId schemeShardActor;
+        std::unique_ptr<IEventHandle> duplicatePrepared;
         auto observePrepared = runtime.AddObserver<TEvPersQueue::TEvProposeTransactionResult>([&](auto& ev) {
             const auto& record = ev->Get()->Record;
             if (record.GetTxId() == splitTxId && record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
                 preparedTablets.insert(record.GetOrigin());
                 minStep = Max(minStep, record.GetMinStep());
+                schemeShardActor = ev->Recipient;
+                if (delayedPrepared && !duplicatePrepared) {
+                    auto duplicate = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
+                    duplicate->Record.CopyFrom(record);
+                    duplicatePrepared = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, duplicate.Release());
+                }
             }
         });
         std::vector<std::unique_ptr<IEventHandle>> plans;
@@ -3504,6 +3513,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
 
+        std::unique_ptr<IEventHandle> proposeProgress;
+        bool heldProposeProgress = false;
+        auto delayProgress = runtime.AddObserver<NSchemeShard::TEvPrivate::TEvProgressOperation>([&](auto& ev) {
+            if (delayedPrepared && !heldProposeProgress && schemeShardActor
+                    && ev->Recipient == schemeShardActor && ev->Get()->TxId == splitTxId) {
+                heldProposeProgress = true;
+                proposeProgress.reset(ev.Release());
+            }
+        });
+        bool splitCompleted = false;
+        auto observeCompletion = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == splitTxId) {
+                splitCompleted = true;
+            }
+        });
+
         AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
             Name: "streamImpl"
             Split {
@@ -3513,6 +3538,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )")));
         TestModificationResults(runtime, splitTxId, {topicAutoPartitioning
             ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusInvalidParameter});
+
+        if (delayedPrepared) {
+            WaitFor(runtime, [&]{ return bool(proposeProgress); }, "Propose state before its first progress event");
+            UNIT_ASSERT(duplicatePrepared);
+            UNIT_ASSERT(plans.empty());
+            const auto notifyEdge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(schemeShard, notifyEdge,
+                new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(splitTxId), 0, GetPipeConfigWithRetries());
+            runtime.Send(duplicatePrepared.release(), 0, true);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(!splitCompleted, "Split completed after a duplicate PREPARED, before any coordinator proposal");
+            UNIT_ASSERT(plans.empty());
+            delayProgress.Remove();
+            runtime.Send(proposeProgress.release(), 0, true);
+        }
+        delayProgress.Remove();
 
         if (topicAutoPartitioning) {
             WaitFor(runtime, [&]{ return !plans.empty(); }, "split waiting for coordinator");
@@ -3657,6 +3698,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     Y_UNIT_TEST(InitialScanTopicSplitPausedAfterRecovery) {
         InitialScanTopicSplitRecovery(true, true, true);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitDelayedPreparedBeforePropose) {
+        InitialScanTopicSplitRecovery(true, false, false, true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

@@ -642,5 +642,87 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(LockIssueWithImmediateEffectsOnEffectlessTx) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.SetEnableForceImmediateEffectsExecution(true);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto writeSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            auto schemeResult = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(R"(
+                    CREATE TABLE `/Root/OneShard` (
+                        Key Uint32 NOT NULL,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    );
+                )").GetValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+            auto fillResult = kikimr.RunCall([&] {
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(Q1_(R"(
+                    UPSERT INTO `/Root/OneShard` (Key, Value) VALUES (1u, "one"), (2u, "two");
+                )"), txc, execSettings).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(fillResult.GetStatus(), EStatus::SUCCESS, fillResult.GetIssues().ToString());
+        }
+
+        std::optional<NYdb::NTable::TTransaction> tx;
+
+        {
+            auto lockResult = kikimr.RunCall([&] {
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW());
+                return session.ExecuteDataQuery(Q1_(R"(
+                    SELECT Value FROM `/Root/OneShard` WHERE Key = 1u;
+                )"), txc, execSettings).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(lockResult.GetStatus(), EStatus::SUCCESS, lockResult.GetIssues().ToString());
+            UNIT_ASSERT_C(lockResult.GetTransaction().has_value(), lockResult.GetIssues().ToString());
+            tx.emplace(*lockResult.GetTransaction());
+        }
+
+        {
+            auto breakResult = kikimr.RunCall([&] {
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return writeSession.ExecuteDataQuery(Q1_(R"(
+                    UPSERT INTO `/Root/OneShard` (Key, Value) VALUES (1u, "changed");
+                )"), txc, execSettings).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(breakResult.GetStatus(), EStatus::SUCCESS, breakResult.GetIssues().ToString());
+        }
+
+        {
+            auto poisonResult = kikimr.RunCall([&] {
+                auto txc = TTxControl::Tx(*tx);
+                return session.ExecuteDataQuery(Q1_(R"(
+                    UPDATE `/Root/OneShard` SET Value = "other" WHERE Key > 100u;
+                )"), txc, execSettings).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(poisonResult.GetStatus(), EStatus::SUCCESS, poisonResult.GetIssues().ToString());
+        }
+
+        {
+            auto crashResult = kikimr.RunCall([&] {
+                auto txc = TTxControl::Tx(*tx);
+                return session.ExecuteDataQuery(Q1_(R"(
+                    SELECT Value FROM `/Root/OneShard` WHERE Key = 2u;
+                )"), txc, execSettings).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(crashResult.GetStatus(), EStatus::ABORTED, crashResult.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(crashResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+                [](const auto& issue) {
+                    return issue.GetMessage().contains("/Root/OneShard");
+                }), crashResult.GetIssues().ToString());
+        }
+    }
 }
 }

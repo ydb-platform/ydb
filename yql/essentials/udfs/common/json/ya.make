@@ -1,17 +1,9 @@
 YQL_UDF_CONTRIB(json_udf)
 
-    YQL_ABI_VERSION(
-        2
-        28
-        0
-    )
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
 
-    SRCS(
-        json_udf.cpp
-    )
+INCLUDE(ya.make.inc)
 
-    PEERDIR(
-        library/cpp/json/easy_parse
-    )
-
-    END()
+END()

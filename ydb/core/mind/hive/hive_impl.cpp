@@ -149,10 +149,6 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
         RecordNodeEvent(*node, EHiveEventType::Deleted, EHiveEventReason::NodeExpired,
             TStringBuilder() << "lastAlive=" << TInstant::MilliSeconds(node->Statistics.GetLastAliveTimestamp())
                 << " nodeDeletePeriod=" << GetNodeDeletePeriod());
-        if (BridgeInfo) {
-            auto& pileInfo = GetPile(node->BridgePileId);
-            pileInfo.Nodes.erase(node->Id);
-        }
         if (node->Down) {
             UpdateCounterNodesDown(-1);
         }

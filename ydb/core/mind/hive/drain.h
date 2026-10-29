@@ -9,20 +9,25 @@ namespace NKikimr::NHive {
 struct TGetNodes {
 private:
     THive* const Hive;
-    std::unordered_set<TNodeId> Node;
 
 public:
     explicit TGetNodes(THive* Hive) 
         : Hive(Hive)
     {}
 
-    const std::unordered_set<TNodeId>& operator()(TNodeId nodeId) {
-        Node = {nodeId};
-        return Node;
+    std::unordered_set<TNodeId> operator()(TNodeId nodeId) const {
+        return {nodeId};
     }
 
-    const std::unordered_set<TNodeId>& operator()(TBridgePileId pileId) {
-        return Hive->GetPile(pileId).Nodes;
+    // Scans all nodes: called only to start a pile drain, so the overhead is negligible
+    std::unordered_set<TNodeId> operator()(TBridgePileId pileId) const {
+        std::unordered_set<TNodeId> nodes;
+        for (const auto& [nodeId, node] : Hive->Nodes) {
+            if (node.BridgePileId == pileId) {
+                nodes.insert(nodeId);
+            }
+        }
+        return nodes;
     }
 };
 

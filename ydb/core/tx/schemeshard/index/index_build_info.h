@@ -1,5 +1,7 @@
 #pragma once
 
+#include "index_utils.h"
+
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
@@ -874,10 +876,7 @@ public:
     }
 
     bool IsBuildFulltextCompact() const {
-        return BuildKind == EBuildKind::BuildFulltext && (
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-            IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
+        return BuildKind == EBuildKind::BuildFulltext && NTableIndex::IsCompactFulltextIndex(IndexType);
     }
 
     // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the

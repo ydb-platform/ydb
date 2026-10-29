@@ -4465,6 +4465,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_expr-list_extend_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-list_extract_universal]": [
+        {
+            "checksum": "380c15a010ca904c13126ba646a98706",
+            "size": 1065,
+            "uri": "https://{canondata_backend}/1871002/eaaa8b9f54b7a4349a10c91a588f9816a2c86a9f/resource.tar.gz#test_sql2yql.test_expr-list_extract_universal_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-list_flat_map_deprecated_opt]": [
         {
             "checksum": "2fb8444854722175b14716369fe0429a",
@@ -10814,6 +10821,20 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_select_yql-select_op_order_by_common_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-select_op_ordered_columns]": [
+        {
+            "checksum": "29dbf7b0f6aa723fa0d8978f9638773d",
+            "size": 1482,
+            "uri": "https://{canondata_backend}/1689644/57ed8ea3774f8d7e7b33d458e5fd0134f765463d/resource.tar.gz#test_sql2yql.test_select_yql-select_op_ordered_columns_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-select_op_positional_columns]": [
+        {
+            "checksum": "5e7567174599a5cbf42d62bf77ef330c",
+            "size": 2455,
+            "uri": "https://{canondata_backend}/1689644/57ed8ea3774f8d7e7b33d458e5fd0134f765463d/resource.tar.gz#test_sql2yql.test_select_yql-select_op_positional_columns_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-select_op_precedence_complicated]": [
         {
             "checksum": "194c80fb42fc7be5790d23881d599377",
@@ -16692,6 +16713,11 @@
             "uri": "file://test_sql_format.test_expr-list_extend_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-list_extract_universal]": [
+        {
+            "uri": "file://test_sql_format.test_expr-list_extract_universal_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-list_flat_map_deprecated_opt]": [
         {
             "uri": "file://test_sql_format.test_expr-list_flat_map_deprecated_opt_/formatted.sql"
@@ -19695,6 +19721,16 @@
     "test_sql_format.test[select_yql-select_op_order_by_common]": [
         {
             "uri": "file://test_sql_format.test_select_yql-select_op_order_by_common_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-select_op_ordered_columns]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-select_op_ordered_columns_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-select_op_positional_columns]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-select_op_positional_columns_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-select_op_precedence_complicated]": [

@@ -743,8 +743,28 @@ message TDefineDataCenterStates {
     repeated TDataCenter DataCenter = 1;
 }
 
-// Clear the volatile states and publish a new generation of every dynamic mirror-3-dc group.
+// Clear volatile DC states and explicit group overrides, then republish every dynamic mirror-3-dc group.
 message TTestResetDataCenterStates {}
+
+// Force group realm states without validating transitions or layout combinations.
+// Explicit group states are persisted across controller restarts.
+message TDefineFailRealmStates {
+    message TGroupDefinition {
+        enum EFailRealmState {
+            INVARIANT0 = 0;
+            INVARIANT1 = 1;
+            INVARIANT2 = 2;
+            EXCLUDED = 3;
+            RECOVERING = 4;
+        }
+
+        optional uint32 GroupId = 1;
+        // Exactly three states, indexed by physical fail realm.
+        repeated EFailRealmState FailRealmStates = 2;
+    }
+
+    repeated TGroupDefinition Groups = 1;
+}
 
 message TConfigRequest {
     message TCommand {
@@ -807,6 +827,7 @@ message TConfigRequest {
             TReassignGroupDisk ReassignGroupDisk = 19;
             TDefineDataCenterStates DefineDataCenterStates = 65;
             TTestResetDataCenterStates TestResetDataCenterStates = 66;
+            TDefineFailRealmStates DefineFailRealmStates = 67;
         }
     }
 

@@ -44,7 +44,7 @@ public:
         , GroupId(groupId)
         , GroupInfo(part->Scheme->GetLayout(groupId))
         , Meta(groupId.IsHistoric() ? part->IndexPages.BTreeHistoric[groupId.Index] : part->IndexPages.BTreeGroups[groupId.Index])
-        , GroupChannel(Part->GetGroupChannel(GroupId))
+        , GroupChannel(Part->GetDataChannel(GroupId))
         , NodeIndex(0)
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
@@ -58,9 +58,7 @@ public:
 
         bool ready = true;
         TVector<TNodeState> nextNodes;
-        auto rootLoc = GetBTreeRootLocation(Meta,
-            Part->GetPageCollection(0),               // btree index pages always room 0
-            Part->GetPageCollection(GroupId.Index));  // data pages in the group's room
+        auto rootLoc = Part->IndexPages.GetRootLocation(Part, GroupId);
         Nodes.emplace_back(TPageRef(rootLoc), 0, GetEndRowId(), EmptyKey, 0, Meta.GetDataSize());
 
         for (ui32 height = 0; height < Meta.LevelCount(); height++) {
@@ -79,8 +77,8 @@ public:
                     continue; // don't go deeper
                 }
 
-                auto location = ResolvePageLocation(Part, nodeState.Ref, {});
-                auto page = Env->TryGetPage(Part, location, {});
+                auto location = ResolveIndexPageLocation(Part, nodeState.Ref, GroupId);
+                auto page = Env->TryGetIndexPage(Part, location, GroupId);
                 if (!page) {
                     ready = false;
                     continue; // continue requesting other nodes
@@ -133,7 +131,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(NodeIndex);
         Y_DEBUG_ABORT_UNLESS(Nodes[NodeIndex - 1].EndDataSize >= Nodes[NodeIndex - 1].BeginDataSize);
         ui64 delta = Nodes[NodeIndex - 1].EndDataSize - Nodes[NodeIndex - 1].BeginDataSize;
-        ui8 channel = Part->GetGroupChannel(GroupId);
+        ui8 channel = Part->GetDataChannel(GroupId);
         dataSize.Add(delta, channel);
     }
 

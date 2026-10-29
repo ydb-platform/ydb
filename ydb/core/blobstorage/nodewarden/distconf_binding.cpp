@@ -478,7 +478,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
+        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT || Halted) {
             return;
         }
 
@@ -1120,6 +1120,9 @@ namespace NKikimr::NStorage {
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        } else if (Halted) {
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }

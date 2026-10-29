@@ -149,7 +149,21 @@ namespace NKikimr::NStorage {
             {"overrideRingsCount", overrideRingsCount},
             {"replicasSpecificVolume", replicasSpecificVolume});
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume) && !forceHeal) {
+        const bool goodConfig = GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas,
+            overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        const auto ensureGenerated = [&](bool automaticManagement, const auto& config, const char *name) {
+            if (automaticManagement && !config.HasRing() && config.RingGroupsSize() == 0) {
+                throw TExError() << "Failed to generate a nonempty " << name << " configuration";
+            }
+        };
+        const auto *selfManagement = Self->Cfg->SelfManagementConfig.get();
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageManagement(),
+            targetConfig.GetStateStorageConfig(), "StateStorage");
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageBoardManagement(),
+            targetConfig.GetStateStorageBoardConfig(), "StateStorageBoard");
+        ensureGenerated(!selfManagement || selfManagement->GetAutomaticSchemeBoardManagement(),
+            targetConfig.GetSchemeBoardConfig(), "SchemeBoard");
+        if (!goodConfig && !forceHeal) {
             throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
         }
 
@@ -467,6 +481,37 @@ namespace NKikimr::NStorage {
                     throw TExError() << name << " incorrect configuration: both Ring and Node fields are set";
                 }
 
+                if (ring->NodeSize() && cmd.GetDisableRing()) {
+                    std::optional<int> nodeIndex;
+                    for (size_t i = 0; i < ring->NodeSize(); ++i) {
+                        if (ring->GetNode(i) == cmd.GetFrom()) {
+                            if (found || nodeIndex) {
+                                throw TExError() << name << " ambiguous From node";
+                            }
+                            nodeIndex = i;
+                        }
+                    }
+                    if (nodeIndex) {
+                        if (ring->GetRingGroupActorIdOffset()) {
+                            throw TExError() << name
+                                << " flat Node configuration with RingGroupActorIdOffset requires full migration";
+                        }
+                        const auto nodes = ring->GetNode();
+                        ring->ClearNode();
+                        ring->ClearIsDisabled();
+                        for (int i = 0; i < nodes.size(); ++i) {
+                            auto *nestedRing = ring->AddRing();
+                            nestedRing->AddNode(nodes[i]);
+                            nestedRing->SetUseSingleNodeActorId(true);
+                            if (i == *nodeIndex) {
+                                nestedRing->SetIsDisabled(true);
+                            }
+                        }
+                        found = true;
+                    }
+                    return;
+                }
+
                 const size_t numItems = Max(ring->RingSize(), ring->NodeSize());
 
                 auto replace = [&](auto *ring, size_t i) {
@@ -506,6 +551,7 @@ namespace NKikimr::NStorage {
 
             };
             auto *m = (config.*mutableFunc)();
+            const auto oldConfig = *m;
 
             if (m->RingGroupsSize() && m->HasRing()) {
                 throw TExError() << name << " incorrect configuration: both Ring and RingGroups fields are set";
@@ -519,6 +565,9 @@ namespace NKikimr::NStorage {
             }
             if (!found) {
                 throw TExError() << name << " From node not found";
+            }
+            if (const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, oldConfig, *m)) {
+                throw TExError() << error;
             }
         };
 

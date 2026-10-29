@@ -123,7 +123,6 @@
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
-/ydb/tools/cfg @ydb-platform/engineering
 /ydb/tools/include_sanitizer @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
 /ydb/tools/ydbd_slice @ydb-platform/engineering
@@ -207,6 +206,8 @@
 /ydb/tests/functional/replication @ydb-platform/core
 /ydb/tests/functional/restarts @ydb-platform/core
 /ydb/tests/functional/minidumps @ydb-platform/core
+/ydb/tests/stress/scheme_board @ydb-platform/core
+/ydb/tools/cfg @ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core
 /ydb/core/tx/replication @ydb-platform/core
@@ -215,7 +216,7 @@
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
-/ydb/tests/stress/scheme_board @ydb-platform/core
+
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/core/raw_socket/ut @ydb-platform/topics

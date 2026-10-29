@@ -7,7 +7,7 @@ Authorization in {{ ydb-short-name }} is based on the concepts of:
 * [Access object](../concepts/glossary.md#access-object)
 * [Access subject](../concepts/glossary.md#access-subject)
 * [Access right](../concepts/glossary.md#access-right)
-* [Access control list](../concepts/glossary.md#access-acl)
+* [Access control list](../concepts/glossary.md#access-control-list)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
@@ -43,6 +43,10 @@ More about initial deployment:
 The suffix `@<subsystem>` identifies the "user source" or "auth domain", within which the uniqueness of all `login` is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user names will be `user1@ldap` and `user2@ldap`.
 If a `login` without a suffix is specified, it implies users directly created in the {{ ydb-short-name }} cluster.
 
+### SID {#sid}
+
+See [{#T}](../concepts/glossary.md#access-sid).
+
 ## Group {#group}
 
 Any [user](../concepts/glossary.md#access-user) can be included in or excluded from a certain [access group](../concepts/glossary.md#access-group). Once a user is included in a group, they receive all the rights to [database objects](../concepts/glossary.md#access-object) that were provided to the access group.
@@ -66,7 +70,7 @@ To create, alter, and delete [groups](../concepts/glossary.md#access-group), the
 
 [Rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
 
-Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#subject) (users and groups) for the object.
+Each access object has a list of permissions — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — it stores all the rights provided to [access subjects](../concepts/glossary.md#access-subject) (users and groups) for the object.
 
 By default, rights are inherited from parents to descendants in the access objects tree.
 

@@ -2,7 +2,7 @@
 
 A {{ ydb-short-name }} cluster periodically needs maintenance, such as upgrading its version or replacing broken disks. Maintenance can cause a cluster or its databases to become unavailable due to:
 
-- Going beyond the expectations of the affected [storage groups](../../concepts/glossary.md#storage-groups) failure model.
+- Going beyond the expectations of the affected [storage groups](../../concepts/glossary.md#storage-group) failure model.
 - Going beyond the expectations of the [State Storage](../../reference/configuration/domains_config.md#domains-state) failure model.
 - Lack of computational resources due to stopping too many [dynamic nodes](../../concepts/glossary.md#dynamic-node).
 
@@ -45,8 +45,8 @@ In a maintenance task, you need to specify the cluster's availability mode to co
     - No more than one unavailable State Storage ring is allowed.
 - **Weak**: a mode that does not allow exceeding the failure model.
 
-  - For affected storage groups with the [block-4-2](../../reference/configuration/domains_config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
-  - For affected storage groups with the [mirror-3-dc](../../reference/configuration/domains_config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
+  - For affected storage groups with the [block-4-2](../../reference/configuration/domains_config.md#domains-blob) scheme, no more than two unavailable VDisks are allowed.
+  - For affected storage groups with the [mirror-3-dc](../../reference/configuration/domains_config.md#domains-blob) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
   - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
 
 - **Force**: a forced mode, the failure model is ignored. *Not recommended for use.*
@@ -82,6 +82,10 @@ To check if the actions of a maintenance task can be performed, the CMS sequenti
   - Whether it's possible to lock all VDisks of the disk according to the availability mode.
 
 The action can be performed if the checks are successful, and temporary locks are acquired on the checked nodes, hosts, or disks. The CMS then considers the next group of actions. Temporary locks help to understand whether the actions requested in different groups conflict with each other. Once the check is complete, the temporary locks are released.
+
+## Suspending maintenance {#disable-maintenance}
+
+See the `disable_maintenance` flag in [CMS configuration](../../reference/configuration/cms_config.md).
 
 ## Bridge mode {#bridge}
 

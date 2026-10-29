@@ -73,7 +73,7 @@ You can use this group to grant [access rights](../../concepts/glossary.md#acces
 
 {% note tip %}
 
-You can get information about access rights on scheme objects in the system views. For more information see, [{#T}](../../dev/system-views#informaciya-o-pravah-dostupa).
+You can get information about access rights on scheme objects in the system views. For more information see, [Users, groups, and access rights](../../dev/system-views.md#auth).
 
 {% endnote %}
 
@@ -275,7 +275,7 @@ For example:
 
 {% endnote %}
 
-## Built-in Security Configuration
+## Built-in Security Configuration {#disable-builtin-security}
 
 The `disable_builtin_security`, `disable_builtin_groups`, and `disable_builtin_access` flags affect the built-in security configuration that occurs when {{ ydb-short-name }} starts for the first time.
 

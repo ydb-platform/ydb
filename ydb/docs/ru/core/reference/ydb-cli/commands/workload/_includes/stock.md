@@ -98,6 +98,14 @@ CREATE TABLE `orderLines`(
 {{ ydb-cli }} workload stock init -p 10 -q 100 -o 10 --min-partitions 100
 ```
 
+## Удаление таблицы {#clean}
+
+Удаление таблиц, созданных при инициализации нагрузочного теста, выполняется командой:
+
+```bash
+{{ ydb-cli }} [global options...] workload stock clean [options...]
+```
+
 ## Запуск нагрузочного теста {#run}
 
 Для запуска нагрузки необходимо выполнить команду:

@@ -42,7 +42,7 @@ Note that:
 - It is more efficient to pass the parameter from the SDK as a string by serializing the numbers on the application side ([examples](../recipes/ydb-sdk/vector-search.md#search-by-vector)). Alternatively, the value can be passed from the SDK as a vector of numbers and converted from a list using `Knn::ToBinaryString*` functions, but this is slower.
 - The `COVER (embedding, data)` clause is optional and is used to create a [covering index](#covering). This helps further speed up the search.
 - Vector index search is always approximate — its results differ from a full-scan search.
-- Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) parameter improves search quality (recall) at the cost of speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 1 (minimum quality, maximum speed).
+- Increasing the [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) parameter improves search quality (recall) at the cost of speed. The parameter sets the number of index clusters nearest to the query that are scanned. The default value is 1 (minimum quality, maximum speed).
 - The `overlap_clusters=3` parameter significantly improves future search quality during indexing by specifying the number of clusters each vector is added to, but increases the index size.
 - The `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they will be autodetected from existing rows.
 
@@ -157,7 +157,7 @@ ALTER TABLE my_table
 
 In this example, each vector will be added to 3 nearest clusters instead of 1.
 
-The `overlap_clusters` parameter is recommended for nearly all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) values (for example, 3).
+The `overlap_clusters` parameter is recommended for nearly all use cases, especially for vector indexes with `levels > 1`, as it significantly improves search recall even with small [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize) values (for example, 3).
 
 This way, you can reduce the PRAGMA value and significantly speed up the search while maintaining the same recall.
 

@@ -6,8 +6,8 @@ This article describes the implementation of the Slowly Changing Dimensions Type
 
 For delivering data to the SCD2 table, the following combination of functional capabilities of {{ ydb-short-name }} will be used in this article:
 
-1. The source table will be [row-oriented](../../../concepts/datamodel/table.md#row-oriented-table) for operational transactional changes;
-2. The target table will be [column-oriented](../../../concepts/datamodel/table.md#column-oriented-table) for efficient execution of analytical queries;
+1. The source table will be [row-oriented](../../../concepts/datamodel/table.md#row-oriented-tables) for operational transactional changes;
+2. The target table will be [column-oriented](../../../concepts/datamodel/table.md#column-oriented-tables) for efficient execution of analytical queries;
 3. The subscription to changes in the source table will be implemented through the [Change Data Capture (CDC)](../../../concepts/cdc.md) mechanism;
 4. The buffering of changes will be handled by an implicitly created CDC [topic](../../../concepts/datamodel/topic.md);
 5. The automatic transfer of data from the CDC topic to the target table will be handled by [transfer](../../../concepts/transfer.md).

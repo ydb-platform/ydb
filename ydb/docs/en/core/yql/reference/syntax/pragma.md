@@ -207,7 +207,7 @@ Output the [column order](select/order_by.md) in SELECT/JOIN/UNION ALL and prese
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](select/union.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](select/union.md#union-all). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2
@@ -228,7 +228,7 @@ In the classical version, the result of integer division remains integer (by def
 If disabled, the result is always Double.
 ClassicDivision is a [scoped](pragma.md#pragmascope) setting.
 
-### UnicodeLiterals
+### UnicodeLiterals {#UnicodeLiterals}
 
 `UnicodeLiterals`/`DisableUnicodeLiterals`
 
@@ -282,7 +282,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.m
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
@@ -293,7 +293,7 @@ Use this option with care, because the computational complexity of the query gro
 
 Managing the default behavior of Yson UDF, for more information, see the [documentation](../udf/list/yson.md) and, in particular, [Yson::Options](../udf/list/yson.md#ysonoptions).
 
-### `yson.AutoConvert`
+### `yson.AutoConvert` {#yson.autoconvert}
 
 | Value type | Default |
 | --- | --- |
@@ -301,7 +301,7 @@ Managing the default behavior of Yson UDF, for more information, see the [docume
 
 Automatic conversion of values to the required data type in all Yson UDF calls, including implicit calls.
 
-### `yson.Strict`
+### `yson.Strict` {#yson.strict}
 
 | Value type | Default |
 | --- | --- |
@@ -429,7 +429,7 @@ SELECT $foo;
 {% endif %}
 
 
-{% if tech %}
+{% if backend_name == "YDB" %}
 
 ## YDB
 
@@ -447,7 +447,7 @@ SELECT $foo;
 | ----- | ------------------------ |
 | 0     | Cost-based optimizer is disabled. |
 | 1     | Cost-based optimizer is disabled, but estimates are computed and available. |
-| 2     | Cost-based optimizer is enabled only for queries that include [column-oriented tables](../concepts/glossary.md#column-oriented-table). |
+| 2     | Cost-based optimizer is enabled only for queries that include [column-oriented tables](../../../concepts/glossary.md#column-oriented-table). |
 | 3     | Cost-based optimizer is enabled for all queries, but `LookupJoin` is preferred for row-oriented tables. |
 | 4     | Cost-based optimizer is enabled for all queries. |
 
@@ -461,6 +461,8 @@ The default level is 2
 
 The pragma for query hints is desicribed in [a separate section](../../../dev/optimization/hints.md).
 
+{% if tech %}
+
 ### `kikimr.IsolationLevel`
 
 | Value type | Default |
@@ -468,6 +470,8 @@ The pragma for query hints is desicribed in [a separate section](../../../dev/op
 | Serializable, ReadCommitted, ReadUncommitted, or ReadStale. | Serializable |
 
 An experimental pragma that allows you to reduce the isolation level of the current YDB transaction.
+
+{% endif %}
 
 {% endif %}
 

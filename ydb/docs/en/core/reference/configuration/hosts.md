@@ -1,5 +1,7 @@
 # hosts
 
+## Configuration {#hosts}
+
 This group lists the static cluster nodes on which the Storage processes run and specifies their main characteristics:
 
 - Numeric node ID

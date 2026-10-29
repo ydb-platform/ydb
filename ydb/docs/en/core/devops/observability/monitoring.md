@@ -1,5 +1,7 @@
 # Setting Up {{ ydb-short-name }} Cluster Monitoring
 
+## Accessing metrics via the web interface {#web-metrics}
+
 This page explains how to set up monitoring for a {{ ydb-short-name }} cluster.
 
 {{ ydb-short-name }} provides numerous system state metrics. Instant metric values can be viewed in the web interface:

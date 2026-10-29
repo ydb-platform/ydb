@@ -40,7 +40,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% if oss == true and backend_name == "YDB" %}
 
-## Query parameters
+## Query parameters {#request-parameters}
 
 ### table_name
 

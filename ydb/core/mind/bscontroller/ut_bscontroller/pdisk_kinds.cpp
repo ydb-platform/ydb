@@ -120,10 +120,8 @@ public:
 
     TConfigResponse Read() {
         TConfigRequest request;
-        request.AddCommand()->MutableReadHostConfig()->SetReturnMaterialized(true);
-        auto* pool = request.AddCommand()->MutableReadStoragePool();
-        pool->SetBoxId(1);
-        pool->SetReturnMaterialized(true);
+        request.AddCommand()->MutableReadHostConfig();
+        request.AddCommand()->MutableReadStoragePool()->SetBoxId(1);
         request.AddCommand()->MutableQueryBaseConfig();
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
@@ -133,6 +131,27 @@ public:
 
     TBaseConfig Base() {
         return Read().GetStatus(2).GetBaseConfig();
+    }
+
+    // Rewrites named definitions into plain numeric ones, as an operator would before a downgrade:
+    // the drive gets its effective PDiskConfig, pool filters keep only the numeric Kind.
+    void ReplaceNamedSources(TDefineHostConfig& host, TDefineStoragePool& pool) {
+        for (auto& drive : *host.MutableDrive()) {
+            if (!drive.GetKindName().empty()) {
+                drive.MutablePDiskConfig()->CopyFrom(Disk(drive.GetPath()).GetPDiskConfig());
+                drive.ClearKindName();
+            }
+        }
+        for (auto& filter : *pool.MutablePDiskFilter()) {
+            auto* properties = filter.MutableProperty();
+            for (int i = 0; i < properties->size();) {
+                if (properties->Get(i).HasKindName()) {
+                    properties->DeleteSubrange(i, 1);
+                } else {
+                    ++i;
+                }
+            }
+        }
     }
 
     TDefineHostConfig SourceHost() {
@@ -724,18 +743,13 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
     }
 
     Y_UNIT_TEST(DuplicateCatalogNameIsRejected) {
-        for (bool existing : {false, true}) {
-            TPDiskKindsEnvironment env;
-            if (existing) {
-                env.AddKind("qlc");
-            }
-            env.Apply();
-            if (!existing) {
-                env.AddKind("qlc");
-            }
-            env.AddKind("qlc");
-            env.AssertRejected();
-        }
+        // Duplicate names are rejected by the config validators before a storage config reaches BSC; here the
+        // second definition of a new kind fails the generation check, so BSC does not create it twice either.
+        TPDiskKindsEnvironment env;
+        env.Apply();
+        env.AddKind("qlc");
+        env.AddKind("qlc");
+        env.AssertRejected();
     }
 
     Y_UNIT_TEST(UnknownDriveKindDoesNotReplaceAcceptedConfiguration) {
@@ -1245,20 +1259,19 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         UNIT_ASSERT_VALUES_EQUAL(kind.GetConfig().GetPDiskConfig().GetLogWeight(), 8);
     }
 
-    Y_UNIT_TEST(ProfileUpdateSendsEffectiveConfigWithoutRequestingRestart) {
+    Y_UNIT_TEST(ProfileUpdateDoesNotPushPDiskRecords) {
+        // Named kinds change where PDiskConfig comes from, not how it is delivered: as for legacy drives, only
+        // slot-related fields reach a running node, everything else is picked up on the next node restart.
         TPDiskKindsEnvironment env;
         env.UseKind();
         env.Profile().SetLogWeight(8);
         env.Drive().MutablePDiskConfig()->SetIoPieceSizeBytes(32768);
         env.Apply();
-        // Register on the actual runtime node, establishing the notification pipe.
         env.RegisterSerialDrive("serial-0", "/dev/nvme0n1");
-        TVector<TNodeWardenServiceSet::TPDisk> updates;
+        size_t updates = 0;
         auto observer = env.Runtime->AddObserver<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(
             [&](TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr& ev) {
-                for (const auto& disk : ev->Get()->Record.GetServiceSet().GetPDisks()) {
-                    updates.push_back(disk);
-                }
+                updates += ev->Get()->Record.GetServiceSet().PDisksSize();
             });
         TConfigRequest request;
         auto* kind = request.AddCommand()->MutableDefinePDiskKind();
@@ -1267,19 +1280,11 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         kind->MutablePDiskConfig()->SetLogWeight(16);
         const auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Runtime->WaitFor("updated PDisk configuration", [&] { return !updates.empty(); }, env.Timeout);
+        env.Runtime->SimulateSleep(TDuration::MilliSeconds(10));
         observer.Remove();
-        bool found = false;
-        for (const auto& disk : updates) {
-            UNIT_ASSERT(!disk.HasEntityStatus() || disk.GetEntityStatus() == INITIAL);
-            if (disk.GetPath() == "/dev/nvme0n1") {
-                UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskConfig().GetLogWeight(), 16);
-                UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskConfig().GetIoPieceSizeBytes(), 32768);
-                UNIT_ASSERT_VALUES_EQUAL(TPDiskCategory(disk.GetPDiskCategory()).Kind(), 1);
-                found = true;
-            }
-        }
-        UNIT_ASSERT(found);
+        UNIT_ASSERT_VALUES_EQUAL(updates, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetLogWeight(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetIoPieceSizeBytes(), 32768);
     }
 
     Y_UNIT_TEST(ReplacementAndVDiskMovementRespectNamedPoolFilter) {
@@ -1374,7 +1379,6 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetLogWeight(), 16);
         UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetIoPieceSizeBytes(), 32768);
         UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), 2);
-        UNIT_ASSERT(!env.Disk().GetSourcePDiskConfig().HasLogWeight());
     }
 
     Y_UNIT_TEST(MaterializedHostAndPoolConfigWorksWithoutCatalog) {
@@ -1384,10 +1388,9 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         env.Drive().MutablePDiskConfig()->SetIoPieceSizeBytes(32768);
         env.Apply();
         env.CreatePool(1, {}, "qlc", 0);
-        const auto read = env.Read();
-        auto host = read.GetStatus(0).GetHostConfig(0);
-        auto pool = read.GetStatus(1).GetStoragePool(0);
-        host.MutableDrive(0)->ClearKindName();
+        auto host = env.SourceHost();
+        auto pool = env.SourcePool();
+        env.ReplaceNamedSources(host, pool);
         UNIT_ASSERT_VALUES_EQUAL(host.GetDrive(0).GetKind(), 1);
         UNIT_ASSERT_VALUES_EQUAL(host.GetDrive(0).GetPDiskConfig().GetLogWeight(), 8);
         for (const auto& property : pool.GetPDiskFilter(0).GetProperty()) {
@@ -1418,41 +1421,23 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         env.Profile().SetLogWeight(8);
         env.Drive().MutablePDiskConfig()->SetIoPieceSizeBytes(32768);
         env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         env.CreatePool(1, {}, "qlc", 0);
 
-        const auto effective = env.Read();
-        request.Clear();
-        auto* host = request.AddCommand()->MutableDefineHostConfig();
-        host->CopyFrom(effective.GetStatus(0).GetHostConfig(0));
-        host->MutableDrive(0)->ClearKindName();
-        serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetUpdateExisting(true);
-        const auto disk = env.Disk("/dev/nvme1n1");
-        serial->SetKind(disk.GetKind());
-        serial->MutablePDiskConfig()->CopyFrom(disk.GetPDiskConfig());
-        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(effective.GetStatus(1).GetStoragePool(0));
-        response = env.Invoke(request);
+        auto host = env.SourceHost();
+        auto pool = env.SourcePool();
+        env.ReplaceNamedSources(host, pool);
+        TConfigRequest request;
+        request.AddCommand()->MutableDefineHostConfig()->CopyFrom(host);
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        auto response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         env.Reboot();
 
-        // Both definition tables now contain complete configs that an old BSC can use without the catalog.
+        // The definition table now contains a complete config that an old BSC can use without the catalog.
         UNIT_ASSERT_VALUES_EQUAL(env.SourceHost().GetDrive(0).GetPDiskConfig().GetLogWeight(), 8);
         UNIT_ASSERT(env.SourceHost().GetDrive(0).GetKindName().empty());
-        for (const auto& path : {"/dev/nvme0n1", "/dev/nvme1n1"}) {
-            UNIT_ASSERT_VALUES_EQUAL(env.Disk(path).GetPDiskConfig().GetLogWeight(), 8);
-            UNIT_ASSERT_VALUES_EQUAL(env.Disk(path).GetSourcePDiskConfig().GetLogWeight(), 8);
-            UNIT_ASSERT_VALUES_EQUAL(env.Disk(path).GetKindName(), "qlc");
-        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetLogWeight(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetKindName(), "qlc");
 
         // A later profile update does not change these materialized definitions.
         request.Clear();
@@ -1471,9 +1456,7 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         }
         env.Reboot();
         UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetLogWeight(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), 8);
         UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetKindName(), "qlc");
-        UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetKindName(), "qlc");
     }
 
     Y_UNIT_TEST(LegacyNumericKindSurvivesRestartAndEditing) {
@@ -1637,170 +1620,6 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), 99);
     }
 
-    Y_UNIT_TEST(SerialDriveProfilesPersistAndReAddingClearsTheName) {
-        TPDiskKindsEnvironment env;
-        env.AddKind("qlc");
-        env.Profile().SetLogWeight(8);
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* drive = request.AddCommand()->MutableAddDriveSerial();
-        drive->SetSerial("serial-1");
-        drive->SetBoxId(1);
-        drive->SetKindName("qlc");
-        drive->MutablePDiskConfig()->SetIoPieceSizeBytes(32768);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Reboot();
-        UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetKindName(), "qlc");
-        UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), 8);
-
-        {
-            const auto actorId = ResolveTablet(*env.Runtime, env.TabletId);
-            auto* controller = dynamic_cast<TBlobStorageController*>(env.Runtime->FindActor(actorId));
-            UNIT_ASSERT(controller);
-            const TBlobStorageController::TConfigState state(*controller,
-                std::make_shared<THostRecordMapImpl>(env.Config), TInstant::Zero(), TMonotonic::Zero());
-            const auto* stored = state.DrivesSerials.Find(TString("serial-1"));
-            UNIT_ASSERT(stored && stored->PDiskConfig);
-            NKikimrBlobStorage::TPDiskConfig overrides;
-            UNIT_ASSERT(overrides.ParseFromString(*stored->PDiskConfig));
-            UNIT_ASSERT(!overrides.HasLogWeight());
-            UNIT_ASSERT_VALUES_EQUAL(overrides.GetIoPieceSizeBytes(), 32768);
-        }
-
-        request.Clear();
-        auto* kind = request.AddCommand()->MutableDefinePDiskKind();
-        kind->SetName("qlc");
-        kind->SetItemConfigGeneration(1);
-        kind->MutablePDiskConfig()->SetLogWeight(16);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), 16);
-        UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetIoPieceSizeBytes(), 32768);
-
-        request.Clear();
-        request.AddCommand()->MutableRemoveDriveSerial()->SetSerial("serial-1");
-        drive = request.AddCommand()->MutableAddDriveSerial();
-        drive->SetSerial("serial-1");
-        drive->SetBoxId(1);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Reboot();
-        const auto disk = env.Disk("/dev/nvme1n1");
-        UNIT_ASSERT_VALUES_EQUAL(disk.GetKind(), 0);
-        UNIT_ASSERT(disk.GetKindName().empty());
-        UNIT_ASSERT(!disk.GetPDiskConfig().HasLogWeight());
-    }
-
-    Y_UNIT_TEST(OccupiedSerialDriveCanSwitchToNewKindWithItsPool) {
-        TPDiskKindsEnvironment env;
-        env.AddKind("qlc").MutablePDiskConfig()->SetLogWeight(8);
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetPDiskType(NKikimrBlobStorage::NVME);
-        serial->SetKindName("qlc");
-        serial->MutablePDiskConfig()->SetIoPieceSizeBytes(32768);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.CreatePool(1, {}, "qlc");
-        const auto disk = env.Disk("/dev/nvme1n1");
-        auto pool = env.PoolWithKindName("capacity");
-        TAddDriveSerial updated = *serial;
-        updated.SetKindName("capacity");
-        updated.SetUpdateExisting(true);
-        request.Clear();
-        auto* kind = request.AddCommand()->MutableDefinePDiskKind();
-        kind->SetName("capacity");
-        kind->MutablePDiskConfig()->SetLogWeight(16);
-        request.AddCommand()->MutableAddDriveSerial()->CopyFrom(updated);
-        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
-        auto* deleted = request.AddCommand()->MutableDeletePDiskKind();
-        deleted->SetName("qlc");
-        deleted->SetItemConfigGeneration(1);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Reboot();
-        const auto renamed = env.Disk("/dev/nvme1n1");
-        UNIT_ASSERT_VALUES_EQUAL(renamed.GetPDiskId(), disk.GetPDiskId());
-        UNIT_ASSERT_VALUES_EQUAL(renamed.GetGuid(), disk.GetGuid());
-        UNIT_ASSERT(renamed.GetKind() != disk.GetKind());
-        UNIT_ASSERT_VALUES_EQUAL(env.Base().PDiskKindSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(renamed.GetKindName(), "capacity");
-        UNIT_ASSERT_VALUES_EQUAL(renamed.GetPDiskConfig().GetLogWeight(), 16);
-        UNIT_ASSERT_VALUES_EQUAL(renamed.GetPDiskConfig().GetIoPieceSizeBytes(), 32768);
-        UNIT_ASSERT(!renamed.GetSourcePDiskConfig().HasLogWeight());
-        UNIT_ASSERT_VALUES_EQUAL(renamed.GetSourcePDiskConfig().GetIoPieceSizeBytes(), 32768);
-        env.AssertPoolKind(1, renamed.GetKind());
-    }
-
-    Y_UNIT_TEST(RenameUpdatesHostAndSerialReferencesInTheSameBox) {
-        TPDiskKindsEnvironment env;
-        env.UseKind();
-        env.Profile().SetLogWeight(8);
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-
-        request.Clear();
-        auto* kind = request.AddCommand()->MutableDefinePDiskKind();
-        kind->SetName("capacity");
-        kind->MutablePDiskConfig()->SetLogWeight(16);
-        auto* host = request.AddCommand()->MutableDefineHostConfig();
-        host->CopyFrom(env.SourceHost());
-        host->MutableDrive(0)->SetKindName("capacity");
-        host->MutableDrive(0)->ClearKind();
-        serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("capacity");
-        serial->SetUpdateExisting(true);
-        auto* deleted = request.AddCommand()->MutableDeletePDiskKind();
-        deleted->SetName("qlc");
-        deleted->SetItemConfigGeneration(1);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Reboot();
-        const auto newKind = env.Disk().GetKind();
-        UNIT_ASSERT(newKind != 1);
-        UNIT_ASSERT_VALUES_EQUAL(env.Base().PDiskKindSize(), 1);
-        for (const auto& path : {"/dev/nvme0n1", "/dev/nvme1n1"}) {
-            const auto disk = env.Disk(path);
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetKindName(), "capacity");
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetKind(), newKind);
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskConfig().GetLogWeight(), 16);
-        }
-    }
-
-    Y_UNIT_TEST(SerialDriveRejectsUnknownNamesAndConflictingIds) {
-        TPDiskKindsEnvironment env;
-        env.AddKind("qlc");
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        const TString before = env.Snapshot();
-        for (const TString& name : {TString("missing"), TString("qlc")}) {
-            TConfigRequest request;
-            auto* drive = request.AddCommand()->MutableAddDriveSerial();
-            drive->SetSerial("serial-1");
-            drive->SetBoxId(1);
-            drive->SetKindName(name);
-            drive->SetKind(2);
-            const auto response = env.Invoke(request);
-            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(env.Snapshot(), before);
-        }
-    }
-
     Y_UNIT_TEST(NamedPoolFilterPropertiesAreOrderIndependent) {
         TPDiskKindsEnvironment env;
         env.UseKind();
@@ -1946,19 +1765,6 @@ Y_UNIT_TEST_SUITE(BsControllerNamedPDiskKinds) {
         env.AssertRejected();
     }
 
-    Y_UNIT_TEST(OccupiedDiskCannotChangeToAKindExcludedByItsPool) {
-        TPDiskKindsEnvironment env;
-        env.UseKind();
-        env.AddKind("tlc");
-        env.Apply();
-        env.CreatePool(1, 1);
-        env.AssertPoolKind(1, 1);
-
-        env.Drive().SetKindName("tlc");
-        env.AssertRejected();
-        env.AssertPoolKind(1, 1);
-    }
-
     Y_UNIT_TEST(OccupiedLegacyDiskKeepsNumericKindChangeBehavior) {
         TPDiskKindsEnvironment env;
         env.AddKind("unused");
@@ -1981,14 +1787,7 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsReview) {
         env.Profile().SetLogWeight(8);
         env.Drive().MutablePDiskConfig()->SetIoPieceSizeBytes(32768);
         env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
         TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        serial->MutablePDiskConfig()->SetIoPieceSizeBytes(16384);
-        UNIT_ASSERT(env.Invoke(request).GetSuccess());
         const auto before = env.Base();
 
         // Emulate an inconsistent restored database, bypassing the command validation deliberately.
@@ -2011,14 +1810,17 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsReview) {
         UNIT_ASSERT_VALUES_EQUAL(after.PDiskSize(), before.PDiskSize());
         for (const auto& disk : after.GetPDisk()) {
             UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskConfig().GetLogWeight(), 8);
-            UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskConfig().GetIoPieceSizeBytes(),
-                disk.GetPath() == "/dev/nvme0n1" ? 32768 : 16384);
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetPDiskConfig().GetIoPieceSizeBytes(), 32768);
         }
 
         const auto source = env.SourceHost();
         UNIT_ASSERT_VALUES_EQUAL(source.GetDrive(0).GetKindName(), "qlc");
         request.Clear();
-        request.AddCommand()->MutableReadHostConfig()->SetReturnMaterialized(true);
+        request.AddCommand()->MutableReadBox();
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        request.Clear();
+        request.AddCommand()->MutableDefineBox()->CopyFrom(response.GetStatus(0).GetBox(0)); // refits the box
         response = env.Invoke(request);
         UNIT_ASSERT(!response.GetSuccess());
         UNIT_ASSERT_C(response.GetErrorDescription().Contains("Unresolved PDisk kind"), response.DebugString());
@@ -2030,48 +1832,7 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsReview) {
         UNIT_ASSERT_C(response.GetErrorDescription().Contains("Unknown PDisk kind"), response.DebugString());
     }
 
-    Y_UNIT_TEST(SerialUpdateValidatesNumericKindAndDeviceTypeAgainstOccupiedPool) {
-        for (bool named : {false, true}) {
-            for (bool changeType : {false, true}) {
-                TPDiskKindsEnvironment env;
-                if (named) {
-                    env.AddKind("qlc");
-                }
-                env.Apply();
-                env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-                TAddDriveSerial drive;
-                drive.SetSerial("serial-1");
-                drive.SetBoxId(1);
-                drive.SetPDiskType(NVME);
-                if (named) {
-                    drive.SetKindName("qlc");
-                } else {
-                    drive.SetKind(17);
-                }
-                TConfigRequest request;
-                request.AddCommand()->MutableAddDriveSerial()->CopyFrom(drive);
-                UNIT_ASSERT(env.Invoke(request).GetSuccess());
-                const ui64 kind = env.Disk("/dev/nvme1n1").GetKind();
-                env.CreatePool(1, kind);
-                const auto before = env.Snapshot();
-                drive.SetUpdateExisting(true);
-                if (changeType) {
-                    drive.SetPDiskType(SSD);
-                } else {
-                    drive.ClearKindName();
-                    drive.SetKind(18);
-                }
-                request.Clear();
-                request.AddCommand()->MutableAddDriveSerial()->CopyFrom(drive);
-                const auto response = env.Invoke(request);
-                UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-                UNIT_ASSERT_C(response.GetErrorDescription().Contains("violates the storage pool filter"), response.DebugString());
-                UNIT_ASSERT_VALUES_EQUAL(env.Snapshot(), before);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(DeferredProfileErrorIsReportedOnDefinitionInsteadOfRead) {
+    Y_UNIT_TEST(ProfileErrorRejectsTheWholeRequest) {
         TPDiskKindsEnvironment env;
         env.UseKind();
         env.Apply();
@@ -2083,10 +1844,9 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsReview) {
         kind->MutablePDiskConfig()->SetMaxSlots(8); // Missing ExpectedSlotSize.
         request.AddCommand()->MutableReadHostConfig();
         const auto response = env.Invoke(request);
+        // Every command succeeds on its own; the effective drive settings are rejected for the request as a whole.
         UNIT_ASSERT(!response.GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-        UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-        UNIT_ASSERT_C(response.GetStatus(0).GetErrorDescription().Contains("ExpectedSlotSize"), response.DebugString());
+        UNIT_ASSERT_C(response.GetErrorDescription().Contains("ExpectedSlotSize"), response.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(env.Snapshot(), before);
     }
 
@@ -2098,37 +1858,10 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsReview) {
         TBlobStorageController::TConfigState state(*controller,
             std::make_shared<THostRecordMapImpl>(env.Config), TInstant::Zero(), TMonotonic::Zero());
         state.PDiskKinds.Unshare()["unused"].KindId = 1;
-        state.ChangedPDiskKinds.insert("unused");
-        state.PreparePDiskKindUpdates();
+        state.PreparePDiskKindUpdates("unused");
         UNIT_ASSERT(state.PDiskKinds.Changed());
         UNIT_ASSERT(!state.HostConfigs.Changed());
         UNIT_ASSERT(!state.Fit);
-    }
-
-    Y_UNIT_TEST(DeferredBoxFitErrorIsReportedOnBoxInsteadOfRead) {
-        TPDiskKindsEnvironment env;
-        env.Apply();
-        const auto before = env.Snapshot();
-        TConfigRequest request;
-        request.AddCommand()->MutableDefinePDiskKind()->SetName("unused");
-        for (ui64 boxId : {1, 2}) {
-            auto* box = request.AddCommand()->MutableDefineBox();
-            box->SetBoxId(boxId);
-            box->SetItemConfigGeneration(boxId == 1 ? 1 : 0);
-            auto* host = box->AddHost();
-            host->SetHostConfigId(1);
-            host->MutableKey()->SetNodeId(std::get<2>(env.GetNodes().front()));
-        }
-        // Fitting must reject assigning the same physical disk to both boxes.
-        request.AddCommand()->MutableReadHostConfig();
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT(!response.GetSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 3);
-        UNIT_ASSERT(response.GetStatus(0).GetSuccess());
-        UNIT_ASSERT(response.GetStatus(1).GetSuccess());
-        UNIT_ASSERT(!response.GetStatus(2).GetSuccess());
-        UNIT_ASSERT_C(response.GetStatus(2).GetErrorDescription().Contains("duplicate disk"), response.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(env.Snapshot(), before);
     }
 
     Y_UNIT_TEST(BatchAllocationReservesLegacyIdsAndPreviouslyAllocatedIds) {
@@ -2227,13 +1960,6 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsRemainingReview) {
         env.UseKind();
         env.Profile().SetLogWeight(8);
         env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        UNIT_ASSERT(env.Invoke(request).GetSuccess());
         auto* controller = dynamic_cast<TBlobStorageController*>(env.Runtime->FindActor(ResolveTablet(*env.Runtime, env.TabletId)));
         UNIT_ASSERT(controller);
         TBlobStorageController::TConfigState state(*controller,
@@ -2241,10 +1967,8 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsRemainingReview) {
         NKikimrBlobStorage::TPDiskConfig profile;
         profile.SetLogWeight(16);
         state.PDiskKinds.Unshare().at("qlc").PDiskConfig = profile.SerializeAsString();
-        state.ChangedPDiskKinds.insert("qlc");
-        state.PreparePDiskKindUpdates();
+        state.PreparePDiskKindUpdates("qlc");
         UNIT_ASSERT(!state.HostConfigs.Changed());
-        UNIT_ASSERT(!state.DrivesSerials.Changed());
         const auto& host = state.HostConfigs.Get().at(1);
         const auto& [key, drive] = *host.Drives.begin();
         NKikimrBlobStorage::TPDiskConfig effective;
@@ -2252,10 +1976,6 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsRemainingReview) {
         UNIT_ASSERT_VALUES_EQUAL(effective.GetLogWeight(), 16);
         UNIT_ASSERT(effective.ParseFromString(*drive.MaterializedPDiskConfig));
         UNIT_ASSERT_VALUES_EQUAL(effective.GetLogWeight(), 8);
-        const auto* serialInfo = state.DrivesSerials.Find(TString("serial-1"));
-        UNIT_ASSERT(serialInfo);
-        UNIT_ASSERT(effective.ParseFromString(*state.GetMaterializedPDiskConfig(TString("serial-1"), *serialInfo)));
-        UNIT_ASSERT_VALUES_EQUAL(effective.GetLogWeight(), 16);
     }
 
     Y_UNIT_TEST(LaterDriveOverrideReplacesPendingProfileCache) {
@@ -2264,192 +1984,21 @@ Y_UNIT_TEST_SUITE(BsControllerPDiskKindsRemainingReview) {
             env.UseKind();
             env.Profile().SetLogWeight(8);
             env.Apply();
-            env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
             TConfigRequest request;
-            auto* serial = request.AddCommand()->MutableAddDriveSerial();
-            serial->SetSerial("serial-1");
-            serial->SetBoxId(1);
-            serial->SetKindName("qlc");
-            UNIT_ASSERT(env.Invoke(request).GetSuccess());
-            request.Clear();
             request.SetRollback(rollback);
             auto* kind = request.AddCommand()->MutableDefinePDiskKind();
             kind->SetName("qlc");
             kind->SetItemConfigGeneration(1);
             kind->MutablePDiskConfig()->SetLogWeight(16);
-            request.AddCommand()->MutableReadHostConfig()->SetReturnMaterialized(true); // flush profile updates
             auto* host = request.AddCommand()->MutableDefineHostConfig();
             host->CopyFrom(env.SourceHost());
             host->MutableDrive(0)->MutablePDiskConfig()->SetLogWeight(32);
-            serial = request.AddCommand()->MutableAddDriveSerial();
-            serial->SetSerial("serial-1");
-            serial->SetBoxId(1);
-            serial->SetKindName("qlc");
-            serial->SetUpdateExisting(true);
-            serial->MutablePDiskConfig()->SetLogWeight(64);
-            request.AddCommand()->MutableReadHostConfig()->SetReturnMaterialized(true);
             const auto response = env.Invoke(request);
             UNIT_ASSERT_C(rollback ? response.GetRollbackSuccess() : response.GetSuccess(), response.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(1).GetHostConfig(0).GetDrive(0).GetPDiskConfig().GetLogWeight(), 16);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(4).GetHostConfig(0).GetDrive(0).GetPDiskConfig().GetLogWeight(), 32);
             UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetLogWeight(), rollback ? 8 : 32);
-            UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), rollback ? 8 : 64);
             env.Reboot();
             UNIT_ASSERT_VALUES_EQUAL(env.Disk().GetPDiskConfig().GetLogWeight(), rollback ? 8 : 32);
-            UNIT_ASSERT_VALUES_EQUAL(env.Disk("/dev/nvme1n1").GetPDiskConfig().GetLogWeight(), rollback ? 8 : 64);
         }
-    }
-
-    Y_UNIT_TEST(NumericSerialUpdatePushesConfigWithoutRestart) {
-        TPDiskKindsEnvironment env;
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetPDiskType(NVME);
-        serial->SetKind(17);
-        serial->MutablePDiskConfig()->SetLogWeight(8);
-        UNIT_ASSERT(env.Invoke(request).GetSuccess());
-        env.Runtime->SimulateSleep(TDuration::MilliSeconds(10));
-        TVector<TNodeWardenServiceSet::TPDisk> updates;
-        auto observer = env.Runtime->AddObserver<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(
-            [&](TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr& ev) {
-                for (const auto& disk : ev->Get()->Record.GetServiceSet().GetPDisks()) {
-                    if (disk.GetPath() == "/dev/nvme1n1") {
-                        updates.push_back(disk);
-                    }
-                }
-            });
-        serial->SetUpdateExisting(true);
-        serial->SetKind(18);
-        serial->MutablePDiskConfig()->SetLogWeight(16);
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Runtime->WaitFor("numeric serial config update", [&] { return !updates.empty(); }, env.Timeout);
-        observer.Remove();
-        const auto& updated = updates.back();
-        UNIT_ASSERT_VALUES_EQUAL(TPDiskCategory(updated.GetPDiskCategory()).Kind(), 18);
-        UNIT_ASSERT_VALUES_EQUAL(updated.GetPDiskConfig().GetLogWeight(), 16);
-        UNIT_ASSERT(!updated.HasEntityStatus() || updated.GetEntityStatus() == INITIAL);
-    }
-
-    Y_UNIT_TEST(RemovingSerialAndKindTogetherChecksOccupiedPDisks) {
-        for (bool occupied : {false, true}) {
-            TPDiskKindsEnvironment env;
-            env.Host().ClearDrive();
-            env.AddKind("qlc");
-            env.Apply();
-            env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-            TConfigRequest request;
-            auto* serial = request.AddCommand()->MutableAddDriveSerial();
-            serial->SetSerial("serial-1");
-            serial->SetBoxId(1);
-            serial->SetPDiskType(NVME);
-            serial->SetKindName("qlc");
-            auto response = env.Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-            if (occupied) {
-                // A type-only filter leaves the PDisk as the only remaining reference.
-                env.CreatePool(1);
-            }
-            const auto before = env.Snapshot();
-            request.Clear();
-            request.AddCommand()->MutableRemoveDriveSerial()->SetSerial("serial-1");
-            auto* kind = request.AddCommand()->MutableDeletePDiskKind();
-            kind->SetName("qlc");
-            kind->SetItemConfigGeneration(1);
-            response = env.Invoke(request);
-            if (occupied) {
-                UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-                UNIT_ASSERT_C(response.GetErrorDescription().Contains("active VSlots"), response.DebugString());
-                UNIT_ASSERT_VALUES_EQUAL(env.Snapshot(), before);
-            } else {
-                UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-                const auto base = env.Base();
-                UNIT_ASSERT_VALUES_EQUAL(base.PDiskSize(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(base.PDiskKindSize(), 0);
-            }
-        }
-    }
-
-    Y_UNIT_TEST(ProfileUpdateAndSerialRemovalCanShareADefinitionBatch) {
-        TPDiskKindsEnvironment env;
-        auto* config = env.AddKind("qlc").MutablePDiskConfig();
-        config->SetExpectedSlotSize(600ull << 30);
-        config->SetMaxSlots(8);
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        serial->MutablePDiskConfig()->SetMaxSlots(4);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        request.Clear();
-        auto* kind = request.AddCommand()->MutableDefinePDiskKind();
-        kind->SetName("qlc");
-        kind->SetItemConfigGeneration(1);
-        kind->MutablePDiskConfig()->SetLogWeight(16);
-        request.AddCommand()->MutableRemoveDriveSerial()->SetSerial("serial-1");
-        request.AddCommand()->MutableQueryBaseConfig();
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(env.Base().PDiskSize(), 1);
-    }
-
-    Y_UNIT_TEST(RemovedSerialDoesNotConstrainProfileUpdatesOrDeletion) {
-        TPDiskKindsEnvironment env;
-        auto* config = env.AddKind("qlc").MutablePDiskConfig();
-        config->SetExpectedSlotSize(600ull << 30);
-        config->SetMaxSlots(8);
-        env.Apply();
-        env.RegisterSerialDrive("serial-1", "/dev/nvme1n1");
-        TConfigRequest request;
-        auto* serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        serial->MutablePDiskConfig()->SetMaxSlots(4);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        request.Clear();
-        request.AddCommand()->MutableRemoveDriveSerial()->SetSerial("serial-1");
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Reboot();
-
-        // The old MaxSlots override would be invalid with the new profile.
-        request.Clear();
-        auto* kind = request.AddCommand()->MutableDefinePDiskKind();
-        kind->SetName("qlc");
-        kind->SetItemConfigGeneration(1);
-        kind->MutablePDiskConfig()->SetLogWeight(16);
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        response = env.DeleteKind("qlc", 2);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        env.Reboot();
-        response = env.DefineKind("tlc");
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        UNIT_ASSERT_VALUES_EQUAL(env.Base().GetPDiskKind(0).GetKind(), 1);
-
-        request.Clear();
-        serial = request.AddCommand()->MutableAddDriveSerial();
-        serial->SetSerial("serial-1");
-        serial->SetBoxId(1);
-        serial->SetKindName("qlc");
-        response = env.Invoke(request);
-        UNIT_ASSERT(!response.GetSuccess());
-        serial->ClearKindName();
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto disk = env.Disk("/dev/nvme1n1");
-        UNIT_ASSERT_VALUES_EQUAL(disk.GetKind(), 0);
-        UNIT_ASSERT(!disk.GetPDiskConfig().HasMaxSlots());
     }
 
     Y_UNIT_TEST(LegacyKindAndConfigEditsDoNotPushPDiskRecords) {

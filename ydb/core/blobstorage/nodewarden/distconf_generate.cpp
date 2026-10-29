@@ -293,6 +293,7 @@ namespace NKikimr::NStorage {
                 namedDrives.emplace(node.GetNodeId(), drive.GetPath());
             }
         });
+        ui32 skippedNamedPDisks = 0; // matching PDisks that were excluded only because of a named kind
 
         auto checkMatch = [&](NKikimrBlobStorage::EPDiskType type, bool sharedWithOs, bool readCentric, ui64 kind) {
             if (selfManagementConfig.HasPDiskType() && type == selfManagementConfig.GetPDiskType()) {
@@ -362,8 +363,11 @@ namespace NKikimr::NStorage {
                 auto& maxId = maxPDiskId[pdiskId.NodeId];
                 maxId = Max(maxId, pdiskId.PDiskId);
 
-                if (pdisk.GetKindName() || namedDrives.contains(std::make_tuple(pdisk.GetNodeId(), pdisk.GetPath())) ||
-                        !checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                if (!checkMatch(pdisk.GetType(), pdisk.GetSharedWithOs(), pdisk.GetReadCentric(), pdisk.GetKind())) {
+                    continue;
+                }
+                if (pdisk.GetKindName() || namedDrives.contains(std::make_tuple(pdisk.GetNodeId(), pdisk.GetPath()))) {
+                    ++skippedNamedPDisks;
                     continue;
                 }
 
@@ -560,10 +564,14 @@ namespace NKikimr::NStorage {
         // build host config map
         auto processDrive = [&](const auto& node, const auto& drive) {
             const ui32 nodeId = node.GetNodeId();
-            if (drive.GetKindName() || pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
+            if (pdiskLocations.contains(std::make_tuple(nodeId, drive.GetPath()))) {
                 return;
             }
             if (checkMatch(drive.GetType(), drive.GetSharedWithOs(), drive.GetReadCentric(), drive.GetKind())) {
+                if (drive.GetKindName()) {
+                    ++skippedNamedPDisks;
+                    return;
+                }
                 const TPDiskId pdiskId(nodeId, ++maxPDiskId[nodeId]);
                 if (const auto [it, inserted] = pdisks.try_emplace(pdiskId); inserted) {
                     TPDiskInfo& pdiskInfo = it->second;
@@ -671,8 +679,13 @@ namespace NKikimr::NStorage {
         };
 
         if (!outcome.Success) {
-            throw TExConfigError() << "group allocation failed Error# " << outcome.Error.ErrorMessage
-                << " groupDefinition# " << dumpGroupDefinition();
+            TExConfigError error;
+            error << "group allocation failed Error# " << outcome.Error.ErrorMessage;
+            if (skippedNamedPDisks) {
+                error << " ExcludedPDisks# " << skippedNamedPDisks
+                    << " (named PDisk kinds are not supported for static group allocation)";
+            }
+            throw error << " groupDefinition# " << dumpGroupDefinition();
         }
         if (!params.LayoutPolicy.Accepts(outcome.LayoutCorrect)) {
             throw TExConfigError() << "Group layout is incorrect GroupId# " << params.GroupId

@@ -176,6 +176,68 @@ Y_UNIT_TEST_SUITE(DBase) {
             .To(24).HasN("bar", 11_u32, 33_u64, "me", "you", large35);
     }
 
+    Y_UNIT_TEST(KeyExtensionWithoutDefault)
+    {
+        /* A table that already holds rows gets a new key column without a default value: rows written with the
+           short key must stay addressable by the long key with NULL in the new position, both in SST parts and
+           in memtables, so that updates and erases by the long key hit the old rows instead of adding new ones. */
+
+        TDbExec me;
+
+        me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
+
+        const auto old1 = *me.SchemedCookRow(1).Col("old1", 11_u64, "a");
+        const auto old2 = *me.SchemedCookRow(1).Col("old2", 22_u64, "b");
+        const auto old3 = *me.SchemedCookRow(1).Col("old3", 33_u64, "c");
+
+        me.To(11).Begin().Put(1, old1, old2).Commit();
+        me.To(12).Compact(1, true); /* old1 and old2 now live in a part written with the one-column key */
+        me.To(13).Begin().Put(1, old3).Commit(); /* old3 stays in the memtable */
+
+        me.To(20).Begin().Apply(
+            *TAlter()
+                .AddColumn(1, "sub", 2, ETypes::String, false, false)
+                .AddColumnToKey(1, 2)).Commit();
+
+        /* existing rows are visible with NULL in the new key column, by point lookup and by iteration */
+
+        me.Select(1)
+            .To(21).HasN("old1", nullptr, 11_u64, "a")
+            .To(22).HasN("old2", nullptr, 22_u64, "b")
+            .To(23).HasN("old3", nullptr, 33_u64, "c");
+        me.Iter(1)
+            .To(24).HasN("old1", nullptr, 11_u64, "a")
+            .To(25).HasN("old2", nullptr, 22_u64, "b")
+            .To(26).HasN("old3", nullptr, 33_u64, "c");
+
+        /* writes by the long key with NULL address the old rows; a non-NULL value is a different key */
+
+        me.To(30).Begin()
+            .PutN(1, "old1", nullptr, 111_u64, "aa")
+            .EraseN(1, "old2", nullptr)
+            .PutN(1, "old3", "x", 333_u64, "cc")
+            .Commit();
+
+        auto check = [&](ui32 step) {
+            me.Select(1, false)
+                .To(step + 1).HasN("old1", nullptr, 111_u64, "aa")
+                .To(step + 2).NoKeyN("old2", nullptr)
+                .To(step + 3).HasN("old3", nullptr, 33_u64, "c")
+                .To(step + 4).HasN("old3", "x", 333_u64, "cc");
+            me.Iter(1, false)
+                .To(step + 5).HasN("old1", nullptr, 111_u64, "aa")
+                .To(step + 6).NoKeyN("old2", nullptr)
+                .To(step + 7).HasN("old3", nullptr, 33_u64, "c")
+                .To(step + 8).HasN("old3", "x", 333_u64, "cc");
+        };
+
+        check(30);
+        me.To(40).Compact(1, true); /* merges the one-column part with the two-column updates */
+        check(40);
+        me.To(50).Replay(EPlay::Boot); /* reloads parts and replays the redo log with the extended key */
+        check(50);
+    }
+
     Y_UNIT_TEST(Subsets)
     {
         TDbExec me;

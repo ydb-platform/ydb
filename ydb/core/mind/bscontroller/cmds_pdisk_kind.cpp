@@ -6,27 +6,6 @@
 
 namespace NKikimr::NBsController {
 
-    TMaybe<TString> TBlobStorageController::GetSourcePDiskConfig(
-            const TPDiskInfo& pdisk, const TMap<THostConfigId, THostConfigInfo>& hosts,
-            const TMap<TBoxId, TBoxInfo>& boxes, const TDriveSerialInfo* serial) {
-        if (const auto box = boxes.find(pdisk.BoxId); box != boxes.end()) {
-            const auto& [fqdn, port] = pdisk.HostId;
-            const TBoxInfo::THostKey key(Schema::BoxHostV2::TKey::Type(pdisk.BoxId, fqdn, port));
-            if (const auto host = box->second.Hosts.find(key); host != box->second.Hosts.end()) {
-                if (const auto config = hosts.find(host->second.HostConfigId); config != hosts.end()) {
-                    const THostConfigInfo::TDriveKey driveKey{{config->first, pdisk.Path}};
-                    if (const auto drive = config->second.Drives.find(driveKey); drive != config->second.Drives.end()) {
-                        return drive->second.PDiskConfig;
-                    }
-                }
-            }
-        }
-        if (serial && serial->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
-            return serial->PDiskConfig;
-        }
-        return Nothing();
-    }
-
     ui64 TBlobStorageController::TConfigState::ResolvePDiskKind(const TString& name, ui64 explicitKind) const {
         // Non-optional proto3 scalars cannot distinguish an absent Kind from zero.
         return ResolvePDiskKind(name, explicitKind ? TMaybe<ui64>(explicitKind) : Nothing());
@@ -49,14 +28,7 @@ namespace NKikimr::NBsController {
     TMaybe<TString> TBlobStorageController::MaterializePDiskConfig(const TMap<TString, TPDiskKindInfo>& kinds,
             const TString& name, const TMaybe<TString>& overrides, TStringBuf validationContext) {
         if (!name) {
-            if (validationContext) {
-                NKikimrBlobStorage::TPDiskConfig config;
-                if (overrides && !config.ParseFromString(*overrides)) {
-                    throw TExError() << validationContext << " undeserializable PDiskConfig string";
-                }
-                ValidatePDiskConfig(config, validationContext);
-            }
-            return overrides;
+            return overrides; // legacy drive: nothing to merge
         }
         NKikimrBlobStorage::TPDiskConfig config;
         const auto it = kinds.find(name);
@@ -84,20 +56,16 @@ namespace NKikimr::NBsController {
         return TBlobStorageController::MaterializePDiskConfig(PDiskKinds.Get(), name, overrides, context);
     }
 
-    void TBlobStorageController::TConfigState::PreparePDiskKindUpdates() {
-        if (ChangedPDiskKinds.empty()) {
-            return;
-        }
+    void TBlobStorageController::TConfigState::PreparePDiskKindUpdates(const TString& name) {
         THashSet<THostConfigId> changedHosts;
         for (const auto& [id, host] : HostConfigs.Get()) {
             for (const auto& [key, drive] : host.Drives) {
-                if (!drive.KindName || !ChangedPDiskKinds.contains(*drive.KindName)) {
+                if (drive.KindName != name) {
                     continue;
                 }
-                const TString context = TStringBuilder() << "HostConfigId# " << id << " Path# " << key.Path;
-                // Validate unused host configs too; fitting reuses these effective settings.
-                auto materialized = MaterializePDiskConfig(*drive.KindName, drive.PDiskConfig, context);
-                HostPDiskConfigUpdates[id][key.Path] = std::move(materialized);
+                // Not validated here: the effective settings are checked against the final state of the request in
+                // ValidateConfigUpdates, so a later command may still fix a drive override conflicting with the profile.
+                HostPDiskConfigUpdates[id][key.Path] = MaterializePDiskConfig(name, drive.PDiskConfig, {});
                 changedHosts.insert(id);
             }
         }
@@ -106,37 +74,6 @@ namespace NKikimr::NBsController {
                 if (changedHosts.contains(host.HostConfigId)) {
                     Fit.Boxes.insert(boxId);
                     break;
-                }
-            }
-        }
-        DrivesSerials.ForEach([&](const TSerial& serial, const TDriveSerialInfo& drive) {
-            if (drive.LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL ||
-                    !drive.KindName || !ChangedPDiskKinds.contains(*drive.KindName)) {
-                return;
-            }
-            auto materialized = MaterializePDiskConfig(*drive.KindName, drive.PDiskConfig,
-                TStringBuilder() << "DriveSerial# " << serial.Serial); // same prefix as AddDriveSerial
-            SerialPDiskConfigUpdates[serial.Serial] = std::move(materialized);
-            Fit.Boxes.insert(drive.BoxId);
-        });
-        ChangedPDiskKinds.clear();
-    }
-
-    void TBlobStorageController::TConfigState::ValidatePDiskKindReferences() const {
-        for (const auto& [id, host] : HostConfigs.Get()) {
-            for (const auto& [key, drive] : host.Drives) {
-                ResolvePDiskKind(drive.KindName.GetOrElse(TString()), drive.Kind);
-            }
-        }
-        DrivesSerials.ForEach([&](const TSerial&, const TDriveSerialInfo& drive) {
-            if (drive.LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
-                ResolvePDiskKind(drive.KindName.GetOrElse(TString()), drive.Kind);
-            }
-        });
-        for (const auto& [id, pool] : StoragePools.Get()) {
-            for (const auto& filter : pool.PDiskFilters) {
-                if (filter.KindName) {
-                    ResolvePDiskKind(*filter.KindName, filter.Kind);
                 }
             }
         }
@@ -163,6 +100,7 @@ namespace NKikimr::NBsController {
         const auto& kinds = PDiskKinds.Get();
         const ui64 nextGen = CheckGeneration(cmd, kinds, name);
         const auto it = kinds.find(name);
+        const bool redefined = it != kinds.end();
 
         TPDiskKindId id;
         if (it != kinds.end()) {
@@ -221,7 +159,10 @@ namespace NKikimr::NBsController {
         }
 
         PDiskKinds.Unshare()[name] = std::move(kind);
-        ChangedPDiskKinds.insert(name);
+        if (redefined) {
+            ChangedPDiskKinds.insert(name);
+            PreparePDiskKindUpdates(name);
+        }
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(
@@ -276,6 +217,7 @@ namespace NKikimr::NBsController {
 
         PDiskKinds.Unshare().erase(name);
         PDiskKindNames.Unshare().erase(id);
+        ChangedPDiskKinds.erase(name);
     }
 
 } // namespace NKikimr::NBsController

@@ -103,7 +103,6 @@ namespace NKikimr {
 
             // PDisks we are going to delete
             THashSet<TPDiskId> PDisksToRemove;
-            THashSet<TPDiskId> PDisksToValidatePoolFilters;
 
             // outgoing messages
             struct TOutgoingMessage {
@@ -154,13 +153,12 @@ namespace NKikimr {
             TStoragePoolStat& StoragePoolStat;
 
             TConfigFitAction Fit;
-            THashSet<TString> ChangedPDiskKinds;
+            THashSet<TString> ChangedPDiskKinds; // redefined in this request; their drives are validated on commit
             THashSet<TPDiskKindId> ReservedPDiskKindIds;
             std::optional<THashSet<TPDiskKindId>> UsedPDiskKindIds;
 
             // Derived cache updates stay outside the persistent row overlays until commit.
             THashMap<THostConfigId, THashMap<TString, TMaybe<TString>>> HostPDiskConfigUpdates;
-            THashMap<TString, TMaybe<TString>> SerialPDiskConfigUpdates;
 
             const TMaybe<TString>& GetMaterializedPDiskConfig(const THostConfigInfo::TDriveKey& key,
                     const THostConfigInfo::TDriveInfo& drive) const {
@@ -172,17 +170,11 @@ namespace NKikimr {
                 return drive.MaterializedPDiskConfig;
             }
 
-            const TMaybe<TString>& GetMaterializedPDiskConfig(const TSerial& serial, const TDriveSerialInfo& drive) const {
-                const auto it = SerialPDiskConfigUpdates.find(serial.Serial);
-                return it != SerialPDiskConfigUpdates.end() ? it->second : drive.MaterializedPDiskConfig;
-            }
-
             ui64 ResolvePDiskKind(const TString& name, ui64 explicitKind) const;
             ui64 ResolvePDiskKind(const TString& name, TMaybe<ui64> explicitKind) const;
             TMaybe<TString> MaterializePDiskConfig(const TString& name,
                 const TMaybe<TString>& overrides, TStringBuf context) const;
-            void PreparePDiskKindUpdates();
-            void ValidatePDiskKindReferences() const;
+            void PreparePDiskKindUpdates(const TString& name);
 
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
@@ -276,9 +268,6 @@ namespace NKikimr {
                     for (auto& [path, config] : updates) {
                         drives.at(THostConfigInfo::TDriveKey{{hostId, path}}).MaterializedPDiskConfig = std::move(config);
                     }
-                }
-                for (auto& [serial, config] : SerialPDiskConfigUpdates) {
-                    Self.DrivesSerials.at(serial)->MaterializedPDiskConfig = std::move(config);
                 }
             }
 

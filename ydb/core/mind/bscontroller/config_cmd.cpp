@@ -3,7 +3,6 @@
 #include "select_groups.h"
 
 #include <algorithm>
-#include <vector>
 
 namespace NKikimr::NBsController {
 
@@ -256,34 +255,23 @@ namespace NKikimr::NBsController {
                     {"request", Cmd},
                     {"selfHeal", SelfHeal});
 
-                for (size_t stepIndex = 0; stepIndex < Cmd.CommandSize(); ++stepIndex) {
-                    const auto& step = Cmd.GetCommand(stepIndex);
+                for (const auto& step : Cmd.GetCommand()) {
                     WrapCommand([&] {
                         THPTimer timer;
                         auto& status = *Response->MutableStatus()->rbegin();
                         ExecuteStep(*State, step, status);
-                        const bool lastStep = stepIndex + 1 == Cmd.CommandSize();
-                        const bool finishBatch = lastStep ||
-                            !GetCommandInfo(Cmd.GetCommand(stepIndex + 1)).CanDeferFitting;
-                        if ((finishBatch && !State->ChangedPDiskKinds.empty()) || step.HasDeletePDiskKind()) {
-                            // Finish deferred work in the defining batch's status, before the next command starts.
-                            State->ValidatePDiskKindReferences();
-                            State->PreparePDiskKindUpdates();
-                        }
                         State->CheckConsistency();
-                        if (State->ChangedPDiskKinds.empty()) {
-                            Self->FitPDisksForUserConfig(*State);
+                        Self->FitPDisksForUserConfig(*State);
 
-                            std::deque<ui64> expectedSlotSize;
-                            if (step.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kDefineStoragePool) {
-                                const auto& cmd = step.GetDefineStoragePool();
-                                for (ui64 size : cmd.GetExpectedGroupSlotSize()) {
-                                    expectedSlotSize.push_back(size);
-                                }
+                        std::deque<ui64> expectedSlotSize;
+                        if (step.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kDefineStoragePool) {
+                            const auto& cmd = step.GetDefineStoragePool();
+                            for (ui64 size : cmd.GetExpectedGroupSlotSize()) {
+                                expectedSlotSize.push_back(size);
                             }
-                            const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
-                            Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status, !SelfHeal && !GroupLayoutSanitizer);
                         }
+                        const auto availabilityDomainId = AppData()->DomainsInfo->GetDomain()->DomainUid;
+                        Self->FitGroupsForUserConfig(*State, availabilityDomainId, Cmd, std::move(expectedSlotSize), status, !SelfHeal && !GroupLayoutSanitizer);
 
                         const TDuration passed = TDuration::Seconds(timer.Passed());
                         switch (step.GetCommandCase()) {
@@ -411,10 +399,8 @@ namespace NKikimr::NBsController {
                     {"operationLogIndex", operationLogIndex});
             }
 
-            // Numeric Kind fields identify PDisks; storage-pool Kind is a string and is not reserved.
-            // Following message fields also covers new commands and nested drive/filter collections.
-            // Numeric PDisk kinds carried by commands of this request; a kind defined in the same request must not
-            // be allocated one of these ids. Exactly the fields that BSC reads as a PDisk kind, nothing inferred.
+            // Numeric PDisk kinds carried by this request: a kind defined in the same request must not be allocated
+            // one of these ids. Storage-pool Kind is a string, not a PDisk kind, and is not reserved.
             static void ReservePDiskKindIds(const NKikimrBlobStorage::TConfigRequest& request, THashSet<TPDiskKindId>& ids) {
                 const auto reserve = [&](ui64 kind) {
                     if (kind) {
@@ -445,9 +431,7 @@ namespace NKikimr::NBsController {
                             }
                             break;
                         case TCommand::kAddDriveSerial:
-                            if (const auto& cmd = command.GetAddDriveSerial(); cmd.GetKindName().empty()) {
-                                reserve(cmd.GetKind());
-                            }
+                            reserve(command.GetAddDriveSerial().GetKind());
                             break;
                         case TCommand::kDefineStoragePool:
                             reserveFilters(command.GetDefineStoragePool().GetPDiskFilter());
@@ -461,79 +445,66 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            struct TCommandInfo {
-                void (*Execute)(TConfigState&, const NKikimrBlobStorage::TConfigRequest::TCommand&,
-                    NKikimrBlobStorage::TConfigResponse::TStatus&) = nullptr;
-                bool CanDeferFitting = false;
-            };
-
-            static TCommandInfo GetCommandInfo(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd) {
-                switch (cmd.GetCommandCase()) {
-#define HANDLE_COMMAND(NAME, CAN_DEFER_FITTING) \
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::k ## NAME: \
-                        return {[](TConfigState& state, const auto& command, auto& status) { \
-                            state.ExecuteStep(command.Get ## NAME(), status); \
-                        }, CAN_DEFER_FITTING};
-
-                    HANDLE_COMMAND(DefineHostConfig, true)
-                    HANDLE_COMMAND(ReadHostConfig, false)
-                    HANDLE_COMMAND(DeleteHostConfig, true)
-                    HANDLE_COMMAND(DefinePDiskKind, true)
-                    HANDLE_COMMAND(DeletePDiskKind, false)
-                    HANDLE_COMMAND(DefineBox, true)
-                    HANDLE_COMMAND(ReadBox, false)
-                    HANDLE_COMMAND(DeleteBox, true)
-                    HANDLE_COMMAND(DefineStoragePool, false)
-                    HANDLE_COMMAND(ReadStoragePool, false)
-                    HANDLE_COMMAND(DeleteStoragePool, false)
-                    HANDLE_COMMAND(UpdateDriveStatus, false)
-                    HANDLE_COMMAND(ReadDriveStatus, false)
-                    HANDLE_COMMAND(ProposeStoragePools, false)
-                    HANDLE_COMMAND(ReadSettings, false)
-                    HANDLE_COMMAND(QueryBaseConfig, false)
-                    HANDLE_COMMAND(ReassignGroupDisk, false)
-                    HANDLE_COMMAND(MergeBoxes, false)
-                    HANDLE_COMMAND(MoveGroups, false)
-                    HANDLE_COMMAND(ChangeGroupSizeInUnits, false)
-                    HANDLE_COMMAND(DropDonorDisk, false)
-                    HANDLE_COMMAND(AddDriveSerial, true)
-                    HANDLE_COMMAND(RemoveDriveSerial, true)
-                    HANDLE_COMMAND(ForgetDriveSerial, true)
-                    HANDLE_COMMAND(MigrateToSerial, false)
-                    HANDLE_COMMAND(AllocateVirtualGroup, false)
-                    HANDLE_COMMAND(DecommitGroups, false)
-                    HANDLE_COMMAND(WipeVDisk, false)
-                    HANDLE_COMMAND(SanitizeGroup, false)
-                    HANDLE_COMMAND(CancelVirtualGroup, false)
-                    HANDLE_COMMAND(SetVDiskReadOnly, false)
-                    HANDLE_COMMAND(RestartPDisk, false)
-                    HANDLE_COMMAND(SetPDiskReadOnly, false)
-                    HANDLE_COMMAND(StopPDisk, false)
-                    HANDLE_COMMAND(GetInterfaceVersion, false)
-                    HANDLE_COMMAND(MovePDisk, false)
-                    HANDLE_COMMAND(PopulatePDisk, false)
-                    HANDLE_COMMAND(UpdateBridgeGroupInfo, false)
-                    HANDLE_COMMAND(ReconfigureVirtualGroup, false)
-                    HANDLE_COMMAND(RecommissionGroups, false)
-                    HANDLE_COMMAND(DefineDDiskPool, false)
-                    HANDLE_COMMAND(ReadDDiskPool, false)
-                    HANDLE_COMMAND(DeleteDDiskPool, false)
-                    HANDLE_COMMAND(MoveDDisk, false)
-                    HANDLE_COMMAND(DeleteSpecificGroups, false)
-                    HANDLE_COMMAND(UpdateStoragePoolSettings, false)
-#undef HANDLE_COMMAND
-                    default: return {};
-                }
-            }
-
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
                     NKikimrBlobStorage::TConfigResponse::TStatus& status) {
                 state.SanitizingRequests.clear();
                 state.ExplicitReconfigureMap.clear();
                 state.SuppressDonorMode.clear();
-                if (const auto info = GetCommandInfo(cmd); info.Execute) {
-                    info.Execute(state, cmd, status);
-                } else if (IsSoleCommand(cmd)) {
+                switch (cmd.GetCommandCase()) {
+#define HANDLE_COMMAND(NAME) \
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::k ## NAME: return state.ExecuteStep(cmd.Get ## NAME(), status);
+
+                    HANDLE_COMMAND(DefineHostConfig)
+                    HANDLE_COMMAND(ReadHostConfig)
+                    HANDLE_COMMAND(DeleteHostConfig)
+                    HANDLE_COMMAND(DefinePDiskKind)
+                    HANDLE_COMMAND(DeletePDiskKind)
+                    HANDLE_COMMAND(DefineBox)
+                    HANDLE_COMMAND(ReadBox)
+                    HANDLE_COMMAND(DeleteBox)
+                    HANDLE_COMMAND(DefineStoragePool)
+                    HANDLE_COMMAND(ReadStoragePool)
+                    HANDLE_COMMAND(DeleteStoragePool)
+                    HANDLE_COMMAND(UpdateDriveStatus)
+                    HANDLE_COMMAND(ReadDriveStatus)
+                    HANDLE_COMMAND(ProposeStoragePools)
+                    HANDLE_COMMAND(ReadSettings)
+                    HANDLE_COMMAND(QueryBaseConfig)
+                    HANDLE_COMMAND(ReassignGroupDisk)
+                    HANDLE_COMMAND(MergeBoxes)
+                    HANDLE_COMMAND(MoveGroups)
+                    HANDLE_COMMAND(ChangeGroupSizeInUnits)
+                    HANDLE_COMMAND(DropDonorDisk)
+                    HANDLE_COMMAND(AddDriveSerial)
+                    HANDLE_COMMAND(RemoveDriveSerial)
+                    HANDLE_COMMAND(ForgetDriveSerial)
+                    HANDLE_COMMAND(MigrateToSerial)
+                    HANDLE_COMMAND(AllocateVirtualGroup)
+                    HANDLE_COMMAND(DecommitGroups)
+                    HANDLE_COMMAND(WipeVDisk)
+                    HANDLE_COMMAND(SanitizeGroup)
+                    HANDLE_COMMAND(CancelVirtualGroup)
+                    HANDLE_COMMAND(SetVDiskReadOnly)
+                    HANDLE_COMMAND(RestartPDisk)
+                    HANDLE_COMMAND(SetPDiskReadOnly)
+                    HANDLE_COMMAND(StopPDisk)
+                    HANDLE_COMMAND(GetInterfaceVersion)
+                    HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(PopulatePDisk)
+                    HANDLE_COMMAND(UpdateBridgeGroupInfo)
+                    HANDLE_COMMAND(ReconfigureVirtualGroup)
+                    HANDLE_COMMAND(RecommissionGroups)
+                    HANDLE_COMMAND(DefineDDiskPool)
+                    HANDLE_COMMAND(ReadDDiskPool)
+                    HANDLE_COMMAND(DeleteDDiskPool)
+                    HANDLE_COMMAND(MoveDDisk)
+                    HANDLE_COMMAND(DeleteSpecificGroups)
+                    HANDLE_COMMAND(UpdateStoragePoolSettings)
+
+                    default: break;
+                }
+
+                if (IsSoleCommand(cmd)) {
                     throw TExError() << "command must be sole";
                 } else {
                     throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());

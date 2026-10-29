@@ -457,10 +457,9 @@ struct Schema : NIceDb::Schema {
         struct PDiskType : Column<8, HostConfigDrive::TypeCol::ColumnType> { using Type = NKikimrBlobStorage::EPDiskType; };
         struct PDiskConfig : Column<9, NScheme::NTypeIds::String> {};
         struct Path : Column<10, NScheme::NTypeIds::String> {};
-        struct KindName : Column<11, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Serial>;
-        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, KindName, PDiskType, PDiskConfig, Path>;
+        using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig, Path>;
     };
 
     // struct VirtualGroupPool : Table<130> {};

@@ -32,18 +32,21 @@ namespace NKikimr::NBsController {
                 driveInfo.DiskScope = drive.GetDiskScope();
             }
 
-            if (drive.HasPDiskConfig()) {
-                driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
-            } else if (!driveInfo.KindName) {
-                driveInfo.PDiskConfig = defaultPDiskConfig;
-            }
-            if (!driveInfo.KindName && !drive.HasPDiskConfig()) {
-                // Inherits DefaultHostPDiskConfig, which was validated once above: no per-drive parse.
-                driveInfo.MaterializedPDiskConfig = driveInfo.PDiskConfig;
-            } else {
+            const TString context = TStringBuilder() << "HostConfigId# " << id << " Path# " << drive.GetPath();
+            if (driveInfo.KindName) {
+                if (drive.HasPDiskConfig()) {
+                    driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
+                }
                 // Validate the effective settings even when this host config is not used by a box yet.
-                driveInfo.MaterializedPDiskConfig = MaterializePDiskConfig(drive.GetKindName(), driveInfo.PDiskConfig,
-                    TStringBuilder() << "HostConfigId# " << id << " Path# " << drive.GetPath());
+                driveInfo.MaterializedPDiskConfig = MaterializePDiskConfig(drive.GetKindName(), driveInfo.PDiskConfig, context);
+            } else {
+                if (drive.HasPDiskConfig()) {
+                    ValidatePDiskConfig(drive.GetPDiskConfig(), context);
+                    driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
+                } else {
+                    driveInfo.PDiskConfig = defaultPDiskConfig;
+                }
+                driveInfo.MaterializedPDiskConfig = driveInfo.PDiskConfig;
             }
 
             Schema::HostConfigDrive::TKey::Type key(id, drive.GetPath());
@@ -104,21 +107,7 @@ namespace NKikimr::NBsController {
             if (it == hostConfigs.end()) {
                 throw TExHostConfigNotFound(id);
             }
-            auto* host = status.AddHostConfig();
-            Serialize(host, it->first, it->second);
-            if (cmd.GetReturnMaterialized()) {
-                for (auto& drive : *host->MutableDrive()) {
-                    const THostConfigInfo::TDriveKey key{{id, drive.GetPath()}};
-                    const auto& config = GetMaterializedPDiskConfig(key, it->second.Drives.at(key));
-                    if (!drive.GetKindName().empty() && !config) {
-                        throw TExError() << "Unresolved PDisk kind Name# " << drive.GetKindName();
-                    }
-                    if (config && !drive.MutablePDiskConfig()->ParseFromString(*config)) {
-                        throw TExError() << "HostConfigId# " << id << " undeserializable materialized PDiskConfig string"
-                            << " Path# " << drive.GetPath();
-                    }
-                }
-            }
+            Serialize(status.AddHostConfig(), it->first, it->second);
         }
     }
 

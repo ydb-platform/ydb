@@ -231,19 +231,15 @@ hosts:
         UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(1).GetDefineHostConfig().GetDrive(0).SerializeAsString(),
             drive.SerializeAsString());
         UNIT_ASSERT(request.GetCommand(2).HasDefineBox());
-
-        const TString duplicate = yaml + "\nblob_storage_config:\n  pdisk_kinds: [{name: tlc}]\n";
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Parse(duplicate, true), yexception, "only one location");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(BuildInitDistributedStorageCommand(duplicate), yexception, "only one location");
     }
 
-    Y_UNIT_TEST(NestedPDiskKindsReachInitCommand) {
+    Y_UNIT_TEST(PDiskKindsReachInitCommand) {
         const TString yaml = R"(
 blob_storage_config:
   service_set: {groups: [{erasure_species: none}]}
-  pdisk_kinds:
-    - name: qlc
-      pdisk_config: {log_weight: 8}
+pdisk_kinds:
+  - name: qlc
+    pdisk_config: {log_weight: 8}
 host_configs:
   - host_config_id: 1
     drive: [{path: /dev/nvme0n1, type: NVME, kind_name: qlc}]
@@ -256,8 +252,6 @@ hosts:
         UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(0).GetDefinePDiskKind().GetName(), "qlc");
         UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(0).GetDefinePDiskKind().GetPDiskConfig().GetLogWeight(), 8);
         UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(1).GetDefineHostConfig().GetDrive(0).GetKindName(), "qlc");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(BuildInitDistributedStorageCommand(
-            yaml + "\npdisk_kinds: [{name: tlc}]\n"), yexception, "only one location");
 
         // Init assigns ItemConfigGeneration=Max, so BSC would accept both and the last one would win.
         UNIT_ASSERT_EXCEPTION_CONTAINS(BuildInitDistributedStorageCommand(R"(
@@ -283,7 +277,7 @@ hosts:
 )"), yexception, "PDisk kind name must not be empty");
     }
 
-    Y_UNIT_TEST(NamedPDiskPoolFilterYamlAlias) {
+    Y_UNIT_TEST(NamedPDiskPoolFilterYaml) {
         const auto config = Parse(R"(
 storage_pool_types:
   - kind: capacity
@@ -292,7 +286,7 @@ storage_pool_types:
       erasure_species: none
       vdisk_kind: Default
       pdisk_filter:
-        - property: [{type: NVME}, {pdisk_kind: qlc}]
+        - property: [{type: NVME}, {kind_name: qlc}]
 host_configs:
   - nvme: [disk1]
 hosts:

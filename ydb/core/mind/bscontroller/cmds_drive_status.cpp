@@ -115,11 +115,6 @@ namespace NKikimr::NBsController {
         case NKikimrBlobStorage::TDriveLifeStage::FREE:
         case NKikimrBlobStorage::TDriveLifeStage::REMOVED_BY_DSTOOL:
             break;
-        case NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL:
-            if (cmd.GetUpdateExisting() && cmd.GetBoxId() == driveInfo->BoxId) {
-                break;
-            }
-            [[fallthrough]];
         default:
             throw TExAlready() << "Device with such serial already exists in BSC database in lifeStage " << driveInfo->LifeStage;
         }
@@ -133,25 +128,18 @@ namespace NKikimr::NBsController {
         }
 
         auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
-        if (cmd.GetUpdateExisting() && driveInfo->PDiskId) {
-            PDisksToValidatePoolFilters.emplace(*driveInfo->NodeId, *driveInfo->PDiskId);
-        }
         driveInfoMutable->BoxId = cmd.GetBoxId();
-        driveInfoMutable->KindName.Clear();
-        if (!cmd.GetKindName().empty()) {
-            driveInfoMutable->KindName = cmd.GetKindName();
-        }
-        driveInfoMutable->Kind = ResolvePDiskKind(cmd.GetKindName(), cmd.GetKind());
+        driveInfoMutable->Kind = cmd.GetKind();
         if (cmd.GetPDiskType() != NKikimrBlobStorage::UNKNOWN_TYPE) {
             driveInfoMutable->PDiskType = cmd.GetPDiskType();
         }
         const TString context = TStringBuilder() << "DriveSerial# " << serial;
-        // Always persist the (possibly empty) message, as before named kinds: an absent PDiskConfig and an
-        // empty one are equivalent for a serial drive, and the stored row must not change for legacy commands.
-        driveInfoMutable->PDiskConfig = cmd.GetPDiskConfig().SerializeAsString();
-        driveInfoMutable->MaterializedPDiskConfig =
-            MaterializePDiskConfig(cmd.GetKindName(), driveInfoMutable->PDiskConfig, context);
-        SerialPDiskConfigUpdates.erase(serial);
+        ValidatePDiskConfig(cmd.GetPDiskConfig(), context);
+        TString config;
+        if (!cmd.GetPDiskConfig().SerializeToString(&config)) {
+            throw TExError() << "Couldn't serialize PDiskConfig for disk with serial number" << TErrorParams::DiskSerialNumber(serial);
+        }
+        driveInfoMutable->PDiskConfig = config;
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL;
 
         Fit.Boxes.insert(cmd.GetBoxId());
@@ -183,7 +171,6 @@ namespace NKikimr::NBsController {
 
         auto driveInfoMutable = DrivesSerials.FindForUpdate(serial);
         driveInfoMutable->LifeStage = NKikimrBlobStorage::TDriveLifeStage::REMOVED_BY_DSTOOL;
-        SerialPDiskConfigUpdates.erase(serial);
 
         Fit.Boxes.insert(driveInfo->BoxId);
 

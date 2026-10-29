@@ -1560,11 +1560,8 @@ public:
         Table::LifeStage::Type LifeStage = NKikimrBlobStorage::TDriveLifeStage::FREE;
         Table::Kind::Type Kind = 0;
         Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(NPDisk::DEVICE_TYPE_UNKNOWN);
-        // Original per-drive overrides, before applying pdisk kind.
         TMaybe<Table::PDiskConfig::Type> PDiskConfig;
-        TMaybe<TString> MaterializedPDiskConfig; // rebuilt on load, not persisted
         TMaybe<Table::Path::Type> Path;
-        TMaybe<Table::KindName::Type> KindName; // Nothing for legacy drives, so their rows keep a NULL cell
 
         TDriveSerialInfo() = default;
         TDriveSerialInfo(const TDriveSerialInfo&) = default;
@@ -1584,8 +1581,7 @@ public:
                     Table::Kind,
                     Table::PDiskType,
                     Table::PDiskConfig,
-                    Table::Path,
-                    Table::KindName
+                    Table::Path
                 > adapter(
                     &TDriveSerialInfo::BoxId,
                     &TDriveSerialInfo::NodeId,
@@ -1595,8 +1591,7 @@ public:
                     &TDriveSerialInfo::Kind,
                     &TDriveSerialInfo::PDiskType,
                     &TDriveSerialInfo::PDiskConfig,
-                    &TDriveSerialInfo::Path,
-                    &TDriveSerialInfo::KindName
+                    &TDriveSerialInfo::Path
                 );
             callback(&adapter);
         }
@@ -2905,17 +2900,12 @@ public:
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
-    static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id,
-        const TStoragePoolInfo &pool, bool returnSource = false);
+    static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
-    static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter,
-        bool returnSource = false);
+    static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static TMaybe<TString> MaterializePDiskConfig(const TMap<TString, TPDiskKindInfo>& kinds,
         const TString& name, const TMaybe<TString>& overrides, TStringBuf validationContext = {});
-    static TMaybe<TString> GetSourcePDiskConfig(const TPDiskInfo& pdisk,
-        const TMap<THostConfigId, THostConfigInfo>& hosts, const TMap<TBoxId, TBoxInfo>& boxes,
-        const TDriveSerialInfo* serial);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId, std::optional<ui64> pdiskGuid = std::nullopt);

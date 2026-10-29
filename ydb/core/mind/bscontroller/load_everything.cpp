@@ -307,14 +307,8 @@ public:
                 return TMaybe<TString>();
             }
         };
-        const auto normalize = [](TMaybe<TString>& kindName) {
-            if (kindName && kindName->empty()) {
-                kindName.Clear(); // an empty cell means a legacy drive
-            }
-        };
         for (auto& [id, host] : Self->HostConfigs) {
             for (auto& [key, drive] : host.Drives) {
-                normalize(drive.KindName);
                 if (!drive.KindName) {
                     drive.MaterializedPDiskConfig = drive.PDiskConfig; // legacy drive: nothing to merge
                     continue;
@@ -322,18 +316,6 @@ public:
                 drive.MaterializedPDiskConfig = materialize(*drive.KindName, drive.PDiskConfig,
                     TStringBuilder() << "HostConfigId# " << id << " Path# " << key.Path);
             }
-        }
-        for (auto& [serial, drive] : Self->DrivesSerials) {
-            normalize(drive->KindName);
-            if (drive->LifeStage != NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
-                continue;
-            }
-            if (!drive->KindName) {
-                drive->MaterializedPDiskConfig = drive->PDiskConfig;
-                continue;
-            }
-            drive->MaterializedPDiskConfig = materialize(*drive->KindName, drive->PDiskConfig,
-                TStringBuilder() << "DriveSerial# " << serial.Serial);
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
             Self->SysViewChangedStoragePools.insert(storagePoolId);

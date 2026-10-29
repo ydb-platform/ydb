@@ -623,15 +623,9 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         ev->EnforceHostRecords.emplace(hostRecords);
     }
 
-    THashMap<TString, size_t> kindDefinitionCounts;
-    for (const auto& pdiskKind : bsConfig.GetPDiskKinds()) {
-        ++kindDefinitionCounts[pdiskKind.GetName()];
-    }
     for (const auto& pdiskKind : bsConfig.GetPDiskKinds()) {
         const auto it = PDiskKinds.find(pdiskKind.GetName());
-        // Keep duplicate definitions in the request so generation checks reject them transactionally.
-        if (kindDefinitionCounts.at(pdiskKind.GetName()) == 1 && it != PDiskKinds.end() &&
-                pdiskKind.HasPDiskConfig() == bool(it->second.PDiskConfig)) {
+        if (it != PDiskKinds.end() && pdiskKind.HasPDiskConfig() == bool(it->second.PDiskConfig)) {
             NKikimrBlobStorage::TPDiskConfig config;
             if (!it->second.PDiskConfig ||
                     (config.ParseFromString(*it->second.PDiskConfig) &&

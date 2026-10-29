@@ -7761,6 +7761,24 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
                     }
                 }
             }
+            // With the named disk as the only candidate the failure names the cause.
+            {
+                NKikimrBlobStorage::TStorageConfig onlyNamed = config;
+                NKikimrBlobStorage::TBaseConfig onlyNamedBase = base;
+                if (fromBaseConfig) {
+                    onlyNamedBase.MutablePDisk()->DeleteSubrange(1, 1);
+                } else {
+                    onlyNamed.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->MutableDrive()->DeleteSubrange(1, 1);
+                }
+                UNIT_ASSERT_EXCEPTION_CONTAINS(keeper.AllocateStaticGroup({
+                    .Config = &onlyNamed,
+                    .GroupId = TGroupId::Zero(),
+                    .GroupGeneration = 1,
+                    .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                    .BaseConfig = fromBaseConfig ? &onlyNamedBase : nullptr,
+                }), NStorage::TDistributedConfigKeeper::TExConfigError, "ExcludedPDisks# 1");
+            }
+
             keeper.AllocateStaticGroup({
                 .Config = &config,
                 .GroupId = TGroupId::Zero(),

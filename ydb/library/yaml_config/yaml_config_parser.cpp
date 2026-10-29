@@ -1268,7 +1268,6 @@ endDiskTypeCheck:   ;
     static void MergePDiskKinds(NKikimrConfig::TBlobStorageConfig* bsConfig,
             const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         if (ephemeralConfig.PDiskKindsSize()) {
-            Y_ENSURE_BT(!bsConfig->PDiskKindsSize(), "pdisk_kinds must be specified in only one location");
             bsConfig->MutablePDiskKinds()->CopyFrom(ephemeralConfig.GetPDiskKinds());
         }
         // Init bypasses generation checks, so a duplicate would silently let the last definition win.
@@ -1691,11 +1690,6 @@ endDiskTypeCheck:   ;
             ephemeralConfig.GetStorageConfigGeneration() : 0;
 
         auto* bsConfig = config.MutableBlobStorageConfig();
-        if (const auto& bsJson = json["blob_storage_config"]; bsJson.Has("pdisk_kinds")) {
-            NJson::TJsonValue catalog;
-            catalog["pdisk_kinds"] = bsJson["pdisk_kinds"];
-            NProtobufJson::MergeJson2Proto(catalog, *bsConfig, GetJsonToProtoConfig());
-        }
         MergePDiskKinds(bsConfig, ephemeralConfig);
         for (const auto& kind : bsConfig->GetPDiskKinds()) {
             auto* cmd = result.AddCommand()->MutableDefinePDiskKind();
@@ -1765,34 +1759,6 @@ endDiskTypeCheck:   ;
         }
     }
 
-    // The public YAML spelling distinguishes a disk class from the pool's own `kind`.
-    void NormalizePDiskFilterNames(NJson::TJsonValue& json) {
-        if (json.IsArray()) {
-            for (auto& value : json.GetArraySafe()) {
-                NormalizePDiskFilterNames(value);
-            }
-        } else if (json.IsMap()) {
-            for (auto& [key, value] : json.GetMapSafe()) {
-                if (key == "pdisk_filter" && value.IsArray()) {
-                    for (auto& filter : value.GetArraySafe()) {
-                        if (filter.Has("property") && filter["property"].IsArray()) {
-                            for (auto& property : filter["property"].GetArraySafe()) {
-                                if (property.Has("pdisk_kind")) {
-                                    Y_ENSURE_BT(!property.Has("kind_name"),
-                                        "pdisk_kind and kind_name cannot appear in the same filter property");
-                                    property["kind_name"] = property["pdisk_kind"];
-                                    property.EraseValue("pdisk_kind");
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    NormalizePDiskFilterNames(value);
-                }
-            }
-        }
-    }
-
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
                bool transform, EParsePhase* phase, bool relaxed) {
         auto runPhase = [phase](EParsePhase value, auto&& func) {
@@ -1822,7 +1788,6 @@ endDiskTypeCheck:   ;
                 jsonNode = json["config"];
             }
 
-            NormalizePDiskFilterNames(jsonNode);
             if (transform) {
                 ExtractExtraFields(jsonNode, ctx);
             }

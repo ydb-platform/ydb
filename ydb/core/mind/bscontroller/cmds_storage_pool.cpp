@@ -239,7 +239,7 @@ namespace NKikimr::NBsController {
                 continue; // skip DDisk pool
             }
             if ((!storagePoolIds || storagePoolIds.contains(it->first)) && (!nameSet || nameSet.contains(it->second.Name))) {
-                Serialize(status.AddStoragePool(), it->first, it->second, !cmd.GetReturnMaterialized());
+                Serialize(status.AddStoragePool(), it->first, it->second);
             }
         }
     }
@@ -632,10 +632,6 @@ namespace NKikimr::NBsController {
                 }
                 device->SetLifeStage(driveInfo.LifeStage);
                 device->SetType(driveInfo.PDiskType);
-                device->SetKind(driveInfo.Kind);
-                if (driveInfo.KindName) {
-                    device->SetKindName(*driveInfo.KindName);
-                }
             });
         }
 
@@ -664,16 +660,8 @@ namespace NKikimr::NBsController {
                 if (!virtualGroupsOnly || pdiskFilter.contains(pdiskId)) {
                     auto* disk = pb->AddPDisk();
                     Serialize(disk, pdiskId, pdiskInfo);
-                    // Only named kinds have overrides distinct from the effective PDiskConfig; legacy PDisks skip
-                    // the box/host/drive lookups and the extra proto parse on this hot query.
                     if (const auto it = kindNames.find(disk->GetKind()); it != kindNames.end()) {
                         disk->SetKindName(it->second);
-                        if (auto source = GetSourcePDiskConfig(pdiskInfo, HostConfigs.Get(), Boxes.Get(),
-                                DrivesSerials.Find(pdiskInfo.ExpectedSerial));
-                                source && !disk->MutableSourcePDiskConfig()->ParseFromString(*source)) {
-                            throw TExError() << "undeserializable source PDiskConfig string"
-                                << TErrorParams::NodeId(pdiskId.NodeId) << TErrorParams::PDiskId(pdiskId.PDiskId);
-                        }
                     }
                 }
             });

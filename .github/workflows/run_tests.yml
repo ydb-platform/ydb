@@ -97,9 +97,9 @@ on:
         default: true
         description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
       test_threads:
-        description: 'Test threads count (default: 64; build presets use a fraction of this value)'
+        description: 'Test threads count (default: 128; build presets use a fraction of this value)'
         required: false
-        default: '64'
+        default: '128'
 
 jobs:
   prepare:
@@ -276,7 +276,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo-xxl ]
     strategy:
       fail-fast: false
       matrix:

@@ -125,7 +125,6 @@
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
-/ydb/tools/ydbd_slice @ydb-platform/engineering
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering
@@ -289,3 +288,7 @@
 /ydb/services/nbs/ut @ydb-platform/nbs
 /ydb/core/nbs @ydb-platform/nbs
 /ydb/tests/functional/nbs @ydb-platform/nbs
+
+#Infra @shmel1k TEAM:@ydb-platform/infra
+
+/ydb/tools/ydbd_slice @ydb-platform/infra

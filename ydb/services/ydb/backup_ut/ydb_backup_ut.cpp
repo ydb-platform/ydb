@@ -4739,6 +4739,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         csController->SetOverrideTasksActualizationLag(TDuration::Zero());
         TS3TestEnv testEnv;
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTieringInColumnShard(true);
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableColumnTableImportDependencyRetry(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", testEnv.GetServer().GetPort()))
             .SetDatabase("/Root").SetAuthToken("root@builtin"));
         TTableClient tableClient(driver);

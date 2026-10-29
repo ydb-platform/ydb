@@ -810,7 +810,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        YDB_LOG_DEBUG("TImport::TTxProgress: delay scheme object query execution",
+        YDB_LOG_DEBUG("TImport::TTxProgress: delay scheme object creation",
             {"id", importInfo->Id},
             {"itemIdx", itemIdx},
         );
@@ -822,7 +822,7 @@ private:
         if (AllDoneOrWaiting(stateCounts)) {
             if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
                 // No progress has been made since the last scheme object creation retry.
-                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed, no progress");
+                return CancelAndPersist(db, importInfo, itemIdx, error, "scheme object creation failed, no progress");
             }
             RetrySchemeObjectsCreation(*importInfo, db, ctx);
         }
@@ -852,7 +852,7 @@ private:
         }
         if (!retriedItems.empty()) {
             importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
-            YDB_LOG_DEBUG("TImport::TTxProgress: retry scheme object query execution",
+            YDB_LOG_DEBUG("TImport::TTxProgress: retry scheme object creation",
                 {"id", importInfo.Id},
                 {"retriedItems", JoinSeq(", ", retriedItems)},
             );
@@ -1784,7 +1784,8 @@ private:
             }
         }
 
-        if (item.State == EState::CreateSchemeObject && IsColumnTable(item)) {
+        if (item.State == EState::CreateSchemeObject && IsColumnTable(item)
+            && AppData()->FeatureFlags.GetEnableColumnTableImportDependencyRetry()) {
             if (ShouldDelayObjectCreationOnError(NKikimrSchemeOp::ESchemeOpCreateColumnTable, record.GetStatus())) {
                 // The external data source referenced by a TTL tier may be restored later in this import.
                 Self->TxIdToImport.erase(txId);

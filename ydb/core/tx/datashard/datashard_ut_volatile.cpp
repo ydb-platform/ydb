@@ -1794,8 +1794,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     enum class ELockDependencySource {
         Write,
         LockRows,
-        LegacyPersistent,
-        LegacyMigrated,
     };
 
     enum class ELockDependencyState {
@@ -1894,16 +1892,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             shard->SysLocksTable().ApplyLocks();
             auto lock = shard->SysLocksTable().GetRawLock(l2);
             UNIT_ASSERT(lock);
-            if (source == ELockDependencySource::LegacyPersistent) {
-                // Model the exact value restored from LockVolatileDependencies.
-                locksDb.PersistAddVolatileDependency(l2, l1);
-                lock->RestorePersistentVolatileDependency(l1);
-                // An upgraded writer may also add the canonical id to this lock.
-                // Both entries must become a single dependency on C1.
-                lock->AddVolatileDependency(c1, &locksDb);
-            } else if (source == ELockDependencySource::LegacyMigrated) {
-                lock->RestoreInMemoryVolatileDependency(l1);
-            }
         });
 
         auto resolveFirst = [&] {
@@ -1991,14 +1979,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
     Y_UNIT_TEST(LockDependencyLockRowsCommitOrder) {
         TestLockDependency(ELockDependencySource::LockRows);
-    }
-
-    Y_UNIT_TEST(LockDependencyLegacyPersistentCommitOrder) {
-        TestLockDependency(ELockDependencySource::LegacyPersistent);
-    }
-
-    Y_UNIT_TEST(LockDependencyLegacyMigratedCommitOrder) {
-        TestLockDependency(ELockDependencySource::LegacyMigrated);
     }
 
     Y_UNIT_TEST(LockDependencyResolved) {

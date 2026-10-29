@@ -577,11 +577,6 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         lock->ForAllVolatileDependencies([this](ui64 dependencyTxId) {
             auto& manager = Self.GetVolatileTxManager();
             auto* info = manager.FindByTxId(dependencyTxId);
-            if (!info) {
-                // Older LockRows writers stored physical commit ids in persistent
-                // and migrated locks. Normalize these to the volatile tx id too.
-                info = manager.FindByCommitTxId(dependencyTxId);
-            }
             if (info && info->State != EVolatileTxState::Aborting) {
                 if (VolatileDependencies.insert(info->TxId).second) {
                     EnsureVolatileTxId();

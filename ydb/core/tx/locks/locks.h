@@ -426,7 +426,6 @@ public:
 
     bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQuerySpanId = 0);
     // Dependencies use TVolatileTxInfo::TxId, not a physical id from CommitTxIds.
-    // Restored locks may still contain physical ids written by older LockRows code.
     bool AddVolatileDependency(ui64 txId, ILocksDb* db);
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();

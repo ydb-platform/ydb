@@ -39,8 +39,7 @@ class TJsonNodeList : public TViewerPipeClient {
             return false;
         }
 
-        // Serverless databases use the storage pools of their shared database.
-        const auto& navigate = ResourceNavigateResponse ? ResourceNavigateResponse : DatabaseNavigateResponse;
+        const auto& navigate = DatabaseNavigateResponse;
         if (!navigate || !navigate->IsOk() || navigate->Get()->Request->ResultSet.size() != 1) {
             TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Failed to resolve database storage pools"));
             return false;
@@ -117,6 +116,10 @@ public:
     void Bootstrap() override {
         if (TBase::NeedToRedirect()) {
             return;
+        }
+        // Keep the ordinary endpoint list for serverless databases without exposing shared storage.
+        if (ResourceNavigateResponse) {
+            IncludeStorage = false;
         }
         // An unscoped nameservice list already contains the cluster's storage nodes.
         if (IncludeStorage && IsDatabaseRequest() && !RequestStorageNodes()) {
@@ -247,13 +250,13 @@ public:
                     type: string
                 - name: include_storage
                   in: query
-                  description: Also include nodes hosting groups from the database's storage pools, including donor nodes present in controller data. Requires viewer access for database-scoped requests. Serverless databases use the shared database's pools. The root domain also includes its static storage groups. Has no effect without a database filter.
+                  description: Also include nodes hosting groups from the database's storage pools, including donor nodes present in controller data. Requires viewer access when expanding a database's node list. The root domain also includes its static storage groups. Has no effect for serverless databases or without a database filter; serverless databases retain their ordinary endpoint list.
                   schema:
                     type: boolean
                     default: false
                 - name: use_cache
                   in: query
-                  description: Use cached storage topology, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. A missing pool triggers one refresh without the cache. Set false to request fresh controller data. Has no effect without include_storage and a database filter.
+                  description: Use cached storage topology, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. A missing pool triggers one refresh without the cache. Set false to request fresh controller data. Has no effect when storage-node expansion is not performed.
                   schema:
                     type: boolean
                     default: true

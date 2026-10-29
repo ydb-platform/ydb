@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
         const auto* response = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
 
-        const bool includeStorage = options.IncludeStorage.value_or(false) && options.Database;
+        const bool includeStorage = options.IncludeStorage.value_or(false) && options.Database && !options.Serverless;
         if (includeStorage && !options.ViewerAccess) {
             UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 403"), response->Answer);
             UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
@@ -831,6 +831,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
         for (size_t index = 0; index < expectedResponses.size(); ++index) {
             UNIT_ASSERT_VALUES_EQUAL_C(storageResponses[index], expectedResponses[index], index);
+        }
+        if (!includeStorage) {
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
         }
         if (options.MissingPool || options.DropVSlots) {
             UNIT_ASSERT_C(response->Answer.StartsWith(options.DropVSlots ? "HTTP/1.1 504" : "HTTP/1.1 500"), response->Answer);
@@ -939,8 +942,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckNodeListStorage({.IncludeStorage = true, .ViewerAccess = false, .Redirect = true});
     }
 
-    Y_UNIT_TEST(NodeListStorageSharedDatabase) {
+    Y_UNIT_TEST(NodeListStorageServerlessIgnoresStorageFlag) {
         CheckNodeListStorage({.IncludeStorage = true, .Serverless = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessDatabaseAccess) {
+        CheckNodeListStorage({.IncludeStorage = true, .Serverless = true, .ViewerAccess = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessLegacyDatabaseAccess) {
+        CheckNodeListStorage({.Serverless = true, .ViewerAccess = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessRedirect) {
+        CheckNodeListStorage({.IncludeStorage = true, .Serverless = true, .ViewerAccess = false, .Redirect = true});
     }
 
     Y_UNIT_TEST(NodeListStorageUnscoped) {

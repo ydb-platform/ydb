@@ -599,4 +599,87 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         env.Sim(TDuration::Minutes(1));
         CheckPileData(env, checker, 1, readerNodeId);
     }
+
+    // the pile back in the data quorum, but not synchronized yet, fails the read made to it; the read is answered by the
+    // synchronized pile anyway, as the failed pile isn't the one to trust, even when its answer comes first
+    Y_UNIT_TEST(UntrustedPileErrorDoesNotFailRead) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        // pile 1 stays NOT_SYNCHRONIZED_2 with its part synced, as BSC can't tell distconf it is synced
+        auto isBsc = [&](const TActorId& actorId) {
+            IActor *actor = env.Runtime->GetActor(actorId);
+            return actor && TypeName(*actor).Contains("TBlobStorageController");
+        };
+        std::vector<std::unique_ptr<IEventHandle>> heldNotifications;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType && isBsc(ev->Sender) &&
+                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBridgeSyncFinished()) {
+                heldNotifications.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return GetPart(env, groupId, 1).GetStage() == NKikimrBridge::TGroupState::SYNCED; },
+            "part of pile 1 synced");
+        UNIT_ASSERT(GetPileState(env, 1) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        const TString data = "blob in both piles";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+
+        // pile 1 fails the read, and its answer comes before the one of pile 0
+        std::unique_ptr<IEventHandle> held;
+        ui32 heldNodeId = 0;
+        bool pile1Answered = false;
+        std::unique_ptr<IEventHandle> result;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == edge) {
+                result = std::move(ev);
+                return false;
+            } else if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType && isBsc(ev->Sender) &&
+                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBridgeSyncFinished()) {
+                heldNotifications.push_back(std::move(ev));
+                return false;
+            } else if (ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult || !ev->HasEvent()) {
+                return true;
+            } else if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); !actor ||
+                    !TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                return true;
+            }
+            auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+            if (msg->GroupId == pileGroups[1]) {
+                msg->Status = NKikimrProto::ERROR;
+                pile1Answered = true;
+            } else if (msg->GroupId == pileGroups[0] && !pile1Answered) {
+                held = std::move(ev);
+                heldNodeId = nodeId;
+                return false;
+            }
+            return true;
+        };
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::FastRead));
+        });
+        WaitUntil(env, [&] { return held && pile1Answered; }, "answers of both piles", TDuration::MilliSeconds(100), 300);
+        env.Runtime->Send(held.release(), heldNodeId);
+        WaitUntil(env, [&] { return !!result; }, "result", TDuration::MilliSeconds(100), 300);
+        env.Runtime->FilterFunction = {};
+
+        auto *msg = result->Get<TEvBlobStorage::TEvGetResult>();
+        UNIT_ASSERT_VALUES_EQUAL_C(msg->Status, NKikimrProto::OK, msg->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(msg->Responses[0].Status, NKikimrProto::OK, msg->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Buffer.ConvertToString(), data);
+    }
 }

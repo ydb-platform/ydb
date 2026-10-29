@@ -116,6 +116,8 @@ namespace NKikimr {
             // request, so it is admitted the same way that request would be.
             NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
+            // the deadline of the original read, which restoration is done on behalf of
+            TInstant Deadline = TInstant::Max();
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
@@ -142,6 +144,7 @@ namespace NKikimr {
 
                     MustRestoreFirst = request->MustRestoreFirst,
                     GetHandleClass = request->GetHandleClass;
+                    Deadline = request->Deadline;
                     RestoreQueue.resize(request->QuerySize);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvRange>) {
                     State = TRangeState{
@@ -150,10 +153,12 @@ namespace NKikimr {
                     };
 
                     MustRestoreFirst = request->MustRestoreFirst;
+                    Deadline = request->Deadline;
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvDiscover>) {
                     State = TDiscoverState{
                         .MinGeneration = request->MinGeneration,
                     };
+                    Deadline = request->Deadline;
 
                     RestoreQueue.resize(1);
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvPut>) {
@@ -197,7 +202,12 @@ namespace NKikimr {
 
             std::unique_ptr<IEventBase> Combine(TThis& self, TEvBlobStorage::TEvPutResult *ev, auto *current) {
                 Y_DEBUG_ABORT_UNLESS(!current || current->Id == ev->Id);
-                return CreateWithErrorReason(ev, ev->Status, ev->Id, StatusFlags, self.GroupId, ApproximateFreeSpaceShare);
+                auto result = std::make_unique<TEvBlobStorage::TEvPutResult>(ev->Status, ev->Id, StatusFlags, self.GroupId,
+                    ApproximateFreeSpaceShare);
+                result->ErrorReason = std::move(ev->ErrorReason);
+                // the blob written beyond the barrier in any pile is the one written beyond the barrier of the group
+                result->WrittenBeyondBarrier = ev->WrittenBeyondBarrier || (current && current->WrittenBeyondBarrier);
+                return result;
             }
 
             std::unique_ptr<IEventBase> Combine(TThis& /*self*/, TEvBlobStorage::TEvBlockResult *ev, auto *current) {
@@ -237,7 +247,12 @@ namespace NKikimr {
             std::unique_ptr<IEventBase> ProcessFullQuorumResponse(TThis& self, std::unique_ptr<TEvent> ev) {
                 // combine responses
                 Y_DEBUG_ABORT_UNLESS(!CombinedResponse || dynamic_cast<TEvent*>(CombinedResponse.get()));
-                Y_DEBUG_ABORT_UNLESS(ev->Status != NKikimrProto::NODATA);
+                if (ev->Status == NKikimrProto::NODATA) {
+                    // no request of this kind is answered so, the pile must be misbehaving
+                    Y_DEBUG_ABORT("unexpected NODATA from pile");
+                    ev->Status = NKikimrProto::ERROR;
+                    ev->ErrorReason = "unexpected NODATA from pile";
+                }
                 const bool readyToReply = !ResponsesPending || ev->Status != NKikimrProto::OK;
                 CombinedResponse = Combine(self, ev.get(), static_cast<TEvent*>(CombinedResponse.get()));
                 return readyToReply ? std::move(CombinedResponse) : nullptr;
@@ -283,7 +298,20 @@ namespace NKikimr {
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& payload) {
-                if (ev->Status != NKikimrProto::OK) {
+                if (ev->Status != NKikimrProto::OK && std::holds_alternative<TGetState>(State) && !MustRestoreFirst &&
+                        !IsRestoring && !DataIsTrustedInPile(pile)) {
+                    // the pile not holding everything (e.g. one being synced) doesn't fail the read the trusted pile can
+                    // answer; its blobs are taken for failed ones, so their absence remains unproven, unless some pile
+                    // has them
+                    auto& get = static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest);
+                    auto res = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, get.QuerySize, self.GroupId);
+                    for (ui32 i = 0; i < get.QuerySize; ++i) {
+                        res->Responses[i].Id = get.Queries[i].Id;
+                        res->Responses[i].Status = NKikimrProto::ERROR;
+                    }
+                    res->BlockedGeneration = ev->BlockedGeneration;
+                    ev = std::move(res);
+                } else if (ev->Status != NKikimrProto::OK) {
                     return std::visit(TOverloaded{
                         [&](TGetState&) -> std::unique_ptr<IEventBase> {
                             return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
@@ -372,8 +400,14 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(existing.Id == current.Id);
 
                         if (existing.Status == current.Status) {
-                            // status did not change, so there is nothing to do
-                            Y_DEBUG_ABORT_UNLESS(existing.Buffer == current.Buffer);
+                            // status did not change, so there is nothing to do, unless the piles have different data
+                            if (!(existing.Buffer == current.Buffer)) {
+                                STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB08, "piles have different data of the blob",
+                                    (GroupId, self.GroupId), (BlobId, existing.Id), (BridgePileId, pile.BridgePileId));
+                                existing = {};
+                                existing.Id = current.Id;
+                                existing.Status = NKikimrProto::ERROR;
+                            }
                         } else if (!MustRestoreFirst && current.Status == NKikimrProto::OK) {
                             // the blob found in any pile is there, whatever the other piles answer
                             existing = current;
@@ -445,7 +479,7 @@ namespace NKikimr {
                     if (item.Buffer && item.Buffer.size() == item.Id.BlobSize()) {
                         IssueRestorePut(self, RestoreIndex);
                     } else {
-                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, TInstant::Max(),
+                        auto get = std::make_unique<TEvBlobStorage::TEvGet>(item.Id, 0, 0, Deadline,
                             GetHandleClass);
                         get->DataKind = DataKind;
                         self.SendQuery(shared_from_this(), item.ReadFrom, std::move(get), {.Index = RestoreIndex});
@@ -495,7 +529,7 @@ namespace NKikimr {
                         TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = item.Id,
                             .Buffer = TRope(TRcBuf(item.Buffer)),
-                            .Deadline = TInstant::Max(),
+                            .Deadline = Deadline,
                             .HandleClass = handleClass,
                             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                             .WriteSource = TWriteSource::BridgeProxyRestorePut,
@@ -546,8 +580,13 @@ namespace NKikimr {
                     item.WriteTo |= Processed;
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
                     item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
-                } else { // exactly same blob
-                    Y_ABORT_UNLESS(state.Buffer == ev->Buffer);
+                } else if (state.Buffer != ev->Buffer) { // same blob with different data
+                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB09, "piles have different data of the blob",
+                        (GroupId, self.GroupId), (BlobId, state.Id), (BridgePileId, pile.BridgePileId));
+                    auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::ERROR,
+                        state.MinGeneration, state.BlockedGeneration);
+                    res->ErrorReason = TStringBuilder() << "piles have different data of the blob " << state.Id;
+                    return res;
                 }
 
                 Processed.Set(pile.BridgePileId.GetPileIndex());
@@ -587,6 +626,7 @@ namespace NKikimr {
                     return RestoreQueue[it->second];
                 };
 
+                std::optional<TLogoBlobID> divergedId; // the blob piles have different data of
                 auto merge = [&](auto&& comp) {
                     auto& target = state.Response->Responses;
                     auto targetIt = std::ranges::begin(target);
@@ -624,9 +664,8 @@ namespace NKikimr {
                                 RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].IssueKeepFlag =
                                     targetIt->DoNotKeep < targetIt->Keep;
                             }
-                            Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
-                            if (targetIt->Buffer && sourceIt->Buffer) {
-                                Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);
+                            if (targetIt->Buffer != sourceIt->Buffer && !divergedId) {
+                                divergedId.emplace(targetIt->Id);
                             }
                             ++sourceIt;
                             ++targetIt;
@@ -650,6 +689,12 @@ namespace NKikimr {
                     merge(std::less<TLogoBlobID>());
                 } else {
                     merge(std::greater<TLogoBlobID>());
+                }
+                if (divergedId) {
+                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB10, "piles have different data of the blob",
+                        (GroupId, self.GroupId), (BlobId, *divergedId), (BridgePileId, pile.BridgePileId));
+                    return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(NKikimrProto::ERROR,
+                        TStringBuilder() << "piles have different data of the blob " << *divergedId, self.GroupId);
                 }
 
                 // mark pile as reponded
@@ -723,6 +768,10 @@ namespace NKikimr {
         bool NotCapableReported = false;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingQ;
+        // the proxy has been waiting for the first storage config for too long, as the DS proxy waiting for its
+        // configuration does, and it answers requests with error until it gets the config
+        TMonotonic WaitBridgeInfoSince;
+        bool WaitBridgeInfoTimedOut = false;
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
         // requests waiting for the cluster state not older than the one the group state was made for
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForClusterState;
@@ -739,6 +788,7 @@ namespace NKikimr {
         void Bootstrap() {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
             Become(&TThis::StateWaitBridgeInfo);
+            WaitBridgeInfoSince = TActivationContext::Monotonic();
             HandleWakeup();
         }
 
@@ -1114,7 +1164,9 @@ namespace NKikimr {
                         << " RequestId# " << request->RequestId
                         << " ErrorReason# " << msg->ErrorReason); // too often restarts do not make sense
 
-                    if (myGeneration < msg->RacingGeneration) {
+                    if (common->RestartCounter >= 100) {
+                        ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
+                    } else if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
                         // when the group is decommitted, its service id points to the BlobDepot agent, which would take
@@ -1274,6 +1326,36 @@ namespace NKikimr {
 #undef HANDLE_RESULT
 #undef HANDLE_REQUEST
 
+        static bool IsRequest(ui32 type) {
+            switch (type) {
+#define REQUEST_TYPE(TYPE) case TYPE::EventType:
+                DSPROXY_ENUM_EVENTS(REQUEST_TYPE)
+#undef REQUEST_TYPE
+                case TEvBlobStorage::EvBunchOfEvents:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        // the config comes from distconf, which may take forever to get it on a dynamic node unable to bind to a static
+        // one; no event tells of that, so the wait is limited the same way the DS proxy limits its wait for configuration
+        void CheckWaitBridgeInfoTimeout() {
+            if (WaitBridgeInfoTimedOut ||
+                    TActivationContext::Monotonic() < WaitBridgeInfoSince + ProxyConfigurationTimeout) {
+                return;
+            }
+            WaitBridgeInfoTimedOut = true;
+            for (auto& ev : std::exchange(PendingQ, {})) {
+                if (IsRequest(ev->GetTypeRewrite())) {
+                    ReplyWithError(*ev, "bridge proxy has no storage config");
+                } else {
+                    PendingQ.push_back(std::move(ev));
+                }
+            }
+        }
+
         STATEFN(StateWaitBridgeInfo) {
             if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
                 StateFunc(ev);
@@ -1283,6 +1365,11 @@ namespace NKikimr {
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
                 StateFunc(ev); // pending requests are answered with error
+            } else if (ev->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
+                HandleWakeup();
+                CheckWaitBridgeInfoTimeout();
+            } else if (WaitBridgeInfoTimedOut && IsRequest(ev->GetTypeRewrite())) {
+                ReplyWithError(*ev, "bridge proxy has no storage config");
             } else {
                 PendingQ.emplace_back(ev.Release());
             }

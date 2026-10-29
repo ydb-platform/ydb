@@ -1513,6 +1513,7 @@ struct TEvBlobStorage {
         const TWriteSource WriteSource;
         const std::optional<ui32> Version;
         bool IsMonitored = true;
+        bool IsIdempotent = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -1523,6 +1524,7 @@ struct TEvBlobStorage {
             , WriteSource(origin.WriteSource)
             , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
+            , IsIdempotent(origin.IsIdempotent)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
@@ -1554,6 +1556,7 @@ struct TEvBlobStorage {
             }
             str << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
+                << " IsIdempotent# " << IsIdempotent
                 << "}";
             return str.Str();
         }

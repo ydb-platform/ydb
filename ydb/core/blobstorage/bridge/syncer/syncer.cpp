@@ -126,21 +126,13 @@ namespace NKikimr::NBridge {
             // this operation is only possible while syncing blocks, so enforce it
             Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::BLOCKS);
             const auto& [tabletId] = key;
-            std::optional<ui32> sourceGeneration = sourceItem
-                ? std::make_optional(sourceItem->BlockedGeneration)
-                : std::nullopt;
-            std::optional<ui32> targetGeneration = targetItem
-                ? std::make_optional(targetItem->BlockedGeneration)
-                : std::nullopt;
-            if (sourceGeneration < targetGeneration) {
-                // synced group has lesser blocked generation for this tablet than unsynced one: we need to update
-                // blocked generation in source group and this will lead to possible tablet restart
-                Y_ABORT_UNLESS(targetGeneration);
-                IssueQuery(false, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *targetGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
-            } else if (targetGeneration < sourceGeneration) {
-                // we just need to update target group generation to current one in source group
-                Y_ABORT_UNLESS(sourceGeneration);
-                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *sourceGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
+            const ui32 generation = Max(sourceItem ? sourceItem->BlockedGeneration : 0,
+                targetItem ? targetItem->BlockedGeneration : 0);
+            for (bool toTargetGroup : {false, true}) {
+                auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max(),
+                    TWriteSource::SyncerMergeBlock);
+                request->IsIdempotent = true;
+                IssueQuery(toTargetGroup, std::move(request));
             }
         };
 
@@ -425,9 +417,7 @@ namespace NKikimr::NBridge {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS09, "TEvBlockResult", (LogId, LogId), (Msg, msg));
         const NKikimrProto::EReplyStatus status = msg.Status;
-        const bool success = status == NKikimrProto::OK
-            || status == NKikimrProto::ALREADY
-            || status == NKikimrProto::BLOCKED;
+        const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
         CheckIfDone();
     }

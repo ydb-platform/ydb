@@ -1,4 +1,5 @@
 #include "statestorage_impl.h"
+#include "tabletid.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
@@ -760,6 +761,74 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupProxyMutation) {
             UNIT_ASSERT_VALUES_EQUAL(f.ReplyCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(f.Status, NKikimrProto::OK);
         }
+    }
+}
+
+// a tablet running when the pile is out has its leader in the ring groups of the other piles only; once the ring group
+// of the pile is back in the configuration, the guardian of the tablet, subscribed to the proxy, writes the leader there
+// too, so the tablet is found through that ring group after a failover to the pile
+Y_UNIT_TEST_SUITE(TStateStorageGuardianRingGroups) {
+    Y_UNIT_TEST(LeaderWrittenToRingGroupComingBack) {
+        static constexpr ui64 TabletId = 100;
+        static constexpr ui32 Generation = 2;
+
+        TTestActorRuntimeBase runtime{1};
+        runtime.Initialize();
+        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        runtime.SetDispatchTimeout(TDuration::Seconds(5));
+        const TActorId leader = runtime.AllocateEdgeActor();
+        const TActorId tabletLeader = runtime.AllocateEdgeActor();
+
+        // ring group 0 is the one of the primary pile, ring group 1 is the one of the pile being out
+        TVector<TActorId> replicas;
+        auto makeInfo = [&](ERingGroupState secondState) {
+            auto info = MakeIntrusive<TStateStorageInfo>();
+            info->RingGroups.resize(2);
+            for (ui32 index = 0; index < 2; ++index) {
+                auto& group = info->RingGroups[index];
+                group.State = index ? secondState : ERingGroupState::PRIMARY;
+                group.NToSelect = 1;
+                group.Rings.resize(1);
+                group.Rings[0].Replicas.push_back(replicas[index]);
+            }
+            return info;
+        };
+        for (ui32 index = 0; index < 2; ++index) {
+            replicas.push_back(runtime.AllocateEdgeActor());
+        }
+        const TActorId proxy = runtime.Register(CreateStateStorageProxy(makeInfo(ERingGroupState::DISCONNECTED), nullptr,
+            nullptr));
+        runtime.RegisterService(MakeStateStorageProxyID(), proxy);
+
+        // the guardian of the running tablet finds its leader in the replica of ring group 0
+        runtime.Register(CreateStateStorageTabletGuardian(TabletId, leader, tabletLeader, Generation));
+        auto lookup = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaLookup>(replicas[0]);
+        UNIT_ASSERT(lookup);
+        auto reply = MakeHolder<TEvStateStorage::TEvReplicaInfo>(TabletId, leader, tabletLeader, Generation, 0, false, 0,
+            0, 0);
+        reply->Record.SetCookie(lookup->Get()->Record.GetCookie());
+        runtime.Send(new IEventHandle(lookup->Sender, replicas[0], reply.Release()));
+
+        // the pile comes back, and its ring group is part of the configuration again
+        runtime.Send(new IEventHandle(proxy, TActorId(), new TEvStateStorage::TEvUpdateGroupConfig(
+            makeInfo(ERingGroupState::NOT_SYNCHRONIZED), nullptr, nullptr)));
+        lookup = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaLookup>(replicas[1]);
+        UNIT_ASSERT_C(lookup, "the guardian doesn't watch the replica of the ring group coming back");
+        UNIT_ASSERT_VALUES_EQUAL(lookup->Get()->Record.GetTabletID(), TabletId);
+
+        // the replica knows nothing of the tablet, so the guardian writes the leader there
+        reply = MakeHolder<TEvStateStorage::TEvReplicaInfo>(TabletId, NKikimrProto::ERROR, 0, 0);
+        reply->Record.SetCookie(lookup->Get()->Record.GetCookie());
+        runtime.Send(new IEventHandle(lookup->Sender, replicas[1], reply.Release()));
+        auto update = runtime.GrabEdgeEvent<TEvStateStorage::TEvReplicaUpdate>(replicas[1]);
+        UNIT_ASSERT(update);
+        const auto& record = update->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetTabletID(), TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetProposedGeneration(), Generation);
+        UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(record.GetProposedLeader()), leader);
+        UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(record.GetProposedLeaderTablet()), tabletLeader);
     }
 }
 

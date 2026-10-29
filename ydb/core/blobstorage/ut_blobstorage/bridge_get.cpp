@@ -123,6 +123,46 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeGet) {
 
+    // the restoration is done on behalf of the read, so it is bound by the deadline of the read: the pile the blob is
+    // restored into doesn't complete writes, and the read must end by its deadline anyway
+    Y_UNIT_TEST(RestoreRespectsReadDeadline) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 2,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+
+        const TString data = "blob to be restored";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        const auto put = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[0], 1,
+            new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        UNIT_ASSERT_VALUES_EQUAL_C(put->Status, NKikimrProto::OK, put->ToString());
+
+        // VDisks of pile 1 run on nodes 9-16
+        env.Runtime->FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return nodeId <= 8 || (ev->GetTypeRewrite() != TEvBlobStorage::EvVPut &&
+                ev->GetTypeRewrite() != TEvBlobStorage::EvVMultiPut);
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TInstant deadline = env.Runtime->GetClock() + TDuration::Seconds(5);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, deadline, NKikimrBlobStorage::FastRead,
+                /*mustRestoreFirst=*/ true));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        const TInstant replied = env.Runtime->GetClock();
+        env.Runtime->FilterFunction = {};
+
+        UNIT_ASSERT_C(replied <= deadline + TDuration::Seconds(1), "replied " << replied - deadline << " after deadline");
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Responses[0].Status, NKikimrProto::ERROR, res->Get()->ToString());
+    }
+
     Y_UNIT_TEST(PartRestorationAcrossBridge) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
@@ -392,6 +432,50 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
 
     Y_UNIT_TEST(RangeAbsenceNeedsAllPiles) {
         CheckAbsenceNeedsAllPiles(EAbsenceRead::Range);
+    }
+
+
+    // the piles have different data of the same blob, as after a corruption; the reads comparing the answers of piles
+    // fail rather than return either of them or stop the node
+    Y_UNIT_TEST(DivergentPilesFailReads) {
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+
+        const TLogoBlobID id(100500, 1, 1, 0, 4, 0);
+        for (ui32 pile : {0, 1}) {
+            const auto res = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[pile], 1 + 8 * pile,
+                new TEvBlobStorage::TEvPut(id, TString(4, 'a' + pile), TInstant::Max()));
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        }
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto send = [&](IEventBase *ev) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, ev);
+            });
+        };
+
+        send(new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        auto get = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(get->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(get->Get()->Responses[0].Status, NKikimrProto::ERROR, get->Get()->ToString());
+
+        send(new TEvBlobStorage::TEvRange(id.TabletID(), id, id, /*mustRestoreFirst=*/ false, TInstant::Max()));
+        auto range = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(range->Get()->Status, NKikimrProto::ERROR, range->Get()->ToString());
+
+        send(new TEvBlobStorage::TEvDiscover(id.TabletID(), 0, /*readBody=*/ true, /*discoverBlockedGeneration=*/ false,
+            TInstant::Max(), 0, false));
+        auto discover = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(discover->Get()->Status, NKikimrProto::ERROR, discover->Get()->ToString());
     }
 
 }

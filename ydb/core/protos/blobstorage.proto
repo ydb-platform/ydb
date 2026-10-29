@@ -1782,6 +1782,10 @@ message TEvInterpilePutResult {
     message TItem {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
+        optional uint32 RacingGeneration = 3;
+        optional bool WrittenBeyondBarrier = 4;
+        optional uint32 StatusFlags = 5;
+        optional float ApproximateFreeSpaceShare = 6;
     }
 
     repeated TItem Items = 1;

@@ -1,7 +1,6 @@
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/test_utils.h>
 #include "scalar_layout_converter_utils.h"
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -12,8 +11,8 @@
 using NYql::NUdf::TUnboxedValuePod;
 using NYql::NUdf::TUnboxedValue;
 using namespace NKikimr::NMiniKQL;
-Y_CPU_UNIT_TEST_SUITE(TPackedTupleDeepCopy, AVX2, {
-    Y_CPU_UNIT_TEST(TestAppend) {
+Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
+    Y_UNIT_TEST(TestAppend) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
@@ -59,7 +58,7 @@ Y_CPU_UNIT_TEST_SUITE(TPackedTupleDeepCopy, AVX2, {
         }
 
     }
-    Y_CPU_UNIT_TEST(TestAppendBigString) {
+    Y_UNIT_TEST(TestAppendBigString) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
@@ -118,7 +117,7 @@ Y_CPU_UNIT_TEST_SUITE(TPackedTupleDeepCopy, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestFlatten) {
+    Y_UNIT_TEST(TestFlatten) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
@@ -169,4 +168,4 @@ Y_CPU_UNIT_TEST_SUITE(TPackedTupleDeepCopy, AVX2, {
     }
 
     
-})
+}

@@ -2,8 +2,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/test_utils.h>
-
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -250,14 +248,14 @@ using TBoolTag = TFixedTag<bool>;
 } // anonymous namespace
 
 #define DECL_TEST(NAME, SLOT, TAG)    \
-    Y_CPU_UNIT_TEST(Test_##NAME##_Full) { \
+    Y_UNIT_TEST(Test_##NAME##_Full) { \
         RunCase<TAG>(SLOT);           \
     }
 
-Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest, AVX2, {
+Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest) {
 
 ALL_CASES(DECL_TEST)
 
-}) // Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest)
+} // Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest)
 
 #undef DECL_TEST

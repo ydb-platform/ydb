@@ -2,8 +2,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/test_utils.h>
-
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
@@ -38,8 +36,8 @@ struct TBlockLayoutConverterTestData {
 
 constexpr int TestSize = 128 * 3 * sizeof(i64);
 
-Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
-    Y_CPU_UNIT_TEST(TestFixedSize) {
+Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
+    Y_UNIT_TEST(TestFixedSize) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -82,7 +80,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestMultipleFixedSize) {
+    Y_UNIT_TEST(TestMultipleFixedSize) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -132,7 +130,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestString) {
+    Y_UNIT_TEST(TestString) {
         TBlockLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -184,7 +182,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestMultipleStrings) {
+    Y_UNIT_TEST(TestMultipleStrings) {
         TBlockLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -243,7 +241,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestMultipleVariousTypes) {
+    Y_UNIT_TEST(TestMultipleVariousTypes) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -320,7 +318,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestOptional) {
+    Y_UNIT_TEST(TestOptional) {
         TBlockLayoutConverterTestData data;
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -371,7 +369,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestTuple) {
+    Y_UNIT_TEST(TestTuple) {
         TBlockLayoutConverterTestData data;
 
         std::vector<NMiniKQL::TType*> t;
@@ -439,7 +437,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestTzDate) {
+    Y_UNIT_TEST(TestTzDate) {
         TBlockLayoutConverterTestData data;
         using TDtLayout = NUdf::TDataType<TTzDatetime>::TLayout;
 
@@ -487,7 +485,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
     }
 
-    Y_CPU_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
+    Y_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
         TBlockLayoutConverterTestData data;
 
         const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
@@ -545,7 +543,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         UNIT_ASSERT_C(!item2, "Row 2 must be NULL");
     }
 
-    Y_CPU_UNIT_TEST(TestSingularColumns) {
+    Y_UNIT_TEST(TestSingularColumns) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -599,7 +597,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
     // singular null has DataSize == 0
     // without packing its allnull validity bitmap
     // two Null keys compare equal and would match in the join.
-    Y_CPU_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
         TBlockLayoutConverterTestData data;
 
         auto* const nullType = data.Env.GetTypeOfNullLazy();
@@ -638,7 +636,7 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
             "Null keys must compare equal when EqualNulls is set");
     }
 
-    Y_CPU_UNIT_TEST(TestBuckets) {
+    Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -688,4 +686,4 @@ Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
         }
         UNIT_ASSERT_EQUAL(hashsum, bhashsum);
     }
-})
+}

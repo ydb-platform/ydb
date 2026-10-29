@@ -166,8 +166,14 @@ Y_CPU_UNIT_TEST(PackSmallRowSSE42) {
 }
 })
 
-Y_CPU_UNIT_TEST_SUITE(TupleLayout, AVX2, {
-Y_CPU_UNIT_TEST(CreateLayout) {
+Y_CPU_UNIT_TEST_SUITE(TupleLayoutAVX2, AVX2, {
+Y_CPU_UNIT_TEST(PackNarrowRowAVX2) {
+    TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
+}
+})
+
+Y_UNIT_TEST_SUITE(TupleLayout) {
+Y_UNIT_TEST(CreateLayout) {
 
     TColumnDesc kc1, kc2,  pc1, pc2, pc3;
 
@@ -192,15 +198,11 @@ Y_CPU_UNIT_TEST(CreateLayout) {
     UNIT_ASSERT(tl->TotalRowSize == 45);
 }
 
-Y_CPU_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
     TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
 }
 
-Y_CPU_UNIT_TEST(PackNarrowRowAVX2) {
-    TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
-}
-
-Y_CPU_UNIT_TEST(Pack) {
+Y_UNIT_TEST(Pack) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -273,7 +275,7 @@ Y_CPU_UNIT_TEST(Pack) {
     CTEST  << Endl;
 }
 
-Y_CPU_UNIT_TEST(PackMany) {
+Y_UNIT_TEST(PackMany) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -367,7 +369,7 @@ Y_CPU_UNIT_TEST(PackMany) {
 
 }
 
-Y_CPU_UNIT_TEST(UnpackMany) {
+Y_UNIT_TEST(UnpackMany) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -481,7 +483,7 @@ Y_CPU_UNIT_TEST(UnpackMany) {
     }(std::make_index_sequence<cols_num>{});
 }
 
-Y_CPU_UNIT_TEST(Unpack) {
+Y_UNIT_TEST(Unpack) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -589,7 +591,7 @@ Y_CPU_UNIT_TEST(Unpack) {
     UNIT_ASSERT(std::memcmp(colValid4.data(), colValid4_new.data(), colValid4.size()) == 0);
 }
 
-Y_CPU_UNIT_TEST(PackVarSize) {
+Y_UNIT_TEST(PackVarSize) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -707,7 +709,7 @@ Y_CPU_UNIT_TEST(PackVarSize) {
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
 }
 
-Y_CPU_UNIT_TEST(UnpackVarSize) {
+Y_UNIT_TEST(UnpackVarSize) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -898,7 +900,7 @@ Y_CPU_UNIT_TEST(UnpackVarSize) {
     UNIT_ASSERT(std::memcmp(colValid.data(), colValid6_new.data(), colValid.size()) == 0);
 }
 
-Y_CPU_UNIT_TEST(PackVarSizeBig) {
+Y_UNIT_TEST(PackVarSizeBig) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -1074,7 +1076,7 @@ Y_CPU_UNIT_TEST(PackVarSizeBig) {
     for (ui32 i = 0; i < sizeof(expected_overflow); ++i)
         UNIT_ASSERT_VALUES_EQUAL(expected_overflow[i], overflow[i]);
 }
-Y_CPU_UNIT_TEST(PackIsValidFuzz) {
+Y_UNIT_TEST(PackIsValidFuzz) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -1142,7 +1144,7 @@ Y_CPU_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << Endl;
 }
 
-Y_CPU_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
+Y_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc key;
@@ -1172,7 +1174,7 @@ Y_CPU_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
     UNIT_ASSERT_VALUES_EQUAL(Hash(row(0)), Hash(row(1)));
 }
 
-Y_CPU_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
+Y_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
     TScopedAlloc alloc(__LOCATION__);
 
     constexpr ui32 keyColumns = 65;
@@ -1206,7 +1208,7 @@ Y_CPU_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
     UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
 }
 
-Y_CPU_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
+Y_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
     TScopedAlloc alloc(__LOCATION__);
 
     constexpr ui32 fixedKeyColumns = 64;
@@ -1336,7 +1338,7 @@ void CheckFloatKeysCanonicalized(const TTupleLayout& tl) {
 
 } // namespace
 
-Y_CPU_UNIT_TEST(FloatKeysAreCanonicalized) {
+Y_UNIT_TEST(FloatKeysAreCanonicalized) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc floatKey;
@@ -1353,7 +1355,7 @@ Y_CPU_UNIT_TEST(FloatKeysAreCanonicalized) {
     CheckFloatKeysCanonicalized(*TTupleLayout::Create(columns));
 }
 
-})
+}
 
 
 

@@ -548,16 +548,16 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
 
 } // namespace
 
-Y_CPU_UNIT_TEST_SUITE(NeumannHashTableTest, AVX2, {
-    Y_CPU_UNIT_TEST(ApplyReturnsPackedRows) {
+Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
+    Y_UNIT_TEST(ApplyReturnsPackedRows) {
         TestApplyReturnsPackedRows<TNeumannTable>();
     }
 
-    Y_CPU_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
+    Y_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
         TestApplyReturnsPackedRows<TNeumannTableSeq>();
     }
 
-    Y_CPU_UNIT_TEST(RequiredMemoryForBuild) {
+    Y_UNIT_TEST(RequiredMemoryForBuild) {
         TColumnDesc key;
         key.Role = EColumnRole::Key;
         key.DataSize = sizeof(ui32);
@@ -572,7 +572,7 @@ Y_CPU_UNIT_TEST_SUITE(NeumannHashTableTest, AVX2, {
 
         UNIT_ASSERT_VALUES_EQUAL(table.RequiredMemoryForBuild(nItems), expected);
     }
-})
+}
 
 // -----------------------------------------------------------------
 
@@ -584,7 +584,7 @@ using TTablesBenchmark =
 
 // -----------------------------------------------------------------
 
-Y_CPU_UNIT_TEST_SUITE(HashTablesBenchmark, AVX2, {
+Y_CPU_UNIT_TEST_SUITE(HashTablesBenchmark, SSE42, {
 
     static constexpr size_t batchSize = 16;
     static constexpr bool toCSV = false;

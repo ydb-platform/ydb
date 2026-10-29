@@ -1,5 +1,4 @@
 #include "test_utils.h"
-#include "ut/test_utils_enums.h"
 
 #if defined(__x86_64__)
 #include <immintrin.h>
@@ -53,16 +52,6 @@ Y_CPU_UNIT_TEST_SUITE_IMPL(TSupportedCpuTest, TSupportedTestSuite, NUnitTest::TB
     Y_CPU_FORKED_UNIT_TEST(ExecutesForkedBody) {
         UNIT_ASSERT(CpuSupported<true>());
     }
-
-    Y_CPU_UNIT_TEST_TWIN(ExecutesTwinBody, Enabled) {
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(Name_).EndsWith("+Enabled"), Enabled);
-    }
-
-    Y_CPU_UNIT_TEST(ExecutesParametrizedBody, NSimd::NTest::ETestFirst, NSimd::NTest::ETestSecond) {
-        UNIT_ASSERT(Arg<0>() == NSimd::NTest::ETestFirst::First || Arg<0>() == NSimd::NTest::ETestFirst::Second);
-        UNIT_ASSERT(Arg<1>() == NSimd::NTest::ETestSecond::First || Arg<1>() == NSimd::NTest::ETestSecond::Second);
-        UNIT_ASSERT(TStringBuf(Name_).StartsWith("ExecutesParametrizedBody-"));
-    }
 })
 
 Y_CPU_UNIT_TEST_SUITE_IMPL(TUnsupportedCpuTest, TUnsupportedTestSuite, TUnsupportedFixture, "sse2", {
@@ -72,14 +61,6 @@ Y_CPU_UNIT_TEST_SUITE_IMPL(TUnsupportedCpuTest, TUnsupportedTestSuite, TUnsuppor
 
     Y_CPU_FORKED_UNIT_TEST(SkipsForkedBodyAndFixture) {
         UNIT_FAIL("The forked body must not run without the required CPU instructions");
-    }
-
-    Y_CPU_UNIT_TEST_TWIN(SkipsTwinBodyAndFixture, Enabled) {
-        UNIT_FAIL("The twin body must not run without the required CPU instructions");
-    }
-
-    Y_CPU_UNIT_TEST(SkipsParametrizedBodyAndFixture, NSimd::NTest::ETestFirst, NSimd::NTest::ETestSecond) {
-        UNIT_FAIL("The parametrized body must not run without the required CPU instructions");
     }
 })
 

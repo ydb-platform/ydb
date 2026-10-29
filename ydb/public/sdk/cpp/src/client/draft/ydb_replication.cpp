@@ -16,6 +16,14 @@
 namespace NYdb::inline Dev {
 namespace NReplication {
 
+TAcquireReplicationBoundaryResult::TAcquireReplicationBoundaryResult(
+        TStatus&& status, const Ydb::Replication::AcquireReplicationBoundaryResult& result)
+    : TStatus(std::move(status))
+    , BoundaryStep_(result.boundary().step())
+    , SnapshotStep_(result.snapshot().step())
+    , CommitIntervalMs_(result.commit_interval_ms())
+{}
+
 TConnectionParams::TConnectionParams(const Ydb::Replication::ConnectionParams& params) {
     DiscoveryEndpoint(params.endpoint());
     Database(params.database());
@@ -329,6 +337,29 @@ public:
     {
     }
 
+    TAsyncAcquireReplicationBoundaryResult AcquireReplicationBoundary(
+            const std::vector<std::string>& sourcePaths, uint64_t commitIntervalMs,
+            const TAcquireReplicationBoundarySettings& settings) {
+        using namespace Ydb::Replication;
+        auto request = MakeOperationRequest<AcquireReplicationBoundaryRequest>(settings);
+        for (const auto& path : sourcePaths) {
+            request.add_source_paths(TStringType{path});
+        }
+        request.set_commit_interval_ms(commitIntervalMs);
+        auto promise = NThreading::NewPromise<TAcquireReplicationBoundaryResult>();
+        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+            AcquireReplicationBoundaryResult result;
+            if (any) {
+                any->UnpackTo(&result);
+            }
+            promise.SetValue(TAcquireReplicationBoundaryResult(TStatus(std::move(status)), result));
+        };
+        Connections_->RunDeferred<V1::ReplicationService, AcquireReplicationBoundaryRequest, AcquireReplicationBoundaryResponse>(
+            std::move(request), extractor, &V1::ReplicationService::Stub::AsyncAcquireReplicationBoundary,
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
+        return promise.GetFuture();
+    }
+
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path, const TDescribeReplicationSettings& settings) {
         using namespace Ydb::Replication;
 
@@ -396,6 +427,12 @@ public:
 TReplicationClient::TReplicationClient(const TDriver& driver, const TCommonClientSettings& settings)
     : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
 {
+}
+
+TAsyncAcquireReplicationBoundaryResult TReplicationClient::AcquireReplicationBoundary(
+        const std::vector<std::string>& sourcePaths, uint64_t commitIntervalMs,
+        const TAcquireReplicationBoundarySettings& settings) {
+    return Impl_->AcquireReplicationBoundary(sourcePaths, commitIntervalMs, settings);
 }
 
 TAsyncDescribeReplicationResult TReplicationClient::DescribeReplication(const std::string& path, const TDescribeReplicationSettings& settings) {

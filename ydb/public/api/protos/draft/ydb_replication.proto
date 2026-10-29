@@ -226,3 +226,27 @@ message DescribeTransferResult {
     optional BatchSettings batch_settings = 11;
     optional Stats stats = 12;
 }
+
+// The caller must complete Freeze for every source table and keep the source
+// frozen (with stable schema and replication membership) until switchover ends.
+// Requires Frozen CDC heartbeat and direct-write protection on all source shards.
+message AcquireReplicationBoundaryRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    repeated string source_paths = 2;
+    uint64 commit_interval_ms = 3;
+}
+
+message AcquireReplicationBoundaryResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AcquireReplicationBoundaryResult {
+    message Version {
+        uint64 step = 1;
+        uint64 tx_id = 2;
+    }
+    // Exclusive boundary, strictly after the fresh source snapshot.
+    Version boundary = 1;
+    Version snapshot = 2;
+    uint64 commit_interval_ms = 3;
+}

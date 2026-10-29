@@ -8,6 +8,7 @@
 #include <util/datetime/base.h>
 
 namespace Ydb::Replication {
+    class AcquireReplicationBoundaryResult;
     class ConnectionParams;
     class ConsistencyLevelGlobal;
     class DescribeReplicationResult;
@@ -21,6 +22,24 @@ namespace NYdb::inline Dev::NDraft {
 }
 
 namespace NYdb::inline Dev::NReplication {
+
+struct TAcquireReplicationBoundarySettings: public TOperationRequestSettings<TAcquireReplicationBoundarySettings> {};
+
+// Keep all source tables frozen until switchover completes. A boundary alone
+// does not prove that replication has applied the source changes.
+class TAcquireReplicationBoundaryResult: public TStatus {
+public:
+    TAcquireReplicationBoundaryResult(TStatus&& status, const Ydb::Replication::AcquireReplicationBoundaryResult& result);
+    uint64_t GetBoundaryStep() const { return BoundaryStep_; }
+    uint64_t GetSnapshotStep() const { return SnapshotStep_; }
+    uint64_t GetCommitIntervalMs() const { return CommitIntervalMs_; }
+
+private:
+    uint64_t BoundaryStep_ = 0; // boundary tx_id is always zero
+    uint64_t SnapshotStep_ = 0;
+    uint64_t CommitIntervalMs_ = 0;
+};
+using TAsyncAcquireReplicationBoundaryResult = NThreading::TFuture<TAcquireReplicationBoundaryResult>;
 
 class TDescribeReplicationResult;
 using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplicationResult>;
@@ -267,6 +286,10 @@ class TReplicationClient {
 
 public:
     TReplicationClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
+
+    TAsyncAcquireReplicationBoundaryResult AcquireReplicationBoundary(
+        const std::vector<std::string>& sourcePaths, uint64_t commitIntervalMs,
+        const TAcquireReplicationBoundarySettings& settings = TAcquireReplicationBoundarySettings());
 
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path,
         const TDescribeReplicationSettings& settings = TDescribeReplicationSettings());

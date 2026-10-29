@@ -57,6 +57,7 @@ SRCS(
     rpc_read_table.cpp
     rpc_remove_directory.cpp
     rpc_rename_tables.cpp
+    rpc_acquire_replication_boundary.cpp
     rpc_replication.cpp
     rpc_rollback_transaction.cpp
     rpc_stream_execute_scan_query.cpp

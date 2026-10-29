@@ -3509,10 +3509,21 @@ message TLabel {
     optional string Value = 2;
 }
 
+message TGeneralCacheConsumer {
+    optional string Name = 1;
+    // Higher priority sends first. A lower priority waits until every higher one has an empty queue.
+    optional uint32 Priority = 2 [default = 0];
+    // Share of DirectInflightSourceLimit among the same priority. Zero waits until positive weights at this priority are idle.
+    optional uint32 Weight = 3 [default = 0];
+}
+
 message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
     optional uint64 DirectInflightSourceLimit = 2;
     optional uint64 DirectInflightGlobalLimit = 3;
+    reserved 4, 5;
+    // Empty list is one FIFO. Name "*" applies to every consumer without its own entry, as one shared queue.
+    repeated TGeneralCacheConsumer Consumers = 6;
 }
 
 message TStatisticsConfig {

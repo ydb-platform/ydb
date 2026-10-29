@@ -2,21 +2,29 @@
 
 #include "storage.h"
 
+#include <ydb/core/tx/general_cache/usage/config.h>
+
+#include <ydb/library/conclusion/result.h>
+
+#include <util/generic/hash_set.h>
+#include <util/generic/serialized_enum.h>
+
 namespace NKikimr::NOlap::NBlobOperations {
 
-inline ui32 GetCacheRequestPriority(const EConsumer consumer) {
-    enum class EPriority: ui32 {
-        Prefetch = 0,
-        Normal = 1,
-        Scan = 2,
-    };
-    if (consumer == EConsumer::SCAN || consumer == EConsumer::SYS_VIEW_SCAN) {
-        return static_cast<ui32>(EPriority::Scan);
+inline NKikimr::NGeneralCache::NPublic::TCacheRequestClass GetCacheRequestClass(
+    const EConsumer consumer, const NKikimr::NGeneralCache::NPublic::TConfig& config) {
+    return config.Classify(::ToString(consumer));
+}
+
+inline TConclusionStatus ValidateCacheConsumerQuotas(const NKikimr::NGeneralCache::NPublic::TConfig& config) {
+    THashSet<TString> allowed;
+    for (const EConsumer consumer : GetEnumAllValues<EConsumer>()) {
+        if (consumer == EConsumer::COUNT) {
+            continue;
+        }
+        allowed.emplace(::ToString(consumer));
     }
-    if (consumer == EConsumer::FETCH_ON_LOAD) {
-        return static_cast<ui32>(EPriority::Prefetch);
-    }
-    return static_cast<ui32>(EPriority::Normal);
+    return config.ValidateNames(allowed);
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations

@@ -128,7 +128,18 @@ struct TEvYdbProxy {
     };
 
     struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        enum class EFailureKind {
+            Unspecified,
+            DataError,
+        };
+
         using TBase::TBase;
+        EFailureKind FailureKind = EFailureKind::Unspecified;
+
+        TEvTopicReaderGone(NYdb::TStatus status, EFailureKind kind)
+            : TBase(std::move(status))
+            , FailureKind(kind)
+        {}
     };
 
     struct TTopicReaderSettings: private NYdb::NTopic::TReadSessionSettings {

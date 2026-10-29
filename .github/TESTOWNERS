@@ -14,6 +14,7 @@
 /ydb/tests/functional/ttl @ydb-platform/datashard
 /ydb/tests/functional/statistics @ydb-platform/datashard
 /ydb/tools/tli_analysis/tests @ydb-platform/datashard
+/ydb/tools/include_sanitizer @ydb-platform/datashard
 /ydb/core/scheme @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
@@ -121,14 +122,9 @@
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/tests/example @ydb-platform/engineering
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
-/ydb/tests/functional/restarts @ydb-platform/engineering
-/ydb/tests/functional/minidumps @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
-/ydb/tools/cfg @ydb-platform/engineering
-/ydb/tools/include_sanitizer @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
-/ydb/tools/ydbd_slice @ydb-platform/engineering
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering
@@ -203,6 +199,14 @@
 /ydb/tests/functional/rename @ydb-platform/core
 /ydb/tests/functional/scheme_tests @ydb-platform/core
 /ydb/tests/functional/wardens @ydb-platform/core
+/ydb/tests/functional/backup_collection @ydb-platform/core
+/ydb/tests/functional/cms @ydb-platform/core
+/ydb/tests/functional/serverless @ydb-platform/core
+/ydb/tests/functional/replication @ydb-platform/core
+/ydb/tests/functional/restarts @ydb-platform/core
+/ydb/tests/functional/minidumps @ydb-platform/core
+/ydb/tests/stress/scheme_board @ydb-platform/core
+/ydb/tools/cfg @ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core
 /ydb/core/tx/replication @ydb-platform/core
@@ -211,11 +215,6 @@
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
-/ydb/tests/functional/backup_collection @ydb-platform/core
-/ydb/tests/functional/cms @ydb-platform/core
-/ydb/tests/functional/serverless @ydb-platform/core
-/ydb/tests/functional/replication @ydb-platform/core
-/ydb/tests/stress/scheme_board @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/core/raw_socket/ut @ydb-platform/topics
@@ -247,7 +246,7 @@
 
 #YDB Analytics TEAM:???
 
-#Federative query @uzhastik TEAM:@ydb-platform/fq
+#Federative query TEAM:@ydb-platform/fq
 /ydb/udfs/wasm @ydb-platform/fq
 /ydb/tests/functional/script_execution @ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
@@ -289,3 +288,6 @@
 /ydb/services/nbs/ut @ydb-platform/nbs
 /ydb/core/nbs @ydb-platform/nbs
 /ydb/tests/functional/nbs @ydb-platform/nbs
+
+#Infra @shmel1k TEAM:@ydb-platform/infra
+/ydb/tools/ydbd_slice @ydb-platform/infra

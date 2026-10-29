@@ -29,6 +29,8 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#include <unordered_map>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
@@ -1871,6 +1873,20 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 return false;
             }
 
+            // Only mirror-3-dc realm-state updates may change generations here. Donors retain their old IDs.
+            std::unordered_map<ui32, std::pair<ui32, ui32>> mirrorGenerations;
+            for (const auto& previous : ssTo->GetGroups()) {
+                if (previous.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                    for (const auto& proposed : ssFrom.GetGroups()) {
+                        if (proposed.GetGroupID() == previous.GetGroupID()
+                                && proposed.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                            mirrorGenerations.emplace(previous.GetGroupID(),
+                                std::pair(previous.GetGroupGeneration(), proposed.GetGroupGeneration()));
+                        }
+                    }
+                }
+            }
+
             THashMap<std::tuple<ui32, ui32, ui32>, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk*> vdiskMap;
             for (const auto& item : ssTo->GetVDisks()) {
                 if (!item.HasVDiskLocation()) {
@@ -1889,14 +1905,21 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     return false;
                 }
                 const auto& loc = item.GetVDiskLocation();
-                if (const auto it = vdiskMap.find(std::make_tuple(loc.GetNodeID(), loc.GetPDiskID(),
-                        loc.GetVDiskSlotID())); it == vdiskMap.end()) {
+                const auto it = vdiskMap.find(std::make_tuple(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID()));
+                if (it == vdiskMap.end()) {
                     return removed(std::bind(vdiskKey, &loc));
-                } else if (!differ.Equals(item, *it->second)) {
-                    return mismatch(std::bind(vdiskKey, &loc));
-                } else {
-                    vdiskMap.erase(it);
                 }
+                auto previous = *it->second;
+                const auto& id = previous.GetVDiskID();
+                if (const auto generation = mirrorGenerations.find(id.GetGroupID()); generation != mirrorGenerations.end()
+                        && id.GetGroupGeneration() == generation->second.first
+                        && generation->second.first != generation->second.second) {
+                    previous.MutableVDiskID()->SetGroupGeneration(generation->second.second);
+                }
+                if (!differ.Equals(item, previous)) {
+                    return mismatch(std::bind(vdiskKey, &loc));
+                }
+                vdiskMap.erase(it);
             }
             if (!vdiskMap.empty()) {
                 TStringStream err;
@@ -1916,18 +1939,37 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 }
             }
             for (const auto& item : ssFrom.GetGroups()) {
-                if (const auto it = groupMap.find(item.GetGroupID()); it == groupMap.end()) {
+                const auto it = groupMap.find(item.GetGroupID());
+                if (it == groupMap.end()) {
                     return removed(std::bind(groupKey, &item));
-                } else if (!differ.Equals(item, *it->second)) {
-                    return mismatch(std::bind(groupKey, &item));
-                } else {
-                    groupMap.erase(it);
                 }
+                auto previous = *it->second;
+                if (mirrorGenerations.contains(item.GetGroupID()) && previous.GetGroupGeneration() != item.GetGroupGeneration()) {
+                    previous.SetGroupGeneration(item.GetGroupGeneration());
+                }
+                if (mirrorGenerations.contains(item.GetGroupID()) && previous.RingsSize() == item.RingsSize()) {
+                    for (size_t realm = 0; realm < item.RingsSize(); ++realm) {
+                        previous.MutableRings(realm)->ClearState();
+                        if (item.GetRings(realm).HasState()) {
+                            previous.MutableRings(realm)->SetState(item.GetRings(realm).GetState());
+                        }
+                    }
+                }
+                if (!differ.Equals(item, previous)) {
+                    return mismatch(std::bind(groupKey, &item));
+                }
+                groupMap.erase(it);
             }
             if (!groupMap.empty()) {
                 *errorReason = "some static groups were removed in newly provided configuration";
                 return false;
             }
+            if (auto error = ValidateConfigUpdate(*ssTo, ssFrom)) {
+                *errorReason = *error;
+                return false;
+            }
+            ssTo->MutableGroups()->CopyFrom(ssFrom.GetGroups());
+            ssTo->MutableVDisks()->CopyFrom(ssFrom.GetVDisks());
         }
     }
 

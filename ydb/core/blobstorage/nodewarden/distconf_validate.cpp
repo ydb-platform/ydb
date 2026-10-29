@@ -1,5 +1,6 @@
 #include "distconf.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/infer_pdisk_slot_count_settings.h>
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
@@ -160,6 +161,22 @@ namespace NKikimr::NStorage {
                     return "sudden group geometry change";
                 } else if (group.RingsSize() && group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
                     return "sudden group geometry change";
+                }
+                if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc && group.RingsSize()) {
+                    if (group.RingsSize() != 3) {
+                        return "static mirror-3-dc group must have three fail realms";
+                    }
+                    TFailRealmStates before, after;
+                    for (ui32 realm = 0; realm < 3; ++realm) {
+                        before[realm] = currentGroup.GetRings(realm).GetState();
+                        after[realm] = group.GetRings(realm).GetState();
+                    }
+                    if (const auto result = ValidateFailRealmStateTransition(before, after); !result) {
+                        return TStringBuilder() << "group# " << group.GetGroupID() << ": " << result.error();
+                    }
+                    if (before != after && group.GetGroupGeneration() == currentGroup.GetGroupGeneration()) {
+                        return "fail realm state transition requires a new group generation";
+                    }
                 }
                 groupInfo.erase(it);
             }

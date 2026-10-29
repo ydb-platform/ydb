@@ -25,9 +25,6 @@ constexpr TDuration CallTimeout = TDuration::Seconds(10);
 constexpr TDuration RetryDelay = TDuration::MilliSeconds(50);
 const TString BuiltinToken = "root@builtin";
 const TString InvalidToken = "invalid-token";
-const TString ChooseProxyMethod = "NKikimrClient.TGRpcServer/ChooseProxy";
-const TString SchemeOperationMethod = "NKikimrClient.TGRpcServer/SchemeOperation";
-const TString ListEndpointsMethod = "Ydb.Discovery.V1.DiscoveryService/ListEndpoints";
 const TString Database = "/Root";
 
 struct TCallAuth {
@@ -213,9 +210,9 @@ struct TChooseProxyServer {
     TServerSettings Settings;
     TServer Server;
 
-    explicit TChooseProxyServer(bool enforceUserToken, std::initializer_list<TString> unauthenticatedMethods = {})
+    explicit TChooseProxyServer(bool enforceUserToken, bool enableAnonymousDiscovery = false)
         : GrpcPort(PortManager.GetPort(2135))
-        , Settings(MakeSettings(enforceUserToken, unauthenticatedMethods))
+        , Settings(MakeSettings(enforceUserToken, enableAnonymousDiscovery))
         , Server(Settings)
     {
         Server.EnableGRpc(NYdbGrpc::TServerOptions()
@@ -234,17 +231,14 @@ struct TChooseProxyServer {
     }
 
 private:
-    TServerSettings MakeSettings(bool enforceUserToken, std::initializer_list<TString> unauthenticatedMethods) {
+    TServerSettings MakeSettings(bool enforceUserToken, bool enableAnonymousDiscovery) {
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
 
         TServerSettings settings(PortManager.GetPort(2134), authConfig);
         settings.SetDomainName("Root");
-        auto* securityConfig = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
-        securityConfig->SetEnforceUserTokenRequirement(enforceUserToken);
-        for (const auto& method : unauthenticatedMethods) {
-            securityConfig->AddUnauthenticatedGrpcMethods(method);
-        }
+        settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(enforceUserToken);
+        settings.FeatureFlags.SetEnableAnonymousDiscovery(enableAnonymousDiscovery);
         return settings;
     }
 };
@@ -257,18 +251,18 @@ Y_UNIT_TEST_SUITE(TChooseProxyGrpc) {
         AssertUnauthenticated(WaitChooseProxy(env.GrpcPort));
     }
 
-    Y_UNIT_TEST(WithoutTokenWhenMethodListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {ChooseProxyMethod});
+    Y_UNIT_TEST(WithoutTokenWhenAnonymousDiscoveryEnabled) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, /*enableAnonymousDiscovery=*/true);
         AssertChooseProxyOk(WaitChooseProxy(env.GrpcPort));
     }
 
-    Y_UNIT_TEST(WithInvalidProtoTokenWhenMethodListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {ChooseProxyMethod});
+    Y_UNIT_TEST(WithInvalidProtoTokenWhenAnonymousDiscoveryEnabled) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, /*enableAnonymousDiscovery=*/true);
         AssertUnauthenticated(WaitChooseProxy(env.GrpcPort, {.ProtoToken = InvalidToken}));
     }
 
-    Y_UNIT_TEST(SchemeOperationWithoutTokenWhenListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {SchemeOperationMethod});
+    Y_UNIT_TEST(SchemeOperationWithoutTokenWhenAnonymousDiscoveryEnabled) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, /*enableAnonymousDiscovery=*/true);
         AssertUnauthenticated(WaitSchemeOperation(env.GrpcPort));
     }
 
@@ -304,23 +298,18 @@ Y_UNIT_TEST_SUITE(TListEndpointsGrpc) {
         AssertUnauthenticated(WaitListEndpoints(env.GrpcPort).Status);
     }
 
-    Y_UNIT_TEST(WithoutTokenWhenMethodListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {ListEndpointsMethod});
+    Y_UNIT_TEST(WithoutTokenWhenAnonymousDiscoveryEnabled) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, /*enableAnonymousDiscovery=*/true);
         AssertListEndpointsOk(WaitListEndpoints(env.GrpcPort));
     }
 
-    Y_UNIT_TEST(WithInvalidMetadataTokenWhenMethodListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {ListEndpointsMethod});
+    Y_UNIT_TEST(WithInvalidMetadataTokenWhenAnonymousDiscoveryEnabled) {
+        TChooseProxyServer env(/*enforceUserToken=*/true, /*enableAnonymousDiscovery=*/true);
         AssertUnauthenticated(WaitListEndpoints(env.GrpcPort, {.MetadataToken = InvalidToken}).Status);
     }
 
     Y_UNIT_TEST(WithMetadataTokenWhenTokenRequired) {
         TChooseProxyServer env(/*enforceUserToken=*/true);
         AssertListEndpointsOk(WaitListEndpoints(env.GrpcPort, {.MetadataToken = BuiltinToken}));
-    }
-
-    Y_UNIT_TEST(WithoutTokenWhenOtherMethodListed) {
-        TChooseProxyServer env(/*enforceUserToken=*/true, {ChooseProxyMethod});
-        AssertUnauthenticated(WaitListEndpoints(env.GrpcPort).Status);
     }
 }

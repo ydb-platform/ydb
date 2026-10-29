@@ -20,7 +20,6 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
-#include <cctype>
 #include <map>
 #include <set>
 
@@ -268,42 +267,6 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
     return EValidationResult::Ok;
 }
 
-bool IsGrpcMethodName(TStringBuf method) {
-    const size_t slash = method.find('/');
-    if (slash == TStringBuf::npos || method.rfind('/') != slash || slash == 0 || slash + 1 == method.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < method.size(); ++i) {
-        if (i == slash) {
-            continue;
-        }
-        const unsigned char c = method[i];
-        if (!isalnum(c) && c != '.' && c != '_') {
-            return false;
-        }
-    }
-    return true;
-}
-
-EValidationResult ValidateUnauthenticatedGrpcMethods(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
-    if (!config.GetDomainsConfig().HasSecurityConfig()) {
-        return EValidationResult::Ok;
-    }
-
-    THashSet<TString> seen;
-    for (const auto& method : config.GetDomainsConfig().GetSecurityConfig().GetUnauthenticatedGrpcMethods()) {
-        if (!IsGrpcMethodName(method)) {
-            msg.push_back(TStringBuilder() << "SecurityConfig.UnauthenticatedGrpcMethods: expected Service/Method, got '" << method << "'");
-            return EValidationResult::Error;
-        }
-        if (!seen.insert(method).second) {
-            msg.push_back(TStringBuilder() << "SecurityConfig.UnauthenticatedGrpcMethods: duplicate method '" << method << "'");
-            return EValidationResult::Error;
-        }
-    }
-    return EValidationResult::Ok;
-}
-
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
     try {
         NPathAliasing::TPathNormalizer{config.GetResourcePathPrefixMapping()};
@@ -365,9 +328,6 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
         if (result == NKikimr::NConfig::EValidationResult::Error) {
             return EValidationResult::Error;
         }
-    }
-    if (ValidateUnauthenticatedGrpcMethods(config, msg) == EValidationResult::Error) {
-        return EValidationResult::Error;
     }
     if (config.HasColumnShardConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateColumnShardConfig(config.GetColumnShardConfig(), msg);

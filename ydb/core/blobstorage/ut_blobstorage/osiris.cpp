@@ -592,9 +592,11 @@ Y_UNIT_TEST_SUITE(Osiris) {
         TBlobStorageGroupInfo::TOrderNums subgroup;
         initialInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
         // Materialize only the old D=1+1. The automatic N1 transition must trigger D=2+2 recovery.
-        for (ui32 part = 0; part < 2; ++part) {
+        for (ui32 part = 0; part < 3; ++part) {
             const TVDiskID disk = initialInfo->GetVDiskId(subgroup[part]);
-            UNIT_ASSERT_VALUES_EQUAL(disk.FailRealm, part);
+            if (disk.FailRealm == 2) {
+                continue;
+            }
             const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::PutTabletLog, 0);
             const TActorId edge = env.Runtime->AllocateEdgeActor(queue.NodeId());
             env.Runtime->Send(new IEventHandle(queue, edge, new TEvBlobStorage::TEvVPut(
@@ -608,9 +610,21 @@ Y_UNIT_TEST_SUITE(Osiris) {
         allowPromotion = true;
         env.Sim(TDuration::Seconds(60));
         const TIntrusivePtr<TBlobStorageGroupInfo> finalInfo = env.GetGroupInfo(groupId);
-        UNIT_ASSERT_VALUES_EQUAL(ui32(finalInfo->GetFailRealmState(0)), ui32(TFailRealm::N2));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(finalInfo->GetFailRealmState(1)), ui32(TFailRealm::N2));
-        UNIT_ASSERT_VALUES_EQUAL(ui32(finalInfo->GetFailRealmState(2)), ui32(TFailRealm::F));
+        // GetGroupInfo reconstructs topology from BaseConfig, which omits realm states.
+        // Read the published service set to check the actual persisted states.
+        const TActorId stateEdge = env.Runtime->AllocateEdgeActor(1);
+        std::unique_ptr<TEvBlobStorage::TEvControllerGetGroup> stateRequest =
+            std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(0, groupId);
+        env.Runtime->SendToPipe(env.TabletId, stateEdge, stateRequest.release(), Max<ui64>(),
+            TTestActorSystem::GetPipeConfigWithRetries());
+        const TAutoPtr<TEventHandle<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>> stateResponse =
+            env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(stateEdge);
+        UNIT_ASSERT_VALUES_EQUAL(stateResponse->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(stateResponse->Get()->Record.GetServiceSet().GroupsSize(), 1);
+        const NKikimrBlobStorage::TGroupInfo& finalGroup = stateResponse->Get()->Record.GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(0).GetState()), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(1).GetState()), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(2).GetState()), ui32(TFailRealm::F));
         UNIT_ASSERT(finalInfo->GroupGeneration >= initialInfo->GroupGeneration + 2);
         std::array<ui32, 3> copies{};
         for (ui32 index = 0; index < subgroup.size(); ++index) {

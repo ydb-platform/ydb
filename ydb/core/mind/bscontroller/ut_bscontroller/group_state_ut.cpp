@@ -39,7 +39,7 @@ public:
         }
         std::unique_ptr<TEvGroupState::TEvUpdate> event = std::make_unique<TEvGroupState::TEvUpdate>(42);
         event->Info = Info;
-        Runtime.Send(new IEventHandle(Actor, Controller, event.release()));
+        Runtime.Send(new IEventHandle(Actor, Controller, event.release()), 0, true);
     }
 
     void ReplyRound(ui32 requests, bool failSecondRealm = false, bool obsoleteGeneration = false) {
@@ -57,7 +57,7 @@ public:
             }
             std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
                 std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, replicated, false, 1);
-            Runtime.Send(new IEventHandle(request->Sender, request->Recipient, result.release(), 0, request->Cookie));
+            Runtime.Send(new IEventHandle(request->Sender, request->Recipient, result.release(), 0, request->Cookie), 0, true);
         }
     }
 
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         fixture.Update(3, {TFailRealm::N1, TFailRealm::N1, TFailRealm::F});
         fixture.ReplyRound(6);
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
-        fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller, new TEvents::TEvPoison));
+        fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller, new TEvents::TEvPoison), 0, true);
     }
 
     Y_UNIT_TEST(RecoveringRealmPromotesAfterReplication) {

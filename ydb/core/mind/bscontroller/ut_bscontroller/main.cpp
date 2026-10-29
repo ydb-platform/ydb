@@ -529,7 +529,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, initial)).GetSuccess());
         const ui32 initialGeneration = env.ReadGroups().at(groupId).GetGroupGeneration();
         ui32 probes = 0;
-        env.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        previousFilter = env.Runtime->SetEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
                 const TEvBlobStorage::TEvVStatus* request = event->Get<TEvBlobStorage::TEvVStatus>();
                 const TVDiskID disk = VDiskIDFromVDiskID(request->Record.GetVDiskID());
@@ -537,11 +538,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     UNIT_ASSERT(disk.FailRealm != 2);
                     ++probes;
                     env.Runtime->Send(new IEventHandle(event->Sender, event->Recipient,
-                        new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, disk, true, true, false, 1), 0, event->Cookie));
-                    return TTestActorRuntime::EEventAction::DROP;
+                        new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, disk, true, true, false, 1), 0, event->Cookie), 0, true);
+                    return true;
                 }
             }
-            return TTestActorRuntime::EEventAction::PROCESS;
+            return previousFilter(runtime, event);
         });
         NKikimrBlobStorage::TGroupInfo promoted;
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
@@ -556,11 +557,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(2).GetState()), ui32(TFailRealm::F));
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 2);
         UNIT_ASSERT_VALUES_EQUAL(probes, 12);
-        env.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        env.Runtime->SetEventFilter(previousFilter);
         // A delayed proposal for the previous generation must not overwrite the new state.
         NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial);
         stale.MutableCommand(0)->MutableDefineFailRealmStates()->MutableGroups(0)->SetExpectedGroupGeneration(initialGeneration);
-        UNIT_ASSERT(!env.Invoke(stale).GetSuccess());
+        const NKikimrBlobStorage::TConfigResponse rejected = env.Invoke(stale);
+        UNIT_ASSERT(!rejected.GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(ui32(rejected.GetStatus(0).GetFailReason()),
+            ui32(NKikimrBlobStorage::TConfigResponse::TStatus::kGroupGenerationMismatch));
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());

@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-Commands for managing the cluster in [bridge mode](../../../../concepts/bridge.md) let you view [pile](../../../../concepts/glossary.md#pile) state, perform planned and emergency PRIMARY change, temporarily take a pile out for maintenance, and return it to the cluster.
+Commands for managing the cluster in [bridge mode](../../../../concepts/bridge.md) let you view [pile states](../../../../concepts/bridge.md#pile-states), perform planned and emergency PRIMARY change, temporarily take a pile out for maintenance, and return it to the cluster.
 
 {% include [danger-warning](../_includes/danger-warning.md) %}
 

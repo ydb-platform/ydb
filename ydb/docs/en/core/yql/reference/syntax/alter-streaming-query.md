@@ -55,7 +55,7 @@ ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (<key> = <value>)
 Available parameters:
 
 * `RUN = (TRUE|FALSE)` — start or stop the query.
-* `RESOURCE_POOL = <resource_pool_name>` — name of the [resource pool](../../../concepts/glossary.md#resource-pool) where the query runs.
+* `RESOURCE_POOL = <resource_pool_name>` — name of the resource pool where the query runs.
 {% if alter_streaming_query == true %}
 * `FORCE = (TRUE|FALSE)` — allow changing query text with aggregation state reset. Required for [text changes](#text-changing-examples).
 {% endif %}
@@ -121,7 +121,7 @@ ALTER STREAMING QUERY my_streaming_query SET (
 )
 ```
 
-Start `my_streaming_query` in [resource pool](../../../concepts/glossary.md#resource-pool) `my_resource_pool`:
+Start `my_streaming_query` in resource pool `my_resource_pool`:
 
 ```sql
 ALTER STREAMING QUERY my_streaming_query SET (

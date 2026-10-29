@@ -12,7 +12,7 @@
 - Редактор [YQL](../../concepts/glossary.md#yql) с подсветкой синтаксиса, автодополнением таблиц и колонок.
 - Выполнение запросов и визуализация результатов: таблица, JSON, диаграмма.
 - Визуализация [плана выполнения запроса](../../dev/query-execution-optimization/query-plans-optimization.md) (`EXPLAIN`).
-- Мониторинг активных сессий через [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
+- Мониторинг активных сессий через [`.sys/query_sessions`](../../dev/system-views.md).
 - Дашборд кластера на базе [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): загрузка CPU, использование памяти, сетевой трафик (обновление каждые 10 секунд).
 - Управление [правами доступа (ACL)](../../security/authorization.md#right): просмотр разрешений на объекты базы данных.
 - Генерация DDL-скриптов ([`CREATE`](../../yql/reference/syntax/create_table/index.md)) для любого объекта базы данных.
@@ -186,7 +186,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### Менеджер сессий {#session-manager}
 
-В панели **Sessions** (Activity Bar → YDB) отображаются все активные сессии с текущим запросом, состоянием и длительностью (данные из системного представления [`.sys/query_sessions`](../../dev/system-views.md#query-sessions)). Кнопка **Toggle Hide Idle** скрывает сессии без активного запроса.
+В панели **Sessions** (Activity Bar → YDB) отображаются все активные сессии с текущим запросом, состоянием и длительностью (данные из системного представления [`.sys/query_sessions`](../../dev/system-views.md)). Кнопка **Toggle Hide Idle** скрывает сессии без активного запроса.
 
 ### Дашборд кластера {#cluster-dashboard}
 

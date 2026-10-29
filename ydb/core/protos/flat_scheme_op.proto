@@ -1356,6 +1356,15 @@ message TVectorIndexKmeansTreeDescription {
 message THnswIndexDescription {
     // Includes the routing tree settings as well as the local graph parameters.
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+
+    // Set by SchemeShard from the posting-table schema for DataShard graph builds.
+    // This is the posting-table column ID, which may differ from the base table's.
+    optional uint32 EmbeddingColumnId = 2;
+
+    // Fully qualified paths of the base table and logical index for HNSW counter
+    // labels. These identify the graph's owners, rather than the posting table.
+    optional string TablePath = 3;
+    optional string IndexPath = 4;
 }
 
 message TFulltextIndexDescription {

@@ -1,4 +1,6 @@
-# node_broker_config {#node-broker-config}
+# node_broker_config
+
+## Обзор {#node-broker-config}
 
 Секция `node_broker_config` настраивает стабильные имена узлов для динамических узлов в кластерах {{ ydb-short-name }}. Присвоение имен узлам осуществляет Node Broker — системная таблетка, которая отвечает за регистрацию динамических узлов в кластере.
 

@@ -1,5 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/test_utils.h>
+
 #include <array>
 #include <bit>
 #include <chrono>
@@ -8,7 +10,6 @@
 #include <vector>
 #include <random>
 
-#include <util/system/cpu_id.h>
 #include <util/system/fs.h>
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -57,70 +58,12 @@ void TestCalculateCRC32_Impl() {
 }
 }
 
-Y_UNIT_TEST_SUITE(TestHash) {
-
-Y_UNIT_TEST(TestCalculateCRC32Fallback) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
-    TestCalculateCRC32_Impl<NSimd::TSimdFallbackTraits>();
-}
-
-Y_UNIT_TEST(TestCalculateCRC32SSE42) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
-    if (NX86::HaveSSE42())
-        TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
-    else
-        CTEST << "Skipped SSE42 test\n";
-}
-
-Y_UNIT_TEST(TestCalculateCRC32AVX2) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
-    TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
-}
-
-}
-
-Y_UNIT_TEST_SUITE(TupleLayout) {
-Y_UNIT_TEST(CreateLayout) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
-
-    TColumnDesc kc1, kc2,  pc1, pc2, pc3;
-
-    kc1.Role = EColumnRole::Key;
-    kc1.DataSize = 8;
-
-    kc2.Role = EColumnRole::Key;
-    kc2.DataSize = 4;
-
-    pc1.Role = EColumnRole::Payload;
-    pc1.DataSize = 16;
-
-    pc2.Role = EColumnRole::Payload;
-    pc2.DataSize = 4;
-
-    pc3.Role = EColumnRole::Payload;
-    pc3.DataSize = 8;
-
-    std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2, pc3};
-
-    auto tl = TTupleLayout::Create(columns);
-    UNIT_ASSERT(tl->TotalRowSize == 45);
-}
+namespace {
 
 template <size_t ColsNum>
 static void TestPackFixedColumnsRoundTrip(
     THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&),
     const std::array<size_t, ColsNum>& colSizes, size_t expectedRowSize) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -180,29 +123,77 @@ static void TestPackNarrowRowWithManySmallColumns(
     TestPackFixedColumnsRoundTrip(createLayout, std::array<size_t, 6>{4, 1, 4, 1, 4, 1}, 20);
 }
 
-Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
-    TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
+} // namespace
+
+Y_UNIT_TEST_SUITE(TestHash) {
+
+Y_UNIT_TEST(TestCalculateCRC32Fallback) {
+    TestCalculateCRC32_Impl<NSimd::TSimdFallbackTraits>();
 }
 
+}
+
+Y_UNIT_TEST_SUITE_IMPL(TestHashSSE42, NSimd::NTest::TSse42TestSuite) {
+Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+    TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
+}
+}
+
+Y_UNIT_TEST_SUITE_IMPL(TestHashAVX2, NSimd::NTest::TAvx2TestSuite) {
+Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+    TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
+}
+}
+
+Y_UNIT_TEST_SUITE(TupleLayoutFallback) {
 Y_UNIT_TEST(PackNarrowRowFallback) {
     TestPackNarrowRowWithManySmallColumns(
         [](const std::vector<TColumnDesc>& columns) -> THolder<TTupleLayout> {
             return MakeHolder<TTupleLayoutFallback>(columns);
         });
 }
+}
 
+Y_UNIT_TEST_SUITE_IMPL(TupleLayoutSSE42, NSimd::NTest::TSse42TestSuite) {
 Y_UNIT_TEST(PackNarrowRowSSE42) {
-    if (NX86::HaveSSE42()) {
-        TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
-    }
+    TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
 }
 
 Y_UNIT_TEST(PackSmallRowSSE42) {
-    if (NX86::HaveSSE42()) {
-        // Three data bytes, four hash bytes and one null-mask byte: the
-        // 8-byte row fits the SSE small-tuple path with a 16-byte register.
-        TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
-    }
+    // Three data bytes, four hash bytes and one null-mask byte: the
+    // 8-byte row fits the SSE small-tuple path with a 16-byte register.
+    TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
+}
+}
+
+Y_UNIT_TEST_SUITE_IMPL(TupleLayout, NSimd::NTest::TAvx2TestSuite) {
+Y_UNIT_TEST(CreateLayout) {
+
+    TColumnDesc kc1, kc2,  pc1, pc2, pc3;
+
+    kc1.Role = EColumnRole::Key;
+    kc1.DataSize = 8;
+
+    kc2.Role = EColumnRole::Key;
+    kc2.DataSize = 4;
+
+    pc1.Role = EColumnRole::Payload;
+    pc1.DataSize = 16;
+
+    pc2.Role = EColumnRole::Payload;
+    pc2.DataSize = 4;
+
+    pc3.Role = EColumnRole::Payload;
+    pc3.DataSize = 8;
+
+    std::vector<TColumnDesc> columns{kc1, kc2, pc1, pc2, pc3};
+
+    auto tl = TTupleLayout::Create(columns);
+    UNIT_ASSERT(tl->TotalRowSize == 45);
+}
+
+Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+    TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
 }
 
 Y_UNIT_TEST(PackNarrowRowAVX2) {
@@ -210,9 +201,6 @@ Y_UNIT_TEST(PackNarrowRowAVX2) {
 }
 
 Y_UNIT_TEST(Pack) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -286,9 +274,6 @@ Y_UNIT_TEST(Pack) {
 }
 
 Y_UNIT_TEST(PackMany) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -383,9 +368,6 @@ Y_UNIT_TEST(PackMany) {
 }
 
 Y_UNIT_TEST(UnpackMany) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -500,9 +482,6 @@ Y_UNIT_TEST(UnpackMany) {
 }
 
 Y_UNIT_TEST(Unpack) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -611,9 +590,6 @@ Y_UNIT_TEST(Unpack) {
 }
 
 Y_UNIT_TEST(PackVarSize) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -732,9 +708,6 @@ Y_UNIT_TEST(PackVarSize) {
 }
 
 Y_UNIT_TEST(UnpackVarSize) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -926,9 +899,6 @@ Y_UNIT_TEST(UnpackVarSize) {
 }
 
 Y_UNIT_TEST(PackVarSizeBig) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -1105,9 +1075,6 @@ Y_UNIT_TEST(PackVarSizeBig) {
         UNIT_ASSERT_VALUES_EQUAL(expected_overflow[i], overflow[i]);
 }
 Y_UNIT_TEST(PackIsValidFuzz) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
 
     TScopedAlloc alloc(__LOCATION__);
 

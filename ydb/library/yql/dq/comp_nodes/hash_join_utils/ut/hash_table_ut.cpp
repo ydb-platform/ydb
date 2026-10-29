@@ -1,12 +1,13 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/test_utils.h>
+
 #include <chrono>
 #include <random>
 #include <vector>
 #include <fstream>
 
 #include <util/stream/null.h>
-#include <util/system/cpu_id.h>
 #include <util/system/compiler.h>
 #include <util/system/fs.h>
 #include <util/system/mem_info.h>
@@ -547,25 +548,16 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
+Y_UNIT_TEST_SUITE_IMPL(NeumannHashTableTest, NSimd::NTest::TAvx2TestSuite) {
     Y_UNIT_TEST(ApplyReturnsPackedRows) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TestApplyReturnsPackedRows<TNeumannTable>();
     }
 
     Y_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TestApplyReturnsPackedRows<TNeumannTableSeq>();
     }
 
     Y_UNIT_TEST(RequiredMemoryForBuild) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TColumnDesc key;
         key.Role = EColumnRole::Key;
         key.DataSize = sizeof(ui32);
@@ -592,15 +584,12 @@ using TTablesBenchmark =
 
 // -----------------------------------------------------------------
 
-Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
+Y_UNIT_TEST_SUITE_IMPL(HashTablesBenchmark, NSimd::NTest::TAvx2TestSuite) {
 
     static constexpr size_t batchSize = 16;
     static constexpr bool toCSV = false;
 
     Y_UNIT_TEST(Uniform) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TUniformDistribution uni1M(0, 1e6 - 1);
 
         auto benchmark = TTablesBenchmark::TBenchmark<batchSize>(4, Name_);
@@ -611,9 +600,6 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
     }
 
     Y_UNIT_TEST(UniformPayloaded) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TUniformDistribution uni1M(0, 1e6 - 1);
 
         auto benchmark = TTablesBenchmark::TBenchmark<batchSize>(21, Name_);
@@ -624,9 +610,6 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
     }
 
     Y_UNIT_TEST(NormalPayloaded) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TNormalDistribution norm1M(1000000 / 2, 1000000 / 6);
 
         auto benchmark = TTablesBenchmark::TBenchmark<batchSize>(21, Name_);

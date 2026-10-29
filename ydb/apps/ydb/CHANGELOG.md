@@ -1,10 +1,6 @@
-* Deprecated the `--quorum-pile` option of `ydb admin bridge update`: it never changed the quorum of the update, which is always every pile taking part in the configuration quorum in the new state, and now it prints a warning.
 * Added recursive removal of Solomon (KeyValue) volumes, resource pools, and backup collections in `ydb scheme rmdir --recursive`.
-* Added `--skip-storage-pool-conversion` option to `ydb admin bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
 * Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
 * Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.
-* Added `ydb admin bridge remove-pile` command to remove a DISCONNECTED pile from a bridged cluster along with all its data (asks for confirmation unless `-y` is given).
-* Added `ydb admin bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin bridge list`.
 
 ## 2.34.0 ##
 

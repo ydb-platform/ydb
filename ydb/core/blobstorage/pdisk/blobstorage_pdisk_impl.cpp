@@ -1888,6 +1888,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         } else {
             // Matches the default value of BSC's DefaultMaxSlots.
             constexpr ui32 defaultMaxSlots = 16;
+
             const ui32 expectedSlotCount = ExpectedSlotCount ? ExpectedSlotCount : defaultMaxSlots;
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / expectedSlotCount) * ui64(Format.ChunkSize);
         }

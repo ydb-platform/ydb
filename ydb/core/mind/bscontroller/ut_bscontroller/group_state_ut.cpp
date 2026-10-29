@@ -204,6 +204,46 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
     }
 
+    Y_UNIT_TEST(GroupUpdateKeepsOtherGroupsQueries) {
+        TGroupStateFixture fixture;
+        const TFailRealmStates initial{TFailRealm::N1, TFailRealm::N1, TFailRealm::F};
+        fixture.Update(1, initial);
+        TGroupReplicationInfo other = fixture.Info;
+        for (TGroupReplicationInfo::TVDisk& disk : other.VDisks) {
+            disk.Id.GroupID = TGroupId::FromValue(43);
+            disk.ActorId = fixture.Runtime.AllocateEdgeActor();
+        }
+        std::unique_ptr<TEvGroupState::TEvUpdate> update = std::make_unique<TEvGroupState::TEvUpdate>(43);
+        update->Info = other;
+        fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller, update.release()), 0, true);
+        TVector<TEvBlobStorage::TEvVStatus::TPtr> requests;
+        for (const TGroupReplicationInfo* info : {&fixture.Info, &other}) {
+            for (const TGroupReplicationInfo::TVDisk& disk : info->VDisks) {
+                if (disk.Id.FailRealm != 2) {
+                    requests.push_back(fixture.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disk.ActorId));
+                }
+            }
+        }
+        fixture.Update(2, initial);
+        // Late replies for group 42 are ignored; current replies for group 43 must still complete it.
+        for (const TEvBlobStorage::TEvVStatus::TPtr& request : requests) {
+            const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+            std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
+                std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, true, false, 1);
+            result->Record.SetDurabilityReplicated(true);
+            fixture.Runtime.Send(new IEventHandle(request->Sender, request->Recipient,
+                result.release(), 0, request->Cookie), 0, true);
+        }
+        TEvBlobStorage::TEvControllerConfigRequest::TPtr proposal =
+            fixture.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(fixture.Controller);
+        const NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition& definition =
+            proposal->Get()->Record.GetRequest().GetCommand(0).GetDefineFailRealmStates().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(definition.GetGroupId(), 43);
+        UNIT_ASSERT_VALUES_EQUAL(definition.GetExpectedGroupGeneration(), 1);
+        fixture.ReplyRound(6);
+        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
+    }
+
     Y_UNIT_TEST(RecoveringRealmPromotesAfterReplication) {
         TGroupStateFixture fixture;
         fixture.Update(1, {TFailRealm::N2, TFailRealm::R, TFailRealm::F});

@@ -77,18 +77,19 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     };
     std::map<ui32, TGroup> Groups;
     std::map<ui64, TQuery> Queries;
+    std::map<ui32, TVector<ui64>> QueryCookiesByGroup;
     std::map<ui64, ui32> Proposals;
     TVector<ui32> ActiveGroups;
     ui32 Cursor = 0;
     ui64 NextCookie = 0;
 
     void Handle(TEvGroupState::TEvUpdate::TPtr& ev) {
-        if (ev->Sender != ControllerId) {
-            return;
-        }
         const TEvGroupState::TEvUpdate& message = *ev->Get();
-        for (auto it = Queries.begin(); it != Queries.end();) {
-            it = it->second.GroupId == message.GroupId ? Queries.erase(it) : std::next(it);
+        if (const auto it = QueryCookiesByGroup.find(message.GroupId); it != QueryCookiesByGroup.end()) {
+            for (ui64 cookie : it->second) {
+                Queries.erase(cookie);
+            }
+            QueryCookiesByGroup.erase(it);
         }
         if (const auto it = Groups.find(message.GroupId); it != Groups.end()) {
             Proposals.erase(it->second.ProposalCookie);
@@ -182,6 +183,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         }
         ActiveGroups.clear();
         Queries.clear();
+        QueryCookiesByGroup.clear();
         if (!Groups.empty()) {
             auto it = Groups.lower_bound(Cursor);
             const ui32 count = Min<ui32>(GroupsPerRound, Groups.size());
@@ -199,6 +201,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                         if (GetReplicatedRealmState(group.Info.States, vdisk.Id.FailRealm)) {
                             const ui64 cookie = ++NextCookie;
                             Queries.emplace(cookie, TQuery{it->first, disk});
+                            QueryCookiesByGroup[it->first].push_back(cookie);
                             ++group.Pending;
                             Send(vdisk.ActorId, new TEvBlobStorage::TEvVStatus(vdisk.Id), 0, cookie);
                         }

@@ -38,6 +38,39 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         }
     }
 
+    Y_UNIT_TEST(SerializeLargeFileAtATime) {
+        TString content(2 * MAX_BLOCK_SIZE + 1, '\0');
+        for (size_t i = 0; i < content.size(); ++i) {
+            content[i] = static_cast<char>(i % 251);
+        }
+
+        const TEncryptionIV iv = TEncryptionIV::Generate();
+        const size_t sizes[] = {
+            MAX_BLOCK_SIZE - 1,
+            MAX_BLOCK_SIZE,
+            MAX_BLOCK_SIZE + 1,
+            2 * MAX_BLOCK_SIZE,
+            2 * MAX_BLOCK_SIZE + 1,
+        };
+        for (const TString& alg : Algorithms) {
+            for (size_t size : sizes) {
+                const TStringBuf input(content.data(), size);
+                TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile(alg, SelectKey(alg), iv, input);
+                {
+                    TBuffer data = TEncryptedFileDeserializer::DecryptFullFile(SelectKey(alg), iv, fileData);
+                    UNIT_ASSERT_VALUES_EQUAL(data.Size(), size);
+                    UNIT_ASSERT_C(TStringBuf(data.Data(), data.Size()) == input, alg << ", size: " << size);
+                }
+                {
+                    auto [data, headerIV] = TEncryptedFileDeserializer::DecryptFullFile(SelectKey(alg), std::move(fileData));
+                    UNIT_ASSERT_EQUAL(headerIV, iv);
+                    UNIT_ASSERT_VALUES_EQUAL(data.Size(), size);
+                    UNIT_ASSERT_C(TStringBuf(data.Data(), data.Size()) == input, alg << ", size: " << size);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(WrongParametersForSerializer) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileSerializer("", Key16, iv), yexception, "No cipher algorithm specified");
@@ -144,15 +177,15 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
             TEncryptedFileSerializer serializer("AES-256-GCM", Key32, iv);
             TBuffer fileData;
             {
-                TBuffer part = serializer.AddBlock("", false);
+                TBuffer part = serializer.AddData("", false);
                 fileData.Append(part.Data(), part.Size());
             }
             {
-                TBuffer part = serializer.AddBlock("", false);
+                TBuffer part = serializer.AddData("", false);
                 UNIT_ASSERT_C(part.Size() == 0, part.Size());
             }
             {
-                TBuffer part = serializer.AddBlock("", true);
+                TBuffer part = serializer.AddData("", true);
                 fileData.Append(part.Data(), part.Size());
             }
             TEncryptedFileDeserializer deserializer(Key32);
@@ -288,9 +321,8 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(serializer.AddBlock(tooBigBlock, false), yexception,
             "data_shard_config.backup_bytes_batch_size");
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            TEncryptedFileSerializer::EncryptFullFile("AES-256-GCM", Key32, iv, tooBigBlock),
-            yexception, "min_write_batch_size");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(serializer.AddBlock(tooBigBlock, true), yexception,
+            "min_write_batch_size");
     }
 
     Y_UNIT_TEST(RestoreFromState) {

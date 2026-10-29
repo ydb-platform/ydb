@@ -471,6 +471,8 @@ namespace NKikimr::NBlobDepot {
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
+                // this copy won't ever get its blob bound to the key, so it doesn't hold garbage collection back anymore
+                Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
             } else {
                 AssimilatedBlobs.push_back({std::move(key), TAssimilatedBlobInfo::TUpdate{
                     TBlobSeqId::FromLogoBlobId(msg.Id), keep, doNotKeep}});

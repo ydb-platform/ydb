@@ -4203,7 +4203,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
     if (replicationSessionEstablished) {
         SendOffsetsToReplicationConsumer(ctx);
-    } else {
+    } else if (!changedUsers.empty()) {
         SendOffsetsToReplicationConsumer(ctx, changedUsers);
     }
     ChangeConfigActs.clear();

@@ -217,7 +217,6 @@
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
 
-
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/core/raw_socket/ut @ydb-platform/topics
 /ydb/services/persqueue_cluster_discovery @ydb-platform/topics

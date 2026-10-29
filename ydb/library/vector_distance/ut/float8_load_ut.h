@@ -34,6 +34,7 @@ namespace NVectorDistance::NFloat8::NTesting {
         }
     }
 
-    void TestAvx2Load(bool e5m2);
+    std::array<float, 8> LoadAvx2(const TFloat8E4M3* ptr);
+    std::array<float, 8> LoadAvx2(const TFloat8E5M2* ptr);
 
 } // namespace NVectorDistance::NFloat8::NTesting

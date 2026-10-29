@@ -19,6 +19,11 @@
             "uri": "file://test.test_CosineSimilarity_/results.txt"
         }
     ],
+    "test.test[EmptyVectorDeserialization]": [
+        {
+            "uri": "file://test.test_EmptyVectorDeserialization_/results.txt"
+        }
+    ],
     "test.test[ErrorDistanceInvalidFormat]": [
         {
             "uri": "file://test.test_ErrorDistanceInvalidFormat_/results.txt"

@@ -6,22 +6,19 @@ namespace NVectorDistance::NFloat8::NTesting {
 
     namespace {
         template <typename T>
-        void TestAvx2Load() {
-            using TOps = NAvx2::NPrivate::TOps;
-            TestLoad<T, TOps::Width>([](const T* ptr) {
-                std::array<float, TOps::Width> result;
-                _mm256_storeu_ps(result.data(), TOps::Load(ptr));
-                return result;
-            });
+        std::array<float, 8> LoadAvx2Impl(const T* ptr) {
+            std::array<float, 8> result;
+            _mm256_storeu_ps(result.data(), NAvx2::NPrivate::TOps::Load(ptr));
+            return result;
         }
     }
 
-    void TestAvx2Load(bool e5m2) {
-        if (e5m2) {
-            TestAvx2Load<TFloat8E5M2>();
-        } else {
-            TestAvx2Load<TFloat8E4M3>();
-        }
+    std::array<float, 8> LoadAvx2(const TFloat8E4M3* ptr) {
+        return LoadAvx2Impl(ptr);
+    }
+
+    std::array<float, 8> LoadAvx2(const TFloat8E5M2* ptr) {
+        return LoadAvx2Impl(ptr);
     }
 
 } // namespace NVectorDistance::NFloat8::NTesting

@@ -27,29 +27,25 @@ namespace NVectorDistance::NFloat8::NAvx2::NPrivate {
 
         template <typename T>
         static __m256 Load(const T* ptr) noexcept {
-            // AVX2 only; FP8 decoding does not require F16C.
-            const __m256i bits = _mm256_cvtepu8_epi32(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr)));
-            const __m256i sign = _mm256_slli_epi32(_mm256_and_si256(bits, _mm256_set1_epi32(0x80)), 24);
-            const __m256i magnitude = _mm256_and_si256(bits, _mm256_set1_epi32(0x7f));
-            const __m256i exponent = _mm256_srli_epi32(magnitude, T::MantissaBits);
-            const __m256i mantissa = _mm256_and_si256(magnitude, _mm256_set1_epi32((1 << T::MantissaBits) - 1));
-            __m256i value = _mm256_add_epi32(_mm256_slli_epi32(magnitude, 23 - T::MantissaBits),
-                _mm256_set1_epi32((127 - T::ExponentBias) << 23));
-
-            const __m256 subnormal = _mm256_mul_ps(_mm256_cvtepi32_ps(mantissa),
-                _mm256_set1_ps(std::bit_cast<float>(static_cast<ui32>(128 - T::ExponentBias - T::MantissaBits) << 23)));
-            value = _mm256_blendv_epi8(value, _mm256_castps_si256(subnormal),
-                _mm256_cmpeq_epi32(exponent, _mm256_setzero_si256()));
-
+            const __m128i bytes = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr));
+            const __m128i highBytes = _mm_unpacklo_epi8(_mm_setzero_si128(), bytes);
+            const __m128i magnitude = _mm_and_si128(highBytes, _mm_set1_epi16(0x7f00));
             if constexpr (T::FiniteOnly) {
-                value = _mm256_blendv_epi8(value, _mm256_set1_epi32(0x7fc00000),
-                    _mm256_cmpeq_epi32(magnitude, _mm256_set1_epi32(0x7f)));
+                // E4M3FN is binary16 scaled by 2^8, except its two NaN codes.
+                const __m128i sign = _mm_and_si128(highBytes, _mm_set1_epi16(static_cast<i16>(0x8000)));
+                const __m128i isNaN = _mm_cmpeq_epi16(magnitude, _mm_set1_epi16(0x7f00));
+                const __m128i halfMagnitude = _mm_xor_si128(_mm_srli_epi16(magnitude, 1),
+                    _mm_and_si128(isNaN, _mm_set1_epi16(0x4180)));
+                return _mm256_mul_ps(_mm256_cvtph_ps(_mm_or_si128(sign, halfMagnitude)), _mm256_set1_ps(256.0f));
             } else {
-                const __m256i special = _mm256_or_si256(_mm256_set1_epi32(0x7f800000),
-                    _mm256_slli_epi32(mantissa, 23 - T::MantissaBits));
-                value = _mm256_blendv_epi8(value, special, _mm256_cmpeq_epi32(exponent, _mm256_set1_epi32(0x1f)));
+                // E5M2 is the high byte of binary16. F16C quiets signaling NaNs;
+                // restore their payload bits to match scalar FP8 conversion.
+                const __m128i isSignalingNaN = _mm_cmpeq_epi16(magnitude, _mm_set1_epi16(0x7d00));
+                const __m128i half = _mm_or_si128(highBytes, _mm_and_si128(isSignalingNaN, _mm_set1_epi16(0x0200)));
+                const __m256 value = _mm256_cvtph_ps(half);
+                const __m256i quietBit = _mm256_and_si256(_mm256_cvtepi16_epi32(isSignalingNaN), _mm256_set1_epi32(0x00400000));
+                return _mm256_castsi256_ps(_mm256_andnot_si256(quietBit, _mm256_castps_si256(value)));
             }
-            return _mm256_castsi256_ps(_mm256_or_si256(value, sign));
         }
     };
 

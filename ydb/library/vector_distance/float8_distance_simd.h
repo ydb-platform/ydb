@@ -1,6 +1,8 @@
 #pragma once
 
-#include "half_distance_simple.h"
+#include "float8.h"
+
+#include <library/cpp/dot_product/common.h>
 
 namespace NVectorDistance::NFloat8 {
 
@@ -11,7 +13,8 @@ namespace NVectorDistance::NFloat8 {
     };
 
     template <EMetric Metric, typename T, typename TOps>
-    float Distance(const T* lhs, const T* rhs, size_t length) noexcept {
+    static float Distance(const T* lhs, const T* rhs, size_t length,
+            float (*tail)(const T*, const T*, size_t) noexcept) noexcept {
         auto sum0 = TOps::Zero();
         auto sum1 = TOps::Zero();
         auto accumulate = [](auto sum, auto a, auto b) {
@@ -38,17 +41,12 @@ namespace NVectorDistance::NFloat8 {
             length -= TOps::Width;
         }
         const float sum = TOps::Sum(TOps::Add(sum0, sum1));
-        if constexpr (Metric == EMetric::L1) {
-            return sum + NSimple::L1(lhs, rhs, length);
-        } else if constexpr (Metric == EMetric::L2Sqr) {
-            return sum + NSimple::L2Sqr(lhs, rhs, length);
-        } else {
-            return sum + NSimple::Dot(lhs, rhs, length);
-        }
+        return sum + tail(lhs, rhs, length);
     }
 
     template <typename T, typename TOps>
-    TTriWayDotProduct<float> TriWay(const T* lhs, const T* rhs, size_t length) noexcept {
+    static TTriWayDotProduct<float> TriWay(const T* lhs, const T* rhs, size_t length,
+            TTriWayDotProduct<float> (*tail)(const T*, const T*, size_t) noexcept) noexcept {
         auto ll0 = TOps::Zero();
         auto ll1 = TOps::Zero();
         auto lr0 = TOps::Zero();
@@ -73,7 +71,7 @@ namespace NVectorDistance::NFloat8 {
             rhs += TOps::Width;
             length -= TOps::Width;
         }
-        auto result = NSimple::TriWay(lhs, rhs, length);
+        auto result = tail(lhs, rhs, length);
         result.LL += TOps::Sum(TOps::Add(ll0, ll1));
         result.LR += TOps::Sum(TOps::Add(lr0, lr1));
         result.RR += TOps::Sum(TOps::Add(rr0, rr1));

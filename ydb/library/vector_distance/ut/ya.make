@@ -7,7 +7,7 @@ SRCS(
 
 IF (USE_SSE4 == "yes" AND OS_LINUX == "yes")
     CFLAGS(-DTEST_FLOAT8_AVX2)
-    SRC_C_AVX2(float8_load_avx2_ut.cpp)
+    SRC_C_AVX2(float8_load_avx2_ut.cpp -mf16c -mno-fma)
 ENDIF()
 
 END()

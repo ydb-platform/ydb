@@ -226,7 +226,11 @@ private:
 
 class TFloatFromBinaryString: public TMultiSignatureBase<TFloatFromBinaryString> {
 public:
-    using TMultiSignatureBase::TMultiSignatureBase;
+    TFloatFromBinaryString(IFunctionTypeInfoBuilder& builder, bool optionalResult)
+        : TMultiSignatureBase(builder)
+        , OptionalResult_(optionalResult)
+    {
+    }
 
     static const TStringRef& Name() {
         static auto name = TStringRef::Of("FloatFromBinaryString");
@@ -234,7 +238,11 @@ public:
     }
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
-        return TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
+        auto result = TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
+        if (!result && !OptionalResult_) {
+            return valueBuilder->NewEmptyList().Release();
+        }
+        return result;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -267,17 +275,21 @@ public:
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        if (ValidTag(argTag, {TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0)) {
+        const bool optionalResult = !(ValidTag(argTag, {TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagFloat8E4M3Vector, TagFloat8E5M2Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0));
+        if (!optionalResult) {
             builder.Returns<TListType<float>>().IsStrict();
         } else {
             builder.Returns<TOptional<TListType<float>>>().IsStrict();
         }
 
         if (!typesOnly) {
-            builder.Implementation(new TFloatFromBinaryString(builder));
+            builder.Implementation(new TFloatFromBinaryString(builder, optionalResult));
         }
         return true;
     }
+
+private:
+    const bool OptionalResult_;
 };
 
 template <typename Derived>

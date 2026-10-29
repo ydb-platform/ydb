@@ -26,7 +26,7 @@ namespace NVectorDistance {
                 result = {&NFloat8::NSse::L1Distance, &NFloat8::NSse::L2SqrDistance,
                     &NFloat8::NSse::DotProduct, &NFloat8::NSse::TriWayDotProduct};
 #endif
-                if (NX86::HaveAVX2()) {
+                if (NX86::HaveAVX2() && NX86::HaveF16C()) {
                     result = {&NFloat8::NAvx2::L1Distance, &NFloat8::NAvx2::L2SqrDistance,
                         &NFloat8::NAvx2::DotProduct, &NFloat8::NAvx2::TriWayDotProduct};
                 }

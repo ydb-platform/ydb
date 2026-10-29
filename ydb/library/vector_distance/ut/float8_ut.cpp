@@ -128,7 +128,7 @@ namespace {
             {&L1Distance, &L2SqrDistance, &DotProduct, &TriWayDotProduct},
             {&NFloat8::NSse::L1Distance, &NFloat8::NSse::L2SqrDistance, &NFloat8::NSse::DotProduct, &NFloat8::NSse::TriWayDotProduct},
         };
-        if (NX86::HaveAVX2()) {
+        if (NX86::HaveAVX2() && NX86::HaveF16C()) {
             kernels.push_back({&NFloat8::NAvx2::L1Distance, &NFloat8::NAvx2::L2SqrDistance,
                 &NFloat8::NAvx2::DotProduct, &NFloat8::NAvx2::TriWayDotProduct});
         }

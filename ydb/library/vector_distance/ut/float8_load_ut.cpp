@@ -23,10 +23,15 @@ Y_UNIT_TEST_SUITE(Float8Load) {
 
 #ifdef TEST_FLOAT8_AVX2
     Y_UNIT_TEST_TWIN(Avx2, E5M2) {
-        if (!NX86::HaveAVX2()) {
+        if (!NX86::HaveAVX2() || !NX86::HaveF16C()) {
             return;
         }
-        NVectorDistance::NFloat8::NTesting::TestAvx2Load(E5M2);
+        using T = std::conditional_t<E5M2, TFloat8E5M2, TFloat8E4M3>;
+        // Keep the scalar reference in this baseline translation unit, so the
+        // AVX2 object cannot supply AVX-encoded weak scalar conversion symbols.
+        NVectorDistance::NFloat8::NTesting::TestLoad<T, 8>([](const T* ptr) {
+            return NVectorDistance::NFloat8::NTesting::LoadAvx2(ptr);
+        });
     }
 #endif
 }

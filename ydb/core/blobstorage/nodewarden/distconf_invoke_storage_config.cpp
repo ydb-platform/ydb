@@ -102,6 +102,10 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
+                if (request.GetAddExplicitConfigs() || request.GetAddSectionsForMigrationToV1()) {
+                    // the reply made once the requestor is in the config carries the stored YAML only
+                    throw TExError() << "Can't transform the config for a requestor that is not in the cluster yet";
+                }
                 YDB_LOG_DEBUG("FetchStorageConfig: requestor put to pending queue",
                     {"marker", "NWDC62"},
                     {"selfId", SelfId()},

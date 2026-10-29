@@ -21,7 +21,8 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-void PatchQueryPhysicalGraphForRescaling(NKikimrKqp::TQueryPhysicalGraph& graph, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot)
+void PatchQueryPhysicalGraphForRescaling(
+    NKikimrKqp::TQueryPhysicalGraph& graph, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 usableThreadsPerNode)
 {
     YDB_LOG_INFO("Starting PQ source rescaling",
         {"resourceCount", resourceSnapshot.size()}, {"taskCount", graph.TasksSize()});
@@ -225,7 +226,7 @@ void PatchQueryPhysicalGraphForRescaling(NKikimrKqp::TQueryPhysicalGraph& graph,
 
     // Preserve the saved query and stage limits. As in CountReadTasksFromSource,
     // the thread-based limit is only a fallback when there is no task count hint.
-    const ui64 tasksByThreads = static_cast<ui64>(TStagePredictor::GetUsableThreads()) * resourceSnapshot.size();
+    const ui64 tasksByThreads = static_cast<ui64>(usableThreadsPerNode) * resourceSnapshot.size();
     THashMap<TStageKey, ui32> newTaskCounts;
     for (const auto& sk : pqSourceStages) {
         YDB_LOG_DEBUG("Computing PQ source stage task count", {"stageId", stageKeyToStr(sk)});

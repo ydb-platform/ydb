@@ -1095,6 +1095,7 @@ STFUNC(TBlobStorageController::StateWork) {
     THPTimer timer;
 
     switch (type) {
+        fFunc(TEvGroupState::EvReplicationDone, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerRegisterNode, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerGetGroup, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
@@ -1178,7 +1179,7 @@ void TBlobStorageController::PassAway() {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
     }
-    for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
+    for (TActorId *ptr : {&SelfHealId, &GroupStateActorId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
         if (const TActorId actorId = std::exchange(*ptr, {})) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
@@ -1235,6 +1236,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerSubscribeDatabaseSpace:       return 1;
 
         // auxiliary messages that are not usually urgent (also includes RW transactions in TConfigRequest and UpdateDiskStatus)
+        case TEvGroupState::EvReplicationDone:                        return 2;
         case TEvPrivate::EvDropDonor:                                  return 2;
         case TEvBlobStorage::EvControllerScrubQueryStartQuantum:       return 2;
         case TEvBlobStorage::EvControllerScrubQuantumFinished:         return 2;

@@ -13,6 +13,7 @@
 #include "bridge_sync_counters.h"
 #include "indir.h"
 #include "self_heal.h"
+#include "group_state.h"
 #include "storage_pool_stat.h"
 #include "database_space.h"
 #include "yaml_config_helpers.h"
@@ -92,6 +93,7 @@ public:
     class TTxUpdateSeenOperational;
     class TTxUpdateEnableConfigV2;
     class TTxConfigCmd;
+    class TTxUpdateGroupState;
     class TTxCommitConfig;
     class TTxProposeGroupKey;
     class TTxRegisterNode;
@@ -2060,6 +2062,9 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
+    TActorId GroupStateActorId;
+    void UpdateGroupStateActor(TGroupId groupId);
+    void Handle(TEvGroupState::TEvReplicationDone::TPtr& ev);
 
     TActorId ClusterBalanceActorId;
 
@@ -2565,6 +2570,7 @@ public:
         }
 
         switch (type) {
+            hFunc(TEvGroupState::TEvReplicationDone, Handle);
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
             hFunc(TEvBlobStorage::TEvControllerGetGroup, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);
@@ -2613,6 +2619,10 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+        GroupStateActorId = Register(CreateGroupStateActor(SelfId()));
+        for (const auto& [groupId, group] : GroupMap) {
+            UpdateGroupStateActor(groupId);
+        }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();

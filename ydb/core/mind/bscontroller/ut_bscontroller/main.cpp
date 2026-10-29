@@ -514,6 +514,60 @@ namespace {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+    Y_UNIT_TEST(GroupStateSatellitePromotesAndPersists) {
+        using TFailRealm = TDataCenterStatesEnv::TFailRealm;
+        TDataCenterStatesEnv env;
+        ui32 groupId = 0;
+        for (const auto& [id, group] : env.ReadGroups()) {
+            if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                groupId = id;
+                break;
+            }
+        }
+        UNIT_ASSERT(groupId);
+        const std::array<TFailRealm::EState, 3> initial{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
+        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, initial)).GetSuccess());
+        const ui32 initialGeneration = env.ReadGroups().at(groupId).GetGroupGeneration();
+        ui32 probes = 0;
+        TActorId satellite;
+        env.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
+                const TEvBlobStorage::TEvVStatus* request = event->Get<TEvBlobStorage::TEvVStatus>();
+                const TVDiskID disk = VDiskIDFromVDiskID(request->Record.GetVDiskID());
+                if (disk.GroupID.GetRawId() == groupId) {
+                    UNIT_ASSERT(disk.FailRealm != 2);
+                    satellite = event->Sender;
+                    ++probes;
+                    env.Runtime->Send(new IEventHandle(event->Sender, event->Recipient,
+                        new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, disk, true, true, false, 1), 0, event->Cookie));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        NKikimrBlobStorage::TGroupInfo promoted;
+        for (ui32 attempt = 0; attempt < 10; ++attempt) {
+            env.Runtime->SimulateSleep(TDuration::Seconds(6));
+            promoted = env.ReadGroups().at(groupId);
+            if (promoted.GetRings(0).GetState() == TFailRealm::N2 && promoted.GetRings(1).GetState() == TFailRealm::N2) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetRings(0).GetState(), TFailRealm::N2);
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetRings(1).GetState(), TFailRealm::N2);
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetRings(2).GetState(), TFailRealm::F);
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 2);
+        UNIT_ASSERT_VALUES_EQUAL(probes, 12);
+        env.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        // A delayed proposal for the previous generation must not overwrite the new state.
+        env.Runtime->SendToPipe(env.TabletId, satellite,
+            new TEvGroupState::TEvReplicationDone(groupId, initialGeneration, initial), 0, GetPipeConfigWithRetries());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());
+    }
+
+
     Y_UNIT_TEST(ForceGroupFailRealmStatesOnlyUpdatesTarget) {
         using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;

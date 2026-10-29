@@ -641,6 +641,9 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+            }
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
@@ -1018,6 +1021,9 @@ namespace NKikimr::NBsController {
                 TActivationContext::Send(std::make_unique<IEventHandle>(Self.SelfHealId, Self.SelfId(), UpdateSelfHealInfoMsg.Release()));
             }
 
+            for (ui32 groupId : GroupStateUpdates) {
+                Self.UpdateGroupStateActor(TGroupId::FromValue(groupId));
+            }
             for (auto& fn : Callbacks) {
                 fn();
             }

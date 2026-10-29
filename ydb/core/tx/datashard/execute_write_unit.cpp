@@ -326,7 +326,6 @@ public:
             ui64 MinRequested = 0;
             ui64 MaxRequested = 0;
             ui64 Current = 0;
-            bool isDuplicate = false;
             bool SawFreshOp = false;
         };
         THashMap<ui64, TShardSeqNums> shard2seqnums;
@@ -431,13 +430,7 @@ public:
                 }
             }
 
-            if (seqnums.MaxRequested == current) {
-                // Duplicate
-                seqnums.isDuplicate = true;
-                if (collectStoredResult(shardKey)) {
-                    return EExecutionStatus::Executed;
-                }
-            } else if (seqnums.MaxRequested < current) {
+            if (seqnums.MaxRequested < current) {
                 // Stale
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
                     TStringBuilder() << "Uncommitted write " << writerIndex << ":" << seqnums.MaxRequested
@@ -446,8 +439,10 @@ public:
             } else {
                 // Continuation: positions up to current were already applied (e.g. a
                 // re-routed batch after a split may mix already applied positions of
-                // the chain with new ones). Such positions are duplicates: their ops
-                // are skipped. The remaining tail must continue without a gap.
+                // the chain with new ones, and a fully applied group — every
+                // position of the batch is a duplicate — is a continuation that
+                // stays in place). Such positions are duplicates: their ops are
+                // skipped. The remaining tail must continue without a gap.
                 if (seqnums.MinRequested > current + 1) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
                         TStringBuilder() << "Uncommitted write " << writerIndex << ":" << seqnums.MinRequested
@@ -457,9 +452,9 @@ public:
                     return EExecutionStatus::Executed;
                 }
                 if (seqnums.MinRequested <= current) {
-                    // Mixed group: leading positions are duplicates of a lost delivery;
-                    // remember its stored statistics for the reply. A fatal stored
-                    // result is replayed before any fresh tail operation is applied.
+                    // Leading positions are duplicates of a lost delivery; remember
+                    // its stored statistics for the reply. A fatal stored result is
+                    // replayed before any fresh tail operation is applied.
                     if (collectStoredResult(shardKey)) {
                         return EExecutionStatus::Executed;
                     }
@@ -516,20 +511,16 @@ public:
             }
         }
 
-        // All continuations: track max per group for ApplyLocks to persist.
+        // All groups: track max per group for ApplyLocks to persist. A fully
+        // applied group re-persists its current position, which the store of the
+        // delivery result below refreshes anyway: StoreWriteSeqNumResult keeps
+        // the stored result of the last delivery, so further duplicates keep
+        // merging the accumulated statistics.
         for (const auto& [shardId, seqnums] : shard2seqnums) {
-            if (!seqnums.isDuplicate) {
-                if (shardId == 0) {
-                    seqNumUpdate.SetWriteSeqNum = seqnums.MaxRequested;
-                } else {
-                    seqNumUpdate.SetAncestorWriteSeqNums.emplace(shardId, seqnums.MaxRequested);
-                }
+            if (shardId == 0) {
+                seqNumUpdate.SetWriteSeqNum = seqnums.MaxRequested;
             } else {
-                if (shardId == 0) {
-                    seqNumUpdate.ThisShardDuplicateWrite = true;
-                } else {
-                    seqNumUpdate.AncestorShardsWithDuplicateWrites.insert(shardId);
-                }
+                seqNumUpdate.SetAncestorWriteSeqNums.emplace(shardId, seqnums.MaxRequested);
             }
         }
         return std::nullopt;

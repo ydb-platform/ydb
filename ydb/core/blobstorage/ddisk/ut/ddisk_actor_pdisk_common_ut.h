@@ -240,17 +240,6 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(startRes->Get()->Status, NKikimrProto::OK);
     }
 
-<<<<<<< HEAD
-=======
-    // Real-thread runtime: DDisk/PDisk complete trailing chunk-reserve refills and
-    // chunk-map log replies asynchronously after write replies return to the edge.
-    // Wait a quiet window so RestartPDisk does not deliver INVALID_ROUND for those
-    // still-in-flight owner-stamped ops (which would stop the DDisk early).
-    void QuiesceInFlightPDiskOps(TDuration quietWindow = TDuration::MilliSeconds(200)) {
-        Sleep(quietWindow);
-    }
-
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     void ForceCutLog(ui32 diskIdx) {
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
             new NPDisk::TEvCutLog(0, 0, Max<ui64>(), 0, 0, 0, 0)));
@@ -1123,7 +1112,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 // SAME PDisk 0 (different VDisk owner, different SlotId) and tablet 3 writes to it --
 // this proves the restarted PDisk is functional through a fresh owner.
 //
-<<<<<<< HEAD
 // Variant restartDDisk == false (zombie):
 //   The original DDisk slot 0 keeps running. Its OwnerRound is now stale, so the first
 //   reply it gets back from PDisk for any owner-stamped request will be INVALID_ROUND,
@@ -1139,13 +1127,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 //   the next OwnerRound and rebuilds its chunk map from the on-disk log. Tablets 1 and
 //   2 reconnect, write fresh vchunks, and we read everything back to confirm pre- and
 //   post-restart data survived.
-=======
-// Before RestartPDisk we quiesce trailing owner-stamped traffic. A requested
-// production restart drains DDisks first; this fixture also exercises direct
-// PDisk restart with a stale DDisk. Its next allocation must fail, and further
-// requests must receive SESSION_MISMATCH instead of disappearing.
-// With restartDDisk=true the new owner recovers committed data and continues I/O.
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 [[maybe_unused]] void TestPDiskRestartWithReservedChunks(NDDisk::TDDiskConfig ddiskConfig,
         bool restartDDisk) {
     constexpr ui32 baseTabletId = 901;
@@ -1196,14 +1177,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     writeBlock(0, creds1, baseTabletId + 0, 0, 0);
     writeBlock(0, creds2, baseTabletId + 1, 0, 0);
 
-<<<<<<< HEAD
-=======
-    // Finish trailing chunk-reserve refill / log replies from phase 1 before restarting
-    // PDisk, so the zombie path has not begun stopping on INVALID_ROUND on those replies
-    // before the page-1 writes below.
-    ctx.QuiesceInFlightPDiskOps();
-
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     // Phase 2: restart PDisk 0 in place. DDisk slot 0 is still alive but its owner
     // round and reserved chunks are stale relative to the freshly-rebuilt PDisk state.
     ctx.RestartPDisk(0);
@@ -1241,7 +1214,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         return;
     }
 
-<<<<<<< HEAD
     // Zombie variant: DDisk slot 0 is still the stale instance. Its OwnerRound is
     // stale so any request that goes through PDisk (chunk reserve, log) gets
     // INVALID_ROUND and CheckPDiskReply switches DDisk to StateFuncTerminate.
@@ -1266,18 +1238,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     // Tablet 3's writes on the new DDisk slot are still readable -- proves the
     // restarted PDisk is functional and the zombie DDisk slot didn't corrupt it.
     readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
-=======
-    // Force an owner-stamped allocation through the restarted PDisk. A stale
-    // router may reject its I/O first; either failure must stop the old actor.
-    auto stale = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(0,
-        makeWrite(creds1, baseTabletId + 0, 1, 0).release());
-    UNIT_ASSERT(stale->Get()->Record.GetStatus() == TReplyStatus::ERROR
-        || stale->Get()->Record.GetStatus() == TReplyStatus::SESSION_MISMATCH);
-    auto rejected = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(0,
-        makeWrite(creds2, baseTabletId + 1, 1, 0).release());
-    AssertStatus<NDDisk::TEvWriteResult>(rejected, TReplyStatus::SESSION_MISMATCH);
-
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 }
 
 // Write from 2 tablets to multiple VChunks, free all chunks of one tablet, verify the other

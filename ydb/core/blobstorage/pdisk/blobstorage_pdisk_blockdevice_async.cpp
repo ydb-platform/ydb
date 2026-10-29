@@ -496,25 +496,6 @@ class TRealBlockDevice : public IBlockDevice {
                 }
                 EndOffset = op->GetOffset() + opSize;
 
-<<<<<<< HEAD
-=======
-                // Feed the merged (cross-source) device overestimation aggregator with
-                // a raw sample. BaseCostNs intentionally excludes any seek cost: the
-                // aggregator recomputes seek-expected based on its own merged,
-                // completion-ordered stream (which may include samples from IO_URING
-                // sources sharing the same physical device).
-                {
-                    TDeviceIoSample sample;
-                    sample.SubmitCycles = (ui64)completionAction->SubmitTime;
-                    sample.CompleteCycles = (ui64)eventGotAtCycle;
-                    sample.Offset = (ui64)op->GetOffset();
-                    sample.Size = opSize;
-                    sample.IsWrite = (op->GetType() != IAsyncIoOperation::EType::PRead);
-                    sample.BaseCostNs = completionAction->CostNs;
-                    Device.Mon.DeviceOverestimationMerged->Push(sample);
-                }
-
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
                 double duration = HPMilliSecondsFloat(HPNow() - completionAction->SubmitTime);
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     NSan::Unpoison(op->GetData(), opSize);
@@ -589,40 +570,6 @@ class TRealBlockDevice : public IBlockDevice {
                 PrevActualCostNs = *Device.Mon.DeviceActualCostNs;
                 PrevEstimationAtCycle = eventGotAtCycle;
                 *Device.Mon.GetThreadCPU = ThreadCPUTime();
-<<<<<<< HEAD
-=======
-
-                // Merge this window's samples (this PDisk block device thread plus
-                // any samples received from IO_URING sources sharing this physical
-                // device) and derive the same overestimation ratio for the merged
-                // stream. See blobstorage_pdisk_device_overestimation.h.
-                auto windowResult = Device.Mon.DeviceOverestimationMerged->ComputeAndReset(Device.SeekCostNs);
-                MergedEstimatedNs += windowResult.EstimatedNs;
-                MergedActualNs += windowResult.ActualNs + OverestimationActualCostBiasNs;
-                const TOverestimationRatioResult mergedRatioResult =
-                    ComputeOverestimationRatio(MergedEstimatedNs, MergedActualNs);
-                *Device.Mon.DeviceOverestimationRatioMerged = mergedRatioResult.OverestimationRatio;
-                *Device.Mon.DeviceNonperformanceMsMerged = mergedRatioResult.NonperformanceMs;
-                *Device.Mon.DeviceOverestimationDroppedSamples = Device.Mon.DeviceOverestimationMerged->GetDroppedSamples();
-                // Reset accumulators each window (unlike the legacy PDisk-only
-                // counters above, which are cumulative device-lifetime counters we
-                // diff against Prev*): this makes MergedEstimatedNs/MergedActualNs
-                // pure per-window sums, matching windowResult's own semantics.
-                MergedEstimatedNs = 0;
-                MergedActualNs = 0;
-
-                // The DeviceOverestimationRatio/DeviceNonperformanceMs sensors are the
-                // ones referenced by dashboards/alerts. By default (ICB control enabled)
-                // we publish the merged (cross-source) metric there instead of the
-                // legacy PDisk-only computation, since it accounts for IO_URING sources
-                // (DDisk / PersistentBuffer) sharing the same physical device. Disabling
-                // the control (no cluster restart required) reverts to the old behavior
-                // in case the new metric misbehaves.
-                const TOverestimationRatioResult& publishedResult = SelectPublishedOverestimationResult(
-                        UseDeviceOverestimationRatioMerged(), ratioResult, mergedRatioResult);
-                *Device.Mon.DeviceOverestimationRatio = publishedResult.OverestimationRatio;
-                *Device.Mon.DeviceNonperformanceMs = publishedResult.NonperformanceMs;
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
             }
 
             PrevEventGotAtCycle = eventGotAtCycle;

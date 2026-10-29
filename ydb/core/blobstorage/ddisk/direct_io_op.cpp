@@ -71,24 +71,11 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
     i32 result = GetResult();
     const double requestTimeMs = TimePassed();
 
-<<<<<<< HEAD
     // note, we assume there is no short read/write with zero bytes,
     // otherwise we might loop forever on the short path
     if (Y_UNLIKELY(result == 0 && operationBytes > 0)) {
         result = -EIO;
         SetResult(result);
-=======
-    // EAGAIN/ENOMEM/ENOSPC on integrity/formatting I/O must not brick the DDisk: retry the same op
-    // (buffers still owned here) through the actor retry path. Defer Done() until the retry
-    // completes or a hard error is reported.
-    if (Y_UNLIKELY(result < 0 && IsCriticalDDiskIo()
-            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED
-            && RetryCount < MaxResubmissions)) {
-        ++RetryCount;
-        auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvRetryIO>(guard.Release());
-        actorSystem->Send(new IEventHandle(DDiskId, {}, ev.release()));
-        return;
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     }
 
     size_t bytesProcessed = 0;
@@ -126,18 +113,9 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
         YDB_LOG_ERROR_CTX(*actorSystem, reason);
-<<<<<<< HEAD
         Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
         Y_UNUSED(guard.release());
         SelfRecycle();
-=======
-        const bool exhausted = IsCriticalDDiskIo()
-            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED;
-        if (exhausted) {
-            reason += TStringBuilder() << " retry exhausted: attempts=" << (RetryCount + 1);
-        }
-        Reply(actorSystem, exhausted ? TReplyStatus::ERROR : UringErrorToStatus(result, opType), std::move(reason));
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
         return;
     }
 
@@ -354,7 +332,7 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
 
     switch (opType) {
         case TUringOperationBase::EREAD: {
-            TRope data = status == TReplyStatus::OK ? ExtractData() : TRope();
+            TRope data = ExtractData();
             reply = std::make_unique<TEvPrivate::TEvReadPersistentBufferPart>(
                 GetCookie(), PartCookie, status, std::move(reason), std::move(data), IsRestore);
             break;
@@ -388,22 +366,12 @@ void TDDiskActor::TDirectIoOpBase::Reinit(const IEventHandle* ev) {
     }
     ChunkIdx = 0;
     ChunkOffsetInBytes = 0;
-<<<<<<< HEAD
-=======
-    ReadUsedBlocksMask.reset();
-    RetryCount = 0;
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 }
 
 void TDDiskActor::TDirectIoOpBase::ClearForRecycle() noexcept {
     AlignedDataHolder = {};
     Data.reset();
     Span = {};
-<<<<<<< HEAD
-=======
-    ReadUsedBlocksMask.reset();
-    RetryCount = 0;
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 }
 
 void TDDiskActor::TDDiskIoOp::SelfRecycle() noexcept {

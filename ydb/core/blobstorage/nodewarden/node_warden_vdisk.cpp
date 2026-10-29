@@ -419,9 +419,6 @@ namespace NKikimr::NStorage {
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
-        if (ddisk) {
-            DDiskActors.emplace(actorId, vslotId);
-        }
 
         YDB_LOG_DEBUG("StartLocalVDiskActor done",
             {"marker", "NW24"},
@@ -459,15 +456,6 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::HandleGone(STATEFN_SIG) {
-        std::optional<ui32> restartPDisk;
-        if (auto it = DDiskActors.find(ev->Sender); it != DDiskActors.end()) {
-            const ui32 pdiskId = it->second.PDiskId;
-            DDiskActors.erase(it);
-            if (auto jt = PDiskRestartInFlight.find(pdiskId); jt != PDiskRestartInFlight.end()) {
-                jt->second.WaitingFor.erase(ev->Sender);
-                restartPDisk = pdiskId;
-            }
-        }
         if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
             const auto slot = it->second;
             VDiskIdByActor.erase(it);
@@ -481,9 +469,6 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
-        }
-        if (restartPDisk) {
-            TrySendPDiskRestart(*restartPDisk);
         }
     }
 

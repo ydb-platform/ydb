@@ -167,11 +167,6 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvUpdateStats, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
-<<<<<<< HEAD
-=======
-        hFunc(TEvPrivate::TEvRetrySlay, Handle);
-        hFunc(TEvPrivate::TEvRestartDrainReminder, Handle);
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);

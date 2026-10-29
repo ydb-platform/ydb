@@ -167,7 +167,7 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::StartRestorePersistentBuffer() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
-        if (Stopping || IsBroken() || PersistentBufferReady) {
+        if (PersistentBufferReady) {
             return;
         }
 
@@ -185,7 +185,6 @@ namespace NKikimr::NDDisk {
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
-            ProcessPersistentBufferQueue();
             return;
         }
         for (ui32 pos = 0; pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight; pos++) {
@@ -325,11 +324,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ProcessPersistentBufferQueue() {
-<<<<<<< HEAD
         if (PendingPersistentBufferEvents.empty() || !PersistentBufferReady) {
-=======
-        if (Stopping || IsBroken() || PendingPersistentBufferEvents.empty() || !PersistentBufferReady) {
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
             return;
         }
 
@@ -523,6 +518,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::RestorePersistentBufferChunk(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
         ui32 chunkIdx = ev->Get()->PartCookie;
         auto& data = ev->Get()->Data;
+        PersistentBufferRestoreChunksInflight--;
         Y_ABORT_UNLESS(data.size() == ChunkSize);
         for (ui32 sectorIdx = 0; sectorIdx < SectorInChunk; sectorIdx++) {
             auto dataPos = data.Position(sectorIdx * SectorSize);
@@ -655,18 +651,6 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
         if (ev->Get()->IsRestore) {
-<<<<<<< HEAD
-=======
-            Y_ABORT_UNLESS(PersistentBufferRestoreChunksInflight);
-            --PersistentBufferRestoreChunksInflight;
-            if (Stopping || IsBroken()) {
-                return;
-            }
-            if (ev->Get()->Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-                EnterBroken(TStringBuilder() << "PersistentBuffer restore failed: " << ev->Get()->ErrorMessage);
-                return;
-            }
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
             RestorePersistentBufferChunk(ev);
             return;
         }
@@ -2010,7 +1994,6 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
 
-<<<<<<< HEAD
         Counters.Interface.ListPersistentBuffer.Request(0);
 
         auto reply = std::make_unique<TEvListPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -2032,14 +2015,6 @@ namespace NKikimr::NDDisk {
 
         Counters.Interface.ListPersistentBuffer.Reply(true, 0);
         SendReply(*ev, std::move(reply));
-=======
-    void TDDiskActor::Handle(TEvPrivate::TEvRetryListPersistentBuffer::TPtr ev) {
-        if (IsBroken()) {
-            RejectQuery(*ev->Get()->Ev, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
-            return;
-        }
-        ProcessListPersistentBuffer(ev->Get()->Ev, ev->Get()->RetriesLeft);
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     }
 
     TString TDDiskActor::PersistentBufferToString() {

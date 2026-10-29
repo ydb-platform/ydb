@@ -110,14 +110,6 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "DDiskInstanceGuid"; } TABLED() { str << DDiskInstanceGuid; } }
                 TABLER() { TABLED() { str << "Uptime"; } TABLED() { str << FormatDuration(TInstant::Now() - StartedAt); } }
                 TABLER() { TABLED() { str << "HandlingQueries"; } TABLED() { str << (HandlingQueries ? "true" : "false"); } }
-<<<<<<< HEAD
-=======
-                TABLER() { TABLED() { str << "Stopping"; } TABLED() { str << (Stopping ? "true" : "false"); } }
-                TABLER() { TABLED() { str << "Waiting for PersistentBuffer"; } TABLED() { str << (Stopping && !PersistentBufferGone); } }
-                TABLER() { TABLED() { str << "Own I/O drained"; } TABLED() { str << OwnDrainComplete; } }
-                TABLER() { TABLED() { str << "I/O stalled"; } TABLED() { str << (IoStalled ? "true" : "false"); } }
-                TABLER() { TABLED() { str << "Router I/O in flight"; } TABLED() { str << GetDirectIoInflight(); } }
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
                 TABLER() { TABLED() { str << "PendingQueries"; } TABLED() { str << PendingQueries.size(); } }
             }
         }

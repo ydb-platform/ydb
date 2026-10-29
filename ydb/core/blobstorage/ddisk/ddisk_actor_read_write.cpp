@@ -214,37 +214,7 @@ namespace NKikimr::NDDisk {
         }
 
         auto it = ReadCallbacks.find(ev->Cookie);
-<<<<<<< HEAD
         Y_ABORT_UNLESS(it != ReadCallbacks.end());
-=======
-        if (it == ReadCallbacks.end()) {
-            Y_ABORT_UNLESS(IsBroken());
-            return;
-        }
-
-        if (Y_UNLIKELY(IsBroken())) {
-            std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
-            ReadCallbacks.erase(it);
-            op->SetResult(-EIO);
-            op.release()->OnComplete(TActivationContext::ActorSystem());
-            return;
-        }
-
-        if (msg.Status != NKikimrProto::OK) {
-            if (it->second.Op->IsCriticalDDiskIo() || it->second.Op->IsRestoreIo()) {
-                // Complete fallback integrity and PB restore reads through the same path as an io_uring EIO.
-                // TEvIntegrityIoResult will latch Broken and fail every joined client request.
-                std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
-                ReadCallbacks.erase(it);
-                op->SetResult(-EIO);
-                op.release()->OnComplete(TActivationContext::ActorSystem());
-                return;
-            }
-            if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
-                return;
-            }
-        }
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
 
         std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
         ReadCallbacks.erase(it);
@@ -273,19 +243,8 @@ namespace NKikimr::NDDisk {
             Y_ABORT("Unknown OperationType");
         }
 
-<<<<<<< HEAD
         if (submitted) {
             Y_UNUSED(op.release());
-=======
-        if (Y_UNLIKELY(!accepted)) {
-            // StopAsync() makes rejection expected while PDisk is shutting
-            // down. Submit() did not take ownership, so restore it and fail on
-            // the actor thread; OnDrop() is reserved for accepted operations
-            // and would violate the I/O-thread producer side of the op pool.
-            op.reset(rawOp);
-            FailDirectIoOp(std::move(op), "io_uring router stopped before submission");
-            Send(SelfId(), new TEvPrivate::TEvBeginStopping);
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
         }
 
         // note, we want to flush anyway (e.g. previous operations)
@@ -354,7 +313,6 @@ namespace NKikimr::NDDisk {
 
     TDDiskActor::TEvPrivate::TEvShortIO::~TEvShortIO() = default;
 
-<<<<<<< HEAD
     void TDDiskActor::HandleShortIO(TEvPrivate::TEvShortIO::TPtr ev) {
         std::unique_ptr<TDirectIoOpBase> op = std::move(ev->Get()->Op);
 
@@ -412,59 +370,6 @@ namespace NKikimr::NDDisk {
 #else
         Y_UNUSED(this);
 #endif
-=======
-    void TDDiskActor::CancelPendingIo(std::unique_ptr<TDirectIoOpBase> op) {
-        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
-        switch (op->GetOperationType()) {
-        case NPDisk::TUringOperationBase::EREAD:
-            Counters.DirectIO.Read.Done(op->GetTotalSize());
-            break;
-        case NPDisk::TUringOperationBase::EWRITE:
-            Counters.DirectIO.Write.Done(op->GetTotalSize());
-            break;
-        default:
-            Y_ABORT("Unknown OperationType");
-        }
-        op->Reply(TActivationContext::ActorSystem(), Stopping ? TStatus::SESSION_MISMATCH : TStatus::ERROR,
-            Stopping ? TString(StoppingReason) : GetBrokenReason());
-        // This is the actor thread, not the SPSC return-pool producer.
-    }
-
-    void TDDiskActor::CancelRetries() {
-        while (!DelayedRetries.empty()) {
-            auto it = DelayedRetries.begin();
-            auto op = std::move(it->second.Op);
-            DelayedRetries.erase(it);
-            CancelPendingIo(std::move(op));
-        }
-    }
-
-    void TDDiskActor::HandleRetryIO(TEvPrivate::TEvRetryIO::TPtr ev) {
-        auto op = std::move(ev->Get()->Op);
-        if (Stopping || IsBroken()) {
-            CancelPendingIo(std::move(op));
-            return;
-        }
-        Y_ABORT_UNLESS(op->RetryCount && op->RetryCount <= TDirectIoOpBase::MaxResubmissions);
-        const auto delay = TDuration::MilliSeconds(Min<ui32>(1u << (op->RetryCount - 1), 100));
-        const ui64 id = ++NextRetryId;
-        DelayedRetries.emplace(id, TPendingIoOp(std::move(op)));
-        Schedule(delay, new TEvPrivate::TEvRetryIODelayed(id));
-    }
-
-    void TDDiskActor::HandleRetryIODelayed(TEvPrivate::TEvRetryIODelayed::TPtr ev) {
-        const auto it = DelayedRetries.find(ev->Get()->Id);
-        if (it == DelayedRetries.end()) {
-            return;
-        }
-        auto op = std::move(it->second.Op);
-        DelayedRetries.erase(it);
-        if (Stopping || IsBroken()) {
-            CancelPendingIo(std::move(op));
-            return;
-        }
-        DirectUringOp(op, /*isRetry=*/true);
->>>>>>> 79b4f9ebdea (Fix DDisk/PB shutdown ordering and PDisk restart ownership (#52618))
     }
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {

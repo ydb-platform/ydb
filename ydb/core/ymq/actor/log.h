@@ -39,7 +39,7 @@ private:
 #define RLOG_SQS_REQ_BASE(actorCtxOrSystem, priority, requestId, stream)                                                                \
     YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, NKikimrServices::SQS, NKikimr::NSQS::RequestIdSample(requestId), "Request", \
         {"requestId", requestId},                                                                                                       \
-        {"stream", TStringStream() << stream})
+        {"stream", TStringBuilder() << stream})
 
 #define RLOG_SQS_BASE(actorCtxOrSystem, priority, stream) \
     RLOG_SQS_REQ_BASE(actorCtxOrSystem, priority, RequestId_, stream)

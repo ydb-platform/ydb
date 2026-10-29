@@ -199,7 +199,7 @@ do { \
 #else
 #define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
     YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "",   \
-        {"stream", TStringStream() << stream})
+        {"stream", TStringBuilder() << stream})
 #endif
 
 #define FLOG_LOG_S(actorCtxOrSystem, priority, component, stream) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)

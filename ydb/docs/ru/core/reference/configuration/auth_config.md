@@ -165,7 +165,7 @@ auth_config:
 
 ## Конфигурация LDAP аутентификации {#ldap-auth-config}
 
-Одним из способов аутентификации пользователей в {{ ydb-short-name }} является использование [LDAP](https://ru.wikipedia.org/wiki/LDAP)-каталога. Подробнее о таком виде аутентификации написано в разделе про [использование LDAP-каталога](../../security/authentication.md#ldap). Для конфигурирования LDAP-аутентификации необходимо описать секцию `ldap_authentication`.
+Одним из способов аутентификации пользователей в {{ ydb-short-name }} является использование [LDAP](https://ru.wikipedia.org/wiki/LDAP)-каталога. Подробнее о таком виде аутентификации написано в разделе про [использование LDAP-каталога](../../security/authentication.md#ldap-auth-provider). Для конфигурирования LDAP-аутентификации необходимо описать секцию `ldap_authentication`.
 
 Пример секции `ldap_authentication`:
 

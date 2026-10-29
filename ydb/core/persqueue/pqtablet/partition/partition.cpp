@@ -744,6 +744,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(GetStartOffset());
     meta.SetEndOffset(GetEndOffset());
+    meta.SetMirroredOffset(BlobEncoder.MirroredOffset);
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
@@ -3912,14 +3913,14 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             {"newHead", BlobEncoder.NewHead}
         );
 
-        auto oldHeadOffset = BlobEncoder.NewHead.Offset;
+        const auto oldHeadOffset = Max(BlobEncoder.NewHead.Offset, BlobEncoder.MirroredOffset);
 
         if (!t.WriteInfo->BodyKeys.empty()) {
             bool needCompactHead =
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
             BlobEncoder.NewPartitionedBlob(Partition,
-                                           BlobEncoder.NewHead.Offset,
+                                           oldHeadOffset,
                                            "", // SourceId
                                            0,  // SeqNo
                                            0,  // TotalParts
@@ -3928,6 +3929,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            needCompactHead,          // needCompactHead
                                            MaxBlobSize);
 
+            Parameters->CurOffset = Max(Parameters->CurOffset, oldHeadOffset);
             for (auto& k : t.WriteInfo->BodyKeys) {
                 LOG_D("add key " << k.Key.ToString());
                 auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);

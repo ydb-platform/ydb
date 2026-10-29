@@ -1373,7 +1373,8 @@ struct TEvPQ {
     };
 
     struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
-        TDeque<NKikimrPQ::TReplicationDataPayload> Data;
+        THashMap<TString, ui64> OffsetsByConsumers;
+        TMaybe<ui64> MirroredOffset;
     };
 
     struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {

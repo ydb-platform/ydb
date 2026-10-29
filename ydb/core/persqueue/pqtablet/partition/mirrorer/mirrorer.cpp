@@ -486,24 +486,26 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 }
 
 void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
-    if (!ReplicationDataInFlight.empty() || ReplicationDataQueue.empty()) {
+    if (ReplicationDataInFlight || (OffsetsByConsumers.empty() && !MirroredOffsetToSend)) {
         return;
     }
 
-    while (!ReplicationDataQueue.empty()) {
-        const auto& data = ReplicationDataQueue.front();
-        // Applying these boundaries must not make unwritten source messages look persisted.
-        if (data.GetEndOffset() > Max(EndOffset, data.GetStartOffset())) {
-            break;
+    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+        if (offset > EndOffset) {
+            return;
         }
-        ReplicationDataInFlight.emplace_back(std::move(ReplicationDataQueue.front()));
-        ReplicationDataQueue.pop_front();
     }
-    if (ReplicationDataInFlight.empty()) {
-        return;
-    }
+    ReplicationDataInFlight = true;
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    event->Data = ReplicationDataInFlight;
+    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+        (event->OffsetsByConsumers)[consumer] = offset;
+    }
+    OffsetsByConsumers.clear();
+    if (MirroredOffsetToSend) {
+        event->MirroredOffset = *MirroredOffsetToSend;
+        MirroredOffsetToSend = Nothing();
+    }
+
     ctx.Send(PartitionActor, event.Release());
 }
 
@@ -721,7 +723,10 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
         if (IsServiceReplicationMessage(msg)) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
-                ReplicationDataQueue.emplace_back(std::move(replicationData));
+                for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
+                    auto& pendingOffset = OffsetsByConsumers[consumer];
+                    pendingOffset = Max(pendingOffset, offset);
+                }
                 continue;
             }
         }
@@ -960,6 +965,14 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status), newEndOffset)));
         }
     );
+
+    if (!MirroredOffsetToSend.Defined()) {
+        MirroredOffsetToSend = EndOffset;
+    } else {
+        MirroredOffsetToSend = Max(*MirroredOffsetToSend, EndOffset);
+    }
+    TryToSendReplicationData(ctx);
+
     return true;
 }
 
@@ -979,10 +992,10 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
 }
 
 void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
-    if (ev->Sender != PartitionActor || ReplicationDataInFlight.empty()) {
+    if (ev->Sender != PartitionActor || !ReplicationDataInFlight) {
         return;
     }
-    ReplicationDataInFlight.clear();
+    ReplicationDataInFlight = false;
     Send(SelfId(), new TEvents::TEvWakeup());
 }
 

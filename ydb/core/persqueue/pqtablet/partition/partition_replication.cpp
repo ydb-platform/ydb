@@ -20,20 +20,20 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
-    for (const auto& data : (*PendingReplicationData)->Get()->Data) {
-        auto& startOffset = CompactionBlobEncoder.IsEmpty() ? BlobEncoder.StartOffset : CompactionBlobEncoder.StartOffset;
-        startOffset = Max(GetStartOffset(), data.GetStartOffset());
-        BlobEncoder.EndOffset = Max(GetEndOffset(), data.GetEndOffset());
-        for (const auto& [consumer, offset] : data.GetOffsetsByConsumers()) {
-            if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
-                continue;
-            }
-            auto& userInfo = GetOrCreatePendingUser(consumer);
-            if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
-                userInfo.Offset = Max(userInfo.Offset, committed->Offset);
-            }
-            userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
+    const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
+    if (mirroredOffset.Defined()) {
+        BlobEncoder.MirroredOffset = Max(BlobEncoder.MirroredOffset, *mirroredOffset);
+    }
+
+    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {        
+        if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+            continue;
         }
+        auto& userInfo = GetOrCreatePendingUser(consumer);
+        if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
+            userInfo.Offset = Max(userInfo.Offset, committed->Offset);
+        }
+        userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
     }
 }
 
@@ -43,15 +43,13 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
     }
 
     // Replication may replay older snapshots; acknowledge the greatest valid offset.
-    THashMap<TString, ui64> expectedOffsets;
-    for (const auto& data : (*PendingReplicationData)->Get()->Data) {
-        for (const auto& [consumer, offset] : data.GetOffsetsByConsumers()) {
-            if (!GetConsumer(Config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
-                continue;
-            }
-            auto& expected = expectedOffsets[consumer];
-            expected = Max(expected, offset);
+    y_absl::flat_hash_map<TString, ui64> expectedOffsets;
+    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
+        if (!GetConsumer(Config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+            continue;
         }
+        auto& expected = expectedOffsets[consumer];
+        expected = Max(expected, offset);
     }
     for (const auto& [consumer, offset] : expectedOffsets) {
         const auto* userInfo = UsersInfoStorage->GetIfExists(consumer);
@@ -77,8 +75,6 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
     for (const auto* userInfo : userInfos) {
         (*replicationData.MutableOffsetsByConsumers())[userInfo->User] = userInfo->Offset;
     }
-    replicationData.SetStartOffset(GetStartOffset());
-    replicationData.SetEndOffset(GetEndOffset());
     const TString payload = replicationData.SerializeAsString();
     for (const auto& [consumer, info] : UsersInfoStorage->ViewAll()) {
         if (info.Type != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION

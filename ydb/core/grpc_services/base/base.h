@@ -1830,17 +1830,9 @@ using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, Runtime
 template <typename TReq, typename TResp, bool IsOperation, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGrpcRequestCallNoAuth : public TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits> {
 public:
-    using TBaseCall = TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>;
-    using TBaseCall::TBaseCall;
+    using TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>::TGrpcRequestCall;
 
     const NYdbGrpc::TAuthState& GetAuthState() const override {
-        const auto& state = TBaseCall::GetAuthState();
-        // Skip the check actor for anonymous calls. If a token was provided and
-        // the check already finished, keep the real state so AS_FAIL becomes
-        // UNAUTHENTICATED instead of being retried forever.
-        if (state.State != NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
-            return state;
-        }
         static NYdbGrpc::TAuthState noAuthState(false);
         return noAuthState;
     }
@@ -1852,10 +1844,10 @@ using TGrpcRequestOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, true
 template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
 using TGrpcRequestNoOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, false, RuntimeEventType, TMethodAccessorTraits>;
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off, bool NonModifying = false>
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestWrapper
     : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-        TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode, NonModifying>>
+        TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>
 {
 public:
     static constexpr bool IsOp = IsOperation;
@@ -1863,18 +1855,11 @@ public:
 
     TGRpcRequestWrapper(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation,
-            TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode, NonModifying>>(ctx)
+            TGRpcRequestWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
     { }
 
     TRateLimiterMode GetRlMode() const override {
         return RateLimitMode;
-    }
-
-    TAuditMode GetAuditMode() const override {
-        if constexpr (NonModifying) {
-            return TAuditMode::NonModifying();
-        }
-        return {};
     }
 
     bool TryCustomAttributeProcess(const NKikimrScheme::TEvDescribeSchemeResult&, ICheckerIface*) override {

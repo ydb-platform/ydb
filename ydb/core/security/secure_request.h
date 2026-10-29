@@ -41,7 +41,8 @@ private:
     }
 
     bool IsTokenRequired() const {
-        // A listed gRPC method may omit credentials. Database and rate-limit checks still run.
+        // EnableAnonymousDiscovery may omit credentials for ChooseProxy and ListEndpoints.
+        // Database and rate-limit checks still run.
         if (AllowMissingToken) {
             return false;
         }

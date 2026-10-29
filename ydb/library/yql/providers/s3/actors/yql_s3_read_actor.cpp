@@ -834,7 +834,8 @@ public:
         for (const auto columnIndex : columnIndices) {
             const i64 chunkSize = rowGroupMetadata.ColumnChunk(columnIndex)->total_uncompressed_size();
             if (chunkSize < 0) {
-                throw parquet::ParquetException("Invalid parquet metadata: negative total_uncompressed_size ", chunkSize, " of column ", columnIndex);
+                throw parquet::ParquetException(
+                    "Invalid parquet metadata: negative total_uncompressed_size ", chunkSize, " of column ", columnIndex);
             }
             const ui64 unsignedChunkSize = static_cast<ui64>(chunkSize);
             if (unsignedChunkSize > Max<ui64>() - uncompressedSize) {
@@ -1026,8 +1027,8 @@ public:
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
                 const int rowGroup = hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex);
                 const auto result = ReadActorFactoryCfg.BatchedRowGroupDecode
-                    ? DecodeRowGroupBatched(*readers[readyReaderIndex], rowGroup, decodeContext)
-                    : DecodeRowGroupWhole(*readers[readyReaderIndex], rowGroup, decodeContext);
+                                        ? DecodeRowGroupBatched(*readers[readyReaderIndex], rowGroup, decodeContext)
+                                        : DecodeRowGroupWhole(*readers[readyReaderIndex], rowGroup, decodeContext);
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];

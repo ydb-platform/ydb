@@ -966,13 +966,6 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
         }
     );
 
-    if (!MirroredOffsetToSend.Defined()) {
-        MirroredOffsetToSend = EndOffset;
-    } else {
-        MirroredOffsetToSend = Max(*MirroredOffsetToSend, EndOffset);
-    }
-    TryToSendReplicationData(ctx);
-
     return true;
 }
 
@@ -988,6 +981,10 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
         return;
     }
     EndOffset = ev->Get()->EndOffset;
+    if (!WasSuccessfulRecording) {
+        MirroredOffsetToSend = Max(MirroredOffsetToSend.GetOrElse(0), EndOffset);
+        TryToSendReplicationData(ctx);
+    }
     ScheduleConsumerCreation(ctx);
 }
 

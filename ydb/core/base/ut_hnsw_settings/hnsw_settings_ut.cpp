@@ -1,6 +1,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -22,9 +23,43 @@ namespace NKikimr::NKMeans {
             return settings;
         }
 
+        template <typename TIndexProto>
+        void CheckDescriptionRoundTrip(const NKikimrSchemeOp::THnswIndexDescription& description) {
+            TIndexProto index;
+            index.SetName("vidx");
+            *index.MutableHnswIndexDescription() = description;
+
+            TIndexProto restored;
+            UNIT_ASSERT(restored.ParseFromString(index.SerializeAsString()));
+            UNIT_ASSERT(restored.HasHnswIndexDescription());
+            const auto& actual = restored.GetHnswIndexDescription();
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetSettings().SerializeAsString(), description.GetSettings().SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(actual.HasEmbeddingColumnId(), description.HasEmbeddingColumnId());
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetEmbeddingColumnId(), description.GetEmbeddingColumnId());
+            UNIT_ASSERT_VALUES_EQUAL(actual.HasTablePath(), description.HasTablePath());
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetTablePath(), description.GetTablePath());
+            UNIT_ASSERT_VALUES_EQUAL(actual.HasIndexPath(), description.HasIndexPath());
+            UNIT_ASSERT_VALUES_EQUAL(actual.GetIndexPath(), description.GetIndexPath());
+        }
+
     } // namespace
 
     Y_UNIT_TEST_SUITE(HnswSettings) {
+        Y_UNIT_TEST(IndexDescriptionMetadataRoundTrip) {
+            for (const bool withMetadata : {false, true}) {
+                NKikimrSchemeOp::THnswIndexDescription description;
+                *description.MutableSettings() = MakeSettings();
+                if (withMetadata) {
+                    description.SetEmbeddingColumnId(42);
+                    description.SetTablePath("/Root/vector table");
+                    description.SetIndexPath("/Root/vector table/vidx");
+                }
+                CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexCreationConfig>(description);
+                CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexDescription>(description);
+                CheckDescriptionRoundTrip<NKikimrSchemeOp::TIndexAlteringConfig>(description);
+            }
+        }
+
         Y_UNIT_TEST(IndexTypeConversion) {
             for (const bool compactFulltext : {false, true}) {
                 const auto type = NTableIndex::TryConvertIndexType(

@@ -149,7 +149,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 CreateIndexedTableRequest(++t.TxId, "/MyRoot", R"(
                     TableDescription {
                         Name: "Table"
-                        Columns { Name: "key"   Type: "Uint64" }
+                        Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "seq1" }
+                        Columns { Name: "data"  Type: "Uint64" DefaultFromSequence: "seq2" }
                         Columns { Name: "value" Type: "Utf8" }
                         KeyColumnNames: ["key"]
                     }

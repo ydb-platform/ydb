@@ -246,6 +246,7 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
+        // StatusInvalidParameter: Cannot create sequence 'seq1' which is not used by any column
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
                 Name: "Table"
@@ -263,14 +264,7 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
             SequenceDescription {
                 Name: "seq2"
             }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestLs(runtime, "/MyRoot/Table/seq1", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
-        TestLs(runtime, "/MyRoot/Table/seq2", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
-
-        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
-        env.TestWaitNotification(runtime, txId);
+        )", {NKikimrScheme::StatusInvalidParameter});
 
         TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
     }
@@ -444,27 +438,29 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
         )");
         env.TestWaitNotification(runtime, txId);
 
-        const auto findRowIdAlter = [&]() -> const NKikimrSchemeOp::TTableDescription* {
+        // The impl tables of a fulltext index also have a __ydb_row_id column, so only the main
+        // table body is checked here.
+        const auto findRowIdTable = [&]() -> const NKikimrSchemeOp::TTableDescription* {
             for (const auto& tx : captured) {
-                if (!tx.HasAlterTable()) {
-                    continue;
-                }
-                if (FindColumn(tx.GetAlterTable(), NTableIndex::NFulltext::RowIdColumn)) {
+                if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == "texts"
+                        && FindColumn(tx.GetAlterTable(), NTableIndex::NFulltext::RowIdColumn)) {
                     return &tx.GetAlterTable();
+                }
+                if (tx.HasCreateTable() && tx.GetCreateTable().GetName() == "texts"
+                        && FindColumn(tx.GetCreateTable(), NTableIndex::NFulltext::RowIdColumn)) {
+                    return &tx.GetCreateTable();
                 }
             }
             return nullptr;
         };
 
-        // Auto-provisioning runs as a background pipeline of internal transactions.
-        for (int i = 0; i < 60 && !findRowIdAlter(); ++i) {
+        // The index is created together with the table, so the column arrives at the data shards
+        // either in the create table body or in a follow-up alter of the provisioning pipeline.
+        for (int i = 0; i < 60 && !findRowIdTable(); ++i) {
             runtime.SimulateSleep(TDuration::Seconds(1));
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&]() { return findRowIdAlter() != nullptr; };
-            runtime.DispatchEvents(options, TDuration::Seconds(1));
         }
 
-        const auto* table = findRowIdAlter();
+        const auto* table = findRowIdTable();
         UNIT_ASSERT_C(table, "the __ydb_row_id column was never sent to data shards");
 
         const auto* column = FindColumn(*table, NTableIndex::NFulltext::RowIdColumn);
@@ -473,6 +469,144 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
         UNIT_ASSERT(column->GetNotNull());
 
         observer.Remove();
+    }
+
+    // A user may only get a column sequence through SERIAL: the sequence has to be generated for the
+    // column and must not set an arbitrary position.
+    Y_UNIT_TEST(CreateTableWithSerialSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id"    Type: "Uint64" DefaultFromSequence: "_serial_column_id" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["id"]
+            }
+            SequenceDescription {
+                Name: "_serial_column_id"
+                MinValue: 1
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table/_serial_column_id",
+            TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+    }
+
+    // Custom sequence parameters are not rejected internally.
+    Y_UNIT_TEST(CreateTableWithCustomSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint64" DefaultFromSequence: "myseq" }
+                KeyColumnNames: ["id"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+                SetVal { NextValue: 1000 NextUsed: true }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+        auto table = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable();
+        const auto* column = FindColumn(table, "id");
+        UNIT_ASSERT(column);
+        UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultFromSequence(), "myseq");
+    }
+
+    Y_UNIT_TEST(CreateTableWithUnusedSequenceRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "id" Type: "Uint64" }
+                KeyColumnNames: ["id"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "which is not used by any column"}});
+    }
+
+    // A fulltext index in row-id mode relies on two sequences: `_seq___ydb_row_id` on the main table
+    // (provides the doc id) and `__ydb_gen_sequence` on the index impl table (generation of posting
+    // rows). Both have to be visible in the describes, because a replication destination recreates
+    // them from there.
+    Y_UNIT_TEST(FulltextRowIdIndexSequences) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableCompactFulltextIndex(true);
+        ff.SetEnableFulltextIndexRowId(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "fulltext_idx"
+                KeyColumnNames: ["text"]
+                Type: EIndexTypeGlobalFulltextCompact
+                FulltextIndexDescription {
+                    Settings {
+                        columns: {
+                            column: "text"
+                            analyzers: {
+                                tokenizer: STANDARD
+                                use_filter_lowercase: true
+                            }
+                        }
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The main table owns the sequence that generates doc ids.
+        {
+            auto table = DescribePath(runtime, "/MyRoot/texts").GetPathDescription().GetTable();
+            const auto* column = FindColumn(table, NTableIndex::NFulltext::RowIdColumn);
+            UNIT_ASSERT_C(column, "the row-id column was not provisioned");
+            UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultFromSequence(), NTableIndex::NFulltext::RowIdSequenceName);
+
+            UNIT_ASSERT_VALUES_EQUAL(table.SequencesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(table.GetSequences(0).GetName(), NTableIndex::NFulltext::RowIdSequenceName);
+        }
+
+        // The index impl table owns the sequence that generates posting generations.
+        {
+            const TString implTablePath = TStringBuilder()
+                << "/MyRoot/texts/fulltext_idx/" << NTableIndex::ImplTable;
+            auto table = DescribePrivatePath(runtime, implTablePath).GetPathDescription().GetTable();
+            const auto* column = FindColumn(table, NTableIndex::NFulltext::GenColumn);
+            UNIT_ASSERT_C(column, "the generation column was not found");
+            UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultFromSequence(), NTableIndex::NFulltext::GenSequence);
+
+            UNIT_ASSERT_VALUES_EQUAL(table.SequencesSize(), 1);
+            const auto& sequence = table.GetSequences(0);
+            UNIT_ASSERT_VALUES_EQUAL(sequence.GetName(), NTableIndex::NFulltext::GenSequence);
+            UNIT_ASSERT_VALUES_EQUAL(sequence.GetIncrement(), -1);
+        }
     }
 
     Y_UNIT_TEST(AlterTableDropColumnWithSequence) {
@@ -803,213 +937,65 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
-                Name: "Table1"
-                Columns { Name: "key"   Type: "Int64" }
-                Columns { Name: "value1" Type: "Int64" }
-                Columns { Name: "value2" Type: "Int32" }
+                Name: "Table"
+                Columns { Name: "key"    Type: "Int64" }
+                Columns { Name: "value1" Type: "Int64" DefaultFromSequence: "_serial_column_value1" }
+                Columns { Name: "value2" Type: "Int64" DefaultFromSequence: "_serial_column_value2" }
                 KeyColumnNames: ["key"]
             }
+            SequenceDescription {
+                Name: "_serial_column_value1"
+                MinValue: 1
+            }
+            SequenceDescription {
+                Name: "_serial_column_value2"
+                MinValue: 1
+            }
         )");
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "key"   Type: "Int64" }
-            Columns { Name: "value1" Type: "Int64" }
-            Columns { Name: "value2" Type: "Int64" }
-            KeyColumnNames: ["key"]
-        )");
-
         env.TestWaitNotification(runtime, txId);
 
+        // Switching the column to another sequence of the same table is not allowed.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "value1" DefaultFromSequence: "_serial_column_value2" }
+        )", {{NKikimrScheme::StatusInvalidParameter, "a sequence is created together with the column"}});
+
+        // Neither is referring to a standalone sequence.
         TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
-            Name: "seq1"
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
-            Name: "seq2"
+            Name: "external"
         )");
         env.TestWaitNotification(runtime, txId);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq1" }
-        )");
-        env.TestWaitNotification(runtime, txId);
+            Name: "Table"
+            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/external" }
+        )", {{NKikimrScheme::StatusInvalidParameter, "a sequence is created together with the column"}});
 
+        // Resetting the default or replacing it with a literal is not allowed either.
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq1" }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "value2" DefaultFromSequence: "/MyRoot/seq1" }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq1" }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "value2" DefaultFromSequence: "/MyRoot/seq1" }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq3" }
-        )", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
-
-        auto table1 = DescribePath(runtime, "/MyRoot/Table1")
-            .GetPathDescription()
-            .GetTable();
-
-        for (const auto& column: table1.GetColumns()) {
-            UNIT_ASSERT(column.HasDefaultFromSequence());
-            UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
-
-            TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                {
-                    NLs::SequenceName("seq1"),
-                }
-            );
-        }
-
-        auto table2 = DescribePath(runtime, "/MyRoot/Table2")
-            .GetPathDescription()
-            .GetTable();
-
-        for (const auto& column: table2.GetColumns()) {
-            if (column.GetName() == "key") {
-                continue;
-            }
-            UNIT_ASSERT(column.HasDefaultFromSequence());
-            UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
-
-            TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                {
-                    NLs::SequenceName("seq1"),
-                }
-            );
-        }
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq2" }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        table2 = DescribePath(runtime, "/MyRoot/Table2")
-            .GetPathDescription()
-            .GetTable();
-
-        for (const auto& column: table2.GetColumns()) {
-            if (column.GetName() == "key") {
-                continue;
-            }
-            if (column.GetName() == "value1") {
-                UNIT_ASSERT(column.HasDefaultFromSequence());
-                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq2");
-
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                    {
-                        NLs::SequenceName("seq2"),
-                    }
-                );
-            } else if (column.GetName() == "value2") {
-                UNIT_ASSERT(column.HasDefaultFromSequence());
-                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
-
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                    {
-                        NLs::SequenceName("seq1"),
-                    }
-                );
-            }
-        }
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table2"
-            Columns { Name: "key" DefaultFromSequence: "/MyRoot/seq2" }
+            Name: "Table"
             Columns { Name: "value1" EmptyDefault: NULL_VALUE }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        table2 = DescribePath(runtime, "/MyRoot/Table2")
-            .GetPathDescription()
-            .GetTable();
-
-        for (const auto& column: table2.GetColumns()) {
-            if (column.GetName() == "key") {
-                UNIT_ASSERT(column.HasDefaultFromSequence());
-                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq2");
-
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                    {
-                        NLs::SequenceName("seq2"),
-                    }
-                );
-            }
-            if (column.GetName() == "value1") {
-                UNIT_ASSERT(!column.HasDefaultFromSequence());
-                UNIT_ASSERT(!column.HasDefaultFromLiteral());
-            } else if (column.GetName() == "value2") {
-                UNIT_ASSERT(column.HasDefaultFromSequence());
-                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
-
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                    {
-                        NLs::SequenceName("seq1"),
-                    }
-                );
-            }
-        }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot reset the default of column 'value1'"}});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "key" EmptyDefault: NULL_VALUE }
-        )");
-        env.TestWaitNotification(runtime, txId);
+            Name: "Table"
+            Columns { Name: "value1" DefaultFromLiteral { type { type_id: INT64 } value { int64_value: 42 } } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot reset the default of column 'value1'"}});
 
-        table1 = DescribePath(runtime, "/MyRoot/Table1")
-            .GetPathDescription()
-            .GetTable();
-
-        for (const auto& column: table1.GetColumns()) {
-            if (column.GetName() == "key") {
-                UNIT_ASSERT(!column.HasDefaultFromSequence());
-                UNIT_ASSERT(!column.HasDefaultFromLiteral());
-            }
-            if (column.GetName() == "value1") {
-                UNIT_ASSERT(column.HasDefaultFromSequence());
-                UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
-
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
-                    {
-                        NLs::SequenceName("seq1"),
-                    }
-                );
-            }
-        }
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table3"
-            Columns { Name: "key"   Type: "Int64" }
-            Columns { Name: "value" Type: "Bool" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
+        // Other alters of the table (and of the very same column) still work.
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table3"
-            Columns { Name: "value" DefaultFromSequence: "/MyRoot/seq1" }
-        )", {{NKikimrScheme::StatusInvalidParameter, "Column 'value' is of type Bool but default expression is of type Int64"}});
+            Name: "Table"
+            Columns { Name: "extra" Type: "Int64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto table = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable();
+        UNIT_ASSERT(FindColumn(table, "extra"));
+        {
+            const auto* column = FindColumn(table, "value1");
+            UNIT_ASSERT(column);
+            UNIT_ASSERT_VALUES_EQUAL(column->GetDefaultFromSequence(), "_serial_column_value1");
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(TSequence)

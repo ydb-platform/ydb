@@ -436,6 +436,12 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+
+    // Internal: send the full column set to data shards instead of the usual alter delta.
+    // Used to resync datashard-side table descriptions that predate a new column property
+    // (e.g. DefaultFromSequence), since the regular alter body only carries the
+    // columns mentioned in the operation.
+    optional bool ResyncSchema = 56 [default = false];
 }
 
 message TCompressionOptions {

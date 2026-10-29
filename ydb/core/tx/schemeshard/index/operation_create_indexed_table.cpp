@@ -106,18 +106,53 @@ ISubOperation::TPtr MaybeProvisionFulltextRowId(
     return nullptr;
 }
 
+// A user request may only create sequences which belong to one of the table columns: a table create
+// is not a way to add standalone sequences (they are created with CREATE SEQUENCE). Names and
+// parameters are free: a user may create arbitrary sequences and manage their position anyway.
+static bool CheckUserColumnSequence(
+    const NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable,
+    const NKikimrSchemeOp::TSequenceDescription& sequence,
+    TString& errStr)
+{
+    const auto& name = sequence.GetName();
+
+    for (const auto& column : indexedTable.GetTableDescription().GetColumns()) {
+        if (column.GetDefaultFromSequence() == name) {
+            return true;
+        }
+    }
+
+    errStr = TStringBuilder() << "Cannot create sequence '" << name << "' which is not used by any column";
+    return false;
+}
+
 TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
 
     auto indexedTable = tx.GetCreateIndexedTable();
+
+    // Internal operations (replication, restore) describe the resulting schema explicitly, so they
+    // may carry arbitrary sequences; a user request may only get a column sequence via SERIAL.
+    if (!tx.GetInternal()) {
+        for (const auto& sequence : indexedTable.GetSequenceDescription()) {
+            TString errStr;
+            if (!CheckUserColumnSequence(indexedTable, sequence, errStr)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
+            }
+        }
+    }
 
     // __ydb_row_id auto-provisioning. A fulltext/JSON index over a table whose PK is not a single
     // integer needs a synthetic Uint64 doc_id; mirror the build-index path (ClassifyFulltextRowId) by
     // injecting the __ydb_row_id column (+ its backing sequence) and a unique secondary index over it,
     // and switching the affected indexes to rowid mode. Done before the object counts below so the
     // injected paths/shards are charged against the scheme limits like any other create.
-    if (auto reject = MaybeProvisionFulltextRowId(nextId, indexedTable, context)) {
-        return {reject};
+    // The destination of a replication (or a restore) mirrors the source schema, so the convenience
+    // provisioning must not add anything to it.
+    if (!tx.GetInternal()) {
+        if (auto reject = MaybeProvisionFulltextRowId(nextId, indexedTable, context)) {
+            return {reject};
+        }
     }
 
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();

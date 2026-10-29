@@ -2,14 +2,31 @@
 
 #include <util/string/builder.h>
 
-#include <algorithm>
-#include <optional>
-
 namespace NKikimr {
 namespace {
 
 using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
 using TDataCenter = NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter;
+
+struct TRealmStats {
+    ui32 NumInvariant0 = 0;
+    ui32 NumInvariant1 = 0;
+    ui32 NumInvariant2 = 0;
+    ui32 NumRecovering = 0;
+    ui32 NumExcluded = 0;
+    ui32 NumDistinctIncludedStates = 0;
+
+    explicit TRealmStats(const TFailRealmStates& states) {
+        for (const TFailRealm::EState state : states) {
+            NumInvariant0 += state == TFailRealm::Invariant0;
+            NumInvariant1 += state == TFailRealm::Invariant1;
+            NumInvariant2 += state == TFailRealm::Invariant2;
+            NumRecovering += state == TFailRealm::Recovering;
+            NumExcluded += state == TFailRealm::Excluded;
+        }
+        NumDistinctIncludedStates = (NumInvariant0 != 0) + (NumInvariant1 != 0) + (NumInvariant2 != 0);
+    }
+};
 
 bool IsIncluded(TFailRealm::EState state) {
     return state == TFailRealm::Invariant0 || state == TFailRealm::Invariant1 || state == TFailRealm::Invariant2;
@@ -54,56 +71,62 @@ std::expected<void, TString> ValidateFailRealmStateTransition(const TFailRealmSt
             return std::unexpected<TString>(TStringBuilder() << "unknown state for realm# " << realm);
         }
     }
-    if (before == after) { // Table 1, row 9.
-        return {};
-    }
-    const ui32 excluded = std::count(after.begin(), after.end(), TFailRealm::Excluded);
-    const ui32 recovering = std::count(after.begin(), after.end(), TFailRealm::Recovering);
-    const bool allInvariant0 = std::all_of(after.begin(), after.end(), [](TFailRealm::EState state) {
-        return state == TFailRealm::Invariant0;
-    });
-    bool sameIncludedStates = true;
-    std::optional<TFailRealm::EState> includedState;
-    for (const TFailRealm::EState state : after) {
-        if (IsIncluded(state)) {
-            if (includedState && *includedState != state) {
-                sameIncludedStates = false;
+    const TRealmStats statsBefore(before);
+    const TRealmStats statsAfter(after);
+
+    const auto validateRealm = [&](ui32 realm) -> std::expected<void, TString> {
+        const TFailRealm::EState from = before[realm];
+        const TFailRealm::EState to = after[realm];
+        const auto expect = [&](bool condition) -> std::expected<void, TString> {
+            if (condition) {
+                return {};
             }
-            includedState = state;
-        }
-    }
-    for (ui32 realm = 0; realm < 3; ++realm) {
-        const TFailRealm::EState previous = before[realm];
-        const TFailRealm::EState target = after[realm];
-        if (previous == target) {
-            continue;
-        }
-        bool allowed = false;
-        if (IsIncluded(previous) && target == TFailRealm::Excluded) { // Row 1: sufficient surviving copy guarantees.
-            ui32 invariant0 = 0;
-            ui32 guaranteed = 0;
-            for (ui32 other = 0; other < 3; ++other) {
-                if (other != realm) {
-                    invariant0 += after[other] == TFailRealm::Invariant0;
-                    guaranteed += after[other] == TFailRealm::Invariant1 || after[other] == TFailRealm::Invariant2;
-                }
-            }
-            allowed = guaranteed || invariant0 == 2;
-        } else if (previous == TFailRealm::Excluded && target == TFailRealm::Recovering) { // Row 2: check the initial state.
-            // Recovery is sequential, including when several realms are listed in one command.
-            allowed = std::count(before.begin(), before.end(), TFailRealm::Recovering) == 0 && recovering == 1;
-        } else if (previous == TFailRealm::Recovering && target == TFailRealm::Excluded) { // Row 3.
-            allowed = true;
-        } else if ((previous == TFailRealm::Recovering || previous == TFailRealm::Invariant1 || previous == TFailRealm::Invariant2)
-                && target == TFailRealm::Invariant0) { // Rows 4 and 8: all realms return to Invariant0 together.
-            allowed = allInvariant0;
-        } else if ((previous == TFailRealm::Recovering || previous == TFailRealm::Invariant0 || previous == TFailRealm::Invariant1)
-                && (target == TFailRealm::Invariant1 || target == TFailRealm::Invariant2)) { // Rows 5, 6 and 7.
-            allowed = excluded == 1 && sameIncludedStates;
-        }
-        if (!allowed) {
             return std::unexpected<TString>(TStringBuilder() << "invalid state transition for realm# " << realm
-                << " from " << TFailRealm::EState_Name(previous) << " to " << TFailRealm::EState_Name(target));
+                << " from " << TFailRealm::EState_Name(from) << " to " << TFailRealm::EState_Name(to));
+        };
+
+        // RFC 190, Table 1, row 1.
+        if (IsIncluded(from) && to == TFailRealm::Excluded) {
+            return expect(statsAfter.NumInvariant1 || statsAfter.NumInvariant2 || statsAfter.NumInvariant0 == 2);
+        }
+        // RFC 190, Table 1, row 2.
+        if (from == TFailRealm::Excluded && to == TFailRealm::Recovering) {
+            return expect(statsBefore.NumRecovering == 0 && statsAfter.NumRecovering == 1);
+        }
+        // RFC 190, Table 1, row 3.
+        if (from == TFailRealm::Recovering && to == TFailRealm::Excluded) {
+            return {};
+        }
+        // RFC 190, Table 1, row 4.
+        if (from == TFailRealm::Recovering && to == TFailRealm::Invariant0) {
+            return expect(statsAfter.NumInvariant0 == 3);
+        }
+        // RFC 190, Table 1, row 5.
+        if (from == TFailRealm::Recovering && (to == TFailRealm::Invariant1 || to == TFailRealm::Invariant2)) {
+            return expect(statsAfter.NumExcluded == 1 && statsAfter.NumDistinctIncludedStates == 1);
+        }
+        // RFC 190, Table 1, row 6.
+        if (from == TFailRealm::Invariant0 && (to == TFailRealm::Invariant1 || to == TFailRealm::Invariant2)) {
+            return expect(statsAfter.NumExcluded == 1 && statsAfter.NumDistinctIncludedStates == 1);
+        }
+        // RFC 190, Table 1, row 7.
+        if (from == TFailRealm::Invariant1 && to == TFailRealm::Invariant2) {
+            return expect(statsAfter.NumExcluded == 1 && statsAfter.NumDistinctIncludedStates == 1);
+        }
+        // RFC 190, Table 1, row 8.
+        if ((from == TFailRealm::Invariant1 || from == TFailRealm::Invariant2) && to == TFailRealm::Invariant0) {
+            return expect(statsAfter.NumInvariant0 == 3);
+        }
+        // RFC 190, Table 1, row 9.
+        if (from == to) {
+            return {};
+        }
+        return expect(false);
+    };
+
+    for (ui32 realm = 0; realm < 3; ++realm) {
+        if (const auto result = validateRealm(realm); !result) {
+            return result;
         }
     }
     return {};

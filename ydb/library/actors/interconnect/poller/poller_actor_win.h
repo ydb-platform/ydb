@@ -40,7 +40,8 @@ namespace NActors {
                     if (!record || (record->Flags & READ)) {
                         add(readfds);
                     }
-                    if (!record || (record->Flags & WRITE)) {
+                    // The wakeup socket represents queued operations only when readable.
+                    if (record && (record->Flags & WRITE)) {
                         add(writefds);
                     }
                     add(exceptfds);
@@ -72,7 +73,7 @@ namespace NActors {
                             record->Flags &= ~WRITE;
                         }
                         Notify(record.Get(), read, write);
-                    } else {
+                    } else if (FD_ISSET(fd, &readfds)) {
                         flag = true;
                     }
                 }

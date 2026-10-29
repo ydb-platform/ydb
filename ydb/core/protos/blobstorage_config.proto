@@ -761,6 +761,8 @@ message TDefineFailRealmStates {
         optional uint32 GroupId = 1;
         // Exactly three states, indexed by physical fail realm.
         repeated EFailRealmState FailRealmStates = 2;
+        // If set, apply only to this group generation.
+        optional uint32 ExpectedGroupGeneration = 3;
     }
 
     repeated TGroupDefinition Groups = 1;

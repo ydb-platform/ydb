@@ -26,21 +26,12 @@ struct TGroupReplicationInfo {
 struct TEvGroupState {
     enum EEv {
         EvUpdate = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 1000,
-        EvReplicationDone,
     };
 
     struct TEvUpdate : TEventLocal<TEvUpdate, EvUpdate> {
         ui32 GroupId;
         std::optional<TGroupReplicationInfo> Info;
         explicit TEvUpdate(ui32 groupId) : GroupId(groupId) {}
-    };
-
-    struct TEvReplicationDone : TEventLocal<TEvReplicationDone, EvReplicationDone> {
-        ui32 GroupId;
-        ui32 Generation;
-        TFailRealmStates States;
-        TEvReplicationDone(ui32 groupId, ui32 generation, const TFailRealmStates& states)
-            : GroupId(groupId), Generation(generation), States(states) {}
     };
 };
 

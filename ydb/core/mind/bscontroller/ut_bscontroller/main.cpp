@@ -529,14 +529,12 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, initial)).GetSuccess());
         const ui32 initialGeneration = env.ReadGroups().at(groupId).GetGroupGeneration();
         ui32 probes = 0;
-        TActorId satellite;
         env.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
                 const TEvBlobStorage::TEvVStatus* request = event->Get<TEvBlobStorage::TEvVStatus>();
                 const TVDiskID disk = VDiskIDFromVDiskID(request->Record.GetVDiskID());
                 if (disk.GroupID.GetRawId() == groupId) {
                     UNIT_ASSERT(disk.FailRealm != 2);
-                    satellite = event->Sender;
                     ++probes;
                     env.Runtime->Send(new IEventHandle(event->Sender, event->Recipient,
                         new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, disk, true, true, false, 1), 0, event->Cookie));
@@ -553,15 +551,16 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetRings(0).GetState(), TFailRealm::N2);
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetRings(1).GetState(), TFailRealm::N2);
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetRings(2).GetState(), TFailRealm::F);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(0).GetState()), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(1).GetState()), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(2).GetState()), ui32(TFailRealm::F));
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 2);
         UNIT_ASSERT_VALUES_EQUAL(probes, 12);
         env.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
         // A delayed proposal for the previous generation must not overwrite the new state.
-        env.Runtime->SendToPipe(env.TabletId, satellite,
-            new TEvGroupState::TEvReplicationDone(groupId, initialGeneration, initial), 0, GetPipeConfigWithRetries());
+        NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial);
+        stale.MutableCommand(0)->MutableDefineFailRealmStates()->MutableGroups(0)->SetExpectedGroupGeneration(initialGeneration);
+        UNIT_ASSERT(!env.Invoke(stale).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());

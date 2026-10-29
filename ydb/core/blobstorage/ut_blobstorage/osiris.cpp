@@ -561,6 +561,84 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
 }
 
 Y_UNIT_TEST_SUITE(Osiris) {
+    Y_UNIT_TEST(Mirror3dcControllerPromotesReplicatedRealms) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        bool allowPromotion = false;
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 9,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        });
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (!allowPromotion && event->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult) {
+                event->Get<TEvBlobStorage::TEvVStatusResult>()->Record.SetReplicated(false);
+            }
+            return true;
+        };
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        NKikimrBlobStorage::TConfigRequest request;
+        NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition* definition =
+            request.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+        definition->SetGroupId(groupId);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
+        definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::EXCLUDED);
+        UNIT_ASSERT(env.Invoke(request).GetSuccess());
+        env.Sim(TDuration::Seconds(30));
+        const TIntrusivePtr<TBlobStorageGroupInfo> initialInfo = env.GetGroupInfo(groupId);
+        const TString data(4096, 'S');
+        const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
+        TBlobStorageGroupInfo::TOrderNums subgroup;
+        initialInfo->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
+        // Materialize only the old D=1+1. The automatic N1 transition must trigger D=2+2 recovery.
+        for (ui32 part = 0; part < 2; ++part) {
+            const TVDiskID disk = initialInfo->GetVDiskId(subgroup[part]);
+            UNIT_ASSERT_VALUES_EQUAL(disk.FailRealm, part);
+            const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::PutTabletLog, 0);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(queue.NodeId());
+            env.Runtime->Send(new IEventHandle(queue, edge, new TEvBlobStorage::TEvVPut(
+                TLogoBlobID(blobId, part + 1), TRope(data), disk, false, nullptr, TInstant::Max(),
+                NKikimrBlobStorage::TabletLog, false)), edge.NodeId());
+            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVPutResult>> result =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        }
+        env.Sim(TDuration::Seconds(30));
+        allowPromotion = true;
+        env.Sim(TDuration::Seconds(60));
+        const TIntrusivePtr<TBlobStorageGroupInfo> finalInfo = env.GetGroupInfo(groupId);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalInfo->GetFailRealmState(0)), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalInfo->GetFailRealmState(1)), ui32(TFailRealm::N2));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(finalInfo->GetFailRealmState(2)), ui32(TFailRealm::F));
+        UNIT_ASSERT(finalInfo->GroupGeneration >= initialInfo->GroupGeneration + 2);
+        std::array<ui32, 3> copies{};
+        for (ui32 index = 0; index < subgroup.size(); ++index) {
+            const TVDiskID disk = finalInfo->GetVDiskId(subgroup[index]);
+            if (disk.FailRealm == 2) {
+                continue;
+            }
+            const TActorId queue = env.CreateQueueActor(disk, NKikimrBlobStorage::GetFastRead, 0);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(queue.NodeId());
+            std::unique_ptr<TEvBlobStorage::TEvVGet> query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
+                disk, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            query->AddExtremeQuery(TLogoBlobID(blobId, index % 3 + 1), 0, 0);
+            env.Runtime->Send(new IEventHandle(queue, edge, query.release()), edge.NodeId());
+            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVGetResult>> result =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            for (const NKikimrBlobStorage::TQueryResult& blob : result->Get()->Record.GetResult()) {
+                if (blob.GetStatus() == NKikimrProto::OK) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(blob).ConvertToString(), data);
+                    ++copies[disk.FailRealm];
+                }
+            }
+        }
+        UNIT_ASSERT(copies[0] >= 2 && copies[1] >= 2);
+        env.Runtime->FilterFunction = {};
+    }
+
+
 
     Y_UNIT_TEST(Mirror3dcRepeatsRecoveryOnDurabilityChange) {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;

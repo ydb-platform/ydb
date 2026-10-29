@@ -93,7 +93,6 @@ public:
     class TTxUpdateSeenOperational;
     class TTxUpdateEnableConfigV2;
     class TTxConfigCmd;
-    class TTxUpdateGroupState;
     class TTxCommitConfig;
     class TTxProposeGroupKey;
     class TTxRegisterNode;
@@ -2064,7 +2063,6 @@ public:
     TActorId SelfHealId;
     TActorId GroupStateActorId;
     void UpdateGroupStateActor(TGroupId groupId);
-    void Handle(TEvGroupState::TEvReplicationDone::TPtr& ev);
 
     TActorId ClusterBalanceActorId;
 
@@ -2570,7 +2568,6 @@ public:
         }
 
         switch (type) {
-            hFunc(TEvGroupState::TEvReplicationDone, Handle);
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
             hFunc(TEvBlobStorage::TEvControllerGetGroup, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroups, Handle);

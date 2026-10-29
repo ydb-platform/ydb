@@ -47,7 +47,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         TGroupReplicationInfo Info;
         TVector<bool> Replicated;
         ui32 Pending = 0;
-        bool Proposed = false;
+        ui64 ProposalCookie = 0;
     };
     struct TQuery {
         ui32 GroupId;
@@ -55,6 +55,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     };
     std::map<ui32, TGroup> Groups;
     std::map<ui64, TQuery> Queries;
+    std::map<ui64, ui32> Proposals;
     TVector<ui32> ActiveGroups;
     ui32 Cursor = 0;
     ui64 NextCookie = 0;
@@ -66,6 +67,9 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         const TEvGroupState::TEvUpdate& message = *ev->Get();
         for (auto it = Queries.begin(); it != Queries.end();) {
             it = it->second.GroupId == message.GroupId ? Queries.erase(it) : std::next(it);
+        }
+        if (const auto it = Groups.find(message.GroupId); it != Groups.end()) {
+            Proposals.erase(it->second.ProposalCookie);
         }
         Groups.erase(message.GroupId);
         if (message.Info) {
@@ -82,7 +86,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void CheckCompletion(ui32 groupId, TGroup* group) {
-        if (group->Proposed) {
+        if (group->ProposalCookie) {
             return;
         }
         TFailRealmStates states = group->Info.States;
@@ -104,8 +108,22 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             }
         }
         if (states != group->Info.States) {
-            group->Proposed = true;
-            Send(ControllerId, new TEvGroupState::TEvReplicationDone(groupId, group->Info.Generation, states));
+            using TDefinition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
+            std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request =
+                std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+            NKikimrBlobStorage::TConfigRequest* config = request->Record.MutableRequest();
+            config->SetIgnoreGroupFailModelChecks(true);
+            config->SetIgnoreDegradedGroupsChecks(true);
+            config->SetIgnoreDisintegratedGroupsChecks(true);
+            TDefinition* definition = config->AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+            definition->SetGroupId(groupId);
+            definition->SetExpectedGroupGeneration(group->Info.Generation);
+            for (EMirror3dcFailRealmState state : states) {
+                definition->AddFailRealmStates(static_cast<TDefinition::EFailRealmState>(state));
+            }
+            group->ProposalCookie = ++NextCookie;
+            Proposals.emplace(group->ProposalCookie, groupId);
+            Send(ControllerId, request.release(), 0, group->ProposalCookie);
         }
     }
 
@@ -127,7 +145,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                     it = Groups.begin();
                 }
                 TGroup& group = it->second;
-                if (!group.Proposed) {
+                if (!group.ProposalCookie) {
                     group.Replicated.assign(group.Info.VDisks.size(), false);
                     group.Pending = 0;
                     ActiveGroups.push_back(it->first);
@@ -146,6 +164,19 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             Cursor = it == Groups.end() ? Groups.begin()->first : it->first;
         }
         Schedule(PollInterval, new TEvents::TEvWakeup);
+    }
+
+    void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
+        const auto proposal = Proposals.find(ev->Cookie);
+        if (proposal == Proposals.end() || ev->Sender != ControllerId) {
+            return;
+        }
+        if (const auto group = Groups.find(proposal->second); group != Groups.end()
+                && group->second.ProposalCookie == ev->Cookie) {
+            // Successful commits also publish a fresh snapshot; rejected commands may retry.
+            group->second.ProposalCookie = 0;
+        }
+        Proposals.erase(proposal);
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr& ev) {
@@ -177,6 +208,7 @@ public:
     STRICT_STFUNC(StateWork,
         hFunc(TEvGroupState::TEvUpdate, Handle)
         hFunc(TEvBlobStorage::TEvVStatusResult, Handle)
+        hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle)
         cFunc(TEvents::TSystem::Wakeup, Poll)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )

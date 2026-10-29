@@ -1181,6 +1181,10 @@ namespace NKikimr::NBsController {
                     || group->Topology->GetTotalFailRealmsNum() != 3) {
                 throw TExError() << "GroupId# " << groupId << " is not an ordinary mirror-3-dc group";
             }
+            if (definition.HasExpectedGroupGeneration() && definition.GetExpectedGroupGeneration() != group->Generation) {
+                throw TExError() << "GroupId# " << groupId << " generation changed: expected# "
+                    << definition.GetExpectedGroupGeneration() << " actual# " << group->Generation;
+            }
             if (definition.FailRealmStatesSize() != 3) {
                 throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
             }

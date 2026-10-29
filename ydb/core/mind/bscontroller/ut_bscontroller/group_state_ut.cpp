@@ -43,11 +43,15 @@ public:
     }
 
     void ReplyRound(ui32 requests, bool failSecondRealm = false, bool obsoleteGeneration = false) {
+        TSet<TActorId> disks;
+        for (const TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
+            disks.insert(disk.ActorId);
+        }
         for (ui32 index = 0; index < requests; ++index) {
-            TEvBlobStorage::TEvVStatus::TPtr request = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>();
+            TEvBlobStorage::TEvVStatus::TPtr request = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disks);
             TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
             UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, Info.Generation);
-            const bool replicated = !failSecondRealm || disk.FailRealm != 1;
+            const bool replicated = !failSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0;
             if (obsoleteGeneration) {
                 --disk.GroupGeneration;
             }
@@ -58,9 +62,17 @@ public:
     }
 
     TFailRealmStates GetProposal() {
-        TEvGroupState::TEvReplicationDone::TPtr result = Runtime.GrabEdgeEventRethrow<TEvGroupState::TEvReplicationDone>(Controller);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Generation, Info.Generation);
-        return result->Get()->States;
+        TEvBlobStorage::TEvControllerConfigRequest::TPtr result =
+            Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(Controller);
+        const NKikimrBlobStorage::TDefineFailRealmStates& command =
+            result->Get()->Record.GetRequest().GetCommand(0).GetDefineFailRealmStates();
+        UNIT_ASSERT_VALUES_EQUAL(command.GroupsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(command.GetGroups(0).GetExpectedGroupGeneration(), Info.Generation);
+        TFailRealmStates states;
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            states[realm] = static_cast<EMirror3dcFailRealmState>(command.GetGroups(0).GetFailRealmStates(realm));
+        }
+        return states;
     }
 };
 }

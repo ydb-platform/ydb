@@ -1,6 +1,7 @@
 import json
 from typing import Optional, Self
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.library.stability.utils.workload_logs import TAIL_BYTES
 
 
 class RunConfigInfo:
@@ -32,8 +33,12 @@ class StressUtilRunResult:
         is_success: Whether run succeeded
         is_timeout: Whether run timed out
         iteration_number: Iteration number
-        stdout: Standard output
-        stderr: Standard error
+        stdout: Tail of stdout (at most TAIL_BYTES), not the full log
+        stderr: Tail of stderr (at most TAIL_BYTES), not the full log
+        stdout_path: Remote path of the full stdout, if the run was kept
+        stderr_path: Remote path of the full stderr, if the run was kept
+        stdout_bytes: Size of the workload stdout file
+        stderr_bytes: Size of the workload stderr file
         start_time: Run start timestamp
         end_time: Run end timestamp
         execution_time: Run duration in seconds
@@ -44,19 +49,37 @@ class StressUtilRunResult:
     iteration_number: Optional[int] = None
     stdout: Optional[str] = None
     stderr: Optional[str] = None
+    stdout_path: Optional[str] = None
+    stderr_path: Optional[str] = None
+    stdout_bytes: Optional[int] = None
+    stderr_bytes: Optional[int] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
     execution_time: Optional[float] = None
 
+    @staticmethod
+    def _bounded_tail(text: Optional[str]) -> Optional[str]:
+        if text is None or len(text) <= TAIL_BYTES:
+            return text
+        return text[-TAIL_BYTES:]
+
     def to_dict(self):
-        """Convert object to dictionary for JSON serialization."""
+        """Convert object to dictionary for JSON serialization.
+
+        stdout/stderr are bounded tails. Full logs stay on the node that ran
+        the workload (stdout_path/stderr_path) and only for a failed run.
+        """
         return {
             "run_config": str(self.run_config),
             "is_success": self.is_success,
             "is_timeout": self.is_timeout,
             "iteration_number": self.iteration_number,
-            "stdout": self.stdout,
-            "stderr": self.stderr,
+            "stdout": self._bounded_tail(self.stdout),
+            "stderr": self._bounded_tail(self.stderr),
+            "stdout_path": self.stdout_path,
+            "stderr_path": self.stderr_path,
+            "stdout_bytes": self.stdout_bytes,
+            "stderr_bytes": self.stderr_bytes,
             "start_time": self.start_time,
             "end_time": self.end_time,
             "execution_time": self.execution_time

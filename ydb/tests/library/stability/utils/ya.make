@@ -8,6 +8,7 @@ PY3_LIBRARY()
         upload_results.py
         results_models.py
         summary_writer.py
+        workload_logs.py
     )
 
     PEERDIR (
@@ -22,3 +23,7 @@ PY3_LIBRARY()
     )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

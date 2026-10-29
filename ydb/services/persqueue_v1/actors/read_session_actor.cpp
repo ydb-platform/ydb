@@ -1350,13 +1350,22 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
             }
         }
     }
+    // The balancer locks a child only after its ancestors finished, so their final state is already known here.
+    std::unordered_set<ui64> skippedParents;
+    for (const auto* parent: partitionNode->AllParents) {
+        for (auto& [_, actorInfo]: Partitions) { // TODO: map
+            if (actorInfo.Partition.Partition == parent->Id && actorInfo.ReadingFinished && actorInfo.StartedFromEnd) {
+                skippedParents.emplace(actorInfo.Partition.Partition);
+            }
+        }
+    }
 
     const auto database = topic->DbPath;
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, ClientDC, RangesMode,
         converterIter->second, database, DirectRead, Protocol, maxLag, readTimestampMs,
-        topic, notCommitedToFinishParents, PartitionMaxInFlightBytes, BatchingSupported));
+        topic, notCommitedToFinishParents, skippedParents, PartitionMaxInFlightBytes, BatchingSupported));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -2502,6 +2511,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
     partitionInfo->EndOffset = msg->EndOffset;
     partitionInfo->ReadingFinished = true;
+    partitionInfo->StartedFromEnd = msg->FirstMessage;
 
     NotifyChildren(*partitionInfo, ctx);
 

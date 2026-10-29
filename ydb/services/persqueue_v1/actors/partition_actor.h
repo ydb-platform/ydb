@@ -78,7 +78,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, const std::unordered_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -293,6 +293,9 @@ private:
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
+    // Ancestors that this session finished without delivering data, as read_from skipped all their messages.
+    // The first commit of this partition commits them to the end, like the SDK commits the read_from gap of a single partition.
+    const std::unordered_set<ui64> SkippedParents;
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

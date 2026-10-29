@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/getopt
     ydb/public/lib/ydb_cli/import
 )
 

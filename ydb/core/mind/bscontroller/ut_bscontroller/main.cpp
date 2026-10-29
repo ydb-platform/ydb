@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).GetGroupGeneration(),
             after.at(groupId).GetGroupGeneration() + 1);
-        // Neither transitions nor resulting layout combinations are restricted by the test command.
+        // The force flag bypasses transition and resulting-layout checks.
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, {TFailRealm::R, TFailRealm::R, TFailRealm::R})).GetSuccess());
         const NKikimrBlobStorage::TGroupInfo changed = env.ReadGroups().at(groupId);
         UNIT_ASSERT_VALUES_EQUAL(changed.GetGroupGeneration(), after.at(groupId).GetGroupGeneration() + 2);
@@ -654,7 +654,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         for (const auto& [id, group] : env.ReadGroups()) {
             UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
         }
-        // Rollback must not leave the per-group override flag behind.
+        // Rollback must not leave forced realm states behind.
         UNIT_ASSERT(env.Invoke(env.Define({{"2", TDataCenterStatesEnv::TDataCenter::EXCLUDED}})).GetSuccess());
         env.CheckStates(env.ReadGroups(), TFailRealm::F);
     }

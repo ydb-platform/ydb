@@ -85,7 +85,6 @@ struct Schema : NIceDb::Schema {
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
-        struct FailRealmStates : Column<18, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TFailRealmStates; };
 
         struct FailRealmStates : Column<18, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TFailRealmStates; };
 

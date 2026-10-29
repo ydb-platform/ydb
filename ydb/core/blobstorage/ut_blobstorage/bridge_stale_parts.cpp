@@ -272,6 +272,86 @@ namespace {
         env.Runtime->FilterFunction = {};
     }
 
+    void CheckNewGroupWaitsForClusterState(bool duringSync) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        CreatePoolAndGetGroup(env);
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+
+        constexpr ui32 staleNodeId = 3;
+        TStaticSyncFinishHold staticHold(env);
+        bool holdWriter = true;
+        std::unique_ptr<IEventHandle> heldConfig;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (duringSync && !staticHold.Filter(nodeId, ev)) {
+                return false;
+            }
+            if (holdWriter && nodeId == staleNodeId && ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                const auto *recipient = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                const auto *msg = ev->Get<TEvNodeWardenStorageConfig>();
+                if (recipient && TypeName(*recipient).Contains("TNodeWarden") &&
+                        msg->Config && msg->Config->HasClusterState() &&
+                        NBridge::PileStateTraits(msg->Config->GetClusterState().GetPerPileState(1)).RequiresDataQuorum) {
+                    heldConfig = std::move(ev);
+                    return false;
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, duringSync ? NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2
+            : NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitUntil(env, [&] { return bool(heldConfig); }, "withheld writer cluster state", TDuration::Seconds(1), 60);
+
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        const auto baseConfig = env.FetchBaseConfig();
+        std::optional<ui32> groupId;
+        for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+            if (group->GetIsProxyGroup()) {
+                groupId = group->GetGroupId();
+            }
+        }
+        UNIT_ASSERT(groupId);
+        const auto pileGroups = GetPileGroups(env, *groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+        const auto groupInfo = GetGroupInfo(env, *groupId);
+        const TString data = "new group write from a node with stale cluster state";
+        auto putAndCheck = [&](ui32 step, bool mustSucceed) {
+            const TLogoBlobID id(100500, 1, step, 0, data.size(), 0);
+            const auto edge = env.Runtime->AllocateEdgeActor(staleNodeId, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, *groupId, new TEvBlobStorage::TEvPut(id, data,
+                    env.Runtime->GetClock() + TDuration::Seconds(30)));
+            });
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Seconds(40));
+            UNIT_ASSERT(result);
+            if (mustSucceed) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+            }
+            if (result->Get()->Status == NKikimrProto::OK) {
+                for (ui32 pile : {0, 1}) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(ReadFromPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data),
+                        NKikimrProto::OK, "acknowledged write skipped pile " << pile);
+                }
+            }
+        };
+        putAndCheck(1, false);
+        UNIT_ASSERT_VALUES_EQUAL(groupInfo.GetBridgeGroupState().GetClusterStateGeneration(),
+            QueryStorageConfig(env).GetClusterState().GetGeneration());
+
+        holdWriter = false;
+        env.Runtime->Send(heldConfig.release(), staleNodeId);
+        env.Sim(TDuration::Seconds(1));
+        putAndCheck(2, true);
+        if (duringSync) {
+            staticHold.Release();
+            WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        }
+        env.Runtime->FilterFunction = {};
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeStaleParts) {
@@ -790,5 +870,13 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL_C(msg->Responses[0].Status, NKikimrProto::OK, msg->ToString());
         UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Buffer.ConvertToString(), data);
+    }
+
+    Y_UNIT_TEST(NewGroupWaitsForClusterStateAfterRejoin) {
+        CheckNewGroupWaitsForClusterState(false);
+    }
+
+    Y_UNIT_TEST(NewGroupWaitsForClusterStateDuringSync) {
+        CheckNewGroupWaitsForClusterState(true);
     }
 }

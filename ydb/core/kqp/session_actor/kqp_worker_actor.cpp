@@ -127,6 +127,9 @@ public:
         }
 
         Config->ApplyServiceConfig(Settings.TableService);
+        if (auto normalizer = AppData()->GetPathNormalizer()) {
+            Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+        }
 
         Config->FreezeDefaults();
 
@@ -187,11 +190,6 @@ public:
         QueryState->Sender = ev->Sender;
         QueryState->CollectTraceStats = bool(ev->TraceId);
         QueryState->RequestEv.reset(ev->Release().Release());
-
-        Config->NormalizePath = {};
-        if (auto normalizer = AppData(ctx)->GetPathNormalizer()) {
-            Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
-        }
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
             Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr, std::nullopt, NWilson::TTraceId(ev->TraceId));

@@ -36,7 +36,7 @@ public:
             {"path", TStringBuilder() << parentPathStr << "/" << name},
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         const auto path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {

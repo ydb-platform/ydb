@@ -2,6 +2,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
@@ -719,7 +720,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "DirA", diffACL.SerializeAsString(), "svc@staff");
 
             TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
             env.TestWaitNotification(runtime, {txId, txId-1});
         }
@@ -757,6 +758,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::HasEffectiveRight("+U:user0@builtin"),
                             NLs::HasNoEffectiveRight("+U:user1@builtin:-")});
 
+    }
+
+    Y_UNIT_TEST(ModifyACLWaitsForPublication) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user0@builtin");
+
+        const ui64 modifyTxId = ++txId;
+        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime,
+            [modifyTxId](const auto& ev) {
+                return ev->Cookie == modifyTxId;
+            });
+
+        AsyncModifyACL(runtime, modifyTxId, "/MyRoot", "DirA", diffACL.SerializeAsString(), "");
+        TestModificationResult(runtime, modifyTxId, NKikimrScheme::StatusAccepted);
+        runtime.WaitFor("ACL publication acknowledgement", [&] { return !publicationAcks.empty(); });
+
+        bool registered = false;
+        bool completed = false;
+        auto registeredObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionRegistered>(
+            [&](const auto& ev) {
+                if (ev->Get()->Record.GetTxId() == modifyTxId) {
+                    registered = true;
+                }
+            });
+        auto completedObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>(
+            [&](const auto& ev) {
+                if (ev->Get()->Record.GetTxId() == modifyTxId) {
+                    completed = true;
+                }
+            });
+
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+            new TEvSchemeShard::TEvNotifyTxCompletion(modifyTxId), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("ACL completion subscription", [&] { return registered || completed; });
+        UNIT_ASSERT_C(registered && !completed, "ModifyACL must wait for SchemeBoard publication");
+
+        publicationAcks.Stop().Unblock();
+        runtime.WaitFor("ACL completion", [&] { return completed; });
     }
 
     Y_UNIT_TEST(NameFormat) {
@@ -13787,7 +13834,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )");
 
             {
-                TestModifyACL(runtime, ++txId, "/MyRoot", "Subdomain", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Subdomain", TString(), newOwner, NKikimrScheme::StatusAccepted, applyIf);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Subdomain"), {checkOwner});
             }
         }
@@ -13798,7 +13845,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )");
 
             {
-                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain", TString(), newOwner, NKikimrScheme::StatusAccepted, applyIf);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain"), {checkOwner});
             }
         }
@@ -13822,7 +13869,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )");
 
             {
-                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain2", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain2", TString(), newOwner, NKikimrScheme::StatusAccepted, applyIf);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain2"), {checkOwner});
             }
         }
@@ -13837,7 +13884,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
             {
                 TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusPreconditionFailed, applyIf);
-                TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusSuccess);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusAccepted);
             }
         }
     }

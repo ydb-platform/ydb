@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group");
         AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),{
             NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
             NLs::HasRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1/DirSub1");
 
         AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
             {NLs::HasOwner("user1")});
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         AsyncModifyACL(runtime, ++txId, "/MyRoot/Dir1", "DirSub1", NACLib::TDiffACL().SerializeAsString(), "user2");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         CreateAlterLoginRemoveUser(runtime, ++txId, "/MyRoot", "user1");
 
         // check user has been removed:
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1")});
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             NACLib::TDiffACL diffACL;
             diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
@@ -440,7 +440,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "Dir1");
         AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "group1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasOwner("group1")});
 
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "root@builtin");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasOwner("root@builtin")});
 
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
         }
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasRight("+U:group1")});
 
@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
         }
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasNoRight("+U:group1")});
 
@@ -552,10 +552,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"), NLs::HasOwner("root@builtin")});
 
         AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1");
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
             {NLs::HasRight("+U:user1"), NLs::HasEffectiveRight("+U:user1"), NLs::HasOwner("user1")});
@@ -573,12 +573,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1@staff");
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", diffACL.SerializeAsString(), "");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         }
 
         {
             AsyncModifyACL(runtime, ++txId, "/MyRoot", "Dir1", NACLib::TDiffACL{}.SerializeAsString(), "user1@staff");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         }
     }
 

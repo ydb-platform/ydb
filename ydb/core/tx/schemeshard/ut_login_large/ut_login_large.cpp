@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
             THashSet<TString> paths;
             paths.emplace("MyRoot");
             AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
             auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(++txId, TTestTxConfig::SchemeShard);
 
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "userx");
             AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         }
 
         {
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginLargeTest) {
             NACLib::TDiffACL diffACL;
             diffACL.RemoveAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "userx");
             AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), "");
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
+            TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
         }
 
         {

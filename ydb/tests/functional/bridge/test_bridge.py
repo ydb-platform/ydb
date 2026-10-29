@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import os
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -84,6 +86,21 @@ class TestBridgeBasic(BridgeKiKiMRTest):
         ]
         self.update_cluster_state(self.bridge_client, updates)
         self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.DISCONNECTED})
+
+    def test_cli_takedown_of_primary(self):
+        # the primary pile is taken down with the CLI naming the new primary; the request must not lose the primary
+        initial_result = self.get_cluster_state(self.bridge_client)
+        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        node = self.pile_nodes["r2"][0]
+        command = [self.configurator.get_ydb_cli_path(), '--endpoint', 'grpc://{}:{}'.format(node.host, node.port),
+                   'admin', 'cluster', 'bridge', 'takedown', '--pile', 'r1', '--new-primary', 'r2']
+        env = os.environ.copy()
+        env['YDB_TOKEN'] = 'root@builtin'
+        result = subprocess.run(command, capture_output=True, env=env, timeout=300)
+        output = (result.stdout + result.stderr).decode('utf-8', errors='replace')
+        assert result.returncode == 0, output
+        self.wait_for_cluster_state(self.secondary_bridge_client, {"r1": PileState.DISCONNECTED, "r2": PileState.PRIMARY},
+                                    timeout_seconds=60)
 
     def test_rejoin(self):
         initial_result = self.get_cluster_state(self.bridge_client)

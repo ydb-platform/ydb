@@ -341,6 +341,37 @@ int TCommandBridgeTakedown::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
+    auto stateOf = [&](const TString& pile) {
+        auto result = client.GetClusterState().GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+        for (const auto& item : result.GetState()) {
+            if (item.PileName == pile) {
+                return item.State;
+            }
+        }
+        throw TMisuseException() << "Unknown pile \"" << pile << "\"";
+    };
+
+    if (!NewPrimaryPile.empty() && stateOf(DownPile) == NYdb::NBridge::EPileState::PRIMARY) {
+        // the cluster has to keep its primary pile, so the new one is promoted first; the pile goes down once the
+        // new one has become the primary
+        auto promote = client.UpdateClusterState({{NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED}}, {}).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(promote);
+        const TInstant deadline = TInstant::Now() + TDuration::Minutes(5);
+        while (stateOf(NewPrimaryPile) != NYdb::NBridge::EPileState::PRIMARY) {
+            if (TInstant::Now() > deadline) {
+                Cerr << "Pile \"" << NewPrimaryPile << "\" has not become the primary in time, \""
+                    << DownPile << "\" is left as it is." << Endl;
+                return EXIT_FAILURE;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+        auto suspend = client.UpdateClusterState({{DownPile, NYdb::NBridge::EPileState::SUSPENDED}}, {}).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(suspend);
+        Cout << "Cluster state updated successfully." << Endl;
+        return EXIT_SUCCESS;
+    }
+
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::SUSPENDED});
     if (!NewPrimaryPile.empty()) {

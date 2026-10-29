@@ -927,7 +927,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
             const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
             const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
-                [normalizer = AppData()->PathNormalizer](TStringBuf path) { return normalizer->NormalizePath(path); });
+                [normalizer = AppData()->GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
             UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");

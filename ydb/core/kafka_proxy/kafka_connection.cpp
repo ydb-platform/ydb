@@ -617,7 +617,8 @@ protected:
         Context->UserToken = event->UserToken;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
-        Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
+        Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath,
+            event->UserToken ? event->UserToken->GetSerializedToken() : TString()};
         Context->DatabaseId = event->DatabaseId;
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
@@ -626,7 +627,7 @@ protected:
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
-            {"SID", Context->UserToken->GetUserSID()});
+            {"SID", GetUsernameOrAnonymous(Context)});
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {

@@ -788,9 +788,6 @@ public:
             return result;
         }
 
-<<<<<<< HEAD
-        bool isReplicated = false;
-=======
         // Keep validation in Propose; decomposition also checks it because TAlterTable
         // does not yet support rolling back its proposal when another sub-operation fails.
         if (alter.ColumnsSize() != 0) {
@@ -806,10 +803,7 @@ public:
             }
         }
 
-        bool hasLegacyReplicationStream = false;
-        bool hasSchemaReplicationStream = false;
-        bool hasSchemaCdcStream = false;
->>>>>>> 836e6e71e3a (Fix DROP NOT NULL propagation to secondary indexes (#54534))
+        bool isReplicated = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -968,8 +962,6 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 }
 
-<<<<<<< HEAD
-=======
 // Collect changes by implementation-table path so independent alterations can share
 // one sub-operation per table.
 using TIndexImplTableAlters = TMap<TPathId, NKikimrSchemeOp::TTableDescription>;
@@ -1159,7 +1151,7 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
         // the base table alter, even if each individual alter fits the in-flight limit.
         THashMap<TTxState::ETxType, ui64> partsByTxType;
         for (const auto& part : result) {
-            if (const auto txType = ConvertToTxType(part->GetModifyScheme().GetOperationType());
+            if (const auto txType = ConvertToTxType(part->GetTransaction().GetOperationType());
                 txType != TTxState::TxInvalid)
             {
                 ++partsByTxType[txType];
@@ -1175,7 +1167,6 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
     return nullptr;
 }
 
->>>>>>> 836e6e71e3a (Fix DROP NOT NULL propagation to secondary indexes (#54534))
 // Collects the names of the table's live local prefix bloom filter index children.
 static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperationContext& context) {
     TVector<TString> names;
@@ -1216,12 +1207,9 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     for (const auto& indexName : bloomIndexNames) {
         AddDropIndex(result, id, path.Child(indexName));
     }
-<<<<<<< HEAD
-=======
     if (auto reject = AppendIndexImplTableAlters(result, id, tx, path, context)) {
         return TVector<ISubOperation::TPtr>{reject};
     }
->>>>>>> 836e6e71e3a (Fix DROP NOT NULL propagation to secondary indexes (#54534))
     return result;
 }
 
@@ -1295,12 +1283,9 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
         result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
     }
 
-<<<<<<< HEAD
-=======
     if (auto reject = AppendIndexImplTableAlters(result, id, tx, path, context)) {
         return TVector<ISubOperation::TPtr>{reject};
     }
->>>>>>> 836e6e71e3a (Fix DROP NOT NULL propagation to secondary indexes (#54534))
     return result;
 }
 
@@ -1345,12 +1330,9 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         TVector<ISubOperation::TPtr> result;
         result.push_back(CreateAlterTable(NextPartId(id, result), tx));
         AppendOwnedSequenceDrops(result, id, tx, path, context);
-<<<<<<< HEAD
-=======
         if (auto reject = AppendIndexImplTableAlters(result, id, tx, path, context)) {
             return {reject};
         }
->>>>>>> 836e6e71e3a (Fix DROP NOT NULL propagation to secondary indexes (#54534))
         return result;
     }
 

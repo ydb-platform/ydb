@@ -3543,7 +3543,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         }
         RebootTablet(runtime, schemeShard, edgeActor);
-        const IEventHandle* recoveredPlan = nullptr;
+        IEventHandle* recoveredPlan = nullptr;
         if (topicAutoPartitioning) {
             WaitFor(runtime, [&] {
                 for (const auto& plan : plans) {

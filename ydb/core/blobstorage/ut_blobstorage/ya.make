@@ -53,11 +53,7 @@ SRCS(
     sync.cpp
     validation.cpp
     vdisk_malfunction.cpp
-<<<<<<< HEAD
-=======
-    virtual_group.cpp
     vrestore_part.cpp
->>>>>>> fd1d742399d (Impl EvVRestorePart with /restore_part http handle (#57072))
     group_size_in_units.cpp
     pdisk_status_flags.cpp
 )

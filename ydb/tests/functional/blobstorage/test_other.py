@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
-<<<<<<< HEAD
-=======
 import re
 
-import pytest
->>>>>>> fd1d742399d (Impl EvVRestorePart with /restore_part http handle (#57072))
 import requests
 
 from ydb.tests.library.common.types import Erasure

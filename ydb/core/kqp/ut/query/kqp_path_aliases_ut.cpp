@@ -45,14 +45,14 @@ struct TPathAliasesFixture {
             return Session.ExecuteDataQuery(R"(
                 UPSERT INTO `/Root/Before/Rows` (Key) VALUES (1u);
                 UPSERT INTO `/Root/After/Rows` (Key) VALUES (2u);
-            )", NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
         });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     TTestActorRuntime& Runtime() { return *Kikimr.GetTestServer().GetRuntime(); }
 
-    NTable::TSession CreateSession() {
+    NYdb::NTable::TSession CreateSession() {
         return Kikimr.RunCall([&] {
             return Kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         });
@@ -108,7 +108,7 @@ struct TPathAliasesFixture {
 
     TKikimrSettings Settings;
     TKikimrRunner Kikimr;
-    NTable::TSession Session;
+    NYdb::NTable::TSession Session;
     TActorId Edge;
     TActorId Service;
 };

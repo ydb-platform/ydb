@@ -14,6 +14,7 @@
 /ydb/tests/functional/ttl @ydb-platform/datashard
 /ydb/tests/functional/statistics @ydb-platform/datashard
 /ydb/tools/tli_analysis/tests @ydb-platform/datashard
+/ydb/tools/include_sanitizer @ydb-platform/datashard
 /ydb/core/scheme @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard

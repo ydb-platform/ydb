@@ -1905,7 +1905,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem = actorSystem;
     if (!PathNormalizer) {
         auto* appData = ActorSystem->AppData<NKikimr::TAppData>();
-        PathNormalizer = MakePathNormalizer(appData ? appData->PathNormalizer : nullptr);
+        PathNormalizer = MakePathNormalizer(appData ? appData->GetPathNormalizer() : nullptr);
     }
     if (auto* appData = ActorSystem->AppData<NKikimr::TAppData>()) {
         GrpcProxyCounters = NKikimr::NGRpcService::CreateGRpcProxyCounters(appData->Counters);

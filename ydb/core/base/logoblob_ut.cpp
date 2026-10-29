@@ -3,13 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/ptr.h>
 
-<<<<<<< HEAD
-=======
-#include <array>
-#include <bit>
 #include <utility>
 
->>>>>>> bd399fc44ed (Fix VERIFY in TLogoBlobID::Parse (#57141))
 namespace NKikimr {
     Y_UNIT_TEST_SUITE(TLogoBlobTest) {
 

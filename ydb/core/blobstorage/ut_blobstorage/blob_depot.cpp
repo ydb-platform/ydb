@@ -5,6 +5,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/testlib/helpers.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -154,9 +155,123 @@ void CheckRangeWaitsForFinalResolve(bool reverse, bool finalError) {
     }
 }
 
+template<typename TRequest, typename TResult>
+void CheckReadDeadline(bool holdResolve, bool physicalTimeout = false) {
+    ui32 seed;
+    LoadSeed(seed);
+    TBlobDepotTestEnvironment tenv(seed);
+    auto& env = *tenv.Env;
+    const TString data = "read with a deadline";
+    const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+    const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    env.Runtime->WrapInActorContext(edge, [&] {
+        SendToBSProxy(edge, tenv.BlobDepot, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+    });
+    UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
+        NKikimrProto::OK);
+
+    auto sendRead = [&](TInstant deadline) {
+        env.Runtime->WrapInActorContext(edge, [&] {
+            TRequest *request;
+            if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvGet>) {
+                request = new TRequest(id, 0, 0, deadline, NKikimrBlobStorage::FastRead);
+            } else if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvRange>) {
+                request = new TRequest(id.TabletID(), id, id, false, deadline, false);
+            } else if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvDiscover>) {
+                request = new TRequest(id.TabletID(), 0, true, false, deadline, 0, false);
+            } else {
+                request = new TRequest(id, deadline, NKikimrBlobStorage::FastRead);
+            }
+            SendToBSProxy(edge, tenv.BlobDepot, request);
+        });
+    };
+    TActorId agent;
+    std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+    std::optional<TInstant> physicalDeadline;
+    bool timedOut = false;
+    bool timeoutInjected = false;
+    const TInstant deadline = env.Runtime->GetClock() + TDuration::Seconds(2);
+    env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (timedOut) {
+            UNIT_ASSERT_C(ev->Recipient != edge || ev->GetTypeRewrite() != TResult::EventType,
+                "late dependency response completed the timed-out query again");
+            return true;
+        }
+        bool hold = false;
+        if (ev->GetTypeRewrite() == TEvBlobDepot::TEvResolveResult::EventType) {
+            const auto& record = ev->Get<TEvBlobDepot::TEvResolveResult>()->Record;
+            if (record.ResolvedKeysSize() == 1 && record.GetResolvedKeys(0).GetKey() == id.AsBinaryString()) {
+                agent = ev->Recipient;
+                hold = holdResolve;
+            }
+        } else if (agent && ev->Sender == agent && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+            physicalDeadline = ev->Get<TEvBlobStorage::TEvGet>()->Deadline;
+        } else if (agent && ev->Sender == agent && ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrity) {
+            physicalDeadline = ev->Get<TEvBlobStorage::TEvCheckIntegrity>()->Deadline;
+        } else if (agent && ev->Recipient == agent &&
+                (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult ||
+                    ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrityResult)) {
+            if (physicalTimeout) {
+                UNIT_ASSERT(ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrityResult);
+                auto& msg = *ev->Get<TEvBlobStorage::TEvCheckIntegrityResult>();
+                msg.Status = NKikimrProto::TIMEOUT;
+                msg.ErrorReason = "physical integrity check timed out";
+                timeoutInjected = true;
+            } else {
+                hold = !holdResolve;
+            }
+        }
+        if (hold) {
+            held.emplace_back(nodeId, std::move(ev));
+            return false;
+        }
+        return true;
+    };
+    sendRead(deadline);
+    auto result = env.WaitForEdgeActorEvent<TResult>(edge, false, deadline + TDuration::Seconds(2));
+    UNIT_ASSERT_C(result, "read did not finish at its caller's deadline");
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::TIMEOUT, result->Get()->ToString());
+    UNIT_ASSERT(physicalTimeout ? timeoutInjected : !held.empty());
+    if (!holdResolve) {
+        UNIT_ASSERT(physicalDeadline);
+        UNIT_ASSERT_VALUES_EQUAL(*physicalDeadline, deadline);
+    }
+    timedOut = true;
+    for (auto& [nodeId, ev] : held) {
+        env.Runtime->Send(ev.release(), nodeId);
+    }
+    env.Sim(TDuration::Seconds(1));
+
+    env.Runtime->FilterFunction = {};
+    sendRead(TInstant::Max());
+    auto retry = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(30));
+    UNIT_ASSERT(retry);
+    UNIT_ASSERT_VALUES_EQUAL_C(retry->Get()->Status, NKikimrProto::OK, retry->Get()->ToString());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepot) {
+    Y_UNIT_TEST_TWIN(GetDeadline, holdResolve) {
+        CheckReadDeadline<TEvBlobStorage::TEvGet, TEvBlobStorage::TEvGetResult>(holdResolve);
+    }
+
+    Y_UNIT_TEST_TWIN(RangeDeadline, holdResolve) {
+        CheckReadDeadline<TEvBlobStorage::TEvRange, TEvBlobStorage::TEvRangeResult>(holdResolve);
+    }
+
+    Y_UNIT_TEST_TWIN(DiscoverDeadline, holdResolve) {
+        CheckReadDeadline<TEvBlobStorage::TEvDiscover, TEvBlobStorage::TEvDiscoverResult>(holdResolve);
+    }
+
+    Y_UNIT_TEST_TWIN(CheckIntegrityDeadline, holdResolve) {
+        CheckReadDeadline<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(holdResolve);
+    }
+
+    Y_UNIT_TEST(CheckIntegrityPhysicalTimeoutIsNotSuccess) {
+        CheckReadDeadline<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(false, true);
+    }
+
     Y_UNIT_TEST(RangeWaitsForFinalResolvePage) {
         CheckRangeWaitsForFinalResolve(false, false);
     }

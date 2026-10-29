@@ -463,6 +463,8 @@ namespace NKikimr::NBlobDepot {
             const ui64 QueryId;
             mutable TString QueryIdString;
             const TMonotonic StartTime;
+            const TInstant Deadline;
+            const TMonotonic DeadlineMonotonic;
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
@@ -480,6 +482,7 @@ namespace NKikimr::NBlobDepot {
             virtual ~TQuery();
 
             void CheckQueryExecutionTime(TMonotonic now);
+            bool CheckDeadline(TMonotonic now);
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);

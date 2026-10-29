@@ -339,7 +339,6 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
         .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
         .EnableAddColumnGeneratedVirtual = AppData()->FeatureFlags.GetEnableAddColumnGeneratedVirtual(),
-        .EnableIndexStreamWrite = context.SS->EnableIndexStreamWrite,
     };
 
 

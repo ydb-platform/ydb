@@ -1183,7 +1183,6 @@ public:
         bool EnableGeneratedStored = false;
         bool EnableGeneratedVirtual = false;
         bool EnableAddColumnGeneratedVirtual = false;
-        bool EnableIndexStreamWrite = true;
     };
 
     static TAlterDataPtr CreateAlterData(

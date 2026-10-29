@@ -691,13 +691,15 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus CompileGeneratedColumns(TPositionHandle pos, const TExprList& columns,
+    IGraphTransformer::TStatus ValidateGeneratedColumns(TPositionHandle pos, const TExprList& columns,
         TKikimrTableMetadata& meta, TExprContext& ctx,
-        TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx, bool isAlter = false)
+        TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
     {
         THashSet<TString> generatedColumns;
+        THashSet<TString> allColumns;
 
         for (const auto& [name, col] : meta.Columns) {
+            allColumns.insert(name);
             if (col.IsDefaultFromExpression()) {
                 generatedColumns.insert(name);
             }
@@ -710,11 +712,12 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        // Reject disabled features before compiling SQL; SchemeShard also enforces these gates.
         if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Generated columns require EnableIndexStreamWrite"));
             return IGraphTransformer::TStatus::Error;
         }
+
+        THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
 
         // Row struct type used to type-check every generated expression
         TVector<const TItemExprType*> rowTypeItems;
@@ -747,9 +750,9 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (isAlter && !stored && !sessionCtx.Config().FeatureFlags.GetEnableAddColumnGeneratedVirtual()) {
+            if (keyColumns.contains(columnName)) {
                 ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                    << "Adding VIRTUAL GENERATED columns is disabled (EnableAddColumnGeneratedVirtual)"));
+                    << "Generated columns cannot be part of the primary key"));
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -766,6 +769,26 @@ namespace {
 
             THashSet<TString> refs;
             CollectGeneratedColumnRefs(lambda->Tail(), &lambda->Head().Head(), refs);
+
+            for (const auto& ref : refs) {
+                if (ref == columnName) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                        << "Generated column " << columnName << " can not reference itself"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (!allColumns.contains(ref)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                        << "Generated column " << columnName << " references an unknown column: " << ref));
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (generatedColumns.contains(ref)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                        << "Generated column " << columnName << " references another generated column: " << ref));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
 
             // Persist the dependency columns
             columnMeta.DefaultExpression->Dependencies.assign(refs.begin(), refs.end());
@@ -1586,7 +1609,7 @@ private:
 
         MaybeAutoBindRowIdSequence(*meta);
 
-        if (auto status = CompileGeneratedColumns(create.Pos(), create.Columns(), *meta, ctx, Types, cluster, *SessionCtx);
+        if (auto status = ValidateGeneratedColumns(create.Pos(), create.Columns(), *meta, ctx, Types, cluster, *SessionCtx);
             status != TStatus::Ok)
         {
             return status;
@@ -2324,6 +2347,19 @@ private:
                         return TStatus::Error;
                     }
 
+                    if (columnMeta.IsDefaultFromExpression()) {
+                        if (table->Metadata->IsOlap()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                "Generated columns are not supported in column tables"));
+                            return TStatus::Error;
+                        }
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableAddColumnGeneratedVirtual()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
+                                "Adding VIRTUAL GENERATED columns is disabled (EnableAddColumnGeneratedVirtual)"));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (table->Metadata->IsOlap() && !columnMeta.Families.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
                             "Column FAMILY is not supported for column tables"));
@@ -2686,13 +2722,13 @@ private:
                 }
             }
 
-            if (auto status = CompileGeneratedColumns(node.Pos(), TExprList(ctx.NewList(node.Pos(), TExprNode::TListType(addedColumns))),
-                metadata, ctx, Types, metadata.Cluster, *SessionCtx, /* isAlter */ true); status != TStatus::Ok)
+            if (auto status = ValidateGeneratedColumns(node.Pos(), TExprList(ctx.NewList(node.Pos(), TExprNode::TListType(addedColumns))),
+                metadata, ctx, Types, metadata.Cluster, *SessionCtx); status != TStatus::Ok)
             {
                 return status;
             }
 
-            // Carry the expression dependencies with the constraint into execution.
+            // Carry the validated dependencies with the constraint into execution.
             TNodeOnNodeOwnedMap replacements;
             for (const auto& column : addedColumns) {
                 auto tuple = TExprList(column);

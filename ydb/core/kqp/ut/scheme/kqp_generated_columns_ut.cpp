@@ -1442,7 +1442,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
                 PRIMARY KEY (k)
             );
         )",
-            "Member not found: missing");
+            "unknown column");
     }
 
     Y_UNIT_TEST(ReferencesGeneratedRejected) {
@@ -5947,7 +5947,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             )");
             const std::vector<std::pair<std::string, TString>> cases = {
                 {"v Int32 AS (v + 1)", "can not reference itself"},
-                {"v Int32 AS (missing + 1)", "Member not found: missing"},
+                {"v Int32 AS (missing + 1)", "references an unknown column"},
                 {"v Int32 AS (existing + 1)", "references another generated column"},
                 {"v Int32 AS (stored + 1)", "references another generated column"},
                 {"v String AS (a + 1)", "expression type mismatch"},
@@ -5965,7 +5965,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             )", "references another generated column");
             fixture.Rejects(R"(
                 ALTER TABLE TestTable ADD COLUMN v Int32 AS (a + 1), DROP COLUMN a;
-            )", "Member not found: a");
+            )", "references an unknown column");
             fixture.Exec("ALTER TABLE TestTable ADD COLUMN v Int32 AS (COALESCE(a, 0) + 1);");
             fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 10);");
             fixture.Check("SELECT k, v FROM TestTable;", "[[1;[11]]]");
@@ -6239,7 +6239,7 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                     v Int32 GENERATED ALWAYS AS (COALESCE(k, 0) + 1) VIRTUAL,
                     PRIMARY KEY (v)
                 );
-            )", "cannot be part of the primary key");
+            )", "Generated columns cannot be part of the primary key");
             rejects(R"(
                 CREATE TABLE VirtualTtl (
                     k Int32 NOT NULL,

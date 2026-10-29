@@ -2124,7 +2124,12 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "generated") {
                                     const auto& value = constraint.Value().Cast().Ref();
-                                    YQL_ENSURE(value.ChildrenSize() == 4 && value.Child(2)->Content() != "stored");
+                                    YQL_ENSURE(value.ChildrenSize() == 4);
+                                    if (value.Child(2)->Content() == "stored") {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                                        return SyncError();
+                                    }
                                     hasGeneratedColumns = true;
                                     add_column->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
                                     auto& generated = *add_column->MutableDefaultFromExpression();
@@ -3513,6 +3518,11 @@ public:
                 TMaybe<TString> requestType;
                 if (!SessionCtx->Query().DocumentApiRestricted) {
                     requestType = NKikimr::NDocApi::RequestType;
+                }
+                if (hasGeneratedColumns && indexBuildSettings.has_column_build_operation()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                        "Adding VIRTUAL GENERATED columns together with columns requiring a build is not supported"));
+                    return SyncError();
                 }
                 future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags,
                     std::move(indexBuildSettings));

@@ -755,10 +755,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (col.HasDefaultFromExpression()) {
-                if (!featureFlags.EnableIndexStreamWrite) {
-                    errStr = "Generated columns require EnableIndexStreamWrite";
-                    return nullptr;
-                }
                 const bool stored = col.GetDefaultFromExpression().GetStored();
                 if (stored && !featureFlags.EnableGeneratedStored) {
                     errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());

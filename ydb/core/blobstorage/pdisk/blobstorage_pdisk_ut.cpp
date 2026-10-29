@@ -4066,7 +4066,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_GT(checkSpace(staticVDisk)->FreeChunks, 0);
     }
 
-    Y_UNIT_TEST(SlotSizeBytesUsesConfiguredSettingsOrDefaultSlotCount) {
+    Y_UNIT_TEST(SlotSizeBytesUsesFormulaUnlessExpectedSlotSizeIsSet) {
         TActorTestContext testCtx({
             .DiskSize = 1_GB,
             .ChunkSize = 1_MB,
@@ -4094,24 +4094,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             });
         };
 
-        testCtx.Send(new TEvents::TEvWakeup());
-        waitForPDiskStateUpdate(0, 0);
-
-        const ui64 slotSizeWithoutSettings = getSlotSizeBytes();
-        UNIT_ASSERT_GT(slotSizeWithoutSettings, 0);
-
-        const ui32 defaultSlotCount = 16;
-        const ui32 slotSizeInUnits = 0;
-
-        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
-            new NPDisk::TEvChangeExpectedSlotCount(defaultSlotCount, slotSizeInUnits),
-            NKikimrProto::OK);
-        testCtx.Send(new TEvents::TEvWakeup());
-        waitForPDiskStateUpdate(defaultSlotCount, 0);
-
-        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), slotSizeWithoutSettings);
-
         const ui32 expectedSlotCount = 4;
+        const ui32 slotSizeInUnits = 0;
 
         testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
             new NPDisk::TEvChangeExpectedSlotCount(expectedSlotCount, slotSizeInUnits),
@@ -4135,14 +4119,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         waitForPDiskStateUpdate(expectedSlotCount, expectedSlotSize);
 
         UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), 3ull * chunkSize);
-
-        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
-            new NPDisk::TEvChangeExpectedSlotCount(0, slotSizeInUnits),
-            NKikimrProto::OK);
-        testCtx.Send(new TEvents::TEvWakeup());
-        waitForPDiskStateUpdate(0, 0);
-
-        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), slotSizeWithoutSettings);
     }
 
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {

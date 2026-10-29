@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/containers/bitseq
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/hulldb/fresh
     ydb/core/blobstorage/vdisk/hulldb/bulksst_add
@@ -28,7 +29,12 @@ SRCS(
     hullds_leveledssts.h
     hullds_sst.cpp
     hullds_sst.h
+    hullds_sst_indexhigh.cpp
+    hullds_sst_indexhigh.h
     hullds_sst_it.h
+    hullds_sst_packed.cpp
+    hullds_sst_packed.h
+    hullds_sst_twolevel.h
     hullds_sstslice.cpp
     hullds_sstslice.h
     hullds_sstslice_it.h

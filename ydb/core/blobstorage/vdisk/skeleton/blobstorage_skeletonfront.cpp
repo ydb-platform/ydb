@@ -814,6 +814,8 @@ namespace NKikimr {
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
                         baseInfo.ReplNodeResponseQuoter, VDiskSpaceReportCounters, VDiskAsyncCounters);
 
+            VCtx->SstIndexFormPolicy = Config->SstIndexFormPolicy;
+
             // report every change of local chunk space color to the NodeWarden right away (it forwards the report to
             // BS_CONTROLLER); from then on NodeWarden takes this VDisk's color from these reports only
             if (TActorSystem *actorSystem = VCtx->ActorSystem; actorSystem && !baseInfo.DonorMode) {

@@ -82,6 +82,11 @@ namespace NKikimr {
         // response status
         std::shared_ptr<NMonGroup::TResponseStatusGroup> ResponseStatusMonGroup;
 
+        // Which in-memory form a LogoBlob SST index takes when it is built from the on-disk record array. Read when an
+        // SST is created, both when the VDisk loads its SSTs and when it writes new ones, so a change applies to the
+        // SSTs created after it. Not synchronized: set it before the VDisk starts.
+        ESstIndexFormPolicy SstIndexFormPolicy = ESstIndexFormPolicy::TwoLevel;
+
     private:
         // Managing disk space
         TOutOfSpaceState OutOfSpaceState;

@@ -454,6 +454,9 @@ namespace NKikimr::NStorage {
             const ui32 heapOrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId));
             vdiskConfig->UseHeapAllocator = Cfg->FeatureFlags->GetEnableVDiskHeapAllocator()
                 && heapOrderNumber < numLeadingDisks;
+            vdiskConfig->SstIndexFormPolicy = Cfg->FeatureFlags->GetEnableVDiskPackedSstIndex()
+                ? ESstIndexFormPolicy::Packed
+                : ESstIndexFormPolicy::TwoLevel;
 
             // issue initial report to whiteboard before creating actor to avoid races
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),

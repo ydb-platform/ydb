@@ -102,11 +102,22 @@ namespace NKikimr {
     /////////////////////////////////////////////////////////////////////////
 #pragma pack(push, 4)
     class TMemRecLogoBlob {
+    public:
+        static constexpr ui32 TypeBits = 2;
+        static constexpr ui32 TypeMask = (1 << TypeBits) - 1;
+        static constexpr ui32 IdBits = 30;
+        static constexpr ui32 OffsetBits = 32;
+        // MemBlob id is split into Id (high bits) and Offset (low bits)
+        static constexpr ui64 MaxMemBlobId = (ui64(1) << (IdBits + OffsetBits)) - 1;
+
+    private:
         TIngress Ingress;
-        ui32 Type : 2;
-        ui32 Id : 30;
+        ui32 Type : TypeBits;
+        ui32 Id : IdBits;
         ui32 Offset;
         ui32 Size;
+
+        static_assert(OffsetBits == sizeof(Offset) * 8);
 
         void ClearData() {
             Type = TBlobType::DiskBlob;
@@ -127,6 +138,14 @@ namespace NKikimr {
         {
             ClearData();
         }
+
+        TMemRecLogoBlob(const TIngress &ingress, TBlobType::EType type, ui32 id, ui32 offset, ui32 size)
+            : Ingress(ingress)
+            , Type(type)
+            , Id(id)
+            , Offset(offset)
+            , Size(size)
+        {}
 
         void Merge(const TMemRecLogoBlob& rec, const TKeyLogoBlob& /*key*/, bool clearLocal, TBlobStorageGroupType gtype) {
             TIngress::Merge(Ingress, clearLocal ? rec.Ingress.CopyWithoutLocal(gtype) : rec.Ingress);
@@ -164,8 +183,8 @@ namespace NKikimr {
 
         void SetMemBlob(ui64 id, ui32 size) {
             Type = TBlobType::MemBlob;
-            Y_ABORT_UNLESS(id < (ui64(1) << 62));
-            Id = id >> 32;
+            Y_ABORT_UNLESS(id <= MaxMemBlobId);
+            Id = id >> OffsetBits;
             Offset = id;
             Size = size;
         }
@@ -193,7 +212,7 @@ namespace NKikimr {
 
         TMemPart GetMemData() const {
             Y_DEBUG_ABORT_UNLESS(GetType() == TBlobType::MemBlob);
-            return TMemPart(ui64(Id) << 32 | Offset, Size);
+            return TMemPart(ui64(Id) << OffsetBits | Offset, Size);
         }
 
         const TIngress &GetIngress() const {
@@ -202,6 +221,14 @@ namespace NKikimr {
 
         TBlobType::EType GetType() const {
             return TBlobType::EType(Type);
+        }
+
+        ui32 GetId() const {
+            return Id;
+        }
+
+        ui32 GetOffset() const {
+            return Offset;
         }
 
         NMatrix::TVectorType GetLocalParts(const TBlobStorageGroupType &gtype) const {

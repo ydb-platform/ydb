@@ -120,8 +120,10 @@ namespace {
             const TKeyBlock lastKey(20);
 
             auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
-            sst->LoadedIndex.emplace_back(firstKey, TMemRecBlock(1));
-            sst->LoadedIndex.emplace_back(lastKey, TMemRecBlock(2));
+            TTrackableVector<TSst::TRec> index(TMemoryConsumer(contexts.GetVCtx()->SstIndex));
+            index.emplace_back(firstKey, TMemRecBlock(1));
+            index.emplace_back(lastKey, TMemRecBlock(2));
+            sst->LoadLinearIndex(std::move(index));
             sst->AllChunks = {11, 12, 13};
             sst->Info.IndexParts = 3;
 
@@ -146,7 +148,9 @@ namespace {
             TTestContexts contexts;
             const TKeyBlock key(10);
             auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
-            sst->LoadedIndex.emplace_back(key, TMemRecBlock(1));
+            TTrackableVector<TSst::TRec> index(TMemoryConsumer(contexts.GetVCtx()->SstIndex));
+            index.emplace_back(key, TMemRecBlock(1));
+            sst->LoadLinearIndex(std::move(index));
             sst->AllChunks = {11};
             sst->HeapStripe = TDiskPart(11, 4096, 5000);
 
@@ -218,7 +222,7 @@ namespace {
             TTrackableVector<TSst::TRec> index(TMemoryConsumer(contexts.GetVCtx()->SstIndex));
             index.emplace_back(key, memRec);
             auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
-            sst->LoadLinearIndex(index);
+            sst->LoadLinearIndex(std::move(index));
             sst->AllChunks = {11};
             sst->HeapStripe = TDiskPart(11, 4096, 5000);
 

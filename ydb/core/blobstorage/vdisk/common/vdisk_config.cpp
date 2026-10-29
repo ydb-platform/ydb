@@ -29,6 +29,7 @@ namespace NKikimr {
         CheckHugeBlobs = false;
         // 128KB for SSD (because of PDisk crc?), 1MB for HDD (?)
         MaxLogoBlobDataSize = MaxVDiskBlobSize;
+        // raising HullSstSizeInChunks risks packed SST index overflow, see hullds_sst_packed.cpp
         HullSstSizeInChunksFresh = 1;
         HullSstSizeInChunksLevel = 1;
         HeapAllocatorMaxSstInBytes = 1u << 20u;

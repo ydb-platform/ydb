@@ -8,271 +8,126 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_rec.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
+#include "hullds_sst_twolevel.h"
+#include "hullds_sst_packed.h"
 #include <util/generic/set.h>
+#include <variant>
 
 namespace NKikimr {
 
     template <class TKey, class TMemRec>
-    struct TRecIndex : public TThrRefBase {
-        typedef TIndexRecord<TKey, TMemRec> TRec;
+    struct TFlatSstIndex {
+        using TRec = TIndexRecord<TKey, TMemRec>;
 
-        TTrackableVector<TRec> LoadedIndex;
+        TTrackableVector<TRec> Recs;
 
-        TRecIndex(TVDiskContextPtr vctx)
-            : LoadedIndex(TMemoryConsumer(vctx->SstIndex))
+        TFlatSstIndex(TVDiskContextPtr vctx)
+            : Recs(TMemoryConsumer(vctx->SstIndex))
         {}
 
         bool IsLoaded() const {
-            return !LoadedIndex.empty();
+            return !Recs.empty();
         }
 
         ui64 Elements() const {
-            Y_DEBUG_ABORT_UNLESS(IsLoaded());
-            return LoadedIndex.size();
+            return Recs.size();
         }
+
+        TKey FirstKey() const {
+            return Recs.front().GetKey();
+        }
+
+        TKey LastKey() const {
+            return Recs.back().GetKey();
+        }
+
+        void Load(TTrackableVector<TRec> linearIndex) {
+            Recs = std::move(linearIndex);
+            Recs.shrink_to_fit();
+        }
+
+        void Save(TTrackableVector<TRec>* linearIndex) const {
+            linearIndex->assign(Recs.begin(), Recs.end());
+        }
+
+        class TIterator;
+    };
+
+    // The LogoBlob index in the form VCtx->SstIndexFormPolicy selected when the SST was created.
+    class TLogoBlobSstIndex {
+    public:
+        using TRec = TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TForms = std::variant<const TTwoLevelLogoBlobSstIndex, const TPackedLogoBlobSstIndex>;
+
+        class TIterator;
+
+        TLogoBlobSstIndex(TVDiskContextPtr vctx)
+            : Consumer(vctx->SstIndex)
+            , Policy(vctx->SstIndexFormPolicy)
+            , Form(std::in_place_type<const TTwoLevelLogoBlobSstIndex>, Consumer, TTrackableVector<TRec>(TMemoryConsumer(Consumer)))
+        {}
+
+        bool IsLoaded() const {
+            return Elements() != 0;
+        }
+
+        ui64 Elements() const {
+            return std::visit([](const auto& form) { return form.Elements(); }, Form);
+        }
+
+        TKeyLogoBlob FirstKey() const {
+            return std::visit([](const auto& form) { return form.FirstKey(); }, Form);
+        }
+
+        TKeyLogoBlob LastKey() const {
+            return std::visit([](const auto& form) { return form.LastKey(); }, Form);
+        }
+
+        // Called once, before any iterator is created:
+        // TIterator binds to the form, and a later Load would destroy that form under it.
+        void Load(TTrackableVector<TRec> linearIndex) {
+            Y_ABORT_UNLESS(!IsLoaded(), "SST index is loaded twice");
+
+            // The packed form cannot be empty, so an empty index is two-level whatever the policy;
+            // SST is not expected to have no records anyway.
+            if (Policy == ESstIndexFormPolicy::Packed && !linearIndex.empty()) {
+                Form.emplace<const TPackedLogoBlobSstIndex>(Consumer, linearIndex);
+            } else {
+                Form.emplace<const TTwoLevelLogoBlobSstIndex>(Consumer, linearIndex);
+            }
+        }
+
+        void Save(TTrackableVector<TRec>* linearIndex) const {
+            std::visit([&](const auto& form) { form.Save(linearIndex); }, Form);
+        }
+
+    private:
+        const TMemoryConsumer Consumer;
+        const ESstIndexFormPolicy Policy;
+        TForms Form;
+    };
+
+    // Which index an SST of the given key type keeps in memory: the flat array for everything but LogoBlobs.
+    template <class TKey, class TMemRec>
+    struct TSstIndexTraits {
+        using TIndex = TFlatSstIndex<TKey, TMemRec>;
     };
 
     template <>
-    struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob> : public TThrRefBase {
-        typedef TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob> TRec;
-
-#pragma pack(push, 4)
-        struct TLogoBlobIdHigh {
-            union {
-                struct {
-                    ui64 TabletId; // 8 bytes
-                    ui64 StepR1 : 24; // 8 bytes
-                    ui64 Generation : 32;
-                    ui64 Channel : 8;
-                } N;
-
-                ui64 X[2];
-            } Raw;
-
-            TLogoBlobIdHigh() {
-                Raw.X[0] = Raw.X[1] = 0;
-            }
-
-            explicit TLogoBlobIdHigh(const TLogoBlobID& id) {
-                Raw.X[0] = id.GetRaw()[0];
-                Raw.X[1] = id.GetRaw()[1];
-            }
-
-            TLogoBlobIdHigh(ui64 tabletId, ui32 generation, ui32 step, ui8 channel) {
-                Raw.N.TabletId = tabletId;
-                Raw.N.Channel = channel;
-                Raw.N.Generation = generation;
-                Raw.N.StepR1 = (step & 0xFFFFFF00ull) >> 8;
-            }
-
-            bool operator == (const TLogoBlobIdHigh& r) const {
-                return Raw.X[0] == r.Raw.X[0] && Raw.X[1] == r.Raw.X[1];
-            }
-
-            bool operator != (const TLogoBlobIdHigh& r) const {
-                return !(operator == (r));
-            }
-
-            bool operator < (const TLogoBlobIdHigh& r) const {
-                return Raw.X[0] != r.Raw.X[0] ? Raw.X[0] < r.Raw.X[0] : Raw.X[1] < r.Raw.X[1];
-            }
-        };
-
-        static_assert(sizeof(TLogoBlobIdHigh) == 16, "expect sizeof(TLogoBlobIdHigh) == 16");
-
-        struct TLogoBlobIdLow {
-            union {
-                struct {
-                    ui64 PartId : 4; // 8 bytes
-                    ui64 BlobSize : 26;
-                    ui64 CrcMode : 2;
-                    ui64 Cookie : 24;
-                    ui64 StepR2 : 8;
-                } N;
-
-                ui64 X;
-            } Raw;
-
-            TLogoBlobIdLow() {
-                Raw.X = 0;
-            }
-
-            explicit TLogoBlobIdLow(const TLogoBlobID& id) {
-                Raw.X = id.GetRaw()[2];
-            }
-
-            TLogoBlobIdLow(ui32 step, ui32 cookie, ui32 crcMode, ui32 blobSize, ui32 partId) {
-                Raw.N.StepR2 = step & 0x000000FFull;
-                Raw.N.Cookie = cookie;
-                Raw.N.CrcMode = crcMode;
-                Raw.N.BlobSize = blobSize;
-                Raw.N.PartId = partId;
-            }
-
-            bool operator == (const TLogoBlobIdLow& r) const {
-                return Raw.X == r.Raw.X;
-            }
-
-            bool operator != (const TLogoBlobIdLow& r) const {
-                return !(operator == (r));
-            }
-
-            bool operator < (const TLogoBlobIdLow& r) const {
-                return Raw.X < r.Raw.X;
-            }
-        };
-
-        static_assert(sizeof(TLogoBlobIdLow) == 8, "expect sizeof(TLogoBlobIdLow) == 8");
-
-        struct TRecHigh {
-        private:
-            TLogoBlobIdHigh Key;
-            ui32 LowRangeEndIndex;
-
-        public:
-            TRecHigh(TLogoBlobIdHigh key)
-                : Key(key)
-            {}
-
-            TLogoBlobIdHigh GetKey() const {
-                return ReadUnaligned<TLogoBlobIdHigh>(&Key);
-            }
-
-            ui32 GetLowRangeEndIndex() const {
-                return LowRangeEndIndex;
-            }
-
-            void SetLowRangeEndIndex(ui32 i) {
-                LowRangeEndIndex = i;
-            }
-
-            bool operator < (const TLogoBlobIdHigh &key) const {
-                return GetKey() < key;
-            }
-        };
-
-        static_assert(sizeof(TRecHigh) == 20, "expect sizeof(TRecHigh) == 20");
-
-        struct TRecLow {
-        private:
-            TLogoBlobIdLow Key;
-            TMemRecLogoBlob MemRec;
-
-        public:
-            TRecLow(TLogoBlobIdLow key, TMemRecLogoBlob memRec)
-                : Key(key)
-                , MemRec(memRec)
-            {}
-
-            TLogoBlobIdLow GetKey() const {
-                return ReadUnaligned<TLogoBlobIdLow>(&Key);
-            }
-
-            TMemRecLogoBlob GetMemRec() const {
-                return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
-            }
-
-            bool operator < (const TLogoBlobIdLow &key) const {
-                return GetKey() < key;
-            }
-        };
-
-        static_assert(sizeof(TRecLow) == 28, "expect sizeof(TRecLow) == 28");
-#pragma pack(pop)
-
-        TTrackableVector<TRecHigh> IndexHigh;
-        TTrackableVector<TRecLow> IndexLow;
-
-        TRecIndex(TVDiskContextPtr vctx)
-            : IndexHigh(TMemoryConsumer(vctx->SstIndex))
-            , IndexLow(TMemoryConsumer(vctx->SstIndex))
-        {}
-
-        bool IsLoaded() const {
-            return !IndexLow.empty();
-        }
-
-        ui64 Elements() const {
-            Y_DEBUG_ABORT_UNLESS(IsLoaded());
-            return IndexLow.size();
-        }
-
-        void LoadLinearIndex(const TTrackableVector<TRec>& linearIndex) {
-            if (linearIndex.empty()) {
-                return;
-            }
-
-            IndexHigh.clear();
-            IndexHigh.reserve(linearIndex.size());
-            IndexLow.clear();
-            IndexLow.reserve(linearIndex.size());
-
-            const TRec* rec = linearIndex.begin();
-
-            auto blobId = rec->GetKey().LogoBlobID();
-            TLogoBlobIdHigh high(blobId);
-            TLogoBlobIdLow low(blobId);
-            TLogoBlobIdHigh highPrev = high;
-
-            IndexHigh.emplace_back(high);
-            IndexLow.emplace_back(low, rec->GetMemRec());
-            ++rec;
-
-            for (; rec != linearIndex.end(); ++rec) {
-                auto blobId = rec->GetKey().LogoBlobID();
-                TLogoBlobIdHigh high(blobId);
-                TLogoBlobIdLow low(blobId);
-
-                if (Y_UNLIKELY(high != highPrev)) {
-                    IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
-                    IndexHigh.emplace_back(high);
-                    highPrev = high;
-                }
-
-                IndexLow.emplace_back(low, rec->GetMemRec());
-            }
-
-            IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
-            IndexHigh.shrink_to_fit();
-        }
-
-        void SaveLinearIndex(TTrackableVector<TRec>* linearIndex) const {
-            if (IndexLow.empty()) {
-                return;
-            }
-
-            linearIndex->clear();
-            linearIndex->reserve(IndexLow.size());
-
-            const TRecHigh* high = IndexHigh.begin();
-            const TRecLow* low = IndexLow.begin();
-            const TRecLow* lowRangeEnd = low + high->GetLowRangeEndIndex();
-
-            while (low != IndexLow.end()) {
-                auto highKey = high->GetKey();
-                auto lowKey = low->GetKey();
-                TLogoBlobID blobId(highKey.Raw.X[0], highKey.Raw.X[1], lowKey.Raw.X);
-                linearIndex->emplace_back(TKeyLogoBlob(blobId), low->GetMemRec());
-
-                ++low;
-                if (Y_UNLIKELY(low == lowRangeEnd)) {
-                    ++high;
-                    if (high != IndexHigh.end()) {
-                        lowRangeEnd = IndexLow.begin() + high->GetLowRangeEndIndex();
-                    }
-                }
-            }
-        }
+    struct TSstIndexTraits<TKeyLogoBlob, TMemRecLogoBlob> {
+        using TIndex = TLogoBlobSstIndex;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TLevelSegment
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    struct TLevelSegment : public TRecIndex<TKey, TMemRec> {
+    struct TLevelSegment : public TThrRefBase {
         typedef TLevelSegment<TKey, TMemRec> TThis;
         using TKeyType = TKey;
         using TMemRecType = TMemRec;
+        using TRec = TIndexRecord<TKey, TMemRec>;
+        using TIndex = typename TSstIndexTraits<TKey, TMemRec>::TIndex;
         struct TLevelSstPtr {
             ui32 Level = 0;
             TIntrusivePtr<TThis> SstPtr;
@@ -310,6 +165,7 @@ namespace NKikimr {
             }
         };
 
+        TIndex Index; // in-memory index
         TDiskPart LastPartAddr; // tail of reverted list of parts (on disk)
         TTrackableVector<TDiskPart> LoadedOutbound;
         TIdxDiskPlaceHolder::TInfo Info;
@@ -323,7 +179,7 @@ namespace NKikimr {
         ui64 VolatileOrderId = 0;
 
         TLevelSegment(TVDiskContextPtr vctx)
-            : TRecIndex<TKey, TMemRec>(vctx)
+            : Index(vctx)
             , LastPartAddr()
             , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
             , Info()
@@ -332,7 +188,7 @@ namespace NKikimr {
         {}
 
         TLevelSegment(TVDiskContextPtr vctx, const TDiskPart &addr)
-            : TRecIndex<TKey, TMemRec>(vctx)
+            : Index(vctx)
             , LastPartAddr(addr)
             , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
             , Info()
@@ -343,7 +199,7 @@ namespace NKikimr {
         }
 
         TLevelSegment(TVDiskContextPtr vctx, const NKikimrVDiskData::TDiskPart &pb)
-            : TRecIndex<TKey, TMemRec>(vctx)
+            : Index(vctx)
             , LastPartAddr(pb)
             , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
             , Info()
@@ -352,6 +208,23 @@ namespace NKikimr {
         {
             // HeapStripe is not stored: it is derived from chunk ownership by ResolveHeapStripe() once the huge
             // keeper has been recovered
+        }
+
+        bool IsLoaded() const {
+            return Index.IsLoaded();
+        }
+
+        ui64 Elements() const {
+            Y_DEBUG_ABORT_UNLESS(IsLoaded());
+            return Index.Elements();
+        }
+
+        void LoadLinearIndex(TTrackableVector<TRec> linearIndex) {
+            Index.Load(std::move(linearIndex));
+        }
+
+        void SaveLinearIndex(TTrackableVector<TRec>* linearIndex) const {
+            Index.Save(linearIndex);
         }
 
         // A stripe-backed SST is written as a single index part filling its whole stripe, so the stripe extent is
@@ -443,8 +316,15 @@ namespace NKikimr {
 
         ui64 GetFirstLsn() const { return Info.FirstLsn; }
         ui64 GetLastLsn() const { return Info.LastLsn; }
-        TKey FirstKey() const;
-        TKey LastKey() const;
+        TKey FirstKey() const {
+            Y_DEBUG_ABORT_UNLESS(IsLoaded());
+            return Index.FirstKey();
+        }
+
+        TKey LastKey() const {
+            Y_DEBUG_ABORT_UNLESS(IsLoaded());
+            return Index.LastKey();
+        }
 
         // append cur seg chunk ids (index and data) to the vector
         void FillInChunkIds(TVector<ui32> &vec) const {

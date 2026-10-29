@@ -733,14 +733,8 @@ namespace NKikimr {
             }
             info.CTime = TAppData::TimeProvider->Now();
 
-            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
-                // load optimized SST index
-                LevelSegment->LoadLinearIndex(Recs);
-            } else {
-                // move Recs into LevelSegment we are going to use
-                Recs.shrink_to_fit();
-                LevelSegment->LoadedIndex = std::move(Recs);
-            }
+            // build the in-memory index of LevelSegment from Recs
+            LevelSegment->LoadLinearIndex(std::move(Recs));
 
             // move Outbound into LevelSegment we are going to use
             Outbound.shrink_to_fit();

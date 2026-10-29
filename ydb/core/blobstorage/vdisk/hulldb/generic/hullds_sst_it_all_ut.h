@@ -26,7 +26,7 @@ namespace NKikimr {
                 TRec rec {TKeyLogoBlob(id), TMemRecLogoBlob()};
                 linearIndex.push_back(rec);
             }
-            ptr->LoadLinearIndex(linearIndex);
+            ptr->LoadLinearIndex(std::move(linearIndex));
             return ptr;
         }
 

@@ -218,7 +218,7 @@ namespace NKikimr {
         constexpr TLogoBlobID FullID() const noexcept {
             return TLogoBlobID(*this, 0);
         }
-    private:
+
         static constexpr ui64 PartIdMask = MaxPartId;
         static constexpr ui64 GenerationMask = 0xFFFFFFFFull;
         static constexpr ui64 StepHighMask = 0xFFFFFFull;
@@ -229,14 +229,14 @@ namespace NKikimr {
         static constexpr ui32 ChannelShift = 56;
         static constexpr ui32 StepLowShift = 56;
 
-        std::array<ui64, 3> Raw;
-
-    public:
         struct THash {
             constexpr ui32 operator()(const TLogoBlobID &id) const noexcept {
                 return id.Hash();
             }
         };
+
+    private:
+        std::array<ui64, 3> Raw;
     };
 
     static_assert(sizeof(TLogoBlobID) == 24, "expect sizeof(TLogoBlobID) == 24");

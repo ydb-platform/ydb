@@ -27,6 +27,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/protobuf/runtime
+    library/cpp/svnversion
     library/cpp/type_info
     library/cpp/threading/future
     library/cpp/yson/node

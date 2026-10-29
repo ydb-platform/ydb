@@ -624,11 +624,6 @@ struct TColumnDataExtractorTraits {
 
     constexpr static bool PassType = false;
 
-    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, TType* type) {
-        Y_UNUSED(desc, pgBuilder, type);
-        MKQL_ENSURE(false, "PG types are not supported in scalar hash join");
-    }
-
     template <bool IsNull>
     static TResult::TPtr MakeSingular(TType* type) {
         return std::make_unique<TSingular<IsNull>>(type);

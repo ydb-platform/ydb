@@ -115,6 +115,13 @@ public:
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
 
+        // Enumeration is deliberately not persisted: every controller generation
+        // must validate membership against the source topic again.
+        virtual bool CompleteWorkerSet(const TActorId& registrar, THashSet<ui64> workers, bool hasPartitionGraph) = 0;
+        virtual bool IsWorkerSetComplete() const = 0;
+        virtual bool IsWorkerSetEnumerated() const = 0;
+        virtual bool HasPartitionGraph() const = 0;
+        virtual void InvalidateWorkerSet() = 0;
         virtual void AddWorker(ui64 id) = 0;
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;

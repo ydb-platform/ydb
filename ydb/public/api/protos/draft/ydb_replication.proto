@@ -18,6 +18,9 @@ message DescribeReplicationRequest {
     string path = 2 [(required) = true];
     // Include statistics.
     bool include_stats = 3;
+    // Poll until apply_progress.state is APPLIED. Missing progress is not success.
+    // Requires global consistency and frozen sources with stable membership.
+    SourceVersion requested_applied_version = 4;
 }
 
 message DescribeReplicationResponse {
@@ -51,6 +54,32 @@ message ConsistencyLevelRow {
 
 message ConsistencyLevelGlobal {
     google.protobuf.Duration commit_interval = 1;
+}
+
+message SourceVersion {
+    uint64 step = 1;
+    uint64 tx_id = 2;
+}
+
+message ReplicationApplyProgress {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        INITIALIZING = 1;
+        WAITING_HEARTBEATS = 2;
+        WAITING_COMMITS = 3;
+        APPLIED = 4;
+        BLOCKED = 5;
+    }
+    SourceVersion requested_version = 1;
+    State state = 2;
+    bool worker_set_complete = 3;
+    uint64 expected_workers = 4;
+    uint64 workers_at_boundary = 5;
+    SourceVersion min_applied_heartbeat = 6;
+    uint64 pending_versions = 7;
+    uint64 assigned_transactions = 8;
+    bool commit_in_progress = 9;
+    repeated Ydb.Issue.IssueMessage issues = 10;
 }
 
 message DescribeReplicationResult {
@@ -96,6 +125,9 @@ message DescribeReplicationResult {
         DoneState done = 6;
         PausedState paused = 9;
     }
+    // Present only when requested and supported by the server.
+    // APPLIED covers source versions strictly below requested_version.
+    ReplicationApplyProgress apply_progress = 10;
 }
 
 message DescribeTransferRequest {

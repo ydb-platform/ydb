@@ -46,11 +46,15 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             return; // TODO: hard error
         }
 
+        THashSet<ui64> workers;
+        bool hasPartitionGraph = false;
         for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
             if (!partition.GetParentPartitionIds().empty()) {
+                hasPartitionGraph = true;
                 continue;
             }
 
+            workers.insert(partition.GetPartitionId());
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
@@ -58,7 +62,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             Send(Parent, std::move(ev));
         }
 
-        Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
+        Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId, std::move(workers), hasPartitionGraph));
 
         PassAway();
     }

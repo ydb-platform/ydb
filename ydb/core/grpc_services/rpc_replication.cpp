@@ -168,6 +168,11 @@ private:
     template <typename TRequest>
     static void BuildRequest(const TRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
         to.SetIncludeStats(from->include_stats());
+        if constexpr (std::is_same_v<TRequest, Ydb::Replication::DescribeReplicationRequest>) {
+            if (from->has_requested_applied_version()) {
+                to.MutableRequestedAppliedVersion()->CopyFrom(from->requested_applied_version());
+            }
+        }
     }
 
 private:

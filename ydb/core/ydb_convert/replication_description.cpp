@@ -187,6 +187,9 @@ void FillReplicationDescription(
 {
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(inDesc.GetConsistencySettings(), out);
+    if (inDesc.HasApplyProgress()) {
+        out.mutable_apply_progress()->CopyFrom(inDesc.GetApplyProgress());
+    }
     ConvertState(inDesc.GetState(), out);
 
     for (const auto& target : inDesc.GetTargets()) {

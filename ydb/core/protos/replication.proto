@@ -274,6 +274,7 @@ message TEvDropReplicationResult {
 message TEvDescribeReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool IncludeStats = 2;
+    optional Ydb.Replication.SourceVersion RequestedAppliedVersion = 3;
 }
 
 message TEvDescribeReplicationResult {
@@ -290,6 +291,7 @@ message TEvDescribeReplicationResult {
     optional TReplicationState State = 4;
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
     optional TReplicationStats Stats = 7;
+    optional Ydb.Replication.ReplicationApplyProgress ApplyProgress = 8;
 }
 
 message TControllerIdentity {

@@ -22,7 +22,10 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
     }
 
     void Reply() {
-        Send(Parent, new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result)));
+        auto response = new TEvPrivate::TEvDescribeTargetsResult(Sender, ReplicationId, std::move(Result));
+        response->Cookie = Cookie;
+        response->RequestedAppliedVersion = RequestedAppliedVersion;
+        Send(Parent, response);
         PassAway();
     }
 
@@ -76,13 +79,17 @@ public:
             const TActorId& parent,
             ui64 rid,
             const TActorId& proxy,
-            THashMap<ui64, TString>&& targets)
+            THashMap<ui64, TString>&& targets,
+            ui64 cookie,
+            std::optional<Ydb::Replication::SourceVersion> requestedAppliedVersion)
         : Sender(sender)
         , Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Targets (std::move(targets))
         , LogPrefix(CreateActorLogPrefix("TargetDescriber", ReplicationId))
+        , Cookie(cookie)
+        , RequestedAppliedVersion(std::move(requestedAppliedVersion))
     {
     }
 
@@ -119,6 +126,8 @@ private:
     const TActorId YdbProxy;
     const THashMap<ui64, TString> Targets;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
+    const ui64 Cookie;
+    const std::optional<Ydb::Replication::SourceVersion> RequestedAppliedVersion;
 
     TEvPrivate::TEvDescribeTargetsResult::TResult Result;
 
@@ -126,6 +135,8 @@ private:
 
 class TController::TTxDescribeReplication: public TTxBase {
     const TActorId Sender;
+    const ui64 Cookie;
+    std::optional<Ydb::Replication::SourceVersion> RequestedAppliedVersion;
     TEvController::TEvDescribeReplication::TPtr PubEv;
     TEvPrivate::TEvDescribeTargetsResult::TPtr PrivEv;
     TReplication::TPtr Replication;
@@ -136,13 +147,19 @@ public:
     explicit TTxDescribeReplication(TController* self, TEvController::TEvDescribeReplication::TPtr& ev)
         : TTxBase("TxDescribeReplication", self)
         , Sender(ev->Sender)
+        , Cookie(ev->Cookie)
         , PubEv(ev)
     {
+        if (PubEv->Get()->Record.HasRequestedAppliedVersion()) {
+            RequestedAppliedVersion = PubEv->Get()->Record.GetRequestedAppliedVersion();
+        }
     }
 
     explicit TTxDescribeReplication(TController* self, TEvPrivate::TEvDescribeTargetsResult::TPtr& ev)
         : TTxBase("TxDescribeReplication", self)
         , Sender(ev->Get()->Sender)
+        , Cookie(ev->Get()->Cookie)
+        , RequestedAppliedVersion(ev->Get()->RequestedAppliedVersion)
         , PrivEv(ev)
     {
     }
@@ -221,6 +238,9 @@ public:
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
         Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
+        if (RequestedAppliedVersion) {
+            Self->FillApplyProgress(*replication, *RequestedAppliedVersion, *Result->Record.MutableApplyProgress());
+        }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;
@@ -332,7 +352,9 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Result) {
-            ctx.Send(Sender, Result.Release());
+            // CommitROTransaction queues this Complete behind previous writes,
+            // including heartbeat persistence and removal of committed TxIds.
+            ctx.Send(Sender, Result.Release(), 0, Cookie);
         } else if (TargetsToDescribe) {
             Y_ABORT_UNLESS(Replication);
             Replication->AddTargetDescriber(ctx.Register(new TTargetDescriber(
@@ -340,7 +362,7 @@ public:
                 ctx.SelfID,
                 Replication->GetId(),
                 Replication->GetYdbProxy(),
-                std::move(TargetsToDescribe))));
+                std::move(TargetsToDescribe), Cookie, RequestedAppliedVersion)));
         }
     }
 

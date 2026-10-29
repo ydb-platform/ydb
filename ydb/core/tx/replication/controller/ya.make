@@ -24,6 +24,7 @@ PEERDIR(
 )
 
 SRCS(
+    apply_progress.cpp
     controller.cpp
     dst_alterer.cpp
     dst_creator.cpp

@@ -1,3 +1,5 @@
+* Added optional requested source version and apply progress to `TReplicationClient::DescribeReplication()` for checking whether global replication has applied a source boundary.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0

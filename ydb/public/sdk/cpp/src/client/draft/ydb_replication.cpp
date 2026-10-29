@@ -213,6 +213,31 @@ TDescribeReplicationResult::TDescribeReplicationResult(TStatus&& status, Ydb::Re
     , ReplicationDescription_(desc)
     , Proto_(std::make_unique<Ydb::Replication::DescribeReplicationResult>())
 {
+    if (desc.has_apply_progress()) {
+        const auto& from = desc.apply_progress();
+        auto& to = ApplyProgress_.emplace();
+        to.RequestedVersion = {from.requested_version().step(), from.requested_version().tx_id()};
+        using TProgress = Ydb::Replication::ReplicationApplyProgress;
+        using EState = TReplicationApplyProgress::EState;
+        switch (from.state()) {
+        case TProgress::INITIALIZING: to.State = EState::Initializing; break;
+        case TProgress::WAITING_HEARTBEATS: to.State = EState::WaitingHeartbeats; break;
+        case TProgress::WAITING_COMMITS: to.State = EState::WaitingCommits; break;
+        case TProgress::APPLIED: to.State = EState::Applied; break;
+        case TProgress::BLOCKED: to.State = EState::Blocked; break;
+        default: break;
+        }
+        to.WorkerSetComplete = from.worker_set_complete();
+        to.ExpectedWorkers = from.expected_workers();
+        to.WorkersAtBoundary = from.workers_at_boundary();
+        if (from.has_min_applied_heartbeat()) {
+            to.MinAppliedHeartbeat = TSourceVersion{from.min_applied_heartbeat().step(), from.min_applied_heartbeat().tx_id()};
+        }
+        to.PendingVersions = from.pending_versions();
+        to.AssignedTransactions = from.assigned_transactions();
+        to.CommitInProgress = from.commit_in_progress();
+        NYdb::NIssue::IssuesFromMessage(from.issues(), to.Issues);
+    }
     *Proto_ = std::move(desc);
 }
 
@@ -335,6 +360,10 @@ public:
         auto request = MakeOperationRequest<DescribeReplicationRequest>(settings);
         request.set_path(TStringType{path});
         request.set_include_stats(settings.IncludeStats_);
+        if (settings.RequestedAppliedVersion_) {
+            request.mutable_requested_applied_version()->set_step(settings.RequestedAppliedVersion_->Step);
+            request.mutable_requested_applied_version()->set_tx_id(settings.RequestedAppliedVersion_->TxId);
+        }
 
         auto promise = NThreading::NewPromise<TDescribeReplicationResult>();
 

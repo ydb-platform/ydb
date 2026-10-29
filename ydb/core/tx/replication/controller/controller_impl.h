@@ -180,6 +180,9 @@ private:
     void ProcessBootQueue(const TActorContext& ctx);
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
+    bool HasEnumeratedWorkerSets(const TReplication& replication) const;
+    void FillApplyProgress(const TReplication& replication, const Ydb::Replication::SourceVersion& boundary,
+        Ydb::Replication::ReplicationApplyProgress& progress) const;
     bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
@@ -360,6 +363,7 @@ private:
     TMap<TRowVersion, THashSet<TWorkerId>> WorkersByHeartbeat;
     THashMap<TWorkerId, TRowVersion> PendingHeartbeats;
     bool ProcessHeartbeatsInFlight = false;
+    bool HeartbeatRecheckPending = false;
     ui64 CommittingTxId = 0;
     THashMap<ui64, std::pair<ui64, ui64>> SchemaTargetFlushes;
     std::optional<std::pair<ui64, ui64>> ActiveSchemaTargetFlush;

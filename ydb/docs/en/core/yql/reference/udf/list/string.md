@@ -62,6 +62,8 @@ Functions for ASCII strings:
 
 * `String::AsciiToTitle(String{Flags:AutoMap}) -> String`: Changes only Latin characters. For working with other alphabets, see Unicode::ToTitle
 
+### String::SplitToList {#splittolist}
+
 * `String::SplitToList( String?, String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>`
 
   The first argument is the source string

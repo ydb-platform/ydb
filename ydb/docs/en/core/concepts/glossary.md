@@ -447,7 +447,7 @@ The access level for a subject is configured using [access control lists](#acces
 
 In {{ ydb-short-name }}, there are [several such lists](../reference/configuration/security_config.md#security-access-levels) that define who has which [access levels](#access-level).
 
-Detailed information about access control lists, their hierarchy, and operating principles is provided in the [Access control lists](../security/authorization.md#access-level-lists) section of the authorization documentation.
+Detailed information about access control lists, their hierarchy, and operating principles is provided in the [Access control lists](../security/authorization.md#right) section of the authorization documentation.
 
 ### Owner {#access-owner}
 

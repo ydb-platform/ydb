@@ -19,7 +19,7 @@ CREATE TABLE article (
 
 {{ ydb-short-name }} supports creating row-based and column-based tables. Their main difference lies in the use case and the data storage format on the hard disk. For row-based tables, data is stored sequentially as rows, while for column-based tables, data is stored as columns. Each table type has its own purpose.
 
-# Column Naming Rules {#column-naming-rules}
+## Column Naming Rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 
@@ -162,7 +162,7 @@ Syntax of TTL value is described in the article [{#T}](../../../yql/reference/sy
 
 {{ ydb-short-name }} allows you to rename an existing table, move it to another directory in the same database, and replace one table with another, in which case the data of the replaced table is deleted. When performing operations, only the table metadata changes, such as its path and name. The table data is not moved or overwritten.
 
-Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#termination-statuses).
+Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#handling-retryable-errors).
 
 The speed of the rename operation is determined by the type of data transactions currently running on the table and does not depend on the amount of data in the table.
 
@@ -254,7 +254,7 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
 
   + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
-* You can configure compression and encoding individually for each column. For details, see [CREATE TABLE request parameters](../../../yql/reference/syntax/create_table/index.md#parametry-zaprosa).
+* You can configure compression and encoding individually for each column. For details, see [CREATE TABLE request parameters](../../../yql/reference/syntax/create_table/index.md#query-parameters).
 
 * Column-oriented tables support column groups, but only for compression settings.
 
@@ -279,7 +279,7 @@ In column-oriented and row-oriented tables you can define [local Bloom skip inde
 
 ### Local min_max index {#local-min-max-index}
 
-In columnar tables, you can define a [local min_max index](../../glossary.md#local-min-max-index) on columns using `LOCAL USING min_max`. The index is defined when [creating a table](../../../yql/reference/syntax/create_table/min_max_index.md) or added via [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). For more details: [local indexes](../../query_execution/local_indexes.md), [min_max index](../../../dev/min_max-skip-index.md).
+In columnar tables, you can define a local min_max index on columns using `LOCAL USING min_max`. The index is defined when [creating a table](../../../yql/reference/syntax/create_table/min_max_index.md) or added via [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). For more details: [local indexes](../../query_execution/local_indexes.md), [min_max index](../../../dev/min_max-skip-index.md).
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 

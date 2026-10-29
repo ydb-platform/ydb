@@ -72,6 +72,8 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Переводят регистр ascii символов строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
+### String::SplitToList {#splittolist}
+
 * `String::SplitToList(string:String?, delimeter:String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>`
 
   Разбивает строку на подстроки по разделителю.

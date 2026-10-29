@@ -27,7 +27,7 @@ Anonymous authentication should be used only for informational purposes for loca
 
 {% endnote %}
 
-To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/auth_config.md#auth).
+To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/security_config.md#security-auth).
 
 ## Authenticating by username and password {#static-credentials}
 
@@ -148,7 +148,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {% note info %}
 
-In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/auth_config.md#auth-config) section.
+In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/auth_config.md#local-auth-config) section.
 
 {% endnote %}
 

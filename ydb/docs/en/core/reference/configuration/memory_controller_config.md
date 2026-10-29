@@ -79,7 +79,7 @@ The second type, known as activity components, allocates memory for specific act
 
 Many other auxiliary components and processes operate alongside the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
 
-### Cache Components Memory Limits
+### Cache Components Memory Limits {#cache-memory-limits}
 
 The cache components include:
 

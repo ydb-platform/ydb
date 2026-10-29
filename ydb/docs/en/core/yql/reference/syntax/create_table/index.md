@@ -38,7 +38,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 {% if oss == true and backend_name == "YDB" %}
 
-## Query parameters
+## Query parameters {#query-parameters}
 
 ### table_name
 
@@ -227,7 +227,6 @@ Creating and populating a table based on the results of the `SELECT` query. For 
     AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
   );
   ```
-
 
   This code will create a row table with automatic partitioning enabled by partition size (`AUTO_PARTITIONING_BY_SIZE`) and a preferred partition size (`AUTO_PARTITIONING_PARTITION_SIZE_MB`) of 512 megabytes. The full list of row table partitioning options is in the [Row table partitioning](../../../../concepts/datamodel/table.md#partitioning_row_table) section of the [{#T}](../../../../concepts/datamodel/table.md) article.
 

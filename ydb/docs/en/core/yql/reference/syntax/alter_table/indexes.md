@@ -46,6 +46,10 @@ Parameters specific to full-text indexes:
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
+### Parameters of the local min_max index {#local-min-max}
+
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
+
 {% if backend_name == "YDB" and oss == true %}
 
 You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
@@ -139,8 +143,9 @@ ALTER TABLE `/Root/Table`
     false_positive_probability = 0.01,
     case_sensitive = true
   );
+```
 
-# # Changing index parameters {#alter-index}
+## Changing index parameters {#alter-index}
 
 Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные](yfmvar-0-yfmvarend#sync) или [асинхронные](yfmvar-1-yfmvarend#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
 

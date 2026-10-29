@@ -75,6 +75,10 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     return nullptr;
 }
 
+bool TUserTableAccessor::ArePortionsLoaded(const IColumnEngine& engine, const TPKRangesFilter& ranges) const {
+    return engine.ArePortionsLoaded(PathId.InternalPathId, ranges);
+}
+
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TAbsentTableAccessor::SelectMetadata(const TSelectMetadataContext& /*context*/,
     const NReader::TReadDescription& /*readDescription*/, const NReader::EReaderClass readerClass) const {
     switch (readerClass) {

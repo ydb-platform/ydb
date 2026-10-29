@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     common.cpp
+    scan_gate.cpp
     tx_scan.cpp
     tx_internal_scan.cpp
 )

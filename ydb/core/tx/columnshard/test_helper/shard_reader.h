@@ -122,26 +122,34 @@ public:
         return Errors;
     }
 
-    bool InitializeScanner() {
+    void StartScanner() {
         AFL_VERIFY(!ScanActorId);
         const TActorId sender = Runtime.AllocateEdgeActor();
         ForwardToTablet(Runtime, TabletId, sender, BuildStartEvent().release());
+    }
+
+    // Whether the shard answered the start within the timeout, with a scan actor or with an error.
+    bool WaitScannerAnswer(const TDuration timeout = TDuration::Max()) {
         TAutoPtr<IEventHandle> handle;
-        auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle);
+        auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle, timeout);
         if (auto* evSuccess = std::get<0>(event)) {
-            AFL_VERIFY(evSuccess);
             auto& msg = evSuccess->Record;
             ScanActorId = ActorIdFromProto(msg.GetScanActorId());
-            return true;
         } else if (auto* evError = std::get<1>(event)) {
             for (auto issue : evError->Record.GetIssues()) {
                 Errors.emplace_back(issue);
             }
             Finished = -1;
         } else {
-            AFL_VERIFY(false);
+            return false;
         }
-        return false;
+        return true;
+    }
+
+    bool InitializeScanner() {
+        StartScanner();
+        AFL_VERIFY(WaitScannerAnswer());
+        return !!ScanActorId;
     }
 
     void Ack() {

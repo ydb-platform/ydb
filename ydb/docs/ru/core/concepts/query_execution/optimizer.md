@@ -74,6 +74,6 @@ GROUP BY
 
 ### Текущие уровни стоимостной оптимизации
 
-В {{ ydb-short-name }} можно выставить уровень стоимостной оптимизации через прагму [CostBasedOptimizationLevel](../../yql/reference/syntax/pragma.md#costbasedoptimizationlevel)
+В {{ ydb-short-name }} можно выставить уровень стоимостной оптимизации через прагму {% if tech %}[CostBasedOptimizationLevel](../../yql/reference/syntax/pragma.md#costbasedoptimizationlevel){% else %}CostBasedOptimizationLevel{% endif %}
 
 В частности, чтобы принудительно включить стоимостной оптимизатор для текущего запроса, необходимо использовать прагму `PRAGMA ydb.CostBasedOptimization = "on";`. Если требуется отключить стоимостной оптимизатор, значение прагмы следует установить в `off`.

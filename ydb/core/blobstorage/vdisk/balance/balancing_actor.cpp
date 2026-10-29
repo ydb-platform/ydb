@@ -107,7 +107,7 @@ namespace NBalancing {
             auto msg = ev->Get();
             auto vdiskId = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
             auto status = msg->Record.GetStatus();
-            bool replicated = msg->Record.GetReplicated();
+            const bool replicated = msg->IsFullyReplicated();
             bool isReadOnly = msg->Record.GetIsReadOnly();
 
             if (status != NKikimrProto::EReplyStatus::OK || !replicated || isReadOnly) {

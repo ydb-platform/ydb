@@ -459,7 +459,8 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
                     new TEvBlobStorage::TEvVStatus(vdiskId)), service.NodeId());
                 const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
                 const NKikimrBlobStorage::TEvVStatusResult& record = response->Get()->Record;
-                replicated &= record.GetStatus() == NKikimrProto::OK && record.GetReplicated();
+                replicated &= record.GetStatus() == NKikimrProto::OK && record.GetReplicated()
+                    && record.GetDurabilityReplicated();
             }
             if (!replicated) {
                 env.Sim(TDuration::Seconds(1));
@@ -570,7 +571,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         });
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
             if (!allowPromotion && event->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult) {
-                event->Get<TEvBlobStorage::TEvVStatusResult>()->Record.SetReplicated(false);
+                event->Get<TEvBlobStorage::TEvVStatusResult>()->Record.SetDurabilityReplicated(false);
             }
             return true;
         };
@@ -663,7 +664,9 @@ Y_UNIT_TEST_SUITE(Osiris) {
         ui32 replDone = 0;
         ui32 osirisWrites = 0;
         bool holdOsirisDone = false;
+        bool holdReplDone = false;
         std::vector<std::unique_ptr<IEventHandle>> heldOsirisDone;
+        std::vector<std::unique_ptr<IEventHandle>> heldReplDone;
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 9,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
@@ -694,6 +697,10 @@ Y_UNIT_TEST_SUITE(Osiris) {
                     break;
                 case TEvBlobStorage::EvReplDone:
                     replDone += !event->Cookie;
+                    if (holdReplDone && !event->Cookie) {
+                        heldReplDone.push_back(std::move(event));
+                        return false;
+                    }
                     break;
                 case TEvBlobStorage::EvAnubisOsirisPut:
                     osirisWrites += event->Get<TEvAnubisOsirisPut>()->IsOsiris();
@@ -713,6 +720,26 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), {}, update.release()), node);
             }
             env.Sim(TDuration::Seconds(30));
+        };
+        const std::function<void(bool)> checkReplicationFlags = [&](bool durabilityReplicated) {
+            for (ui32 order = 0; order < info->GetTotalVDisksNum(); ++order) {
+                TVDiskID disk = info->GetVDiskId(order);
+                if (states[disk.FailRealm] == TFailRealm::F) {
+                    continue;
+                }
+                disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
+                const TActorId service = info->GetActorId(order);
+                const TActorId edge = env.Runtime->AllocateEdgeActor(service.NodeId());
+                env.Runtime->Send(new IEventHandle(service, edge, new TEvBlobStorage::TEvVStatus(disk)), service.NodeId());
+                const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> result =
+                    env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
+                const NKikimrBlobStorage::TEvVStatusResult& record = result->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT(record.GetReplicated());
+                UNIT_ASSERT(record.HasDurabilityReplicated());
+                UNIT_ASSERT_VALUES_EQUAL(record.GetDurabilityReplicated(), durabilityReplicated);
+                env.Runtime->DestroyActor(edge);
+            }
         };
         states[2] = TFailRealm::F;
         applyStates();
@@ -743,6 +770,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
         UNIT_ASSERT_C(osirisWrites, "N0->N1 must resurrect additional copies for D=2+2");
+        checkReplicationFlags(true);
         // A generation-only update must not start another pass.
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
@@ -789,9 +817,12 @@ Y_UNIT_TEST_SUITE(Osiris) {
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 0);
+        checkReplicationFlags(false);
         states[0] = states[1] = TFailRealm::N0;
         applyStates();
+        checkReplicationFlags(false);
         holdOsirisDone = false;
+        holdReplDone = true;
         for (std::unique_ptr<IEventHandle>& event : heldOsirisDone) {
             const ui32 node = event->Sender.NodeId();
             env.Runtime->Send(event.release(), node);
@@ -801,6 +832,17 @@ Y_UNIT_TEST_SUITE(Osiris) {
         // Held completions are observed by the filter twice, then the newer pass finishes.
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 18);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
+        UNIT_ASSERT_VALUES_EQUAL(heldReplDone.size(), 6);
+        checkReplicationFlags(false);
+        holdReplDone = false;
+        for (std::unique_ptr<IEventHandle>& event : heldReplDone) {
+            const ui32 node = event->Sender.NodeId();
+            env.Runtime->Send(event.release(), node);
+        }
+        heldReplDone.clear();
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(replDone, 12);
+        checkReplicationFlags(true);
         env.Runtime->FilterFunction = {};
     }
 

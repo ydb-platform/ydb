@@ -191,7 +191,8 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         const bool matchingDisk = record.HasVDiskID()
             && VDiskIDFromVDiskID(record.GetVDiskID()) == group.Info.VDisks[query.Disk].Id;
         group.Replicated[query.Disk] = matchingDisk && record.GetStatus() == NKikimrProto::OK
-            && record.GetJoinedGroup() && record.GetReplicated() && !record.GetIsReadOnly();
+            && record.GetJoinedGroup() && record.GetReplicated()
+            && record.GetDurabilityReplicated() && !record.GetIsReadOnly();
         if (!--group.Pending) {
             CheckCompletion(query.GroupId, &group);
         }

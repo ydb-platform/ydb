@@ -335,6 +335,11 @@ namespace NKikimr {
             Record.SetReplicated(false);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
+        // Legacy VDisks report both phases through Replicated alone.
+        bool IsFullyReplicated() const {
+            return Record.GetReplicated()
+                && (!Record.HasDurabilityReplicated() || Record.GetDurabilityReplicated());
+        }
     };
 
     struct TEvRegisterPDiskLoadActor: public TEventLocal<TEvRegisterPDiskLoadActor,

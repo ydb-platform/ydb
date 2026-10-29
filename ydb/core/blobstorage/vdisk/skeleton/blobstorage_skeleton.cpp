@@ -1761,9 +1761,10 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvVStatus",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS20"});
-            auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
+            const bool durabilityReplDone = DurabilityReplDone && !RepeatRecoveryPending && !HasUnreadableBlobs;
+            const TActorId aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
                 IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now,
-                ReplDone && !HasUnreadableBlobs && !RepeatRecoveryPending, Config->BaseInfo.ReadOnly));
+                ReplDone, durabilityReplDone, Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2236,12 +2237,12 @@ namespace NKikimr {
 
         void TryRepeatRecovery(const TActorContext& ctx) {
             if (CurrentStateFunc() != &TThis::StateNormal
-                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !ReplDone
+                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
                     || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
                 return;
             }
             RepeatRecoveryPending = false;
-            ReplDone = false;
+            DurabilityReplDone = false;
             ReplOnlyPhantomsRemain = false;
             UpdateReplState();
             RepeatOsirisId = StartOsiris(SelfId(), ctx);
@@ -2519,6 +2520,7 @@ namespace NKikimr {
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
                 ReplDone = true;
+                DurabilityReplDone = true;
             }
             UpdateReplState();
             RunBalancing(ctx);
@@ -3268,6 +3270,7 @@ namespace NKikimr {
                 ReplOnlyPhantomsRemain = true;
             } else {
                 ReplDone = true;
+                DurabilityReplDone = true;
             }
             TryRepeatRecovery(TActivationContext::AsActorContext());
             UpdateReplState();
@@ -3365,7 +3368,7 @@ namespace NKikimr {
         }
 
         void UpdateReplState() {
-            const bool ready = ReplDone && !HasUnreadableBlobs;
+            const bool ready = DurabilityReplDone && !HasUnreadableBlobs;
             UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING);
         }
 
@@ -3959,6 +3962,7 @@ namespace NKikimr {
         bool RepeatRecoveryPending = false;
         TActorId RepeatOsirisId;
         bool ReplDone = false;
+        bool DurabilityReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();

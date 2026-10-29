@@ -565,8 +565,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 if (disk.GroupID.GetRawId() == groupId) {
                     UNIT_ASSERT(disk.FailRealm != 2);
                     ++probes;
+                    std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
+                        std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, true, false, 1);
+                    result->Record.SetDurabilityReplicated(true);
                     env.Runtime->Send(new IEventHandle(event->Sender, event->Recipient,
-                        new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, disk, true, true, false, 1), 0, event->Cookie), 0, true);
+                        result.release(), 0, event->Cookie), 0, true);
                     return true;
                 }
             }

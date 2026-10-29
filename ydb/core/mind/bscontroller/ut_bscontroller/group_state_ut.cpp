@@ -11,6 +11,13 @@ using namespace NKikimr::NBsController;
 namespace {
 using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
 
+struct TVDiskReplicationStatus {
+    bool Replicated = true;
+    std::optional<bool> DurabilityReplicated = true;
+    bool FailSecondRealm = false;
+    bool ObsoleteGeneration = false;
+};
+
 class TGroupStateFixture {
 public:
     TTestBasicRuntime Runtime;
@@ -42,7 +49,7 @@ public:
         Runtime.Send(new IEventHandle(Actor, Controller, event.release()), 0, true);
     }
 
-    void ReplyRound(ui32 requests, bool failSecondRealm = false, bool obsoleteGeneration = false) {
+    void ReplyRound(ui32 requests, const TVDiskReplicationStatus& status = {}) {
         TSet<TActorId> disks;
         for (const TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
             disks.insert(disk.ActorId);
@@ -51,12 +58,16 @@ public:
             TEvBlobStorage::TEvVStatus::TPtr request = Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVStatus>(disks);
             TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
             UNIT_ASSERT_VALUES_EQUAL(disk.GroupGeneration, Info.Generation);
-            const bool replicated = !failSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0;
-            if (obsoleteGeneration) {
+            const bool available = !status.FailSecondRealm || disk.FailRealm != 1 || disk.FailDomain != 0;
+            if (status.ObsoleteGeneration) {
                 --disk.GroupGeneration;
             }
             std::unique_ptr<TEvBlobStorage::TEvVStatusResult> result =
-                std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true, replicated, false, 1);
+                std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, disk, true,
+                    status.Replicated && available, false, 1);
+            if (status.DurabilityReplicated) {
+                result->Record.SetDurabilityReplicated(*status.DurabilityReplicated && available);
+            }
             Runtime.Send(new IEventHandle(request->Sender, request->Recipient, result.release(), 0, request->Cookie), 0, true);
         }
     }
@@ -78,6 +89,17 @@ public:
 }
 
 Y_UNIT_TEST_SUITE(BsControllerGroupState) {
+    Y_UNIT_TEST(FullReplicationStatusSupportsLegacyReplies) {
+        TEvBlobStorage::TEvVStatusResult status(NKikimrProto::OK, TVDiskID(42, 1, 0, 0, 0), true, true, false, 1);
+        UNIT_ASSERT(status.IsFullyReplicated());
+        status.Record.SetDurabilityReplicated(false);
+        UNIT_ASSERT(!status.IsFullyReplicated());
+        status.Record.SetDurabilityReplicated(true);
+        UNIT_ASSERT(status.IsFullyReplicated());
+        status.Record.SetReplicated(false);
+        UNIT_ASSERT(!status.IsFullyReplicated());
+    }
+
     Y_UNIT_TEST(DurabilityTargets) {
         const TFailRealmStates oneCopy{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
         UNIT_ASSERT(GetReplicatedRealmState(oneCopy, 0) == TFailRealm::N1);
@@ -97,11 +119,11 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(WaitsForEveryDiskAndTracksChangedDurability) {
         TGroupStateFixture fixture;
         fixture.Update(1, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
-        fixture.ReplyRound(6, true);
+        fixture.ReplyRound(6, {.FailSecondRealm = true});
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N0, TFailRealm::F}));
         fixture.Update(2, {TFailRealm::N1, TFailRealm::N0, TFailRealm::F});
         // These replies carry the current query cookies, but an obsolete group generation.
-        fixture.ReplyRound(3, false, true);
+        fixture.ReplyRound(3, {.ObsoleteGeneration = true});
         fixture.ReplyRound(3);
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::F}));
         // D changed from 1+1 to 2+2. Completion of the old round cannot prove N2.
@@ -109,6 +131,23 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         fixture.ReplyRound(6);
         UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
         fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller, new TEvents::TEvPoison), 0, true);
+    }
+
+    Y_UNIT_TEST(RequiresOrdinaryAndDurabilityReplication) {
+        TGroupStateFixture fixture;
+        fixture.Update(1, {TFailRealm::N1, TFailRealm::N1, TFailRealm::F});
+        fixture.ReplyRound(6, {.DurabilityReplicated = false});
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
+        // A VDisk that does not advertise the new field cannot confirm D.
+        fixture.ReplyRound(6, {.DurabilityReplicated = std::nullopt});
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
+        fixture.ReplyRound(6, {.Replicated = false});
+        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
+        fixture.ReplyRound(6);
+        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
     }
 
     Y_UNIT_TEST(RecoveringRealmPromotesAfterReplication) {

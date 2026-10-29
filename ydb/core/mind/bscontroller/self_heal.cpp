@@ -129,13 +129,13 @@ namespace NKikimr::NBsController {
                 {"groupId", GroupId},
                 {"status", record.GetStatus()},
                 {"joinedGroup", record.GetJoinedGroup()},
-                {"replicated", record.GetReplicated()});
+                {"replicated", ev->Get()->IsFullyReplicated()});
 
             bool diskIsOk = false;
             if (record.GetStatus() == NKikimrProto::RACE) {
                 return Finish(false, 0, "Race occured"); // group reconfigured while we were querying it
             } else if (record.GetStatus() == NKikimrProto::OK) {
-                diskIsOk = record.GetJoinedGroup() && record.GetReplicated();
+                diskIsOk = record.GetJoinedGroup() && ev->Get()->IsFullyReplicated();
             }
             ProcessVDiskReply(VDiskIDFromVDiskID(record.GetVDiskID()), diskIsOk);
         }

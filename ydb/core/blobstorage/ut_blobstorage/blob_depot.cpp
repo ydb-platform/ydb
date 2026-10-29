@@ -3,6 +3,7 @@
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/events.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -596,6 +597,61 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT(!undelivered);
         UNIT_ASSERT(status);
         UNIT_ASSERT_VALUES_EQUAL(*status, NKikimrProto::ERROR);
+    }
+
+    // the put waits for BlobSeqId allocation when the BlobDepot tablet goes away; the allocation is lost along with the
+    // connection, so the put ends with error, as the other queries waiting for the tablet do, instead of waiting for
+    // the agent to reconnect
+    Y_UNIT_TEST(PutWaitingForIdEndsOnDisconnect) {
+        TBlobDepotTestEnvironment tenv;
+        auto& env = *tenv.Env;
+        const std::optional<ui64> tabletId = TryGetBlobDepotTabletId(env, tenv.BlobDepot);
+        UNIT_ASSERT(tabletId);
+
+        bool dropAllocations = true;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return !dropAllocations || ev->GetTypeRewrite() != TEvBlobDepot::EvAllocateIdsResult;
+        };
+
+        // write until the agent runs out of BlobSeqIds
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "data";
+        auto put = [&](ui32 step) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, tenv.BlobDepot, new TEvBlobStorage::TEvPut(TLogoBlobID(100500, 1, step, 0,
+                    data.size(), 0), data, TInstant::Max()));
+            });
+        };
+        auto waitPut = [&](TDuration timeout) {
+            const TInstant deadline = env.Runtime->GetClock() + timeout;
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false, deadline);
+        };
+        ui32 step = 1;
+        for (;; ++step) {
+            UNIT_ASSERT_C(step <= 10000, "agent does not run out of BlobSeqIds");
+            put(step);
+            if (auto res = waitPut(TDuration::Seconds(10))) {
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            } else {
+                break; // this put waits for allocation
+            }
+        }
+        Cerr << "*** put of step " << step << " waits for BlobSeqId" << Endl;
+
+        env.Runtime->WrapInActorContext(edge, [&] {
+            TActivationContext::Register(CreateTabletKiller(*tabletId));
+        });
+        auto res = waitPut(TDuration::Minutes(1));
+        UNIT_ASSERT_C(res, "put waiting for BlobSeqId got no answer after the tablet disconnected");
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::ERROR, res->Get()->ToString());
+
+        // the agent reconnects and allocates BlobSeqIds again
+        dropAllocations = false;
+        put(step + 1);
+        res = waitPut(TDuration::Minutes(1));
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        env.Runtime->FilterFunction = {};
     }
 
 #ifndef KIKIMR_DISABLE_S3_OPS

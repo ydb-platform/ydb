@@ -491,7 +491,7 @@ namespace NKikimr::NBlobDepot {
 
             virtual void OnUpdateBlock() {}
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
-            virtual void OnIdAllocated(bool /*success*/) {}
+            virtual void OnIdAllocated(bool /*success*/, const TString& /*errorReason*/) {}
             virtual void OnDestroy(bool /*success*/) {}
             virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
@@ -616,7 +616,7 @@ namespace NKikimr::NBlobDepot {
             void RebuildHeap();
 
             void EnqueueQueryWaitingForId(TQuery *query);
-            void ProcessQueriesWaitingForId(bool success);
+            void ProcessQueriesWaitingForId(bool success, const TString& errorReason = {});
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;

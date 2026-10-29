@@ -368,7 +368,7 @@ public:
     }
 
     bool IsErasable() const {
-        return Portions.empty() && InsertedPortions.empty();
+        return Portions.empty() && InsertedPortions.empty() && LoadedKeyRanges.IsEverythingLoaded();
     }
 
     void OnCompactionStarted();

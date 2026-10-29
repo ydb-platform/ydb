@@ -44,6 +44,48 @@ THostMask MakeAllHostsMask()
     return MakeHostMask({0, 1, 2, 3, 4});
 }
 
+// Distinct from any checksum of the fixture payload, so a match means the
+// request field was forwarded rather than recomputed.
+const TBlockChecksums SuppliedChecksums{11, 22, 33};
+
+// Replaces the direct-write mock and records every checksum vector it sees.
+void CaptureDirectWriteChecksums(
+    TWriteRequestTestFixture& fixture,
+    TVector<TBlockChecksums>* received)
+{
+    fixture.DirectBlockGroup->WriteBlocksToPBufferHandler =
+        [&fixture, received](
+            ui32 vChunkIndex,
+            THostIndex hostIndex,
+            TPBufferKey pBufferKey,
+            TBlockRange16 range,
+            const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
+            const NWilson::TTraceId& traceId)
+    {
+        Y_UNUSED(
+            vChunkIndex,
+            hostIndex,
+            pBufferKey,
+            range,
+            guardedSglist,
+            traceId);
+
+        received->push_back(checksums);
+
+        auto response = NewPromise<TDBGWriteBlocksResponse>();
+        fixture.DirectWritePromises.push_back(std::move(response));
+        return fixture.DirectWritePromises.back().GetFuture();
+    };
+}
+
+void CompleteDirectWrites(TWriteRequestTestFixture& fixture)
+{
+    for (auto& promise: fixture.DirectWritePromises) {
+        promise.SetValue(TWriteRequestTestFixture::CreateOkDirectResponse());
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -342,6 +384,55 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
         UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2, 3}), response.RequestedWrites);
         UNIT_ASSERT_EQUAL(MakeHostMask({0, 1, 2}), response.CompletedWrites);
+    }
+
+    Y_UNIT_TEST_F(ShouldForwardChecksumsOnDirectWrite, TWriteRequestTestFixture)
+    {
+        Init();
+
+        TVector<TBlockChecksums> received;
+        CaptureDirectWriteChecksums(*this, &received);
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectWrite,
+            SuppliedChecksums);
+        writeRequest->Run();
+
+        UNIT_ASSERT_VALUES_EQUAL(3u, received.size());
+        for (const auto& checksums: received) {
+            UNIT_ASSERT_EQUAL(SuppliedChecksums, checksums);
+        }
+
+        CompleteDirectWrites(*this);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, WriteClient->Response->Error.GetCode());
+    }
+
+    Y_UNIT_TEST_F(ShouldForwardChecksumsOnHedgedWrite, TWriteRequestTestFixture)
+    {
+        Init();
+
+        TVector<TBlockChecksums> received;
+        CaptureDirectWriteChecksums(*this, &received);
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::DirectWrite,
+            SuppliedChecksums);
+        writeRequest->Run();
+
+        const size_t primaryWrites = received.size();
+        UNIT_ASSERT_VALUES_EQUAL(3u, primaryWrites);
+
+        RunScheduledHedge();
+
+        UNIT_ASSERT_GT(received.size(), primaryWrites);
+        for (size_t i = primaryWrites; i < received.size(); ++i) {
+            UNIT_ASSERT_EQUAL(SuppliedChecksums, received[i]);
+        }
+
+        CompleteDirectWrites(*this);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, WriteClient->Response->Error.GetCode());
     }
 }
 
@@ -711,6 +802,49 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
         DirectWritePromises[2].SetValue(CreateOkDirectResponse());
 
         UNIT_ASSERT_EQUAL(5, WriteClient->AllCompletedWrites.Count());
+    }
+
+    Y_UNIT_TEST_F(
+        ShouldForwardChecksumsOnIndirectWrite,
+        TWriteRequestTestFixture)
+    {
+        Init();
+
+        TBlockChecksums received;
+        DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
+            [&](ui32 vChunkIndex,
+                THostIndex coordinatorHostIndex,
+                THostMask hostIndexes,
+                TPBufferKey pBufferKey,
+                TBlockRange16 range,
+                TDuration replyTimeout,
+                const TGuardedSgList& guardedSglist,
+                const TBlockChecksums& checksums,
+                const NWilson::TTraceId& traceId,
+                IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
+        {
+            Y_UNUSED(
+                vChunkIndex,
+                coordinatorHostIndex,
+                hostIndexes,
+                pBufferKey,
+                range,
+                replyTimeout,
+                guardedSglist,
+                traceId);
+
+            received = checksums;
+            callback(CreateOkResponse());
+        };
+
+        auto writeRequest = CreateRequestExecutor(
+            MakeWriteTestRequestHeaders(Range, BlockSize),
+            EWriteMode::IndirectWrite,
+            SuppliedChecksums);
+        writeRequest->Run();
+
+        UNIT_ASSERT_EQUAL(SuppliedChecksums, received);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, WriteClient->Response->Error.GetCode());
     }
 }
 

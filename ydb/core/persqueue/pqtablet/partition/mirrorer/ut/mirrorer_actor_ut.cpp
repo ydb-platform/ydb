@@ -897,10 +897,12 @@ Y_UNIT_TEST(RewindOnCommitLagAndFailedResult) {
     env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.Factory.CommitPromises.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(env.Factory.LastCommitOffset, 1000u);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
 
     env.Factory.CommitPromises[0].SetValue(NYdb::TStatus(NYdb::EStatus::TIMEOUT, NYdb::NIssue::TIssues()));
     env.Dispatch();
     UNIT_ASSERT(env.ErrorCount > 0);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
 
     env.Advance(TDuration::Minutes(5));
     env.WaitSessions(2);
@@ -912,6 +914,53 @@ Y_UNIT_TEST(RewindOnCommitLagAndFailedResult) {
     UNIT_ASSERT(env.Factory.CommitPromises.size() >= 2);
     env.Factory.CommitPromises.back().SetValue(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT(env.CapturedReplicationData.back()->MirroredOffset.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*env.CapturedReplicationData.back()->MirroredOffset, 1000);
+}
+
+Y_UNIT_TEST(RewindSendsMirroredOffsetWithoutNewWrites) {
+    TMirrorerEnv env({.EndOffset = 10, .RewindCommitDelaySeconds = 0});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 100);
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
+        env.Factory.Session(0).Partition, 10, 100, 100, TInstant::MilliSeconds(2000)
+    ));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CommitPromises.size(), 1);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+    env.Factory.CommitPromises[0].SetValue(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT(env.CapturedReplicationData.back()->MirroredOffset.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*env.CapturedReplicationData.back()->MirroredOffset, 100);
+}
+
+Y_UNIT_TEST(RewindDoesNotSendMirroredOffsetAfterWrites) {
+    TMirrorerEnv env({.EndOffset = 10, .RewindCommitDelaySeconds = 0});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 100);
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 10));
+    env.Dispatch();
+    env.AckWrite(10);
+
+    env.Factory.Session(0).PushEvent(NYdb::NTopic::TSessionClosedEvent(
+        NYdb::EStatus::UNAVAILABLE, NYdb::NIssue::TIssues()
+    ));
+    env.Dispatch();
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(1, 11, 100);
+    env.Factory.Session(1).PushEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
+        env.Factory.Session(1).Partition, 11, 100, 100, TInstant::MilliSeconds(2000)
+    ));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.Factory.CommitPromises.size(), 1);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+    env.Factory.CommitPromises[0].SetValue(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
+    env.Dispatch();
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
 }
 
 Y_UNIT_TEST(RewindCommitExceptionAndIntervalSkip) {

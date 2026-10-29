@@ -3048,7 +3048,13 @@ Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
         SendWrite(cookie, 0, "owner", offset, "message", false, cookie, true);
         WaitCmdWrite();
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        WaitProxyResponse({.Cookie = cookie, .Status = NMsgBusProxy::MSTATUS_OK, .Offset = expected});
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        const auto& result = response->Response->GetPartitionResponse();
+        UNIT_ASSERT_VALUES_EQUAL(result.CmdWriteResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetCmdWriteResult(0).GetOffset(), expected);
         UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), expected + 1);
     };
 

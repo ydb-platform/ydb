@@ -548,16 +548,16 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE_IMPL(NeumannHashTableTest, NSimd::NTest::TAvx2TestSuite) {
-    Y_UNIT_TEST(ApplyReturnsPackedRows) {
+Y_CPU_UNIT_TEST_SUITE(NeumannHashTableTest, AVX2, {
+    Y_CPU_UNIT_TEST(ApplyReturnsPackedRows) {
         TestApplyReturnsPackedRows<TNeumannTable>();
     }
 
-    Y_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
+    Y_CPU_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
         TestApplyReturnsPackedRows<TNeumannTableSeq>();
     }
 
-    Y_UNIT_TEST(RequiredMemoryForBuild) {
+    Y_CPU_UNIT_TEST(RequiredMemoryForBuild) {
         TColumnDesc key;
         key.Role = EColumnRole::Key;
         key.DataSize = sizeof(ui32);
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE_IMPL(NeumannHashTableTest, NSimd::NTest::TAvx2TestSuite) {
 
         UNIT_ASSERT_VALUES_EQUAL(table.RequiredMemoryForBuild(nItems), expected);
     }
-}
+})
 
 // -----------------------------------------------------------------
 
@@ -584,12 +584,12 @@ using TTablesBenchmark =
 
 // -----------------------------------------------------------------
 
-Y_UNIT_TEST_SUITE_IMPL(HashTablesBenchmark, NSimd::NTest::TAvx2TestSuite) {
+Y_CPU_UNIT_TEST_SUITE(HashTablesBenchmark, AVX2, {
 
     static constexpr size_t batchSize = 16;
     static constexpr bool toCSV = false;
 
-    Y_UNIT_TEST(Uniform) {
+    Y_CPU_UNIT_TEST(Uniform) {
         TUniformDistribution uni1M(0, 1e6 - 1);
 
         auto benchmark = TTablesBenchmark::TBenchmark<batchSize>(4, Name_);
@@ -599,7 +599,7 @@ Y_UNIT_TEST_SUITE_IMPL(HashTablesBenchmark, NSimd::NTest::TAvx2TestSuite) {
         benchmark.Run(toCSV);
     }
 
-    Y_UNIT_TEST(UniformPayloaded) {
+    Y_CPU_UNIT_TEST(UniformPayloaded) {
         TUniformDistribution uni1M(0, 1e6 - 1);
 
         auto benchmark = TTablesBenchmark::TBenchmark<batchSize>(21, Name_);
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE_IMPL(HashTablesBenchmark, NSimd::NTest::TAvx2TestSuite) {
         benchmark.Run(toCSV);
     }
 
-    Y_UNIT_TEST(NormalPayloaded) {
+    Y_CPU_UNIT_TEST(NormalPayloaded) {
         TNormalDistribution norm1M(1000000 / 2, 1000000 / 6);
 
         auto benchmark = TTablesBenchmark::TBenchmark<batchSize>(21, Name_);
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE_IMPL(HashTablesBenchmark, NSimd::NTest::TAvx2TestSuite) {
         benchmark.Run(toCSV);
     }
 
-} // Y_UNIT_TEST_SUITE(RobinHoodCheck)
+}) // Y_UNIT_TEST_SUITE(RobinHoodCheck)
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

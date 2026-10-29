@@ -51,9 +51,9 @@ TVector<TString> GenerateValues(size_t level) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE_IMPL(Accumulator, NSimd::NTest::TAvx2TestSuite) {
+Y_CPU_UNIT_TEST_SUITE(Accumulator, AVX2, {
 
-Y_UNIT_TEST(CreateAccumulator) {
+Y_CPU_UNIT_TEST(CreateAccumulator) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc kc1, kc2, pc1, pc2, pc3;
@@ -81,9 +81,9 @@ Y_UNIT_TEST(CreateAccumulator) {
 
     UNIT_ASSERT(info.NTuples == 0);
     CTEST << "";
-} // Y_UNIT_TEST(CreateAccumulator)
+} // Y_CPU_UNIT_TEST(CreateAccumulator)
 
-Y_UNIT_TEST(MultipleAddToAccumulator) {
+Y_CPU_UNIT_TEST(MultipleAddToAccumulator) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc kc;
@@ -125,9 +125,9 @@ Y_UNIT_TEST(MultipleAddToAccumulator) {
     }
 
     UNIT_ASSERT(totalCount == 2 * NTuples);
-} // Y_UNIT_TEST(MultipleAddToAccumulator)
+} // Y_CPU_UNIT_TEST(MultipleAddToAccumulator)
 
-Y_UNIT_TEST(AddVarSizedDataToAccumulator) {
+Y_CPU_UNIT_TEST(AddVarSizedDataToAccumulator) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc kc;
@@ -179,9 +179,9 @@ Y_UNIT_TEST(AddVarSizedDataToAccumulator) {
         total += info.NTuples;
     }
     UNIT_ASSERT(total == 2);
-} // Y_UNIT_TEST(AddVarSizedDataToAccumulator)
+} // Y_CPU_UNIT_TEST(AddVarSizedDataToAccumulator)
 
-Y_UNIT_TEST(AccumulatorFuzz) {
+Y_CPU_UNIT_TEST(AccumulatorFuzz) {
     TScopedAlloc alloc(__LOCATION__);
 
     std::mt19937 rng; // fixed-seed (0) prng
@@ -248,7 +248,7 @@ Y_UNIT_TEST(AccumulatorFuzz) {
             UNIT_ASSERT_VALUES_EQUAL(totalCount, subRows);
         }
     }
-} // Y_UNIT_TEST(AccumulatorFuzz)
+} // Y_CPU_UNIT_TEST(AccumulatorFuzz)
 
 #if TO_BENCH > 0
 
@@ -581,39 +581,39 @@ static bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Bucke
     return accums[0]->GetBucket(0).NTuples > 0;
 }
 
-Y_UNIT_TEST(BenchAccumulator_VariateNTuples) {
+Y_CPU_UNIT_TEST(BenchAccumulator_VariateNTuples) {
     CTEST << ">>> BenchAccumulator_VariateNTuples <<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5, 2, 3));
-} // Y_UNIT_TEST(BenchAccumulator_VariateNTuples)
+} // Y_CPU_UNIT_TEST(BenchAccumulator_VariateNTuples)
 
-Y_UNIT_TEST(BenchAccumulator_VariateNColumns) {
+Y_CPU_UNIT_TEST(BenchAccumulator_VariateNColumns) {
     CTEST << ">>> BenchAccumulator_VariateNColumns <<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5,  2, 4));
-} // Y_UNIT_TEST(BenchAccumulator_VariateNColumns)
+} // Y_CPU_UNIT_TEST(BenchAccumulator_VariateNColumns)
 
-Y_UNIT_TEST(BenchAccumulator_VariateNBuckets) {
+Y_CPU_UNIT_TEST(BenchAccumulator_VariateNBuckets) {
     CTEST << ">>> BenchAccumulator_VariateNBuckets <<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5, 4,  2));
-} // Y_UNIT_TEST(BenchAccumulator_VariateNBuckets)
+} // Y_CPU_UNIT_TEST(BenchAccumulator_VariateNBuckets)
 
-Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples) {
+Y_CPU_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples) {
     CTEST << ">>> VarSized_BenchAccumulator_VariateNTuples <<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5, 2, 3));
-} // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples)
+} // Y_CPU_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples)
 
-Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns) {
+Y_CPU_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns) {
     CTEST << ">>> VarSized_BenchAccumulator_VariateNColumns <<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5,  2, 4));
-} // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns)
+} // Y_CPU_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns)
 
-Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
+Y_CPU_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
     CTEST << ">>> VarSized_BenchAccumulator_VariateNBuckets <<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5, 2,  4));
-} // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets)
+} // Y_CPU_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets)
 
 #endif
 
-} // Y_UNIT_TEST_SUITE(Accumulator)
+}) // Y_UNIT_TEST_SUITE(Accumulator)
 
 
 }

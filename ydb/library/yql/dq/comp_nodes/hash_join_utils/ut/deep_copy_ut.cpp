@@ -12,8 +12,8 @@
 using NYql::NUdf::TUnboxedValuePod;
 using NYql::NUdf::TUnboxedValue;
 using namespace NKikimr::NMiniKQL;
-Y_UNIT_TEST_SUITE_IMPL(TPackedTupleDeepCopy, NSimd::NTest::TAvx2TestSuite) {
-    Y_UNIT_TEST(TestAppend) {
+Y_CPU_UNIT_TEST_SUITE(TPackedTupleDeepCopy, AVX2, {
+    Y_CPU_UNIT_TEST(TestAppend) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE_IMPL(TPackedTupleDeepCopy, NSimd::NTest::TAvx2TestSuite) {
         }
 
     }
-    Y_UNIT_TEST(TestAppendBigString) {
+    Y_CPU_UNIT_TEST(TestAppendBigString) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE_IMPL(TPackedTupleDeepCopy, NSimd::NTest::TAvx2TestSuite) {
         }
     }
 
-    Y_UNIT_TEST(TestFlatten) {
+    Y_CPU_UNIT_TEST(TestFlatten) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
         NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
@@ -169,4 +169,4 @@ Y_UNIT_TEST_SUITE_IMPL(TPackedTupleDeepCopy, NSimd::NTest::TAvx2TestSuite) {
     }
 
     
-}
+})

@@ -38,8 +38,8 @@ struct TBlockLayoutConverterTestData {
 
 constexpr int TestSize = 128 * 3 * sizeof(i64);
 
-Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) {
-    Y_UNIT_TEST(TestFixedSize) {
+Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterTest, AVX2, {
+    Y_CPU_UNIT_TEST(TestFixedSize) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestMultipleFixedSize) {
+    Y_CPU_UNIT_TEST(TestMultipleFixedSize) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestString) {
+    Y_CPU_UNIT_TEST(TestString) {
         TBlockLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestMultipleStrings) {
+    Y_CPU_UNIT_TEST(TestMultipleStrings) {
         TBlockLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestMultipleVariousTypes) {
+    Y_CPU_UNIT_TEST(TestMultipleVariousTypes) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestOptional) {
+    Y_CPU_UNIT_TEST(TestOptional) {
         TBlockLayoutConverterTestData data;
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestTuple) {
+    Y_CPU_UNIT_TEST(TestTuple) {
         TBlockLayoutConverterTestData data;
 
         std::vector<NMiniKQL::TType*> t;
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestTzDate) {
+    Y_CPU_UNIT_TEST(TestTzDate) {
         TBlockLayoutConverterTestData data;
         using TDtLayout = NUdf::TDataType<TTzDatetime>::TLayout;
 
@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
     }
 
-    Y_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
+    Y_CPU_UNIT_TEST(TestNullBitmapPreservationAcrossMultiplePacks) {
         TBlockLayoutConverterTestData data;
 
         const auto optStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         UNIT_ASSERT_C(!item2, "Row 2 must be NULL");
     }
 
-    Y_UNIT_TEST(TestSingularColumns) {
+    Y_CPU_UNIT_TEST(TestSingularColumns) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -599,7 +599,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
     // singular null has DataSize == 0
     // without packing its allnull validity bitmap
     // two Null keys compare equal and would match in the join.
-    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+    Y_CPU_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
         TBlockLayoutConverterTestData data;
 
         auto* const nullType = data.Env.GetTypeOfNullLazy();
@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
             "Null keys must compare equal when EqualNulls is set");
     }
 
-    Y_UNIT_TEST(TestBuckets) {
+    Y_CPU_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -688,4 +688,4 @@ Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) 
         }
         UNIT_ASSERT_EQUAL(hashsum, bhashsum);
     }
-}
+})

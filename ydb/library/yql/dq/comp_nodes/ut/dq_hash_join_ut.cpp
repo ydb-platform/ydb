@@ -15,12 +15,6 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
-// MiniKQL filters the true twin under sanitizers because that variant normally enables LLVM.
-// BlockJoin is not an LLVM toggle, so use the generic YDB helper that registers both variants.
-#undef Y_UNIT_TEST_TWIN
-#undef Y_UNIT_TEST_QUAD
-#include <ydb/library/testlib/helpers.h>
-
 #include <arrow/util/bit_util.h>
 
 #include <bit>
@@ -2715,44 +2709,45 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE_IMPL(TDqHashJoinBasicTest, NSimd::NTest::TAvx2TestSuite) {
-    Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
+// BlockJoin is not an LLVM toggle; both twin variants must run under sanitizers.
+Y_CPU_UNIT_TEST_SUITE(TDqHashJoinBasicTest, AVX2, {
+    Y_CPU_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {
         TestOutputRowsOperatorStat(BasicInnerJoinTestData(), BlockJoin);
         TestOutputRowsOperatorStat(EmptyInnerJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {
         Test(CrossJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
         Test(MixedKeysInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
         Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNulls, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNulls, BlockJoin) {
         Test(InnerJoinEqualNullsTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKey, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKey, BlockJoin) {
         Test(InnerJoinEqualNullsAfterTupleKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild, BlockJoin) {
         Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), BlockJoin);
     }
 
     // arrow builders zero null slotsPoison
     // poison leftover so hash/equality cannot
     // rely on that and must canonicalize EqualNulls NULLs
-    Y_UNIT_TEST(TestInnerJoinEqualNullsDistinctNullSlotData) {
+    Y_CPU_UNIT_TEST(TestInnerJoinEqualNullsDistinctNullSlotData) {
         TJoinTestData td = InnerJoinEqualNullsTestData();
         auto descr = MakeJoinDescription(td);
         auto dummy = td.Setup->BuildGraph(td.Setup->PgmBuilder->NewDataLiteral<ui64>(0));
@@ -2770,455 +2765,455 @@ Y_UNIT_TEST_SUITE_IMPL(TDqHashJoinBasicTest, NSimd::NTest::TAvx2TestSuite) {
         CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsNullVsZero, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNullsNullVsZero, BlockJoin) {
         Test(InnerJoinEqualNullsNullVsZeroTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsCompositeKey, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNullsCompositeKey, BlockJoin) {
         Test(InnerJoinEqualNullsCompositeKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinEqualNulls, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinEqualNulls, BlockJoin) {
         Test(LeftJoinEqualNullsTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnly, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnly, BlockJoin) {
         Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnlyLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnlyLeftIsBuild, BlockJoin) {
         Test(InnerJoinEqualNullsSecondKeyOnlyLeftIsBuildTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
         Test(InnerJoinNullKeysDoNotMatchByDefaultTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinDoubleKeys, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinDoubleKeys, BlockJoin) {
         Test(InnerJoinDoubleKeysTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestInnerJoinOptionalFloatAndIntKeys, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerJoinOptionalFloatAndIntKeys, BlockJoin) {
         Test(InnerJoinOptionalFloatAndIntKeysTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
         Test(EmptyInnerJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestEmptyLeft, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestEmptyLeft, BlockJoin) {
         Test(EmptyLeftInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestEmptyRight, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestEmptyRight, BlockJoin) {
         Test(EmptyRightInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
         Test(LeftJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinNarrowRowWithFlags, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinNarrowRowWithFlags, BlockJoin) {
         Test(LeftJoinNarrowRowWithFlagsTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {
         Test(LeftJoinWithMatchesTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {
         Test(LeftJoinSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeys, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeys, BlockJoin) {
         Test(LeftJoinSpillingTwoKeysTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKey, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKey, BlockJoin) {
         Test(LeftJoinSpillingMultiKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftKindLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftKindLeftIsBuild, BlockJoin) {
         Test(LeftJoinTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinWithMatchesLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinWithMatchesLeftIsBuild, BlockJoin) {
         Test(LeftJoinWithMatchesTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinInplaceBuildRowLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinInplaceBuildRowLeftIsBuild, BlockJoin) {
         Test(LeftJoinInplaceBuildRowLeftIsBuildTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinSpillingLeftIsBuild, BlockJoin) {
         Test(LeftJoinSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeysLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeysLeftIsBuild, BlockJoin) {
         Test(LeftJoinSpillingTwoKeysTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKeyLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKeyLeftIsBuild, BlockJoin) {
         Test(LeftJoinSpillingMultiKeyTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpillingLeftIsBuild, BlockJoin) {
         Test(LargeBothSidesLeftSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestSlicedBlocksLeftSpillingLeftIsBuild) {
+    Y_CPU_UNIT_TEST(TestSlicedBlocksLeftSpillingLeftIsBuild) {
         Test(SlicedBlocksLeftSpillingTestDataLeftIsBuild(), true);
     }
 
-    Y_UNIT_TEST(TestLargeBothSidesInnerSpilling) {
+    Y_CPU_UNIT_TEST(TestLargeBothSidesInnerSpilling) {
         Test(LargeBothSidesInnerSpillingTestData(), true);
     }
 
-    Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpilling, BlockJoin) {
         Test(LargeBothSidesLeftSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestSlicedBlocksInnerSpilling) {
+    Y_CPU_UNIT_TEST(TestSlicedBlocksInnerSpilling) {
         Test(SlicedBlocksInnerSpillingTestData(), true);
     }
 
-    Y_UNIT_TEST(TestSlicedBlocksLeftSpilling) {
+    Y_CPU_UNIT_TEST(TestSlicedBlocksLeftSpilling) {
         Test(SlicedBlocksLeftSpillingTestData(), true);
     }
 
-    // Y_UNIT_TEST_TWIN(FullBehavesAsLeftIfRightEmpty, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(FullBehavesAsLeftIfRightEmpty, BlockJoin) {
     //     Test(FullBehavesAsLeftIfRightEmptyTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(TestRightKind, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(TestRightKind, BlockJoin) {
     //     Test(RightJoinTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(TestFullKindBehavesAsRightIfLeftIsEmpty, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(TestFullKindBehavesAsRightIfLeftIsEmpty, BlockJoin) {
     //     Test(FullBehavesAsRightIfLeftEmptyTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(TestFullKind, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(TestFullKind, BlockJoin) {
     //     Test(FullTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(TestExclusionKind, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(TestExclusionKind, BlockJoin) {
     //     Test(ExclusionTestData(), BlockJoin);
     // }
 
-    Y_UNIT_TEST_TWIN(TestLeftSemiKind, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftSemiKind, BlockJoin) {
         Test(LeftSemiTestData(), BlockJoin);
     }
 
-    // Y_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
     //     Test(RightSemiTestData(), BlockJoin);
     // }
 
-    Y_UNIT_TEST_TWIN(TestLeftOnlyKind, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftOnlyKind, BlockJoin) {
         Test(LeftOnlyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftSemiKindLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftSemiKindLeftIsBuild, BlockJoin) {
         Test(LeftSemiTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftOnlyKindLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftOnlyKindLeftIsBuild, BlockJoin) {
         Test(LeftOnlyTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeys, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeys, BlockJoin) {
         Test(LeftSemiDuplicateKeysTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeysLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeysLeftIsBuild, BlockJoin) {
         Test(LeftSemiDuplicateKeysTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemiLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemiLeftIsBuild, BlockJoin) {
         Test(SwappedKeyColumnsLeftSemiTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftSemiSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftSemiSpillingLeftIsBuild, BlockJoin) {
         Test(LeftSemiSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestLeftOnlySpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestLeftOnlySpillingLeftIsBuild, BlockJoin) {
         Test(LeftOnlySpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
+    // Y_CPU_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
     //     Test(RightOnlyTestData(), BlockJoin);
     // }
-    Y_UNIT_TEST_TWIN(TestInnerRenamesKind, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestInnerRenamesKind, BlockJoin) {
         Test(InnerJoinRenamesTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsInner, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestSwappedKeyColumnsInner, BlockJoin) {
         Test(SwappedKeyColumnsInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemi, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemi, BlockJoin) {
         Test(SwappedKeyColumnsLeftSemiTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestBlockJoinScalarColumn) {
+    Y_CPU_UNIT_TEST(TestBlockJoinScalarColumn) {
         Test(ScalarPayloadInnerJoinTestData(), true);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftFilter, BlockJoin) {
         Test(LeftFilterInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashRightFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashRightFilter, BlockJoin) {
         Test(RightFilterInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCommonFilter, BlockJoin) {
         Test(CommonFilterInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCommonFilterReversed, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCommonFilterReversed, BlockJoin) {
         Test(CommonFilterReversedInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashAllFilters, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashAllFilters, BlockJoin) {
         Test(AllFiltersInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilter, BlockJoin) {
         Test(LeftJoinLeftFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilter, BlockJoin) {
         Test(LeftJoinCommonFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilter, BlockJoin) {
         Test(LeftSemiLeftFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilter, BlockJoin) {
         Test(LeftSemiCommonFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilter, BlockJoin) {
         Test(LeftOnlyLeftFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
         Test(LeftOnlyCommonFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilterLeftIsBuild, BlockJoin) {
         Test(LeftJoinLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
         Test(LeftJoinCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilterLeftIsBuild, BlockJoin) {
         Test(LeftSemiLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilterLeftIsBuild, BlockJoin) {
         Test(LeftSemiCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilterLeftIsBuild, BlockJoin) {
         Test(LeftOnlyLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilterLeftIsBuild, BlockJoin) {
         Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
         Test(KeylessJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
         Test(KeylessLeftJoinCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
         Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftSemi), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinCommonFilter, BlockJoin) {
         Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftOnly), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinEmptyRight, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftJoinEmptyRight, BlockJoin) {
         Test(KeylessLeftJoinEmptyRightTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingRightIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingRightIsBuild, BlockJoin) {
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingSlowSpiller, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingSlowSpiller, BlockJoin) {
         TestWithSlowSpiller(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinSpillingRightIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinSpillingRightIsBuild, BlockJoin) {
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftSemi), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinSpillingRightIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinSpillingRightIsBuild, BlockJoin) {
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftOnly), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingLeftIsBuild, BlockJoin) {
         Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
         Test(TrueKeylessInnerJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashKeylessInnerJoinCommonFilter, BlockJoin) {
         Test(KeylessJoinCommonFilterTestData(EJoinKind::Inner), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {
         Test(TrueCrossJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyLeft, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinEmptyLeft, BlockJoin) {
         Test(EmptyLeftCrossJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyRight, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinEmptyRight, BlockJoin) {
         Test(EmptyRightCrossJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilter, BlockJoin) {
         Test(CrossJoinCommonFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilter, BlockJoin) {
         Test(CrossJoinLeftFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinRightFilter, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinRightFilter, BlockJoin) {
         Test(CrossJoinRightFilterTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAll, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAll, BlockJoin) {
         Test(CrossJoinFilterRejectsAllTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFilters, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinAllFilters, BlockJoin) {
         Test(CrossJoinAllFiltersTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinLeftIsBuild, BlockJoin) {
         Test(TrueCrossJoinTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinSpilling, BlockJoin) {
         Test(CrossJoinSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthRight, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthRight, BlockJoin) {
         Test(CrossJoinZeroWidthRightTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthLeft, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthLeft, BlockJoin) {
         Test(CrossJoinZeroWidthLeftTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthBothEmptyOutput, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthBothEmptyOutput, BlockJoin) {
         Test(CrossJoinZeroWidthBothEmptyOutputTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinSpillingLeftIsBuild, BlockJoin) {
         Test(CrossJoinSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpilling, BlockJoin) {
         Test(CrossJoinManyBucketsSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpillingLeftIsBuild, BlockJoin) {
         Test(CrossJoinManyBucketsSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpilling, BlockJoin) {
         Test(CrossJoinEmptyProbeSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpillingLeftIsBuild, BlockJoin) {
         Test(CrossJoinEmptyProbeSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpilling, BlockJoin) {
         Test(CrossJoinEmptyBuildSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpillingLeftIsBuild, BlockJoin) {
         Test(CrossJoinEmptyBuildSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilterSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilterSpilling, BlockJoin) {
         Test(CrossJoinCommonFilterSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpilling, BlockJoin) {
         Test(CrossJoinBothSidesSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpillingLeftIsBuild, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpillingLeftIsBuild, BlockJoin) {
         Test(CrossJoinBothSidesSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilterSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilterSpilling, BlockJoin) {
         Test(CrossJoinLeftFilterSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinRightFilterSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinRightFilterSpilling, BlockJoin) {
         Test(CrossJoinRightFilterSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFiltersSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinAllFiltersSpilling, BlockJoin) {
         Test(CrossJoinAllFiltersSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAllSpilling, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAllSpilling, BlockJoin) {
         Test(CrossJoinFilterRejectsAllSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST_TWIN(TestHashCrossJoinSpillingSlowSpiller, BlockJoin) {
+    Y_CPU_UNIT_TEST_TWIN(TestHashCrossJoinSpillingSlowSpiller, BlockJoin) {
         TestWithSlowSpiller(CrossJoinSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestBlockSpilling) { 
+    Y_CPU_UNIT_TEST(TestBlockSpilling) {
         Test(SpillingTestData(), true);
     }
-    Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
+    Y_CPU_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
         RunFinalDumpSpillingIsBatchedTest();
     }
 
-    Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
+    Y_CPU_UNIT_TEST(TestBlockJoinWithoutSpilling) {
         Test(BasicInnerJoinTestData(), true, false);
     }
-    Y_UNIT_TEST(TestBigStrings) { 
+    Y_CPU_UNIT_TEST(TestBigStrings) {
         Test(BigStringsTestData(), true);
     }
-    Y_UNIT_TEST(TestSmallStrings) { 
+    Y_CPU_UNIT_TEST(TestSmallStrings) {
         Test(SmallStringsTestData(), true);
     }
-    Y_UNIT_TEST(TestOutputBufferBounded) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBounded) {
         auto td = OutputBufferBoundedTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 200 * 200);
     }
 
-    Y_UNIT_TEST(TestHighFanoutInnerJoin) {
+    Y_CPU_UNIT_TEST(TestHighFanoutInnerJoin) {
         Test(HighFanoutInnerJoinTestData(), true);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedHighFanout) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedHighFanout) {
         auto td = HighFanoutInnerJoinTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), HighFanoutBuildRows);
     }
@@ -3226,45 +3221,45 @@ Y_UNIT_TEST_SUITE_IMPL(TDqHashJoinBasicTest, NSimd::NTest::TAvx2TestSuite) {
     // Thousands of narrow rows fit in one block, while a few dozen wide rows already fill it.
     // A row-based limit cannot do both: it would either fragment the narrow case or let the wide
     // case grow a block to tens of megabytes.
-    Y_UNIT_TEST(TestOutputBufferBoundedNarrowRows) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedNarrowRows) {
         auto td = NarrowRowsHighFanoutTestData();
         const auto stats = MeasureOutputBlocks(td);
         AssertOutputBufferBounded(stats, NarrowRowsFanout);
         UNIT_ASSERT_GT(stats.MaxBlockRows, 2000);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedWideRows) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedWideRows) {
         auto td = WideRowsHighFanoutTestData();
         const auto stats = MeasureOutputBlocks(td);
         AssertOutputBufferBounded(stats, WideRowsFanout);
         UNIT_ASSERT_LT(stats.MaxBlockRows, 200);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {
         auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftSemi);
         AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedLeftOnlyLeftIsBuild) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedLeftOnlyLeftIsBuild) {
         auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftOnly);
         AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiSpillingLeftIsBuild) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedLeftSemiSpillingLeftIsBuild) {
         auto td = LeftSemiSpillingTestDataLeftIsBuild();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 100000);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedCrossJoin) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedCrossJoin) {
         auto td = CrossJoinOutputBufferBoundedTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), CrossJoinOutputBufferBoundedRows);
     }
 
-    Y_UNIT_TEST(TestOutputBufferBoundedCrossJoinSpilling) {
+    Y_CPU_UNIT_TEST(TestOutputBufferBoundedCrossJoinSpilling) {
         auto td = CrossJoinOutputBufferBoundedSpillingTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 8 * 20000);
     }
-}
+})
 
 Y_UNIT_TEST_SUITE(TDqHashJoinSettingsCompatibilityTest) {
     Y_UNIT_TEST(NewRuntimeReadsOldSettingsTuple) {

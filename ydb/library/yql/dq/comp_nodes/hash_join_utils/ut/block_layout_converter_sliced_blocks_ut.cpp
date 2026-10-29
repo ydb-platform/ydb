@@ -249,14 +249,15 @@ using TBoolTag = TFixedTag<bool>;
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE_IMPL(TBlockLayoutConverterSlicedBlocksTest, NSimd::NTest::TAvx2TestSuite) {
-
 #define DECL_TEST(NAME, SLOT, TAG)    \
-    Y_UNIT_TEST(Test_##NAME##_Full) { \
+    Y_CPU_UNIT_TEST(Test_##NAME##_Full) { \
         RunCase<TAG>(SLOT);           \
     }
 
-ALL_CASES(DECL_TEST)
-#undef DECL_TEST
+Y_CPU_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest, AVX2, {
 
-} // Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest)
+ALL_CASES(DECL_TEST)
+
+}) // Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest)
+
+#undef DECL_TEST

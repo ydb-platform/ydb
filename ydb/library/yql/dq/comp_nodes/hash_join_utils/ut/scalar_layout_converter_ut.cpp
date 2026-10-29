@@ -87,8 +87,8 @@ void AssertFixedSizeValuesEqual(EFixedSizeScalarType type, const NYql::NUdf::TUn
 
 } // namespace
 
-Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite) {
-    Y_UNIT_TEST(TestFixedSize) {
+Y_CPU_UNIT_TEST_SUITE(TScalarLayoutConverterTest, AVX2, {
+    Y_CPU_UNIT_TEST(TestFixedSize) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestMultipleFixedSize) {
+    Y_CPU_UNIT_TEST(TestMultipleFixedSize) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestString) {
+    Y_CPU_UNIT_TEST(TestString) {
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestMixedTypes) {
+    Y_CPU_UNIT_TEST(TestMixedTypes) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestOptional) {
+    Y_CPU_UNIT_TEST(TestOptional) {
         TScalarLayoutConverterTestData data;
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestOptionalString) {
+    Y_CPU_UNIT_TEST(TestOptionalString) {
         TScalarLayoutConverterTestData data;
 
         const auto optionalStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestEmptyStrings) {
+    Y_CPU_UNIT_TEST(TestEmptyStrings) {
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestLargeStrings) {
+    Y_CPU_UNIT_TEST(TestLargeStrings) {
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestBatchPackFixedSize) {
+    Y_CPU_UNIT_TEST(TestBatchPackFixedSize) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestBatchPackMultipleColumns) {
+    Y_CPU_UNIT_TEST(TestBatchPackMultipleColumns) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestBatchPackStrings) {
+    Y_CPU_UNIT_TEST(TestBatchPackStrings) {
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -544,7 +544,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestBatchPackMixedTypes) {
+    Y_CPU_UNIT_TEST(TestBatchPackMixedTypes) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -605,7 +605,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestBatchPackMatchesSinglePack) {
+    Y_CPU_UNIT_TEST(TestBatchPackMatchesSinglePack) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestUnpackBatchMatchesSingleUnpack) {
+    Y_CPU_UNIT_TEST(TestUnpackBatchMatchesSingleUnpack) {
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestBucketPack) {
+    Y_CPU_UNIT_TEST(TestBucketPack) {
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestFixedSizePackUnpack, EFixedSizeScalarType, EFixedSizePackMode) {
+    Y_CPU_UNIT_TEST(TestFixedSizePackUnpack, EFixedSizeScalarType, EFixedSizePackMode) {
         const auto scalarType = Arg<0>();
         const auto packMode = Arg<1>();
 
@@ -840,7 +840,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestFixedSizeOptional, EFixedSizeScalarType) {
+    Y_CPU_UNIT_TEST(TestFixedSizeOptional, EFixedSizeScalarType) {
         const auto scalarType = Arg<0>();
 
         TScalarLayoutConverterTestData data;
@@ -880,7 +880,7 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
         }
     }
 
-    Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+    Y_CPU_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
         TScalarLayoutConverterTestData data;
 
         auto* const nullType = data.Env.GetTypeOfNullLazy();
@@ -917,4 +917,4 @@ Y_UNIT_TEST_SUITE_IMPL(TScalarLayoutConverterTest, NSimd::NTest::TAvx2TestSuite)
             !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
             "Null keys must not compare equal");
     }
-}
+})

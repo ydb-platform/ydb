@@ -133,17 +133,17 @@ Y_UNIT_TEST(TestCalculateCRC32Fallback) {
 
 }
 
-Y_UNIT_TEST_SUITE_IMPL(TestHashSSE42, NSimd::NTest::TSse42TestSuite) {
-Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+Y_CPU_UNIT_TEST_SUITE(TestHashSSE42, SSE42, {
+Y_CPU_UNIT_TEST(TestCalculateCRC32SSE42) {
     TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
 }
-}
+})
 
-Y_UNIT_TEST_SUITE_IMPL(TestHashAVX2, NSimd::NTest::TAvx2TestSuite) {
-Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+Y_CPU_UNIT_TEST_SUITE(TestHashAVX2, AVX2, {
+Y_CPU_UNIT_TEST(TestCalculateCRC32AVX2) {
     TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
 }
-}
+})
 
 Y_UNIT_TEST_SUITE(TupleLayoutFallback) {
 Y_UNIT_TEST(PackNarrowRowFallback) {
@@ -154,20 +154,20 @@ Y_UNIT_TEST(PackNarrowRowFallback) {
 }
 }
 
-Y_UNIT_TEST_SUITE_IMPL(TupleLayoutSSE42, NSimd::NTest::TSse42TestSuite) {
-Y_UNIT_TEST(PackNarrowRowSSE42) {
+Y_CPU_UNIT_TEST_SUITE(TupleLayoutSSE42, SSE42, {
+Y_CPU_UNIT_TEST(PackNarrowRowSSE42) {
     TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
 }
 
-Y_UNIT_TEST(PackSmallRowSSE42) {
+Y_CPU_UNIT_TEST(PackSmallRowSSE42) {
     // Three data bytes, four hash bytes and one null-mask byte: the
     // 8-byte row fits the SSE small-tuple path with a 16-byte register.
     TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
 }
-}
+})
 
-Y_UNIT_TEST_SUITE_IMPL(TupleLayout, NSimd::NTest::TAvx2TestSuite) {
-Y_UNIT_TEST(CreateLayout) {
+Y_CPU_UNIT_TEST_SUITE(TupleLayout, AVX2, {
+Y_CPU_UNIT_TEST(CreateLayout) {
 
     TColumnDesc kc1, kc2,  pc1, pc2, pc3;
 
@@ -192,15 +192,15 @@ Y_UNIT_TEST(CreateLayout) {
     UNIT_ASSERT(tl->TotalRowSize == 45);
 }
 
-Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+Y_CPU_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
     TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
 }
 
-Y_UNIT_TEST(PackNarrowRowAVX2) {
+Y_CPU_UNIT_TEST(PackNarrowRowAVX2) {
     TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
 }
 
-Y_UNIT_TEST(Pack) {
+Y_CPU_UNIT_TEST(Pack) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -273,7 +273,7 @@ Y_UNIT_TEST(Pack) {
     CTEST  << Endl;
 }
 
-Y_UNIT_TEST(PackMany) {
+Y_CPU_UNIT_TEST(PackMany) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -367,7 +367,7 @@ Y_UNIT_TEST(PackMany) {
 
 }
 
-Y_UNIT_TEST(UnpackMany) {
+Y_CPU_UNIT_TEST(UnpackMany) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -481,7 +481,7 @@ Y_UNIT_TEST(UnpackMany) {
     }(std::make_index_sequence<cols_num>{});
 }
 
-Y_UNIT_TEST(Unpack) {
+Y_CPU_UNIT_TEST(Unpack) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -589,7 +589,7 @@ Y_UNIT_TEST(Unpack) {
     UNIT_ASSERT(std::memcmp(colValid4.data(), colValid4_new.data(), colValid4.size()) == 0);
 }
 
-Y_UNIT_TEST(PackVarSize) {
+Y_CPU_UNIT_TEST(PackVarSize) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -707,7 +707,7 @@ Y_UNIT_TEST(PackVarSize) {
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
 }
 
-Y_UNIT_TEST(UnpackVarSize) {
+Y_CPU_UNIT_TEST(UnpackVarSize) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -898,7 +898,7 @@ Y_UNIT_TEST(UnpackVarSize) {
     UNIT_ASSERT(std::memcmp(colValid.data(), colValid6_new.data(), colValid.size()) == 0);
 }
 
-Y_UNIT_TEST(PackVarSizeBig) {
+Y_CPU_UNIT_TEST(PackVarSizeBig) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST(PackVarSizeBig) {
     for (ui32 i = 0; i < sizeof(expected_overflow); ++i)
         UNIT_ASSERT_VALUES_EQUAL(expected_overflow[i], overflow[i]);
 }
-Y_UNIT_TEST(PackIsValidFuzz) {
+Y_CPU_UNIT_TEST(PackIsValidFuzz) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -1142,7 +1142,7 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << Endl;
 }
 
-Y_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
+Y_CPU_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc key;
@@ -1172,7 +1172,7 @@ Y_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
     UNIT_ASSERT_VALUES_EQUAL(Hash(row(0)), Hash(row(1)));
 }
 
-Y_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
+Y_CPU_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
     TScopedAlloc alloc(__LOCATION__);
 
     constexpr ui32 keyColumns = 65;
@@ -1206,7 +1206,7 @@ Y_UNIT_TEST(EqualNullsSupportsMoreThan64KeyColumns) {
     UNIT_ASSERT_VALUES_EQUAL(Hash(lhs), Hash(rhs));
 }
 
-Y_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
+Y_CPU_UNIT_TEST(EqualNullsSupportsVariableKeyAfter64FixedKeys) {
     TScopedAlloc alloc(__LOCATION__);
 
     constexpr ui32 fixedKeyColumns = 64;
@@ -1336,7 +1336,7 @@ void CheckFloatKeysCanonicalized(const TTupleLayout& tl) {
 
 } // namespace
 
-Y_UNIT_TEST(FloatKeysAreCanonicalized) {
+Y_CPU_UNIT_TEST(FloatKeysAreCanonicalized) {
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc floatKey;
@@ -1353,7 +1353,7 @@ Y_UNIT_TEST(FloatKeysAreCanonicalized) {
     CheckFloatKeysCanonicalized(*TTupleLayout::Create(columns));
 }
 
-}
+})
 
 
 

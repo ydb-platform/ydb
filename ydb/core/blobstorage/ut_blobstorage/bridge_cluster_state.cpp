@@ -6,6 +6,44 @@
 using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeClusterState) {
+    Y_UNIT_TEST(RecoveredStateRejectsInvalidPileRolesAndStates) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const auto current = QueryStorageConfig(env);
+        UNIT_ASSERT(!NStorage::ValidateConfig(current));
+        auto check = [&](const auto& mutate, TStringBuf expected) {
+            auto recovered = current;
+            mutate(*recovered.MutableClusterState());
+            const auto error = NStorage::ValidateConfig(recovered);
+            UNIT_ASSERT_C(error, "malformed recovered cluster state was accepted");
+            UNIT_ASSERT_STRING_CONTAINS(*error, expected);
+        };
+        for (ui32 role : {0u, 4u, Max<ui32>()}) {
+            check([&](auto& state) { state.SetPrimaryPile(role); }, "Incorrect primary pile");
+            check([&](auto& state) { state.SetPromotedPile(role); }, "Incorrect promoted pile");
+        }
+        check([](auto& state) { state.SetPerPileState(0, NKikimrBridge::TClusterState::SUSPENDED); },
+            "Incorrect primary pile state");
+        check([](auto& state) {
+            state.SetPromotedPile(2);
+            state.SetPerPileState(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        }, "Incorrect promoted pile state");
+        check([](auto& state) {
+            state.SetPerPileState(2, static_cast<NKikimrBridge::TClusterState::EPileState>(Max<int>()));
+        }, "Incorrect pile state");
+        auto valid = current;
+        valid.MutableClusterState()->SetPromotedPile(2);
+        valid.MutableClusterState()->SetPerPileState(2, NKikimrBridge::TClusterState::SUSPENDED);
+        UNIT_ASSERT(!NStorage::ValidateConfig(valid));
+    }
+
     Y_UNIT_TEST(RejectsInvalidPileRolesAndStates) {
         using namespace NBridgeTest;
         TEnvironmentSetup env{{

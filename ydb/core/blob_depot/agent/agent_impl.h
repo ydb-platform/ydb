@@ -526,6 +526,10 @@ namespace NKikimr::NBlobDepot {
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);
+            void HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
+                std::optional<TString> data, const char *error);
+            void OnCheckIntegrityPartDone(TCheckContext& checkContext);
+            void HandleCheckIntegrityResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
 
         public:
             struct TDeleter {

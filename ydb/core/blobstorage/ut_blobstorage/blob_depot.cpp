@@ -5,6 +5,11 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/library/actors/core/events.h>
 
+#ifndef KIKIMR_DISABLE_S3_OPS
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/wrappers/fake_storage.h>
+#endif
+
 #include "blob_depot_test_functions.h"
 
 using namespace NKikimr::NBlobDepot;
@@ -592,4 +597,79 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         UNIT_ASSERT(status);
         UNIT_ASSERT_VALUES_EQUAL(*status, NKikimrProto::ERROR);
     }
+
+#ifndef KIKIMR_DISABLE_S3_OPS
+    // the value written to S3 has no blob parts; its integrity is checked by reading it from S3, and the check gets its
+    // answer
+    Y_UNIT_TEST(CheckIntegrityOfS3Value) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .SetupHive = true,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(20));
+
+        const TString bucket = "check-integrity";
+        auto& storage = *Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>();
+        storage.Clear();
+
+        NKikimrBlobStorage::TConfigRequest request;
+        {
+            auto *cmd = request.AddCommand()->MutableDefineStoragePool();
+            cmd->SetBoxId(1);
+            cmd->SetName("virtual_pool");
+            cmd->SetErasureSpecies("none");
+            cmd->SetVDiskKind("Default");
+        }
+        {
+            auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
+            cmd->SetName("vg");
+            cmd->SetHiveId(env.Runtime->GetDomainsInfo()->GetHive());
+            cmd->SetStoragePoolName("virtual_pool");
+            auto *prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(env.StoragePoolName);
+            prof->SetCount(2);
+            prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(env.StoragePoolName);
+            prof->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+            prof->SetCount(2);
+            auto *s3 = cmd->MutableS3BackendSettings();
+            s3->MutableSettings()->SetEndpoint("fake.fake");
+            s3->MutableSettings()->SetBucket(bucket);
+            s3->MutableSyncMode();
+        }
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        const ui32 groupId = response.GetStatus(1).GetGroupId(0);
+        env.Sim(TDuration::Seconds(5));
+
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "stored in S3";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status,
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetBucket(bucket).GetSize(), 1);
+
+        auto check = [&] {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCheckIntegrity(id, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Minutes(1));
+            UNIT_ASSERT_C(res, "no answer to CheckIntegrity");
+            Cerr << "*** " << res->Get()->ToString() << Endl;
+            return res->Get()->Status;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::OK);
+
+        storage.Clear(); // the object disappears from S3
+        UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::ERROR);
+    }
+#endif
 }

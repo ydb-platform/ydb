@@ -275,7 +275,6 @@ void TPersQueueReadBalancer::RequestReplicationDone(const TActorContext& ctx) {
     // SchemeShard preserves the current key schema; specifying it in alter is forbidden.
     config->ClearPartitionKeySchema();
     config->SetReplicationStatus(NKikimrPQ::ReplicationDone);
-    config->MutablePartitionConfig()->ClearMirrorFrom();
 
     ReplicationStatusRequestActor = ctx.Register(CreateReplicationStatusRequest(SelfId(), std::move(proposal)));
 }

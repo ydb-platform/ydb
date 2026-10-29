@@ -222,6 +222,12 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         }
         UNIT_ASSERT_VALUES_EQUAL_C(status, "3", "Timed out waiting for ReplicationDone through PQv1 DescribeTopic");
 
+        settings = env.Describe(destination);
+        UNIT_ASSERT(settings.has_remote_mirror_rule());
+        settings.clear_remote_mirror_rule();
+        settings.mutable_attributes()->erase("_ydb_is_for_topic_replication");
+        env.Alter(destination, settings);
+
         env.Write(destination, 1000, 100);
         env.Read(destination, 500, 600, 1100);
     }

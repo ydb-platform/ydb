@@ -359,6 +359,16 @@ struct TResourceSnapshotState {
     TVector<ui32> InitialBoardNodeIds;
 };
 
+struct TEvQueryMemoryState : public TEventLocal<TEvQueryMemoryState, TKqpResourceManagerEvents::EvQueryMemoryState> {
+    TEvQueryMemoryState(ui64 limit, ui64 usage)
+        : Limit(limit)
+        , Usage(usage)
+    {}
+
+    const ui64 Limit;
+    const ui64 Usage;
+};
+
 struct TEvKqpResourceInfoExchanger {
     struct TEvPublishResource : public TEventLocal<TEvPublishResource,
         TKqpResourceInfoExchangerEvents::EvPublishResource>

@@ -12,6 +12,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/string/builder.h>
 #include <util/string/printf.h>
 
 namespace NKikimr::NReplication::NController {
@@ -234,13 +235,20 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetDstPath(), "/Root/Replicated/Dir/Table");
     }
 
-    Y_UNIT_TEST(SystemObjects) {
+    Y_UNIT_TEST(InternalObjects) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.CreateTable("/Root", *MakeTableDescription(DummyTable()));
-        env.MkDir("/Root", "export-100500");
-        env.CreateTable("/Root/export-100500", *MakeTableDescription(DummyTable()));
+        for (const auto& directory : {
+                 "~my_directory", "~backup", "user~backup", "~backup_12345",
+                 ".sys_health", ".sys_user", ".metadata", ".metadata_user", ".tmp", ".tmp_user",
+                 ".backups", ".backups_user", "export-100500", "export-user"}) {
+            env.MkDir("/Root", directory);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                env.CreateTable(TStringBuilder() << "/Root/" << directory, *MakeTableDescription(DummyTable())),
+                NMsgBusProxy::EResponseStatus::MSTATUS_OK, directory);
+        }
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
             CreateConfig(TVector<std::pair<TString, TString>>{
@@ -252,8 +260,18 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT(ev->Get()->IsSuccess());
 
         const auto& toAdd = ev->Get()->ToAdd;
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetSrcPath(), "/Root/Table");
+        const TVector<std::pair<TString, TString>> expectedPaths = {
+            {"/Root/Table", "/Root/Replicated/Table"},
+            {"/Root/~my_directory/Table", "/Root/Replicated/~my_directory/Table"},
+            {"/Root/~backup/Table", "/Root/Replicated/~backup/Table"},
+            {"/Root/user~backup/Table", "/Root/Replicated/user~backup/Table"},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(toAdd.size(), expectedPaths.size());
+        for (const auto& [src, dst] : expectedPaths) {
+            UNIT_ASSERT_C(AnyOf(toAdd, [&](const auto& target) {
+                return target.Config->GetSrcPath() == src && target.Config->GetDstPath() == dst;
+            }), "Missing target: " << src << " -> " << dst);
+        }
     }
 
     Y_UNIT_TEST(InvalidCredentials) {

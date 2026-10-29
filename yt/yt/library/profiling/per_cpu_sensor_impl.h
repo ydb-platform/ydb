@@ -4,6 +4,7 @@
 #include "summary.h"
 
 #include <library/cpp/yt/cpu_clock/public.h>
+
 #include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NProfiling {

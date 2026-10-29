@@ -5,6 +5,30 @@ import "ydb/core/scheme/protos/type_info.proto";
 package NTabletFlatScheme;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TTierBoundSettings {
+    oneof Kind {
+        uint64 RelativeOffsetUs = 1; // now - offset
+        int64 AbsoluteMicros = 2;    // microseconds since the epoch
+    }
+}
+
+message TTierRangeSettings {
+    optional TTierBoundSettings From = 1;
+    optional TTierBoundSettings To = 2;
+    optional bool ToInclusive = 3 [default = false];
+}
+
+message TTierRuleSettings {
+    optional uint32 TierId = 1;
+    repeated TTierRangeSettings Ranges = 2;
+}
+
+message TTieringPolicySettings {
+    optional uint32 ColumnTag = 1;
+    optional NKikimrSchemeOp.TTTLSettings.EUnit Unit = 2;
+    repeated TTierRuleSettings Rules = 3;
+}
+
 message TAlterRecord {
     enum EDeltaType {
         AddTable = 1;
@@ -69,6 +93,12 @@ message TAlterRecord {
     reserved 29; // deprecated -> ByKeyFilterPrefixes
     repeated NKikimrSchemeOp.TByKeyFilterPrefix ByKeyFilterPrefixes = 30; // Bloom filters on PK prefixes
     optional uint32 SpecialTableType = 32;
+
+    //_ Table: Families drop and data tiering (SetTable records, ignored by older versions)
+
+    repeated uint32 DropFamilies = 33;
+    optional TTieringPolicySettings TieringPolicy = 34; // Tiers are families of the table
+    optional bool ResetTieringPolicy = 35 [default = false];
 
     optional uint64 ExecutorCacheSize = 100;
     optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;

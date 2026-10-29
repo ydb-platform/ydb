@@ -570,6 +570,97 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         TTestEnv env(8, 4);
     }
 
+    void TestPDisksWithoutNodes(bool cmsFirst, bool removeAllNodes) {
+        TTestEnv env(2, 2);
+        // With no nodes to query, the state updater completes on timeout.
+        auto prevScheduledFilter = env.SetScheduledEventFilter(&TTestActorRuntimeBase::NopFilterFunc);
+        env.SetScheduledEventFilter([prevScheduledFilter](TTestActorRuntimeBase& runtime,
+                TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+            if (ev->GetTypeRewrite() == TEvSentinel::TEvTimeout::EventType) {
+                return false;
+            }
+            return prevScheduledFilter(runtime, ev, delay, deadline);
+        });
+
+        const auto originalPDisks = env.GetSentinelPDisks();
+        UNIT_ASSERT_VALUES_EQUAL(originalPDisks.size(), 4);
+        const ui32 removedNode = env.GetFirstNodeId();
+
+        bool firstResponseReceived = false;
+        TAutoPtr<IEventHandle> delayedResponse;
+        auto prevObserver = env.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto action = prevObserver(ev);
+            if (action != TTestActorRuntime::EEventAction::PROCESS) {
+                return action;
+            }
+
+            const bool cmsResponse = ev->GetTypeRewrite() == TEvCms::TEvClusterStateResponse::EventType;
+            const bool bscResponse = ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType
+                && ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse().StatusSize()
+                && ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse().GetStatus(0).HasBaseConfig();
+            if (!cmsResponse && !bscResponse) {
+                return action;
+            }
+
+            if (cmsResponse) {
+                auto* hosts = ev->Get<TEvCms::TEvClusterStateResponse>()->Record.MutableState()->MutableHosts();
+                for (int i = hosts->size() - 1; i >= 0; --i) {
+                    if (removeAllNodes || hosts->Get(i).GetNodeId() == removedNode) {
+                        hosts->DeleteSubrange(i, 1);
+                    }
+                }
+            }
+
+            if (!firstResponseReceived) {
+                if (cmsResponse != cmsFirst) {
+                    delayedResponse = ev.Release();
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                firstResponseReceived = true;
+                if (delayedResponse) {
+                    env.Send(delayedResponse.Release(), 0, true);
+                }
+            }
+            return action;
+        });
+
+        env.UpdateConfig();
+        UNIT_ASSERT(firstResponseReceived);
+        UNIT_ASSERT(!delayedResponse);
+        env.SetObserverFunc(prevObserver);
+
+        // BSC still lists the removed nodes' disks. The state update must not panic.
+        env.SetPDiskState({}, NKikimrBlobStorage::TPDiskState::Normal);
+        const auto remainingPDisks = env.GetSentinelPDisks();
+        UNIT_ASSERT_VALUES_EQUAL(remainingPDisks.size(), removeAllNodes ? 0 : 2);
+        for (const auto& id : remainingPDisks) {
+            UNIT_ASSERT(id.NodeId != removedNode);
+            UNIT_ASSERT(originalPDisks.contains(id));
+        }
+
+        // Once CMS reports the nodes again, Sentinel must resume tracking their disks.
+        env.UpdateConfig();
+        env.SetPDiskState({}, NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT(env.GetSentinelPDisks() == originalPDisks);
+    }
+
+    Y_UNIT_TEST(PDisksWithoutNodesCMSFirst) {
+        TestPDisksWithoutNodes(true, false);
+    }
+
+    Y_UNIT_TEST(PDisksWithoutNodesBSCFirst) {
+        TestPDisksWithoutNodes(false, false);
+    }
+
+    Y_UNIT_TEST(PDisksWithoutAnyNodesCMSFirst) {
+        TestPDisksWithoutNodes(true, true);
+    }
+
+    Y_UNIT_TEST(PDisksWithoutAnyNodesBSCFirst) {
+        TestPDisksWithoutNodes(false, true);
+    }
+
     Y_UNIT_TEST(PDiskUnknownState) {
         TTestEnv env(8, 4);
 

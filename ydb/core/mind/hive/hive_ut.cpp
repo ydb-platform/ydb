@@ -10396,7 +10396,25 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-    Y_UNIT_TEST(TestBridgeDemotion) {
+    enum class EBridgeHiveRestart {
+        None,
+        BeforePromotion,
+        BeforeDisconnect,
+        DisconnectBeforeResync,
+        DisconnectWithDeadNodes,
+    };
+
+    // Not runtime.WaitFor: it aborts the whole binary on timeout
+    bool WaitUntil(TTestBasicRuntime& runtime, const std::function<bool()>& condition) {
+        bool done = condition();
+        for (ui32 i = 0; i < 100 && !done; ++i) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            done = condition();
+        }
+        return done;
+    }
+
+    void TestBridgeDemotion(EBridgeHiveRestart hiveRestart) {
         static constexpr ui32 NUM_NODES = 4;
         static constexpr ui32 NUM_TABLETS = 4;
         TTestBasicRuntime runtime(NUM_NODES, false);
@@ -10411,7 +10429,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui32 numNodes = runtime.GetNodeCount();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         MakeSureTabletIsUp(runtime, hiveTablet, 0);
-        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        TActorId hiveActor = GetHiveActor(runtime, hiveTablet);
+        bridge.Subscribe(hiveActor);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
 
         std::unordered_set<ui64> tablets;
@@ -10421,6 +10440,23 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             tablets.insert(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
+
+        // Every Local has reconnected (alive node) and every tablet has been resynced (none Unknown)
+        auto hiveSettled = [&]() -> bool {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveDomainStats());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveDomainStats* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveDomainStats>(handle);
+            std::unordered_set<ui32> aliveNodes;
+            for (const auto& domain : response->Record.GetDomainStats()) {
+                aliveNodes.insert(domain.GetNodeIds().begin(), domain.GetNodeIds().end());
+                for (const auto& state : domain.GetStateStats()) {
+                    if (state.GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN && state.GetCount() > 0) {
+                        return false;
+                    }
+                }
+            }
+            return aliveNodes.size() == numNodes;
+        };
 
         using TDistribution = std::vector<std::vector<ui64>>;
         auto getDistribution = [hiveTablet, nodeBase, senderA, numNodes, &runtime]() -> TDistribution {
@@ -10449,14 +10485,72 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return sum;
         };
 
+        auto waitUntil = [&](auto&& condition) {
+            return WaitUntil(runtime, condition);
+        };
+
+        auto restartHive = [&] {
+            RebootTablet(runtime, hiveTablet, senderA);
+            UNIT_ASSERT_C(waitUntil(hiveSettled), "Locals did not reconnect to the restarted Hive");
+            bridge.Unsubscribe(hiveActor);
+            hiveActor = GetHiveActor(runtime, hiveTablet);
+            bridge.Subscribe(hiveActor);
+        };
+
+        auto allInPile1 = [&] {
+            auto distribution = getDistribution();
+            return tabletsInPile(distribution, 0) == 0 && tabletsInPile(distribution, 1) == NUM_TABLETS;
+        };
+
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), NUM_TABLETS);
+
+        if (hiveRestart == EBridgeHiveRestart::DisconnectWithDeadNodes) {
+            // pile 0 dies unseen by the old Hive: the new one loads its tablets as Unknown, and no Local resyncs them
+            bridge.Unsubscribe(hiveActor);
+            bridge.Disconnect(0);
+            TBlockEvents<TEvLocal::TEvStatus> blockStatusDead(runtime, [](auto&& ev) {
+                return ev->Get()->Record.GetStatus() == TEvLocal::TEvStatus::StatusDead;
+            });
+            for (ui32 nodeIndex = 0; nodeIndex < numNodes; nodeIndex += 2) {
+                SendKillLocal(runtime, nodeIndex);
+            }
+            UNIT_ASSERT_C(waitUntil([&] { return blockStatusDead.size() >= numNodes / 2; }), "pile 0 Locals did not die");
+            UNIT_ASSERT_VALUES_EQUAL_C(tabletsInPile(getDistribution(), 0), NUM_TABLETS, "the old Hive saw the nodes die");
+            RebootTablet(runtime, hiveTablet, senderA);
+            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets of dead nodes stayed in the disconnected pile after Hive restart");
+            return;
+        }
+
+        if (hiveRestart == EBridgeHiveRestart::DisconnectBeforeResync) {
+            bridge.Unsubscribe(hiveActor); // the old Hive must not see the disconnect
+            bridge.Disconnect(0);
+            restartHive();
+            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets stayed in the disconnected pile after Hive restart");
+            return;
+        }
+
+        if (hiveRestart == EBridgeHiveRestart::BeforeDisconnect) {
+            restartHive();
+            bridge.Disconnect(0);
+            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets stayed in the disconnected pile after Hive restart");
+            return;
+        }
+
+        if (hiveRestart == EBridgeHiveRestart::BeforePromotion) {
+            restartHive();
+        }
 
         TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
 
         bridge.Promote(1);
 
-        while (blockBoot.empty()) {
-            runtime.DispatchEvents({}, TDuration::MilliSeconds(20));
+        {
+            // Not runtime.WaitFor: it aborts the whole binary on timeout
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return !blockBoot.empty(); };
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; }); // enables full simulation
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT_C(!blockBoot.empty(), "pile drain did not start after promotion");
         }
 
         // make sure tablets are moved with correct in-flight
@@ -10466,6 +10560,121 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), 0);
+    }
+
+    Y_UNIT_TEST(TestBridgeDemotion) {
+        TestBridgeDemotion(EBridgeHiveRestart::None);
+    }
+
+    Y_UNIT_TEST(TestBridgeDemotionAfterHiveRestart) {
+        TestBridgeDemotion(EBridgeHiveRestart::BeforePromotion);
+    }
+
+    Y_UNIT_TEST(TestBridgeDisconnectAfterHiveRestart) {
+        TestBridgeDemotion(EBridgeHiveRestart::BeforeDisconnect);
+    }
+
+    Y_UNIT_TEST(TestBridgeDisconnectBeforeResync) {
+        TestBridgeDemotion(EBridgeHiveRestart::DisconnectBeforeResync);
+    }
+
+    Y_UNIT_TEST(TestBridgeDisconnectWithDeadNodes) {
+        TestBridgeDemotion(EBridgeHiveRestart::DisconnectWithDeadNodes);
+    }
+
+    // a storage config update during a pile drain does not start a second drain of the pile, even for a node that joined it
+    Y_UNIT_TEST(TestBridgePileDrainSingleActor) {
+        static constexpr ui32 NUM_NODES = 4;
+        static constexpr ui32 NUM_TABLETS = 4;
+        static constexpr ui32 DRAIN_INFLIGHT = 2;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, false, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetDrainInflight(DRAIN_INFLIGHT);
+        });
+        // node 2 of pile 0 joins only while the pile drain runs
+        for (ui32 nodeIndex : {0, 1, 3}) {
+            CreateLocal(runtime, nodeIndex);
+        }
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, TTabletTypes::Dummy, BINDED_CHANNELS));
+            MakeSureTabletIsUp(runtime, SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true), 0);
+        }
+
+        TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
+        bridge.Promote(1);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return blockBoot.size() >= DRAIN_INFLIGHT; }), "pile drain did not start");
+        UNIT_ASSERT_VALUES_EQUAL(blockBoot.size(), DRAIN_INFLIGHT);
+
+        bool node2Registered = false;
+        auto observer = runtime.AddObserver<TEvLocal::TEvStatus>([&](auto&& ev) {
+            node2Registered |= ev->Sender.NodeId() == runtime.GetNodeId(2);
+        });
+        CreateLocal(runtime, 2);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return node2Registered; }), "node 2 did not register");
+        observer.Remove();
+
+        bridge.Promote(1); // one more storage config update while the drain runs
+        runtime.SimulateSleep(TDuration::MilliSeconds(500));
+        UNIT_ASSERT_VALUES_EQUAL_C(blockBoot.size(), DRAIN_INFLIGHT, "a second drain of the pile started");
+    }
+
+    // Hive restarts while the drain of the pile demoted from primary is in progress; the restarted Hive finds the tablets
+    // left in the pile running where they are not allowed, so they leave the pile anyway
+    Y_UNIT_TEST(TestBridgePileDrainInterruptedByRestart) {
+        static constexpr ui32 NUM_NODES = 4;
+        static constexpr ui32 NUM_TABLETS = 4;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetDrainInflight(1);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        std::vector<ui64> tablets;
+        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i,
+                TTabletTypes::Dummy, BINDED_CHANNELS));
+            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true));
+            MakeSureTabletIsUp(runtime, tablets.back(), 0);
+        }
+
+        // nodes of the even indexes belong to pile 0
+        auto pileOf = [&](ui32 nodeId) { return (nodeId - runtime.GetNodeId(0)) % 2; };
+        auto tabletsInPile = [&](ui32 pile) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto *response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            ui32 num = 0;
+            for (const auto& tablet : response->Record.GetTablets()) {
+                num += std::ranges::find(tablets, tablet.GetTabletID()) != tablets.end() && tablet.GetNodeID() &&
+                    pileOf(tablet.GetNodeID()) == pile;
+            }
+            return num;
+        };
+        UNIT_ASSERT(tabletsInPile(0));
+
+        // the drain of pile 0 starts and moves one tablet at a time, which is held
+        TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
+        bridge.Promote(1);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return !blockBoot.empty(); }), "pile drain did not start");
+        UNIT_ASSERT(tabletsInPile(0)); // the drain is in progress
+
+        RebootTablet(runtime, hiveTablet, sender);
+        blockBoot.Stop().Unblock();
+        // the restarted Hive learns where the tablets run from the nodes, so all of them have to be seen in pile 1, not
+        // just none in pile 0
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return tabletsInPile(1) == NUM_TABLETS; }),
+            "tablets are left in the drained pile");
     }
 
     // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later

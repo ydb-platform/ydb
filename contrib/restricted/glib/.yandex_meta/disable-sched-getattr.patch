@@ -1,0 +1,9 @@
+SYS_sched_getattr is unavailable in Arcadia build.
+
+--- a/meson.build
++++ b/meson.build
+@@ -1739,4 +1738,0 @@
+-  if cc.has_header_symbol('sys/syscall.h', 'SYS_sched_getattr')
+-    glib_conf.set('HAVE_SYS_SCHED_GETATTR', 1)
+-  endif
+-

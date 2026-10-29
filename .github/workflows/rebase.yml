@@ -171,6 +171,114 @@ jobs:
               }
             }
 
+      - name: Probe GitHub speed
+        if: vars.GH_PROXY_URL != ''
+        env:
+          GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          proxy_url="${GH_PROXY_URL:-}"
+          proxy_url="${proxy_url%/}"
+          if [ -z "$proxy_url" ]; then
+            echo "GH_PROXY_URL is empty, checkout stays direct"
+            exit 0
+          fi
+
+          repo_url=https://github.com/ydb-platform/ydb.git
+
+          # Depth-1 clone, same transfer as checkout. Speed is bytes added over the 15s after tmp_pack passes 1 MB, ignoring a flat tail.
+          pack_size() {
+            local f
+            f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
+            if [ -z "$f" ]; then echo 0; return; fi
+            stat -c %s "$f" 2>/dev/null || stat -f %z "$f"
+          }
+          measure() {
+            local git_config=$1 dest log pid i sz s1 s2
+            dest=$(mktemp -d /tmp/gh-probe.XXXXXX)
+            log=$(mktemp)
+            if [ -n "$git_config" ]; then
+              git -c "$git_config" clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+            else
+              git clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+            fi
+            pid=$!
+            s1=0
+            for i in $(seq 1 45); do
+              sleep 1
+              sz=$(pack_size "$dest")
+              if [ "$sz" -gt 1000000 ]; then s1=$sz; break; fi
+            done
+            s2=$s1
+            elapsed=0
+            if [ "$s1" -gt 0 ]; then
+              grown=$s1
+              for j in $(seq 1 15); do
+                sleep 1
+                sz=$(pack_size "$dest")
+                if [ "$sz" -lt "$grown" ]; then sz=$grown; fi
+                if [ "$sz" -gt "$grown" ]; then
+                  grown=$sz
+                  elapsed=$j
+                fi
+              done
+              s2=$grown
+            fi
+            if [ "$elapsed" -lt 1 ]; then elapsed=1; fi
+            kill "$pid" 2>/dev/null || true
+            pkill -P "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            if [ "$s1" -eq 0 ]; then
+              echo "git clone never started receiving objects:" >&2
+              tr '\r' '\n' < "$log" | grep -E 'Receiving objects|Compressing objects|fatal:' | tail -5 >&2 || true
+            fi
+            rm -rf "$dest"
+            rm -f "$log"
+            echo "$s2 $(( (s2 - s1) / elapsed ))"
+          }
+
+          megabytes() {
+            awk -v bytes="${1:-0}" 'BEGIN { printf "%.2f", (bytes + 0) / 1000000 }'
+          }
+
+          direct_out=$(mktemp)
+          proxy_out=$(mktemp)
+          measure "" >"$direct_out" &
+          direct_pid=$!
+          measure "url.${proxy_url}/https://github.com/.insteadOf=https://github.com/" >"$proxy_out" &
+          proxy_pid=$!
+          wait "$direct_pid" || true
+          wait "$proxy_pid" || true
+          read -r direct_bytes direct_tail <"$direct_out" || true
+          read -r proxy_bytes proxy_tail <"$proxy_out" || true
+          rm -f "$direct_out" "$proxy_out"
+
+          faster=$(awk -v direct="${direct_tail:-0}" -v proxy="${proxy_tail:-0}" 'BEGIN {
+            print (proxy + 0 > direct + 0) ? "proxy" : "github"
+          }')
+          use_proxy=false
+          if [ "$faster" = proxy ]; then
+            use_proxy=true
+          fi
+
+          echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, 15s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, 15s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+          {
+            echo "GH_PROXY_MEASURED=1"
+            echo "GH_PROXY_USED=$use_proxy"
+            echo "GH_PROXY_DIRECT_MBPS=$(megabytes "${direct_tail:-0}")"
+            echo "GH_PROXY_PROXY_MBPS=$(megabytes "${proxy_tail:-0}")"
+          } >> "$GITHUB_ENV"
+
+          if [ "$use_proxy" = true ]; then
+            {
+              echo "GIT_CONFIG_COUNT=1"
+              echo "GIT_CONFIG_KEY_0=url.${proxy_url}/https://github.com/.insteadOf"
+              echo "GIT_CONFIG_VALUE_0=https://github.com/"
+              echo "GH_FETCH_PROXY_URL=${proxy_url}"
+            } >> "$GITHUB_ENV"
+          fi
+
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
@@ -183,6 +291,16 @@ jobs:
           # Keep subsequent operations limited to git; never execute PR files.
           allow-unsafe-pr-checkout: true
 
+      - name: Drop GitHub proxy
+        if: vars.GH_PROXY_URL != ''
+        shell: bash
+        run: |
+          {
+            echo "GIT_CONFIG_COUNT=0"
+            echo "GIT_CONFIG_KEY_0="
+            echo "GIT_CONFIG_VALUE_0="
+          } >> "$GITHUB_ENV"
+
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
@@ -192,9 +310,43 @@ jobs:
         env:
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
           BASE_REPO: ${{ steps.pr.outputs.base_repo_clone_url }}
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
         run: |
+          set -euo pipefail
           git remote set-url upstream "$BASE_REPO" 2>/dev/null || git remote add upstream "$BASE_REPO"
-          git fetch upstream "refs/heads/$BASE_REF:refs/remotes/upstream/$BASE_REF"
+
+          base_repo_path="${BASE_REPO#https://github.com/}"
+          base_repo_path="${base_repo_path%.git}"
+          expected=$(
+            curl --retry 5 --retry-all-errors --retry-delay 2 --fail --silent \
+              -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${base_repo_path}/git/ref/heads/${BASE_REF}" \
+              | jq -r '.object.sha'
+          )
+          if [ -z "$expected" ] || [ "$expected" = null ]; then
+            echo "Failed to resolve base branch tip from GitHub API" >&2
+            exit 1
+          fi
+
+          fetch_ref="refs/heads/${BASE_REF}:refs/remotes/upstream/${BASE_REF}"
+          git_proxy=()
+          proxy_url="${GH_FETCH_PROXY_URL:-}"
+          proxy_url="${proxy_url%/}"
+          if [ -n "$proxy_url" ]; then
+            git_proxy=(-c "url.${proxy_url}/https://github.com/.insteadOf=https://github.com/")
+          fi
+
+          git "${git_proxy[@]}" fetch upstream "$fetch_ref"
+          actual=$(git rev-parse "upstream/${BASE_REF}")
+          if [ "$actual" != "$expected" ] && [ -n "$proxy_url" ]; then
+            echo "upstream/${BASE_REF} is ${actual}, GitHub has ${expected}; refetching without proxy" >&2
+            git fetch upstream "$fetch_ref"
+            actual=$(git rev-parse "upstream/${BASE_REF}")
+          fi
+          if [ "$actual" != "$expected" ]; then
+            echo "upstream/${BASE_REF} is ${actual}, GitHub has ${expected}" >&2
+            exit 1
+          fi
 
       - name: Attempt rebase
         id: rebase

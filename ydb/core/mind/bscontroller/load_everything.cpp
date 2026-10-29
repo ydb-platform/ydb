@@ -270,6 +270,17 @@ public:
                 if (groups.HaveValue<T::BridgeGroupInfo>()) {
                     group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }
+                if (groups.HaveValue<T::FailRealmStates>()) {
+                    const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.StateSize()) {
+                        Y_ABORT_UNLESS(states.StateSize() == 3);
+                        group.FailRealmStates.emplace();
+                        for (ui32 realm = 0; realm < 3; ++realm) {
+                            (*group.FailRealmStates)[realm] = states.GetState(realm);
+                        }
+                        group.HasExplicitFailRealmStates = true;
+                    }
+                }
 
 #undef OPTIONAL
 
@@ -654,7 +665,7 @@ public:
             }
         }
 
-        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
         for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
@@ -675,10 +686,11 @@ public:
             group->CalculateGroupStatus();
 
             group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
-                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
-                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
-                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType, jt->second);
+                    if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            Self->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     } else {
                         Y_DEBUG_ABORT();
                     }

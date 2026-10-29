@@ -138,7 +138,7 @@ public:
             TMailboxType::ReadAsFilled, 0));
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
             TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive), rdmaCqMode, nullptr),
+                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive, 8, 0), rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

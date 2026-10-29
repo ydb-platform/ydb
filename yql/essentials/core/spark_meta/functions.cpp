@@ -15,6 +15,10 @@ public:
     }
 
     const TAggregateFunction& GetAggregate(TStringBuf name) const {
+        const auto* information = Find(TString(name));
+        if (information && !information->BindingName.empty()) {
+            name = information->BindingName;
+        }
         const auto function = AggregateFunctions_.find(name);
         Y_ENSURE(function != AggregateFunctions_.end(), "Missing Spark aggregate implementation: " << name);
         Y_ENSURE(function->second.Arity > 0 && function->second.YqlNames.size() == function->second.Arity,
@@ -26,9 +30,9 @@ public:
         return function->second;
     }
 
-    void Enumerate(const std::function<void(const TString& name, const TString& bindingName)>& callback) const {
-        for (const auto& [name, bindingName] : Functions_) {
-            callback(name, bindingName.BindingName);
+    void Enumerate(const std::function<void(const TString& name, const TFunction& function)>& callback) const {
+        for (const auto& [name, function] : Functions_) {
+            callback(name, function);
         }
     }
 
@@ -39,6 +43,12 @@ private:
         {"max", {.YqlNames = {"max"}, .PreprocessorBinding = "aggregate_minmax_pre"}},
         {"avg", {.YqlNames = {"avg"}, .PreprocessorBinding = "aggregate_numeric_pre"}},
         {"sum", {.Arity = 2, .YqlNames = {"checked_sum", "count"}, .PreprocessorBinding = "aggregate_sum_pre", .PostprocessorBinding = "aggregate_sum_post"}},
+        {"count_if", {.YqlNames = {"count_if"}, .PreprocessorBinding = "boolean_argument", .PostprocessorBinding = "aggregate_count_post"}},
+        {"bool_and", {.YqlNames = {"min"}, .PreprocessorBinding = "boolean_argument"}},
+        {"bool_or", {.YqlNames = {"max"}, .PreprocessorBinding = "boolean_argument"}},
+        {"bit_and", {.YqlNames = {"bit_and"}, .PreprocessorBinding = "aggregate_bitwise_pre", .PostprocessorBinding = "aggregate_bitwise_post"}},
+        {"bit_or", {.YqlNames = {"bit_or"}, .PreprocessorBinding = "aggregate_bitwise_pre", .PostprocessorBinding = "aggregate_bitwise_post"}},
+        {"bit_xor", {.YqlNames = {"bit_xor"}, .PreprocessorBinding = "aggregate_bitwise_pre", .PostprocessorBinding = "aggregate_bitwise_post"}},
     };
 
     const THashMap<TString, TFunction> Functions_ = {
@@ -47,6 +57,14 @@ private:
         {"max", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
         {"avg", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
         {"sum", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"mean", {.BindingName = "avg", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"count_if", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"bool_and", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"bool_or", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"every", {.BindingName = "bool_and", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"bit_and", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"bit_or", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
+        {"bit_xor", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1, .IsAggregate = true}},
         {"concat", {.BindingName = "", .MinArgs = 2, .MaxArgs = Max<ui32>()}},
         {"raise_error", {.BindingName = "", .MinArgs = 1, .MaxArgs = 1}},
         {"nullif", {.BindingName = "nullif", .MinArgs = 2, .MaxArgs = 2}},
@@ -191,7 +209,7 @@ TString TFunction::GetBindingName(ui32 argumentCount) const {
     return bindingName;
 }
 
-void EnumerateFunctions(const std::function<void(const TString& name, const TString& bindingName)>& callback) {
+void EnumerateFunctions(const std::function<void(const TString& name, const TFunction& function)>& callback) {
     Singleton<TFunctionRegistry>()->Enumerate(callback);
 }
 

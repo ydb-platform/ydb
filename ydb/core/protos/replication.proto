@@ -25,10 +25,15 @@ message TReplicationDefaults {
         optional bool EnableSsl = 5 [default = true];
     }
 
-    optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
+    optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // Bootstrap retention, 1d
     optional TSchemeOperationLimits SchemeOperationLimits = 2;
     optional TIamServiceControl IamServiceControl = 3;
     optional bool InitialScan = 4 [default = true];
+    // Retention after installing the replication consumer. Increase when the
+    // source cluster's ValidRetentionLimits disallow the minimum of one second.
+    optional uint32 StreamRetentionPeriodSeconds = 5 [default = 1];
+    // Uncommitted messages are protected only for this finite window.
+    optional uint32 ConsumerAvailabilityPeriodSeconds = 6 [default = 86400]; // 1d
 }
 
 message TStaticCredentials {

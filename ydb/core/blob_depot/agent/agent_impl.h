@@ -491,7 +491,7 @@ namespace NKikimr::NBlobDepot {
 
             virtual void OnUpdateBlock() {}
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
-            virtual void OnIdAllocated(bool /*success*/) {}
+            virtual void OnIdAllocated(bool /*success*/, const TString& /*errorReason*/) {}
             virtual void OnDestroy(bool /*success*/) {}
             virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
@@ -522,9 +522,14 @@ namespace NKikimr::NBlobDepot {
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+            void HandleResolveDisconnected(const TRequestContext::TPtr& context);
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);
+            void HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
+                std::optional<TString> data, const char *error);
+            void OnCheckIntegrityPartDone(TCheckContext& checkContext);
+            void HandleCheckIntegrityResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
 
         public:
             struct TDeleter {
@@ -576,7 +581,11 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
 
-        void Invoke(std::function<void()> callback) { callback(); }
+        // called by helper actors through InvokeOtherActor, so no query is on the stack and the ended ones can go
+        void Invoke(std::function<void()> callback) {
+            callback();
+            DeletePendingQueries.Clear();
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -607,7 +616,7 @@ namespace NKikimr::NBlobDepot {
             void RebuildHeap();
 
             void EnqueueQueryWaitingForId(TQuery *query);
-            void ProcessQueriesWaitingForId(bool success);
+            void ProcessQueriesWaitingForId(bool success, const TString& errorReason = {});
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;

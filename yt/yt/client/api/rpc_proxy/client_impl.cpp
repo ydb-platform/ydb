@@ -1000,6 +1000,7 @@ TFuture<TPullQueueResult> TClient::PullQueue(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TPullQueueResult{
             .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
         };
     }));
 }
@@ -1042,6 +1043,7 @@ TFuture<TPullQueueResult> TClient::PullQueueConsumer(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TPullQueueResult{
             .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
         };
     }));
 }

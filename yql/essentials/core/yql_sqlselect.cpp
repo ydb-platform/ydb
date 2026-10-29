@@ -291,18 +291,27 @@ TExprNode::TPtr ExpandSqlWindowCall(
         // clang-format on
     }
 
-    if (((name == "firstvalue" || name == "lastvalue") && argsCount == 1) ||
-        (name == "nthvalue" && argsCount == 2))
+    const bool ignoreNulls = isYql && name.EndsWith("ignorenulls");
+    TStringBuf valueFunction(name);
+    if (ignoreNulls) {
+        valueFunction.ChopSuffix("ignorenulls");
+    }
+    if (((valueFunction == "firstvalue" || valueFunction == "lastvalue") && argsCount == 1) ||
+        (valueFunction == "nthvalue" && argsCount == 2))
     {
         TString traitName;
-        if (name == "firstvalue") {
+        if (valueFunction == "firstvalue") {
             traitName = "first_value";
-        } else if (name == "lastvalue") {
+        } else if (valueFunction == "lastvalue") {
             traitName = "last_value";
-        } else if (name == "nthvalue") {
+        } else if (valueFunction == "nthvalue") {
             traitName = "nth_value";
         } else {
             YQL_ENSURE(false, "unexpected " << name);
+        }
+
+        if (ignoreNulls) {
+            traitName += "_ignore_nulls";
         }
 
         TString path = "/lib/yql/window.yqls";

@@ -1,0 +1,106 @@
+{
+    "toolchains": {
+        "gdbnew": {
+            "tools": {
+                "gdbnew": {
+                    "bottle": "gdbnew",
+                    "executable": "gdb"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "aarch64"
+                    },
+                    "default": true
+                }
+            ],
+            "env": {
+                "TERMINFO": [
+                    "$(ROOT)/gdb/lib/terminfo"
+                ]
+            }
+        },
+        "gcorenew": {
+            "tools": {
+                "gcorenew": {
+                    "bottle": "gdbnew",
+                    "executable": "gcore"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "aarch64"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "gdbservernew": {
+            "tools": {
+                "gdbservernew": {
+                    "bottle": "gdbnew",
+                    "executable": "gdbserver"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "LINUX",
+                        "arch": "aarch64"
+                    },
+                    "default": true
+                }
+            ]
+        }
+    },
+    "bottles": {
+        "gdbnew": {
+            "formula": "build/external_resources/gdb/resources.json",
+            "executable": {
+                "gdb": [
+                    "gdb",
+                    "bin",
+                    "gdb"
+                ],
+                "gdbserver": [
+                    "gdb",
+                    "bin",
+                    "gdbserver"
+                ],
+                "gcore": [
+                    "gdb",
+                    "bin",
+                    "gcore"
+                ]
+            }
+        }
+    }
+}

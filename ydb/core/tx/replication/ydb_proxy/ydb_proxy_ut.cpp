@@ -565,6 +565,46 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         }
     }
 
+    Y_UNIT_TEST(LocalAlterTopicPreservesConsumerSettingsAndRetention) {
+        TEnv env;
+        const auto created = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+        UNIT_ASSERT(created->Get()->Result.IsSuccess());
+        const auto proxy = env.GetRuntime().Register(CreateLocalYdbProxy("/Root"));
+
+        auto settings = NYdb::NTopic::TAlterTopicSettings()
+            .BeginAddConsumer("consumer")
+                .AvailabilityPeriod(TDuration::Hours(3))
+            .EndAddConsumer();
+        const auto added = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(proxy,
+            new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+        UNIT_ASSERT(added->Get()->Result.IsSuccess());
+
+        const auto describe = [&] {
+            const auto result = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(proxy,
+                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {}));
+            UNIT_ASSERT(result->Get()->Result.IsSuccess());
+            return result->Get()->Result.GetTopicDescription();
+        };
+        const auto addedTopic = describe();
+        UNIT_ASSERT_VALUES_EQUAL(addedTopic.GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(addedTopic.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Hours(3));
+
+        const auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Seconds(1))
+            .BeginAlterConsumer("consumer")
+                .SetImportant(false)
+                .SetAvailabilityPeriod(TDuration::Hours(2))
+            .EndAlterConsumer();
+        const auto altered = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(proxy,
+            new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", alterSettings));
+        UNIT_ASSERT(altered->Get()->Result.IsSuccess());
+        const auto topic = describe();
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetRetentionPeriod(), TDuration::Seconds(1));
+        UNIT_ASSERT(!topic.GetConsumers()[0].GetImportant());
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Hours(2));
+    }
+
     Y_UNIT_TEST(DropTopic) {
         TEnv env;
         // create

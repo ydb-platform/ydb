@@ -114,6 +114,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenBaseConfig::TPtr ev);
         void CheckReassignGroupDisk();
         void ReassignGroupDiskExecute();
+        void CheckBridgedPartDataRestorable(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TGroupInfo& group, TVDiskID vdiskId);
         void UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

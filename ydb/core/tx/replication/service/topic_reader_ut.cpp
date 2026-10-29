@@ -5,6 +5,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -54,8 +55,9 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         } while (true);
     }
 
-    Y_UNIT_TEST(ReadTopic) {
-        TEnv env;
+    Y_UNIT_TEST_QUAD(ReadTopic, Compress, InternalDecompression) {
+        TEnv env(TFeatureFlags().SetTransferInternalDataDecompression(InternalDecompression));
+        auto codec = Compress ? NYdb::NTopic::ECodec::GZIP : NYdb::NTopic::ECodec::RAW;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         // create topic
@@ -73,6 +75,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         auto settings = TEvYdbProxy::TTopicReaderSettings()
             .ConsumerName("consumer")
+            .Decompress(!InternalDecompression)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path("/Root/topic")
                 .AppendPartitionIds(0)
@@ -80,21 +83,22 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         TActorId reader;
 
+        // note: messages must be long and repetitive to benefit from compression
         // write, create reader & read
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
+        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessagemessagemessage-1", codec));
         {
             auto records = ReadData(env, reader, settings);
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-1");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-1");
         }
 
         // trigger commit, write new data & kill reader
         {
             env.SendAsync(reader, new TEvWorker::TEvPoll());
-            UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-2"));
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessagemessagemessage-2", codec));
             env.SendAsync(reader, new TEvents::TEvPoison());
         }
 
@@ -105,8 +109,38 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
             const auto& record = records.at(0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-2");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-2");
         }
+
+        if (!Compress) {
+            return;
+        }
+        // trigger commit, write broken data & kill reader
+        {
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic",
+                        NYdb::NTopic::TWriteMessage::CompressedMessage(
+                            "baddata",
+                            NYdb::NTopic::ECodec::GZIP,   // GZIP has signature and junk message will be rejected
+                            12345)));
+            env.SendAsync(reader, new TEvents::TEvPoison());
+        }
+
+        // create reader again & read
+        {
+            reader = CreateReader(env, settings);
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+
+            TAutoPtr<IEventHandle> ev;
+            do {
+                env.GetRuntime().template GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(ev);
+            } while (ev->Sender != reader);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvWorker::EvGone);
+            const auto &result = *ev->Get<TEvWorker::TEvGone>();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, TEvWorker::TEvGone::EStatus::DATA_ERROR, result.ToString());
+        }
+
     }
 
     Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {

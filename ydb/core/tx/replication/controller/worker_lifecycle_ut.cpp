@@ -31,7 +31,15 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
         TString StreamPath;
         TWorkerId Root{0, 0, 0};
 
-        explicit TSetup(bool mockService = true) {
+        static TFeatureFlags MakeFeatureFlags(bool topicAutopartitioning) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableTopicAutopartitioningForReplication(topicAutopartitioning);
+            return flags;
+        }
+
+        explicit TSetup(bool mockService = true, bool topicAutopartitioning = true)
+            : Env(MakeFeatureFlags(topicAutopartitioning))
+        {
             auto& runtime = Env.GetRuntime();
             LookupEdge = runtime.AllocateEdgeActor();
             runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
@@ -175,6 +183,38 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
             return desc.GetPathDescription().GetPersQueueGroup().GetPartitions();
         }
 
+        void PauseTopicAutopartitioning() {
+            auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto& tx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+            tx.SetWorkingDir(StreamPath);
+            tx.SetAllowAccessToPrivatePaths(true);
+            auto& alter = *tx.MutableAlterPersQueueGroup();
+            alter.SetName("streamImpl");
+            alter.MutablePQTabletConfig()->CopyFrom(
+                Env.GetDescription(StreamPath + "/streamImpl").GetPathDescription().GetPersQueueGroup().GetPQTabletConfig());
+            alter.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(NKikimrPQ::TPQTabletConfig::PAUSED);
+
+            const auto resp = Env.Send<TEvTxUserProxy::TEvProposeTransactionStatus>(MakeTxProxyID(), ev.Release());
+            const auto status = resp->Get()->Record.GetStatus();
+            UNIT_ASSERT_C(status == NTxProxy::TResultStatus::ExecComplete || status == NTxProxy::TResultStatus::ExecInProgress,
+                resp->Get()->Record.ShortDebugString());
+
+            for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
+                if (Env.GetDescription(StreamPath + "/streamImpl")
+                        .GetPathDescription()
+                        .GetPersQueueGroup()
+                        .GetPQTabletConfig()
+                        .GetPartitionStrategy()
+                        .GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::PAUSED)
+                {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("topic autopartitioning was not paused");
+        }
+
         // what topic autopartitioning does on write load
         TVector<ui64> SplitRoot() {
             auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
@@ -305,6 +345,63 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
 
         const auto started = s.WaitStarted({children.at(0)}, TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL_C(started.size(), 1, "re-adopted worker is not rebooted");
+    }
+
+    Y_UNIT_TEST(AdoptedChildRestartsWithPausedAutopartitioning) {
+        TSetup s;
+        const auto children = s.SplitRoot();
+        s.DataEnd(children);
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitStarted(children, TDuration::Seconds(30)).size(), 2);
+
+        // Pausing automatic scaling preserves existing children and their recovery requirements.
+        s.PauseTopicAutopartitioning();
+        UNIT_ASSERT_VALUES_EQUAL(s.Partitions().size(), 3);
+        s.RebootController();
+        const TWorkerId child(s.Root.ReplicationId(), s.Root.TargetId(), children.at(0));
+        s.Handshake({ s.Root, child, TWorkerId(s.Root.ReplicationId(), s.Root.TargetId(), children.at(1)) });
+        s.Env.SendAsync(s.ControllerId, new TEvService::TEvWorkerStatus(child, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(s.WaitStarted({ child.WorkerId() }, TDuration::Seconds(30)).size(), 1,
+            "an existing child must restart while topic autopartitioning is paused");
+    }
+
+    Y_UNIT_TEST_TWIN(PersistedChildrenRestartWithoutParentReplay, PausedAutopartitioning) {
+        TSetup s;
+        if (PausedAutopartitioning) {
+            s.PauseTopicAutopartitioning();
+        }
+        const auto children = s.SplitRoot();
+        s.DataEnd(children);
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitStarted(children, TDuration::Seconds(30)).size(), 2);
+
+        // Both children were allowed to run, then disappeared along with the controller.
+        // The parent survives but does not replay DataEnd: recovery must use durable workers.
+        s.RebootController();
+        s.Handshake({ s.Root });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            s.WaitStarted(children, TDuration::Seconds(30)).size(), 2, "missing persisted children must start without another parent DataEnd");
+    }
+
+    Y_UNIT_TEST(EndToEndManualSplitWithPausedAutopartitioning) {
+        TSetup s(false);
+        s.PauseTopicAutopartitioning();
+        s.SplitRoot();
+        s.Upsert(101, 200);
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitReplicated(200, TDuration::Seconds(60)), 200);
+    }
+
+    Y_UNIT_TEST(EndToEndWithDisabledAutopartitioning) {
+        TSetup s(false, false);
+        const auto config = s.Env.GetDescription(s.StreamPath + "/streamImpl").GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::DISABLED);
+        UNIT_ASSERT_VALUES_EQUAL(s.Partitions().size(), 1);
+
+        s.Upsert(101, 200);
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitReplicated(200, TDuration::Seconds(60)), 200);
+        s.RebootController();
+        s.Upsert(201, 300);
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitReplicated(300, TDuration::Seconds(60)), 300);
+        UNIT_ASSERT_VALUES_EQUAL(s.Partitions().size(), 1);
     }
 
     // The parent's DataEnd goes to a controller generation that is gone

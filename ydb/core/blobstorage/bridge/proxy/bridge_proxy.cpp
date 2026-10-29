@@ -5,6 +5,8 @@
 
 #include <ydb/library/actors/async/wait_for_event.h>
 
+#include <map>
+
 namespace NKikimr {
 
     template<typename T>
@@ -118,6 +120,8 @@ namespace NKikimr {
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
             // the deadline of the original read, which restoration is done on behalf of
             TInstant Deadline = TInstant::Max();
+            // Once queued for routing, retries retain the original bound even when they reach a pile and race again.
+            std::optional<TMonotonic> RoutingDeadline;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
@@ -774,9 +778,19 @@ namespace NKikimr {
         // configuration does, and it answers requests with error until it gets the config
         TMonotonic WaitBridgeInfoSince;
         bool WaitBridgeInfoTimedOut = false;
-        std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
+        using TPendingQueue = std::multimap<TMonotonic, std::unique_ptr<IEventHandle>>;
+        TPendingQueue PendingForNextGeneration;
         // requests waiting for the cluster state not older than the one the group state was made for
-        std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForClusterState;
+        TPendingQueue PendingForClusterState;
+        TMonotonic PendingCheckAt = TMonotonic::Max();
+
+        struct TEvCheckPendingRequests : TEventLocal<TEvCheckPendingRequests, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+            const TMonotonic Deadline;
+
+            explicit TEvCheckPendingRequests(TMonotonic deadline)
+                : Deadline(deadline)
+            {}
+        };
 
     public:
         TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId)
@@ -795,19 +809,89 @@ namespace NKikimr {
         }
 
         void HandleWakeup() {
-            TMonotonic dropBefore = TActivationContext::Monotonic() - TDuration::Seconds(2);
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
+                {}, nullptr, 0));
+        }
+
+        void SchedulePendingCheck() {
+            TMonotonic deadline = TMonotonic::Max();
+            for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
+                if (!queue->empty()) {
+                    deadline = Min(deadline, queue->begin()->first);
+                }
+            }
+            if (deadline < PendingCheckAt) {
+                PendingCheckAt = deadline;
+                Schedule(deadline - TActivationContext::Monotonic(), new TEvCheckPendingRequests(deadline));
+            }
+        }
+
+        void Handle(TEvCheckPendingRequests::TPtr ev) {
+            if (ev->Get()->Deadline != PendingCheckAt) {
+                return;
+            }
+            PendingCheckAt = TMonotonic::Max();
+            const auto now = TActivationContext::Monotonic();
             for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
                 while (!queue->empty()) {
-                    if (auto& [timestamp, ev] = queue->front(); timestamp < dropBefore) {
+                    if (auto& [deadline, ev] = *queue->begin(); deadline <= now) {
                         ReplyWithError(*ev, "bridge request timed out");
-                        queue->pop_front();
+                        queue->erase(queue->begin());
                     } else {
                         break;
                     }
                 }
             }
-            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(),
-                {}, nullptr, 0));
+            SchedulePendingCheck();
+        }
+
+        static TInstant GetRequestDeadline(IEventBase& request) {
+            const auto get = [](const auto& request) {
+                if constexpr (requires { request.Deadline; }) {
+                    return request.Deadline;
+                } else {
+                    return TInstant::Max();
+                }
+            };
+            switch (request.Type()) {
+#define REQUEST_DEADLINE(TYPE) case TYPE::EventType: return get(static_cast<TYPE&>(request));
+                DSPROXY_ENUM_EVENTS(REQUEST_DEADLINE)
+#undef REQUEST_DEADLINE
+                default: Y_ABORT();
+            }
+        }
+
+        void QueuePending(TPendingQueue& queue, std::unique_ptr<IEventHandle> ev,
+                std::optional<TMonotonic> routingDeadline = {}) {
+            const auto now = TActivationContext::Monotonic();
+            auto deadline = routingDeadline.value_or(now + TDuration::Seconds(2));
+            const auto callerDeadline = GetRequestDeadline(*ev->GetBase());
+            if (callerDeadline != TInstant::Max()) {
+                const auto wallNow = TActivationContext::Now();
+                deadline = Min(deadline, now + (callerDeadline > wallNow ? callerDeadline - wallNow : TDuration::Zero()));
+            }
+            if (deadline <= now) {
+                ReplyWithError(*ev, "bridge request timed out");
+                return;
+            }
+            queue.emplace(deadline, std::move(ev));
+            SchedulePendingCheck();
+        }
+
+        void RetryPending(TPendingQueue& queue) {
+            for (auto& [deadline, ev] : std::exchange(queue, {})) {
+                switch (ev->GetTypeRewrite()) {
+#define RETRY_REQUEST(TYPE) \
+                    case TYPE::EventType: { \
+                        TYPE::TPtr request(static_cast<TEventHandle<TYPE>*>(ev.release())); \
+                        HandleProxyRequest(request, deadline); \
+                        break; \
+                    }
+                    DSPROXY_ENUM_EVENTS(RETRY_REQUEST)
+#undef RETRY_REQUEST
+                    default: Y_ABORT();
+                }
+            }
         }
 
         void PassAway() override {
@@ -823,9 +907,7 @@ namespace NKikimr {
         void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             StorageConfig = std::move(ev->Get()->Config);
             BridgeInfo = std::move(ev->Get()->BridgeInfo);
-            for (auto& [timestamp, ev] : std::exchange(PendingForClusterState, {})) {
-                TActivationContext::Send(ev.release());
-            }
+            RetryPending(PendingForClusterState);
         }
 
         template<typename TEvent>
@@ -871,7 +953,7 @@ namespace NKikimr {
             }
             RequestsInFlight.clear();
             for (auto *queue : {&PendingForNextGeneration, &PendingForClusterState}) {
-                for (auto& [timestamp, ev] : std::exchange(*queue, {})) {
+                for (auto& [deadline, ev] : std::exchange(*queue, {})) {
                     ReplyWithError(*ev, errorReason);
                 }
             }
@@ -898,14 +980,18 @@ namespace NKikimr {
             return Info->BlobDepotId.value_or(0);
         }
 
-        // the request to be processed later is sent to us again; handles of puts restarted by DS proxy come unaddressed
+        // preserve the caller while waiting; handles of puts restarted by DS proxy come unaddressed
         std::unique_ptr<IEventHandle> MakePendingHandle(IEventHandle& ev) {
             return std::make_unique<IEventHandle>(SelfId(), ev.Sender, ev.ReleaseBase().Release(), 0, ev.Cookie, nullptr,
                 std::move(ev.TraceId));
         }
 
         template<typename TEvent>
-        void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev) {
+        void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev, std::optional<TMonotonic> routingDeadline = {}) {
+            if (routingDeadline && *routingDeadline <= TActivationContext::Monotonic()) {
+                ReplyWithError(*ev, "bridge request timed out");
+                return;
+            }
             if (InnerProxyId && ev->Get()->ForceGroupGeneration) {
                 // request to the physical group of the inline pile (e.g. phantom check from replication), it has to reach
                 // DS proxy as is, with its own generation fence, sender and cookie
@@ -941,7 +1027,7 @@ namespace NKikimr {
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB05, "request waits for newer cluster state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (ClusterStateGeneration, generation),
                     (BridgeGroupState, state));
-                PendingForClusterState.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                QueuePending(PendingForClusterState, MakePendingHandle(*ev), routingDeadline);
                 return;
             }
 
@@ -977,7 +1063,7 @@ namespace NKikimr {
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingDeadline);
                 return;
             }
             if (authorityPileId && std::ranges::none_of(subrequests, [&](const auto& item) {
@@ -986,7 +1072,7 @@ namespace NKikimr {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
                     (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), MakePendingHandle(*ev));
+                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingDeadline);
                 return;
             }
 
@@ -995,6 +1081,7 @@ namespace NKikimr {
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
             request->BridgeInfo = BridgeInfo;
+            request->RoutingDeadline = routingDeadline;
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
@@ -1169,7 +1256,7 @@ namespace NKikimr {
                     if (common->RestartCounter >= 100) {
                         ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
                     } else if (myGeneration < msg->RacingGeneration) {
-                        PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
+                        QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingDeadline);
                     } else if (msg->RacingGeneration < myGeneration) {
                         // when the group is decommitted, its service id points to the BlobDepot agent, which would take
                         // restarted request for its client's one; restart it right here then
@@ -1279,9 +1366,7 @@ namespace NKikimr {
             Y_ABORT_UNLESS(prevInfo);
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
-                for (auto& [timestamp, ev] : std::exchange(PendingForNextGeneration, {})) {
-                    TActivationContext::Send(ev.release());
-                }
+                RetryPending(PendingForNextGeneration);
             }
         }
 
@@ -1321,8 +1406,9 @@ namespace NKikimr {
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
+            hFunc(TEvCheckPendingRequests, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
-            cFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+            IgnoreFunc(TEvents::TEvWakeup) // the last tick from waiting for initial configuration
         )
 
 #undef HANDLE_RESULT

@@ -380,7 +380,9 @@ public:
         WorkerStatsMode = QueryState->GetStatsMode();
         auto request = MakeHolder<IEventHandle>(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
             nullptr, QueryState->KqpSessionSpan.GetTraceId());
-        Send(MakeKqpCompileServiceID(SelfId().NodeId()), new TEvKqp::TEvWorkerQueryRequest(request.Release()));
+        TlsActivationContext->Send(new IEventHandle(MakeKqpCompileServiceID(SelfId().NodeId()), SelfId(),
+            new TEvKqp::TEvWorkerQueryRequest(request.Release()), ev->Flags, ev->Cookie,
+            nullptr, QueryState->KqpSessionSpan.GetTraceId()));
         Become(&TKqpSessionActor::ExecuteState);
     }
 

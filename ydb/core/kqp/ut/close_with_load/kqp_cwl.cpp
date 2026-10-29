@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
     }
 
-    Y_UNIT_TEST(FinalCleanupIntentIsPreservedWhileClosingLegacyWorker) {
+    Y_UNIT_TEST_TWIN(FinalCleanupIntentIsPreservedWhileClosingLegacyWorker, DropAtWorker) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
         auto kikimr = TKikimrRunner(settings);
@@ -243,6 +243,16 @@ Y_UNIT_TEST_SUITE(KqpService) {
         TActorId sessionActorId;
         bool workerRequestDropped = false;
         runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqp::TEvWorkerQueryRequest::EventType) {
+                const auto workerId = ev->Get<TEvKqp::TEvWorkerQueryRequest>()->Request->Recipient;
+                // Drop either the session-to-service hop or the service-to-worker hop.
+                if (sessionActorId && ev->Sender == sessionActorId
+                    && (ev->GetRecipientRewrite() == workerId) == DropAtWorker) {
+                    workerRequestDropped = true;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
             if (ev->GetTypeRewrite() != TEvKqp::TEvQueryRequest::EventType) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
@@ -250,9 +260,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 proxyId = ev->GetRecipientRewrite();
             } else if (ev->Sender == proxyId) {
                 sessionActorId = ev->GetRecipientRewrite();
-            } else if (sessionActorId && ev->Sender == sessionActorId) {
-                workerRequestDropped = true;
-                return TTestActorRuntime::EEventAction::DROP;
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -268,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             opts.FinalEvents.emplace_back(
                 [&](IEventHandle&) { return workerRequestDropped; });
             UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)),
-                "Table scheme request was not forwarded to the legacy worker");
+                "Table scheme request was not dispatched for legacy execution");
         }
         UNIT_ASSERT(sessionActorId);
 

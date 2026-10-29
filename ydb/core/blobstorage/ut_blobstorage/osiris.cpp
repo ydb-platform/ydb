@@ -738,7 +738,6 @@ Y_UNIT_TEST_SUITE(Osiris) {
                 UNIT_ASSERT(record.GetReplicated());
                 UNIT_ASSERT(record.HasDurabilityReplicated());
                 UNIT_ASSERT_VALUES_EQUAL(record.GetDurabilityReplicated(), durabilityReplicated);
-                env.Runtime->DestroyActor(edge);
             }
         };
         states[2] = TFailRealm::F;

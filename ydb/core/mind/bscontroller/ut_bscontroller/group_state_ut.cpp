@@ -89,17 +89,6 @@ public:
 }
 
 Y_UNIT_TEST_SUITE(BsControllerGroupState) {
-    Y_UNIT_TEST(FullReplicationStatusSupportsLegacyReplies) {
-        TEvBlobStorage::TEvVStatusResult status(NKikimrProto::OK, TVDiskID(42, 1, 0, 0, 0), true, true, false, 1);
-        UNIT_ASSERT(status.IsFullyReplicated());
-        status.Record.SetDurabilityReplicated(false);
-        UNIT_ASSERT(!status.IsFullyReplicated());
-        status.Record.SetDurabilityReplicated(true);
-        UNIT_ASSERT(status.IsFullyReplicated());
-        status.Record.SetReplicated(false);
-        UNIT_ASSERT(!status.IsFullyReplicated());
-    }
-
     Y_UNIT_TEST(DurabilityTargets) {
         const TFailRealmStates oneCopy{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
         UNIT_ASSERT(GetReplicatedRealmState(oneCopy, 0) == TFailRealm::N1);

@@ -223,7 +223,7 @@ namespace NKikimr::NStorage {
         if (!PendingVDiskIds.erase(vdiskId)) {
             return;
         }
-        if (record.GetJoinedGroup() && ev->Get()->IsFullyReplicated()) {
+        if (record.GetJoinedGroup() && record.GetReplicated()) {
             *SuccessfulVDisks |= {&GroupInfo->GetTopology(), vdiskId};
         }
         CheckReassignGroupDisk();

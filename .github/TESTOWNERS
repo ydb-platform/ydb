@@ -290,5 +290,4 @@
 /ydb/tests/functional/nbs @ydb-platform/nbs
 
 #Infra @shmel1k TEAM:@ydb-platform/infra
-
 /ydb/tools/ydbd_slice @ydb-platform/infra

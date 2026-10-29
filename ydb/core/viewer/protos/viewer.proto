@@ -325,6 +325,7 @@ message TBridgePileInfo {
     optional Ydb.Bridge.PileState.State State = 3;
     optional uint32 Nodes = 4;
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
+    optional uint32 NodesAlive = 6;
 }
 
 message TBridgeInfo {

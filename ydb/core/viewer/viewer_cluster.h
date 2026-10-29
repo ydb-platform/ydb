@@ -1039,6 +1039,7 @@ private:
                     const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
                     auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
                     std::unordered_map<ui32, ui32> pileNodes;
+                    std::unordered_map<ui32, ui32> pileNodesAlive;
                     for (const auto& pile : srcBridgeInfo.Piles) {
                         if (pile.IsFreeSlot) {
                             continue;
@@ -1054,12 +1055,16 @@ private:
                     for (const auto& node : NodeData) {
                         if (node.PileNum) {
                             pileNodes[*node.PileNum]++;
+                            if (!node.Disconnected && node.SystemState.HasSystemState()) {
+                                pileNodesAlive[*node.PileNum]++;
+                            }
                         }
                     }
                     for (auto& pile : *pbBridgeInfo.MutablePiles()) {
                         const auto pileId = TBridgePileId::FromProto(&pile, &std::decay_t<decltype(pile)>::GetPileId);
                         if (const auto it = pileNodes.find(pileId.GetPileIndex()); it != pileNodes.end()) {
                             pile.SetNodes(it->second);
+                            pile.SetNodesAlive(pileNodesAlive[pileId.GetPileIndex()]);
                         }
                     }
                 } else {

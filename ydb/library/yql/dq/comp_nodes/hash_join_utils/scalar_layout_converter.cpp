@@ -625,12 +625,8 @@ struct TColumnDataExtractorTraits {
     constexpr static bool PassType = false;
 
     static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, TType* type) {
-        Y_UNUSED(pgBuilder);
-        if (desc.PassByValue) {
-            return std::make_unique<TFixedSize<ui64, true>>(type);
-        } else {
-            return std::make_unique<TStringColumnDataExtractor<true>>(type);
-        }
+        Y_UNUSED(desc, pgBuilder, type);
+        MKQL_ENSURE(false, "PG types are not supported in scalar hash join");
     }
 
     template <bool IsNull>
@@ -925,6 +921,7 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     Y_ENSURE(types.size() == roles.size());
     for (size_t i = 0; i < types.size(); ++i) {
         auto* type = types[i];
+        EnsureNoPgTypes(type);
         auto* unpacked = type;
         while (unpacked->IsTagged()) {
             unpacked = static_cast<TTaggedType*>(unpacked)->GetBaseType();
@@ -939,7 +936,7 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
         const bool flatData = unpacked->IsData()
             && !IsTzDateType(static_cast<TDataType*>(unpacked)->GetSchemeType());
         const bool nativeNull = !optional && unpacked->IsNull();
-        if (!flatData && !nativeNull && !type->IsPg() && !unpacked->IsResource()) {
+        if (!flatData && !nativeNull && !unpacked->IsResource()) {
             packers.emplace_back(std::make_unique<TSerializedColumnDataExtractor>(
                 type, roles[i] == NPackedTuple::EColumnRole::Key, unpacked, optional || unpacked->IsNull()));
         } else {

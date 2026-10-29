@@ -84,6 +84,8 @@ struct TPackResult {
     void AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout);
 };
 
+void EnsureNoPgTypes(TType* type);
+
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
 using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
 

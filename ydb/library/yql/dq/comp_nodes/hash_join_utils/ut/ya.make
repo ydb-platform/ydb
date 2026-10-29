@@ -22,6 +22,11 @@ SRCS(
     packed_tuple_ut.cpp
     deep_copy_ut.cpp
 )
+ENDIF()
+
+SRCS(
+    pg_types_ut.cpp
+)
 
 PEERDIR(
     yql/essentials/public/udf
@@ -33,8 +38,6 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins
     yql/essentials/sql/pg_dummy
 )
-
-ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(scalar_layout_converter_test_enums.h)
 

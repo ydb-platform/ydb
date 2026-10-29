@@ -136,6 +136,7 @@ public:
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
             .Decompress(false)
             .AutoPartitioningSupport(true)
+            .Header({{"x-ydb-supports-replication-messages", "true"}})
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
         if (logger) {
             settings.Log(logger.GetRef());

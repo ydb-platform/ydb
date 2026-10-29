@@ -290,6 +290,21 @@ TReadSessionEvent::TDataReceivedEvent MakeDataEvent(
     return TReadSessionEvent::TDataReceivedEvent({}, std::move(compressedMessages), partition);
 }
 
+TReadSessionEvent::TDataReceivedEvent MakeReplicationDataEvent(
+    const TIntrusivePtr<TMockPartitionSession>& partition, ui64 consumerOffset,
+    ui64 startOffset = 0, ui64 endOffset = 0)
+{
+    NKikimrPQ::TReplicationDataPayload payload;
+    payload.SetStartOffset(startOffset);
+    payload.SetEndOffset(endOffset);
+    (*payload.MutableOffsetsByConsumers())["consumer"] = consumerOffset;
+    auto message = MakeCompressed(partition, 0, payload.SerializeAsString());
+    message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
+    std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+    messages.push_back(std::move(message));
+    return TReadSessionEvent::TDataReceivedEvent({}, std::move(messages), partition);
+}
+
 THolder<TEvPersQueue::TEvResponse> MakeWriteResponse(
     ui64 offset,
     ui64 cookie,
@@ -337,6 +352,7 @@ struct TEnvOptions {
     bool LocalDC = false;
     TMaybe<ui32> RewindCommitDelaySeconds;
     bool EnableSplitMerge = true;
+    bool MirrorConsumerOffsets = false;
     bool PendingCredentials = false;
     bool ThrowOnCreateSession = false;
     bool ThrowOnCredentials = false;
@@ -352,6 +368,7 @@ struct TMirrorerEnv {
     TPersQueueCounters Counters;
     std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
     std::vector<THolder<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
+    std::vector<THolder<TEvPQ::TEvReplicationData>> CapturedReplicationData;
     ui32 ErrorCount = 0;
     ui32 CounterEventCount = 0;
     bool TabletPoisoned = false;
@@ -389,6 +406,10 @@ struct TMirrorerEnv {
         Partition = Runtime.AllocateEdgeActor();
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvReplicationData::EventType) {
+                CapturedReplicationData.emplace_back(ev->Release<TEvPQ::TEvReplicationData>());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->Recipient == Tablet && ev->GetTypeRewrite() == TEvPersQueue::TEvRequest::EventType) {
                 CapturedRequests.emplace_back(ev->Release<TEvPersQueue::TEvRequest>());
                 return TTestActorRuntime::EEventAction::DROP;
@@ -413,6 +434,8 @@ struct TMirrorerEnv {
         });
 
         auto converter = MakeTopicConverter();
+        auto mirrorConfig = MakeMirrorConfig();
+        mirrorConfig.SetMirrorConsumerOffsets(options.MirrorConsumerOffsets);
         Mirrorer = Runtime.Register(CreateMirrorer(
             TabletId,
             Tablet,
@@ -421,7 +444,7 @@ struct TMirrorerEnv {
             PartitionId,
             options.LocalDC,
             options.EndOffset,
-            MakeMirrorConfig(),
+            mirrorConfig,
             Counters
         ));
         Runtime.EnableScheduleForActor(Mirrorer);
@@ -429,7 +452,7 @@ struct TMirrorerEnv {
     }
 
     void Dispatch(TDuration timeout = TDuration::MilliSeconds(20)) {
-        Runtime.DispatchEvents(TDispatchOptions(), timeout);
+        Runtime.SimulateSleep(timeout);
     }
 
     void Advance(TDuration delay) {
@@ -486,6 +509,17 @@ struct TMirrorerEnv {
             Tablet,
             MakeWriteResponse(offset, cookie, alreadyWritten).Release()
         ), 0, true);
+        Dispatch();
+    }
+
+    void PushReplicationData(ui64 consumerOffset = 0, ui64 startOffset = 0, ui64 endOffset = 0) {
+        Factory.Session(0).PushEvent(MakeReplicationDataEvent(
+            Factory.Session(0).Partition, consumerOffset, startOffset, endOffset));
+        Dispatch();
+    }
+
+    void AckReplicationData() {
+        Runtime.Send(new IEventHandle(Mirrorer, Partition, new TEvPQ::TEvReplicationDataAck()), 0, true);
         Dispatch();
     }
 
@@ -731,6 +765,66 @@ Y_UNIT_TEST(StatusWrongSessionIgnored) {
     ));
     env.Dispatch();
     UNIT_ASSERT(env.Factory.CommitPromises.empty());
+}
+
+Y_UNIT_TEST(ReplicationDataBatchesQueuedOffsetsAndWaitsForAck) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 0);
+    env.PushReplicationData(5);
+    env.PushReplicationData(7);
+    env.PushReplicationData(9);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+
+    env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Runtime.AllocateEdgeActor(),
+        new TEvPQ::TEvReplicationDataAck()), 0, true);
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+
+    env.AckReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2);
+    const auto& batch = env.CapturedReplicationData.back()->Data;
+    UNIT_ASSERT_VALUES_EQUAL(batch.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(batch[0].GetOffsetsByConsumers().at("consumer"), 7);
+    UNIT_ASSERT_VALUES_EQUAL(batch[1].GetOffsetsByConsumers().at("consumer"), 9);
+    UNIT_ASSERT(env.CapturedRequests.empty());
+}
+
+Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 2);
+    env.PushReplicationData(1, 0, 1);
+    env.PushReplicationData(2, 0, 2);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
+    env.Dispatch();
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+    env.AckWrite(0);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 1);
+    env.AckReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 1));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    env.AckWrite(1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 2);
+}
+
+Y_UNIT_TEST(ReplicationDataForEmptySourceDoesNotWaitForMessages) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 10);
+    env.PushReplicationData(10, 10, 10);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetStartOffset(), 10);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 10);
+    UNIT_ASSERT(env.CapturedRequests.empty());
 }
 
 Y_UNIT_TEST(SplitMergeChildrenSendsNeedSplit) {

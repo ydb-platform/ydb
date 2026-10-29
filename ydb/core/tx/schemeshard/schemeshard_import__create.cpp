@@ -3,6 +3,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
+#include "schemeshard_import_kesus_restorer.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
 #include "schemeshard_xxport__helpers.h"
@@ -381,6 +382,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         Y_ABORT_UNLESS(importInfo != nullptr);
 
         importInfo->SanitizedToken = request.GetSanitizedToken();
+        importInfo->CanRestoreRateLimiterMetering = request.GetCanRestoreRateLimiterMetering();
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateImport(db, *importInfo);
@@ -498,10 +500,13 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
     TEvPrivate::TEvImportSchemaMappingReady::TPtr SchemaMappingResult = nullptr;
     TEvPrivate::TEvImportSchemeQueryResult::TPtr SchemeQueryResult = nullptr;
+    TEvPrivate::TEvImportKesusResourcesResult::TPtr KesusResourcesResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
+    TVector<std::pair<ui64, ui32>> KesusRestorersToStart;
+    TVector<std::pair<ui64, ui32>> KesusParentsToRetry;
 
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
@@ -526,6 +531,12 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , SchemeQueryResult(ev)
+    {
+    }
+
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportKesusResourcesResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , KesusResourcesResult(ev)
     {
     }
 
@@ -566,6 +577,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnSchemaMappingResult(txc, ctx);
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc, ctx);
+        } else if (KesusResourcesResult) {
+            OnKesusResourcesResult(txc, ctx);
         } else if (AllocateResult) {
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
@@ -581,11 +594,199 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TImport::TTxProgress: DoComplete");
+        for (const auto& [id, itemIdx] : KesusParentsToRetry) {
+            ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvImportRetryKesusParent(id, itemIdx));
+        }
+        // The helper may mutate Kesus immediately. Start only after its phase and
+        // immutable input have been committed to SchemeShard's database.
+        for (const auto& [id, itemIdx] : KesusRestorersToStart) {
+            const auto it = Self->Imports.find(id);
+            if (it == Self->Imports.end() || it->second->State != EState::Waiting) {
+                continue;
+            }
+            auto& importInfo = *it->second;
+            auto& item = importInfo.Items.at(itemIdx);
+            if (item.State != EState::RestoreKesusResources || item.KesusResourcesRestorer) {
+                continue;
+            }
+            const ui32 retries = std::visit([](const auto& settings) {
+                return settings.number_of_retries();
+            }, importInfo.Settings);
+            item.KesusResourcesRestorer = ctx.Register(CreateKesusResourcesRestorer(
+                Self->SelfId(), id, itemIdx, item.DstPathId, item.CreateKesusTxId,
+                *item.RateLimiterResources, retries));
+            Self->RunningImportKesusResourcesRestorers.emplace(item.KesusResourcesRestorer);
+        }
     }
 
 private:
+    bool CheckKesusDestination(const TItem& item, bool requireReady, TString& error) const {
+        const auto path = TPath::Resolve(item.DstPathName, Self);
+        auto checks = path.Check();
+        checks.IsAtLocalSchemeShard().IsResolved().NotDeleted().NotUnderDeleting().IsKesus();
+        if (!checks) {
+            error = TStringBuilder() << "Cannot restore coordination node '" << item.DstPathName << "': " << checks.GetError();
+            return false;
+        }
+        if (item.CreateKesusTxId == InvalidTxId || path->CreateTxId != item.CreateKesusTxId
+            || (item.DstPathId && path->PathId != item.DstPathId))
+        {
+            error = TStringBuilder() << "Coordination node '" << item.DstPathName << "' was not created by this import";
+            return false;
+        }
+        if (requireReady && path.IsUnderOperation()) {
+            error = TStringBuilder() << "Coordination node '" << item.DstPathName << "' is still under operation";
+            return false;
+        }
+        return true;
+    }
+
+    bool CreateKesus(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        auto& item = importInfo->Items.at(itemIdx);
+        TString error;
+        auto propose = CreateKesusPropose(Self, txId, *importInfo, itemIdx, error);
+        if (!propose) {
+            CancelAndPersist(db, importInfo, itemIdx, error, "invalid coordination node scheme");
+            return false;
+        }
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+        Y_ABORT_UNLESS(item.CreateKesusTxId == InvalidTxId || item.CreateKesusTxId == txId);
+        item.CreateKesusTxId = txId;
+        item.SubState = ESubState::Proposed;
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
+        Send(Self->SelfId(), std::move(propose));
+        return true;
+    }
+
+    void StartKesusResources(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        auto& item = importInfo->Items.at(itemIdx);
+        TString error;
+        if (!item.CoordinationNode || !item.RateLimiterResources) {
+            return CancelAndPersist(db, importInfo, itemIdx, "Missing persisted coordination node resources", "invalid Kesus import state");
+        }
+        if (!CheckKesusDestination(item, true, error)) {
+            return CancelAndPersist(db, importInfo, itemIdx, error, "coordination node changed during import");
+        }
+        item.DstPathId = TPath::Resolve(item.DstPathName, Self)->PathId;
+        item.WaitTxId = InvalidTxId;
+        item.State = EState::RestoreKesusResources;
+        Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
+        if (!item.KesusResourcesRestorer) {
+            KesusRestorersToStart.emplace_back(importInfo->Id, itemIdx);
+        }
+    }
+
+    void OnKesusModifyResult(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        auto& item = importInfo->Items.at(itemIdx);
+        const auto& record = ModifyResult->Get()->Record;
+        const TTxId txId(record.GetTxId());
+        if (item.State == EState::CreateKesusParent && importInfo->State == EState::Waiting) {
+            const auto status = record.GetStatus();
+            Self->TxIdToImport.erase(txId);
+            if (status == NKikimrScheme::StatusSuccess || status == NKikimrScheme::StatusAlreadyExists) {
+                item.WaitTxId = InvalidTxId;
+                Self->PersistImportItemState(db, *importInfo, itemIdx);
+                // Recheck the parent, then use the next allocated txid to create
+                // the node. A Kesus creation cannot share a transaction with MkDir.
+                AllocateTxId(*importInfo, itemIdx);
+                return;
+            }
+            if (status == NKikimrScheme::StatusAccepted) {
+                item.WaitTxId = txId;
+            } else if (status == NKikimrScheme::StatusMultipleModifications) {
+                // Multiple items can share this parent. TxIdToImport holds only
+                // one item per txid, so subscribing to a foreign directory's tx
+                // would overwrite another item's continuation.
+                item.WaitTxId = InvalidTxId;
+                item.SubState = ESubState::WaitingForParent;
+                Self->PersistImportItemState(db, *importInfo, itemIdx);
+                KesusParentsToRetry.emplace_back(importInfo->Id, itemIdx);
+                return;
+            } else {
+                return CancelAndPersist(db, importInfo, itemIdx, record.GetReason(), "cannot create coordination node parent");
+            }
+            Self->TxIdToImport[item.WaitTxId] = {importInfo->Id, itemIdx};
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+            SubscribeTx(*importInfo, itemIdx);
+            return;
+        }
+        if (importInfo->State != EState::Waiting || item.State != EState::CreateSchemeObject
+            || item.CreateKesusTxId != txId)
+        {
+            Self->TxIdToImport.erase(txId);
+            return;
+        }
+        const auto status = record.GetStatus();
+        if (!IsIn({NKikimrScheme::StatusAccepted, NKikimrScheme::StatusSuccess,
+                   NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}, status))
+        {
+            Self->TxIdToImport.erase(txId);
+            return CancelAndPersist(db, importInfo, itemIdx, record.GetReason(), "coordination node creation failed");
+        }
+        TString error;
+        if (!CheckKesusDestination(item, false, error)) {
+            Self->TxIdToImport.erase(txId);
+            return CancelAndPersist(db, importInfo, itemIdx, error, "coordination node creation conflict");
+        }
+        if (record.GetPathCreateTxId() && TTxId(record.GetPathCreateTxId()) != item.CreateKesusTxId) {
+            Self->TxIdToImport.erase(txId);
+            return CancelAndPersist(db, importInfo, itemIdx, "Coordination node creation transaction does not belong to this import", "coordination node creation conflict");
+        }
+        const auto path = TPath::Resolve(item.DstPathName, Self);
+        item.DstPathId = path->PathId;
+        Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+        if (!path.IsUnderOperation()) {
+            Self->TxIdToImport.erase(txId);
+            StartKesusResources(db, importInfo, itemIdx);
+        } else {
+            item.WaitTxId = item.CreateKesusTxId;
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+            SubscribeTx(*importInfo, itemIdx);
+        }
+    }
+
+    void OnKesusResourcesResult(TTransactionContext& txc, const TActorContext& ctx) {
+        const auto& message = *KesusResourcesResult->Get();
+        const auto it = Self->Imports.find(message.ImportId);
+        if (it == Self->Imports.end() || it->second->State != EState::Waiting
+            || message.ItemIdx >= it->second->Items.size())
+        {
+            return;
+        }
+        auto importInfo = it->second;
+        auto& item = importInfo->Items.at(message.ItemIdx);
+        if (item.State != EState::RestoreKesusResources || item.KesusResourcesRestorer != KesusResourcesResult->Sender) {
+            return;
+        }
+        Self->RunningImportKesusResourcesRestorers.erase(std::exchange(item.KesusResourcesRestorer, {}));
+        NIceDb::TNiceDb db(txc.DB);
+        if (!message.Success) {
+            return CancelAndPersist(db, importInfo, message.ItemIdx, message.Error, "cannot restore coordination node resources");
+        }
+        TString error;
+        if (!CheckKesusDestination(item, true, error)) {
+            return CancelAndPersist(db, importInfo, message.ItemIdx, error, "coordination node changed during import");
+        }
+        item.State = EState::Done;
+        Self->PersistImportItemState(db, *importInfo, message.ItemIdx);
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllDone(stateCounts)) {
+            importInfo->State = EState::Done;
+            importInfo->EndTime = TAppData::TimeProvider->Now();
+        } else if (AllDoneOrWaiting(stateCounts)) {
+            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
+        }
+        Self->PersistImportState(db, *importInfo);
+        SendNotificationsIfFinished(importInfo);
+        if (importInfo->IsFinished()) {
+            Self->EraseEncryptionKey(db, *importInfo);
+            AuditLogImportEnd(*importInfo.Get(), Self);
+        }
+    }
+
     void GetScheme(TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -1082,6 +1283,10 @@ private:
             Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
             Self->RunningImportSchemeQueryExecutors.erase(schemeQueryExecutor);
         }
+        if (auto restorer = std::exchange(item.KesusResourcesRestorer, {})) {
+            Send(restorer, new TEvents::TEvPoisonPill());
+            Self->RunningImportKesusResourcesRestorers.erase(restorer);
+        }
     }
 
     void Cancel(TImportInfo& importInfo, ui32 itemIdx, TStringBuf marker) {
@@ -1271,6 +1476,17 @@ private:
                     break;
 
                 case EState::CreateSchemeObject:
+                    if (item.CoordinationNode && item.WaitTxId == InvalidTxId && item.CreateKesusTxId != InvalidTxId) {
+                        // A crash may have happened after persisting the id but before
+                        // delivery/acceptance of the proposal. Do not subscribe to an
+                        // unknown txid: SchemeShard considers unknown transactions done.
+                        if (CreateKesus(db, importInfo, itemIdx, item.CreateKesusTxId)) {
+                            Self->TxIdToImport[item.CreateKesusTxId] = {importInfo->Id, itemIdx};
+                        }
+                        break;
+                    }
+                    [[fallthrough]];
+                case EState::CreateKesusParent:
                 case EState::Transferring:
                 case EState::BuildIndexes:
                 case EState::CreateChangefeed:
@@ -1287,6 +1503,10 @@ private:
                     } else {
                         SubscribeTx(*importInfo, itemIdx);
                     }
+                    break;
+
+                case EState::RestoreKesusResources:
+                    StartKesusResources(db, importInfo, itemIdx);
                     break;
 
                 default:
@@ -1372,6 +1592,10 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = importInfo->Items.at(msg.ItemIdx);
+        if (item.State != EState::GetScheme || item.SchemeGetter != SchemeResult->Sender) {
+            Self->RunningImportSchemeGetters.erase(SchemeResult->Sender);
+            return;
+        }
         Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, {}));
 
         if (importInfo->State == EState::Cancelled || importInfo->State == EState::Done) {
@@ -1402,6 +1626,12 @@ private:
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
+        } else if (item.CoordinationNode) {
+            TString error;
+            if (!item.RateLimiterResources || !CreateKesusPropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                    error ? error : TString("Missing coordination node resources"), "invalid coordination node scheme");
+            }
         } else if (item.Table) {
             TString error;
             TVector<TString> indexesToBuild;
@@ -1444,7 +1674,7 @@ private:
         Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
 
         if (item.State != EState::Done) {
-            item.State = EState::CreateSchemeObject;
+            item.State = item.CoordinationNode ? EState::CreateKesusParent : EState::CreateSchemeObject;
         }
 
         Self->PersistImportItemState(db, *importInfo, msg.ItemIdx);
@@ -1649,7 +1879,34 @@ private:
             }
 
             switch (item.State) {
+            case EState::CreateKesusParent: {
+                NIceDb::TNiceDb db(txc.DB);
+                TString error;
+                auto propose = CreateKesusParentPropose(Self, txId, *importInfo, i, error);
+                if (error) {
+                    return CancelAndPersist(db, importInfo, i, error, "invalid coordination node parent");
+                }
+                if (propose) {
+                    importInfo->Items.at(i).SubState = ESubState::Proposed;
+                    Send(Self->SelfId(), std::move(propose));
+                } else {
+                    importInfo->Items.at(i).State = EState::CreateSchemeObject;
+                    if (!CreateKesus(db, importInfo, i, txId)) {
+                        return;
+                    }
+                }
+                itemIdx = i;
+                break;
+            }
             case EState::CreateSchemeObject:
+                if (item.CoordinationNode) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    if (!CreateKesus(db, importInfo, i, txId)) {
+                        return;
+                    }
+                    itemIdx = i;
+                    break;
+                }
                 if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
                     itemIdx = i;
@@ -1769,6 +2026,10 @@ private:
 
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
+
+        if (item.CoordinationNode) {
+            return OnKesusModifyResult(db, importInfo, itemIdx);
+        }
 
         if (IsCreatedByQuery(item)) {
             // As for created by query objects query must be compiled to execute
@@ -1990,7 +2251,14 @@ private:
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         switch (item.State) {
+        case EState::CreateKesusParent:
+            AllocateTxId(*importInfo, itemIdx);
+            return;
         case EState::CreateSchemeObject:
+            if (item.CoordinationNode) {
+                StartKesusResources(db, importInfo, itemIdx);
+                return;
+            }
             if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
                 break;
@@ -2115,6 +2383,10 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemaMa
 }
 
 ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev) {
+    return new TImport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportKesusResourcesResult::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 

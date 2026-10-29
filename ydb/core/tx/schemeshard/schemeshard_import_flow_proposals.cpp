@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/public/schema/schema_propose.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -21,6 +22,112 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusParentPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+) {
+    error.clear();
+    const auto& item = importInfo.Items.at(itemIdx);
+    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    std::pair<TString, TString> dbAndPath;
+    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), dbAndPath, error)) {
+        return nullptr;
+    }
+
+    const auto separator = dbAndPath.second.rfind('/');
+    const TString relativeParent = separator == TString::npos ? TString() : dbAndPath.second.substr(0, separator);
+    const TString parentName = relativeParent.empty()
+        ? dbAndPath.first
+        : TString(TStringBuilder() << dbAndPath.first << '/' << relativeParent);
+    const TPath parentPath = TPath::Resolve(parentName, ss);
+
+    // Validate the existing prefix and every missing directory before proposing.
+    // MkDir itself performs the authoritative checks again during execution.
+    for (TPath path = parentPath;; path.Rise()) {
+        auto checks = path.Check();
+        checks.IsAtLocalSchemeShard().HasResolvedPrefix().IsTheSameDomain(domainPath);
+        const bool exists = path.IsResolved() && !path.IsDeleted();
+        if (exists) {
+            checks.NotUnderDomainUpgrade().NotDeleted().NotUnderDeleting().IsCommonSensePath().IsLikeDirectory();
+        } else {
+            checks.IsValidLeafName(&NACLib::TSystemUsers::Metadata()).DepthLimit();
+        }
+        checks.FailOnRestrictedCreateInTempZone();
+        if (!checks) {
+            error = TStringBuilder() << "Cannot create coordination node parent '" << parentName << "': " << checks.GetError();
+            return nullptr;
+        }
+        if (exists) {
+            break;
+        }
+    }
+
+    if (parentPath.IsResolved() && !parentPath.IsDeleted() && !parentPath.IsUnderCreating()) {
+        return nullptr;
+    }
+    if (relativeParent.empty()) {
+        error = TStringBuilder() << "Coordination node database parent '" << parentName << "' is not ready";
+        return nullptr;
+    }
+
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+    modifyScheme.SetWorkingDir(dbAndPath.first);
+    modifyScheme.SetInternal(true);
+    modifyScheme.SetFailOnExist(false);
+    modifyScheme.MutableMkDir()->SetName(relativeParent);
+    // The backup's ACL and owner belong to the node, not its new parent directories.
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+) {
+    error.clear();
+    const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.CoordinationNode);
+
+    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    std::pair<TString, TString> wdAndPath;
+    if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
+        return nullptr;
+    }
+    const auto separator = wdAndPath.second.rfind('/');
+    if (separator != TString::npos) {
+        wdAndPath.first = TStringBuilder() << wdAndPath.first << '/' << wdAndPath.second.substr(0, separator);
+        wdAndPath.second = wdAndPath.second.substr(separator + 1);
+    }
+
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
+    // Kesus is a single-part transaction: create its directories in a separate
+    // proposal, and never pass a hierarchical name to the automatic splitter.
+    modifyScheme.SetWorkingDir(wdAndPath.first);
+    modifyScheme.SetInternal(true);
+    // Return AlreadyExists for a completed replay. TTxProgress still rejects
+    // any path whose create txid differs from this item's persisted create txid.
+    modifyScheme.SetFailOnExist(false);
+    FillKesusDescription(*modifyScheme.MutableKesus(), item.CoordinationNode->config(), wdAndPath.second);
+    modifyScheme.MutableKesus()->MutableConfig()->clear_path();
+
+    FillOwner(record, item.Permissions);
+    record.SetOwner(ChooseAppropriateOwner(record, AppData()));
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
+        return nullptr;
+    }
+    return propose;
+}
 
 static bool FillDefaultValues(
     const NKikimr::NSchemeShard::TImportInfo::TItem& item,

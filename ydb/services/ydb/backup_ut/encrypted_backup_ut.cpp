@@ -1252,11 +1252,7 @@ protected:
             WaitOpSuccess(res);
         } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
-            // TODO: Include Kesus in the round-trip tests once its import is supported.
-            // FS tests above still cover encrypted Kesus export without importing it.
             settings
-                .AppendExcludeRegexp("^Anonymized_Dir/Anonymized_Kesus$")
-                .AppendExcludeRegexp("^Anonymized_Dir/Anonymized_Kesus2$")
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
 
             auto res = YdbExportClient().ExportToS3(settings).GetValueSync();

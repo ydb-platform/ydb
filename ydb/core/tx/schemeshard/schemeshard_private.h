@@ -62,6 +62,8 @@ namespace TEvPrivate {
         EvExportCompletionUploadResult,
         EvExportKesusTimeout,
         EvKesusResourcesDescribeResult,
+        EvImportKesusResourcesResult,
+        EvImportRetryKesusParent,
         EvEnd
     };
 
@@ -143,6 +145,30 @@ namespace TEvPrivate {
             : ImportId(id)
             , Success(success)
             , Error(error)
+        {}
+    };
+
+    struct TEvImportKesusResourcesResult: public TEventLocal<TEvImportKesusResourcesResult, EvImportKesusResourcesResult> {
+        const ui64 ImportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+
+        TEvImportKesusResourcesResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvImportRetryKesusParent: public TEventLocal<TEvImportRetryKesusParent, EvImportRetryKesusParent> {
+        const ui64 ImportId;
+        const ui32 ItemIdx;
+
+        TEvImportRetryKesusParent(ui64 id, ui32 itemIdx)
+            : ImportId(id)
+            , ItemIdx(itemIdx)
         {}
     };
 

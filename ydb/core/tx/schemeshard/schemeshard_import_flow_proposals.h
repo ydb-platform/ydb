@@ -5,6 +5,23 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+// A null proposal with no error means that the destination's parent is ready.
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusParentPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+);
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateKesusPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    const TImportInfo& importInfo,
+    ui32 itemIdx,
+    TString& error
+);
+
 // `indexesToBuild` receives the names of the indexes whose materialized data from the backup is
 // incompatible with the layout created in this database: they are left out of the create request
 // and must be built from the restored table data.

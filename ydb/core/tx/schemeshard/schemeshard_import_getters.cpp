@@ -11,17 +11,23 @@
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kesus/tablet/quoter_resource_tree.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/backup/proto/proto.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
 
+#include <google/protobuf/text_format.h>
+
+#include <util/generic/hash_set.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
 #include <util/folder/path.h>
@@ -385,6 +391,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
     }
 
+    static bool IsKesus(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateCoordinationNode().FileName);
+    }
+
     static bool IsReplication(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
     }
@@ -450,6 +460,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
             case NKikimrSchemeOp::EPathTypeTable:
+            case NKikimrSchemeOp::EPathTypeKesus:
                 return true;
             default:
                 return false;
@@ -494,7 +505,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        GetObject(SchemeKey, result.GetResult().GetContentLength());
+        const auto contentLength = result.GetResult().GetContentLength();
+        if (IsKesus(SchemeKey) && contentLength == 0) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << SchemeKey << ": empty coordination node scheme");
+        }
+        GetObject(SchemeKey, contentLength);
     }
 
     void HandlePermissions(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -509,7 +525,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
             if (!item.Metadata.HasEnablePermissions()) {
-                return StartCheckingMaterializedIndexes(); // permissions are optional if we don't know if they were created during export
+                return StartDownloadingAdditionalObjects(); // permissions are optional if we don't know if they were created during export
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST,
                     TStringBuilder() << PermissionsKey << ": no permissions file found");
@@ -653,6 +669,17 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
+        } else if (IsKesus(SchemeKey)) {
+            Ydb::Coordination::CreateNodeRequest request;
+            google::protobuf::TextFormat::Parser parser;
+            // Unknown fields must not turn an unsupported backup into a default node.
+            if (content.empty() || !parser.ParseFromString(content, &request)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << SchemeKey << ": cannot parse coordination node scheme");
+            }
+            request.clear_path();
+            request.mutable_config()->clear_path();
+            item.CoordinationNode = std::move(request);
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
             if (!NYdb::NBackup::ParseProto(content, request)) {
@@ -681,7 +708,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (NeedDownloadPermissions) {
                 StartDownloadingPermissions();
             } else {
-                StartCheckingMaterializedIndexes();
+                StartDownloadingAdditionalObjects();
             }
         };
 
@@ -726,11 +753,135 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         item.Permissions = std::move(permissions);
 
         auto nextStep = [this]() {
-            StartCheckingMaterializedIndexes();
+            StartDownloadingAdditionalObjects();
         };
 
         if (NeedValidateChecksums) {
             StartValidatingChecksum(PermissionsKey, content, nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    static bool ValidateKesusMetric(const Ydb::RateLimiter::MeteringConfig::Metric& metric, TString& error) {
+        static const THashSet<TString> supportedFields{
+            "version", "schema", "cloud_id", "folder_id", "resource_id", "source_id", "database",
+        };
+        for (const auto& [name, value] : metric.metric_fields().fields()) {
+            if (!supportedFields.contains(name)) {
+                error = TStringBuilder() << "Unsupported key for metric. Key: " << name;
+                return false;
+            }
+            if (!value.has_string_value()) {
+                error = TStringBuilder() << "Unsupported type for metric. Key: " << name;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool ValidateKesusResources(Ydb::RateLimiter::Resources& resources) {
+        THashSet<TString> paths;
+        for (const auto& resource : resources.resources()) {
+            const TString& path = resource.resource_path();
+            auto fail = [this, &path](const TString& error, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::BAD_REQUEST) {
+                Reply(status, TStringBuilder() << KesusResourcesKey << ": resource '" << path << "': " << error);
+                return false;
+            };
+
+            if (path.empty() || path != NKesus::CanonizeQuoterResourcePath(path)
+                || !NKesus::TQuoterResources::IsResourcePathValid(path))
+            {
+                return fail("Invalid or noncanonical resource path");
+            }
+            if (!paths.insert(path).second) {
+                return fail("Duplicate resource path");
+            }
+            if (!resource.has_hierarchical_drr()) {
+                return fail("Unsupported resource type or no resource properties");
+            }
+            if (resource.has_metering_config()) {
+                if (!ImportInfo->CanRestoreRateLimiterMetering) {
+                    return fail("Setting metering is allowed only for administrators", Ydb::StatusIds::UNAUTHORIZED);
+                }
+                const auto& metering = resource.metering_config();
+                TString error;
+                if ((metering.has_provisioned() && !ValidateKesusMetric(metering.provisioned(), error))
+                    || (metering.has_on_demand() && !ValidateKesusMetric(metering.on_demand(), error))
+                    || (metering.has_overshoot() && !ValidateKesusMetric(metering.overshoot(), error)))
+                {
+                    return fail(error);
+                }
+            }
+        }
+
+        for (const auto& path : paths) {
+            const auto separator = path.rfind('/');
+            if (separator != TString::npos && !paths.contains(path.substr(0, separator))) {
+                Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << KesusResourcesKey
+                    << ": parent resource '" << path.substr(0, separator) << "' is missing for '" << path << "'");
+                return false;
+            }
+        }
+
+        auto& sorted = *resources.mutable_resources();
+        std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.resource_path() < rhs.resource_path();
+        });
+        return true;
+    }
+
+    void HandleKesusResources(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (IsNoSuchKeyError(result)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << KesusResourcesKey << ": no rate limiter resources file found");
+        }
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+        const auto contentLength = result.GetResult().GetContentLength();
+        if (contentLength == 0) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << KesusResourcesKey << ": empty rate limiter resources file");
+        }
+        GetObject(KesusResourcesKey, contentLength);
+    }
+
+    void HandleKesusResources(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        if (!CheckResult(msg.Result, "GetObject")) {
+            return;
+        }
+
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter)) {
+            return;
+        }
+        if (content.empty()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << KesusResourcesKey << ": empty rate limiter resources file");
+        }
+
+        Ydb::RateLimiter::Resources resources;
+        google::protobuf::TextFormat::Parser parser;
+        // Unlike ParseProto, reject unknown fields: a misspelled container must not
+        // silently turn a backup into an empty resource set.
+        if (!parser.ParseFromString(content, &resources)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << KesusResourcesKey << ": cannot parse rate limiter resources");
+        }
+        if (!ValidateKesusResources(resources)) {
+            return;
+        }
+        ImportInfo->Items.at(ItemIdx).RateLimiterResources = std::move(resources);
+
+        auto nextStep = [this]() {
+            Reply();
+        };
+        if (NeedValidateChecksums) {
+            // The checksum covers the original text, not the sorted protobuf.
+            StartValidatingChecksum(KesusResourcesKey, content, nextStep);
         } else {
             nextStep();
         }
@@ -942,6 +1093,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
+    void DownloadKesusResources() {
+        Download(KesusResourcesKey);
+    }
+
     static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         switch (mode) {
         case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
@@ -1049,6 +1204,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Become(&TThis::StateDownloadPermissions);
     }
 
+    void StartDownloadingAdditionalObjects() {
+        if (ImportInfo->Items.at(ItemIdx).CoordinationNode) {
+            ResetRetries();
+            DownloadKesusResources();
+            Become(&TThis::StateDownloadKesusResources);
+        } else {
+            StartCheckingMaterializedIndexes();
+        }
+    }
+
     void StartCheckingMaterializedIndexes() {
         ResetRetries();
         if (NeedToCheckMaterializedIndexes(IndexPopulationMode)) {
@@ -1072,6 +1237,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
+        , KesusResourcesKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, KesusResourcesFileName))
         , IndexPopulationMode(ImportInfo->GetIndexPopulationMode())
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
@@ -1079,6 +1245,9 @@ public:
     }
 
     void Bootstrap() {
+        if (Key && !IV) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Encrypted import item has no IV in schema mapping");
+        }
         DownloadMetadata();
         Become(&TThis::StateDownloadMetadata);
     }
@@ -1109,6 +1278,16 @@ public:
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandlePermissions);
 
             sFunc(TEvents::TEvWakeup, DownloadPermissions);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    STATEFN(StateDownloadKesusResources) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleKesusResources);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleKesusResources);
+
+            sFunc(TEvents::TEvWakeup, DownloadKesusResources);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
@@ -1153,6 +1332,7 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+    const TString KesusResourcesKey;
     ui32 SchemePropertiesIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;

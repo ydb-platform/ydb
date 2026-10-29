@@ -542,7 +542,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             return;
         }
 
-        if (KesusResources && !AddFileWithChecksum("rate_limiter_resources.pb", *KesusResources,
+        if (KesusResources && !AddFileWithChecksum(KesusResourcesFileName, *KesusResources,
                 NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter))
         {
             return;

@@ -15,6 +15,7 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -3963,6 +3964,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
+        RestoreKesusResources = 8,
+        CreateKesusParent = 9,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3978,6 +3981,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             AllocateTxId = 0,
             Proposed,
             Subscribed,
+            WaitingForParent,
         };
 
         enum class EChangefeedState: ui8 {
@@ -3992,6 +3996,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<Ydb::Table::CreateTableRequest> Table;
         TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TMaybe<Ydb::Table::DescribeSystemViewResult> SysView;
+        TMaybe<Ydb::Coordination::CreateNodeRequest> CoordinationNode;
+        TMaybe<Ydb::RateLimiter::Resources> RateLimiterResources;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -4005,6 +4011,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId KesusResourcesRestorer;
+        // Unlike WaitTxId, this is durable before the create proposal is sent.
+        TTxId CreateKesusTxId = InvalidTxId;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -4045,6 +4054,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
+    bool CanRestoreRateLimiterMetering = false;
 
     EState State = EState::Invalid;
     TString Issue;

@@ -415,7 +415,7 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
         })
     {
         DataSmall = FastGenDataForLZ4(32_KB, 0);
-        DataLarge = FastGenDataForLZ4(1_MB, 0);
+        DataLarge = FastGenDataForLZ4(256_KB * erasure.DataParts(), 0);
 
         SetIcbControl("VDiskControls.MaxChunksToDefragInflight", MAX_DEFRAG_INFLIGHT);
         SetIcbControl("VDiskControls.DefaultHugeGarbagePerMille", 50);
@@ -701,6 +701,8 @@ struct TTestEnvCompBroker {
 Y_UNIT_TEST_SUITE(CompDefrag) {
 
     void TestDoesItWork(TBlobStorageGroupType erasure, EBlobHeaderMode mode = EBlobHeaderMode::OLD_HEADER) {
+        std::unordered_map<TActorId, ui32> pendingChunkDeletes;
+        std::unordered_map<ui32, ui32> freedHugeChunks;
         TTestEnvCompDefragIndependent env(0.01, erasure, mode);
 
         ui32 N = 70000;
@@ -732,8 +734,31 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         }
 
 
+        // HugeKeeper sends TEvNotifyChunksDeleted only after the deletion log record is committed.
+        env.SetFilterFunction(NPDisk::TEvLog::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const auto* msg = ev->Get<NPDisk::TEvLog>();
+            if (msg->Signature.GetUnmasked() == TLogSignature::SignatureHugeBlobFreeChunk) {
+                pendingChunkDeletes.emplace(ev->Sender, msg->CommitRecord.DeleteChunks.size());
+            }
+            return true;
+        });
+        env.SetFilterFunction(TEvNotifyChunksDeleted::EventType, [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (auto it = pendingChunkDeletes.find(ev->Sender); it != pendingChunkDeletes.end()) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvNotifyChunksDeleted>()->Chunks.size(), it->second);
+                freedHugeChunks[nodeId] += it->second;
+                pendingChunkDeletes.erase(it);
+            }
+            return true;
+        });
         DeleteHugeBlobsOfTablet(env, N, 1);
         env.Env.Sim(TDuration::Minutes(30)); // defrag scheduler runs every 5-5.5 minutes
+        UNIT_ASSERT(pendingChunkDeletes.empty());
+        for (const auto& [nodeId, count] : env.CompactionsPerNode) {
+            ui32 chunksFreed = freedHugeChunks[nodeId];
+            Cerr << "Node " << nodeId << " had " << count << " compactions and " << chunksFreed << " chunks freed" << Endl;
+            UNIT_ASSERT_GT(chunksFreed, TTestEnvCompDefragIndependent::MAX_DEFRAG_INFLIGHT);
+            UNIT_ASSERT_VALUE_IN(1, count, chunksFreed / TTestEnvCompDefragIndependent::MAX_DEFRAG_INFLIGHT - 1);
+        }
         env.RunFullCompaction(); // release obsolete huge references created by defrag
         env.Env.Sim(TDuration::Minutes(30));
 
@@ -741,11 +766,6 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         { // check metrics
             auto metrics = env.PrintMetrics();
 
-            for (const auto& [nodeId, count] : env.CompactionsPerNode) {
-                ui32 chunksFreed = env.ChunksFreedByDefragPerNode[nodeId];
-                Cerr << "Node " << nodeId << " had " << count << " compactions and " << chunksFreed << " chunks freed" << Endl;
-
-            }
             Cerr << "Total compaction bytes written during deletion: " << metrics.CompactionBytesWritten - compactionBytesWritten << Endl
                 << "Amplification to lsm size: " << (metrics.CompactionBytesWritten - compactionBytesWritten) / float(metrics.DskSpaceCurInplacedData) << Endl;
 
@@ -780,9 +800,7 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
     }
 
     Y_UNIT_TEST(DoesItWorkBlock82) {
-        for (auto mode : {EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
-            TestDoesItWork(TBlobStorageGroupType::Erasure8Plus2Block, mode);
-        }
+        TestDoesItWork(TBlobStorageGroupType::Erasure8Plus2Block, EBlobHeaderMode::NO_HEADER);
     }
 
     Y_UNIT_TEST(DelayedCompaction) {

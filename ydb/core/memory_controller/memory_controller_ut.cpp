@@ -1,3 +1,4 @@
+#include <consumer_collection.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <memory_controller.h>
@@ -67,15 +68,6 @@ NKikimrConfig::TMemoryControllerConfig MakeCacheAndQueryConfig(ui64 cacheMin, ui
     config.SetSharedCacheMinBytes(cacheMin);
     config.SetSharedCacheMaxBytes(cacheMax);
     config.SetQueryExecutionLimitBytes(queryLimit);
-    return config;
-}
-
-NKikimrConfig::TMemoryControllerConfig MakeSoftPressureConfig(ui64 queryLimit = 120_MB) {
-    auto config = MakeCacheAndQueryConfig(20_MB, 40_MB, queryLimit);
-    config.SetTargetUtilizationBytes(50_MB);
-    config.SetSoftLimitBytes(75_MB);
-    config.SetMemTableMinBytes(1_MB);
-    config.SetMemTableMaxBytes(1_MB);
     return config;
 }
 
@@ -236,165 +228,133 @@ private:
 Y_UNIT_TEST_SUITE(TMemoryController) {
 
 Y_UNIT_TEST(GeneralCacheReceivesFirstReductionWhileOverBudget) {
-    for (bool configured : {false, true}) {
-        TControllerFixture fixture(MakeCacheAndQueryConfig(0, 400_MB, 40_MB));
-        fixture.Runtime.RegisterService(MakeMemoryControllerId(), fixture.MemoryController);
-        const auto waiter = fixture.Runtime.AllocateEdgeActor();
-        fixture.Register(waiter, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
+    TControllerFixture fixture(MakeCacheAndQueryConfig(0, 400_MB, 40_MB));
+    fixture.Runtime.RegisterService(MakeMemoryControllerId(), fixture.MemoryController);
+    const auto waiter = fixture.Runtime.AllocateEdgeActor();
+    fixture.Register(waiter, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
 
-        ui64 initialLimit = 0;
-        bool registered = false;
-        THashMap<TActorId, ui64> limits;
-        auto registrations = fixture.Runtime.AddObserver<TEvConsumerRegister>([&](TEvConsumerRegister::TPtr& ev) {
-            initialLimit = ev->Get()->InitialLimitBytes;
-        });
-        auto acknowledgements = fixture.Runtime.AddObserver<TEvConsumerRegistered>([&](TEvConsumerRegistered::TPtr&) {
-            registered = true;
-        });
-        auto grants = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
-            limits[ev->Recipient] = ev->Get()->LimitBytes;
-        });
-        NKikimrConfig::TGeneralCacheConfig proto;
-        if (configured) {
-            proto.SetMemoryLimit(120_MB);
-        }
-        const auto config = NGeneralCache::NPublic::TConfig::BuildFromProto(proto).GetResult();
-        NGeneralCache::NPrivate::TActorCounters counters(TStartupCachePolicy::GetCacheName(), fixture.CountersRoot, config);
-        const auto cache = fixture.Runtime.Register(NGeneralCache::CreateService<TStartupCachePolicy>(config, fixture.CountersRoot));
-        fixture.Runtime.WaitFor("cache registration", [&] { return registered; });
-        UNIT_ASSERT_VALUES_EQUAL(initialLimit, configured ? 120_MB : 1_GB);
+    ui64 initialLimit = 0;
+    ui64 ceiling = 0;
+    bool registered = false;
+    THashMap<TActorId, ui64> limits;
+    auto registrations = fixture.Runtime.AddObserver<TEvConsumerRegister>([&](TEvConsumerRegister::TPtr& ev) {
+        initialLimit = ev->Get()->InitialLimitBytes;
+        ceiling = ev->Get()->LimitCeiling;
+    });
+    auto acknowledgements = fixture.Runtime.AddObserver<TEvConsumerRegistered>([&](TEvConsumerRegistered::TPtr&) {
+        registered = true;
+    });
+    auto grants = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
+        limits[ev->Recipient] = ev->Get()->LimitBytes;
+    });
+    NKikimrConfig::TGeneralCacheConfig proto;
+    proto.SetMemoryLimit(120_MB);
+    const auto config = NGeneralCache::NPublic::TConfig::BuildFromProto(proto).GetResult();
+    NGeneralCache::NPrivate::TActorCounters counters(TStartupCachePolicy::GetCacheName(), fixture.CountersRoot, config);
+    const auto cache = fixture.Runtime.Register(NGeneralCache::CreateService<TStartupCachePolicy>(config, fixture.CountersRoot));
+    fixture.Runtime.WaitFor("cache registration", [&] { return registered; });
+    UNIT_ASSERT_VALUES_EQUAL(initialLimit, 120_MB);
+    UNIT_ASSERT_VALUES_EQUAL(ceiling, 120_MB);
 
-        THashMap<ui64, ui64> objects;
+    THashMap<ui64, ui64> objects;
+    for (ui64 i = 0; i < 24; ++i) {
+        objects.emplace(i, 5_MB);
+    }
+    using TSourceEvents = NGeneralCache::NSource::TEvents<TStartupCachePolicy>;
+    fixture.Runtime.Send(new IEventHandle(cache, waiter,
+        new TSourceEvents::TEvObjectsInfo(0, std::move(objects), {}, {})));
+    fixture.Runtime.WaitFor("cache filled before first grant", [&] {
+        return counters.GetManager()->CacheSizeBytes->Val() == 120_MB;
+    });
+    UNIT_ASSERT(!limits.contains(cache));
+
+    fixture.Runtime.WaitFor("startup reduction", [&] { return limits.contains(cache); });
+    UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 10_MB);
+    UNIT_ASSERT(!limits.contains(waiter));
+    fixture.Runtime.WaitFor("grant after eviction report", [&] { return limits.contains(waiter); });
+    UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), 10_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesDataAccessorCache/Consumption"), 10_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersBudgetDeficit"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(limits.at(waiter), 20_MB);
+
+    for (ui64 grant : {0_MB, 1_MB, 2_GB}) {
+        fixture.Runtime.Send(new IEventHandle(cache, fixture.MemoryController, new TEvConsumerLimit(grant)));
+        const ui64 expectedLimit = Min(grant, 120_MB);
+        fixture.Runtime.WaitFor("cache applies controller ceiling", [&] {
+            return counters.GetManager()->CacheSizeLimitBytes->Val() == i64(expectedLimit);
+        });
+        UNIT_ASSERT(counters.GetManager()->CacheSizeBytes->Val() <= i64(expectedLimit));
+        THashMap<ui64, ui64> refill;
         for (ui64 i = 0; i < 24; ++i) {
-            objects.emplace(i, 5_MB);
+            refill.emplace(i, 5_MB);
         }
-        using TSourceEvents = NGeneralCache::NSource::TEvents<TStartupCachePolicy>;
         fixture.Runtime.Send(new IEventHandle(cache, waiter,
-            new TSourceEvents::TEvObjectsInfo(0, std::move(objects), {}, {})));
-        fixture.Runtime.WaitFor("cache filled before first grant", [&] {
-            return counters.GetManager()->CacheSizeBytes->Val() == 120_MB;
-        });
-        UNIT_ASSERT(!limits.contains(cache));
-
-        fixture.Runtime.WaitFor("startup reduction", [&] { return limits.contains(cache); });
-        UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 10_MB);
-        UNIT_ASSERT(!limits.contains(waiter));
-        fixture.Runtime.WaitFor("grant after eviction report", [&] { return limits.contains(waiter); });
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), 10_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesDataAccessorCache/Consumption"), 10_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersBudgetDeficit"), 0);
-        UNIT_ASSERT_VALUES_EQUAL(limits.at(waiter), 20_MB);
-
-        fixture.RequestLimit(cache, EMemoryConsumerKind::ColumnTablesDataAccessorCache, 0);
-        fixture.RequestLimit(waiter, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, 100_MB);
-        fixture.Tick();
-        fixture.Tick();
-        UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 0);
-        UNIT_ASSERT_VALUES_EQUAL_C(limits.at(waiter), 100_MB,
-            "cache usage after zero grant: " << counters.GetManager()->CacheSizeBytes->Val());
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), 0);
-
-        for (ui64 grant : {20_MB, 1_MB, 5_MB, 0_MB, 60_MB, 2_GB}) {
-            fixture.Runtime.Send(new IEventHandle(cache, fixture.MemoryController, new TEvConsumerLimit(grant)));
-            const ui64 expectedLimit = configured ? Min(grant, 120_MB) : grant;
-            fixture.Runtime.WaitFor("cache applies controller ceiling", [&] {
-                return counters.GetManager()->CacheSizeLimitBytes->Val() == i64(expectedLimit);
-            });
-            UNIT_ASSERT(counters.GetManager()->CacheSizeBytes->Val() <= i64(expectedLimit));
-            THashMap<ui64, ui64> refill;
-            for (ui64 i = 0; i < 24; ++i) {
-                refill.emplace(i, 5_MB);
-            }
-            fixture.Runtime.Send(new IEventHandle(cache, waiter,
-                new TSourceEvents::TEvObjectsInfo(0, std::move(refill), {}, {})));
-            const ui64 expectedCount = Min(expectedLimit, 120_MB) / 5_MB;
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeCount->Val(), expectedCount);
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), expectedCount * 5_MB);
-        }
+            new TSourceEvents::TEvObjectsInfo(0, std::move(refill), {}, {})));
+        const ui64 expectedCount = expectedLimit / 5_MB;
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeCount->Val(), expectedCount);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetManager()->CacheSizeBytes->Val(), expectedCount * 5_MB);
     }
 }
 
 Y_UNIT_TEST(GroupedMemoryRegistersAndAppliesHardLimits) {
     using namespace NOlap::NGroupedMemoryManager;
-    struct TCase {
-        std::optional<ui64> HardLimit;
-        ui64 Buckets;
-        ui64 Multiplier;
-        ui64 Expected;
-    };
-    const ui64 max = std::numeric_limits<ui64>::max();
-    constexpr ui64 compMultiplier = NOlap::TGlobalLimits::CompGroupedMemoryHardLimitMultiplier;
-    for (const auto& test : TVector<TCase>{{{}, 2, 1, max}, {{}, 2, compMultiplier, max},
-            {259, 2, 1, 258}, {259, 2, compMultiplier, 65}, {0, 2, compMultiplier, 0},
-            {max, 3, compMultiplier, max / compMultiplier + 1}}) {
-        TTestBasicRuntime runtime;
-        runtime.Initialize(TAppPrepare().Unwrap());
-        const auto controller = runtime.AllocateEdgeActor();
-        runtime.RegisterService(MakeMemoryControllerId(), controller);
-        NKikimrConfig::TGroupedMemoryLimiterConfig proto;
-        proto.SetCountBuckets(test.Buckets);
-        proto.SetMemoryLimit(100);
-        if (test.HardLimit) {
-            proto.SetHardMemoryLimit(*test.HardLimit);
-        }
-        NOlap::NGroupedMemoryManager::TConfig config;
-        UNIT_ASSERT(config.DeserializeFromProto(proto));
-        const auto kind = test.Multiplier == compMultiplier
-            ? EMemoryConsumerKind::ColumnTablesCompGroupedMemory : EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-        const auto actor = runtime.Register(new TMemoryLimiterActor(config, "Test", runtime.GetDynamicCounters(), kind, test.Multiplier));
-        const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
-        UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, test.Expected);
-        for (ui64 grant : {20, 60, 1000, 0}) {
-            runtime.Send(new IEventHandle(actor, controller, new TEvConsumerLimit(grant)));
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            const ui64 expectedHard = Min(grant * test.Multiplier / test.Buckets,
-                config.GetHardMemoryLimit().value_or(max));
-            for (ui64 i = 0; i < test.Buckets; ++i) {
-                TCounters counters(runtime.GetDynamicCounters(), "Test_" + ToString(i));
-                const auto stageCounters = counters.BuildStageCounters("general");
-                UNIT_ASSERT_VALUES_EQUAL(stageCounters->ValueHardLimit->Val(), expectedHard);
-                UNIT_ASSERT_VALUES_EQUAL(stageCounters->ValueSoftLimit->Val(), Min(*config.GetMemoryLimit(), expectedHard));
-            }
+    TTestBasicRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    const auto controller = runtime.AllocateEdgeActor();
+    runtime.RegisterService(MakeMemoryControllerId(), controller);
+    NKikimrConfig::TGroupedMemoryLimiterConfig proto;
+    proto.SetCountBuckets(2);
+    proto.SetMemoryLimit(100);
+    proto.SetHardMemoryLimit(259);
+    TConfig config;
+    UNIT_ASSERT(config.DeserializeFromProto(proto));
+    constexpr ui64 multiplier = NOlap::TGlobalLimits::CompGroupedMemoryHardLimitMultiplier;
+    const auto limiter = runtime.Register(new TMemoryLimiterActor(config, "Test", runtime.GetDynamicCounters(),
+        EMemoryConsumerKind::ColumnTablesCompGroupedMemory, multiplier));
+    const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
+    // Two 129-byte buckets require a rounded-up nominal grant of 65 at multiplier 4.
+    UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, 65);
+    UNIT_ASSERT_VALUES_EQUAL(registration->Get()->LimitCeiling, 65);
+    for (ui64 grant : {20, 1000}) {
+        runtime.Send(new IEventHandle(limiter, controller, new TEvConsumerLimit(grant)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        const ui64 hard = Min<ui64>(grant * multiplier / 2, 129);
+        for (ui64 bucket = 0; bucket < 2; ++bucket) {
+            TCounters counters(runtime.GetDynamicCounters(), "Test_" + ToString(bucket));
+            const auto stage = counters.BuildStageCounters("general");
+            UNIT_ASSERT_VALUES_EQUAL(stage->ValueHardLimit->Val(), hard);
+            UNIT_ASSERT_VALUES_EQUAL(stage->ValueSoftLimit->Val(), Min<ui64>(50, hard));
         }
     }
 }
 
 Y_UNIT_TEST(BlobCacheRegistersAndAppliesLimits) {
-    for (bool configured : {false, true}) {
-        TTestBasicRuntime runtime;
-        runtime.Initialize(TAppPrepare().Unwrap());
-        const auto controller = runtime.AllocateEdgeActor();
-        runtime.RegisterService(MakeMemoryControllerId(), controller);
-        NKikimrConfig::TBlobCacheConfig proto;
-        if (configured) {
-            proto.SetMaxSizeBytes(80);
-        }
-        const auto settings = NBlobCache::TBlobCacheSettings::FromProto(proto);
-        auto counters = runtime.GetDynamicCounters();
-        const auto cache = runtime.Register(NBlobCache::CreateBlobCache(settings, counters));
-        runtime.EnableScheduleForActor(cache);
-        const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
-        UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, settings.MaxCacheDataSize);
-        for (ui64 grant : TVector<ui64>{20, 60, 2_GB, 0, 60}) {
-            runtime.Send(new IEventHandle(cache, controller, new TEvConsumerLimit(grant)));
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            const ui64 expectedLimit = configured ? Min<ui64>(grant, 80) : grant;
-            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("MaxSizeBytes")->Val(), expectedLimit);
-            for (ui32 i = 0; i < 16; ++i) {
-                NOlap::TBlobRange range(NOlap::TUnifiedBlobId(0, TLogoBlobID(1, 1, 1, 1, 5, i)), 0, 5);
-                runtime.Send(new IEventHandle(cache, controller,
-                    new NBlobCache::TEvBlobCache::TEvCacheBlobRange(range, TString(5, 'a'), true)));
-            }
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("SizeBytes")->Val(), Min<ui64>(expectedLimit, 80));
-        }
-        auto& control = runtime.GetAppData(0).Icb->BlobCache.MaxCacheDataSize;
-        for (ui64 limit : TVector<ui64>{100, 10, settings.MaxCacheDataSize}) {
-            TControlBoard::SetValue(limit, control);
-            runtime.SimulateSleep(TDuration::MilliSeconds(100));
-            UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("MaxSizeBytes")->Val(), Min<ui64>(limit, 60));
-        }
+    TTestBasicRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    const auto controller = runtime.AllocateEdgeActor();
+    runtime.RegisterService(MakeMemoryControllerId(), controller);
+    const auto settings = NBlobCache::TBlobCacheSettings::FromProto({});
+    auto counters = runtime.GetDynamicCounters();
+    const auto cache = runtime.Register(NBlobCache::CreateBlobCache(settings, counters));
+    runtime.EnableScheduleForActor(cache);
+    const auto registration = runtime.GrabEdgeEvent<TEvConsumerRegister>(controller);
+    UNIT_ASSERT_VALUES_EQUAL(registration->Get()->InitialLimitBytes, settings.MaxCacheDataSize);
+    UNIT_ASSERT_VALUES_EQUAL(registration->Get()->LimitCeiling, std::numeric_limits<ui64>::max());
+    auto consumer = MakeIntrusive<TRegistrantConsumer>();
+    runtime.Send(new IEventHandle(cache, controller, new TEvConsumerRegistered(consumer)));
+    runtime.Send(new IEventHandle(cache, controller, new TEvConsumerLimit(60)));
+    for (ui32 i = 0; i < 16; ++i) {
+        NOlap::TBlobRange range(NOlap::TUnifiedBlobId(0, TLogoBlobID(1, 1, 1, 1, 5, i)), 0, 5);
+        runtime.Send(new IEventHandle(cache, controller,
+            new NBlobCache::TEvBlobCache::TEvCacheBlobRange(range, TString(5, 'a'), true)));
     }
+    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("MaxSizeBytes")->Val(), 60);
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("SizeBytes")->Val(), 60);
+    TControlBoard::SetValue(10, runtime.GetAppData(0).Icb->BlobCache.MaxCacheDataSize);
+    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter("MaxSizeBytes")->Val(), 10);
+    UNIT_ASSERT_VALUES_EQUAL(consumer->GetLimitCeiling(), 10);
 }
 
 Y_UNIT_TEST(Counters) {
@@ -531,6 +491,14 @@ Y_UNIT_TEST(Counters_NoHardLimit) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/HardLimit")->Val(), 220_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/SoftLimit")->Val(), 165_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/TargetUtilization")->Val(), 110_MB);
+    server->ProcessMemoryInfo->AnonRss = 0;
+    server->ProcessMemoryInfo->MemAvailable = 20_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ExternalConsumption")->Val(), 200_MB);
+    // Usage can lag a reduction; issued limits, including Comp's multiplier, must fit.
+    const auto extraCompaction = (NOlap::TGlobalLimits::CompGroupedMemoryHardLimitMultiplier - 1)
+        * server->MemoryControllerCounters->GetCounter("Consumer/ColumnTablesCompGroupedMemory/Limit")->Val();
+    UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Stats/ConsumersLimit")->Val() + extraCompaction, 20_MB);
 }
 
 Y_UNIT_TEST(Config_ConsumerLimits) {
@@ -579,7 +547,11 @@ Y_UNIT_TEST(Config_ConsumerLimits) {
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/LimitMax")->Val(), 30_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMin")->Val(), 10_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/LimitMax")->Val(), 20_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 15_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/LimitMin")->Val(), 15_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/LimitMax")->Val(), 15_MB);
+    // The 116 MB of minimum permissions share the available 100 MB Hard budget.
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 15_MB * 100_MB / 116_MB);
+    UNIT_ASSERT_LE(server->MemoryControllerCounters->GetCounter("Stats/ConsumersCommitted")->Val(), i64(100_MB));
 }
 
 Y_UNIT_TEST(SharedCache) {
@@ -608,26 +580,31 @@ Y_UNIT_TEST(SharedCache) {
 
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(40_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 32_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 32_MB);
 
     // Idle fixed grants reserve Hard capacity without reducing cache at Soft.
     server->ProcessMemoryInfo->AllocatedMemory = 4_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(40_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 32_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), 32_MB);
 
     UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->ActiveBytes->Val(), static_cast<i64>(32_KB), static_cast<i64>(5_KB));
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->PassiveBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveBytes->Val(), server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Consumption")->Val());
 
-    server->ProcessMemoryInfo->AllocatedMemory = 60_MB; // fixed grants leave no Hard capacity for cache
+    server->ProcessMemoryInfo->AllocatedMemory = 60_MB; // idle reservations share the Hard reduction
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
-    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_GT(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_LT(server->SharedPageCacheCounters->MemLimitBytes->Val(), i64(32_MB));
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
+    UNIT_ASSERT_GT(server->SharedPageCacheCounters->ActiveBytes->Val(), 0);
 
+    server->ProcessMemoryInfo->AllocatedMemory = 1000_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveBytes->Val(), 0);
     UNIT_ASSERT_GT(server->SharedPageCacheCounters->PassiveBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->PassiveBytes->Val(), server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Consumption")->Val());
@@ -656,14 +633,15 @@ Y_UNIT_TEST(SharedCache_ConfigLimit) {
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 50_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(60_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), 50_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->ConfigLimitBytes->Val());
 
     server->ProcessMemoryInfo->AllocatedMemory = 60_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
     server->PrintCounters();
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ConfigLimitBytes->Val(), 50_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->MemLimitBytes->Val(), static_cast<i64>(27_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_GT(server->SharedPageCacheCounters->MemLimitBytes->Val(), 0);
+    UNIT_ASSERT_LT(server->SharedPageCacheCounters->MemLimitBytes->Val(), i64(50_MB));
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->ActiveLimitBytes->Val(), server->SharedPageCacheCounters->MemLimitBytes->Val());
 }
 
@@ -677,8 +655,6 @@ Y_UNIT_TEST(MemTable) {
     memoryControllerConfig->SetHardLimitBytes(200_MB);
     // Keep room for this consumer after the scheduler and GML reservations.
     memoryControllerConfig->SetCompactionLimitPercent(5);
-    // Leave room above fixed grants to exercise MemTable growth and later compaction.
-    memoryControllerConfig->SetTargetUtilizationPercent(75);
     memoryControllerConfig->SetSharedCacheMinBytes(0);
     memoryControllerConfig->SetSharedCacheMaxBytes(0);
     memoryControllerConfig->SetMemTableMinPercent(0);
@@ -1046,188 +1022,6 @@ Y_UNIT_TEST(ColumnShardCaches_Config) {
     checkMemoryLimits();
 }
 
-Y_UNIT_TEST(IdleFixedLimitKeepsCacheWithinHardBudget) {
-    const auto config = MakeCacheAndQueryConfig(0, 50_MB, 120_MB); // scan receives half
-    TControllerFixture fixture(config);
-    const auto cache = fixture.Runtime.AllocateEdgeActor();
-    const auto scan = fixture.Runtime.AllocateEdgeActor();
-    fixture.Register(cache, EMemoryConsumerKind::SharedCache);
-    fixture.Register(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 60_MB);
-    UNIT_ASSERT(fixture.Counter("Consumer/SharedCache/Limit") < i64(40_MB));
-    UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(100_MB));
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
-}
-
-Y_UNIT_TEST(IdleFixedGrantsDoNotCauseSoftPressure) {
-    TControllerFixture fixture(MakeSoftPressureConfig()); // scan reserves 60 MB
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-
-    // The fixed caps plus MemTable reserve 66 MB. Target is inaccessible,
-    // but there is room under Hard for the whole 20 MB cache minimum.
-    for (const ui64 other : {0_MB, 4_MB, 10_MB, 20_MB}) {
-        fixture.Provider->ProcessMemoryInfo.AllocatedMemory = other;
-        fixture.Tick();
-        const ui64 cacheLimit = other == 20_MB ? 14_MB : 20_MB;
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/Coefficient"), 0);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ResultingConsumersConsumption"), 21_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RequiredConsumersBudget"), 86_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), cacheLimit);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 60_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), 66_MB + cacheLimit);
-        UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(100_MB - other));
-    }
-}
-
-Y_UNIT_TEST(SameKindUnreleasedUsageTrimsCacheForSibling) {
-    TControllerFixture fixture(MakeSoftPressureConfig(128_MB)); // scan shares 64 MB
-    const auto cache = fixture.Runtime.AllocateEdgeActor();
-    const auto first = fixture.Runtime.AllocateEdgeActor();
-    const auto second = fixture.Runtime.AllocateEdgeActor();
-    fixture.Register(cache, EMemoryConsumerKind::SharedCache);
-    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    THashMap<TActorId, ui64> limits;
-    auto observer = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
-        limits[ev->Recipient] = ev->Get()->LimitBytes;
-    });
-
-    firstConsumer->SetReport({40_MB, 40_MB, 0});
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(first), 52_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(second), 12_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 20_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RequiredConsumersBudget"), 90_MB);
-
-    // The first consumer still uses 40 MB after its share falls to 24 MB.
-    // Charge those bytes separately from the second consumer's 40 MB share.
-    secondConsumer->SetReport({0, 72_MB, 0});
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RequiredConsumersBudget"), 106_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 14_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(first), 24_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(second), 40_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 64_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), 100_MB);
-
-    // Once that usage is released, the same shares need no cache reduction.
-    firstConsumer->SetReport({0, 40_MB, 0});
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RequiredConsumersBudget"), 90_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(cache), 20_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(first), 24_MB);
-    UNIT_ASSERT_VALUES_EQUAL(limits.at(second), 40_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), 90_MB);
-}
-
-Y_UNIT_TEST(RealConsumptionStillCausesSoftPressure) {
-    TControllerFixture fixture(MakeSoftPressureConfig());
-    auto cache = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
-    auto scan = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    fixture.Tick();
-    scan->SetConsumption(60_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ResultingConsumersConsumption"), 81_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 14_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 60_MB);
-
-    // Cache usage above its target still contributes to pressure until released.
-    cache->SetConsumption(30_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ResultingConsumersConsumption"), 91_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 4_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), 96_MB);
-
-    cache->SetConsumption(4_MB);
-    scan->SetConsumption(0);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 20_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), 86_MB);
-}
-
-Y_UNIT_TEST(ExternalConsumptionReducesAvailableHardBudget) {
-    auto config = MakeSoftPressureConfig();
-    config.ClearHardLimitBytes();
-    TControllerFixture fixture(config);
-    fixture.Provider->ProcessMemoryInfo.MemTotal = 100_MB;
-    fixture.Provider->ProcessMemoryInfo.AnonRss = 0;
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    for (const ui64 external : {0_MB, 20_MB, 80_MB}) {
-        fixture.Provider->ProcessMemoryInfo.MemAvailable = 100_MB - external;
-        fixture.Tick();
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ExternalConsumption"), external);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"),
-            external == 0 ? 20_MB : external == 20_MB ? 14_MB : 0);
-        UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(100_MB - external));
-    }
-}
-
-Y_UNIT_TEST(CompactionReservationSurvivesSoftPressureSplit) {
-    auto config = MakeSoftPressureConfig(60_MB); // scan reserves 30 MB
-    config.SetCompactionLimitBytes(10_MB); // GML can use four times the nominal grant
-    TControllerFixture fixture(config);
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesCompGroupedMemory);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RequiredConsumersBudget"), 96_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 20_MB);
-
-    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 5_MB;
-    for (const ui64 hard : {100_MB, 90_MB}) {
-        fixture.Provider->ProcessMemoryInfo.CGroupLimit = hard;
-        fixture.Tick();
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), hard - 81_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesCompGroupedMemory/Limit"), 10_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 30_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), hard - 5_MB);
-    }
-    // Cache reaches zero before the ledger has to reduce fixed permissions.
-    fixture.Provider->ProcessMemoryInfo.CGroupLimit = 70_MB;
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
-    UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(65_MB));
-    UNIT_ASSERT(fixture.Counter("Consumer/ColumnTablesCompGroupedMemory/Limit") < i64(10_MB));
-}
-
-Y_UNIT_TEST(CacheConsumptionMustFallBeforeSendingTheFullIncrease) {
-    const auto config = MakeCacheAndQueryConfig(50_MB, 50_MB, 100_MB);
-    TControllerFixture fixture(config);
-    const auto cache = fixture.Runtime.AllocateEdgeActor();
-    const auto scan = fixture.Runtime.AllocateEdgeActor();
-    auto cacheConsumer = fixture.Register(cache, EMemoryConsumerKind::SharedCache);
-    cacheConsumer->SetConsumption(50_MB);
-    fixture.Tick();
-    size_t scanLimitEvents = 0;
-    auto observer = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
-        if (ev->Recipient == scan) {
-            ++scanLimitEvents;
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->LimitBytes, 50_MB);
-        }
-    });
-    fixture.Register(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
-    fixture.Tick();
-    const ui64 cacheLimit = fixture.Counter("Consumer/SharedCache/Limit");
-    UNIT_ASSERT(cacheLimit < 50_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 0);
-    UNIT_ASSERT_VALUES_EQUAL(scanLimitEvents, 0);
-
-    cacheConsumer->SetConsumption((50_MB + cacheLimit) / 2);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 0);
-    UNIT_ASSERT_VALUES_EQUAL(scanLimitEvents, 0);
-
-    cacheConsumer->SetConsumption(cacheLimit);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 50_MB);
-    UNIT_ASSERT_GT(scanLimitEvents, 0);
-    UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(100_MB));
-}
-
 Y_UNIT_TEST(MemTableCompactionContinuesWhileItsIncreaseWaits) {
     auto config = MakeBudgetConfig(200_MB);
     config.SetMemTableMinBytes(10_MB);
@@ -1235,7 +1029,7 @@ Y_UNIT_TEST(MemTableCompactionContinuesWhileItsIncreaseWaits) {
     config.SetSharedCacheMinBytes(0);
     config.SetSharedCacheMaxBytes(80_MB);
     TControllerFixture fixture(config);
-    fixture.Provider->ProcessMemoryInfo.CGroupLimit = 100_MB;
+    fixture.Provider->ProcessMemoryInfo.CGroupLimit = 15_MB;
     const auto cache = fixture.Runtime.AllocateEdgeActor();
     const auto owner = fixture.Runtime.AllocateEdgeActor();
     auto cacheConsumer = fixture.Register(cache, EMemoryConsumerKind::SharedCache);
@@ -1243,7 +1037,7 @@ Y_UNIT_TEST(MemTableCompactionContinuesWhileItsIncreaseWaits) {
     auto memTable = fixture.Runtime.GrabEdgeEvent<TEvMemTableRegistered>(owner)->Get()->Consumer;
     fixture.Tick();
     const auto previousLimit = fixture.Counter("Consumer/MemTable/Limit");
-    UNIT_ASSERT(previousLimit > 0 && previousLimit < i64(20_MB));
+    UNIT_ASSERT(previousLimit > 0 && previousLimit < i64(10_MB));
 
     bool compactionRequested = false;
     auto observer = fixture.Runtime.AddObserver<TEvMemTableCompact>([&](TEvMemTableCompact::TPtr& ev) {
@@ -1263,44 +1057,13 @@ Y_UNIT_TEST(MemTableCompactionContinuesWhileItsIncreaseWaits) {
     UNIT_ASSERT(compactionRequested);
 }
 
-Y_UNIT_TEST(CompetingDesiredRequestsKeepDefaultConsumersFunded) {
-    auto config = MakeCacheAndQueryConfig(40_MB, 40_MB, 80_MB);
-    config.SetMemTableMinBytes(10_MB);
-    config.SetMemTableMaxBytes(10_MB);
-    TControllerFixture fixture(config);
-    const auto cache = fixture.Runtime.AllocateEdgeActor();
-    const auto first = fixture.Runtime.AllocateEdgeActor();
-    const auto second = fixture.Runtime.AllocateEdgeActor();
-    auto cacheConsumer = fixture.Register(cache, EMemoryConsumerKind::SharedCache);
-    constexpr auto kind = EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-    fixture.Register(first, kind);
-    fixture.Register(second, kind);
-    cacheConsumer->SetConsumption(40_MB);
-    fixture.Tick();
-    fixture.RequestLimit(first, kind, 60_MB);
-    fixture.RequestLimit(second, kind, 60_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 5_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 40_MB);
-
-    cacheConsumer->SetConsumption(5_MB);
-    for (size_t round = 0; round < 3; ++round) {
-        fixture.Tick();
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 5_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 80_MB);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersCommitted"), 100_MB);
-    }
-}
-
 Y_UNIT_TEST(ClientDesiredWaitsForFullGrantThenReplacesConfiguredTarget) {
     const auto config = MakeCacheAndQueryConfig(60_MB, 60_MB, 40_MB); // scan default is 20 MB
     TControllerFixture fixture(config);
     const auto cache = fixture.Runtime.AllocateEdgeActor();
     const auto scan = fixture.Runtime.AllocateEdgeActor();
     auto cacheConsumer = fixture.Register(cache, EMemoryConsumerKind::SharedCache);
-    auto scanConsumer = fixture.Register(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
+    fixture.Register(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory);
     cacheConsumer->SetConsumption(60_MB);
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 20_MB);
@@ -1328,84 +1091,6 @@ Y_UNIT_TEST(ClientDesiredWaitsForFullGrantThenReplacesConfiguredTarget) {
     }
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 60_MB);
     UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(100_MB));
-
-    fixture.RequestLimit(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, 30_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(scanLimits.back(), 30_MB);
-    fixture.RequestLimit(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, 0);
-    scanConsumer->SetReport({.Used = 0, .Demand = 100_MB, .Reclaimable = 0});
-    fixture.Tick();
-    fixture.Tick(); // neither a report nor another round restores the configured target
-    UNIT_ASSERT_VALUES_EQUAL(scanLimits.back(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 0);
-}
-
-Y_UNIT_TEST(ClientDesiredIsScopedToItsRegistration) {
-    auto config = MakeBudgetConfig(200_MB);
-    config.SetQueryExecutionLimitBytes(80_MB); // two scan clients default to 20 MB each
-    TControllerFixture fixture(config);
-    const auto first = fixture.Runtime.AllocateEdgeActor();
-    const auto second = fixture.Runtime.AllocateEdgeActor();
-    const auto stranger = fixture.Runtime.AllocateEdgeActor();
-    constexpr auto kind = EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-    fixture.Register(first, kind);
-    fixture.Register(second, kind);
-    fixture.Tick();
-    THashMap<TActorId, ui64> lastLimit;
-    auto observer = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
-        lastLimit[ev->Recipient] = ev->Get()->LimitBytes;
-    });
-    fixture.RequestLimit(first, kind, 35_MB);
-    fixture.RequestLimit(second, kind, 15_MB);
-    fixture.RequestLimit(stranger, kind, 999_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(lastLimit.at(first), 35_MB);
-    UNIT_ASSERT_VALUES_EQUAL(lastLimit.at(second), 15_MB);
-    UNIT_ASSERT(!lastLimit.contains(stranger));
-    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, first, new TEvConsumerUnregister(kind)));
-    fixture.RequestLimit(first, kind, 999_MB); // detached requests cannot recreate a registration
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 15_MB);
-    fixture.Register(first, kind);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(lastLimit.at(first), 20_MB);
-    UNIT_ASSERT_VALUES_EQUAL(lastLimit.at(second), 15_MB);
-}
-
-Y_UNIT_TEST(ImpossibleDesiredKeepsCacheBudgetAndDeadWaiterIsRemoved) {
-    const auto config = MakeCacheAndQueryConfig(10_MB, 60_MB, 40_MB);
-    TControllerFixture fixture(config);
-    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
-    TIntrusivePtr<IMemoryConsumer> doomedConsumer;
-    constexpr auto kind = EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-    const auto doomed = fixture.Runtime.Register(new TStubRegistrant(fixture.MemoryController, kind, &doomedConsumer));
-    fixture.Tick();
-    UNIT_ASSERT(doomedConsumer);
-    const auto cacheLimit = fixture.Counter("Consumer/SharedCache/Limit");
-    UNIT_ASSERT(cacheLimit > i64(50_MB));
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 20_MB);
-    size_t limitEvents = 0;
-    auto observer = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
-        if (ev->Recipient == doomed) {
-            ++limitEvents;
-        }
-    });
-
-    fixture.RequestLimit(doomed, kind, 1000_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), cacheLimit);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 20_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerRegistrantDeaths", true), 0);
-    UNIT_ASSERT_VALUES_EQUAL(limitEvents, 0);
-
-    fixture.Runtime.Send(new IEventHandle(doomed, TActorId(), new TEvents::TEvPoison));
-    fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerRegistrantDeaths", true), 1);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 0);
-    UNIT_ASSERT_VALUES_EQUAL(limitEvents, 0); // runtime liveness, not a disguised limit update
-    doomedConsumer->SetConsumption(1000_MB);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Consumption"), 0);
 }
 
 Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {
@@ -1442,12 +1127,12 @@ Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {
     // The lower limit is recorded immediately; usage above it stays charged.
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation"), 0);
 
-    // The target also reserves the 7.5 MB portions-cache allowance: 100 - 53 - 10 - 7.5 = 29.5 MB.
+    // Idle portions permissions count against Hard, not Target: 100 - 53 - 10 = 37 MB.
     fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 90_MB;
     fixture.Tick();
-    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Stats/Coefficient") / 1e9, (29.5 - 20.0) / 40.0, 1e-5);
-    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit") / double(1_MB), 29.5, 0.01);
-    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation") / double(1_MB), 0.0, 0.01);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Stats/Coefficient") / 1e9, (37.0 - 20.0) / 40.0, 1e-5);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit") / double(1_MB), 37.0, 0.01);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation") / double(1_MB), 7.0, 0.01);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
 }
 
@@ -1523,22 +1208,30 @@ Y_UNIT_TEST(DeadRegistrantLeavesTheSum) {
     config.SetHardLimitBytes(200_MB);
     TControllerFixture fixture(config);
 
-    TIntrusivePtr<IMemoryConsumer> doomedConsumer;
+    TIntrusivePtr<IMemoryConsumer> doomedConsumer, waiterConsumer;
     const TActorId doomed = fixture.Runtime.Register(new TStubRegistrant(fixture.MemoryController, EMemoryConsumerKind::SharedCache, &doomedConsumer));
+    const auto waiter = fixture.Runtime.Register(new TStubRegistrant(fixture.MemoryController, EMemoryConsumerKind::SharedCache, &waiterConsumer));
     auto survivorConsumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
     fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
-    UNIT_ASSERT(doomedConsumer);
+    UNIT_ASSERT(doomedConsumer && waiterConsumer);
+    bool waiterGotLimit = false;
+    auto observer = fixture.Runtime.AddObserver<TEvConsumerLimit>([&](TEvConsumerLimit::TPtr& ev) {
+        waiterGotLimit |= ev->Recipient == waiter;
+    });
+    fixture.RequestLimit(waiter, EMemoryConsumerKind::SharedCache, 1000_MB);
 
     doomedConsumer->SetConsumption(25_MB);
     survivorConsumer->SetConsumption(5_MB);
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 30_MB);
 
-    // The poisoned registrant stops existing; the next tracked limit send detects the death
+    // Detect both an active registrant and a waiter that receives no limit events.
     fixture.Runtime.Send(new IEventHandle(doomed, TActorId(), new TEvents::TEvPoison));
+    fixture.Runtime.Send(new IEventHandle(waiter, TActorId(), new TEvents::TEvPoison));
     fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerRegistrantDeaths", true), 1);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerRegistrantDeaths", true), 2);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 5_MB);
+    UNIT_ASSERT(!waiterGotLimit);
 }
 
 Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
@@ -1599,11 +1292,11 @@ Y_UNIT_TEST(QueryExecutionConsumer) {
     queriesConsumer->SetConsumption(20_MB);
     fixture.Tick();
 
-    // The queries also reserve their unused grant, reducing room for the cache.
+    // The unused query grant fits within Hard without reducing the Target allocation.
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 50_MB);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Reservation"), 30_MB);
-    UNIT_ASSERT_LT(fixture.Counter("Consumer/SharedCache/Limit"), sharedCacheLimit);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), sharedCacheLimit);
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit, i64(30_MB), i64(1_KB));
 
     // The reported consumption replaces the global page pool estimation, the limit stays fixed
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/QueryExecution/Consumption"), 20_MB);

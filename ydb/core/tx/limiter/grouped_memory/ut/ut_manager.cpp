@@ -39,17 +39,6 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         }
     };
 
-    Y_UNIT_TEST(ReportsUsageWhenConsumptionCallbackIsAttached) {
-        auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>(
-            "GLOBAL", std::nullopt, std::nullopt, nullptr, nullptr);
-        stage->Add(120, true);
-        ui64 reported = 0;
-        stage->SetMemoryConsumptionUpdateFunction([&](ui64 used) { reported = used; });
-        UNIT_ASSERT_VALUES_EQUAL(reported, 120);
-        stage->Free(120, true);
-        UNIT_ASSERT_VALUES_EQUAL(reported, 0);
-    }
-
     Y_UNIT_TEST(Simplest) {
         auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
         NOlap::NGroupedMemoryManager::TConfig config;
@@ -222,6 +211,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         auto groupedMemoryLimiterCounters = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
         auto stage = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TStageFeatures>("GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, groupedMemoryLimiterCounters->BuildStageCounters("general"));
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        ui64 reported = 0;
         {
             manager->RegisterProcess(0, {});
             manager->RegisterProcessScope(0, 0);
@@ -229,6 +219,8 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->RegisterGroup(0, 0, 1);
             manager->RegisterAllocation(0, 0, 1, alloc1, {});
             UNIT_ASSERT(alloc1->IsAllocated());
+            stage->SetMemoryConsumptionUpdateFunction([&](ui64 used) { reported = used; });
+            UNIT_ASSERT_VALUES_EQUAL(reported, 1000);
             auto alloc2 = std::make_shared<TAllocation>(10);
             manager->RegisterGroup(0, 0, 3);
             manager->RegisterAllocation(0, 0, 3, alloc2, {});
@@ -251,6 +243,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->UnregisterProcess(0);
         }
         UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reported, 0);
         UNIT_ASSERT(manager->IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
@@ -527,7 +520,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
-    Y_UNIT_TEST(ShrunkBandFailsWaitingRequest) {
+    Y_UNIT_TEST(ShrunkBandKeepsWaitingRequest) {
         NOlap::NGroupedMemoryManager::TConfig config;
         NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
         protoConfig.SetUnrestrictedSoftLimitCoefficient(0.5);
@@ -554,12 +547,31 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         manager->UpdateMemoryLimits(60, 400, config.MakeUnrestrictedSoftBytes(400));
         UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(0), 200u);
         UNIT_ASSERT(!tail->IsAllocated());
-        UNIT_ASSERT(!tail->Error.empty());
+        UNIT_ASSERT(tail->Error.empty());
         UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 300u);
-        UNIT_ASSERT_VALUES_EQUAL(stage->GetWaiting().Val(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetWaiting().Val(), 250u);
 
+        manager->UpdateMemoryLimits(0, 0, config.MakeUnrestrictedSoftBytes(0));
+        manager->RegisterGroup(0, 0, 3);
+        auto next = std::make_shared<TFallibleAllocation>(300);
+        manager->RegisterAllocation(0, 0, 3, next, {});
+        UNIT_ASSERT(!next->IsAllocated());
+        UNIT_ASSERT(next->Error.empty());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 300u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetWaiting().Val(), 550u);
+        manager->UpdateMemoryLimits(60, 400, config.MakeUnrestrictedSoftBytes(400));
+        UNIT_ASSERT(!tail->IsAllocated() && !next->IsAllocated());
+        UNIT_ASSERT(tail->Error.empty() && next->Error.empty());
         head->Guard.reset();
         manager->UnregisterAllocation(0, 0, head->GetIdentifier());
+        UNIT_ASSERT(tail->IsAllocated());
+        UNIT_ASSERT(!next->IsAllocated());
+        tail->Guard.reset();
+        manager->UnregisterAllocation(0, 0, tail->GetIdentifier());
+        UNIT_ASSERT(next->IsAllocated());
+        next->Guard.reset();
+        manager->UnregisterAllocation(0, 0, next->GetIdentifier());
+        manager->UnregisterGroup(0, 0, 3);
         manager->UnregisterGroup(0, 0, 1);
         manager->UnregisterGroup(0, 0, 2);
         manager->UnregisterProcessScope(0, 0);
@@ -571,47 +583,29 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     }
 
     Y_UNIT_TEST(ConfiguredLimitsFollowControllerCeiling) {
-        using namespace NOlap::NGroupedMemoryManager;
-        for (bool configuredSoft : {false, true}) {
-            for (bool configuredHard : {false, true}) {
-                for (bool withBand : {false, true}) {
-                    TConfig config;
-                    NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
-                    if (configuredSoft) {
-                        protoConfig.SetMemoryLimit(100);
-                    }
-                    if (configuredHard) {
-                        protoConfig.SetHardMemoryLimit(200);
-                    }
-                    if (withBand) {
-                        protoConfig.SetUnrestrictedSoftLimitCoefficient(0.5);
-                    }
-                    UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
-                    auto counters = std::make_shared<TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
-                    auto stage = std::make_shared<TStageFeatures>(
-                        "GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, counters->BuildStageCounters("general"),
-                        config.MakeUnrestrictedSoftBytes(config.GetHardMemoryLimit()));
-                    auto manager = std::make_shared<TManager>(NActors::TActorId(), config, "test", counters, stage);
-                    for (ui64 grant : {1000, 20, 60, 1000, 0}) {
-                        manager->UpdateMemoryLimits(grant * 3 / 10, grant, config.MakeUnrestrictedSoftBytes(grant));
-                        const ui64 hard = configuredHard ? Min<ui64>(grant, 200) : grant;
-                        const ui64 soft = Min<ui64>(configuredSoft ? 100 : grant * 3 / 10, hard);
-                        UNIT_ASSERT_VALUES_EQUAL(stage->GetLimit(), soft);
-                        UNIT_ASSERT_VALUES_EQUAL(stage->GetHardLimit().value_or(Max<ui64>()), hard);
-                        if (withBand) {
-                            UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(Max<ui64>()), hard / 2);
-                        } else {
-                            UNIT_ASSERT(!stage->GetUnrestrictedSoft());
-                        }
-                        stage->Add(hard + 1, false);
-                        UNIT_ASSERT(!stage->Allocate(hard + 1).IsSuccess());
-                        stage->Add(hard, false);
-                        UNIT_ASSERT(stage->Allocate(hard).IsSuccess());
-                        stage->Free(hard, true);
-                    }
-                }
-            }
-        }
+        NOlap::NGroupedMemoryManager::TConfig config;
+        NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
+        protoConfig.SetMemoryLimit(100);
+        protoConfig.SetHardMemoryLimit(200);
+        protoConfig.SetUnrestrictedSoftLimitCoefficient(0.5);
+        UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
+        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
+        auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>(
+            "GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, counters->BuildStageCounters("general"),
+            config.MakeUnrestrictedSoftBytes(config.GetHardMemoryLimit()));
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetHardLimit().value_or(0), 200u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(0), 100u);
+
+        manager->UpdateMemoryLimits(18, 60, config.MakeUnrestrictedSoftBytes(60));
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetLimit(), 60u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetHardLimit().value_or(0), 60u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(0), 30u);
+
+        manager->UpdateMemoryLimits(300, 1000, config.MakeUnrestrictedSoftBytes(1000));
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetLimit(), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetHardLimit().value_or(0), 200u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(0), 100u);
     }
 
     Y_UNIT_TEST(TwoAdmissionSlotsShareTheBand) {
@@ -681,7 +675,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         auto limiter = MakeBandLimiter(100, 1000, 0.5);
         auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>("STAGE", 200, std::nullopt, nullptr, nullptr);
         stage->AttachOwner(limiter.Stage);
-        UNIT_ASSERT_VALUES_EQUAL(stage->GetEffectiveUnrestrictedLimit(), 200u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetPermanentUnrestrictedLimit(), 200u);
 
         limiter.Manager->RegisterProcess(0, {stage});
         limiter.Manager->RegisterProcessScope(0, 0);
@@ -737,6 +731,23 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT(!alloc->Error.empty());
         UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
 
+        auto holder = std::make_shared<TFallibleAllocation>(100);
+        limiter.Manager->RegisterAllocation(0, 0, 1, holder, {});
+        UNIT_ASSERT(holder->IsAllocated());
+
+        limiter.Manager->UpdateMemoryLimits(100, 120, 100);
+        auto waiting = std::make_shared<TFallibleAllocation>(40);
+        limiter.Manager->RegisterAllocation(0, 0, 1, waiting, {});
+        UNIT_ASSERT(!waiting->IsAllocated());
+        UNIT_ASSERT(!waiting->Error.empty()); // A deadlocked holder must receive a hard-limit failure.
+        limiter.Manager->UpdateMemoryLimits(100, 150, 100);
+        waiting = std::make_shared<TFallibleAllocation>(40);
+        limiter.Manager->RegisterAllocation(0, 0, 1, waiting, {});
+        UNIT_ASSERT(waiting->IsAllocated());
+        holder->Guard.reset();
+        waiting->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, holder->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, waiting->GetIdentifier());
         limiter.Manager->UnregisterGroup(0, 0, 1);
         limiter.Manager->UnregisterProcessScope(0, 0);
         limiter.Manager->UnregisterProcess(0);

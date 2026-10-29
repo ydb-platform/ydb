@@ -95,7 +95,7 @@ class TScanMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Scan";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
-    static constexpr ui64 HardLimitMultiplier = 1;
+    static constexpr ui64 HardLimitMultiplier = TGlobalLimits::ScanGroupedMemoryHardLimitMultiplier;
 };
 
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
@@ -113,7 +113,7 @@ class TDeduplicationMemoryLimiterPolicy {
 public:
     static const inline TString Name = "Dedu";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory;
-    static constexpr ui64 HardLimitMultiplier = 1;
+    static constexpr ui64 HardLimitMultiplier = TGlobalLimits::DeduplicationGroupedMemoryHardLimitMultiplier;
 };
 
 using TDeduplicationMemoryLimiterOperator = TServiceOperatorImpl<TDeduplicationMemoryLimiterPolicy>;

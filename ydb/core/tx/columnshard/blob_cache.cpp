@@ -221,7 +221,7 @@ public:
         MaxSizeBytes->Set((i64)MaxCacheDataSize);
 
         Send(NMemory::MakeMemoryControllerId(),
-            new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache, static_cast<ui64>(MaxCacheDataSize)));
+            new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache, MaxCacheDataSize, GetLimitCeiling()));
 
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();
@@ -440,14 +440,18 @@ private:
         UpdateConsumption();
     }
 
+    ui64 GetLimitCeiling() const noexcept {
+        if (UseMaxCacheDataSizeFromConfig || !MaxCacheDataSize.IsDefault()) {
+            return MaxCacheDataSize;
+        }
+        return std::numeric_limits<ui64>::max();
+    }
+
     ui64 GetMaxCacheDataSize() const {
         if (!MemoryControllerLimit) {
             return MaxCacheDataSize;
         }
-        if (UseMaxCacheDataSizeFromConfig || !MaxCacheDataSize.IsDefault()) {
-            return Min<ui64>(MaxCacheDataSize, *MemoryControllerLimit);
-        }
-        return *MemoryControllerLimit;
+        return Min(GetLimitCeiling(), *MemoryControllerLimit);
     }
 
     void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext& ctx) {
@@ -462,6 +466,7 @@ private:
             return;
         }
 
+        MemoryConsumer->SetLimitCeiling(GetLimitCeiling());
         MemoryConsumer->SetConsumption(CacheDataSize);
     }
 

@@ -68,6 +68,7 @@ Y_UNIT_TEST(SnapshotKeepsReportsAndMembershipFromOneRead) {
     second->SetReport({.Used = 200, .Demand = 200, .Reclaimable = 20});
     const auto snapshot = collection.GetSnapshot();
 
+    first->SetLimitCeiling(0);
     first->SetConsumption(1000);
     UNIT_ASSERT(collection.Unregister(Registrant(2)));
     collection.Register(Registrant(3))->SetConsumption(2000);
@@ -84,12 +85,14 @@ Y_UNIT_TEST(ReRegisterHandsOutFreshObject) {
     TConsumerCollection collection;
 
     auto stale = collection.Register(Registrant(7));
+    stale->SetLimitCeiling(17);
     stale->SetConsumption(1000);
     AssertReport(collection.GetSnapshot().GetTotal(), 1000, 1000, 0);
 
     // The comeback gets a new object, so the old pointer no longer reaches the sum
     auto fresh = collection.Register(Registrant(7));
     UNIT_ASSERT(stale.Get() != fresh.Get());
+    UNIT_ASSERT_VALUES_EQUAL(fresh->GetLimitCeiling(), std::numeric_limits<ui64>::max());
     UNIT_ASSERT_VALUES_EQUAL(collection.GetRegistrantsCount(), 1);
     AssertReport(collection.GetSnapshot().GetTotal(), 0, 0, 0);
 
@@ -105,22 +108,27 @@ Y_UNIT_TEST(DesiredLimitBelongsToRegistrationAndSnapshot) {
     UNIT_ASSERT(!collection.SetDesired(Registrant(3), 999));
     UNIT_ASSERT(collection.SetDesired(Registrant(1), 90));
     const auto snapshot = collection.GetSnapshot();
-    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 140);
+    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 190);
     auto shares = AsMap(snapshot.ComputeLimitShares(100));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 90);
-    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 50);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 100);
+    const auto reduced = AsMap(snapshot.ComputeLimitShares(100, 40));
+    UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(1)), 90);
+    UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(2)), 60);
 
     // A usage report neither supplies nor replaces a requested limit.
     first->SetReport({.Used = 10, .Demand = 1000, .Reclaimable = 0});
     UNIT_ASSERT_VALUES_EQUAL(AsMap(collection.GetSnapshot().ComputeLimitShares(100)).at(Registrant(1)), 90);
     UNIT_ASSERT(collection.SetDesired(Registrant(1), 0));
+    UNIT_ASSERT_VALUES_EQUAL(AsMap(collection.GetSnapshot().ComputeLimitShares(100)).at(Registrant(2)), 100);
+    AssertReport(collection.GetSnapshot().GetTotal(), 10, 1000, 0);
     UNIT_ASSERT(collection.SetDesired(Registrant(2), 30));
     UNIT_ASSERT_VALUES_EQUAL(collection.GetSnapshot().GetDesiredLimit(100), 30);
-    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 140);
+    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 190);
 
     collection.Register(Registrant(1)); // fresh registration restores its default
     shares = AsMap(collection.GetSnapshot().ComputeLimitShares(100));
-    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 50);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 100);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 30);
     UNIT_ASSERT(collection.Unregister(Registrant(2)));
     UNIT_ASSERT(!collection.SetDesired(Registrant(2), 999));
@@ -137,7 +145,7 @@ Y_UNIT_TEST(PlanningUsesRetainedLimitWithoutChangingTheRequest) {
             entry.PlannedLimit = 17;
         }
     }
-    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 67);
+    UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 117);
     // Planning cannot erase or clip the target passed to the grant allocator.
     UNIT_ASSERT_VALUES_EQUAL(AsMap(snapshot.ComputeLimitShares(100)).at(Registrant(1)), 101);
 }
@@ -169,10 +177,18 @@ Y_UNIT_TEST(LimitShareSingleRegistrantGetsWholeLimit) {
     shares = AsMap(collection.GetSnapshot().ComputeLimitShares(1000));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 1000);
 
-    // Demand above the limit still yields exactly the limit
+    // Neither usage nor demand can turn a configured ceiling into a larger grant.
     only->SetReport({.Used = 300, .Demand = 5000, .Reclaimable = 0});
-    shares = AsMap(collection.GetSnapshot().ComputeLimitShares(1000));
-    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 1000);
+    for (ui64 ceiling : {ui64(100), ui64(0), ui64(1000), std::numeric_limits<ui64>::max()}) {
+        only->SetLimitCeiling(ceiling);
+        const auto snapshot = collection.GetSnapshot();
+        shares = AsMap(snapshot.ComputeLimitShares(1000));
+        UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), Min<ui64>(1000, ceiling));
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(1000), Min<ui64>(1000, ceiling));
+        const auto reduced = AsMap(snapshot.ComputeLimitShares(1000, 200));
+        UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(1)), Min<ui64>(1000, ceiling) - Min<ui64>(200, ceiling));
+        AssertReport(snapshot.GetTotal(), 300, 5000, 0);
+    }
 }
 
 Y_UNIT_TEST(LimitShareSplitsByDemandPlusSurplus) {
@@ -205,6 +221,13 @@ Y_UNIT_TEST(LimitShareSplitsByDemandPlusSurplus) {
     shares = AsMap(collection.GetSnapshot().ComputeLimitShares(600));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 300);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 300);
+
+    c1->SetLimitCeiling(100);
+    const auto capped = collection.GetSnapshot();
+    UNIT_ASSERT_VALUES_EQUAL(capped.GetDesiredLimit(600), 400);
+    shares = AsMap(capped.ComputeLimitShares(600, 100));
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 75);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 225);
 }
 
 Y_UNIT_TEST(LimitShareColdRegistrantGrowsOutOfZero) {

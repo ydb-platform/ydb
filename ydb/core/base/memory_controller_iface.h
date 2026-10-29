@@ -2,6 +2,9 @@
 
 #include <ydb/core/base/events.h>
 
+#include <atomic>
+#include <limits>
+
 namespace NKikimr::NMemory {
 
 enum class EMemoryConsumerKind {
@@ -28,9 +31,21 @@ struct TConsumerReport {
 struct IMemoryConsumer : public TThrRefBase {
     virtual void SetReport(TConsumerReport report) = 0;
 
+    // Configured maximum for automatic grants; max ui64 means unbounded.
+    void SetLimitCeiling(ui64 value) {
+        LimitCeiling.store(value);
+    }
+
+    ui64 GetLimitCeiling() const {
+        return LimitCeiling.load();
+    }
+
     void SetConsumption(ui64 value) {
         SetReport({.Used = value, .Demand = value, .Reclaimable = 0});
     }
+
+private:
+    std::atomic<ui64> LimitCeiling{std::numeric_limits<ui64>::max()};
 };
 
 enum EEvMemory {
@@ -54,13 +69,16 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_MEMORY), "expected EvEnd <
 
 struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerRegister> {
     const EMemoryConsumerKind Kind;
-    // Startup cap in TEvConsumerLimit units; zero forbids growth until granted.
+    // Permission before the first grant, in TEvConsumerLimit units; zero forbids growth.
     // An unbounded startup cap is represented by the maximum ui64 value.
     const ui64 InitialLimitBytes;
+    const ui64 LimitCeiling;
 
-    TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0)
+    TEvConsumerRegister(EMemoryConsumerKind kind, ui64 initialLimitBytes = 0,
+        ui64 limitCeiling = std::numeric_limits<ui64>::max())
         : Kind(kind)
         , InitialLimitBytes(initialLimitBytes)
+        , LimitCeiling(limitCeiling)
     {}
 };
 
@@ -85,13 +103,13 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
     ui64 LimitBytes;
 
     TEvConsumerLimit(ui64 limitBytes)
-        : LimitBytes(limitBytes)
-    {
+        : LimitBytes(limitBytes) {
     }
 };
 
-// Replaces the configured share with a total limit in TEvConsumerLimit units; zero releases it.
-// Increases wait until the full target fits. Keep using the previous grant until TEvConsumerLimit.
+// Replaces the automatic share with a total limit in TEvConsumerLimit units.
+// Zero keeps this registration at zero; re-register to restore automatic allocation.
+// Increases wait for the full target. The caller must respect its configured ceiling.
 struct TEvConsumerDemand : public TEventLocal<TEvConsumerDemand, EvConsumerDemand> {
     const EMemoryConsumerKind Kind;
     const ui64 Desired;

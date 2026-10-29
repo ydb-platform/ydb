@@ -37,7 +37,8 @@ struct TConsumerCollectionSnapshot {
         TActorId Registrant;
         TConsumerReport Report;
         std::optional<ui64> Desired;
-        ui64 PlannedLimit = 0; // explicit target admitted by MC, or the retained grant while waiting
+        std::optional<ui64> PlannedLimit; // explicit target admitted by MC, or the retained grant while waiting
+        ui64 LimitCeiling = std::numeric_limits<ui64>::max();
     };
 
     // Reports and membership stay fixed; only PlannedLimit changes during the round.
@@ -49,12 +50,14 @@ struct TConsumerCollectionSnapshot {
 
     // Explicit Desired replaces the default share based on reported demand.
     ui64 ComputeLimitShare(const TEntry& entry, ui64 limitBytes) const;
-    TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
+    TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes, ui64 limitReduction = 0) const;
     ui64 GetDesiredLimit(ui64 defaultLimitBytes) const;
 
 private:
     friend class TConsumerCollection;
     TConsumerReport Total;
+    size_t AutomaticRegistrantCount = 0;
+    ui64 AutomaticDemand = 0;
 };
 
 // Per-kind set of registrants owned by the memory controller; every method runs on its thread.

@@ -48,10 +48,10 @@ public:
     bool IsAllocatable(const ui64 volume, const ui64 additional) const;
     bool IsAllocatableUnrestricted(const ui64 volume, const ui64 additional) const;
     // false: the volume exceeds a limit on the chain even at zero usage, so waiting cannot help.
-    // nullopt: the root stage has no band yet, so the answer is not known.
+    // nullopt: the root has no configured band; a future grant may admit the request.
     std::optional<bool> CanEverFitUnrestricted(const ui64 volume) const;
-    // Smallest unrestricted limit on the chain. Used for error messages.
-    ui64 GetEffectiveUnrestrictedLimit() const;
+    // Permanent configured bound on the chain, independent of controller grants.
+    ui64 GetPermanentUnrestrictedLimit() const;
     // A waiting request was rejected without going through Allocate.
     void OnCannotAllocate() {
         if (Counters) {

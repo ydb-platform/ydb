@@ -34,7 +34,7 @@ void TMemoryLimiterActor::Bootstrap() {
         const ui64 totalHardLimit = *hardLimit * Config.GetCountBuckets();
         initialLimitBytes = totalHardLimit / HardLimitMultiplier + (totalHardLimit % HardLimitMultiplier != 0);
     }
-    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind, initialLimitBytes));
+    Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(ConsumerKind, initialLimitBytes, initialLimitBytes));
     Become(&TThis::StateWait);
 }
 

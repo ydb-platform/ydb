@@ -13,7 +13,9 @@ public:
     static constexpr inline ui64 DefaultReadSequentiallyBufferSize = ((ui64)8) << 20;
 
     static constexpr double GroupedMemoryLimiterSoftLimitCoefficient = 0.3;
+    static constexpr ui64 ScanGroupedMemoryHardLimitMultiplier = 1;
     static constexpr ui64 CompGroupedMemoryHardLimitMultiplier = 4;
+    static constexpr ui64 DeduplicationGroupedMemoryHardLimitMultiplier = 1;
 
     static constexpr ui64 AveragePortionSizeLimit = 2 << 10;
 };

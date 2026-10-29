@@ -166,15 +166,22 @@ std::optional<bool> TStageFeatures::CanEverFitUnrestricted(const ui64 volume) co
         }
         return Owner->CanEverFitUnrestricted(volume);
     }
-    if (!UnrestrictedSoft) {
+    if (ConfiguredHardLimit && volume > *ConfiguredHardLimit) {
+        return false;
+    }
+    if (!ConfiguredUnrestrictedSoft) {
         return std::nullopt;
     }
-    return volume <= GetUnrestrictedLimit();
+    return volume <= GetPermanentUnrestrictedLimit();
 }
 
-ui64 TStageFeatures::GetEffectiveUnrestrictedLimit() const {
-    const ui64 own = GetUnrestrictedLimit();
-    return Owner ? std::min(own, Owner->GetEffectiveUnrestrictedLimit()) : own;
+ui64 TStageFeatures::GetPermanentUnrestrictedLimit() const {
+    if (Owner) {
+        return std::min(GetUnrestrictedLimit(), Owner->GetPermanentUnrestrictedLimit());
+    }
+    const ui64 hard = ConfiguredHardLimit.value_or(Max<ui64>());
+    return ConfiguredUnrestrictedSoft
+        ? std::min(hard, std::max(*ConfiguredUnrestrictedSoft, ConfiguredLimit.value_or(hard))) : hard;
 }
 
 void TStageFeatures::Add(const ui64 volume, const bool allocated) {

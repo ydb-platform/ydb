@@ -61,10 +61,6 @@ ui64 SafeDiff(ui64 a, ui64 b) {
     return a - Min(a, b);
 }
 
-ui64 SafeSum(ui64 a, ui64 b) {
-    return a + Min(b, std::numeric_limits<ui64>::max() - a);
-}
-
 ui64 GetMemoryMapsCountOrZero() {
     try {
         return GetMemoryMapsCount();
@@ -124,7 +120,7 @@ struct TConsumerState {
     const ui64 Reclaimable;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
-    bool CanZeroLimit = false;
+    bool ReduceForSoftPressure = false;
 
     TConsumerState(const TMemoryConsumer& consumer)
         : Kind(consumer.Kind)
@@ -198,13 +194,14 @@ enum class ELimitDelivery {
 struct TConsumerTraits {
     EMemoryConsumerKind Kind;
     bool ElasticLimit; // false: reserve the fixed limit as well as observed usage
-    bool CanZeroLimit; // soft pressure may cut below Min; Hard always bounds every grant
+    bool ReduceForSoftPressure; // soft pressure may cut below Min; Hard always bounds every grant
     TLimitBytesGetter GetMinBytes;
     TLimitBytesGetter GetMaxBytes;
     ELimitDelivery LimitDelivery;
     TStatsWriter WriteStats;
     bool StatsSummed; // several kinds add up into the same fields
     bool StatsWithLimit; // the kind writes the limit field
+    ui64 LimitMultiplier = 1;
 };
 
 // One row per EMemoryConsumerKind, in the enum order
@@ -212,7 +209,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::SharedCache,
         .ElasticLimit = true,
-        .CanZeroLimit = true,
+        .ReduceForSoftPressure = true,
         .GetMinBytes = &GetSharedCacheMinBytes,
         .GetMaxBytes = &GetSharedCacheMaxBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -223,7 +220,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::MemTable,
         .ElasticLimit = true,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetMemTableMinBytes,
         .GetMaxBytes = &GetMemTableMaxBytes,
         .LimitDelivery = ELimitDelivery::MemTableCompaction,
@@ -234,29 +231,31 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesScanGroupedMemory,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesScanGroupedMemoryLimitBytes,
         .GetMaxBytes = &GetColumnTablesScanGroupedMemoryLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
         .WriteStats = &WriteQueryExecutionStats,
         .StatsSummed = true,
         .StatsWithLimit = false,
+        .LimitMultiplier = NOlap::TGlobalLimits::ScanGroupedMemoryHardLimitMultiplier,
     },
     {
         .Kind = EMemoryConsumerKind::ColumnTablesCompGroupedMemory,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesCompGroupedMemoryLimitBytes,
         .GetMaxBytes = &GetColumnTablesCompGroupedMemoryLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
         .WriteStats = &WriteCompactionStats,
         .StatsSummed = false,
         .StatsWithLimit = true,
+        .LimitMultiplier = NOlap::TGlobalLimits::CompGroupedMemoryHardLimitMultiplier,
     },
     {
         .Kind = EMemoryConsumerKind::ColumnTablesBlobCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesBlobCacheLimitBytes,
         .GetMaxBytes = &GetColumnTablesBlobCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -267,7 +266,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesDataAccessorCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesDataAccessorCacheLimitBytes,
         .GetMaxBytes = &GetColumnTablesDataAccessorCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -278,7 +277,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesColumnDataCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesColumnDataCacheLimitBytes,
         .GetMaxBytes = &GetColumnTablesColumnDataCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -289,18 +288,19 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesDeduplicationGroupedMemoryLimitBytes,
         .GetMaxBytes = &GetColumnTablesDeduplicationGroupedMemoryLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
         .WriteStats = &WriteQueryExecutionStats,
         .StatsSummed = true,
         .StatsWithLimit = false,
+        .LimitMultiplier = NOlap::TGlobalLimits::DeduplicationGroupedMemoryHardLimitMultiplier,
     },
     {
         .Kind = EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetPortionsMetaDataCacheLimitBytes,
         .GetMaxBytes = &GetPortionsMetaDataCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::PortionsCacheSetter,
@@ -312,7 +312,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         // The compute scheduler: reports the memory of the queries and limits it by the given limit
         .Kind = EMemoryConsumerKind::QueryExecution,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetQueryExecutionLimitBytes,
         .GetMaxBytes = &GetQueryExecutionLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -341,18 +341,15 @@ const TConsumerTraits& GetConsumerTraits(EMemoryConsumerKind kind) {
 }
 
 ui64 GetLimitMultiplier(EMemoryConsumerKind kind) {
-    return kind == EMemoryConsumerKind::ColumnTablesCompGroupedMemory
-        ? NOlap::TGlobalLimits::CompGroupedMemoryHardLimitMultiplier : 1;
+    return GetConsumerTraits(kind).LimitMultiplier;
 }
 
 ui64 GetLimitReservation(EMemoryConsumerKind kind, ui64 limitBytes) {
-    const ui64 multiplier = GetLimitMultiplier(kind);
-    const ui64 max = std::numeric_limits<ui64>::max();
-    return limitBytes > max / multiplier ? max : limitBytes * multiplier;
+    return SaturatingMultiply(limitBytes, GetLimitMultiplier(kind));
 }
 
 class TMemoryController : public TActorBootstrapped<TMemoryController> {
-    using ETargetSource = TMemoryLimitBudget::ETargetSource;
+    using ETargetSource = TMemoryGrantLedger::ETargetSource;
     using TConsumerSnapshots = THashMap<EMemoryConsumerKind, TConsumerCollectionSnapshot>;
 
 public:
@@ -375,6 +372,10 @@ public:
         , Counters(counters)
     {
         Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TColumnTablesPortionsMetaDataCacheMemoryConsumer>());
+        // These controls have no controller-issued cap before the first allocation.
+        for (const auto& [kind, consumer] : Consumers) {
+            GrantLedger.Register({kind, {}}, std::numeric_limits<ui64>::max(), GetLimitMultiplier(kind));
+        }
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -448,12 +449,12 @@ private:
         ui64 consumersConsumption = 0;
         for (const auto& consumer : Consumers) {
             consumers.push_back(BuildConsumerState(*consumer.second, hardLimitBytes));
-            consumersConsumption = SafeSum(consumersConsumption, consumers.back().Consumption);
+            consumersConsumption = SaturatingAdd(consumersConsumption, consumers.back().Consumption);
         }
         for (const auto& [kind, collection] : Collections) {
             snapshots[kind] = collection.GetSnapshot();
             consumers.push_back(BuildConsumerState(kind, snapshots[kind].GetTotal(), hardLimitBytes));
-            consumersConsumption = SafeSum(consumersConsumption, consumers.back().Consumption);
+            consumersConsumption = SaturatingAdd(consumersConsumption, consumers.back().Consumption);
         }
 
         // allocatedMemory = otherConsumption + consumersConsumption
@@ -463,27 +464,26 @@ private:
         if (hasMemTotalHardLimit && processMemoryInfo.AnonRss.has_value()
                 && processMemoryInfo.MemTotal.has_value() && processMemoryInfo.MemAvailable.has_value()) {
             // externalConsumption + AnonRss + MemAvailable = MemTotal
-            externalConsumption = SafeDiff(SafeDiff(processMemoryInfo.MemTotal.value(),
-                processMemoryInfo.AnonRss.value()), processMemoryInfo.MemAvailable.value());
+            externalConsumption = SafeDiff(processMemoryInfo.MemTotal.value(),
+                SaturatingAdd(processMemoryInfo.AnonRss.value(), processMemoryInfo.MemAvailable.value()));
         }
 
         // targetConsumersConsumption + otherConsumption + externalConsumption = targetUtilizationBytes
-        ui64 targetConsumersConsumption = SafeDiff(SafeDiff(targetUtilizationBytes, otherConsumption), externalConsumption);
-        const ui64 available = SafeDiff(SafeDiff(hardLimitBytes, otherConsumption), externalConsumption);
+        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, SaturatingAdd(otherConsumption, externalConsumption));
+        const ui64 available = SafeDiff(hardLimitBytes, SaturatingAdd(otherConsumption, externalConsumption));
 
         PlanConsumerDemands(consumers, snapshots, available);
 
-        // want to find maximum possible coefficient in range [0..1] so that
-        // Sum(consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes)) <= targetConsumersConsumption
-        auto coefficient = BinarySearchCoefficient(consumers, snapshots, targetConsumersConsumption);
+        // Grow elastic targets within both utilization and reserved Hard capacity.
+        auto coefficient = BinarySearchCoefficient(consumers, snapshots, targetConsumersConsumption, available);
 
         ui64 resultingConsumersConsumption = 0;
         ui64 requiredConsumersBudget = 0;
         for (const auto& consumer : consumers) {
             const ui64 requiredBudget = GetRequiredBudget(consumer, coefficient, snapshots);
-            requiredConsumersBudget = SafeSum(requiredConsumersBudget, requiredBudget);
+            requiredConsumersBudget = SaturatingAdd(requiredConsumersBudget, requiredBudget);
             // Idle fixed grants reserve Hard capacity without causing Soft pressure.
-            resultingConsumersConsumption = SafeSum(resultingConsumersConsumption,
+            resultingConsumersConsumption = SaturatingAdd(resultingConsumersConsumption,
                 GetConsumerTraits(consumer.Kind).ElasticLimit ? requiredBudget : consumer.Consumption);
         }
 
@@ -541,17 +541,14 @@ private:
         if (hasMemTotalHardLimit) memoryStats.SetExternalConsumption(externalConsumption);
 
         const ui64 softLimitExcess = SafeDiff(
-            SafeSum(SafeSum(resultingConsumersConsumption, otherConsumption), externalConsumption), softLimitBytes);
-        const ui64 hardLimitExcess = SafeDiff(requiredConsumersBudget, available);
-        // Trim cache first for either pressure or reserved capacity. The ledger
-        // still bounds every grant if cache reductions cannot cover the excess.
-        const auto limits = ApplyConsumerLimits(consumers, snapshots, coefficient,
-            Max(softLimitExcess, hardLimitExcess), available);
+            SaturatingAdd(SaturatingAdd(resultingConsumersConsumption, otherConsumption), externalConsumption), softLimitBytes);
+        // Soft pressure trims cache first. Hard shortfalls scale all automatic grants.
+        const auto limits = ApplyConsumerLimits(consumers, snapshots, coefficient, softLimitExcess, available);
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
             const ui64 limitBytes = limits.at(consumer.Kind);
-            consumersLimitBytes = SafeSum(consumersLimitBytes, limitBytes);
+            consumersLimitBytes = SaturatingAdd(consumersLimitBytes, limitBytes);
 
             YDB_LOG_INFO_CTX(ctx, "Consumer state",
                 {"consumerKind", consumer.Kind},
@@ -565,7 +562,7 @@ private:
             counters.Consumption->Set(consumer.Consumption);
             counters.Demand->Set(consumer.Demand);
             counters.Reclaimable->Set(consumer.Reclaimable);
-            counters.Reservation->Set(LimitBudget.GetUnusedReservation(consumer.Kind));
+            counters.Reservation->Set(GrantLedger.GetUnusedReservation(consumer.Kind));
             counters.LimitBytes->Set(limitBytes);
             counters.LimitMinBytes->Set(consumer.MinBytes);
             counters.LimitMaxBytes->Set(consumer.MaxBytes);
@@ -583,21 +580,23 @@ private:
     }
 
     void PlanConsumerDemands(const TVector<TConsumerState>& consumers, TConsumerSnapshots& snapshots, ui64 available) {
-        TVector<TMemoryLimitBudget::TRequest> requests;
+        TVector<TMemoryGrantLedger::TRequest> requests;
         TVector<TConsumerCollectionSnapshot::TEntry*> entries;
         // Use the same order as ApplyConsumerLimits, across all consumer kinds.
         for (const auto& consumer : consumers) {
             if (auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
                 for (auto& entry : snapshot->Entries) {
                     if (entry.Desired) {
-                        requests.push_back({{consumer.Kind, entry.Registrant}, entry.Report.Used,
-                            *entry.Desired, GetLimitMultiplier(consumer.Kind), ETargetSource::ConsumerRequest});
+                        requests.push_back(TMemoryGrantLedger::TRequest{
+                            .Key = {consumer.Kind, entry.Registrant}, .Used = entry.Report.Used,
+                            .TargetLimit = *entry.Desired, .Multiplier = GetLimitMultiplier(consumer.Kind),
+                            .Source = ETargetSource::ConsumerRequest});
                         entries.push_back(&entry);
                     }
                 }
             }
         }
-        const auto planned = LimitBudget.PlanExplicitLimits(requests, available);
+        const auto planned = GrantLedger.PlanExplicitLimits(requests, available);
         for (const auto& [index, entry] : Enumerate(entries)) {
             entry->PlannedLimit = planned[index];
         }
@@ -605,29 +604,31 @@ private:
 
     THashMap<EMemoryConsumerKind, ui64> ApplyConsumerLimits(
         const TVector<TConsumerState>& consumers, const TConsumerSnapshots& snapshots,
-        double coefficient, ui64 cacheLimitReduction, ui64 available)
+        double coefficient, ui64 softLimitExcess, ui64 available)
     {
-        TVector<TMemoryLimitBudget::TRequest> requests;
+        TVector<TMemoryGrantLedger::TRequest> requests;
         for (const auto& consumer : consumers) {
-            ui64 limitBytes = consumer.GetLimit(coefficient);
-            if (consumer.CanZeroLimit) {
-                limitBytes = SafeDiff(limitBytes, cacheLimitReduction);
-            }
+            const ui64 limitBytes = consumer.GetLimit(coefficient);
+            const ui64 reduction = consumer.ReduceForSoftPressure ? softLimitExcess : 0;
             if (const auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
-                for (const auto& entry : snapshot->Entries) {
+                const auto shares = snapshot->ComputeLimitShares(limitBytes, reduction);
+                for (const auto& [index, entry] : Enumerate(snapshot->Entries)) {
                     const auto source = entry.Desired ? ETargetSource::ConsumerRequest : ETargetSource::MemoryController;
-                    requests.push_back({{consumer.Kind, entry.Registrant}, entry.Report.Used,
-                        snapshot->ComputeLimitShare(entry, limitBytes), GetLimitMultiplier(consumer.Kind), source});
+                    requests.push_back(TMemoryGrantLedger::TRequest{
+                        .Key = {consumer.Kind, entry.Registrant}, .Used = entry.Report.Used,
+                        .TargetLimit = shares[index].Bytes, .Multiplier = GetLimitMultiplier(consumer.Kind), .Source = source});
                 }
             } else {
-                requests.push_back({{consumer.Kind, {}}, consumer.Consumption, limitBytes, GetLimitMultiplier(consumer.Kind)});
+                requests.push_back(TMemoryGrantLedger::TRequest{
+                    .Key = {consumer.Kind, {}}, .Used = consumer.Consumption,
+                    .TargetLimit = SafeDiff(limitBytes, reduction), .Multiplier = GetLimitMultiplier(consumer.Kind)});
             }
         }
-        const auto grants = LimitBudget.Allocate(requests, available);
+        const auto grants = GrantLedger.Allocate(requests, available);
         THashMap<EMemoryConsumerKind, ui64> limits;
         for (const auto& grant : grants) {
             const auto& [kind, registrant] = grant.Key;
-            limits[kind] = SafeSum(limits[kind], grant.Bytes);
+            limits[kind] = SaturatingAdd(limits[kind], grant.Bytes);
             // MC-owned controls keep enforcing the retained cap while growth waits.
             if (!grant.ShouldSend && GetConsumerTraits(kind).LimitDelivery == ELimitDelivery::LimitShares) {
                 if (registrant != TActorId{}) {
@@ -649,7 +650,7 @@ private:
                     break;
             }
         }
-        const auto committed = LimitBudget.GetCommitted();
+        const auto committed = GrantLedger.GetCommitted();
         Counters->GetCounter("Stats/ConsumersCommitted")->Set(committed);
         Counters->GetCounter("Stats/ConsumersBudgetDeficit")->Set(SafeDiff(committed, available));
 
@@ -661,7 +662,8 @@ private:
         // A kind the controller feeds itself has no registrant and must not be taken over
         Y_ABORT_UNLESS(!Consumers.contains(msg->Kind), "Consumer kind is owned by the memory controller");
         TIntrusivePtr<IMemoryConsumer> consumer = Collections[msg->Kind].Register(ev->Sender);
-        LimitBudget.Register({msg->Kind, ev->Sender}, msg->InitialLimitBytes, GetLimitMultiplier(msg->Kind));
+        consumer->SetLimitCeiling(msg->LimitCeiling);
+        GrantLedger.Register({msg->Kind, ev->Sender}, msg->InitialLimitBytes, GetLimitMultiplier(msg->Kind));
         YDB_LOG_INFO_CTX(ctx, "Consumer registered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
@@ -677,7 +679,7 @@ private:
                 {"sender", ev->Sender});
             return;
         }
-        LimitBudget.Forget({msg->Kind, ev->Sender});
+        GrantLedger.Forget({msg->Kind, ev->Sender});
         if (it->second.IsEmpty()) {
             Collections.erase(it);
             // Nothing updates the gauges of a removed kind any more, so zero them instead of leaving the last values
@@ -690,8 +692,8 @@ private:
 
     void Handle(TEvConsumerDemand::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
-        auto it = Collections.find(msg->Kind);
-        if (it == Collections.end() || !it->second.SetDesired(ev->Sender, msg->Desired)) {
+        auto* collection = Collections.FindPtr(msg->Kind);
+        if (!collection || !collection->SetDesired(ev->Sender, msg->Desired)) {
             YDB_LOG_WARN_CTX(ctx, "Consumer demand ignored for an unknown registration",
                 {"msgKind", msg->Kind}, {"sender", ev->Sender});
             return;
@@ -727,7 +729,7 @@ private:
     void ForgetDeadRegistrant(TActorId registrant, const TActorContext& ctx) {
         for (auto it = Collections.begin(); it != Collections.end();) {
             if (it->second.Unregister(registrant)) {
-                LimitBudget.Forget({it->first, registrant});
+                GrantLedger.Forget({it->first, registrant});
                 YDB_LOG_INFO_CTX(ctx, "Consumer registrant died",
                     {"msgKind", it->first},
                     {"registrant", registrant});
@@ -776,7 +778,7 @@ private:
     }
 
     double BinarySearchCoefficient(const TVector<TConsumerState>& consumers,
-        const TConsumerSnapshots& snapshots, ui64 availableMemory)
+        const TConsumerSnapshots& snapshots, ui64 targetMemory, ui64 hardBudget)
     {
         static const ui32 BinarySearchIterations = 20;
 
@@ -784,15 +786,18 @@ private:
         for (ui32 iteration = 0; iteration < BinarySearchIterations; iteration++) {
             double middle = (left + right) / 2;
 
-            ui64 remaining = availableMemory;
+            ui64 targetRemaining = targetMemory;
+            ui64 hardRemaining = hardBudget;
             bool fits = true;
             for (const auto& consumer : consumers) {
-                const ui64 reservation = GetTargetConsumption(consumer, middle, snapshots);
-                if (reservation > remaining) {
+                const ui64 target = GetTargetConsumption(consumer, middle, snapshots);
+                const ui64 required = GetRequiredBudget(consumer, middle, snapshots);
+                if (target > targetRemaining || required > hardRemaining) {
                     fits = false;
                     break;
                 }
-                remaining -= reservation;
+                targetRemaining -= target;
+                hardRemaining -= required;
             }
 
             if (!fits) {
@@ -826,9 +831,9 @@ private:
 
         ui64 total = 0;
         for (const auto& entry : snapshot->Entries) {
-            const ui64 bytes = entry.Desired ? entry.PlannedLimit : snapshot->ComputeLimitShare(entry, defaultLimit);
+            const ui64 bytes = entry.PlannedLimit.value_or(snapshot->ComputeLimitShare(entry, defaultLimit));
             // A sibling's unused grant must not hide this registrant's unreleased usage.
-            total = SafeSum(total, Max(entry.Report.Used, GetLimitReservation(consumer.Kind, bytes)));
+            total = SaturatingAdd(total, Max(entry.Report.Used, GetLimitReservation(consumer.Kind, bytes)));
         }
         return total;
     }
@@ -838,7 +843,7 @@ private:
     {
         const ui64 reservation = GetLimitReservation(consumer.Kind, GetDesiredLimit(consumer, coefficient, snapshots));
         return GetConsumerTraits(consumer.Kind).ElasticLimit
-            ? reservation : Max(consumer.Consumption, reservation);
+            ? reservation : consumer.Consumption;
     }
 
     void ApplyMemTableLimit(ui64 limitBytes) const {
@@ -950,7 +955,7 @@ private:
         const auto& traits = GetConsumerTraits(result.Kind);
         result.MinBytes = traits.GetMinBytes(Config, hardLimitBytes);
         result.MaxBytes = traits.GetMaxBytes(Config, hardLimitBytes);
-        result.CanZeroLimit = traits.CanZeroLimit;
+        result.ReduceForSoftPressure = traits.ReduceForSoftPressure;
 
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;
@@ -963,7 +968,7 @@ private:
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
     // Kinds fed by event-registered actors; each holds one entry per registrant, keyed by its TActorId
     TMap<EMemoryConsumerKind, TConsumerCollection> Collections;
-    TMemoryLimitBudget LimitBudget;
+    TMemoryGrantLedger GrantLedger;
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;

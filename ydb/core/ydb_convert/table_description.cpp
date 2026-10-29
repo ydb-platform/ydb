@@ -2424,7 +2424,9 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 );
             }
 
-            *vectorIndex->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+            *vectorIndex->mutable_vector_settings() = tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                ? tableIndex.GetHnswIndexDescription().GetSettings()
+                : tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
         }
@@ -2673,7 +2675,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
         case Ydb::Table::TableIndex::kGlobalHnswIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw);
-            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_hnsw_index().vector_settings();
+            *indexDesc->MutableHnswIndexDescription()->MutableSettings() = index.global_hnsw_index().vector_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:

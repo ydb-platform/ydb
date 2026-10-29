@@ -427,20 +427,6 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
-
-    // Set only on the ESchemeOpFinalizeBuildIndexImplTable alter of a vector
-    // index posting table, so the shard hosting it can build an in-memory HNSW
-    // index for accelerated top-K search. The embedding column keeps its
-    // original base table name, so it has to be named explicitly rather than
-    // derived from a well-known constant.
-    optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 56;
-    optional string VectorIndexEmbeddingColumn = 57;
-    optional uint32 VectorIndexEmbeddingColumnId = 58;
-    optional NKikimrProto.TPathID VectorIndexTablePathId = 59;
-    optional string VectorIndexTablePath = 60;
-    optional NKikimrProto.TPathID VectorIndexPathId = 61;
-    optional string VectorIndexPath = 62;
-    optional bool VectorIndexHnsw = 63;
 }
 
 message TCompressionOptions {
@@ -1367,6 +1353,11 @@ message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
+message THnswIndexDescription {
+    // Includes the routing tree settings as well as the local graph parameters.
+    optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
 message TFulltextIndexDescription {
     optional Ydb.Table.FulltextIndexSettings Settings = 1;
     // When true, the fulltext index uses the __ydb_row_id Uint64 column of the main table as doc_id
@@ -1399,6 +1390,7 @@ message TIndexDescription {
         TFulltextIndexDescription FulltextIndexDescription = 12;
         TBloomFilter BloomFilterDescription = 13;
         TBloomNGrammFilter BloomNGrammFilterDescription = 14;
+        THnswIndexDescription HnswIndexDescription = 15;
     }
 }
 
@@ -1414,6 +1406,7 @@ message TIndexCreationConfig {
         TFulltextIndexDescription FulltextIndexDescription = 8;
         TBloomFilter BloomFilterDescription = 9;
         TBloomNGrammFilter BloomNGrammFilterDescription = 10;
+        THnswIndexDescription HnswIndexDescription = 11;
     }
 }
 
@@ -1436,6 +1429,7 @@ message TIndexAlteringConfig {
     oneof SpecializedIndexDescription {
         TBloomFilter BloomFilterDescription = 8;
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+        THnswIndexDescription HnswIndexDescription = 11;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
     repeated string DataColumnNames = 10;

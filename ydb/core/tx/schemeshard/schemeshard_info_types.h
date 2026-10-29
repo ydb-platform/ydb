@@ -3367,10 +3367,16 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                     Y_ENSURE(success, description);
                 }
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::THnswIndexDescription>()
                     .ParseFromString(description);
                 Y_ENSURE(success, description);
                 break;
@@ -3479,8 +3485,10 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+                alterData->SpecializedIndexDescription = config.GetHnswIndexDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -3553,6 +3561,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::THnswIndexDescription,
         NKikimrSchemeOp::TFulltextIndexDescription,
         NKikimrSchemeOp::TBloomFilter,
         NKikimrSchemeOp::TBloomNGrammFilter> SpecializedIndexDescription;

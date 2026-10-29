@@ -328,6 +328,8 @@ private:
         auto *cmd = request->Record.MutableSwitchBridgeClusterState();
         cmd->MutableNewClusterState()->CopyFrom(newClusterState);
 
+        // quorum_piles is deprecated and doesn't change the quorum of the update, but the names are still checked, as
+        // they were when the request was accepted with them
         for (const auto& name : GetProtoRequest()->quorum_piles()) {
             if (const auto it = nameToId.find(name); it != nameToId.end()) {
                 if (newClusterState.GetPerPileState(it->second.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
@@ -335,7 +337,6 @@ private:
                         NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
                 }
-                it->second.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::AddSpecificBridgePileIds);
             } else {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown pile name in quorum: " << name,
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());

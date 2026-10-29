@@ -400,7 +400,7 @@ def test_disconnect_primary_pile_promotes_replacement_in_same_request(monkeypatc
     ]
 
 
-def test_connect_pile_uses_live_primary_endpoint_for_both_quorums(monkeypatch):
+def test_connect_pile_uses_live_primary_endpoint(monkeypatch):
     captured = []
 
     def update_pile_states(updates, **kwargs):
@@ -417,20 +417,14 @@ def test_connect_pile_uses_live_primary_endpoint_for_both_quorums(monkeypatch):
         },
     )
 
-    assert len(captured) == 2
-    assert [call[1]['quorum_piles'] for call in captured] == [
-        ('pile-primary',),
-        ('pile-disconnected',),
-    ]
-    assert [call[1]['endpoints'] for call in captured] == [
-        ('primary-endpoint',),
-        ('primary-endpoint',),
-    ]
-    assert all(
-        call[0][0].pile_name == 'pile-disconnected'
-        and call[0][0].state == ydb_bridge_common.PileState.NOT_SYNCHRONIZED
-        for call in captured
-    )
+    # the update is committed by the quorum the new cluster state requires, so no quorum piles are passed
+    assert len(captured) == 1
+    updates, kwargs = captured[0]
+    assert 'quorum_piles' not in kwargs
+    assert kwargs['endpoints'] == ('primary-endpoint',)
+    assert len(updates) == 1
+    assert updates[0].pile_name == 'pile-disconnected'
+    assert updates[0].state == ydb_bridge_common.PileState.NOT_SYNCHRONIZED
 
 
 def test_fetch_node_endpoints_supports_tls_and_skips_missing_grpc(monkeypatch):

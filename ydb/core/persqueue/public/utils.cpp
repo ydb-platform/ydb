@@ -40,11 +40,18 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().HasMirrorFrom();
 }
 
-bool IsReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {
-    if (!config.GetWriteAndReadDisabled()) {
+bool IsWriteAndReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TAppData& appData) {
+    return config.GetWriteAndReadDisabled() || appData.FeatureFlags.GetDisableTopicWriteAndRead();
+}
+
+bool IsReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName, const TAppData& appData) {
+    const auto* consumer = GetConsumer(config, consumerName);
+    if (consumer && consumer->GetIsReadDisabled()) {
+        return true;
+    }
+    if (!IsWriteAndReadDisabled(config, appData)) {
         return false;
     }
-    const auto* consumer = GetConsumer(config, consumerName);
     return !consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
 }
 

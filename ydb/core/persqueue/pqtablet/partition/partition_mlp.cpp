@@ -78,7 +78,7 @@ void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHa
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
-    if (IsReadDisabled(Config, ev->Get()->GetConsumer())) {
+    if (IsReadDisabled(Config, ev->Get()->GetConsumer(), *AppData())) {
         Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Partition.OriginalPartitionId,
             Ydb::StatusIds::UNAVAILABLE, "Read from topic is disabled"), 0, ev->Cookie);
         return;
@@ -91,6 +91,11 @@ void TPartition::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
+    if (IsReadDisabled(Config, ev->Get()->GetConsumer(), *AppData())) {
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Partition.OriginalPartitionId,
+            Ydb::StatusIds::UNAVAILABLE, "Commit to topic is disabled"), 0, ev->Cookie);
+        return;
+    }
     LOG_D(
         "Handle TEvPQ::TEvMLPCommitRequest",
         {"ev", ev->Get()->Record.ShortDebugString()}

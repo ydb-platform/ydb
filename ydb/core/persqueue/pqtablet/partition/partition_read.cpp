@@ -874,7 +874,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
     // Cookie 0 is used for timestamp reads; internal reads also serve compaction.
-    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, read->ClientId)) {
+    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, read->ClientId, *AppData(ctx))) {
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::ERROR,
             "Read from topic is disabled", read->ReplyTo);
         return;
@@ -965,7 +965,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
     userInfo->ReadsInQuotaQueue--;
-    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, user)) {
+    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, user, *AppData(ctx))) {
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::ERROR,
             "Read from topic is disabled", read->ReplyTo);
         OnReadRequestFinished(read->Cookie, 0, 0, user, ctx);
@@ -1245,7 +1245,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
     }
 
-    if (info.Destination != 0 && !info.IsInternal && IsReadDisabled(Config, info.User)) {
+    if (info.Destination != 0 && !info.IsInternal && IsReadDisabled(Config, info.User, *AppData(ctx))) {
         ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::ERROR,
             "Read from topic is disabled", info.ReplyTo);
         OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);

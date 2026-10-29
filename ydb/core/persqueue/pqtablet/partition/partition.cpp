@@ -239,7 +239,7 @@ bool TPartition::IsTopicReplicationFinishing(const TString& consumer) const {
         }
     }
 
-    return consumerForTopicReplication && Config.GetWriteAndReadDisabled();
+    return consumerForTopicReplication && IsWriteAndReadDisabled(Config, *AppData());
 }
 
 bool TPartition::CanWrite() const {
@@ -4585,6 +4585,10 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     const TString& user = act.ClientId;
     RemoveUserAct(user);
     const auto& ctx = ActorContext();
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && IsReadDisabled(Config, user, *AppData(ctx))) {
+        ScheduleReplyError(act, NPersQueue::NErrorCode::ERROR, "Commit to topic is disabled");
+        return;
+    }
     if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
         switch (act.Type) {
         case TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE:

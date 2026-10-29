@@ -79,7 +79,7 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
     }
     replicationData.SetStartOffset(GetStartOffset());
     replicationData.SetEndOffset(GetEndOffset());
-    replicationData.SetSourceTopicIsClosedForReadWrites(Config.GetWriteAndReadDisabled());
+    replicationData.SetSourceTopicIsClosedForReadWrites(IsWriteAndReadDisabled(Config, *AppData(ctx)));
     const TString payload = replicationData.SerializeAsString();
     for (const auto& [consumer, info] : UsersInfoStorage->ViewAll()) {
         if (info.Type != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION

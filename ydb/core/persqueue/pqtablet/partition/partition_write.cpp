@@ -755,7 +755,7 @@ bool TPartition::ShouldUseDeduplicationQueue() const {
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Received TPartition::TEvWrite");
 
-    if (Config.GetWriteAndReadDisabled()) {
+    if (IsWriteAndReadDisabled(Config, *AppData(ctx))) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
             "Write to topic is disabled");
         return;

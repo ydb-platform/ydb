@@ -457,6 +457,8 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+        // When true, consumer reads and offset commits are disabled.
+        optional bool IsReadDisabled = 23 [default = false];
     }
 
     repeated TConsumer Consumers = 37;

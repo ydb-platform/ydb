@@ -221,6 +221,9 @@ public:
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
         Result->Record.MutableConsistencySettings()->CopyFrom(replication->GetConfig().GetConsistencySettings());
+        if (replication->GetConfig().HasAvailabilityPeriod()) {
+            Result->Record.MutableAvailabilityPeriod()->CopyFrom(replication->GetConfig().GetAvailabilityPeriod());
+        }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;

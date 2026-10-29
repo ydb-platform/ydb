@@ -6,12 +6,14 @@
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
+#include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/backup/proto/proto.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
@@ -78,6 +80,31 @@ bool BuildTopicScheme(
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
 
     return NYdb::NBackup::PrintProto(request, scheme);
+}
+
+bool BuildCoordinationNodeScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    TString& error)
+{
+    const auto& pathDesc = describeResult.GetPathDescription();
+    if (!pathDesc.HasKesus()) {
+        error = "Path description does not contain a description of Kesus";
+        return false;
+    }
+
+    Ydb::Coordination::DescribeNodeResult nodeDescription;
+    FillKesusDescription(nodeDescription, pathDesc.GetKesus(), pathDesc.GetSelf());
+
+    Ydb::Coordination::CreateNodeRequest request;
+    *request.mutable_config() = std::move(*nodeDescription.mutable_config());
+    request.mutable_config()->clear_path();
+
+    if (!NYdb::NBackup::PrintProto(request, scheme)) {
+        error = "Cannot serialize coordination node configuration";
+        return false;
+    }
+    return true;
 }
 
 bool BuildReplicationScheme(
@@ -219,6 +246,8 @@ bool BuildScheme(
             return BuildViewScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             return BuildTopicScheme(describeResult, scheme, error);
+        case NKikimrSchemeOp::EPathTypeKesus:
+            return BuildCoordinationNodeScheme(describeResult, scheme, error);
         case NKikimrSchemeOp::EPathTypeReplication:
             return BuildReplicationScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypeTransfer:

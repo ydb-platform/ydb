@@ -566,7 +566,7 @@ namespace NKikimr::NStorage {
             if (!found) {
                 throw TExError() << name << " From node not found";
             }
-            if (const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, oldConfig, *m)) {
+            if (const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, oldConfig, *m, true)) {
                 throw TExError() << error;
             }
         };

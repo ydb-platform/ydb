@@ -71,6 +71,20 @@
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
+### Выгрузка кластера
+
+С автоматическим созданием директории `backup_...` в текущей директории:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster dump
+```
+
+В заданную директорию:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster dump -o ~/backup_cluster
+```
+
 ### Выгрузка базы данных {#db}
 
 С автоматическим созданием директории `backup_...` в текущей директории:

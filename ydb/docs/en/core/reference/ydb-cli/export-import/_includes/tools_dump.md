@@ -71,6 +71,20 @@ The `tools dump` command dumps the schema objects to the client file system in t
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 
+### Exporting a cluster
+
+With automatic creation of the `backup_...` directory in the current directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster dump
+```
+
+To a specific directory:
+
+```bash
+{{ ydb-cli }} -e <endpoint> admin cluster dump -o ~/backup_cluster
+```
+
 ### Exporting a database {#db}
 
 To an automatically created `backup_...` directory in the current directory:

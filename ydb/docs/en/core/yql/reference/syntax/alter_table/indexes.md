@@ -58,7 +58,7 @@ You can also add a secondary index using the [table index](../../../../reference
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), only local indexes are supported via `ADD INDEX`: [bloom index](#local-bloom) and [min_max index](#local-min-max).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
 
 Features of local bloom indexes:
 
@@ -145,24 +145,13 @@ ALTER TABLE `/Root/Table`
   );
 ```
 
+# # Changing index parameters {#alter-index}
 
-min_max index:
-
-
-```yql
-ALTER TABLE `/Root/Table`
-  ADD INDEX idx_created_at LOCAL USING min_max
-  ON (created_at);
-```
-
-
-## Changing index parameters {#alter-index}
-
-Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
+Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные](yfmvar-0-yfmvarend#sync) или [асинхронные](yfmvar-1-yfmvarend#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
 
 {% note info %}
 
-Currently, setting partitioning parameters for secondary indexes when creating an index is not supported either in the [`ALTER TABLE ADD INDEX`](#add-index) statement or in the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statement.
+В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table/secondary_index.md).
 
 {% endnote %}
 

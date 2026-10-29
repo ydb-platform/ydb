@@ -9979,7 +9979,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         const TString tableName = inStore ? "/Root/tiering_store/tiering_tree" : "/Root/tiering_tree";
-        const auto checkTier = [&] {
+        const auto checkTier = [&](const std::optional<TString>& prefix) {
             const auto desc = session.DescribeTable(tableName).GetValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
             const auto ttl = desc.GetTableDescription().GetTtlSettings();
@@ -9987,23 +9987,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
             const auto& action = std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction());
             UNIT_ASSERT_VALUES_EQUAL(action.GetStorage(), "/Root/tier1");
-            UNIT_ASSERT_VALUES_EQUAL(action.GetObjectKeyPrefix().has_value(), enableTree);
-            if (enableTree) {
-                UNIT_ASSERT_VALUES_EQUAL(*action.GetObjectKeyPrefix(), "archive/data");
-            }
-        };
-        const auto rejectAlter = [&](const TString& suffix) {
-            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName << "` " << suffix)
-                .GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), suffix);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing tiering object key prefixes with ALTER is not supported");
-            checkTier();
+            UNIT_ASSERT(action.GetObjectKeyPrefix() == prefix);
         };
         const TString createBase = TStringBuilder() << "CREATE TABLE `" << tableName
             << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))"
             << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1, TTL = ";
         const auto create = session.ExecuteSchemeQuery(createBase
             + R"(Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts);)").GetValueSync();
+        std::optional<TString> currentPrefix;
         if (!enableTree) {
             UNIT_ASSERT_C(!create.IsSuccess(), create.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(create.GetIssues().ToString(), "Tree object keys are disabled");
@@ -10012,35 +10003,41 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_C(legacy.IsSuccess(), legacy.GetIssues().ToString());
         } else {
             UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+            currentPrefix = "archive/data";
         }
+        checkTier(currentPrefix);
 
-        checkTier();
-        for (auto&& prefix : {"another/path", ""}) {
-            rejectAlter(TStringBuilder() << "SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`"
-                << prefix << "` ON ts;");
+        const auto alterPrefix = [&](const std::optional<TString>& prefix) {
+            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName
+                << "` SET TTL Interval(\"P2D\") TO EXTERNAL DATA SOURCE `/Root/tier1`"
+                << (prefix ? ".`" + *prefix + "`" : "") << " ON ts;").GetValueSync();
+            if (prefix && !enableTree) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Tree object keys are disabled");
+            } else if (prefix && prefix->size() > 800) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must not exceed 800 bytes");
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                currentPrefix = prefix;
+            }
+            checkTier(currentPrefix);
+        };
+        alterPrefix(TString("another/path"));
+        alterPrefix(TString());
+        alterPrefix(std::nullopt);
+        alterPrefix(TString("archive/data"));
+        alterPrefix(TString(801, 'x'));
+
+        for (const TString& suffix : {TString(R"(SET TTL Interval("P1D") DELETE ON ts;)"), TString("RESET (TTL);")}) {
+            const auto result = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName << "` " << suffix)
+                .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-
-        if (enableTree) {
-            rejectAlter(R"(SET TTL Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1` ON ts;)");
-            rejectAlter(R"(SET TTL Interval("P1D") DELETE ON ts;)");
-            rejectAlter("RESET (TTL);");
-
-            const TString legacyName = tableName + "_legacy";
-            const auto legacy = session.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `" << legacyName
-                << "` (ts Timestamp NOT NULL, value String, PRIMARY KEY(ts))"
-                << " WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);").GetValueSync();
-            UNIT_ASSERT_C(legacy.IsSuccess(), legacy.GetIssues().ToString());
-            const auto alterLegacy = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << legacyName
-                << "` SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`archive/data` ON ts;").GetValueSync();
-            UNIT_ASSERT_C(!alterLegacy.IsSuccess(), alterLegacy.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(alterLegacy.GetIssues().ToString(), "Changing tiering object key prefixes with ALTER is not supported");
-        }
-
-        const auto alter = session.ExecuteSchemeQuery(TStringBuilder() << "ALTER TABLE `" << tableName
-            << "` SET TTL Interval(\"P2D\") TO EXTERNAL DATA SOURCE `/Root/tier1`"
-            << (enableTree ? ".`archive/data`" : "") << " ON ts;").GetValueSync();
-        UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToString());
-        checkTier();
+        const auto desc = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        UNIT_ASSERT(!desc.GetTableDescription().GetTtlSettings());
+        alterPrefix(enableTree ? std::make_optional(TString("after/reset")) : std::nullopt);
     }
 
     Y_UNIT_TEST(AlterColumnTableTiering) {

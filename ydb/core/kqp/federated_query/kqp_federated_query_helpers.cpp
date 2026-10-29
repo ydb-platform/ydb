@@ -191,6 +191,9 @@ std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::
     cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
     cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
     cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+    if (config.HasMaxGrpcMessageSize()) {
+        cfg.SetMaxMessageSize(config.GetMaxGrpcMessageSize());
+    }
 
     auto driver = std::make_unique<NYdb::TDriver>(cfg);
 

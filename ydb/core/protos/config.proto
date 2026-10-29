@@ -1377,6 +1377,7 @@ message TStreamingQueriesConfig {
     optional TExternalTopicsSettings TopicSdkSettings = 4;
     optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
     optional string ResourcePoolForSharedReading = 6;
+    optional uint64 MaxGrpcMessageSize = 7;
 }
 
 message TQueryServiceConfig {

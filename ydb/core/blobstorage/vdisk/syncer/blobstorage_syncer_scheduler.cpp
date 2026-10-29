@@ -226,6 +226,7 @@ namespace NKikimr {
         TActorId NotifyId;
         bool Scheduled;
         THashSet<ui32> StartupDataSyncPeers;
+        THashSet<ui32> FullSyncRequested;
         bool StartupDataSyncDoneReported = false;
         std::shared_ptr<TSjCtx> JobCtx;
 
@@ -267,6 +268,17 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            const ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
+            const bool localRealmRecovering = GInfo->IsRecoveringFailRealm(localRealm);
+            // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
+            if (localRealmRecovering) {
+                for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
+                    const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                    if (!peer.Myself && !GInfo->IsFailedFailRealm(realm)) {
+                        FullSyncRequested.insert(peer.OrderNumber);
+                    }
+                }
+            }
             // fill in SchedulerQueue
             for (const auto &x : *SyncerData->Neighbors) {
                 if (!x.Myself) {
@@ -310,7 +322,9 @@ namespace NKikimr {
                 bool fullRecovery) {
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: sync job done: vDiskId# %s status# %s newSyncState# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data(), peerSyncState.SyncState.ToString().data()));
 
-            auto interval = fullRecovery ? TDuration::Seconds(0) : SyncTimeInterval;
+            const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
+            const bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber);
+            TDuration interval = fullRecovery || fullSyncPending ? TDuration::Zero() : SyncTimeInterval;
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
@@ -395,8 +409,10 @@ namespace NKikimr {
 
         void StartSyncJob(const TActorContext& ctx, const TVDiskInfoPtr& info) {
             auto vDiskId = GInfo->GetVDiskId(info->OrderNumber);
+            const TSyncerJobTask::EJobType jobType = FullSyncRequested.erase(info->OrderNumber)
+                ? TSyncerJobTask::EFullRecover : TSyncerJobTask::EJustSync;
             auto task = std::make_unique<TSyncerJobTask>(
-                    TSyncerJobTask::EJustSync,
+                    jobType,
                     vDiskId,
                     GInfo->GetActorId(info->OrderNumber),
                     TActorId(),
@@ -485,10 +501,40 @@ namespace NKikimr {
 
         // BlobStorage Group reconfiguration
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ctx);
-            auto *msg = ev->Get();
+            const TEvVGenerationChange* msg = ev->Get();
+            if (msg->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
+                return;
+            }
+            const std::function<bool(ui32)> returned = [&](ui32 realm) {
+                return GInfo->IsFailedFailRealm(realm)
+                    && msg->NewInfo->IsRecoveringFailRealm(realm);
+            };
+            const bool localRealmReturned = returned(SyncerContext->VCtx->ShortSelfVDisk.FailRealm);
+            for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
+                const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                const bool peerAvailable = !msg->NewInfo->IsFailedFailRealm(realm);
+                if (!peer.Myself && peerAvailable && (localRealmReturned || returned(realm))) {
+                    FullSyncRequested.insert(peer.OrderNumber);
+                }
+            }
             GInfo = msg->NewInfo;
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
+
+            // Running jobs finish first; queued peers can start full sync immediately.
+            TVector<TVDiskInfoPtr> queued;
+            while (!SchedulerQueue.empty()) {
+                queued.push_back(SchedulerQueue.top());
+                SchedulerQueue.pop();
+            }
+            const TInstant now = TAppData::TimeProvider->Now();
+            for (TVDiskInfoPtr peer : queued) {
+                if (FullSyncRequested.contains(peer->OrderNumber)) {
+                    NSyncer::TPeerSyncState& peerState = (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
+                    peerState.SchTime = now;
+                }
+                SchedulerQueue.push(peer);
+            }
+            Schedule(ctx);
         }
 
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {

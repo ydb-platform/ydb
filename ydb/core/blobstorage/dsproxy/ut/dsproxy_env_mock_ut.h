@@ -41,6 +41,7 @@ struct TDSProxyEnv {
     ui64 GroupId;
     ui64 NodeIdx;
     TActorId RealProxyActorId;
+    TActorId ProxyActorId;
     TActorId FakeProxyActorId;
 
     TActorId MakeVDiskId(ui32 failDomainIdx, ui32 driveIdx, ui32 drivesPerFailDomain) const {
@@ -49,7 +50,10 @@ struct TDSProxyEnv {
     }
 
     void Configure(TTestActorRuntime& runtime, TBlobStorageGroupType type, ui64 groupId, ui64 nodeIndex,
-            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1)
+            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1,
+            const TControlWrapper& dormantTimeoutMinutes = DormantTimeoutDefaultControl,
+            bool enableProxySchedule = false,
+            const TVector<TBlobStorageGroupInfo::TDynamicInfo::EFailRealmState>& failRealmStates = {})
     {
         GroupId = groupId;
         NodeIdx = nodeIndex;
@@ -57,13 +61,27 @@ struct TDSProxyEnv {
         ui32 vDiskCount = type.BlobSubgroupSize();
         VDisks.clear();
         for (ui32 i = 0; i < vDiskCount; ++i) {
-            VDisks.push_back(runtime.AllocateEdgeActor(nodeIndex));
+            const TActorId edgeActorId = runtime.AllocateEdgeActor(nodeIndex);
+            if (enableProxySchedule) {
+                const TActorId serviceId = MakeBlobStorageVDiskID(runtime.GetNodeId(nodeIndex), i + 1, 1);
+                runtime.RegisterService(serviceId, edgeActorId, nodeIndex);
+                VDisks.push_back(serviceId);
+            } else {
+                VDisks.push_back(edgeActorId);
+            }
         }
 
         if (type.GetErasure() == TErasureType::ErasureMirror3dc) {
             Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, 3, 3, &VDisks, encryptionMode);
         } else {
             Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, type.BlobSubgroupSize(), 1, &VDisks, encryptionMode);
+        }
+
+        if (!failRealmStates.empty()) {
+            auto dynamic = Info->GetDynamicInfo();
+            dynamic.FailRealmStates = failRealmStates;
+            Info = MakeIntrusive<TBlobStorageGroupInfo>(Info->PickTopology(), std::move(dynamic), "",
+                TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
         }
 
         RealProxyActorId = MakeBlobStorageProxyID(groupId);
@@ -86,10 +104,15 @@ struct TDSProxyEnv {
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,
                         .EnableVPatch = enableVPatch,
+                        .DormantTimeoutMinutes = dormantTimeoutMinutes,
                     }
                 }
             );
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);
+        ProxyActorId = actorId;
+        if (enableProxySchedule) {
+            runtime.EnableScheduleForActor(actorId);
+        }
         runtime.RegisterService(RealProxyActorId, actorId, nodeIndex);
 
         FakeProxyActorId = runtime.AllocateEdgeActor(0);
@@ -203,7 +226,8 @@ struct TDSProxyEnv {
                 }));
     }
 
-    std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
+    std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false,
+            bool enableVPatchForTesting = false) {
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(
             TBlobStorageGroupPatchParameters{
                 .Common = {
@@ -219,7 +243,8 @@ struct TDSProxyEnv {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = useVPatch
+                .UseVPatch = useVPatch,
+                .EnableVPatchForTesting = enableVPatchForTesting,
             }));
     }
 };

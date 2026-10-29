@@ -7,6 +7,12 @@
 namespace NKikimr {
     namespace NSyncer {
 
+        enum class EFirstRunMode {
+            Initialize,
+            // Publish an existing GUID without changing local recovery state or DbBirthLsn.
+            PublishOnly,
+        };
+
         ////////////////////////////////////////////////////////////////////////
         // EFirstRunStep
         // FirstRun phase has the following steps
@@ -53,6 +59,7 @@ namespace NKikimr {
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
                                          const TActorId &committerId,
                                          const TActorId &notifyId,
+                                         NSyncer::EFirstRunMode mode,
                                          NSyncer::EFirstRunStep startStep,
                                          TVDiskEternalGuid guid);
 

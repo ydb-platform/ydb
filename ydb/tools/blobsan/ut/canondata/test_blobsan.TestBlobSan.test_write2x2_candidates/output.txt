@@ -1,0 +1,1334 @@
+===== testcase =====
+above barriers
+When a blob has no GC barrier and local copies exist in only one of the two captured DCs,
+then default mode skips it; write2x2 mode reports a candidate with FULL because ingress claims a full layout.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           default
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           000000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+
+===== testcase =====
+keep above barriers
+When a blob has Keep but no GC barrier and local copies exist in only one captured DC,
+then default mode skips it despite Keep; write2x2 mode reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+
+===== testcase =====
+missing DC inferred from ingress
+When a kept blob is at a confirmed soft barrier and one DC is missing from the snapshot,
+then default mode accepts the full layout inferred from ingress; write2x2 mode reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+all disks captured, local data incomplete
+When all nine VDisks are captured but a kept blob at the soft barrier has local copies in only one DC,
+then both modes report a candidate; only write2x2 mode appends FULL to indicate full ingress.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8))
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+local data full in two DCs
+When a kept blob at the soft barrier has three local replicas in each of two captured DCs,
+then both modes consider the local layout full and report no candidate.
+Snapshot: Snapshot(local_realms=(0, 1), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+local data full, ingress incomplete
+When local replicas form a full layout in two DCs but ingress knows only one main part,
+then default mode reports the kept blob because ingress is incomplete; write2x2 mode reports no candidate.
+Snapshot: Snapshot(local_realms=(0, 1), keep=1, barrier='soft', quorum=True, known_full=False, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000062)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000062)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000062)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0}
+	LocalLayout#        {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2}
+	ReflectionLayout#   {R0D0}
+	NumParts#           1
+	NumLocalParts#      2
+	NumReflectionParts# 1
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+DoNotKeep above barriers
+When a blob has DoNotKeep and no GC barrier,
+then both modes exclude it from recovery candidates.
+Snapshot: Snapshot(local_realms=(0,), keep=2, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040bc)], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040b8)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040bc)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040b8)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040bc)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040b8)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+DoNotKeep overrides Keep
+When a blob ingress contains both Keep and DoNotKeep,
+then DoNotKeep takes precedence and both modes exclude the blob from recovery candidates.
+Snapshot: Snapshot(local_realms=(0,), keep=3, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040fc)], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040f8)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040fc)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040f8)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040fc)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040f8)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+soft collected without Keep
+When a blob is exactly at a confirmed soft barrier and has no Keep flag,
+then both modes discard its local parts and exclude it from recovery candidates.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+hard collected with Keep
+When a blob is exactly at a confirmed hard barrier and has Keep,
+then the hard barrier takes precedence over Keep and both modes exclude the blob.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='hard', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+hard barrier without quorum
+When a kept blob is covered by a hard barrier whose ingress lacks quorum,
+then default mode ignores the barrier and skips the blob above any accepted barrier; write2x2 mode excludes it as hard-collected.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='hard', quorum=False, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x080))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x002))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x100))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x004))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x040))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x001))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+empty snapshot
+When the input contains no VDisk snapshots,
+then both modes exit successfully without candidates or trash diagnostics.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=())
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+no local parts with all disks captured
+When all nine VDisks contain metadata for a kept blob at the soft barrier but none has local data,
+then both modes exclude the blob through the phantom filter because no local part is available.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8))
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+no local parts with missing DC
+When captured VDisks have no local data for a kept blob but ingress claims parts in an uncaptured DC,
+then both modes report a candidate using the inferred parts for the phantom check; write2x2 mode also appends FULL.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 7 [1:1:1:0:0:100:1]
+	RestorePartInv2#    1 8 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+incomplete ingress and local data
+When a kept blob at the soft barrier has incomplete local data and ingress knows only one main part,
+then both modes report a candidate and neither appends FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=False, indexes=(7, 1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000060)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000060)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000060)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0}
+	NumParts#           1
+	NumLocalParts#      1
+	NumReflectionParts# 1
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0}
+	NumParts#           1
+	NumLocalParts#      1
+	NumReflectionParts# 1
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+no known parts
+When three local replicas exist but ingress knows no parts for a kept blob at the soft barrier,
+then both modes exclude the blob through the phantom filter and report TrashSize# 300.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), known_nodes=())
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000044)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000040)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000044)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000040)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000044)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000040)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: TrashSize# 300
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: TrashSize# 300
+
+===== testcase =====
+full local data in three DCs
+When all nine VDisks are captured and every DC has all three local replicas,
+then both modes recognize a full layout and report no candidate.
+Snapshot: Snapshot(local_realms=(0, 1, 2), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8))
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404079)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404079)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404079)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+one replica in each DC
+When exactly one local replica is present in each of the three DCs,
+then the mirror-3-dc layout is full and both modes report no candidate.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), local_parts={7: (0,), 1: (1,), 4: (2,)})
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404079)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+two replicas in each of two DCs
+When exactly two local replicas are present in each of two captured DCs,
+then the two-by-two layout is full and both modes report no candidate.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), local_parts={7: (0,), 8: (0,), 1: (1,), 2: (1,)})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+one replica missing from two-by-two layout
+When two local replicas exist in one captured DC and only one exists in the other,
+then default mode accepts the layout after inferring the missing DC; write2x2 mode reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), local_parts={7: (0,), 8: (0,), 1: (1,)})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R1D0 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R1D0}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      3
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+misplaced local part
+When one local part belongs to the wrong DC and the remaining local copies are incomplete,
+then both modes report TrashSize# 100 for the misplaced part; only write2x2 mode also reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), local_parts={7: (1,)})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: TrashSize# 100
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0!?2 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      3
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          true
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+TrashSize# 100
+
+===== testcase =====
+Keep on one disk, other local parts discarded
+When only one VDisk has Keep for a blob covered by a confirmed soft barrier,
+then local parts on other captured VDisks are discarded and both modes report a candidate using the remaining Keep.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), keep_flags={7: 1})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         5
+	DiscardMask#        010110110
+	KeepMask#           100000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)
+	Barrier[1]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[6]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         5
+	DiscardMask#        010110110
+	KeepMask#           100000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv2#    1 8 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)
+	Barrier[1]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[6]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)
+
+===== testcase =====
+DoNotKeep on one disk overrides Keep elsewhere
+When one VDisk has DoNotKeep while the other captured VDisks have Keep,
+then the merged DoNotKeep overrides Keep and both modes exclude the blob.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), keep_flags={7: 2})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040bc)], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+Keep merged from duplicate blob records
+When one VDisk has two records for the same blob, first without flags and then with Keep,
+then Keep survives record merging and both modes report the kept blob with incomplete local data.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), keep_flags={7: (0, 1)})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c), (key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         5
+	DiscardMask#        010110110
+	KeepMask#           100000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)
+	Barrier[1]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[6]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         5
+	DiscardMask#        010110110
+	KeepMask#           100000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv2#    1 8 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)
+	Barrier[1]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[6]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)
+
+===== testcase =====
+DoNotKeep merged from duplicate blob records
+When one VDisk has duplicate records containing Keep and DoNotKeep separately,
+then DoNotKeep wins during record merging and both modes exclude the blob.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), keep_flags={7: (1, 2)})
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c), (key=(0x1, 0x1000000, 0x100000000000640), ingress=0x00001010504040bc)], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+blob absent from a captured disk
+When a captured VDisk has no record for a blob that is present on the other captured VDisks,
+then default mode accepts the inferred full layout; write2x2 mode excludes the phantom-like blob and reports estimated TrashSize# 500.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), blob_indexes=(1, 8, 2, 6, 0))
+  VDisk(index=7, subgroup=0, blobs=[], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: TrashSize# 500
+
+===== testcase =====
+two DCs missing
+When only the three VDisks of one DC are captured for a kept blob at the soft barrier,
+then default mode accepts inferred completeness; write2x2 mode rejects coverage outside the failure model and reports estimated TrashSize# 900.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(7, 8, 6))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: TrashSize# 900
+
+===== testcase =====
+snapshot has no blob records
+When VDisk streams are present but contain no blob or barrier records,
+then both modes exit successfully without candidates or trash diagnostics.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), blob_indexes=())
+  VDisk(index=7, subgroup=0, blobs=[], barriers=[])
+  VDisk(index=1, subgroup=1, blobs=[], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+some disks have incomplete ingress
+When the DC with local data has incomplete ingress while the other captured VDisks provide full ingress,
+then ingress merges into a full layout but local data remains incomplete, so both modes report a candidate.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), known_per_disk={7: (0,), 8: (0,), 6: (0,)})
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000000000000064)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+full local data without reflected parts
+When local data forms a full layout but no VDisk ingress reflects its own part,
+then default mode reports the missing reflection information; write2x2 mode reports no candidate because local data is full.
+Snapshot: Snapshot(local_realms=(0, 1), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), known_per_disk={7: (1, 2, 3, 4, 5, 6, 7, 8), 1: (0, 2, 3, 4, 5, 6, 7, 8), 4: (0, 1, 3, 4, 5, 6, 7, 8), 8: (0, 1, 2, 4, 5, 6, 7, 8), 2: (0, 1, 2, 3, 5, 6, 7, 8), 5: (0, 1, 2, 3, 4, 6, 7, 8), 6: (0, 1, 2, 3, 4, 5, 7, 8), 0: (0, 1, 2, 3, 4, 5, 6, 8), 3: (0, 1, 2, 3, 4, 5, 6, 7)})
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010005040407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040406a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105000407a)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000001050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404070)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101010404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010104040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040405c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040007c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2}
+	ReflectionLayout#   {}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 0
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+blob above soft barrier step
+When the blob generation matches the soft barrier but its step is greater than the collect step,
+then default mode skips the blob above the barrier; write2x2 mode checks it and reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'collect': (1, 0)}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           default
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           000000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:0]
+	Barrier[1]#         soft[2:1=>1:0]
+	Barrier[2]#         soft[2:1=>1:0]
+	Barrier[6]#         soft[2:1=>1:0]
+	Barrier[7]#         soft[2:1=>1:0]
+	Barrier[8]#         soft[2:1=>1:0]
+
+===== testcase =====
+blob above soft barrier generation
+When the blob generation is greater than the soft barrier collect generation,
+then default mode skips the blob above the barrier; write2x2 mode checks it and reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'collect': (0, 100)}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(0, 100, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(0, 100, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(0, 100, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(0, 100, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(0, 100, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(0, 100, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           default
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           000000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>0:100]
+	Barrier[1]#         soft[2:1=>0:100]
+	Barrier[2]#         soft[2:1=>0:100]
+	Barrier[6]#         soft[2:1=>0:100]
+	Barrier[7]#         soft[2:1=>0:100]
+	Barrier[8]#         soft[2:1=>0:100]
+
+===== testcase =====
+blob below soft barrier generation
+When a blob without Keep has a generation below the soft barrier collect generation,
+then both modes treat it as soft-collected and report no candidate.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'collect': (2, 0)}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(2, 0, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(2, 0, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(2, 0, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(2, 0, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(2, 0, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(2, 0, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+barrier for another tablet
+When the only GC barrier belongs to a different tablet,
+then both modes ignore that barrier; default mode skips the blob and write2x2 mode reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'tablet': 2}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(2, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(2, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(2, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(2, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(2, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(2, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           default
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           000000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+
+===== testcase =====
+barrier for another channel
+When the only GC barrier belongs to a different channel of the same tablet,
+then both modes ignore that barrier; default mode skips the blob and write2x2 mode reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'channel': 1}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 1, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 1, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 1, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 1, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 1, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 1, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           default
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           000000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+
+===== testcase =====
+hard barrier on one disk
+When only one captured VDisk has a confirmed hard barrier covering the kept blob,
+then that hard barrier excludes the blob from recovery candidates in both modes.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='hard', quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barrier_indexes=(7,))
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 2147483648, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+
+===== testcase =====
+blob covered by soft barrier but above hard barrier
+When a kept blob is covered by the soft barrier but lies above the hard barrier collect step,
+then the hard barrier does not collect it; default mode accepts inferred completeness and write2x2 mode reports a candidate with FULL.
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'kind': 'soft'}, {'kind': 'hard', 'record': (3, 1), 'collect': (1, 0)}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff)), (key=(1, 2147483648, 3, 1), value=(1, 0, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    6
+	UnderBarrierMask#   110110110
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           110110110
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]

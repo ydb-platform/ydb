@@ -36,6 +36,8 @@ SRCS(
     skeleton_loggedrec.h
     skeleton_mon_dbmainpage.cpp
     skeleton_mon_dbmainpage.h
+    skeleton_mon_restore_part.cpp
+    skeleton_mon_restore_part.h
     skeleton_mon_util.h
     skeleton_oos_logic.cpp
     skeleton_oos_logic.h
@@ -51,6 +53,8 @@ SRCS(
     skeleton_vmovedpatch_actor.h
     skeleton_vpatch_actor.cpp
     skeleton_vpatch_actor.h
+    skeleton_vrestore_part.cpp
+    skeleton_vrestore_part.h
 )
 
 END()

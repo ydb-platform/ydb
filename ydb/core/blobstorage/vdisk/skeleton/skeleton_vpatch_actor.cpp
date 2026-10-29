@@ -160,7 +160,7 @@ namespace NKikimr::NPrivate {
         {
             NKikimrBlobStorage::TEvVPatchStart &record = ev->Get()->Record;
             if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
-                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
+                Deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
             }
             if (!Deadline) {
                 Deadline = now + CommonLiveTime;

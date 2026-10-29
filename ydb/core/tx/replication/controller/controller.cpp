@@ -191,16 +191,6 @@ void TController::SwitchToWork(const TActorContext& ctx) {
     // but their commands are not. Otherwise a child partition that is not running
     // anywhere is never read. Boot them after a grace period, so that workers still
     // running on nodes are re-adopted from TEvStatus first instead of being doubled.
-    for (auto& [id, worker] : Workers) {
-        if (worker.HasCommand() || !IsValidWorker(id)) {
-            continue;
-        }
-
-        if (const auto* target = FindTarget(id)) {
-            auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
-            worker.SetCommand(ev->Record.MutableCommand());
-        }
-    }
     Schedule(BootPersistedWorkersDelay, new TEvPrivate::TEvBootPersistedWorkers());
 
     for (const auto& [key, barrier] : SchemaBarriers) {
@@ -529,9 +519,7 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
         auto& worker = it->second;
         worker.ClearSession();
 
-        if (worker.HasCommand()) {
-            BootQueue.insert(id);
-        }
+        BootQueue.insert(id);
     }
 
     Sessions.erase(nodeId);
@@ -570,12 +558,6 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
         }
 
         auto* worker = GetOrCreateWorker(id);
-        if (!worker->HasCommand()) {
-            if (const auto* target = FindTarget(id)) {
-                auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
-                worker->SetCommand(ev->Record.MutableCommand());
-            }
-        }
 
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
@@ -631,7 +613,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                     if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
                         worker->second.ClearSession();
                     }
-                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
+                    if (IsValidWorker(id) && !worker->second.HasSession()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -730,7 +712,8 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
-            auto ev = MakeRunWorkerEv(replication, *target, partitionId);
+            auto ev = MakeHolder<TEvService::TEvRunWorker>();
+            TWorkerId(id.ReplicationId(), id.TargetId(), partitionId).Serialize(*ev->Record.MutableWorker());
             Send(SelfId(), std::move(ev));
         }
     }
@@ -772,10 +755,10 @@ bool TController::HasWorkerSession(const TWorkerId& id, ui32 nodeId) const {
         && it->second.GetSession() == nodeId;
 }
 
-TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
+TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id) {
     auto it = Workers.find(id);
     if (it == Workers.end()) {
-        it = Workers.emplace(id, cmd).first;
+        it = Workers.try_emplace(id).first;
         TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
     }
 
@@ -837,6 +820,11 @@ void TController::ProcessBootQueue(const TActorContext&) {
         auto replication = Find(id.ReplicationId());
         Y_ABORT_UNLESS(replication);
 
+        if (!replication->IsCredentialsReady()) {
+            ++iter;
+            continue;
+        }
+
         const auto* target = replication->FindTarget(id.TargetId());
         const auto* base = replication->FindBaseTableTarget(*target);
         const bool awaitingBaseStream = base && base->GetStreamState() == TReplication::EStreamState::Creating;
@@ -860,8 +848,10 @@ void TController::ProcessBootQueue(const TActorContext&) {
             continue;
         }
 
-        Y_ABORT_UNLESS(worker.HasCommand());
-        BootWorker(nodeId, id, *worker.GetCommand());
+        // Commands are not persisted or cached: credentials may have resolved
+        // since recovery, adoption, or the registrar's request.
+        const auto ev = MakeRunWorkerEv(replication, *target, id.WorkerId());
+        BootWorker(nodeId, id, ev->Record.GetCommand());
         worker.AttachSession(nodeId);
 
         BootQueue.erase(iter++);
@@ -1136,7 +1126,7 @@ void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const T
 
 void TController::Handle(TEvPrivate::TEvBootPersistedWorkers::TPtr&, const TActorContext&) {
     for (const auto& [id, worker] : Workers) {
-        if (!worker.HasSession() && worker.HasCommand() && IsValidWorker(id)) {
+        if (!worker.HasSession() && IsValidWorker(id)) {
             BootQueue.insert(id);
         }
     }

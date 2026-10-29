@@ -112,6 +112,47 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 
+Y_UNIT_TEST(CombinedCompletionWhenSplitMergeDisabled) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+    PQTabletPrepare({}, {}, tc);
+    SendBalancerUpdate(tc, TBalancerUpdate{
+        .Partitions = {{0, {tc.TabletId, 1}}, {1, {tc.TabletId, 2}}},
+        .Strategy = NKikimrPQ::TPQTabletConfig::DISABLED,
+        .ParentPartitionIds = {{1, {0}}},
+        .ChildPartitionIds = {{0, {1}}},
+        .ReplicationStatus = NKikimrPQ::ReplicationData,
+        .DatabasePath = "/Root",
+    });
+    WaitBalancerReady(tc);
+
+    TProposeCapture proxy;
+    InstallProposeCapture(tc, proxy);
+    TVector<THolder<IEventHandle>> proposals;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType) {
+            proposals.emplace_back(ev.Release());
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    SendFinished(tc, 1, 1);
+    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(200));
+    UNIT_ASSERT(proposals.empty());
+
+    auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(0);
+    event->Record.MutableParticipatingPartitions()->AddChildPartitionIds(1);
+    ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, event.Release());
+    tc.Runtime->SimulateSleep(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
+    const auto& alter = proposals.front()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record
+        .GetTransaction().GetModifyScheme().GetAlterPersQueueGroup();
+    UNIT_ASSERT_VALUES_EQUAL(alter.SplitSize(), 0);
+    UNIT_ASSERT(alter.GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration);
+    tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+}
+
 Y_UNIT_TEST(CombinedCompletionWaitsForSplitAndChildren) {
     TTestContext tc;
     tc.Prepare();

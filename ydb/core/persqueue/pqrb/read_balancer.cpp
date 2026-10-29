@@ -1028,8 +1028,8 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
         return;
     }
-    if (record.HasParticipatingPartitions()) {
-        if (!SplitMergeEnabled(TabletConfig) || !PartitionsScaleManager) {
+    if (record.HasParticipatingPartitions() && SplitMergeEnabled(TabletConfig)) {
+        if (!PartitionsScaleManager) {
             return;
         }
         PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), NKikimrPQ::EScaleStatus::NEED_SPLIT,

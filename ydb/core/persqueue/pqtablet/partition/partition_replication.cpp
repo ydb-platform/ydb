@@ -19,13 +19,20 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         return;
     }
 
+    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     for (const auto& data : (*PendingReplicationData)->Get()->Data) {
         auto& startOffset = CompactionBlobEncoder.IsEmpty() ? BlobEncoder.StartOffset : CompactionBlobEncoder.StartOffset;
         startOffset = Max(GetStartOffset(), data.GetStartOffset());
         BlobEncoder.EndOffset = Max(GetEndOffset(), data.GetEndOffset());
         for (const auto& [consumer, offset] : data.GetOffsetsByConsumers()) {
+            if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+                continue;
+            }
             auto& userInfo = GetOrCreatePendingUser(consumer);
-            userInfo.Offset = offset;
+            if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
+                userInfo.Offset = Max(userInfo.Offset, committed->Offset);
+            }
+            userInfo.Offset = Max(userInfo.Offset, static_cast<i64>(offset));
         }
     }
 }
@@ -35,11 +42,15 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
         return;
     }
 
-    // A consumer may occur in several snapshots; the last offset is authoritative.
+    // Replication may replay older snapshots; acknowledge the greatest valid offset.
     THashMap<TString, ui64> expectedOffsets;
     for (const auto& data : (*PendingReplicationData)->Get()->Data) {
         for (const auto& [consumer, offset] : data.GetOffsetsByConsumers()) {
-            expectedOffsets[consumer] = offset;
+            if (!GetConsumer(Config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+                continue;
+            }
+            auto& expected = expectedOffsets[consumer];
+            expected = Max(expected, offset);
         }
     }
     for (const auto& [consumer, offset] : expectedOffsets) {

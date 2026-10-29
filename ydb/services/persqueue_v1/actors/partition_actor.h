@@ -293,9 +293,7 @@ private:
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
-    // Ancestors that this session finished without delivering data, as read_from skipped all their messages.
-    // The first commit of this partition commits them to the end, like the SDK commits the read_from gap of a single partition.
-    const std::unordered_set<ui64> SkippedParents;
+    const std::unordered_set<ui64> SkippedParents; // Set of parent partitions that don't contain any data for this session
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

@@ -1350,10 +1350,10 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
             }
         }
     }
-    // The balancer locks a child only after its ancestors finished, so their final state is already known here.
+
     std::unordered_set<ui64> skippedParents;
     for (const auto* parent: partitionNode->AllParents) {
-        for (auto& [_, actorInfo]: Partitions) { // TODO: map
+        for (auto& [_, actorInfo]: Partitions) {
             if (actorInfo.Partition.Partition == parent->Id && actorInfo.ReadingFinished && actorInfo.StartedFromEnd) {
                 skippedParents.emplace(actorInfo.Partition.Partition);
             }

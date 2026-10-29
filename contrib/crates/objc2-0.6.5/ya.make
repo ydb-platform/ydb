@@ -1,0 +1,145 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(objc2)
+
+CRATE_VERSION(0.6.5)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    examples/class_with_lifetime.rs
+    examples/encode_core_graphics.rs
+    examples/encode_nsstring.rs
+    examples/encode_nsuinteger.rs
+    examples/encode_opaque_type.rs
+    examples/hello_world_app.rs
+    examples/introspection.rs
+    src/__framework_prelude.rs
+    src/__macro_helpers/cache.rs
+    src/__macro_helpers/class.rs
+    src/__macro_helpers/common_selectors.rs
+    src/__macro_helpers/convert.rs
+    src/__macro_helpers/define_class.rs
+    src/__macro_helpers/defined_ivars.rs
+    src/__macro_helpers/image_info.rs
+    src/__macro_helpers/method_family.rs
+    src/__macro_helpers/mod.rs
+    src/__macro_helpers/module_info.rs
+    src/__macro_helpers/msg_send_retained.rs
+    src/__macro_helpers/null_error.rs
+    src/__macro_helpers/os_version.rs
+    src/__macro_helpers/os_version/apple.rs
+    src/__macro_helpers/retain_semantics.rs
+    src/__macro_helpers/sync_unsafe_cell.rs
+    src/__macro_helpers/writeback.rs
+    src/downcast.rs
+    src/encode.rs
+    src/exception.rs
+    src/ffi/class.rs
+    src/ffi/constants.rs
+    src/ffi/exception.rs
+    src/ffi/libc.rs
+    src/ffi/message.rs
+    src/ffi/method.rs
+    src/ffi/mod.rs
+    src/ffi/object.rs
+    src/ffi/property.rs
+    src/ffi/protocol.rs
+    src/ffi/rc.rs
+    src/ffi/selector.rs
+    src/ffi/types.rs
+    src/ffi/various.rs
+    src/macros/__attribute_helpers.rs
+    src/macros/__fallback.rs
+    src/macros/__method_msg_send.rs
+    src/macros/__msg_send_parse.rs
+    src/macros/__rewrite_self_param.rs
+    src/macros/available.rs
+    src/macros/cf_objc2_type.rs
+    src/macros/define_class.rs
+    src/macros/extern_class.rs
+    src/macros/extern_conformance.rs
+    src/macros/extern_methods.rs
+    src/macros/extern_protocol.rs
+    src/macros/mod.rs
+    src/main_thread_marker.rs
+    src/rc/allocated_partial_init.rs
+    src/rc/autorelease.rs
+    src/rc/mod.rs
+    src/rc/retained.rs
+    src/rc/retained_forwarding_impls.rs
+    src/rc/retained_traits.rs
+    src/rc/test_object.rs
+    src/rc/weak.rs
+    src/runtime/__nsstring.rs
+    src/runtime/bool.rs
+    src/runtime/define.rs
+    src/runtime/malloc.rs
+    src/runtime/message_receiver.rs
+    src/runtime/method_encoding_iter.rs
+    src/runtime/method_implementation.rs
+    src/runtime/mod.rs
+    src/runtime/nsobject.rs
+    src/runtime/nsproxy.rs
+    src/runtime/nszone.rs
+    src/runtime/protocol_object.rs
+    src/runtime/retain_release_fast.rs
+    src/test_utils.rs
+    src/top_level_traits.rs
+    src/topics/about_generated/list.rs
+    src/topics/about_generated/mod.rs
+    src/topics/mod.rs
+    src/verify.rs
+)
+
+CRATE_INPUTS(
+    CHANGELOG.md
+    Cargo.lock
+    README.md
+    src/topics/about_generated/CHANGELOG.md
+    src/topics/about_generated/README.md
+    src/topics/about_generated/cargo_features.md
+    src/topics/about_generated/deref.md
+    src/topics/about_generated/list_data.md
+    src/topics/about_generated/list_unsupported.md
+    src/topics/alternatives.md
+    src/topics/crate_interop.md
+    src/topics/cross_compiling.md
+    src/topics/goals.md
+    src/topics/interior_mutability.md
+    src/topics/kvo.md
+    src/topics/layered_safety.md
+    src/topics/migrating_from_objc.md
+    src/topics/mvc.md
+    src/topics/run_loop.md
+    src/topics/swift.md
+    src/topics/weak_property.md
+    translation-config.toml
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    alloc
+    std
+)
+
+PEERDIR(
+    contrib/crates/objc2-encode-4.1.0
+)
+
+CRATE_BUILD_SCRIPT(contrib/crates/objc2-0.6.5/build_script)
+
+LICENSE("MIT")
+VERSION(0.6.5)
+ORIGINAL_SOURCE(https://static.crates.io/crates/objc2/objc2-0.6.5.crate)
+
+CRATE_FEATURES(
+    default
+)
+
+END()
+
+RECURSE(build_script)

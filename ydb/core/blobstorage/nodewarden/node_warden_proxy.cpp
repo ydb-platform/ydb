@@ -298,6 +298,18 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
     if (msg.ErrorReason) {
         item->SetErrorReason(msg.ErrorReason);
     }
+    if (msg.RacingGeneration) {
+        item->SetRacingGeneration(msg.RacingGeneration);
+    }
+    if (msg.WrittenBeyondBarrier) {
+        item->SetWrittenBeyondBarrier(true);
+    }
+    if (msg.StatusFlags.Raw) {
+        item->SetStatusFlags(msg.StatusFlags.Raw);
+    }
+    if (msg.ApproximateFreeSpaceShare) {
+        item->SetApproximateFreeSpaceShare(msg.ApproximateFreeSpaceShare);
+    }
     if (!--common.RepliesRemaining) {
         auto ev = std::make_unique<TEvInterpilePutResult>();
         common.Result.Swap(&ev->Record);

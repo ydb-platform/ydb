@@ -516,6 +516,7 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     out_tables = []
     suite_dir = os.path.join(data_path, suite)
     res_dir = get_yql_dir('table_')
+    input_dir = tempfile.mkdtemp(prefix='input_table_')
 
     for splitted in cfg:
         if len(splitted) == 4:
@@ -532,7 +533,7 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
                 yqlrun_file=yqlrun_file,
                 format_name=format_name,
                 def_attr=def_attr,
-                res_dir=res_dir,
+                res_dir=input_dir,
                 attr_postprocess=attr_postprocess
             ))
         if type_name == 'out':
@@ -864,6 +865,54 @@ def yson_to_csv(yson_content, columns=None, with_header=True, strict=False):
 
 
 udfs_lock = Lock()
+udf_libraries_cache = {}
+
+
+def get_udfs(config):
+    names = set()
+    for entry in config:
+        if entry[0] == 'udf':
+            assert len(entry) == 2, 'Expected: udf <library_name>, got {}'.format(entry)
+            names.add(entry[1])
+    return sorted(names)
+
+
+def get_udf_libraries(udfs_dir):
+    with udfs_lock:
+        if udfs_dir not in udf_libraries_cache:
+            udf_libraries_cache[udfs_dir] = find_udf_libraries(udfs_dir)
+        return udf_libraries_cache[udfs_dir]
+
+
+def find_udf_libraries(udfs_dir):
+    libraries = {}
+    for directory, _, filenames in os.walk(udfs_dir, followlinks=True):
+        for filename in filenames:
+            name, extension = os.path.splitext(filename)
+            if extension not in ('.so', '.dylib', '.dll'):
+                continue
+            if name.startswith('lib'):
+                name = name[3:]
+            path = os.path.join(directory, filename)
+            libraries.setdefault(name, []).append(path)
+    return libraries
+
+
+def get_udf_paths(udfs_dir, names):
+    if not names:
+        return []
+    libraries = get_udf_libraries(udfs_dir)
+    missing = sorted(set(names) - set(libraries))
+    if missing and yatest.common.context.sanitize == 'undefined':
+        pytest.skip('Declared UDF libraries are unavailable under UBSan: {}'.format(', '.join(missing)))
+    assert not missing, 'Declared UDF libraries not found in {}: {}'.format(udfs_dir, ', '.join(missing))
+    paths = []
+    # Open-source packages can contain duplicate dependencies of otherwise unique UDFs.
+    for name in sorted(set(names)):
+        candidates = libraries[name]
+        assert len(candidates) == 1, 'Ambiguous UDF library: {}: {}'.format(name, ', '.join(sorted(candidates)))
+        paths.append(candidates[0])
+    return paths
 
 
 def get_udfs_path(extra_paths=None):

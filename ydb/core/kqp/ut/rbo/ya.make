@@ -7,12 +7,6 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
-    kqp_effects_ut.cpp
-    kqp_immediate_effects_ut.cpp
-    kqp_inplace_update_ut.cpp
-    kqp_overload_ut.cpp
-    kqp_reattach_ut.cpp
-    kqp_write_ut.cpp
     kqp_rbo_compatibility_ut.cpp
     kqp_rbo_copy_ut.cpp
     kqp_rbo_decorrelation_ut.cpp
@@ -69,3 +63,8 @@ NO_COMPILER_WARNINGS()
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    join_order
+    effects
+)

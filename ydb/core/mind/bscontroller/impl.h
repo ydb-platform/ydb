@@ -1790,6 +1790,7 @@ private:
             EvRetryBridgePileOperation,
             EvRetryBridgeGroupModes,
             EvCheckBridgeGroupModes,
+            EvRetrySyncers,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2267,6 +2268,9 @@ private:
         THashMap<TNodeId, TPerNodeInfo> NodeIds;
         bool InCommit = false;
         ui64 StaticCommitCookie = 0;
+        // the syncer finished with an error is started again after a while only, as it may fail again at once
+        TBackoffTimer RetryBackoff{100, 30000};
+        TMonotonic NotBefore;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2278,6 +2282,7 @@ private:
     ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
+    TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
 
     bool CheckingUnsyncedBridgePiles = false;
     bool NotifyBridgeSyncFinishedErrors = false;
@@ -2389,6 +2394,7 @@ private:
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
+    void HandleRetrySyncers();
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<TGroupId>& groupIdsToRead);
@@ -2431,7 +2437,10 @@ private:
         NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot Request;
         std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)> Callback;
         TBackoffTimer Timer{10, 3000};
+        TMonotonic StartedAt;
+        bool Alarmed = false; // the command has been retried for too long, which is reported
     };
+    static constexpr TDuration InvokeOnRootAlarmTimeout = TDuration::Minutes(1);
     THashMap<ui64, TInvokeOnRootCommand> InvokeOnRootCommands;
 
     void InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,

@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package temporal.api.cloud.billing.v1;
+
+option go_package = "go.temporal.io/api/cloud/billing/v1;billing";
+option java_package = "io.temporal.api.cloud.billing.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Cloud::Billing::V1";
+option csharp_namespace = "Temporalio.Api.Cloud.Billing.V1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+message BillingReportSpec {
+  // The start time of the billing report (in UTC).
+  google.protobuf.Timestamp start_time_inclusive = 1;
+  // The end time of the billing report (in UTC).
+  google.protobuf.Timestamp end_time_exclusive = 2;
+  // The duration after which the download url will expire.
+  // Optional, default is 5 minutes and maximum is 1 hour.
+  google.protobuf.Duration download_url_expiration_duration = 3;
+  // The description for the billing report.
+  // Optional, default is empty.
+  string description = 4;
+  // The data granularity of the billing report.
+  // Optional, default is hourly.
+  // temporal:versioning:min_version=v0.16.0
+  BillingReportGranularity granularity = 5;
+
+  enum BillingReportGranularity {
+    BILLING_REPORT_GRANULARITY_UNSPECIFIED = 0;
+    BILLING_REPORT_GRANULARITY_HOURLY = 1;
+    BILLING_REPORT_GRANULARITY_DAILY = 2;
+    BILLING_REPORT_GRANULARITY_MONTHLY = 3;
+  }
+}
+
+message BillingReport {
+  // The id of the billing report.
+  string id = 1;
+  // The current state of the billing report.
+  BillingReportState state = 2;
+  // The spec used to generate this billing report.
+  BillingReportSpec spec = 3;
+  // The download information for the billing report.
+  // For future-proofness this is repeated as we may return multiple files (e.g. csv+meta/json, split by size/date, etc.)
+  repeated Download download_info = 4;
+  // The date and time when the billing report was requested.
+  google.protobuf.Timestamp requested_time = 5;
+  // The date and time when the billing report generation completed.
+  google.protobuf.Timestamp generated_time = 6;
+  // The async operation id associated with the billing report generation.
+  string async_operation_id = 7;
+
+  message Download {
+    // The download url.
+    string url = 1;
+    // The time when the download url will expire.
+    google.protobuf.Timestamp url_expiration_time = 2;
+    // The file format of the billing report
+    FileFormat file_format = 3;
+    // The size of the file in bytes. Useful for pre-allocating space, progress indicators, etc.
+    int64 file_size_bytes = 4;
+
+    enum FileFormat {
+      FILE_FORMAT_UNSPECIFIED = 0;
+      FILE_FORMAT_CSV = 1;
+    }
+  }
+
+  enum BillingReportState {
+    BILLING_REPORT_STATE_UNSPECIFIED = 0;
+    BILLING_REPORT_STATE_IN_PROGRESS = 1;
+    BILLING_REPORT_STATE_GENERATED = 2;
+    BILLING_REPORT_STATE_FAILED = 3;
+  }
+}

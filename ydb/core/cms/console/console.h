@@ -37,10 +37,28 @@ class TPathNormalizer;
 namespace NKikimr::NConsole {
 
 // Tenant UserAttribute that enables the usage of database YAML config selectors.
+//
+// Changing this attribute requires cluster administration permissions.
+// This permission is checked when accepting new or changed database configs.
+// Disabling or removing the attribute does not invalidate the accepted config;
+// it remains active until explicitly replaced or cleared.
+//
 // Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
 //  - "true", "yes", "on", "1"            - enabled
 //  - "false", "no", "off", "0", (absent) - disabled
 constexpr TStringBuf TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS = "allow_database_config_selectors";
+
+// Tenant UserAttribute that enables all config types in database YAML configs.
+//
+// Changing this attribute requires cluster administration permissions.
+// This permission is checked when accepting new or changed database configs.
+// Disabling or removing the attribute does not invalidate the accepted config;
+// it remains active until explicitly replaced or cleared.
+//
+// Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+//  - "true", "yes", "on", "1"            - enabled
+//  - "false", "no", "off", "0", (absent) - disabled
+constexpr TStringBuf TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG = "allow_all_types_in_database_config";
 
 namespace TEvConsole {
     enum EEv {

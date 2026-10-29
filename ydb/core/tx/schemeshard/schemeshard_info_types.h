@@ -1011,6 +1011,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     bool IsAsyncReplica() const {
         switch (TableDescription.GetReplicationConfig().GetMode()) {
             case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP:
                 return false;
             default:
                 return true;

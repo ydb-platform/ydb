@@ -595,7 +595,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     bool CheckScheme(const NKikimrSchemeOp::TPathDescription& desc, TString& error) const {
         if (PendingDstPathId && Cleanup) {
             const auto& table = desc.GetTable();
-            return NotReplica(table) || CheckReplicationConfig(table.GetReplicationConfig(), Mode, Consistency, error);
+            return NotReplica(table)
+                || (table.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP
+                    && table.GetReplicationConfig().HasBootstrapReplication()
+                    && TPathId::FromProto(table.GetReplicationConfig().GetBootstrapReplication()) == PathId)
+                || CheckReplicationConfig(table.GetReplicationConfig(), Mode, Consistency, error);
         }
 
         switch (Kind) {
@@ -613,14 +617,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             error = "Destination was restored for another replication";
             return false;
         }
-        const bool needsConfig = InitialScan || Attaching || IsReplica(got);
+        const bool bootstrap = got.GetReplicationConfig().GetMode()
+            == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP;
+        const bool needsConfig = InitialScan || Attaching || IsReplica(got) || bootstrap;
 
         if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
             return false;
         }
 
-        if (needsConfig && !CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
+        auto replicationConfig = got.GetReplicationConfig();
+        if (bootstrap && replicationConfig.HasBootstrapReplication()) {
+            // Attachment changes the prepared destination to read-only mode.
+            replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        }
+        if (needsConfig && !CheckReplicationConfig(replicationConfig, Mode, Consistency, error)) {
             return false;
         }
 

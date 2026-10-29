@@ -233,7 +233,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated() && !restoreUpload) {
+    if ((self->IsReplicated() && !restoreUpload) || (!IsWrite && self->IsReplicationBootstrap())) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);

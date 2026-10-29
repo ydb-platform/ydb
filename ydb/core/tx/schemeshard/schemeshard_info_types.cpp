@@ -1025,6 +1025,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
             break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP:
             if (source && !allowReplicationMode) {
                 errStr = "Cannot set replication mode";
                 return nullptr;

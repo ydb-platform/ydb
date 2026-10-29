@@ -558,6 +558,12 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
         record.SetErrorDescription(error);
     };
 
+    if (IsReplicationBootstrap()) {
+        badRequest("TTL is disabled while loading a replication destination");
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
     const ui64 localPathId = record.GetTableId();
     if (GetUserTables().contains(localPathId)) {
         auto condition = record.GetConditionCase();

@@ -220,7 +220,7 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         return false;
     }
     NKikimrSchemeOp::TTableReplicationConfig replicationConfig;
-    return GetImportReplicationConfig(dstPath, ss, replicationConfig, explain);
+    return GetReplicationBootstrapConfig(dstPath, ss, replicationConfig, explain);
 }
 
 struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {

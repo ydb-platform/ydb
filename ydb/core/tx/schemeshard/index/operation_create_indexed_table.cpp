@@ -160,14 +160,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
-    if (tx.GetInternal() && baseTableDescription.GetIsRestore()) {
-        NKikimrSchemeOp::TTableReplicationConfig replicationConfig;
+    {
         TString error;
-        if (!GetImportReplicationConfig(baseTablePath.PathString(), context.SS, replicationConfig, error)) {
+        if (!PrepareReplicationBootstrapTable(baseTablePath.PathString(), context.SS,
+                *indexedTable.MutableTableDescription(), error)) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, error)};
-        }
-        if (replicationConfig.HasBootstrapReplication()) {
-            indexedTable.MutableTableDescription()->MutableReplicationConfig()->CopyFrom(replicationConfig);
         }
     }
     {

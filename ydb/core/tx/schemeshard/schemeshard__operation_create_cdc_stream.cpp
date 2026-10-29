@@ -1062,6 +1062,13 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     }
 
     const bool initialScan = op.GetStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateScan;
+    if (initialScan && context.SS->Tables.at(tablePath.Base()->PathId)->ReplicationConfig().GetMode()
+        == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP) {
+        // A suspended initial scan would hold a schema lock and prevent the
+        // replication from attaching or releasing its destination.
+        return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+            "CDC initial scan is disabled while loading a replication destination")};
+    }
     if (initialScan && !AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
             << "Initial scan is not supported yet")};

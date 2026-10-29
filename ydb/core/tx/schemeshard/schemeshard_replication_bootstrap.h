@@ -7,7 +7,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-inline bool GetImportReplicationConfig(const TString& destination, TSchemeShard* ss,
+inline bool GetReplicationBootstrapConfig(const TString& destination, TSchemeShard* ss,
         NKikimrSchemeOp::TTableReplicationConfig& tableConfig, TString& error) {
     const auto canonicalDestination = CanonizePath(destination);
     TPathId owner;
@@ -22,11 +22,10 @@ inline bool GetImportReplicationConfig(const TString& destination, TSchemeShard*
             if (CanonizePath(target.GetDstPath()) != canonicalDestination) {
                 continue;
             }
-            if (owner) {
-                error = TStringBuilder() << "Multiple replications target import destination: " << destination;
-                return false;
+            // Keep ownership stable across SchemeShard restarts.
+            if (!owner || pathId < owner) {
+                owner = pathId;
             }
-            owner = pathId;
         }
     }
     if (!owner) {
@@ -42,14 +41,31 @@ inline bool GetImportReplicationConfig(const TString& destination, TSchemeShard*
     }
     const auto& replication = ss->Replications.at(owner)->Description;
     if (replication.GetConfig().GetInitialScan() || !replication.GetState().HasPaused()) {
-        error = TStringBuilder() << "Replication must be paused with initial scan disabled before importing destination: " << destination;
+        error = TStringBuilder() << "Replication must be paused with initial scan disabled before creating destination: " << destination;
         return false;
     }
-    tableConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    tableConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP);
     tableConfig.SetConsistencyLevel(replication.GetConfig().GetConsistencySettings().HasGlobal()
         ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
         : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW);
     owner.ToProto(tableConfig.MutableBootstrapReplication());
+    return true;
+}
+
+inline bool PrepareReplicationBootstrapTable(const TString& destination, TSchemeShard* ss,
+        NKikimrSchemeOp::TTableDescription& table, TString& error) {
+    // Initial-scan replication creates its destinations directly in read-only mode.
+    if (table.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+        && !table.GetReplicationConfig().HasBootstrapReplication()) {
+        return true;
+    }
+    NKikimrSchemeOp::TTableReplicationConfig config;
+    if (!GetReplicationBootstrapConfig(destination, ss, config, error)) {
+        return false;
+    }
+    if (config.HasBootstrapReplication()) {
+        table.MutableReplicationConfig()->CopyFrom(config);
+    }
     return true;
 }
 

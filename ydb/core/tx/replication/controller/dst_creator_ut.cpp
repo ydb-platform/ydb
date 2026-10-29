@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void AttachBootstrappedTable(bool wrongOwner) {
+    void AttachBootstrappedTable(bool wrongOwner, bool bootstrap) {
         TEnv env;
         auto table = TTestTableDescription{
             .Name = "Source",
@@ -190,6 +190,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto dst = MakeTableDescription(table);
         auto& config = *dst->MutableReplicationConfig();
         FillReplicationConfig(config, EReplicationMode::ReadOnly, EConsistencyLevel::Global);
+        if (bootstrap) {
+            config.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP);
+        }
         const auto owner = env.GetPathId(wrongOwner ? "/Root/Source" : "/Root");
         owner.ToProto(config.MutableBootstrapReplication());
         env.CreateTable("/Root", *dst);
@@ -211,12 +214,12 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
     }
 
-    Y_UNIT_TEST(AttachBootstrappedTable) {
-        AttachBootstrappedTable(false);
+    Y_UNIT_TEST_TWIN(AttachBootstrappedTable, bootstrap) {
+        AttachBootstrappedTable(false, bootstrap);
     }
 
-    Y_UNIT_TEST(RejectBootstrappedTableOwnedByAnotherReplication) {
-        AttachBootstrappedTable(true);
+    Y_UNIT_TEST_TWIN(RejectBootstrappedTableOwnedByAnotherReplication, bootstrap) {
+        AttachBootstrappedTable(true, bootstrap);
     }
 
     void CreateTableWithVectorIndexes(TEnv<>& env, const TString& path, bool withSyncIndex = false) {

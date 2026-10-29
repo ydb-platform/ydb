@@ -1,5 +1,9 @@
 #include "mock_env.h"
 
+#include <library/cpp/testing/common/env.h>
+#include <util/system/fs.h>
+#include <util/system/shellcommand.h>
+
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(ParseOptionsTest) {
@@ -1510,5 +1514,41 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             profile
         );
         UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oauth2-key-file: " << oauth2KeyFile << Endl);
+    }
+
+    // The storage replace in dedicated mode gets only the storage section: the command must refuse it with an error
+    // telling which sections are needed, before sending anything
+    Y_UNIT_TEST(StorageReplaceWithOneDedicatedSection) {
+        TTempDir dir;
+        const TString storageYaml = dir.Path() / "storage.yaml";
+        TFileOutput(storageYaml).Write("metadata:\n  kind: StorageConfig\n");
+
+        TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
+        command << "-e" << "grpc://localhost:1" << "admin" << "storage" << "replace"
+            << "--dedicated-storage-yaml" << storageYaml;
+        command.Run().Wait();
+        const TString error = command.GetError();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(command.GetExitCode(), 0, error);
+        UNIT_ASSERT_C(!error.Contains("optional"), error);
+        UNIT_ASSERT_STRING_CONTAINS(error, "--dedicated-cluster-yaml");
+    }
+
+    // The config directory of the node has a main and a storage YAML from an earlier init; the new init installs a
+    // main YAML alone, which then holds the whole configuration, so the old storage YAML must not stay
+    Y_UNIT_TEST(NodeConfigInitFromMainConfigDropsOldStorageConfig) {
+        TTempDir dir;
+        const TString configDir = dir.Path() / "config";
+        NFs::MakeDirectoryRecursive(configDir);
+        TFileOutput(configDir + "/config.yaml").Write("metadata:\n  kind: MainConfig\n  version: 0\n");
+        TFileOutput(configDir + "/storage.yaml").Write("metadata:\n  kind: StorageConfig\n  version: 0\n");
+        const TString newConfig = dir.Path() / "new.yaml";
+        TFileOutput(newConfig).Write("metadata:\n  kind: MainConfig\n  version: 1\nconfig: {}\n");
+
+        TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
+        command << "admin" << "node" << "config" << "init" << "--from-config" << newConfig << "--config-dir" << configDir;
+        command.Run().Wait();
+        UNIT_ASSERT_VALUES_EQUAL_C(command.GetExitCode(), 0, command.GetError());
+        UNIT_ASSERT_STRING_CONTAINS(TFileInput(configDir + "/config.yaml").ReadAll(), "version: 1");
+        UNIT_ASSERT_C(!NFs::Exists(configDir + "/storage.yaml"), "the storage YAML of the earlier init is left");
     }
 }

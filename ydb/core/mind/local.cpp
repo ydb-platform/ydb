@@ -104,7 +104,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TDuration LastSendTabletMetricsDuration = {};
     constexpr static TDuration TABLET_METRICS_BATCH_INTERVAL = TDuration::MilliSeconds(5000);
     constexpr static TDuration UPDATE_SYSTEM_USAGE_INTERVAL = TDuration::MilliSeconds(1000);
-    constexpr static TDuration DRAIN_NODE_TIMEOUT = TDuration::MilliSeconds(15000);
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
     ui64 UserPoolLimit = 0; // PotentialMaxThreadCount of UserPool
     ui64 MemUsage = 0;
@@ -914,7 +913,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             LastDrainRequest = ev->Get()->DrainProgress;
             UpdateEstimate();
             NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
-            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
+            ctx.Schedule(Config->DrainNodeTimeout, new TEvPrivate::TEvLocalDrainTimeout());
             ev->Get()->DrainProgress->OnReceive();
         } else {
             ev->Get()->DrainProgress->OnReceive();

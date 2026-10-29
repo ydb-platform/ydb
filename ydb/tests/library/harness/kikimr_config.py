@@ -191,6 +191,7 @@ class KikimrConfigGenerator(object):
             tiny_mode=False,
             monitoring_allowed_sids=[],
             viewer_allowed_sids=[],
+            shutdown_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -588,6 +589,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config.pop("table_service_config")
             self.yaml_config.pop("kqpconfig")
 
+        if shutdown_config:
+            self.yaml_config["shutdown_config"] = shutdown_config
         if metadata_section:
             self.full_config["metadata"] = metadata_section
             self.full_config["config"] = self.yaml_config

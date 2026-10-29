@@ -10,7 +10,7 @@ namespace NKikimr::NBsController {
 
 using TFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
 
-// The local target follows D; a recovering realm is used only when D needs it.
+// The sustainable target follows the minimum requirements of W and D after this realm becomes normal.
 std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealmStates& states, ui32 realm);
 
 struct TGroupReplicationInfo {

@@ -7,35 +7,55 @@
 
 namespace NKikimr::NBsController {
 
+namespace {
+struct TLayoutRequirements {
+    ui32 RequiredRealms;
+    ui32 RequiredCopies;
+};
+
+TLayoutRequirements GetMinimumLayoutRequirements(EMirror3dcLayout layout) {
+    switch (layout) {
+        case EMirror3dcLayout::LAYOUT_111_22:
+        case EMirror3dcLayout::LAYOUT_11:
+            return {2, 1};
+        case EMirror3dcLayout::LAYOUT_11_2:
+        case EMirror3dcLayout::LAYOUT_1:
+            return {1, 1};
+        case EMirror3dcLayout::LAYOUT_22:
+            return {2, 2};
+        case EMirror3dcLayout::LAYOUT_2:
+            return {1, 2};
+        case EMirror3dcLayout::LAYOUT_111:
+            return {3, 1};
+        case EMirror3dcLayout::LAYOUT_0:
+            return {0, 0};
+    }
+    Y_ABORT("Unsupported mirror-3-dc layout");
+}
+} // namespace
+
 std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(const TFailRealmStates& states, ui32 realm) {
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     if (realm >= 3 || states[realm] == TFailRealm::F) {
         return std::nullopt;
     }
     const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(states[0], states[1], states[2]);
-    if (!state || *state == EMirror3dcGroupState::NORMAL) {
-        // NORMAL writes may use 2+2 and omit any realm, so N1 is not a lasting per-realm guarantee.
+    if (!state) {
         return std::nullopt;
     }
-    const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
-    ui32 requiredRealms;
-    EMirror3dcFailRealmState target;
-    switch (durability) {
-        case EMirror3dcLayout::LAYOUT_111: requiredRealms = 3; target = TFailRealm::N1; break;
-        case EMirror3dcLayout::LAYOUT_11: requiredRealms = 2; target = TFailRealm::N1; break;
-        case EMirror3dcLayout::LAYOUT_22: requiredRealms = 2; target = TFailRealm::N2; break;
-        case EMirror3dcLayout::LAYOUT_1: requiredRealms = 1; target = TFailRealm::N1; break;
-        case EMirror3dcLayout::LAYOUT_2: requiredRealms = 1; target = TFailRealm::N2; break;
-        default: return std::nullopt;
-    }
-    ui32 normalRealms = 0;
+    const TMirror3dcGroupLayouts layouts = *GetMirror3dcGroupLayouts(*state);
+    const TLayoutRequirements write = GetMinimumLayoutRequirements(layouts.Write);
+    const TLayoutRequirements durability = GetMinimumLayoutRequirements(layouts.Durability);
+    const ui32 requiredRealms = Min(write.RequiredRealms, durability.RequiredRealms);
+    const ui32 requiredCopies = Min(write.RequiredCopies, durability.RequiredCopies);
+    ui32 normalRealmsAfterTransition = states[realm] == TFailRealm::R;
     for (EMirror3dcFailRealmState realmState : states) {
-        normalRealms += realmState != TFailRealm::F && realmState != TFailRealm::R;
+        normalRealmsAfterTransition += realmState != TFailRealm::F && realmState != TFailRealm::R;
     }
-    if (states[realm] == TFailRealm::R && normalRealms >= requiredRealms) {
-        return std::nullopt;
-    }
-    if (states[realm] == TFailRealm::N2 || states[realm] == target) {
+    // N0/N1/N2 encode the minimum copy count. A surplus realm may be omitted by future writes.
+    const EMirror3dcFailRealmState target = normalRealmsAfterTransition > requiredRealms
+        ? TFailRealm::N0 : static_cast<EMirror3dcFailRealmState>(requiredCopies);
+    if (states[realm] == target || (target != TFailRealm::N0 && states[realm] == TFailRealm::N2)) {
         return std::nullopt;
     }
     return target;
@@ -115,10 +135,15 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
             for (ui32 realm = 0; realm < 3; ++realm) {
                 if (group->Info.States[realm] == TFailRealm::R && states[realm] != TFailRealm::R) {
-                    // R alone may finish before a normal realm has its first copy.
+                    // This R has confirmed D, even though its resulting state is N0.
                     // Establish 1+1+1 before NORMAL allows writes to omit any realm again.
-                    const bool everyRealmHasCopy = std::find(states.begin(), states.end(), TFailRealm::N0) == states.end();
-                    if (everyRealmHasCopy) {
+                    bool everyNormalRealmHasCopy = true;
+                    for (ui32 normalRealm = 0; normalRealm < 3; ++normalRealm) {
+                        if (normalRealm != realm && states[normalRealm] == TFailRealm::N0) {
+                            everyNormalRealmHasCopy = false;
+                        }
+                    }
+                    if (everyNormalRealmHasCopy) {
                         states.fill(TFailRealm::N0);
                     } else {
                         states[realm] = TFailRealm::R;

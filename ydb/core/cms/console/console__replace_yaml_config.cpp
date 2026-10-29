@@ -67,10 +67,11 @@ public:
         return MakeHolder<NActors::IEventHandle>(Sender, ctx.SelfID, ev.Release());
     }
 
-    void HandleError(const TString& error, const TActorContext& ctx) {
+    void HandleError(const TString& error, const TActorContext& ctx,
+            Ydb::StatusIds::StatusCode status = Ydb::StatusIds::BAD_REQUEST) {
         Error = true;
         auto ev = MakeHolder<TEvConsole::TEvGenericError>();
-        ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        ev->Record.SetYdbStatus(status);
         auto *issue = ev->Record.AddIssues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message(error);
@@ -111,11 +112,24 @@ public:
         TConfigsManager *self,
         TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
             : TTxReplaceYamlConfigBase(self, ev)
+            , ConsoleCommitContext(ev->Get()->ConsoleCommitContext)
     {
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
+        if (ConsoleCommitContext) {
+            const auto& commit = *ConsoleCommitContext;
+            if (!Self->IsCurrentConfigSession(commit.Sender, commit.PipeServer)) {
+                HandleError("Console commit session is obsolete", ctx, Ydb::StatusIds::ABORTED);
+                return true;
+            }
+            if (Self->YamlVersion != commit.YamlVersion) {
+                HandleError("Console config changed while the commit was pending", ctx, Ydb::StatusIds::ABORTED);
+                return true;
+            }
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         TUpdateConfigOpContext opCtx;
@@ -245,6 +259,7 @@ public:
     }
 
 private:
+    const std::optional<TEvConsole::TEvSetYamlConfigRequest::TConsoleCommitContext> ConsoleCommitContext;
     ui32 Version;
     TString Cluster;
     TString UpdatedMainConfig;

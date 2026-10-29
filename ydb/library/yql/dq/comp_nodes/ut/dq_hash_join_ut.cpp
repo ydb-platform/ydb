@@ -339,6 +339,40 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+TJoinTestData SerializedListKeySpillingTestData() {
+    auto td = LeftJoinSpillingTestData();
+    auto& setup = *td.Setup;
+    auto& pb = *setup.PgmBuilder;
+    auto dummy = setup.BuildGraph(pb.NewDataLiteral<ui64>(0));
+    const auto& factory = dummy->GetContext().HolderFactory;
+    auto* type = pb.NewDataType(NUdf::EDataSlot::Uint64);
+    auto* rowType = pb.NewTupleType({pb.NewListType(type), type});
+    const auto wrapKey = [&](TypeAndValue& source) {
+        TUnboxedValueVector rows;
+        auto iter = source.Value.GetListIterator();
+        NUdf::TUnboxedValue row;
+        while (iter.Next(row)) {
+            NUdf::TUnboxedValue* keyItem = nullptr;
+            NUdf::TUnboxedValue key = factory.CreateDirectArrayHolder(1, keyItem);
+            keyItem[0] = row.GetElement(0);
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue wrapped = factory.CreateDirectArrayHolder(2, items);
+            items[0] = std::move(key);
+            items[1] = row.GetElement(1);
+            rows.push_back(std::move(wrapped));
+        }
+        source.Type = pb.NewListType(rowType);
+        source.Value = factory.VectorAsArray(rows);
+    };
+    wrapKey(td.Left);
+    wrapKey(td.Right);
+    td.Renames = {{1, EJoinSide::kLeft}, {1, EJoinSide::kRight}};
+    td.Result = ConvertVectorsToTuples(setup, TVector<ui64>{13, 14, 15, 16, 17},
+        TVector<std::optional<ui64>>{std::nullopt, std::nullopt, 0, std::nullopt, 1});
+    td.ExpectsSpilling = true;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData LeftJoinSpillingMultiKeyTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -2714,6 +2748,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 }
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST(TestSerializedListKeySpilling) {
+        Test(SerializedListKeySpillingTestData(), false);
+    }
+
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
     }

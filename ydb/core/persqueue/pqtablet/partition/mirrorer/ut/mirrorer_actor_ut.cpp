@@ -291,10 +291,13 @@ TReadSessionEvent::TDataReceivedEvent MakeDataEvent(
 }
 
 TReadSessionEvent::TDataReceivedEvent MakeReplicationDataEvent(
-    const TIntrusivePtr<TMockPartitionSession>& partition, bool sourceClosed, ui64 consumerOffset)
+    const TIntrusivePtr<TMockPartitionSession>& partition, bool sourceClosed, ui64 consumerOffset,
+    ui64 startOffset = 0, ui64 endOffset = 0)
 {
     NKikimrPQ::TReplicationDataPayload payload;
     payload.SetSourceTopicIsClosedForReadWrites(sourceClosed);
+    payload.SetStartOffset(startOffset);
+    payload.SetEndOffset(endOffset);
     (*payload.MutableOffsetsByConsumers())["consumer"] = consumerOffset;
     auto message = MakeCompressed(partition, 0, payload.SerializeAsString());
     message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
@@ -524,8 +527,9 @@ struct TMirrorerEnv {
         Dispatch();
     }
 
-    void PushReplicationData(bool sourceClosed = true, ui64 consumerOffset = 0) {
-        Factory.Session(0).PushEvent(MakeReplicationDataEvent(Factory.Session(0).Partition, sourceClosed, consumerOffset));
+    void PushReplicationData(bool sourceClosed = true, ui64 consumerOffset = 0, ui64 startOffset = 0, ui64 endOffset = 0) {
+        Factory.Session(0).PushEvent(MakeReplicationDataEvent(
+            Factory.Session(0).Partition, sourceClosed, consumerOffset, startOffset, endOffset));
         Dispatch();
     }
 
@@ -944,6 +948,43 @@ Y_UNIT_TEST(ReplicationFinishedWaitsForQueuedReplicationData) {
     env.AckReplicationData();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
     UNIT_ASSERT(env.CapturedScale.empty());
+}
+
+Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
+    TMirrorerEnv env({.IsForTopicReplication = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 2);
+    env.PushReplicationData(true, 1, 0, 1);
+    env.PushReplicationData(true, 2, 0, 2);
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
+    env.Dispatch();
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+    env.AckWrite(0);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 1);
+    env.AckReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 1));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    env.AckWrite(1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 2);
+}
+
+Y_UNIT_TEST(ReplicationDataForEmptySourceDoesNotWaitForMessages) {
+    TMirrorerEnv env({.IsForTopicReplication = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 10);
+    env.PushReplicationData(true, 10, 10, 10);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetStartOffset(), 10);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetEndOffset(), 10);
+    UNIT_ASSERT(env.CapturedRequests.empty());
 }
 
 Y_UNIT_TEST(RegularMirrorDoesNotSendReplicationFinished) {

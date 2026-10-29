@@ -496,7 +496,18 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         return;
     }
 
-    ReplicationDataInFlight.swap(ReplicationDataQueue);
+    while (!ReplicationDataQueue.empty()) {
+        const auto& data = ReplicationDataQueue.front();
+        // Applying these boundaries must not make unwritten source messages look persisted.
+        if (data.GetEndOffset() > Max(EndOffset, data.GetStartOffset())) {
+            break;
+        }
+        ReplicationDataInFlight.emplace_back(std::move(ReplicationDataQueue.front()));
+        ReplicationDataQueue.pop_front();
+    }
+    if (ReplicationDataInFlight.empty()) {
+        return;
+    }
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
     event->Data = ReplicationDataInFlight;
     ctx.Send(PartitionActor, event.Release());

@@ -208,6 +208,7 @@ Y_UNIT_TEST(ConfigurationReplicationDoneRequest) {
     SendBalancerUpdate(tc, update);
     tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
     UNIT_ASSERT(replicator);
+    tc.Runtime->EnableScheduleForActor(replicator);
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
     auto complete = [&](const TActorId& sender) {
         ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, sender, new TEvPQ::TEvTopicConfigurationReplicationFinished());
@@ -225,7 +226,7 @@ Y_UNIT_TEST(ConfigurationReplicationDoneRequest) {
     tc.Runtime->Send(new IEventHandle(proposals.back()->Sender, tc.Edge,
         new TEvTxUserProxy::TEvProposeTransactionStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError)));
     tc.Runtime->SimulateSleep(TDuration::MilliSeconds(100));
-    complete(replicator);
+    tc.Runtime->SimulateSleep(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 2);
     const auto oldReplicator = replicator;
     SendBalancerUpdate(tc, update);

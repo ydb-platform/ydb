@@ -17,6 +17,7 @@ Y_UNIT_TEST(CompletesWithoutReplicatingConfiguration) {
     NKikimrPQ::TMirrorPartitionConfig config;
     config.SetTopic("source-topic");
     const auto replicator = runtime.Register(CreateTopicConfigurationReplicator(42, parent, config));
+    runtime.EnableScheduleForActor(replicator);
     size_t credentialsRequests = 0;
     size_t completionNotifications = 0;
     runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -28,14 +29,14 @@ Y_UNIT_TEST(CompletesWithoutReplicatingConfiguration) {
     });
     auto completion = runtime.GrabEdgeEvent<TEvPQ::TEvTopicConfigurationReplicationFinished>(parent);
     UNIT_ASSERT_VALUES_EQUAL(completion->Sender, replicator);
-    runtime.Send(new IEventHandle(replicator, parent, new TEvents::TEvWakeup()), 0, true);
-    runtime.SimulateSleep(TDuration::Seconds(10));
+    runtime.SimulateSleep(TDuration::Seconds(6));
     UNIT_ASSERT(runtime.FindActor(replicator));
     UNIT_ASSERT_VALUES_EQUAL(credentialsRequests, 0);
-    UNIT_ASSERT_VALUES_EQUAL(completionNotifications, 1);
+    UNIT_ASSERT_VALUES_EQUAL(completionNotifications, 2);
     runtime.Send(new IEventHandle(replicator, parent, new TEvents::TEvPoisonPill()), 0, true);
-    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    runtime.SimulateSleep(TDuration::Seconds(6));
     UNIT_ASSERT(!runtime.FindActor(replicator));
+    UNIT_ASSERT_VALUES_EQUAL(completionNotifications, 2);
     runtime.SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
 }
 

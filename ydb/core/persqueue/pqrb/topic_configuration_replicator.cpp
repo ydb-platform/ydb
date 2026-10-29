@@ -13,11 +13,17 @@ TTopicConfigurationReplicator::TTopicConfigurationReplicator(ui64 tabletId, cons
 
 void TTopicConfigurationReplicator::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateWork);
+    NotifyReplicationFinished(ctx);
+}
+
+void TTopicConfigurationReplicator::NotifyReplicationFinished(const TActorContext& ctx) {
     ctx.Send(TabletActorId, new TEvPQ::TEvTopicConfigurationReplicationFinished());
+    ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
 STFUNC(TTopicConfigurationReplicator::StateWork) {
     switch (ev->GetTypeRewrite()) {
+        CFunc(TEvents::TSystem::Wakeup, NotifyReplicationFinished);
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
     }
 }

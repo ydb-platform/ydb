@@ -14,6 +14,7 @@ public:
 
 private:
     STFUNC(StateWork);
+    void NotifyReplicationFinished(const TActorContext& ctx);
     TStructuredMessage BuildLogPrefix() const override;
 
     const NKikimrPQ::TMirrorPartitionConfig Config;

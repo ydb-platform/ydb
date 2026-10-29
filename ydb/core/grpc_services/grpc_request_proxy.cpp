@@ -356,7 +356,7 @@ private:
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
-    PathNormalizer = AppData(ctx)->PathNormalizer;
+    PathNormalizer = AppData(ctx)->GetPathNormalizer();
     AllowYdbRequestsWithoutDatabase = AppData(ctx)->FeatureFlags.GetAllowYdbRequestsWithoutDatabase();
 
     // Subscribe for TableService config changes

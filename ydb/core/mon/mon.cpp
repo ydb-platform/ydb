@@ -73,8 +73,10 @@ TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
         return *request->Database;
     }
     TString database = ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, request->ContentType);
-    if (!database.empty() && HasAppData() && AppData()->PathNormalizer) {
-        database = AppData()->PathNormalizer->NormalizePath(CanonizePath(database));
+    if (!database.empty() && HasAppData()) {
+        if (auto normalizer = AppData()->GetPathNormalizer()) {
+            database = normalizer->NormalizePath(CanonizePath(database));
+        }
     }
     return database;
 }
@@ -1849,7 +1851,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     ActorSystem = actorSystem;
     if (!PathNormalizer) {
         auto* appData = ActorSystem->AppData<NKikimr::TAppData>();
-        PathNormalizer = MakePathNormalizer(appData ? appData->PathNormalizer : nullptr);
+        PathNormalizer = MakePathNormalizer(appData ? appData->GetPathNormalizer() : nullptr);
     }
     Register(new TIndexRedirectMonPage(IndexMonPage));
     Register(new NMonitoring::TVersionMonPage);

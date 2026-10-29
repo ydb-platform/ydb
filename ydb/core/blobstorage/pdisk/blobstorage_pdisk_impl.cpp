@@ -1885,8 +1885,11 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
         if (effectiveExpectedSlotSize) {
             *Mon.SlotSizeBytes = ui64(expectedOwnerSize) * Format.ChunkSize;
-        } else if (ExpectedSlotCount) {
-            *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
+        } else {
+            // Matches the default value of BSC's DefaultMaxSlots.
+            constexpr ui32 defaultMaxSlots = 16;
+            const ui32 expectedSlotCount = ExpectedSlotCount ? ExpectedSlotCount : defaultMaxSlots;
+            *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / expectedSlotCount) * ui64(Format.ChunkSize);
         }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();

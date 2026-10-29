@@ -4094,6 +4094,15 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             });
         };
 
+        testCtx.Send(new TEvents::TEvWakeup());
+        waitForPDiskStateUpdate(0, 0);
+
+        const ui64 defaultSlotSizeBytes = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return ui64(pdisk->Keeper.GetUserChunkPoolSize() / 16) * ui64(pdisk->Format.ChunkSize);
+        });
+        UNIT_ASSERT_GT(defaultSlotSizeBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), defaultSlotSizeBytes);
+
         const ui32 expectedSlotCount = 4;
         const ui32 slotSizeInUnits = 0;
 
@@ -4119,6 +4128,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         waitForPDiskStateUpdate(expectedSlotCount, expectedSlotSize);
 
         UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), 3ull * chunkSize);
+
+        testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
+            new NPDisk::TEvChangeExpectedSlotCount(0, slotSizeInUnits),
+            NKikimrProto::OK);
+        testCtx.Send(new TEvents::TEvWakeup());
+        waitForPDiskStateUpdate(0, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(getSlotSizeBytes(), defaultSlotSizeBytes);
     }
 
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {

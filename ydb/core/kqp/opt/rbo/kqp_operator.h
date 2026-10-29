@@ -623,6 +623,8 @@ public:
         // time. A row storage read passes it to the source as is, so the ranges are not computed in a separate
         // transaction, and explain shows it. ComputeNode describes the same ranges.
         TExprNode::TPtr LiteralRange;
+        // The ranges computed at compile time, for explain, when they do not depend on parameters.
+        TExprNode::TPtr EvaluatedRanges;
 
         // The prefix computed for a particular table, by its path.
         const TPointPrefix* FindPointPrefix(const TString& table) const {

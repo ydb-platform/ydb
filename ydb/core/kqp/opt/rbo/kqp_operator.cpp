@@ -3,8 +3,8 @@
 #include "kqp_rbo_utils.h"
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/types/uuid/uuid.h>
 
 #include <algorithm>
 #include <limits>
@@ -382,53 +382,6 @@ TString StripAliasPrefix(const TString& column) {
     return (dot != TString::npos) ? column.substr(dot + 1) : column;
 }
 
-static TString FormatKeyValue(const TExprBase& value) {
-    if (const auto param = value.Maybe<TCoParameter>()) {
-        return param.Cast().Name().StringValue();
-    }
-    if (const auto uuid = value.Maybe<TCoUuid>()) {
-        return NUuid::UuidBytesToString(uuid.Cast().Literal().StringValue());
-    }
-    if (const auto data = value.Maybe<TCoDataCtor>()) {
-        return data.Cast().Literal().StringValue();
-    }
-    if (const auto pg = value.Maybe<TCoPgConst>()) {
-        return pg.Cast().Value().StringValue();
-    }
-    if (value.Maybe<TCoNothing>()) {
-        return "NULL";
-    }
-    return "n/a";
-}
-
-// A key range bound over all key columns. A bound shorter than the key covers every key with that prefix,
-// so the missing columns are the infinity on the side the bound includes or excludes.
-static TString FormatKeyBound(const TKqlKeyTuple& bound, bool isFrom, const TVector<TString>& keyColumns) {
-    const bool inclusive = bound.Maybe<TKqlKeyInc>().IsValid();
-    const TStringBuf infinity = (isFrom == inclusive) ? "-∞" : "+∞";
-    TStringBuilder res;
-    res << "{";
-    for (size_t i = 0; i < keyColumns.size(); ++i) {
-        res << (i ? ", " : "") << StripAliasPrefix(keyColumns[i]) << ": ";
-        if (i < bound.ArgCount()) {
-            res << FormatKeyValue(bound.Arg(i));
-        } else {
-            res << infinity;
-        }
-    }
-    return res << "}";
-}
-
-// Infinities are never read, so a bound padded with them is shown as open.
-static TString FormatKeyRange(const TKqlKeyRange& range, const TVector<TString>& keyColumns) {
-    const auto from = range.From();
-    const auto to = range.To();
-    const bool fromInclusive = from.Maybe<TKqlKeyInc>() && from.ArgCount() == keyColumns.size();
-    const bool toInclusive = to.Maybe<TKqlKeyInc>() && to.ArgCount() == keyColumns.size();
-    return TStringBuilder() << (fromInclusive ? "[" : "(") << FormatKeyBound(from, true, keyColumns) << ", "
-                            << FormatKeyBound(to, false, keyColumns) << (toInclusive ? "]" : ")");
-}
-
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto res = IOperator::ToJson(explainFlags, registry);
 
@@ -472,11 +425,16 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
             rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
         }
 
-        // Ranges are shown only when the extractor found them to be a single range known at compile time.
-        if (RangeInfo->LiteralRange) {
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges, RangeInfo->ComputeNode, RangeInfo->KeyColumns,
+                                                          RangeInfo->ExpectedMaxRanges);
+        if (description.Ranges) {
             NJson::TJsonValue readRanges(NJson::EJsonValueType::JSON_ARRAY);
-            readRanges.AppendValue(FormatKeyRange(TKqlKeyRange(RangeInfo->LiteralRange), RangeInfo->KeyColumns));
+            for (const auto& range : *description.Ranges) {
+                readRanges.AppendValue(range);
+            }
             res["ReadRanges"] = std::move(readRanges);
+        } else if (description.Expression) {
+            res["ReadRangesExpression"] = *description.Expression;
         }
 
         NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);

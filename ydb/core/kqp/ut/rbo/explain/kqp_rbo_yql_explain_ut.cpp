@@ -489,12 +489,160 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedDisjointPlan = GetSimplifiedPlan(disjointPlan);
         const auto* disjointReadOp = FindOperatorByStringField(simplifiedDisjointPlan, "Name", "TableRangeScan");
         UNIT_ASSERT_C(disjointReadOp, disjointPlan);
-        // Two ranges are not a literal range, so only the ranged keys are shown.
-        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRanges"), disjointPlan);
+        // Two ranges are not a literal range, so they are computed from the ranges expression.
+        UNIT_ASSERT_VALUES_EQUAL_C(disjointReadOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 2, disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRanges", "({a: -∞}, {a: 5})"), disjointPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRanges", "[{a: 10}, {a: +∞})"), disjointPlan);
+        UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesExpression"), disjointPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadRangesKeys", "a"), disjointPlan);
         UNIT_ASSERT_C(StringArrayFieldContains(*disjointReadOp, "ReadColumns", "b"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("Predicate"), disjointPlan);
         UNIT_ASSERT_C(!disjointReadOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), disjointPlan);
+
+        // A parameter has no value at compile time, so the ranges are described by the structure of the expression.
+        auto parameterPlan = ExecuteExplain(session, R"(
+            PRAGMA YqlSelect = 'force';
+            DECLARE $p AS Int64;
+            SELECT t1.a, t1.b FROM `/Root/t1` AS t1 WHERE t1.a < $p OR t1.a >= 10;
+        )");
+        const auto simplifiedParameterPlan = GetSimplifiedPlan(parameterPlan);
+        const auto* parameterReadOp = FindOperatorByStringField(simplifiedParameterPlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(parameterReadOp, parameterPlan);
+        UNIT_ASSERT_C(!parameterReadOp->GetMapSafe().contains("ReadRanges"), parameterPlan);
+        const auto expression = GetStringField(*parameterReadOp, "ReadRangesExpression");
+        UNIT_ASSERT_C(expression.StartsWith("a ∈ ") && expression.Contains("$p") && expression.Contains("[10, +∞)"), parameterPlan);
+    }
+
+    // TEMPORARY: prints explain plans that show how read ranges are described. Not for commit.
+    Y_UNIT_TEST(RangeDisplayShowcase) {
+        TExplainPlanTestContext testContext;
+        auto tableSession = testContext.GetKikimr().GetTableClient().CreateSession().GetValueSync().GetSession();
+        const std::pair<TStringBuf, TStringBuf> tables[] = {
+            {"sc_row", "(a Int64 NOT NULL, b Int64 NOT NULL, c Int64, PRIMARY KEY (a, b))"},
+            {"sc_col", "(a Int64 NOT NULL, b Int64 NOT NULL, c Int64, PRIMARY KEY (a, b)) WITH (STORE = column)"},
+            {"sc_idx", "(a Int64 NOT NULL, c Int64, PRIMARY KEY (a), INDEX idx GLOBAL ON (c))"},
+            {"sc_nullable", "(k Int64, v Int64, PRIMARY KEY (k))"},
+            {"sc_str", "(s String NOT NULL, v Int64, PRIMARY KEY (s))"},
+            {"sc_utf8", "(u Utf8 NOT NULL, v Int64, PRIMARY KEY (u))"},
+            {"sc_i8", "(k Int8 NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_u32", "(k Uint32 NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_double", "(k Double NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_dec", "(k Decimal(10, 2) NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_date", "(k Date NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_dt", "(k Datetime NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_ts", "(k Timestamp NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_interval", "(k Interval NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_uuid", "(k Uuid NOT NULL, v Int64, PRIMARY KEY (k))"},
+            {"sc_bool", "(k Bool NOT NULL, v Int64, PRIMARY KEY (k))"},
+        };
+        THashSet<TString> created;
+        for (const auto& [name, schema] : tables) {
+            auto result = tableSession.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `/Root/" << name << "` " << schema << ";").GetValueSync();
+            if (result.IsSuccess()) {
+                created.insert(TString(name));
+            } else {
+                Cout << "TABLE NOT CREATED: " << name << " " << schema << Endl << result.GetIssues().ToString() << Endl;
+            }
+        }
+
+        struct TCase {
+            TStringBuf Title;
+            TStringBuf Table;
+            TStringBuf Query;
+        };
+        const TCase cases[] = {
+            {"Point on the whole key", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b = 10;"},
+            {"Range on the second key column", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b >= 10 AND b < 20;"},
+            {"Key prefix", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1;"},
+            {"Greater than", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 5;"},
+            {"Closed interval", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a >= 5 AND a <= 10;"},
+            {"BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a BETWEEN 5 AND 10;"},
+            {"Disjoint ranges from OR", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a >= 10;"},
+            {"Not equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a != 5;"},
+            {"IN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3);"},
+            {"IN times a point", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b = 7;"},
+            {"IN times BETWEEN", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b BETWEEN 10 AND 20;"},
+            {"OR of composite conditions", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a = 1 AND b < 5) OR (a = 3 AND b >= 10);"},
+            {"Overlapping ranges merge", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 5 OR a < 7 OR a = 20;"},
+            {"A column after a range goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a > 1 AND b = 5;"},
+            {"A non-key condition goes to the filter", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 AND b > 5 AND c = 7;"},
+            {"OR across key columns", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1 OR b = 2;"},
+            {"Tuple IN in key order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (a, b) IN ((1, 10), (2, 20));"},
+            {"Tuple IN in another order", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE (b, a) IN ((10, 1), (20, 2));"},
+            {"IN with 15 values", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);"},
+            {"IN with 25 values: more ranges than listed", "sc_row",
+             "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25);"},
+            {"Product of IN lists: 24 ranges", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2, 3) AND b IN (1, 2, 3, 4, 5, 6, 7, 8);"},
+
+            {"Parameter: literal range", "sc_row", "DECLARE $a AS Int64; SELECT * FROM `/Root/sc_row` WHERE a = $a;"},
+            {"Parameters: literal interval", "sc_row", "DECLARE $lo AS Int64; DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a >= $lo AND a < $hi;"},
+            {"Parameter in a multi-range read", "sc_row", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_row` WHERE a IN (1, 2) AND b >= 10 AND b < $hi;"},
+            {"Parameter in OR", "sc_row", "DECLARE $p AS Int64; SELECT * FROM `/Root/sc_row` WHERE a < $p OR a >= 10;"},
+            {"IN over a list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $list;"},
+            {"Tuple IN over a parameter", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (a, b) IN $pairs;"},
+            {"Condition that does not depend on the row", "sc_row", "DECLARE $flag AS Bool; SELECT * FROM `/Root/sc_row` WHERE a = 1 OR $flag;"},
+
+            {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;"},
+            {"Fraction on an integer key: less", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 2.5;"},
+            {"Value above Int8: less", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k < 300;"},
+            {"Value above Int8: greater", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k > 300;"},
+            {"Value above Int8: equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k = 300;"},
+            {"Value above Int8: not equal", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k != 300;"},
+            {"Uint32 key", "sc_u32", "SELECT * FROM `/Root/sc_u32` WHERE k > 4000000000;"},
+
+            {"Nullable key: less", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k < 5;"},
+            {"Nullable key: IS NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NULL;"},
+            {"Nullable key: IS NOT NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k IS NOT NULL;"},
+            {"Nullable key: value or NULL", "sc_nullable", "SELECT * FROM `/Root/sc_nullable` WHERE k = 5 OR k IS NULL;"},
+
+            {"String: point", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'abc';"},
+            {"String: interval", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s >= 'abc' AND s < 'abd';"},
+            {"String: StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, 'ab');"},
+            {"String: LIKE prefix", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s LIKE 'ab%';"},
+            {"String: NOT StartsWith", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE NOT StartsWith(s, 'ab');"},
+            {"String: StartsWith a parameter", "sc_str", "DECLARE $p AS String; SELECT * FROM `/Root/sc_str` WHERE StartsWith(s, $p);"},
+            {"String: quotes and separators", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = 'a\"b, c: 1';"},
+            {"String: non-UTF-8 bytes", "sc_str", "SELECT * FROM `/Root/sc_str` WHERE s = '\\xff\\xfe';"},
+            {"Utf8: StartsWith", "sc_utf8", "SELECT * FROM `/Root/sc_utf8` WHERE StartsWith(u, 'при');"},
+
+            {"Double key", "sc_double", "SELECT * FROM `/Root/sc_double` WHERE k > 5;"},
+            {"Decimal key", "sc_dec", "SELECT * FROM `/Root/sc_dec` WHERE k < Decimal('1.5', 10, 2);"},
+            {"Date key: month", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k >= Date('2024-01-01') AND k < Date('2024-02-01');"},
+            {"Date key: point", "sc_date", "SELECT * FROM `/Root/sc_date` WHERE k = Date('2024-01-01');"},
+            {"Datetime key", "sc_dt", "SELECT * FROM `/Root/sc_dt` WHERE k BETWEEN Datetime('2024-01-01T00:00:00Z') AND Datetime('2024-01-02T00:00:00Z');"},
+            {"Timestamp key", "sc_ts", "SELECT * FROM `/Root/sc_ts` WHERE k >= Timestamp('2024-01-01T00:00:00Z');"},
+            {"Interval key", "sc_interval", "SELECT * FROM `/Root/sc_interval` WHERE k > Interval('PT1H');"},
+            {"Uuid key: point", "sc_uuid", "SELECT * FROM `/Root/sc_uuid` WHERE k = Uuid('00112233-4455-6677-8899-aabbccddeeff');"},
+            {"Uuid key: two points", "sc_uuid",
+             "SELECT * FROM `/Root/sc_uuid` WHERE k IN (Uuid('00112233-4455-6677-8899-aabbccddeeff'), Uuid('ffeeddcc-bbaa-9988-7766-554433221100'));"},
+            {"Bool key", "sc_bool", "SELECT * FROM `/Root/sc_bool` WHERE k = true;"},
+
+            {"Column table: OR of composite conditions", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE ((a = 1 AND b < 5) OR (a = 3 AND b >= 10)) AND c = 7;"},
+            {"Column table: IN times a point", "sc_col", "SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b = 7;"},
+            {"Column table: parameter", "sc_col", "DECLARE $hi AS Int64; SELECT * FROM `/Root/sc_col` WHERE a IN (1, 2) AND b < $hi;"},
+
+            {"Secondary index: point", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c = 5;"},
+            {"Secondary index: IN", "sc_idx", "SELECT * FROM `/Root/sc_idx` WHERE c IN (1, 2);"},
+            {"Secondary index: range", "sc_idx", "SELECT a FROM `/Root/sc_idx` WHERE c > 5 AND c < 10;"},
+        };
+        size_t number = 0;
+        for (const auto& [title, table, query] : cases) {
+            Cout << Endl << "==================== " << ++number << ". " << title << Endl << query << Endl;
+            if (!created.contains(table)) {
+                Cout << "SKIPPED: table " << table << " was not created" << Endl;
+                continue;
+            }
+            auto result = testContext.GetSession().ExecuteQuery(
+                TStringBuilder() << "PRAGMA YqlSelect = 'force'; " << query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            if (!result.IsSuccess()) {
+                Cout << "EXPLAIN FAILED: " << result.GetIssues().ToString() << Endl;
+                continue;
+            }
+            PrintPlan(TString{*result.GetStats()->GetPlan()}, /*analyzeMode=*/false);
+        }
     }
 
     Y_UNIT_TEST_TWIN(ExplainRangeComposite, ColumnStorage) {
@@ -527,6 +675,18 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", column), plan);
             }
         }
+
+        // IN over tuples in another order than the key: every tuple is a point of the key.
+        const auto tuplePlan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT a, b, c FROM `/Root/composite` WHERE (b, a) IN ((10, 1), (20, 2)) AND c = 7;
+        )");
+        const auto simplifiedTuplePlan = GetSimplifiedPlan(tuplePlan);
+        const auto* tupleReadOp = FindOperatorByStringField(simplifiedTuplePlan, "Name", "TableRangeScan");
+        UNIT_ASSERT_C(tupleReadOp, tuplePlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(tupleReadOp->GetMapSafe().at("ReadRanges").GetArraySafe().size(), 2, tuplePlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*tupleReadOp, "ReadRanges", "[{a: 1, b: 10}, {a: 1, b: 10}]"), tuplePlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*tupleReadOp, "ReadRanges", "[{a: 2, b: 20}, {a: 2, b: 20}]"), tuplePlan);
     }
 
     Y_UNIT_TEST(ExplainUuidReadRanges) {

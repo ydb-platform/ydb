@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
     Y_UNIT_TEST(Defrag) {
         TTestEnv env;
-        env.Setup(true, 0, nullptr, 128);
+        env.Setup(true, 0, nullptr, 256);
         env.Start();
         TManualEvent event;
         TTestActorConcurrent::TTestActorState state;

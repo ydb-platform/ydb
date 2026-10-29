@@ -15,7 +15,7 @@ Before you begin:
 - On the target, [create a secret](../yql/reference/syntax/create-secret.md) named `source_token` containing the token that replication will use to connect to the source.
 - Prepare the `mybucket` bucket and [S3 authentication](../reference/ydb-cli/export-import/auth-s3.md). The examples use the `storage.yandexcloud.net` endpoint and read access keys from environment variables or the `~/.aws/credentials` file. The endpoint must be accessible from the servers of both databases: the source writes the backup, and the target reads it.
 - Choose an unused prefix, `replication-bootstrap`, in the bucket. Do not modify the exported files until the import is complete.
-- Make sure that `replica_table` does not exist on the target. The `import s3` command creates the table together with its data and does not overwrite existing tables. Use `scheme ls` to check the path.
+- Make sure that `replica_table` does not exist on the target. Replication will create an empty table here for import. The `import s3` command can replace this table, but does not overwrite ordinary tables or previously imported data. Use `scheme ls` to check the path.
 
 Keep the set of replicated tables, their columns, and their indexes unchanged during initial synchronization. The table schemas in the backup must match the source schemas when replication starts.
 
@@ -41,7 +41,7 @@ WITH (
 
 The `source.example.com:2135` address in the example is the source endpoint. The `CONNECTION_STRING` and `TOKEN_SECRET_PATH` parameters specify the connection that the target will use to create and read changefeeds.
 
-Replication is created in the `PAUSED` state and prepares changefeeds on the source without exporting the initial data. The `replica_table` table is not created or attached to replication yet. The import operation will create it.
+Replication is created in the `PAUSED` state and prepares changefeeds on the source without exporting the initial data. An empty `replica_table` is automatically created on the target in replica mode. Import recreates it with the schema and partitioning from the backup. Before replication starts, the table remains read-only and TTL does not delete imported data.
 
 ## 2. Wait for the Changefeeds to Be Ready {#wait-for-changefeeds}
 
@@ -181,7 +181,7 @@ Replication then continues transferring new changes. If the transfer is part of 
 
 ## Errors and Retries {#errors}
 
-- If an export or import fails, check its status and error description using `operation get`. Keep replication in the `PAUSED` state until all table imports succeed. When retrying an import, remember that target tables must not exist; a failed operation does not confirm that no objects were created.
+- If an export or import fails, check its status and error description using `operation get`. Keep replication in the `PAUSED` state until all table imports succeed. A repeated import does not overwrite previously imported tables. Only an empty table specifically prepared by replication can be replaced; an import failure does not mean that this table remains untouched.
 - If starting replication fails, get its JSON description and check the `error` field. In particular, check that all target tables exist, their schemas match, and permissions are sufficient. Do not import over tables already attached as replicas.
 - If required CDC records have been deleted because their retention period expired, continuing to read cannot ensure data completeness. Repeat initial synchronization with new changefeeds and a new backup.
 - Restarting the replication controller preserves the `PAUSED` state; it does not replace an explicit transition to `STANDBY`. If a CLI session is interrupted, check previously started server-side operations by their IDs before starting new ones.

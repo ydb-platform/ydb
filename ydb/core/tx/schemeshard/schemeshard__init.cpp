@@ -5288,6 +5288,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.SysView = sysView;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::ReplicationConfig>()) {
+                        item.ReplicationConfig = rowset.GetValue<Schema::ImportItems::ReplicationConfig>();
+                    }
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);

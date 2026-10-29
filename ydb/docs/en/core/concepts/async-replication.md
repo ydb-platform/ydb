@@ -64,7 +64,7 @@ The user account that is used to connect to the source database must have the fo
 {% endnote %}
 
 * [Changefeeds](glossary.md#changefeed) are created automatically on the source for the specified set of source objects.
-* If the initial scan is enabled, [replica objects](glossary.md#replica-object) are created automatically on the target. With synchronization using backup and restore, the target tables are restored from a backup first and then attached to replication.
+* If the initial scan is enabled, [replica objects](glossary.md#replica-object) are created automatically on the target. With synchronization using backup and restore, empty replica tables are created first. Import replaces them with tables from the backup while preserving replica mode and protection against TTL deletion.
 
 {% note info %}
 
@@ -88,9 +88,9 @@ You can get the progress of the initial table scan from the [description](../ref
 
 With `INITIAL_SCAN = FALSE`, the initial data is transferred using server-side [backup to S3](../reference/ydb-cli/export-import/export-s3.md) and [restore from S3](../reference/ydb-cli/export-import/import-s3.md) operations. This method uses the backup mechanism to transfer large datasets.
 
-Replication is created in the `PAUSED` state and prepares changefeeds without an initial scan. After all changefeeds are ready, the user creates a backup of the source tables and restores them on the target. Changes on the source accumulate in the changefeeds during the transfer. The target tables are not attached to replication at this stage.
+Replication is created in the `PAUSED` state, prepares changefeeds without an initial scan, and creates empty target tables in replica mode. After all changefeeds are ready, the user creates a backup of the source tables and restores them on the target. Changes on the source accumulate in the changefeeds during the transfer. The target tables are not attached to replication at this stage.
 
-After the restore is complete, the user switches replication to `STANDBY` using [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md). The target checks the restored table schemas, attaches the tables as replica objects, and starts applying accumulated changes. Attached tables become read-only.
+After the restore is complete, the user switches replication to `STANDBY` using [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md). The target checks the restored table schemas, attaches the tables as replica objects, and starts applying accumulated changes. The tables remain read-only.
 
 To ensure data completeness, changefeeds must be ready before the backup is created, and accumulated records must be read before their [retention period](cdc.md#retention-period) expires. For the procedure and checks, see the [guide to initial synchronization using backup and restore](../devops/async-replication-initial-sync.md).
 

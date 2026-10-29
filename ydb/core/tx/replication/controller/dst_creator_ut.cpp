@@ -378,6 +378,81 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable().TableIndexesSize(), 2);
     }
 
+    Y_UNIT_TEST_TWIN(PausedReplicationCreatesEmptyDestination, global) {
+        TEnv env(true, ERuntimeMode::Simulated);
+        const auto source = TTestTableDescription{
+            .Name = "Source",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(source));
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        const auto sessionResult = env.RunCall([&] { return client.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        if (global) {
+            const auto indexed = env.RunCall([&] {
+                return session.ExecuteSchemeQuery(
+                    "ALTER TABLE `/Root/Source` ADD INDEX by_value GLOBAL ON (value)").GetValueSync();
+            });
+            UNIT_ASSERT_C(indexed.IsSuccess(), indexed.GetIssues().ToString());
+        }
+        const auto written = env.RunCall([&] {
+            return session.ExecuteDataQuery(R"(UPSERT INTO `/Root/Source` (key,value) VALUES (1u,"source"u))",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(written.IsSuccess(), written.GetIssues().ToString());
+
+        ui32 placeholdersCreated = 0;
+        auto observer = env.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() != TEvPrivate::TEvCreateDstResult::EventType || !ev->HasEvent()) {
+                return;
+            }
+            if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                UNIT_ASSERT_C(result->IsSuccess(), result->ToString());
+                UNIT_ASSERT(!result->DstPathId);
+                ++placeholdersCreated;
+            }
+        });
+        const auto created = env.RunCall([&] {
+            return session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/Source` AS `/Root/Dst`
+                WITH (INITIAL_SCAN = FALSE, TOKEN = "root@builtin", CONSISTENCY_LEVEL = ")"
+                << (global ? "GLOBAL" : "ROW") << R"(", CONNECTION_STRING = "grpc://)"
+                << env.GetEndpoint() << R"(/?database=/Root");
+            )").GetValueSync();
+        });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        env.GetRuntime().WaitFor("empty replica creation", [&] { return placeholdersCreated == (global ? 2 : 1); }, TDuration::Seconds(60));
+        const auto replicationId = env.GetPathId("/Root/replication");
+        const auto desc = env.GetDescription("/Root/Dst");
+        const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT(config.GetAwaitingImport());
+        if (global) {
+            const auto index = env.GetDescription("/Root/Dst/by_value/indexImplTable");
+            const auto& indexConfig = index.GetPathDescription().GetTable().GetReplicationConfig();
+            UNIT_ASSERT(indexConfig.GetAwaitingImport());
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(indexConfig.GetBootstrapReplication()), replicationId);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetBootstrapReplication()), replicationId);
+        CheckTableReplica(source, desc.GetPathDescription().GetTable(), EReplicationMode::ReadOnly,
+            global ? EConsistencyLevel::Global : EConsistencyLevel::Row);
+        UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription().GetState().HasPaused());
+        const auto rows = env.RunCall([&] {
+            return session.ExecuteDataQuery("SELECT * FROM `/Root/Dst`",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(rows.IsSuccess(), rows.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(rows.GetResultSet(0).RowsCount(), 0);
+        const auto denied = env.RunCall([&] {
+            return session.ExecuteDataQuery(R"(UPSERT INTO `/Root/Dst` (key,value) VALUES (2u,"must fail"u))",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT(!denied.IsSuccess());
+    }
+
     Y_UNIT_TEST(StandbyDropsRestoredVectorIndexes) {
         TEnv env(true, ERuntimeMode::Simulated);
         CreateTableWithVectorIndexes(env, "/Root/Source");

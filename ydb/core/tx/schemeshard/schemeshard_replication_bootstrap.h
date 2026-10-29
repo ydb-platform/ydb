@@ -77,6 +77,20 @@ inline TVector<TPath> GetReplicationBootstrapTables(const TPathId& replicationId
 }
 
 inline bool CheckReplicationBootstrapTables(const TPathId& replicationId, TProposeResponse& result, TSchemeShard* ss) {
+    const auto& replication = ss->Replications.at(replicationId)->Description.GetConfig();
+    for (const auto& [id, import] : ss->Imports) {
+        if (import->IsFinished()) {
+            continue;
+        }
+        for (const auto& item : import->Items) {
+            for (const auto& target : replication.GetSpecific().GetTargets()) {
+                if (CanonizePath(item.DstPathName) == CanonizePath(target.GetDstPath())) {
+                    result.SetError(NKikimrScheme::StatusMultipleModifications, "Import is using a replication destination");
+                    return false;
+                }
+            }
+        }
+    }
     for (const auto& path : GetReplicationBootstrapTables(replicationId, ss)) {
         const auto checks = path.Check();
         checks.NotUnderOperation();

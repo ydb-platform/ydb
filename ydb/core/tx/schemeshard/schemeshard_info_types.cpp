@@ -3643,7 +3643,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
 
             TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
             TString explain;
-            if (!ValidateImportDstPath(dstPath, ss, explain)) {
+            if (!ValidateImportDstPath(dstPath, ss, explain, Id)) {
                 result.AddError(explain);
                 continue;
             }
@@ -3711,7 +3711,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                     }
 
                     TString explain;
-                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                    if (!ValidateImportDstPath(dstPath, ss, explain, Id)) {
                         result.AddError(explain);
                         continue;
                     }

@@ -229,7 +229,7 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
-        if (!DstCreator && !ShouldWaitForAttachment(Replication)) {
+        if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
         break;

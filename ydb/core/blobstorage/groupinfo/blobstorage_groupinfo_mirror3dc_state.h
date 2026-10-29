@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
 
+#include <array>
 #include <optional>
 
 namespace NKikimr {
@@ -60,7 +61,7 @@ namespace NKikimr {
 // |                                                                    |       +-------------------------------=-------=-------------------------------------------------------+
 // |                                                                    v                                       v       v                                                       |
 // |   +---------------------------------+             +----------------+----------------+             +--------+-------+----------------+             +------------------------+--------+
-// +<--|         DC_RECOVERY_INV2        |<----------->|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
+// +<--|         DC_RECOVERY_INV2        |------------>|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
 //     | N2/N2/R                   I/I/I |             | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
 //     | D: 1+1+1                        |             | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
 //     | E: 1+1+1 OR 2+2                 |             | E: 2+2                          |             | E: 2                            |             | E: 2                            |
@@ -68,6 +69,10 @@ namespace NKikimr {
 //
 //     ADMIN: I/I/I                                    ADMIN: I/I/X                                    ADMIN: I/X/X                                    ADMIN: I/I/X
 //     W: 1+1+1 OR 2+2                                 W: 2+2                                          W: 2                                            W: 2+2
+//
+// Additional directed recovery links between different rows:
+// DC_FAILURE_INV1 -> DC_RECOVERY_INV2.
+// DC_FAILURE_INV2 -> DC_RECOVERY_INV1.
 //
 // + marks turns/junctions; = is a crossing WITHOUT a connection.
 // Optional (opt) transitions require the target guarantee in the selected surviving realm
@@ -96,6 +101,7 @@ enum class EMirror3dcGroupState {
 };
 
 using EMirror3dcFailRealmState = NKikimrBlobStorage::TGroupInfo::TFailRealm::EState;
+using TMirror3dcFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
 
 // Each number is a minimum copy count in a distinct failrealm; OR is an alternative.
 enum class EMirror3dcLayout {
@@ -203,6 +209,92 @@ constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror
             return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_2};
     }
     return std::nullopt;
+}
+
+struct TMirror3dcGroupStateTransition {
+    EMirror3dcGroupState From;
+    EMirror3dcGroupState To;
+};
+
+inline constexpr TMirror3dcGroupStateTransition Mirror3dcAllowedGroupTransitions[] = {
+    {EMirror3dcGroupState::NORMAL, EMirror3dcGroupState::DC_FAILURE},
+
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_FAILURE_INV1},
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_RECOVERY},
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_SOLO_DISASTER},
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_SOLO_INV1},
+
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_FAILURE_INV2},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV1},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV2},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV1},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV2},
+
+    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_RECOVERY_INV1},
+    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_SOLO_INV2},
+
+    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::NORMAL},
+    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::DC_FAILURE},
+
+    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::NORMAL},
+    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1},
+
+    {EMirror3dcGroupState::DC_RECOVERY_INV2, EMirror3dcGroupState::NORMAL},
+    {EMirror3dcGroupState::DC_RECOVERY_INV2, EMirror3dcGroupState::DC_FAILURE_INV2},
+
+    {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_INV1},
+    {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_RECOVERY},
+
+    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_INV2},
+    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1},
+
+    {EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2},
+
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_FAILURE},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_DISASTER},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1},
+
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_SOLO_INV1},
+
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_FAILURE_INV1},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_SOLO_INV2},
+};
+
+// A role change crosses an F/R boundary; changing only an N copy guarantee keeps the role.
+constexpr bool IsMirror3dcFailRealmRoleChange(EMirror3dcFailRealmState before, EMirror3dcFailRealmState after) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    const bool beforeHasSpecialRole = before == TFailRealm::F || before == TFailRealm::R;
+    const bool afterHasSpecialRole = after == TFailRealm::F || after == TFailRealm::R;
+    return before != after && (beforeHasSpecialRole || afterHasSpecialRole);
+}
+
+// Validate graph edges while retaining physical realm identities. Identical supported
+// configurations are allowed; other updates must follow a listed edge. Copy guarantees
+// required by the target state must be established separately by the caller.
+constexpr bool IsAllowedMirror3dcFailRealmStateTransition(
+        const TMirror3dcFailRealmStates& before, const TMirror3dcFailRealmStates& after) {
+    unsigned roleChanges = 0;
+    for (unsigned realm = 0; realm < before.size(); ++realm) {
+        roleChanges += IsMirror3dcFailRealmRoleChange(before[realm], after[realm]);
+    }
+    if (roleChanges > 1) {
+        return false;
+    }
+    const std::optional<EMirror3dcGroupState> from = GetMirror3dcGroupState(before[0], before[1], before[2]);
+    const std::optional<EMirror3dcGroupState> to = GetMirror3dcGroupState(after[0], after[1], after[2]);
+    if (!from || !to) {
+        return false;
+    }
+    if (before == after) {
+        return true;
+    }
+    for (const TMirror3dcGroupStateTransition& transition : Mirror3dcAllowedGroupTransitions) {
+        if (transition.From == *from && transition.To == *to) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace NKikimr

@@ -132,5 +132,136 @@ static_assert(!GetMirror3dcGroupState(UnknownRealm, R::N0, R::N0));
 static_assert(!GetMirror3dcGroupState(R::N0, UnknownRealm, R::N0));
 static_assert(!GetMirror3dcGroupState(R::N0, R::N0, UnknownRealm));
 
+
+using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+
+struct TTransitionCase {
+    TMirror3dcFailRealmStates Before;
+    TMirror3dcFailRealmStates After;
+    bool Allowed;
+};
+
+// Representative physical realm configurations for every directed edge in the transition specification.
+constexpr TTransitionCase TransitionCases[] = {
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}, true}, // NORMAL -> DC_FAILURE.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_FAILURE -> DC_FAILURE_INV1.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::R}, true}, // DC_FAILURE -> DC_RECOVERY.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::N0, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE -> DC_SOLO_DISASTER.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE -> DC_SOLO_INV1.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, true}, // DC_FAILURE_INV1 -> DC_FAILURE_INV2.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV1.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, true}, // DC_FAILURE_INV1 -> DC_RECOVERY_INV2.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE_INV1 -> DC_SOLO_INV1.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE_INV1 -> DC_SOLO_INV2.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}, true}, // DC_FAILURE_INV2 -> DC_RECOVERY_INV1.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::F, TFailRealm::F}, true}, // DC_FAILURE_INV2 -> DC_SOLO_INV2.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::R},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, true}, // DC_RECOVERY -> NORMAL.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::R},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}, true}, // DC_RECOVERY -> DC_FAILURE.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::R},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, true}, // DC_RECOVERY_INV1 -> NORMAL.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::R},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_RECOVERY_INV1 -> DC_FAILURE_INV1.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, true}, // DC_RECOVERY_INV2 -> NORMAL.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::R},
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, true}, // DC_RECOVERY_INV2 -> DC_FAILURE_INV2.
+    {{TFailRealm::N0, TFailRealm::F, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_DISASTER -> DC_SOLO_INV1.
+    {{TFailRealm::N0, TFailRealm::F, TFailRealm::F},
+        {TFailRealm::N0, TFailRealm::R, TFailRealm::F}, true}, // DC_SOLO_DISASTER -> DC_SOLO_RECOVERY.
+    {{TFailRealm::N1, TFailRealm::F, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_INV1 -> DC_SOLO_INV2.
+    {{TFailRealm::N1, TFailRealm::F, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::R, TFailRealm::F}, true}, // DC_SOLO_INV1 -> DC_SOLO_RECOVERY_INV1.
+    {{TFailRealm::N2, TFailRealm::F, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::R, TFailRealm::F}, true}, // DC_SOLO_INV2 -> DC_SOLO_RECOVERY_INV2.
+    {{TFailRealm::N0, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}, true}, // DC_SOLO_RECOVERY -> DC_FAILURE.
+    {{TFailRealm::N0, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N0, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_RECOVERY -> DC_SOLO_DISASTER.
+    {{TFailRealm::N0, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::R, TFailRealm::F}, true}, // DC_SOLO_RECOVERY -> DC_SOLO_RECOVERY_INV1.
+    {{TFailRealm::N1, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_SOLO_RECOVERY_INV1 -> DC_FAILURE_INV1.
+    {{TFailRealm::N1, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_RECOVERY_INV1 -> DC_SOLO_INV1.
+    {{TFailRealm::N2, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, true}, // DC_SOLO_RECOVERY_INV2 -> DC_FAILURE_INV1.
+    {{TFailRealm::N2, TFailRealm::R, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::F, TFailRealm::F}, true}, // DC_SOLO_RECOVERY_INV2 -> DC_SOLO_INV2.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N0, TFailRealm::F}, false}, // A partial guarantee increase does not change the group category.
+    {{TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::N1, TFailRealm::F}, false}, // Same-category updates are not graph edges.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::F, TFailRealm::N0, TFailRealm::R}, false}, // The group edge exists, but two physical realms change roles.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0},
+        {TFailRealm::N0, TFailRealm::R, TFailRealm::R}, false}, // Multiple recovering realms are unsupported.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0},
+        {TFailRealm::N0, TFailRealm::F, TFailRealm::F}, false}, // Two realms cannot be excluded in one step.
+    {{TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, false}, // The intermediate group guarantee cannot be skipped.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
+        {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, false}, // The graph has no direct backward guarantee edge.
+    {{TFailRealm::N2, TFailRealm::N2, TFailRealm::F},
+        {TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, false}, // The specification routes FAILURE_INV2 to RECOVERY_INV1.
+};
+
+constexpr bool CheckTransitions() {
+    constexpr unsigned permutations[][3] = {
+        {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0},
+    };
+    for (const TTransitionCase& test : TransitionCases) {
+        for (const unsigned (&permutation)[3] : permutations) {
+            TMirror3dcFailRealmStates before{};
+            TMirror3dcFailRealmStates after{};
+            for (unsigned realm = 0; realm < 3; ++realm) {
+                before[realm] = test.Before[permutation[realm]];
+                after[realm] = test.After[permutation[realm]];
+            }
+            if (IsAllowedMirror3dcFailRealmStateTransition(before, after) != test.Allowed) {
+                return false;
+            }
+        }
+    }
+    for (const TStateCase& test : StateCases) {
+        if (IsAllowedMirror3dcFailRealmStateTransition(test.Realms, test.Realms) != test.Expected.has_value()) {
+            return false;
+        }
+    }
+    const TMirror3dcFailRealmStates valid{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
+    for (unsigned realm = 0; realm < 3; ++realm) {
+        TMirror3dcFailRealmStates invalid = valid;
+        invalid[realm] = UnknownRealm;
+        if (IsAllowedMirror3dcFailRealmStateTransition(invalid, valid)
+                || IsAllowedMirror3dcFailRealmStateTransition(valid, invalid)
+                || IsAllowedMirror3dcFailRealmStateTransition(invalid, invalid)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(CheckTransitions());
+static_assert(IsMirror3dcFailRealmRoleChange(TFailRealm::N2, TFailRealm::F));
+static_assert(IsMirror3dcFailRealmRoleChange(TFailRealm::F, TFailRealm::R));
+static_assert(IsMirror3dcFailRealmRoleChange(TFailRealm::R, TFailRealm::N1));
+static_assert(!IsMirror3dcFailRealmRoleChange(TFailRealm::N0, TFailRealm::N2));
+static_assert(!IsMirror3dcFailRealmRoleChange(TFailRealm::R, TFailRealm::R));
+
 } // namespace
 } // namespace NKikimr

@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             }
             IndexDescription {
                 Name: "idx" KeyColumnNames: ["embedding"] Type: EIndexTypeGlobalHnsw
-                VectorIndexKmeansTreeDescription { Settings {
+                HnswIndexDescription { Settings {
                     settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
                     clusters: 2 levels: 1
                 } }

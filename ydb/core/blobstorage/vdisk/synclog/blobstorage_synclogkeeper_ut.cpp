@@ -63,6 +63,7 @@ namespace NKikimr {
             ::NKikimr::PrintStatus(State.get(), str);
         }
         void RunDisposeTest();
+        void RunRecoveryBaseTest();
 
     private:
         std::unique_ptr<TSyncLogKeeperState> State;
@@ -376,7 +377,28 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Unit tests
     ////////////////////////////////////////////////////////////////////////////
+    void TSyncLogKeeperTest::RunRecoveryBaseTest() {
+        CreateState({});
+        State->PerformInitialCommit();
+        State->AdvanceRecoveryBase(9);
+        Trim(3);
+        UNIT_ASSERT_VALUES_EQUAL(State->GetSyncLogSnapshot()->LogStartLsn, 10);
+        UNIT_ASSERT(State->PerformInitialCommit());
+        TCommitWithNoSwapAndDelChunks commit;
+        commit.Start(State.get(), 9);
+        const TEntryPointPair entryPoint = commit.Finish(State.get(), 10);
+        CreateState(entryPoint);
+        UNIT_ASSERT_VALUES_EQUAL(State->GetSyncLogSnapshot()->LogStartLsn, 10);
+        State->AdvanceRecoveryBase(9);
+        UNIT_ASSERT(!State->PerformInitialCommit());
+    }
+
     Y_UNIT_TEST_SUITE(TBlobStorageSyncLogKeeper) {
+        Y_UNIT_TEST(RecoveryBaseSurvivesEntryPointReload) {
+            TSyncLogKeeperTest test;
+            test.RunRecoveryBaseTest();
+        }
+
 
         Y_UNIT_TEST(CutLog_EntryPointNewFormat) {
             TSyncLogKeeperTest test;

@@ -270,6 +270,17 @@ public:
                 if (groups.HaveValue<T::BridgeGroupInfo>()) {
                     group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }
+                if (groups.HaveValue<T::FailRealmStates>()) {
+                    const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.StateSize()) {
+                        Y_ABORT_UNLESS(states.StateSize() == 3);
+                        group.FailRealmStates.emplace();
+                        for (ui32 realm = 0; realm < 3; ++realm) {
+                            (*group.FailRealmStates)[realm] = states.GetState(realm);
+                        }
+                        group.HasExplicitFailRealmStates = true;
+                    }
+                }
 
 #undef OPTIONAL
 

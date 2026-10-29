@@ -1161,6 +1161,8 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         bool IsInternal = false;
+        // Local read checks can report CORRUPTED without starting recovery. Not serialized.
+        bool SuppressCorruptedBlobRestoration = false;
 
         TEvVGet() = default;
 
@@ -1966,7 +1968,7 @@ namespace NKikimr {
                 Record.SetGeneration(actual->ActualGen);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
+            if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
                 Record.SetIncarnationGuid(incarnationGuid);
             }
         }

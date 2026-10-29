@@ -1,0 +1,336 @@
+syntax = "proto3";
+
+package temporal.api.worker.v1;
+
+option go_package = "go.temporal.io/api/worker/v1;worker";
+option java_package = "io.temporal.api.worker.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Worker::V1";
+option csharp_namespace = "Temporalio.Api.Worker.V1";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/enums/v1/common.proto";
+
+message WorkerPollerInfo {
+  // Number of polling RPCs that are currently in flight.
+  int32 current_pollers = 1;
+
+  google.protobuf.Timestamp last_successful_poll_time = 2;
+
+  // Set true if the number of concurrent pollers is auto-scaled
+  bool is_autoscaling = 3;
+}
+
+message WorkerSlotsInfo {
+  // Number of slots available for the worker to specific tasks.
+  // May be -1 if the upper bound is not known.
+  int32 current_available_slots = 1;
+  // Number of slots used by the worker for specific tasks.
+  int32 current_used_slots = 2;
+
+  // Kind of the slot supplier, which is used to determine how the slots are allocated.
+  // Possible values: "Fixed | ResourceBased | Custom String"
+  string slot_supplier_kind = 3;
+
+  // Total number of tasks processed (completed both successfully and unsuccesfully, or any other way)
+  // by the worker since the worker started. This is a cumulative counter.
+  int32 total_processed_tasks = 4;
+  // Total number of failed tasks processed by the worker so far.
+  int32 total_failed_tasks = 5;
+
+  // Number of tasks processed in since the last heartbeat from the worker.
+  // This is a cumulative counter, and it is reset to 0 each time the worker sends a heartbeat.
+  // Contains both successful and failed tasks.
+  int32 last_interval_processed_tasks = 6;
+  // Number of failed tasks processed since the last heartbeat from the worker.
+  int32 last_interval_failure_tasks = 7;
+}
+
+// Holds everything needed to identify the worker host/process context
+message WorkerHostInfo {
+  // Worker host identifier.
+  string host_name = 1;
+
+  // Worker grouping identifier. A key to group workers that share the same client+namespace+process.
+  // This will be used to build the worker command nexus task queue name:
+  // "temporal-sys/worker-commands/{worker_grouping_key}"
+  string worker_grouping_key = 5;
+
+  // Worker process identifier. This id only needs to be unique
+  // within one host (so using e.g. a unix pid would be appropriate).
+  string process_id = 2;
+
+  // System used CPU as a float in the range [0.0, 1.0] where 1.0 is defined as all
+  // cores on the host pegged.
+  float current_host_cpu_usage = 3;
+  // System used memory as a float in the range [0.0, 1.0] where 1.0 is defined as
+  // all available memory on the host is used.
+  float current_host_mem_usage = 4;
+}
+
+// Worker info message, contains information about the worker and its current state.
+// All information is provided by the worker itself.
+// (-- api-linter: core::0140::prepositions=disabled
+//     aip.dev/not-precedent: Removing those words make names less clear. --)
+message WorkerHeartbeat {
+  // Worker identifier, should be unique for the namespace.
+  // It is distinct from worker identity, which is not necessarily namespace-unique.
+  string worker_instance_key = 1;
+
+  // Worker identity, set by the client, may not be unique.
+  // Usually host_name+(user group name)+process_id, but can be overwritten by the user.
+  string worker_identity = 2;
+
+  // Worker host information.
+  WorkerHostInfo host_info = 3;
+
+  // Task queue this worker is polling for tasks.
+  string task_queue = 4;
+
+  temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 5;
+
+  string sdk_name = 6;
+  string sdk_version = 7;
+
+  // Worker status. Defined by SDK.
+  temporal.api.enums.v1.WorkerStatus status = 8;
+
+  // Worker start time.
+  // It can be used to determine worker uptime. (current time - start time)
+  google.protobuf.Timestamp start_time = 9;
+
+  // Timestamp of this heartbeat, coming from the worker. Worker should set it to "now".
+  // Note that this timestamp comes directly from the worker and is subject to workers' clock skew.
+  google.protobuf.Timestamp heartbeat_time = 10;
+  // Elapsed time since the last heartbeat from the worker.
+  google.protobuf.Duration elapsed_since_last_heartbeat = 11;
+
+  WorkerSlotsInfo workflow_task_slots_info = 12;
+  WorkerSlotsInfo activity_task_slots_info = 13;
+  WorkerSlotsInfo nexus_task_slots_info = 14;
+  WorkerSlotsInfo local_activity_slots_info = 15;
+
+  WorkerPollerInfo workflow_poller_info = 16;
+  WorkerPollerInfo workflow_sticky_poller_info = 17;
+  WorkerPollerInfo activity_poller_info = 18;
+  WorkerPollerInfo nexus_poller_info = 19;
+
+  // A Workflow Task found a cached Workflow Execution to run against.
+  int32 total_sticky_cache_hit = 20;
+  // A Workflow Task did not find a cached Workflow execution to run against.
+  int32 total_sticky_cache_miss = 21;
+  // Current cache size, expressed in number of Workflow Executions.
+  int32 current_sticky_cache_size = 22;
+
+  // Plugins currently in use by this SDK.
+  repeated PluginInfo plugins = 23;
+
+  // Storage drivers in use by this SDK.
+  repeated StorageDriverInfo drivers = 24;
+
+  // Information about the environment this SDK is running in.
+  EnvironmentInfo environment = 25;
+}
+
+// Detailed worker information.
+message WorkerInfo {
+  WorkerHeartbeat worker_heartbeat = 1;
+}
+
+// Limited worker information returned in the list response.
+// When adding fields here, ensure that it is also added to WorkerInfo (as it carries the full worker information).
+message WorkerListInfo {
+  // Worker identifier, should be unique for the namespace.
+  // It is distinct from worker identity, which is not necessarily namespace-unique.
+  string worker_instance_key = 1;
+
+  // Worker identity, set by the client, may not be unique.
+  // Usually host_name+(user group name)+process_id, but can be overwritten by the user.
+  string worker_identity = 2;
+
+  // Task queue this worker is polling for tasks.
+  string task_queue = 3;
+
+  temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 4;
+
+  string sdk_name = 5;
+  string sdk_version = 6;
+
+  // Worker status. Defined by SDK.
+  temporal.api.enums.v1.WorkerStatus status = 7;
+
+  // Worker start time.
+  // It can be used to determine worker uptime. (current time - start time)
+  google.protobuf.Timestamp start_time = 8;
+
+  // Worker host identifier.
+  string host_name = 9;
+
+  // Worker grouping identifier. A key to group workers that share the same client+namespace+process.
+  // This will be used to build the worker command nexus task queue name:
+  // "temporal-sys/worker-commands/{worker_grouping_key}"
+  string worker_grouping_key = 10;
+
+  // Worker process identifier. This id only needs to be unique
+  // within one host (so using e.g. a unix pid would be appropriate).
+  string process_id = 11;
+
+  // Plugins currently in use by this SDK.
+  repeated PluginInfo plugins = 12;
+
+  // Storage drivers in use by this SDK.
+  repeated StorageDriverInfo drivers = 13;
+}
+
+message PluginInfo {
+    // The name of the plugin, required.
+    string name = 1;
+    // The version of the plugin, may be empty.
+    string version = 2;
+}
+
+message StorageDriverInfo {
+  // The type of the driver, required.
+  string type = 1;
+}
+
+message EnvironmentInfo {
+  message Runtime {
+    enum RuntimeType {
+      // Should never actually be set, exists to follow convention of having a default.
+      // SDKs should just leave `runtimes` empty if none can be determined.
+      RUNTIME_TYPE_UNSPECIFIED = 0;
+      RUNTIME_TYPE_JVM = 1;
+      RUNTIME_TYPE_CPYTHON = 2;
+      RUNTIME_TYPE_NODE = 3;
+      RUNTIME_TYPE_BUN = 4;
+      RUNTIME_TYPE_CRUBY = 5;
+      RUNTIME_TYPE_GO = 6;
+      RUNTIME_TYPE_DOTNET_FRAMEWORK = 7;
+      RUNTIME_TYPE_DOTNET_CORE = 8;
+      RUNTIME_TYPE_NATIVE = 9;
+      RUNTIME_TYPE_ROADRUNNER = 10;
+    }
+    // The type of the runtime.
+    RuntimeType type = 1;
+    // The version of the runtime, if obtainable.
+    string version = 2;
+  }
+
+  message HostingEnvironment {
+    // What kind of hosting environment we're running in. This list is about what can actually be
+    // detected reliably and is unrelated to what SDKs can actually run in.
+    enum HostingEnvironmentType {
+      // Should never actually be set, exists to follow convention of having a default.
+      // SDKs should just leave `hosting_environments` empty if none can be determined.
+      HOSTING_ENVIRONMENT_TYPE_UNSPECIFIED = 0;
+      // Should always be in the list if we're running inside a docker container
+      HOSTING_ENVIRONMENT_TYPE_DOCKER = 1;
+      // Should always be in the list if we're running inside any k8s environment
+      HOSTING_ENVIRONMENT_TYPE_K8S = 2;
+      // Detect via `AWS_LAMBDA_FUNCTION_NAME`
+      HOSTING_ENVIRONMENT_TYPE_AWS_LAMBDA = 3;
+      // Detect via `ECS_CONTAINER_METADATA_URI_V4` or `ECS_CONTAINER_METADATA_URI`
+      HOSTING_ENVIRONMENT_TYPE_AWS_ECS = 4;
+      // Detect via `K_SERVICE`
+      HOSTING_ENVIRONMENT_TYPE_GOOGLE_CLOUD_RUN = 6;
+      // Detect via `GAE_SERVICE`
+      HOSTING_ENVIRONMENT_TYPE_GOOGLE_APP_ENGINE = 7;
+      // Detect via `WEBSITE_SITE_NAME`
+      HOSTING_ENVIRONMENT_TYPE_AZURE_APP_SERVICE = 8;
+      // Detect via `FUNCTIONS_EXTENSION_VERSION`
+      HOSTING_ENVIRONMENT_TYPE_AZURE_FUNCTIONS = 9;
+      // Detect via `CONTAINER_APP_NAME`
+      HOSTING_ENVIRONMENT_TYPE_AZURE_CONTAINER_APPS = 10;
+    }
+    // The type of hosting environment.
+    HostingEnvironmentType type = 1;
+    // The version of the hosting environment, if obtainable.
+    string version = 2;
+  }
+
+  enum Architecture {
+    ARCHITECTURE_UNSPECIFIED = 0;
+    ARCHITECTURE_AMD64 = 1;
+    ARCHITECTURE_ARM64 = 2;
+  }
+
+  message Platform {
+    oneof variant {
+      LinuxPlatform linux = 1;
+      MacOSPlatform macos = 2;
+      WindowsPlatform windows = 3;
+    }
+  }
+
+  message LinuxPlatform {
+    enum Libc {
+      LIBC_UNSPECIFIED = 0;
+      LIBC_GLIBC = 1;
+      LIBC_MUSL = 2;
+    }
+    // The Linux kernel or distribution version, if obtainable.
+    string version = 1;
+    // The architecture of the worker process.
+    Architecture architecture = 2;
+    // The libc used by the worker process.
+    Libc libc = 3;
+  }
+
+  message MacOSPlatform {
+    // The macOS version, if obtainable.
+    string version = 1;
+    // The architecture of the worker process.
+    Architecture architecture = 2;
+  }
+
+  message WindowsPlatform {
+    enum Crt {
+      CRT_UNSPECIFIED = 0;
+      CRT_UCRT = 1;
+      CRT_MSVCRT = 2;
+      CRT_MINGW = 3;
+      CRT_CYGWIN = 4;
+    }
+    // The Windows version, if obtainable.
+    string version = 1;
+    // The architecture of the worker process.
+    Architecture architecture = 2;
+    // The C runtime used by the worker process, if obtainable.
+    Crt crt = 3;
+  }
+
+  // The runtime(s) the SDK is operating in.
+  repeated Runtime runtimes = 1;
+  // The hosting environment(s) the SDK is operating in. Repeated to allow for layering (ex: Docker inside k8s).
+  repeated HostingEnvironment hosting_environments = 2;
+  // The platform the SDK is operating on.
+  Platform platform = 3;
+}
+
+// A command sent from the server to a worker.
+message WorkerCommand {
+  oneof type {
+    CancelActivityCommand cancel_activity = 1;
+  }
+}
+
+// Cancel an activity if it is still running. Otherwise, do nothing.
+message CancelActivityCommand {
+  bytes task_token = 1;
+}
+
+// The result of executing a WorkerCommand.
+message WorkerCommandResult {
+  oneof type {
+    CancelActivityResult cancel_activity = 1;
+  }
+}
+
+// Result of a CancelActivityCommand.
+// Treat both successful cancellation and no-op (activity is no longer running) as success.
+message CancelActivityResult {
+}

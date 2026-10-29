@@ -4,7 +4,7 @@
 
 {% include [_](../_includes/experimental_v2.md) %}
 
-Если нужно вывести из эксплуатации узел кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/index.md#domains-state), необходимо переместить её на другой узел.
+Если нужно вывести из эксплуатации узел кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/domains_config.md#domains-state), необходимо переместить её на другой узел.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
@@ -29,7 +29,7 @@
     ...
     ```
 
-    На ухле с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v2/config-settings.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот узел.
+    На ухле с `node_id:1` сконфигурирован и запущен [статический узел](../../../reference/configuration/hosts.md) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот узел.
 
     Для замены `node_id:1` мы используем другой хост с развернутым на нем статическим узлом с `node_id:10`.
 

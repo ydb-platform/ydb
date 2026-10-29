@@ -796,6 +796,9 @@ public:
     }
 
     void Handle(TEvInterpilePutResult::TPtr ev) {
+        for (const auto& item : ev->Get()->Record.GetItems()) {
+            AccountRacingGeneration(item.GetRacingGeneration());
+        }
         TPutImpl::TPutResultVec putResults;
         PutImpl.ProcessInterpilePutResult(*ev->Get(), LogCtx, putResults);
         if (!ReplyAndDieWithLastResponse(putResults)) {

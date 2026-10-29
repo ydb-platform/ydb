@@ -279,6 +279,7 @@ int main(int argc, char** argv) {
         TString path;
         TString user;
         TString group;
+        constexpr bool dumpable = false;
         bool printAsProto = true;
         NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info;
 
@@ -332,7 +333,7 @@ int main(int argc, char** argv) {
         if (user && !NYql::IsLinuxKernelBelow4_3()) {
             // since we are going to load untrusted modules
             // we have to switch into another user and drop privileges (capabilities)
-            NYql::BecomeUser(user, group);
+            NYql::BecomeUser(user, group, dumpable);
             NYql::TurnOffBecomeUserAbility();
         }
 
@@ -455,7 +456,11 @@ int main(int argc, char** argv) {
     #endif
                 Allow(openat),
                 Allow(pipe2),
-                Allow(prctl),
+                BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, SYS_prctl, 0, 4),
+                BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, args[0])),
+                BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, PR_SET_DUMPABLE, 0, 1),
+                BPF_STMT(BPF_RET + BPF_K, dumpable ? SECCOMP_RET_ALLOW : SECCOMP_RET_TRAP),
+                BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW),
                 Allow(pread64),
                 Allow(pwrite64),
                 Allow(read),

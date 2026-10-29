@@ -842,9 +842,16 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 *tx.MutableAlterTable()->MutableReplicationConfig(),
                 EReplicationMode::ReadOnly,
                 EConsistencyLevel::Row);
-            const auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            // A new generation may still be initializing. The pipe waits for
+            // tablet activation before delivering the ALTER.
+            runtime.SendToPipe(
                 pathId.OwnerId,
-                std::move(request));
+                env.GetSender(),
+                request.Release(),
+                0,
+                GetPipeConfigWithRetries());
+            const auto result = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                env.GetSender());
             const auto status = result->Get()->Record.GetStatus();
             // A scavenged path is empty; a retained tombstone is deleted.
             UNIT_ASSERT_C(

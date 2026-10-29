@@ -692,6 +692,24 @@ TTypedColumn CompileYqlKernelUdf(const TKqpOlapUdf& udf, TKqpOlapCompileContext&
     return {command->GetColumn().GetId(), resultType};
 }
 
+void CopyLikeHint(const TKqpOlapApply& apply, TProgram::TAssignment::TFunction* function) {
+    const auto hint = apply.LikeHint();
+    if (!hint) {
+        return;
+    }
+    const auto& list = hint.Cast().Ref();
+    if (list.ChildrenSize() != 4) {
+        return;
+    }
+    auto* proto = function->MutablePatternHint();
+    proto->SetArgumentIndex(FromString<ui32>(list.Child(0)->Content()));
+    proto->MutableLike()->SetPattern(TString(list.Child(1)->Content()));
+    if (const auto escape = list.Child(2)->Content(); !escape.empty()) {
+        proto->MutableLike()->SetEscape(TString(escape));
+    }
+    proto->SetCaseSensitive(list.Child(3)->Content() == "true");
+}
+
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
@@ -715,6 +733,7 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
     function->SetKernelName(apply.KernelName().StringValue());
+    CopyLikeHint(apply, function);
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
     return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
 }

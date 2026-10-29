@@ -186,7 +186,7 @@ private:
     void SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const;
     void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
     void StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx);
-    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
     void SendSchemaChangeResult(const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,

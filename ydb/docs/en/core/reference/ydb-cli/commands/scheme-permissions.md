@@ -28,7 +28,7 @@ permissions                 Modify permissions
 All commands have an additional parameter, which is not critical for them:
 `--timeout ms` - a technical parameter that sets the server response timeout.
 
-## grant, revoke
+## grant, revoke {#grant-revoke}
 
 The `grant` and `revoke` commands allow you to establish and revoke, respectively, access rights to schema objects for a user or group of users. Essentially, they are analogues of the corresponding YQL [GRANT](../../../yql/reference/syntax/grant.md) and [REVOKE](../../../yql/reference/syntax/revoke.md) commands.
 

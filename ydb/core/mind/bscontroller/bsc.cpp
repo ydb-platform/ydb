@@ -160,31 +160,12 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorag
     }
 }
 
-<<<<<<< HEAD
-=======
-bool TBlobStorageController::TGroupInfo::FillInOwnGroupParameters(
-        NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params) const {
-    bool res = true;
-    params->SetGroupSizeInUnits(GroupSizeInUnits);
-    if (VDisksInGroup.empty()
-        || !Topology
-        || !Topology->GetTotalVDisksNum()
-        || !Topology->GetTotalFailDomainsNum()) {
-        return false;
-    }
-    res &= FillInResources(params->MutableAssuredResources(), true);
-    res &= FillInResources(params->MutableCurrentResources(), false);
-    res &= FillInVDiskResources(params);
-    return res;
-}
-
 ui64 TBlobStorageController::TGroupInfo::ScaleGroupResource(ui64 value) const {
     const TBlobStorageGroupType type(ErasureSpecies);
     const auto scaled = static_cast<unsigned __int128>(value) * VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     return scaled > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(scaled);
 }
 
->>>>>>> d064c9daee0 (Fix UB overflow in BSC (#55126))
 bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
         bool useExpectedSlotCount) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)

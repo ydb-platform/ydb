@@ -1369,6 +1369,7 @@ message TStreamingQueriesConfig {
 
     message TExternalTopicsSettings {
         optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
+        optional uint64 MaxGrpcMessageSize = 2;
     }
 
     reserved 1;
@@ -1377,7 +1378,6 @@ message TStreamingQueriesConfig {
     optional TExternalTopicsSettings TopicSdkSettings = 4;
     optional bool ForbidYqlSysColumnsAndSystemMetadata = 5 [default = true];
     optional string ResourcePoolForSharedReading = 6;
-    optional uint64 MaxGrpcMessageSize = 7;
 }
 
 message TQueryServiceConfig {

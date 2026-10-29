@@ -6,14 +6,14 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <google/protobuf/text_format.h>
+#include <ydb/library/testlib/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
-    Y_UNIT_TEST(NonDefaultAdditionsRejected) {
+    Y_UNIT_TEST_TWIN(AlterPayloadDoesNotLimitColumnBuild, ExtraFields) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
         ui64 txId = 100;
@@ -24,122 +24,34 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-        const auto original = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString();
-        size_t scans = 0;
-        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
         Ydb::TypedValue literal;
         literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
         literal.mutable_value()->set_uint32_value(10);
-        for (ui32 plainCount : {1, 3}) {
-            for (bool plainFirst : {false, true}) {
-                auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
-                NKikimrSchemeOp::TModifyScheme payload;
-                payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-                auto* alter = payload.MutableAlterTable();
-                alter->SetName("Table");
-                const auto addPlainColumns = [&] {
-                    for (ui32 i = 0; i < plainCount; ++i) {
-                        auto* column = alter->AddColumns();
-                        column->SetName(TStringBuilder() << "plain" << i);
-                        column->SetType("Uint32");
-                    }
-                };
-                if (plainFirst) {
-                    addPlainColumns();
-                }
-                alter->AddColumns()->SetName("default_value");
-                if (!plainFirst) {
-                    addPlainColumns();
-                }
-                request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
-                ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
-                TAutoPtr<IEventHandle> handle;
-                auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-                UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::UNSUPPORTED, response->Record.DebugString());
-                UNIT_ASSERT_STRING_CONTAINS(response->Record.DebugString(),
-                    "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
-                UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString(), original);
-            }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
-        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
-    }
-
-    Y_UNIT_TEST(AlterPayloadOnlyDefaultColumns) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-        ui64 txId = 100;
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-        const auto original = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString();
-
-        size_t scans = 0;
-        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
-        Ydb::TypedValue literal;
-        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        literal.mutable_value()->set_uint32_value(10);
-        const TVector<TString> forbidden = {
-            R"(Columns { Name: "plain" Type: "Uint32" })",
-            R"(Columns { Name: "default_value" Type: "Uint32" })",
-            R"(DropColumns { Name: "value" })",
-            R"(DropColumns { Name: "default_value" })",
-            R"(DropColumns { Name: "plain" })",
-            R"(DropColumns { Name: "missing" })",
-            R"(Columns { Name: "value" EmptyDefault: NULL_VALUE })",
-            R"(Columns { Name: "value" DefaultFromLiteral { type { type_id: UINT32 } value { uint32_value: 20 } } })",
-            R"(Columns { Name: "value" NotNull: false })",
-            R"(Columns { Name: "value" FamilyName: "cold" })",
-            R"(Columns { Name: "untyped" NotNull: false })",
-            R"(TTLSettings { Enabled { ColumnName: "key" ColumnUnit: UNIT_SECONDS ExpireAfterSeconds: 3600 } })",
-            R"(TTLSettings { Disabled {} })",
-            R"(PartitionConfig { EnableFilterByKey: false })",
-            R"(PartitionConfig { ColumnFamilies { Id: 1 Name: "cold" } })",
-            R"(MultiColumnStatistics {})",
-            R"(DropMultiColumnStatistics: "stats")",
-            R"(DetailedMetricsSettings { NotConfigured {} })",
-            R"(AllowUnderSameOperation: false)",
-            R"(PartitionCount: 0)",
-        };
-        for (const auto& change : forbidden) {
-            auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
-            auto* settings = request->Record.MutableSettings();
-            NKikimrSchemeOp::TModifyScheme payload;
-            payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            payload.MutableAlterTable()->SetName("Table");
-            payload.MutableAlterTable()->AddColumns()->SetName("default_value");
-            NKikimrSchemeOp::TTableDescription extra;
-            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(change, &extra), change);
-            payload.MutableAlterTable()->MergeFrom(extra);
-            settings->MutableAlterMainTablePayload()->PackFrom(payload);
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
-            TAutoPtr<IEventHandle> handle;
-            auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::UNSUPPORTED, change << ": " << response->Record.DebugString());
-            UNIT_ASSERT_STRING_CONTAINS(response->Record.DebugString(),
-                "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
-            const auto table = DescribePath(runtime, "/MyRoot/Table");
-            UNIT_ASSERT_VALUES_EQUAL_C(table.GetPathDescription().GetTable().SerializeAsString(), original, change);
-            TestDescribeResult(table, {
-                NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"}, true),
-            });
-        }
-        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
-        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
-
-        // KQP's empty settings container is inert, and legacy DEFAULT descriptors have no type.
         const ui64 buildId = ++txId;
-        auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_value", literal);
+        auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_one", literal);
+        auto* settings = request->Record.MutableSettings();
+        auto* second = settings->mutable_column_build_operation()->add_column();
+        second->CopyFrom(settings->column_build_operation().column(0));
+        second->SetColumnName("default_two");
+        second->mutable_default_from_literal()->mutable_value()->set_uint32_value(20);
         NKikimrSchemeOp::TModifyScheme payload;
         payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-        payload.MutableAlterTable()->SetName("Table");
-        payload.MutableAlterTable()->AddColumns()->SetName("default_value");
-        payload.MutableAlterTable()->MutablePartitionConfig();
-        request->Record.MutableSettings()->MutableAlterMainTablePayload()->PackFrom(payload);
+        auto* alter = payload.MutableAlterTable();
+        alter->SetName("Table");
+        alter->AddColumns()->SetName("default_one");
+        if (ExtraFields) {
+            alter->SetAllowUnderSameOperation(false);
+            alter->SetPartitionCount(0);
+        }
+        settings->MutableAlterMainTablePayload()->PackFrom(payload);
+        size_t scans = 0;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
+            ++scans;
+            const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
+            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), "default_one");
+            UNIT_ASSERT_VALUES_EQUAL(columns.column(1).GetColumnName(), "default_two");
+        });
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
         TAutoPtr<IEventHandle> handle;
         auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
@@ -148,96 +60,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId).GetIndexBuild().GetState(),
             Ydb::Table::IndexBuildState::STATE_DONE);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::CheckColumns("Table", {"key", "value", "default_value"}, {}, {"key"}, true),
+            NLs::CheckColumns("Table", {"key", "value", "default_one", "default_two"}, {}, {"key"}, true),
         });
         UNIT_ASSERT(scans > 0);
-    }
-
-    Y_UNIT_TEST(AlterPayloadMissingBuildColumnsRejected) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-        ui64 txId = 100;
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-        const auto original = DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString();
-        size_t scans = 0;
-        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
-        Ydb::TypedValue literal;
-        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        literal.mutable_value()->set_uint32_value(10);
-        for (ui32 payloadColumns : {0, 1}) {
-            auto request = CreateBuildColumnRequest(++txId, "/MyRoot", "/MyRoot/Table", "default_one", literal);
-            auto* settings = request->Record.MutableSettings();
-            auto* second = settings->mutable_column_build_operation()->add_column();
-            second->CopyFrom(settings->column_build_operation().column(0));
-            second->SetColumnName("default_two");
-            NKikimrSchemeOp::TModifyScheme payload;
-            payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            auto* alter = payload.MutableAlterTable();
-            alter->SetName("Table");
-            if (payloadColumns) {
-                alter->AddColumns()->SetName("default_one");
-            }
-            settings->MutableAlterMainTablePayload()->PackFrom(payload);
-            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
-            TAutoPtr<IEventHandle> handle;
-            auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response->Record.DebugString());
-            UNIT_ASSERT_STRING_CONTAINS(response->Record.DebugString(), "ALTER TABLE payload is missing columns to build");
-            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable().SerializeAsString(), original);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
-        UNIT_ASSERT_VALUES_EQUAL(TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot").EntriesSize(), 0);
-    }
-
-    Y_UNIT_TEST(InvalidAlterPayload) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-        ui64 txId = 100;
-        ui64 tenantSchemeShard = 0;
-        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        Ydb::TypedValue literal;
-        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        literal.mutable_value()->set_uint32_value(10);
-        for (ui32 invalidPayload = 0; invalidPayload < 3; ++invalidPayload) {
-            auto request = CreateBuildColumnRequest(++txId, "/MyRoot/ServerLessDB",
-                "/MyRoot/ServerLessDB/Table", "default_value", literal);
-            auto* payload = request->Record.MutableSettings()->MutableAlterMainTablePayload();
-            if (invalidPayload == 0) {
-                payload->PackFrom(literal); // Wrong Any type.
-            } else {
-                NKikimrSchemeOp::TModifyScheme modifyScheme;
-                modifyScheme.SetOperationType(invalidPayload == 1
-                    ? NKikimrSchemeOp::ESchemeOpDropTable
-                    : NKikimrSchemeOp::ESchemeOpAlterTable);
-                if (invalidPayload == 1) {
-                    modifyScheme.MutableAlterTable()->SetName("Table");
-                }
-                payload->PackFrom(modifyScheme); // Wrong operation or missing AlterTable.
-            }
-            ForwardToTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor(), request.release());
-            TAutoPtr<IEventHandle> handle;
-            auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST, response->Record.DebugString());
-        }
-        auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        UNIT_ASSERT_VALUES_EQUAL(listing.EntriesSize(), 0);
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"), {
-            NLs::PathExist,
-            NLs::CheckColumns("Table", {"key"}, {}, {"key"}, true),
-        });
     }
 
     Y_UNIT_TEST(ValidDefaultValue) {

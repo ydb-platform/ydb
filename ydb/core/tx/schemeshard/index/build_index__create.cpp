@@ -8,8 +8,6 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
-#include <util/generic/hash_set.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr::NSchemeShard {
@@ -287,43 +285,6 @@ public:
             }
             if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
                 return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
-            }
-
-            if (settings.HasAlterMainTablePayload()) {
-                NKikimrSchemeOp::TModifyScheme modifyScheme;
-                if (!settings.GetAlterMainTablePayload().UnpackTo(&modifyScheme)
-                    || modifyScheme.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterTable
-                    || !modifyScheme.HasAlterTable())
-                {
-                    return makeReply("invalid ALTER TABLE payload for column build");
-                }
-                // The payload must contain only additions represented in the build settings.
-                auto extraAlter = modifyScheme.GetAlterTable();
-                extraAlter.ClearName();
-                extraAlter.ClearColumns();
-                // KQP also supplies an empty PartitionConfig for ADD COLUMN alone.
-                if (extraAlter.GetPartitionConfig().ByteSizeLong() == 0) {
-                    extraAlter.ClearPartitionConfig();
-                }
-                bool onlyDefaultColumns = extraAlter.ByteSizeLong() == 0;
-                THashSet<TString> columnsToBuild;
-                for (const auto& column : settings.column_build_operation().column()) {
-                    columnsToBuild.insert(column.GetColumnName());
-                }
-                for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
-                    // Also reject repeated descriptors rather than silently ignoring them.
-                    if (!columnsToBuild.erase(column.GetName())) {
-                        onlyDefaultColumns = false;
-                        break;
-                    }
-                }
-                if (!onlyDefaultColumns) {
-                    return Reply(Ydb::StatusIds::UNSUPPORTED,
-                        "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
-                }
-                if (!columnsToBuild.empty()) {
-                    return makeReply("ALTER TABLE payload is missing columns to build");
-                }
             }
 
             buildInfo->TargetName = tablePath.PathString();

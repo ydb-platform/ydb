@@ -1,12 +1,17 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/json/json_reader.h>
+
+#include <google/protobuf/text_format.h>
 
 #include <algorithm>
 
@@ -237,9 +242,107 @@ void TestDropNotNullDocumentId(const TString& kind, bool compact) {
 }
 
 
+std::pair<NKikimrSchemeOp::TModifyScheme, NKikimrIndexBuilder::TColumnBuildSettings>
+MakeColumnBuildAlter(ui32 count) {
+    NKikimrSchemeOp::TModifyScheme modifyScheme;
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+    modifyScheme.MutableAlterTable()->SetName("Table");
+    NKikimrIndexBuilder::TColumnBuildSettings settings;
+    for (ui32 i = 0; i < count; ++i) {
+        const TString name = TStringBuilder() << "default" << i;
+        modifyScheme.MutableAlterTable()->AddColumns()->SetName(name);
+        auto* column = settings.add_column();
+        column->SetColumnName(name);
+        column->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT32);
+        column->mutable_default_from_literal()->mutable_value()->set_uint32_value(10 + i);
+    }
+    return {std::move(modifyScheme), std::move(settings)};
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpConstraints) {
+    Y_UNIT_TEST(ColumnBuildAlterOnlyDefaults) {
+        for (ui32 count : {1, 3}) {
+            for (bool emptyPartitionConfig : {false, true}) {
+                auto [alter, settings] = MakeColumnBuildAlter(count);
+                alter.MutableAlterTable()->MutableColumns()->SwapElements(0, count - 1);
+                if (emptyPartitionConfig) {
+                    alter.MutableAlterTable()->MutablePartitionConfig();
+                }
+                auto code = Ydb::StatusIds::SUCCESS;
+                TString error;
+                UNIT_ASSERT_C(NSchemeHelpers::ValidateColumnBuildAlter(alter, settings, code, error), error);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ColumnBuildAlterRejectsOtherActions) {
+        const TVector<TString> forbidden = {
+            R"(Columns { Name: "plain" Type: "Uint32" })",
+            R"(Columns { Name: "default0" Type: "Uint32" })",
+            R"(DropColumns { Name: "value" })",
+            R"(DropColumns { Name: "default0" })",
+            R"(DropColumns { Name: "plain" })",
+            R"(DropColumns { Name: "missing" })",
+            R"(Columns { Name: "value" EmptyDefault: NULL_VALUE })",
+            R"(Columns { Name: "value" DefaultFromLiteral { type { type_id: UINT32 } value { uint32_value: 20 } } })",
+            R"(Columns { Name: "value" NotNull: false })",
+            R"(Columns { Name: "value" FamilyName: "cold" })",
+            R"(Columns { Name: "untyped" NotNull: false })",
+            R"(TTLSettings { Enabled { ColumnName: "key" ColumnUnit: UNIT_SECONDS ExpireAfterSeconds: 3600 } })",
+            R"(TTLSettings { Disabled {} })",
+            R"(PartitionConfig { EnableFilterByKey: false })",
+            R"(PartitionConfig { ColumnFamilies { Id: 1 Name: "cold" } })",
+            R"(MultiColumnStatistics {})",
+            R"(DropMultiColumnStatistics: "stats")",
+            R"(DetailedMetricsSettings { NotConfigured {} })",
+            R"(AllowUnderSameOperation: false)",
+            R"(PartitionCount: 0)",
+        };
+        for (const auto& change : forbidden) {
+            auto [alter, settings] = MakeColumnBuildAlter(1);
+            NKikimrSchemeOp::TTableDescription extra;
+            UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(change, &extra), change);
+            alter.MutableAlterTable()->MergeFrom(extra);
+            auto code = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT_C(!NSchemeHelpers::ValidateColumnBuildAlter(alter, settings, code, error), change);
+            UNIT_ASSERT_VALUES_EQUAL_C(code, Ydb::StatusIds::UNSUPPORTED, change << ": " << error);
+            UNIT_ASSERT_STRING_CONTAINS(error, "cannot be combined with other ALTER TABLE actions");
+        }
+    }
+
+    Y_UNIT_TEST(ColumnBuildAlterRequiresMatchingColumns) {
+        for (ui32 missing : {1, 3}) {
+            auto [alter, settings] = MakeColumnBuildAlter(3);
+            for (ui32 i = 0; i < missing; ++i) {
+                alter.MutableAlterTable()->MutableColumns()->RemoveLast();
+            }
+            auto code = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT(!NSchemeHelpers::ValidateColumnBuildAlter(alter, settings, code, error));
+            UNIT_ASSERT_VALUES_EQUAL(code, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(error, "ALTER TABLE payload is missing columns to build");
+        }
+    }
+
+    Y_UNIT_TEST(ColumnBuildAlterRejectsInvalidOperation) {
+        for (bool missingAlter : {false, true}) {
+            auto [alter, settings] = MakeColumnBuildAlter(1);
+            if (missingAlter) {
+                alter.ClearAlterTable();
+            } else {
+                alter.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+            }
+            auto code = Ydb::StatusIds::SUCCESS;
+            TString error;
+            UNIT_ASSERT(!NSchemeHelpers::ValidateColumnBuildAlter(alter, settings, code, error));
+            UNIT_ASSERT_VALUES_EQUAL(code, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(error, "invalid ALTER TABLE operation for column build");
+        }
+    }
+
     Y_UNIT_TEST(SerialTypeNegative1) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetWithSampleTables(false));
@@ -997,6 +1100,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         };
         size_t scans = 0;
         auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
+        size_t buildRequests = 0;
+        auto buildObserver = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([&](auto& ev) {
+            buildRequests += ev->Get()->Record.GetSettings().has_column_build_operation();
+        });
         const TVector<TString> otherActions = {
             "ALTER COLUMN Value DROP DEFAULT",
             "ALTER COLUMN Value SET DEFAULT 20",
@@ -1040,6 +1147,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                             "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
                     }
                     UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(buildRequests, 0);
                     const auto describe = kikimr.RunCall([&] { return tableSession.DescribeTable("/Root/t").GetValueSync(); });
                     UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
                     THashSet<TString> names;
@@ -1089,6 +1197,88 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         auto result = execute("SELECT * FROM TestTable ORDER BY Key;");
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).GetColumnsMeta().size(), 2);
         CompareYson("[[1u;[42u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableViaTableClient, WithData) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto session = kikimr.RunCall([&] { return kikimr.GetTableClient().CreateSession().GetValueSync().GetSession(); });
+        auto querySession = kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().GetSession(); });
+        const auto scheme = [&](const TString& query) {
+            return kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
+        };
+        const auto execute = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] { return querySession.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        const auto created = scheme(R"(CREATE TABLE t (
+            Key Uint32 NOT NULL, Value Uint32 DEFAULT 7, Old Uint32, PRIMARY KEY (Key)
+        ) WITH (KEY_BLOOM_FILTER = ENABLED);)");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        if (WithData) {
+            execute("UPSERT INTO t (Key, Value, Old) VALUES (1, 42, 99);");
+        }
+        const auto before = kikimr.RunCall([&] { return session.DescribeTable("/Root/t").GetValueSync(); });
+        UNIT_ASSERT_C(before.IsSuccess(), before.GetIssues().ToString());
+        const auto original = TProtoAccessor::GetProto(before.GetTableDescription()).SerializeAsString();
+        size_t buildRequests = 0;
+        auto buildObserver = runtime.AddObserver<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>([&](auto& ev) {
+            buildRequests += ev->Get()->Record.GetSettings().has_column_build_operation();
+        });
+        size_t scans = 0;
+        auto scanObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto&) { ++scans; });
+        for (const TString& changes : {
+            TString("ADD COLUMN d0 Uint32 DEFAULT 10, ADD COLUMN Plain1 Uint32"),
+            TString("ADD COLUMN Plain1 Uint32, ADD COLUMN d0 Uint32 DEFAULT 10"),
+            TString("ADD COLUMN d0 Uint32 DEFAULT 10, DROP COLUMN Old"),
+        }) {
+            const auto rejected = scheme("ALTER TABLE t " + changes + ";");
+            UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), EStatus::UNSUPPORTED, rejected.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(),
+                "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions");
+            UNIT_ASSERT_VALUES_EQUAL(buildRequests, 0);
+            UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+            const auto unchanged = kikimr.RunCall([&] { return session.DescribeTable("/Root/t").GetValueSync(); });
+            UNIT_ASSERT_C(unchanged.IsSuccess(), unchanged.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(TProtoAccessor::GetProto(unchanged.GetTableDescription()).SerializeAsString(), original);
+        }
+
+        const auto defaults = scheme("ALTER TABLE t ADD COLUMN d0 Uint32 DEFAULT 10, ADD COLUMN d1 Uint32 DEFAULT 20;");
+        UNIT_ASSERT_C(defaults.IsSuccess(), defaults.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(buildRequests, 1);
+        UNIT_ASSERT(scans > 0);
+        const auto scansAfterBuild = scans;
+        const auto rows = execute("SELECT Key, Value, Old, d0, d1 FROM t;");
+        CompareYson(WithData ? "[[1u;[42u];[99u];[10u];[20u]]]" : "[]", FormatResultSetYson(rows.GetResultSet(0)));
+
+        const auto type = TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Uint32).EndOptional().Build();
+        const auto altered = kikimr.RunCall([&] {
+            return session.AlterTable("/Root/t", NYdb::NTable::TAlterTableSettings()
+                .AppendAddColumns(TColumn{"Plain1", type})
+                .AppendAddColumns(TColumn{"Plain2", type})
+                .AppendDropColumns("Old")
+                .SetKeyBloomFilter(false)).GetValueSync();
+        });
+        UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(buildRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(scans, scansAfterBuild);
+        const auto description = kikimr.RunCall([&] { return session.DescribeTable("/Root/t").GetValueSync(); });
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        THashSet<TString> names;
+        for (const auto& column : description.GetTableDescription().GetTableColumns()) {
+            names.insert(TString(column.Name));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(names.size(), 6);
+        for (const char* name : {"Key", "Value", "d0", "d1", "Plain1", "Plain2"}) {
+            UNIT_ASSERT_C(names.contains(name), name);
+        }
+        UNIT_ASSERT(!description.GetTableDescription().GetKeyBloomFilter().value_or(true));
+        const auto preserved = execute("SELECT Key, Value, d0, d1, Plain1, Plain2 FROM t;");
+        CompareYson(WithData ? "[[1u;[42u];[10u];[20u];#;#]]" : "[]", FormatResultSetYson(preserved.GetResultSet(0)));
+        execute("UPSERT INTO t (Key, Plain1, Plain2) VALUES (2, 11, 22);");
+        const auto inserted = execute("SELECT Value, d0, d1, Plain1, Plain2 FROM t WHERE Key = 2;");
+        CompareYson("[[[7u];[10u];[20u];[11u];[22u]]]", FormatResultSetYson(inserted.GetResultSet(0)));
     }
 
     Y_UNIT_TEST_TWIN(AlterTableGeneratedColumnCannotBeCombined, PlainColumnFirst) {

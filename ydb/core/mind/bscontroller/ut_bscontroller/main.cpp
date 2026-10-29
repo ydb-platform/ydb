@@ -495,6 +495,15 @@ namespace {
                 const auto& record = response->Get()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetServiceSet().GroupsSize(), 1);
+                const NKikimrBlobStorage::TGroupInfo& info = record.GetServiceSet().GetGroups(0);
+                if (info.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.FailRealmStatesSize(), 3);
+                    for (ui32 realm = 0; realm < 3; ++realm) {
+                        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetFailRealmStates(realm)), ui32(info.GetRings(realm).GetState()));
+                    }
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(group.FailRealmStatesSize(), 0);
+                }
                 result.emplace(group.GetGroupId(), record.GetServiceSet().GetGroups(0));
             }
             return result;

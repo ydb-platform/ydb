@@ -977,6 +977,11 @@ namespace NKikimr::NBsController {
                     if (const auto& info = group.Info) {
                         x->SetGroupGeneration(info->GroupGeneration);
                         x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(info->Type.GetErasure()));
+                        if (info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+                            for (ui32 realm = 0; realm < 3; ++realm) {
+                                x->AddFailRealmStates(info->GetFailRealmState(realm));
+                            }
+                        }
                         for (TActorId actorId : info->GetDynamicInfo().ServiceIdForOrderNumber) {
                             const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(actorId);
                             const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);

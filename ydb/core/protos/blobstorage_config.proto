@@ -962,6 +962,8 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
+        // Effective mirror-3-dc states in physical fail realm order (0/1/2); empty for other erasure species.
+        repeated TGroupInfo.TFailRealm.EState FailRealmStates = 14;
     }
     message TNode {
         uint32 NodeId = 1;

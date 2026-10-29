@@ -1517,6 +1517,12 @@ namespace NKikimr::NBsController {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
+            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    pb->AddFailRealmStates(group.FailRealmStates ? (*group.FailRealmStates)[realm]
+                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                }
+            }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {
                 Serialize(pb->AddVSlotId(), vslot->VSlotId);
             }

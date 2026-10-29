@@ -152,6 +152,9 @@ runs:
         mkdir -p $TMP_DIR
         echo "TMP_DIR=$TMP_DIR" >> $GITHUB_ENV
 
+        # Keep the wrapper available while graph_compare checks out the base commit.
+        install -m 755 .github/scripts/ya-stable-test-uids.py "$TMP_DIR/ya-stable-test-uids"
+
         # The whole dir will be uploaded to s3 with public (=wild internet) ACL
         export PUBLIC_DIR=$TMP_DIR/results
         echo "PUBLIC_DIR=$PUBLIC_DIR" >> $GITHUB_ENV
@@ -388,7 +391,7 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        YA_MAKE_COMMAND="$TMP_DIR/ya-stable-test-uids make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
@@ -536,7 +539,7 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            "$TMP_DIR/ya-stable-test-uids" make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"

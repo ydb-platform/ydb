@@ -3,8 +3,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/stream/output.h>
+
 Y_UNIT_TEST_SUITE(Util) {
     Y_UNIT_TEST(IsQueryWithSensitiveInfo) {
+        Cerr << "DIR_OUTPUTS_PROBE: security successful test" << Endl;
         // false
         UNIT_ASSERT(!NKikimr::IsQueryWithSensitiveInfo("SELECT 1"));
         UNIT_ASSERT(!NKikimr::IsQueryWithSensitiveInfo("CREATE TABLE t (id Int32, PRIMARY KEY(id))"));

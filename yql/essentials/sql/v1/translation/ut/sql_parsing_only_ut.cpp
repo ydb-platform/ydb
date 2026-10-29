@@ -6193,57 +6193,18 @@ Y_UNIT_TEST(AsyncReplicationInvalidSettings) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:62: Error: Unknown replication setting: FOO\n");
 }
 
-Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication;
-        )";
-    auto res = SqlToYql(req);
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
-    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'drop)"));
-        }
-    };
-
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(res, elementStat, verifyLine);
-
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-}
-
-Y_UNIT_TEST(DropAsyncReplicationCascade) {
-    auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication CASCADE;
-        )";
-    auto res = SqlToYql(req);
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
-    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'dropCascade)"));
-        }
-    };
-
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(res, elementStat, verifyLine);
-
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-}
-
-Y_UNIT_TEST(DropAsyncReplicationForce) {
+Y_UNIT_TEST(DropAsyncReplicationModes) {
     for (const auto& [query, mode] : {
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication;", "drop"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE;", "dropCascade"},
              std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication FORCE;", "dropForce"},
-             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;", "dropCascadeForce"},
-             std::pair{"USE plato; DROP ASYNC REPLICATION fOrCe FORCE;", "dropForce"}}) {
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;", "dropCascadeForce"}}) {
         const auto res = SqlToYql(query);
         UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
 
-        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        TVerifyLineFunc verifyLine = [mode](const TString& word, const TString& line) {
             if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(TStringBuilder() << "('mode '" << mode << ")"));
             }
         };
@@ -6274,6 +6235,7 @@ Y_UNIT_TEST(ForceRemainsAnUnquotedIdentifier) {
             "SELECT * FROM plato.fOrCe AS fOrCe;",
             "USE ydb; CREATE TABLE fOrCe (fOrCe Uint64, PRIMARY KEY (fOrCe));",
             "USE plato; DROP ASYNC REPLICATION fOrCe;",
+            "USE plato; DROP ASYNC REPLICATION fOrCe FORCE;",
             "USE plato; CREATE TOPIC fOrCe (CONSUMER fOrCe);",
             "USE plato; ALTER TOPIC fOrCe ADD CONSUMER fOrCe;",
             "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (fOrCe) DEFINE fOrCe AS fOrCe);"}) {

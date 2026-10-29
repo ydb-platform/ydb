@@ -432,21 +432,23 @@ NThreading::TFuture<void> TFederatedReadSessionImpl::WaitEvent() {
     // TODO override with read session settings timeout
     return AsyncInit.Apply([selfCtx = SelfContext](const NThreading::TFuture<void>) {
         if (auto self = selfCtx->LockShared()) {
-            std::vector<NThreading::TFuture<void>> waiters;
             std::lock_guard guard(self->Lock);
             if (self->Closing || !self->PendingEvents.empty()) {
                 return NThreading::MakeFuture();
             }
-            // Every blocked reader shares one promise. Signaling it wakes them all, and a caller
-            // that drops a timed-out wait leaves nothing behind: the next signal replaces it.
-            if (!self->Wakeup.Initialized()) {
-                self->Wakeup = NThreading::NewPromise<void>();
+            // Subscribing a new WaitAny to every call leaks: a caller that drops a timed-out
+            // wait does not unsubscribe it, and it stays until some input completes.
+            if (self->BlockedWait.Initialized() && !self->BlockedWait.IsReady()) {
+                return self->BlockedWait;
             }
+            std::vector<NThreading::TFuture<void>> waiters;
+            self->Wakeup = NThreading::NewPromise<void>();
             waiters.push_back(self->Wakeup.GetFuture());
             for (const auto& sub : self->SubSessions) {
                 waiters.emplace_back(sub.Session->WaitEvent());
             }
-            return NThreading::WaitAny(std::move(waiters));
+            self->BlockedWait = NThreading::WaitAny(std::move(waiters));
+            return self->BlockedWait;
         }
         return NThreading::MakeFuture();
     });

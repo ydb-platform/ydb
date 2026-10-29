@@ -265,10 +265,13 @@ private:
     // comes back is read again. An empty first snapshot still fails the session.
     bool SawReadableDatabase = false;
 
-    // Shared by every blocked WaitEvent. Taken and replaced when signaled, so a caller
-    // that drops a timed-out wait does not leave a promise behind. SetValue happens
+    // Signals BlockedWait on a membership change or session close. SetValue happens
     // outside Lock: a subscriber may take Lock.
     NThreading::TPromise<void> Wakeup;
+    // One WaitAny for every blocked reader, subscribed to Wakeup and the current
+    // subsessions. Rebuilt only after it becomes ready: a timed-out wait drops the
+    // caller's copy and does not subscribe again.
+    NThreading::TFuture<void> BlockedWait;
     // Events produced by the federated session itself, returned by GetEvents
     // before subsession events. Only used when no handler takes them.
     std::deque<TReadSessionEvent::TEvent> PendingEvents;

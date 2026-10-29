@@ -9,8 +9,11 @@
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+#include <util/generic/strbuf.h>
 
 namespace NKikimr {
+
+struct TPathId;
 
 struct TEvStateStorage {
     enum EEv {
@@ -631,6 +634,9 @@ struct TBoardRetrySettings {
     TDuration StartDelayMs = TDuration::MilliSeconds(2000);
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
+
+ui64 GetSchemeBoardSelectionKey(TStringBuf path);
+ui64 GetSchemeBoardSelectionKey(const TPathId& pathId);
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);

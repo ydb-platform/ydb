@@ -130,7 +130,7 @@ Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
             UNIT_ASSERT(result.PreparedQuery);
             const auto& tables = result.PreparedQuery->GetQueryTables();
             UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(tables.front().Path, expectedPath);
+            UNIT_ASSERT_VALUES_EQUAL(tables.front(), expectedPath);
         }
     };
     auto update = [&](std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) {

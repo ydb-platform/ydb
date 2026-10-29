@@ -8,10 +8,12 @@
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
-/ydb/core/tx/sharding/ut @ydb-platform/datashard
 /ydb/tests/functional/large_serializable @ydb-platform/datashard
 /ydb/tests/functional/serializable @ydb-platform/datashard
 /ydb/tests/functional/split_merge @ydb-platform/datashard
+/ydb/tests/functional/ttl @ydb-platform/datashard
+/ydb/tests/functional/statistics @ydb-platform/datashard
+/ydb/tools/tli_analysis/tests @ydb-platform/datashard
 /ydb/core/scheme @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
@@ -26,7 +28,9 @@
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/config/validation/column_shard_config_validator_ut @ydb-platform/cs
 /ydb/core/io_formats/arrow/scheme/ut @ydb-platform/cs
-/ydb/tests/functional/ttl @ydb-platform/cs
+/ydb/core/tx/sharding/ut @ydb-platform/cs
+/ydb/core/tx/conveyor_composite/ut @ydb-platform/cs
+/ydb/core/tx/limiter/grouped_memory/ut @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/tiering @ydb-platform/cs
@@ -114,12 +118,11 @@
 /ydb/tests/example @ydb-platform/engineering
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/functional/restarts @ydb-platform/engineering
-/ydb/tests/functional/tpcc @ydb-platform/engineering
+/ydb/tests/functional/minidumps @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
 /ydb/tools/cfg @ydb-platform/engineering
 /ydb/tools/include_sanitizer @ydb-platform/engineering
-/ydb/tools/tli_analysis/tests @ydb-platform/engineering
 /ydb/tools/ydb_bench @ydb-platform/engineering
 /ydb/tools/ydbd_slice @ydb-platform/engineering
 /ydb/tests/functional/tpc @ydb-platform/engineering
@@ -131,6 +134,8 @@
 /ydb/apps/bridge_skipper @ydb-platform/blobstorage
 /ydb/apps/dstool @ydb-platform/blobstorage
 /ydb/services/distributed_storage/ut @ydb-platform/blobstorage
+/ydb/services/test_shard/ut @ydb-platform/blobstorage
+/ydb/tests/functional/tpcc @ydb-platform/blobstorage
 /ydb/tools/blobsan/ut @ydb-platform/blobstorage
 /ydb/tools/pdisktool/ut @ydb-platform/blobstorage
 /ydb/core/blobstorage @ydb-platform/blobstorage
@@ -177,8 +182,6 @@
 /ydb/core/tablet/ut @ydb-platform/core
 /ydb/core/testlib/actors/ut @ydb-platform/core
 /ydb/core/tx/balance_coverage/ut @ydb-platform/core
-/ydb/core/tx/conveyor_composite/ut @ydb-platform/core
-/ydb/core/tx/limiter/grouped_memory/ut @ydb-platform/core
 /ydb/core/tx/long_tx_service @ydb-platform/core
 /ydb/core/tx/mediator/ut @ydb-platform/core
 /ydb/core/tx/sequenceproxy/ut @ydb-platform/core
@@ -195,16 +198,13 @@
 /ydb/services/config/ut @ydb-platform/core
 /ydb/services/dynamic_config/ut @ydb-platform/core
 /ydb/services/rate_limiter/ut @ydb-platform/core
-/ydb/services/test_shard/ut @ydb-platform/core
 /ydb/services/ydb/ut @ydb-platform/core
 /ydb/tests/functional/api @ydb-platform/core
 /ydb/tests/functional/autoconfig @ydb-platform/core
 /ydb/tests/functional/backup @ydb-platform/core
-/ydb/tests/functional/minidumps @ydb-platform/core
 /ydb/tests/functional/mvp/meta @ydb-platform/core
 /ydb/tests/functional/rename @ydb-platform/core
 /ydb/tests/functional/scheme_tests @ydb-platform/core
-/ydb/tests/functional/statistics @ydb-platform/core
 /ydb/tests/functional/wardens @ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core

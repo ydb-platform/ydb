@@ -1276,11 +1276,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         ui64 fakeTabletId;
         switch (msg->KeyType) {
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePath:
-            fakeTabletId = CityHash64(msg->Path);
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->Path);
             break;
 
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePathId:
-            fakeTabletId = msg->PathId.Hash();
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->PathId);
             break;
 
         default:

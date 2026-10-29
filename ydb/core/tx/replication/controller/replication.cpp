@@ -541,6 +541,24 @@ ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
 }
 
+bool TReplication::IsCredentialsReady() const {
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    if (params.GetEndpoint().empty()) {
+        return true;
+    }
+
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        return params.GetStaticCredentials().HasPassword();
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        return params.GetOAuthToken().HasToken();
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        return params.GetIamCredentials().HasResourceId();
+    default:
+        return false;
+    }
+}
+
 void TReplication::UpdateSecret(const TString& secretValue) {
     auto& params = *Impl->Config.MutableSrcConnectionParams();
     switch (params.GetCredentialsCase()) {

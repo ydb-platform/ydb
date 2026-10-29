@@ -6,13 +6,19 @@
 namespace NKikimr::NMiniKQL {
 
 void EnsureNoPgTypes(TType* type) {
-    TExploringNodeVisitor explorer;
+    struct TVisitor : TExploringNodeVisitor {
+        using TExploringNodeVisitor::Visit;
+
+        void Visit(TPgType&) override {
+            HasPg = true;
+        }
+
+        bool HasPg = false;
+    } visitor;
+
     std::vector<TNode*> stack;
-    explorer.Walk(type, stack);
-    for (auto* node : explorer.GetNodes()) {
-        MKQL_ENSURE(!node->GetType()->IsType() || !static_cast<TType*>(node)->IsPg(),
-            "PG types are not supported in hash join");
-    }
+    visitor.Walk(type, stack);
+    MKQL_ENSURE(!visitor.HasPg, "PG types are not supported in hash join");
 }
 
 i64 TPackResult::AllocatedBytes() const {

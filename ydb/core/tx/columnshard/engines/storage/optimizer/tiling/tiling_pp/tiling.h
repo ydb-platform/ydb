@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/settings.h>
 
 #include <algorithm>
+#include <iterator>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -50,7 +51,6 @@ struct Tiling: ICompactionUnit<TPortion> {
     THashMap<ui64, typename TPortion::TPtr> PortionRegistry;
     THashMap<ui64, TInstant> InsertTimeByPortionId;
     TSet<std::pair<TInstant, ui64>> PortionsByTime;
-    bool FirstLoad = true;
 
     enum class EState {
         REGULAR,
@@ -61,11 +61,28 @@ struct Tiling: ICompactionUnit<TPortion> {
     EState State = EState::REGULAR;
     TOptimizationPriority OverloadPriority = TOptimizationPriority::Critical(0);
 
-    void InitialAddPortions(const std::vector<typename TPortion::TPtr>& add) {
+    void UpdatePriority() {
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+    }
+
+    void AddLoadedPortions(const std::vector<typename TPortion::TPtr>& add) {
+        std::vector<typename TPortion::TPtr> sortedPortions;
+        std::copy_if(add.begin(), add.end(), std::back_inserter(sortedPortions), [](const auto& p) {
+            return p->GetProduced() != NPortion::EVICTED;
+        });
+        if (sortedPortions.empty()) {
+            return;
+        }
+        const EState stateBefore = State;
+        const auto metricBefore = DoGetUsefulMetric();
         auto comparator = TPortionByIndexKeyEndComparator<TPortion>();
 
-        auto sortedPortions = add;
-        Sort(sortedPortions, comparator);
+        // the loader reads portions from the highest key down
+        if (std::is_sorted(sortedPortions.rbegin(), sortedPortions.rend(), comparator)) {
+            std::reverse(sortedPortions.begin(), sortedPortions.end());
+        } else {
+            Sort(sortedPortions, comparator);
+        }
 
         std::vector<typename TPortion::TPtr> toLastLevel;
         std::vector<typename TPortion::TPtr> toAccumulator;
@@ -87,8 +104,9 @@ struct Tiling: ICompactionUnit<TPortion> {
             lastKey.emplace(portion->IndexKeyEndRef());
         }
 
-        for (auto& portion : toLastLevel) {
-            this->AddPortion(portion);
+        // in reverse: we load batches from high keys to low, so each portion is added at the front, which is fast
+        for (auto it = toLastLevel.rbegin(); it != toLastLevel.rend(); ++it) {
+            this->AddPortion(*it);
         }
 
         for (auto& portion : toMiddleLevels) {
@@ -99,17 +117,19 @@ struct Tiling: ICompactionUnit<TPortion> {
             this->AddPortion(portion);
         }
 
-        const auto usefulMetric = DoGetUsefulMetric();
-        if (usefulMetric.IsCritical() && Settings.EnableCompatibilityMode) {
+        // the ceiling grows only by what the batch adds, so an overload caused by writes stays visible
+        const auto metricAfter = DoGetUsefulMetric();
+        const auto batchGrowth = metricAfter - metricBefore;
+        if (stateBefore == EState::COMPATIBILITY) {
             State = EState::COMPATIBILITY;
-            OverloadPriority = usefulMetric.IncPercent(10);
+            OverloadPriority = OverloadPriority + batchGrowth;
+        } else if (metricAfter.IsCritical() && Settings.EnableCompatibilityMode) {
+            State = EState::COMPATIBILITY;
+            OverloadPriority = metricBefore.IsCritical() ? OverloadPriority + batchGrowth : metricAfter.IncPercent(10);
         } else {
             State = EState::REGULAR;
         }
-    }
-
-    void UpdatePriority() {
-        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        UpdatePriority();
     }
 
     void ModifyPortions(const std::vector<typename TPortion::TPtr>& add, const std::vector<typename TPortion::TConstPtr>& remove) {
@@ -117,13 +137,8 @@ struct Tiling: ICompactionUnit<TPortion> {
             this->RemovePortion(p);
         }
 
-        if (FirstLoad) {
-            FirstLoad = false;
-            InitialAddPortions(add);
-        } else {
-            for (const auto& p : add) {
-                this->AddPortion(p);
-            }
+        for (const auto& p : add) {
+            this->AddPortion(p);
         }
 
         UpdatePriority();

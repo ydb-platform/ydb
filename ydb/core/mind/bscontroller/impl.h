@@ -722,8 +722,9 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
-        // Derived from the volatile DataCenterStates; intentionally omitted from the table adapter.
+        // Effective realm states; explicit overrides are stored separately from volatile DC-derived states.
         std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
+        bool HasExplicitFailRealmStates = false; // Persisted override takes precedence over volatile DC states.
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 

@@ -391,6 +391,10 @@ class TNeumannHashTable {
             return iter;
         }
 
+        if (Y_UNLIKELY(!Layout_->HasEqualNullsKeys && Layout_->KeyHasNull(row))) {
+            return iter;
+        }
+
         const ui8 *const begin =
             Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
         const ui8 *const end =
@@ -504,6 +508,10 @@ class TNeumannHashTable {
         const TBloom dirBloomFilter = dir.BloomFilter;
 
         if (hashBloomTag & dirBloomFilter) {
+            return;
+        }
+
+        if (Y_UNLIKELY(!Layout_->HasEqualNullsKeys && Layout_->KeyHasNull(row))) {
             return;
         }
 

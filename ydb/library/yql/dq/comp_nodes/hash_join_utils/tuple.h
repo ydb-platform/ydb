@@ -252,6 +252,31 @@ struct TTupleLayout {
         return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
     }
 
+    // Cached NULL-key check parameters; packed row size and offsets stay unchanged.
+    ui64 NullCheckMask = 0;
+    ui32 NullCheckOffset = 0;
+    ui32 NullCheckWidth = 0;
+
+    void PrepareKeyNullCheck();
+
+    Y_FORCE_INLINE bool KeyHasNull(const ui8* row) const {
+        if (Y_LIKELY(NullCheckWidth == 1)) {
+            return (ReadUnaligned<ui8>(row + NullCheckOffset) & NullCheckMask) != NullCheckMask;
+        }
+        if (NullCheckWidth == 4) {
+            return (ReadUnaligned<ui32>(row + NullCheckOffset) & NullCheckMask) != NullCheckMask;
+        }
+        if (KeyColumnsNum > 64) {
+            for (ui32 i = 0; i < KeyColumnsNum / 64; ++i) {
+                if (ReadUnaligned<ui64>(row + BitmaskOffset + i * sizeof(ui64)) != ~ui64{0}) {
+                    return true;
+                }
+            }
+        }
+        return NullCheckMask != 0 &&
+            (ReadUnaligned<ui64>(row + NullCheckOffset) & NullCheckMask) != NullCheckMask;
+    }
+
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
     Create(const std::vector<TColumnDesc> &columns);

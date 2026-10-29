@@ -1707,6 +1707,21 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
     }
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    auto partition = Partitions.find(TPartitionId(record.GetPartitionId()));
+    if (partition == Partitions.end() || partition->second.Actor != ev->Sender) {
+        return;
+    }
+    auto pipe = PipesInfo.find(ActorIdFromProto(record.GetPipeClient()));
+    if (pipe == PipesInfo.end() || !pipe->second.ClientActor
+        || pipe->second.SessionId != record.GetSession()
+        || pipe->second.PartitionSessionId != record.GetPartitionSessionId()) {
+        return;
+    }
+    ctx.Send(pipe->second.ClientActor, ev->Release().Release());
+}
+
 void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
@@ -2941,6 +2956,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     auto& req = request.GetPartitionRequest();
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+    if (auto pipe = PipesInfo.find(pipeClient); pipe != PipesInfo.end()) {
+        pipe->second.ClientActor = ev->Sender;
+    }
 
     if (request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
         auto pipeIter = PipesInfo.find(pipeClient);
@@ -6193,6 +6211,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
+        HFuncTraced(TEvPersQueue::TEvReplicationData, Handle);
         HFuncTraced(TEvPersQueue::TEvStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);

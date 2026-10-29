@@ -486,6 +486,28 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     EndPartitionSessionEvent = std::nullopt;
 }
 
+void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (!ReplicationDataInFlight.empty() || ReplicationDataQueue.empty()) {
+        return;
+    }
+
+    while (!ReplicationDataQueue.empty()) {
+        const auto& data = ReplicationDataQueue.front();
+        // Applying these boundaries must not make unwritten source messages look persisted.
+        if (data.GetEndOffset() > Max(EndOffset, data.GetStartOffset())) {
+            break;
+        }
+        ReplicationDataInFlight.emplace_back(std::move(ReplicationDataQueue.front()));
+        ReplicationDataQueue.pop_front();
+    }
+    if (ReplicationDataInFlight.empty()) {
+        return;
+    }
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->Data = ReplicationDataInFlight;
+    ctx.Send(PartitionActor, event.Release());
+}
+
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
@@ -556,6 +578,7 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
     TryToSplitMerge(ctx);
+    TryToSendReplicationData(ctx);
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
@@ -682,9 +705,31 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
+bool TMirrorer::IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const {
+    if (message.GetOffset() != 0) {
+        return false;
+    }
+
+    const auto& messageMeta = message.GetMessageMeta();
+    for (const auto& attribute : messageMeta->Fields) {
+        if (attribute.first == "_ydb_service_replication_message") {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
+        if (IsServiceReplicationMessage(msg)) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(msg.GetData())) {
+                ReplicationDataQueue.emplace_back(std::move(replicationData));
+                continue;
+            }
+        }
+
         PQ_ENSURE(OffsetToRead <= offset);
         LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();
@@ -924,6 +969,14 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
     }
     EndOffset = ev->Get()->EndOffset;
     ScheduleConsumerCreation(ctx);
+}
+
+void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
+    if (ev->Sender != PartitionActor || ReplicationDataInFlight.empty()) {
+        return;
+    }
+    ReplicationDataInFlight.clear();
+    Send(SelfId(), new TEvents::TEvWakeup());
 }
 
 NActors::IActor* CreateMirrorer(const ui64 tabletId,

@@ -571,12 +571,16 @@ TIntrusivePtr<TUserInfo> TUsersInfoStorage::CreateUserInfo(const TActorContext& 
     const TDetailedCounterSubgroup partitionSubgroup = GetPartitionCounterSubgroup(ctx);
     const TDetailedCounterSubgroup consumerSubgroup = consumerConfig ? GetConsumerCounterSubgroup(ctx, *consumerConfig) : TDetailedCounterSubgroup{};
 
-    return MakeIntrusive<TUserInfo>(
+    auto userInfo = MakeIntrusive<TUserInfo>(
         ctx, StreamCountersSubgroup, FilterDetailedMetricsSubgroups(partitionSubgroup, consumerSubgroup),
         user, readRuleGeneration, important, availabilityPeriod, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata
     );
+    if (consumerConfig) {
+        userInfo->Type = consumerConfig->GetType();
+    }
+    return userInfo;
 }
 
 TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,

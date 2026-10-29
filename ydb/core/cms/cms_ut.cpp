@@ -1283,10 +1283,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8);
 
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+        auto allowed = env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+
+        auto denied = env.CheckPermissionRequest("other-user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(),
+            TStringBuilder() << "Cannot lock node '" << env.GetNodeId(0)
+                << "': node state: 'Locked' (permission " << allowed.GetPermissions(0).GetId() << " owned by user)");
     }
 
     Y_UNIT_TEST(RequestRestartServicesWrongHost)

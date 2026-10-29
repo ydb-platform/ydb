@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
         };
         const TCase cases[] = {
             {{R::N0, R::N0, R::N0}, {1, 1, 1}, {2, 2, 2}}, // W = 1+1+1 OR 2+2.
-            {{R::N1, R::N2, R::R}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in N/N.
+            {{R::N1, R::N1, R::R}, {1, 1, 1}, {2, 2, 1}}, // Union of 1+1+1 and 2+2 in N/N.
             {{R::N0, R::N0, R::F}, {2, 2, 0}, {3, 3, 0}}, // W = 2+2, expand to 3+3.
             {{R::N2, R::N2, R::F}, {2, 2, 0}, {3, 3, 0}},
             {{R::N1, R::F, R::F}, {2, 0, 0}, {3, 0, 0}},
@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcPutStrategyTest) {
     }
 
     Y_UNIT_TEST(DoneUsesWriteWithoutWaitingForDurability) {
-        TTest t({R::N2, R::N2, R::R});
+        TTest t({R::N1, R::N1, R::R});
         t.Set({2, 2, 0}, S::Present); // W = 2+2 is complete, D = 1+1+1 is not.
         UNIT_ASSERT(t.Run(P::TacticMinLatency) == EStrategyOutcome::DONE);
         t.Expect({0, 0, 0});

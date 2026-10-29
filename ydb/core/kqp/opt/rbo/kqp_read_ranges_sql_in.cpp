@@ -94,6 +94,15 @@ std::optional<TSqlInRanges> MatchSqlInRanges(const TExprNode::TPtr& node) {
         return AllOf(child->Tail().Tail().Children(), [](const TExprNode::TPtr& element) { return IsArgumentElement(*element); });
     });
     if (keyOrder) {
+        const auto& input = keyOrder->Head();
+        if (input.IsCallable("FlatMap") && input.ChildrenSize() == 2 && input.Tail().IsLambda()) {
+            const auto& cast = input.Tail().Tail();
+            if (cast.IsCallable("StrictCast") && cast.ChildrenSize() == 2
+                && cast.Tail().IsCallable("OptionalType") && cast.Tail().ChildrenSize() == 1
+                && cast.Tail().Head().IsCallable("TupleType")) {
+                result.TupleSize = cast.Tail().Head().ChildrenSize();
+            }
+        }
         for (const auto& element : keyOrder->Tail().Tail().Children()) {
             ui32 index;
             if (!TryFromString(element->Tail().Content(), index)) {
@@ -103,14 +112,6 @@ std::optional<TSqlInRanges> MatchSqlInRanges(const TExprNode::TPtr& node) {
         }
     }
 
-    const auto limitCheck = FindNode(body, [](const TExprNode::TPtr& child) {
-        return child->IsCallable(">") && child->ChildrenSize() == 2 && child->Head().IsCallable("Length")
-            && child->Tail().IsCallable("Uint64");
-    });
-    ui64 limit;
-    if (limitCheck && TryFromString(limitCheck->Tail().Head().Content(), limit)) {
-        result.Limit = limit;
-    }
     return result;
 }
 

@@ -26,7 +26,7 @@ struct TSqlInRanges {
     TVector<TSqlInColumn> Columns;
     ui64 ItemLimit = 0;
     TVector<ui32> KeyOrder; // the element of a tuple for every element in key order, when the tuples are reordered
-    std::optional<ui64> Limit;
+    std::optional<size_t> TupleSize; // the original tuple width, before selecting/reordering key columns
 
     // The value of a column in an item, null when the item is not a literal tuple.
     NYql::TExprNode::TPtr GetValue(const NYql::TExprNode::TPtr& item, const TSqlInColumn& column) const {

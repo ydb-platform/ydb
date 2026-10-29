@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/generic/algorithm.h>
+#include <util/string/subst.h>
 
 namespace NKikimr::NKqp::NOpt {
 namespace {
@@ -442,11 +443,43 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertRanges(expression, {"a", "b"}, {"[{a: 1, b: 7}, {a: 1, b: 7}]", "[{a: 2, b: 7}, {a: 2, b: 7}]"});
         AssertExpression(expression, {"a", "b"}, "a ∈ {1, 2} × b ∈ {7}");
         AssertRanges(SqlIn("(Just (AsList (Int64 '3) (Int64 '3)))", 10000), {"a"}, {"[{a: 3}, {a: 3}]"});
+        AssertExpression(SqlIn("(Just (AsList (Int64 '3) (Int64 '3)))", 10000), {"a"}, "a ∈ {3}");
     }
 
     Y_UNIT_TEST(SqlInOverLimitReadsEverything) {
         AssertRanges(SqlIn(TupleList, 1), {"a"}, {"({a: -∞}, {a: +∞})"});
-        AssertExpression(SqlIn(TupleList, 1), {"a"}, "a ∈ (-∞, +∞)");
+        AssertExpression(SqlIn(TupleList, 1), {"a"}, "a ∈ {1, 2}");
+    }
+
+    Y_UNIT_TEST(SqlInInputCountDoesNotProveRangeLimitOverflow) {
+        const auto withNull = SqlIn(R"(
+            (Just (AsList (Nothing (OptionalType (DataType 'Int64))) (Just (Int64 '1))))
+        )", 1);
+        AssertRanges(withNull, {"a"}, {"[{a: 1}, {a: 1}]"});
+        AssertExpression(withNull, {"a"}, "a ∈ {NULL, 1}");
+
+        const auto withParameter = SqlIn(R"(
+            (Just (AsList (Nothing (OptionalType (DataType 'Int64)))
+                (Just (Parameter '$p (DataType 'Int64)))))
+        )", 1);
+        UNIT_ASSERT(!Describe(withParameter, {"a"}));
+        AssertExpression(withParameter, {"a"}, "a ∈ {NULL, $p}");
+    }
+
+    Y_UNIT_TEST(ExpressionUnionPreservesPaddedKeyWidth) {
+        AssertExpression(R"(
+            (RangeMultiply (Uint64 '100)
+                (RangeUnion
+                    (RangeMultiply (Uint64 '100)
+                        (RangeFor '== (Int64 '1) (DataType 'Int64))
+                        (AsRange '('((Nothing (OptionalType (DataType 'Int64))) (Int32 '0))
+                                  '((Nothing (OptionalType (DataType 'Int64))) (Int32 '0)))))
+                    (RangeMultiply (Uint64 '100)
+                        (RangeFor '== (Int64 '2) (DataType 'Int64))
+                        (AsRange '('((Nothing (OptionalType (DataType 'Int64))) (Int32 '0))
+                                  '((Nothing (OptionalType (DataType 'Int64))) (Int32 '0))))))
+                (RangeFor '== (Parameter '$c (DataType 'Int64)) (DataType 'Int64)))
+        )", {"a", "b", "c"}, "a ∈ {1, 2} × c ∈ {$c}");
     }
 
     Y_UNIT_TEST(ExpressionLeavesOutUnconstrainedColumns) {
@@ -462,6 +495,18 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertExpression(expression, {"a"}, "a ∈ $list");
     }
 
+    Y_UNIT_TEST(SqlInDoesNotDiscardCollectionOperations) {
+        AssertExpression(SqlIn(R"(
+            (Map (Just (Parameter '$list (ListType (DataType 'Int64)))) (lambda '(x) x))
+        )", 10000), {"a"}, "a ∈ $list");
+        AssertExpression(SqlIn(R"(
+            (Just (Take (Parameter '$list (ListType (DataType 'Int64))) (Uint64 '1)))
+        )", 10000), {"a"}, "a ∈ Take(…)");
+        AssertExpression(SqlIn(R"(
+            (Just (Map (Parameter '$list (ListType (DataType 'Int64))) (lambda '(x) (+ x (Int64 '1)))))
+        )", 10000), {"a"}, "a ∈ Map(…)");
+    }
+
     Y_UNIT_TEST(TupleSqlInIsEvaluatedInKeyOrder) {
         const TString expression = TStringBuilder() << "(RangeFinalize " << TupleSqlIn(PairList, 10000) << ")";
         AssertRanges(expression, {"a", "b"}, {"[{a: 1, b: 10}, {a: 1, b: 10}]", "[{a: 2, b: 20}, {a: 2, b: 20}]"});
@@ -471,8 +516,21 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
     Y_UNIT_TEST(TupleSqlInOverParameterOrLimit) {
         const auto parameter = TupleSqlIn("(Map (Just (Parameter '$pairs (ListType (TupleType (DataType 'Int32) (DataType 'Int32))))) (lambda '(x) x))", 10000);
         UNIT_ASSERT(!Describe(parameter, {"a", "b"}));
-        AssertExpression(parameter, {"a", "b"}, "(a, b) ∈ $pairs");
+        AssertExpression(parameter, {"a", "b"}, "(b, a) ∈ $pairs");
         AssertRanges(TupleSqlIn(PairList, 1), {"a", "b"}, {"({a: -∞, b: -∞}, {a: +∞, b: +∞})"});
+    }
+
+    Y_UNIT_TEST(TupleSqlInProjectionIsNotPlainMembership) {
+        const auto parameter = TupleSqlIn("(Just (Parameter '$pairs (ListType (TupleType (DataType 'Int32) (DataType 'Int32)))))", 10000);
+        auto projected = parameter;
+        SubstGlobal(projected, "(TupleType (DataType 'Int32) (DataType 'Int32))",
+            "(TupleType (DataType 'Int32) (DataType 'Int32) (DataType 'Int32))");
+        auto duplicated = parameter;
+        SubstGlobal(duplicated, "(Nth t '1)", "(Nth t '0)");
+        for (const auto& expression : {projected, duplicated}) {
+            NYql::TExprContext ctx;
+            UNIT_ASSERT(!NReadRanges::DescribeRangesStructure(Compile(expression, ctx), {"a", "b"}));
+        }
     }
 
     Y_UNIT_TEST(FloatRangesStopBeforeNaN) {

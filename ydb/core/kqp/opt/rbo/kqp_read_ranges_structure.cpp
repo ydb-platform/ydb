@@ -5,9 +5,8 @@
 #include "kqp_read_ranges_sql_in.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NKqp::NOpt::NReadRanges {
@@ -25,6 +24,12 @@ TString DescribeExprValue(const TExprNode::TPtr& node) {
         return FormatKeyValue(*value);
     }
     if (node->IsCallable("Just") && node->ChildrenSize() == 1) {
+        return DescribeExprValue(node->HeadPtr());
+    }
+    if (node->IsCallable("Map") && node->ChildrenSize() == 2 && node->Tail().IsLambda()
+        && node->Tail().Head().ChildrenSize() == 1
+        && node->Tail().TailPtr() == node->Tail().Head().HeadPtr()) {
+        // The extractor wraps an optional list in an identity Map.
         return DescribeExprValue(node->HeadPtr());
     }
     if (node->IsCallable({"SafeCast", "StrictCast", "Convert", "ToString"}) && node->ChildrenSize() > 0) {
@@ -117,14 +122,12 @@ std::optional<TColumnSet> DescribeRangeFor(const TExprNode& node) {
 TColumnSet DescribeSqlIn(const TSqlInRanges& in) {
     if (!in.Items) {
         // A list known only at runtime, usually a parameter.
-        const auto param = FindNode(in.List, [](const TExprNode::TPtr& node) { return TCoParameter::Match(node.Get()); });
-        return TColumnSet{.Text = param ? TString(TCoParameter(param).Name().Value()) : TString("{…}")};
+        return TColumnSet{.Text = DescribeExprValue(in.List)};
     }
-    if (in.Limit && in.Items->size() > *in.Limit) {
-        // Past the limit the whole key range is read.
-        return TColumnSet{.Kind = TColumnSet::EKind::Interval};
-    }
+    // Describe the input set. Its length alone cannot establish a range-limit overflow: NULLs and values
+    // that do not fit the key type may produce no ranges. Only MiniKQL determines the actual scan bounds.
     TColumnSet result{.Kind = TColumnSet::EKind::Points};
+    THashSet<TString> seen;
     for (const auto& item : *in.Items) {
         TStringBuilder point;
         for (size_t i = 0; i < in.Columns.size(); ++i) {
@@ -132,7 +135,7 @@ TColumnSet DescribeSqlIn(const TSqlInRanges& in) {
             point << (i ? ", " : "") << (value ? DescribeExprValue(value) : TString("…"));
         }
         const TString text = in.Columns.size() > 1 ? TString(TStringBuilder() << '(' << point << ')') : TString(point);
-        if (!IsIn(result.Points, text)) {
+        if (seen.insert(text).second) {
             result.Points.push_back(text);
         }
     }
@@ -152,9 +155,10 @@ TColumnSet JoinSets(const TVector<TColumnSet>& sets, TStringBuf op) {
 TColumnSet UniteSets(const TVector<TColumnSet>& sets) {
     if (AllOf(sets, [](const TColumnSet& set) { return set.Kind == TColumnSet::EKind::Points; })) {
         TColumnSet result{.Kind = TColumnSet::EKind::Points};
+        THashSet<TString> seen;
         for (const auto& set : sets) {
             for (const auto& point : set.Points) {
-                if (!IsIn(result.Points, point)) {
+                if (seen.insert(point).second) {
                     result.Points.push_back(point);
                 }
             }
@@ -239,6 +243,32 @@ private:
                 return std::nullopt;
             }
             auto set = DescribeSqlIn(*in);
+            if (!in->Items && in->Columns.front().Element) {
+                // The collection still contains tuples in their original order. Put the column names in that
+                // order too; a projection or duplicate component cannot be expressed as tuple membership.
+                if (!in->TupleSize || *in->TupleSize != width) {
+                    return std::nullopt;
+                }
+                TVector<TString> names(width);
+                for (size_t i = 0; i < width; ++i) {
+                    const auto element = in->Columns[i].Element;
+                    if (!element || *element >= in->KeyOrder.size()) {
+                        return std::nullopt;
+                    }
+                    const auto source = in->KeyOrder[*element];
+                    if (source >= width || !names[source].empty()) {
+                        return std::nullopt;
+                    }
+                    names[source] = ColumnName(column + i);
+                }
+                TStringBuilder text;
+                text << '(';
+                for (size_t i = 0; i < width; ++i) {
+                    text << (i ? ", " : "") << names[i];
+                }
+                text << ") ∈ " << set.Format();
+                return TDescription{.Width = width, .Text = text};
+            }
             if (width == 1) {
                 return TDescription{.Width = 1, .Column = std::move(set)};
             }
@@ -326,7 +356,7 @@ private:
                 for (auto& child : children) {
                     sets.push_back(std::move(*child.Column));
                 }
-                return TDescription{.Width = 1, .Column = op == EOp::Union ? UniteSets(sets) : IntersectSets(sets)};
+                return TDescription{.Width = children.front().Width, .Column = op == EOp::Union ? UniteSets(sets) : IntersectSets(sets)};
             }
             return Join(children, column, op, op == EOp::Union ? " ∪ " : " ∩ ");
         }

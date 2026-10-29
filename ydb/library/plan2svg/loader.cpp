@@ -405,6 +405,8 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
                     }
                     builder << subNode.GetStringSafe();
                 }
+            } else if (const auto* expression = subNode.GetValueByPath("ReadRangesExpression")) {
+                builder << expression->GetStringSafe();
             }
         }
 

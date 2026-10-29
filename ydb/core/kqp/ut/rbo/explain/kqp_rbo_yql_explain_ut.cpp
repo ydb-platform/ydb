@@ -630,6 +630,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"Parameter in OR", "sc_row", "DECLARE $p AS Int64; SELECT * FROM `/Root/sc_row` WHERE a < $p OR a >= 10;", {}, "a ∈ (-∞, $p) ∪ [10, +∞)"},
             {"IN over a list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN $list;", {}, "a ∈ $list"},
             {"Tuple IN over a parameter", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (a, b) IN $pairs;", {}, "(a, b) ∈ $pairs"},
+            {"Tuple IN over a parameter in another order", "sc_row", "DECLARE $pairs AS List<Tuple<Int64, Int64>>; SELECT * FROM `/Root/sc_row` WHERE (b, a) IN $pairs;", {}, "(b, a) ∈ $pairs"},
+            {"IN over a transformed list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN ListTake($list, 1);", {}, "a ∈ Take(…)"},
             {"Condition that does not depend on the row", "sc_row", "DECLARE $flag AS Bool; SELECT * FROM `/Root/sc_row` WHERE a = 1 OR $flag;", {}, "a ∈ {1} ∪ (a ∈ (-∞, +∞) if $flag)"},
 
             {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;", {}},

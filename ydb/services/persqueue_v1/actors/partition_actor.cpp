@@ -34,7 +34,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
+        const std::unordered_set<ui64>& notCommitedToFinishParents, const std::unordered_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : TBase(NKikimrServices::PQ_READ_PROXY)
     , ParentId(parentId)
@@ -85,6 +85,7 @@ TPartitionActor::TPartitionActor(
     , FirstRead(true)
     , ReadingFinishedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
+    , SkippedParents(skippedParents)
 {
 }
 
@@ -202,7 +203,8 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: parents) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            const bool onlyCheck = !SkippedParents.contains(parent->Id);
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = onlyCheck, .ReadSessionId = Session};
             commits.push_back(commit);
         }
         TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};

@@ -206,13 +206,30 @@ namespace NKikimr {
                 << ", committed " << committed << ", expected " << received[0].Offset + 1
                 << ", consumer " << DumpConsumerOffsets(client)
                 << ", topic " << DumpOffsets(ReadOffsets(client)));
-            // Partition 4 is a grandchild of partition 0. The direct child forwards ParentCommitedToFinish, and neither ancestor offset is written.
-            AssertConsumerOffset(client, ParentPartition, 0);
-            AssertConsumerOffset(client, PartitionAfterFirstSplit, 0);
+            // read_from skipped every parent message, so the first child commit also commits both ancestors to their end.
+            AssertConsumerOffset(client, ParentPartition, 1);
+            AssertConsumerOffset(client, PartitionAfterFirstSplit, 1);
             AssertConsumerOffset(client, PartitionAfterSecondSplit, received[0].Offset + 1);
+            readSession->Close();
+
+            // A later session without read_from does not get the skipped parent messages back.
+            UNIT_ASSERT(session->Write(Msg("child-4-next", seqNo++)));
+            std::shared_ptr<ITestReadSession> nextSession = CreateTestReadSession({
+                .Name = autoPartitioningSupport ? "next-aware" : "next",
+                .Setup = setup,
+                .Sdk = SdkVersion::Topic,
+                .ExpectedMessagesCount = 1,
+                .AutoCommit = false,
+                .AutoPartitioningSupport = autoPartitioningSupport,
+            });
+            nextSession->Run();
+            nextSession->WaitAllMessages();
+            received = nextSession->GetReceivedMessages();
+            UNIT_ASSERT_C(received.size() == 1, "received [" << DumpMessages(received) << "]");
+            UNIT_ASSERT_VALUES_EQUAL(received[0].Data, "child-4-next");
+            nextSession->Close();
 
             UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
-            readSession->Close();
         }
 
         const MsgInfo* FindMessage(const std::vector<MsgInfo>& messages, ui64 partitionId) {

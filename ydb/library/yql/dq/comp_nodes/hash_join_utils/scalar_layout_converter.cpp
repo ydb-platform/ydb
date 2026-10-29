@@ -1,5 +1,4 @@
 #include "scalar_layout_converter.h"
-#include "layout_converter_traits.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -8,6 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -624,6 +624,10 @@ struct TColumnDataExtractorTraits {
 
     constexpr static bool PassType = false;
 
+    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription&, const NUdf::IPgBuilder*, TType*) {
+        MKQL_ENSURE(false, "PG types are not supported in scalar hash join");
+    }
+
     template <bool IsNull>
     static TResult::TPtr MakeSingular(TType* type) {
         return std::make_unique<TSingular<IsNull>>(type);
@@ -934,7 +938,7 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
             packers.emplace_back(std::make_unique<TSerializedColumnDataExtractor>(
                 type, roles[i] == NPackedTuple::EColumnRole::Key, unpacked, optional || unpacked->IsNull()));
         } else {
-            packers.emplace_back(NLayoutConverter::DispatchLayoutTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, type));
+            packers.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, type));
         }
     }
 

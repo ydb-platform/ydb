@@ -482,6 +482,7 @@ class TBlobStorageGroupMirror3dcDiscoverRequest : public TBlobStorageGroupReques
     // quorum tracker for EvVGetBlock queries
     TGroupQuorumTracker GetBlockTracker;
     bool GetBlockFinished = false;
+    ui32 GetBlockRepliesRemaining = 0;
 
     // number of in flight requests of all kind
     ui32 RequestsInFlight = 0;
@@ -541,6 +542,7 @@ public:
                 auto query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
                 DSP_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
+                ++GetBlockRepliesRemaining;
 
                 SendToQueue(std::move(query), 0);
                 ++RequestsInFlight;
@@ -743,6 +745,19 @@ public:
             BlockedGeneration = Max(BlockedGeneration, record.GetGeneration());
         } else if (status == NKikimrProto::NODATA) {
             status = NKikimrProto::OK; // assume OK for quorum tracker
+        }
+
+        if (Worker->RequiresDataProbe()) {
+            // E=0 cannot provide an ensured-layout quorum. Collect every active disk instead.
+            if (status != NKikimrProto::OK) {
+                return ReplyAndDie(NKikimrProto::ERROR);
+            }
+            Y_ABORT_UNLESS(GetBlockRepliesRemaining);
+            if (!--GetBlockRepliesRemaining) {
+                GetBlockFinished = true;
+                TryToSatisfyRequest();
+            }
+            return;
         }
 
         switch (NKikimrProto::EReplyStatus quorumStatus = GetBlockTracker.ProcessReply(vdisk, status)) {

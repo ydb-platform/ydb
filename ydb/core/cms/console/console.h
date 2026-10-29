@@ -188,6 +188,14 @@ namespace TEvConsole {
 
     struct TEvSetYamlConfigRequest : public TEventShortDebugPB<TEvSetYamlConfigRequest, NKikimrConsole::TSetYamlConfigRequest, EvSetYamlConfigRequest> {
         using TResponse = TEvSetYamlConfigResponse;
+
+        struct TConsoleCommitContext {
+            TActorId Sender;
+            TActorId PipeServer;
+            ui32 YamlVersion;
+        };
+
+        std::optional<TConsoleCommitContext> ConsoleCommitContext;
     };
 
     struct TEvReplaceYamlConfigResponse : public TEventShortDebugPB<TEvReplaceYamlConfigResponse, NKikimrConsole::TReplaceYamlConfigResponse, EvReplaceYamlConfigResponse> {};

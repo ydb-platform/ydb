@@ -10,6 +10,17 @@ namespace NKikimr::NBlobDepot {
 
     using TAssimilator = TBlobDepot::TGroupAssimilator;
 
+    void TBlobDepot::ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId) {
+        TChannelInfo& channel = Channels[blobSeqId.Channel];
+        const ui32 generation = Executor()->Generation();
+        const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+        const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blobSeqId.ToSequentialNumber());
+        Y_ABORT_UNLESS(numErased == 1);
+        if (leastExpectedBlobIdBefore != channel.GetLeastExpectedBlobId(generation)) {
+            Data->OnLeastExpectedBlobIdChange(channel.Index);
+        }
+    }
+
     struct TStateBits {
         enum {
             Blocks = 1,
@@ -700,6 +711,8 @@ namespace NKikimr::NBlobDepot {
             get.BlobIds.push_back(key.GetBlobId());
             get.AssimilatedBlobs.push_back({std::move(key), TData::TAssimilatedBlobInfo::TUpdate{
                 TBlobSeqId::FromLogoBlobId(msg.Id)}});
+        } else {
+            Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
         }
         if (!--get.PutsPending) {
             Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,

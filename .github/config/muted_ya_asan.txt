@@ -49,6 +49,7 @@ ydb/core/kqp/ut/scheme KqpAcl.AclTemporary-IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultCancellation
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite

@@ -198,7 +198,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     break;
                 }
                 case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
-                    (*settings->mutable_attributes())["_replication_consumer"] = consumerName;
+                    (*settings->mutable_attributes())["_ydb_replication_consumer"] = consumerName;
                     break;
                 }
             }

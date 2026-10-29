@@ -8,7 +8,7 @@
 
 - Connecting to {{ ydb-name }} with all [authentication](../../security/authentication.md) methods: anonymous, static, token-based, service account, and metadata.
 - Hierarchical object navigator: tables, topics, external data sources, external tables, views.
-- System objects: [system views](../../dev/system-views.md) (`.sys`), [resource pools](../../concepts/analytics/concepts/execution.md#resource_management), and resource pool classifiers.
+- System objects: [system views](../../dev/system-views.md) (`.sys`), resource pools, and resource pool classifiers.
 - [YQL](../../concepts/glossary.md#yql) editor with syntax highlighting for 150+ keywords and built-in functions.
 - Query execution plan visualization (`EXPLAIN` / `EXPLAIN ANALYZE`).
 - Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md).
@@ -196,7 +196,7 @@ After connection, the **Database Navigator** panel displays the {{ ydb-short-nam
 - **External Data Sources** — [external data sources](../../concepts/glossary.md#external-data-source).
 - **External Tables** — [external tables](../../concepts/glossary.md#external-table).
 - **System Views (.sys)** — [system views](../../dev/system-views.md), such as `partition_stats`, `query_sessions`.
-- **Resource Pools** — [resource pools](../../concepts/analytics/concepts/execution.md#resource_management).
+- **Resource Pools** — resource pools.
 
 ## Working with the plugin {#capabilities}
 

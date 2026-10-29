@@ -25,10 +25,12 @@ namespace NKikimr::NBridge {
         const auto& state = Info->Group->GetBridgeGroupState();
         if (const auto *source = NBridge::FindGroupPileByGroupId(state, SourceGroupId)) {
             if (source->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
-                Y_DEBUG_ABORT("TGroupState.TPile is not in SYNCED state for primary pile");
+                // An old assignment may be stamped with a newer group generation after its source was suspended.
                 return Terminate("group is not synced for primary pile");
             }
             SourceGroupGeneration = source->GetGroupGeneration();
+        } else {
+            return Terminate("source group not found in TGroupState");
         }
         const auto *target = NBridge::FindGroupPileByGroupId(state, TargetGroupId);
         if (!target) {

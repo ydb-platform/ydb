@@ -3494,8 +3494,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         });
         std::vector<std::unique_ptr<IEventHandle>> plans;
+        TActorId initialProposer;
         auto blockPlans = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>([&](auto& ev) {
             if (ev->Get()->Record.GetTransaction().GetTxId() == splitTxId) {
+                if (!initialProposer) {
+                    initialProposer = ev->Sender;
+                }
                 plans.emplace_back(ev.Release());
             }
         });
@@ -3540,9 +3544,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         }
         RebootTablet(runtime, schemeShard, edgeActor);
+        const IEventHandle* recoveredPlan = nullptr;
         if (topicAutoPartitioning) {
-            WaitFor(runtime, [&]{ return !plans.empty(); }, "recovered split proposal");
-            const auto& proposal = plans.back()->Get<TEvTxProxy::TEvProposeTransaction>()->Record.GetTransaction();
+            WaitFor(runtime, [&] {
+                for (const auto& plan : plans) {
+                    if (plan->Sender != initialProposer) {
+                        recoveredPlan = plan.get();
+                        return true;
+                    }
+                }
+                return false;
+            }, "split proposal from the recovered SchemeShard actor");
+            const auto& proposal = recoveredPlan->Get<TEvTxProxy::TEvProposeTransaction>()->Record.GetTransaction();
             UNIT_ASSERT_C(proposal.GetMinStep() >= minStep, "Recovery must preserve the prepared minimum step");
             THashSet<ui64> affected;
             for (const auto& entry : proposal.GetAffectedSet()) {
@@ -3555,7 +3568,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
         blockPlans.Remove();
         for (auto& ev : plans) {
-            runtime.Send(ev.release(), 0, true);
+            // An old actor's delayed proposal must not rescue a broken recovery path.
+            if (ev->Sender != initialProposer) {
+                runtime.Send(ev.release(), 0, true);
+            }
         }
         if (topicAutoPartitioning) {
             WaitTxNotification(server, edgeActor, splitTxId);

@@ -179,6 +179,7 @@ public:
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
+    bool IsCredentialsReady() const;
     void UpdateSecret(const TString& secretValue);
     bool IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const;
 

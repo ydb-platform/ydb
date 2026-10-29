@@ -118,7 +118,7 @@ private:
     void ProcessBootQueue(const TActorContext& ctx);
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
-    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);

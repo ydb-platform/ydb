@@ -447,9 +447,7 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
         auto& worker = it->second;
         worker.ClearSession();
 
-        if (worker.HasCommand()) {
-            BootQueue.insert(id);
-        }
+        BootQueue.insert(id);
     }
 
     Sessions.erase(nodeId);
@@ -488,12 +486,6 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
         }
 
         auto* worker = GetOrCreateWorker(id);
-        if (!worker->HasCommand()) {
-            if (const auto* target = FindTarget(id)) {
-                auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
-                worker->SetCommand(ev->Record.MutableCommand());
-            }
-        }
 
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
@@ -547,7 +539,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                     if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
                         worker->second.ClearSession();
                     }
-                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
+                    if (IsValidWorker(id) && !worker->second.HasSession()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -613,16 +605,12 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
 
     auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    auto* cmd = record.MutableCommand();
 
     if (!IsValidWorker(id)) {
         return;
     }
 
-    auto* worker = GetOrCreateWorker(id, cmd);
-    if (!worker->HasCommand()) {
-        worker->SetCommand(cmd);
-    }
+    auto* worker = GetOrCreateWorker(id);
 
     if (!worker->HasSession()) {
         BootQueue.insert(id);
@@ -670,7 +658,8 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
-            auto ev = MakeRunWorkerEv(replication, *target, partitionId);
+            auto ev = MakeHolder<TEvService::TEvRunWorker>();
+            TWorkerId(id.ReplicationId(), id.TargetId(), partitionId).Serialize(*ev->Record.MutableWorker());
             Send(SelfId(), std::move(ev));
         }
     }
@@ -702,10 +691,10 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     return true;
 }
 
-TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
+TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id) {
     auto it = Workers.find(id);
     if (it == Workers.end()) {
-        it = Workers.emplace(id, cmd).first;
+        it = Workers.try_emplace(id).first;
         TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
     }
 
@@ -767,6 +756,13 @@ void TController::ProcessBootQueue(const TActorContext&) {
         auto replication = Find(id.ReplicationId());
         Y_ABORT_UNLESS(replication);
 
+        if (!replication->IsCredentialsReady()) {
+            ++iter;
+            continue;
+        }
+
+        const auto* target = replication->FindTarget(id.TargetId());
+
         const auto& tenant = replication->GetDatabase();
         if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
@@ -779,8 +775,10 @@ void TController::ProcessBootQueue(const TActorContext&) {
             continue;
         }
 
-        Y_ABORT_UNLESS(worker.HasCommand());
-        BootWorker(nodeId, id, *worker.GetCommand());
+        // Commands are not persisted or cached: credentials may have resolved
+        // since recovery, adoption, or the registrar's request.
+        const auto ev = MakeRunWorkerEv(replication, *target, id.WorkerId());
+        BootWorker(nodeId, id, ev->Record.GetCommand());
         worker.AttachSession(nodeId);
 
         BootQueue.erase(iter++);

@@ -31,6 +31,48 @@ Y_UNIT_TEST_SUITE(Replication) {
         }
     }
 
+    Y_UNIT_TEST(CredentialReadiness) {
+        const auto ready = [](const NKikimrReplication::TConnectionParams& params) {
+            NKikimrReplication::TReplicationConfig config;
+            config.MutableSrcConnectionParams()->CopyFrom(params);
+            return MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), config, "/Root")->IsCredentialsReady();
+        };
+
+        NKikimrReplication::TConnectionParams params;
+        UNIT_ASSERT(ready(params)); // Local source does not need credentials.
+        params.SetEndpoint("localhost:2135");
+        UNIT_ASSERT(!ready(params));
+
+        auto* token = params.MutableOAuthToken();
+        token->SetTokenSecretName("token");
+        UNIT_ASSERT(!ready(params));
+        token->SetToken(""); // Explicit anonymous access is already resolved.
+        UNIT_ASSERT(ready(params));
+        token->SetToken("resolved-token");
+        UNIT_ASSERT(ready(params));
+
+        auto* password = params.MutableStaticCredentials();
+        password->SetUser("user");
+        password->SetPasswordSecretName("password");
+        UNIT_ASSERT(!ready(params));
+        password->SetPassword("");
+        UNIT_ASSERT(ready(params));
+        password->SetPassword("resolved-password");
+        UNIT_ASSERT(ready(params));
+
+        auto* iam = params.MutableIamCredentials();
+        iam->MutableInitialToken()->SetTokenSecretName("initial-token");
+        UNIT_ASSERT(!ready(params));
+        iam->MutableInitialToken()->SetToken("resolved-initial-token");
+        UNIT_ASSERT(!ready(params)); // Resource discovery must finish too.
+        iam->SetResourceId("resource-id");
+        UNIT_ASSERT(ready(params));
+
+        params.ClearEndpoint();
+        iam->ClearResourceId();
+        UNIT_ASSERT(ready(params));
+    }
+
     Y_UNIT_TEST(ResourceId) {
         const ui64 id = 1;
         const auto pathId = TPathId(1, 2);

@@ -1089,10 +1089,14 @@ namespace NKikimr {
                 ReplyWithError(*ev, "bridge request timed out");
                 return;
             }
-            if (InnerProxyId && ev->Get()->ForceGroupGeneration) {
+            if (ev->Get()->ForceGroupGeneration) {
                 // request to the physical group of the inline pile (e.g. phantom check from replication), it has to reach
                 // DS proxy as is, with its own generation fence, sender and cookie
-                TActivationContext::Send(ev->Forward(InnerProxyId));
+                if (InnerProxyId) {
+                    TActivationContext::Send(ev->Forward(InnerProxyId));
+                } else {
+                    ReplyWithError(*ev, "physical pile of this group no longer exists");
+                }
                 return;
             }
             if (!BridgeInfo) {

@@ -6,7 +6,19 @@
 
 
 inline TBlobStorageGroupType GetErasureTypeByString(const TString& erasure) {
-    return TBlobStorageGroupType(TErasureType::ErasureSpeciesByName(erasure));
+    if (erasure == "none") {
+        return TBlobStorageGroupType::ErasureNone;
+    } else if (erasure == "block-4-2") {
+        return TBlobStorageGroupType::Erasure4Plus2Block;
+    } else if (erasure == "block-8-2") {
+        return TBlobStorageGroupType::Erasure8Plus2Block;
+    } else if (erasure == "mirror-3of4") {
+        return TBlobStorageGroupType::ErasureMirror3of4;
+    } else if (erasure == "mirror-3-dc") {
+        return TBlobStorageGroupType::ErasureMirror3dc;
+    }
+    UNIT_ASSERT(false);
+    return TBlobStorageGroupType::ErasureNone;
 }
 
 struct TTestInfo {

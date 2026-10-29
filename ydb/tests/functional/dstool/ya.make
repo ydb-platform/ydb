@@ -1,7 +1,8 @@
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
-SIZE(MEDIUM)
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 REQUIREMENTS(cpu:4)
 

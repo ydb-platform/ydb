@@ -17,8 +17,6 @@ namespace NKikimr::NBridge {
         const TGroupId SourceGroupId;
         const TGroupId TargetGroupId;
         std::shared_ptr<TSyncerDataStats> SyncerDataStats;
-        ui32 SourceGroupGeneration;
-        ui32 TargetGroupGeneration;
         TString LogId;
         NKikimrBridge::TGroupState::EStage Stage;
         bool Finished = false;
@@ -49,8 +47,16 @@ namespace NKikimr::NBridge {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Main sync logic
 
+        struct TAbsenceCheck {
+            std::vector<TLogoBlobID> Ids;
+            std::vector<ui8> Observations; // bit 0: absent/DoNotKeep; bit 1: live
+            ui32 ResponsesPending = 0;
+            bool Failed = false;
+        };
+
         struct TQueryPayload {
             bool ToTargetGroup;
+            std::shared_ptr<TAbsenceCheck> AbsenceCheck;
         };
 
         const ui32 MaxQueriesInFlight = 16;
@@ -70,6 +76,8 @@ namespace NKikimr::NBridge {
             TCallback&& merge, std::optional<TKey>& lastMerged);
 
         void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
+            ui64 quoterBytes = 0);
+        void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);

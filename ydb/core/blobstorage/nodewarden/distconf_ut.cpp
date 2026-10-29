@@ -7869,8 +7869,13 @@ selector_config: []
         ui32 reconfigurationRequests = 0;
         TActorId edge;
         std::vector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> results;
+        bool forwardedSelfHealResult = false;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             SetMetadataDiskGuid(nodeId, *ev);
+            if (nodeId == 1 && ev->Type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType
+                    && ev->GetTypeRewrite() == TEvInterconnect::EvForward) {
+                forwardedSelfHealResult = true;
+            }
             if (edge && ev->GetRecipientRewrite() == edge
                     && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
                 const auto& result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
@@ -7909,7 +7914,7 @@ selector_config: []
             fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, &bridge, &policy));
         }
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
-        edge = runtime.AllocateEdgeActor(1);
+        edge = runtime.AllocateEdgeActor(2);
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *command = request->Record.MutableSelfHealNodesStateUpdate();
         command->SetEnableSelfHealStateStorage(true);
@@ -7922,11 +7927,12 @@ selector_config: []
             nodeState->SetNodeId(nodeId);
             nodeState->SetState(0);
         }
-        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        runtime.Send(new IEventHandle(fixture.Keepers[1], edge, request.release()), 2);
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return reconfigurationRequests == 4 && results.size() == 1; }),
             "Board self-heal did not complete with a single result");
         SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT(forwardedSelfHealResult);
         UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, 4);
         const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetStateStorageConfig().SerializeAsString(), originalStateStorage);

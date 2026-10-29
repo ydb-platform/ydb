@@ -342,7 +342,8 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(op);
             Self->StateStorageSelfHealActor = Register(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
                 , TDuration::Seconds(waitForConfigStep), nodesToReplace.begin()->first, std::get<2>(nodesToReplace.begin()->second)
-                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE));
+                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE
+                , op->SessionId));
             Finish(TResult::OK, std::nullopt, {}, false);
             return;
         }
@@ -407,7 +408,8 @@ namespace NKikimr::NStorage {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
-            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig,
+            op->SessionId));
         Finish(TResult::OK, std::nullopt, {}, false);
     }
 

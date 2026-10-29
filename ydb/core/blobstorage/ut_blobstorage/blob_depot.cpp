@@ -13,6 +13,8 @@
 
 #include "blob_depot_test_functions.h"
 
+#include <array>
+
 using namespace NKikimr::NBlobDepot;
 
 namespace {
@@ -60,16 +62,111 @@ void RebootBlobDepotTablet(TEnvironmentSetup& env, ui64 blobDepotTabletId) {
     runtime.DestroyActor(sender);
 }
 
+void LoadSeed(ui32& seed) {
+    ui32 constantSeed = 0;
+    if (TryIntFromString<10, ui32>(GetEnv("MERSENNE_SEED"), constantSeed)) {
+        seed = constantSeed;
+    } else {
+        Seed().LoadOrFail(&seed, sizeof(seed));
+    }
+}
+
+void CheckRangeWaitsForFinalResolve(bool reverse, bool finalError) {
+    ui32 seed;
+    LoadSeed(seed);
+    TBlobDepotTestEnvironment tenv(seed);
+    auto& env = *tenv.Env;
+    const TString data = "paginated range body";
+    const std::array<TLogoBlobID, 2> ids{
+        TLogoBlobID(100500, 1, 1, 0, data.size(), 0),
+        TLogoBlobID(100500, 1, 2, 0, data.size(), 0),
+    };
+    const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    for (const auto& id : ids) {
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, tenv.BlobDepot, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+    }
+
+    TActorId agent;
+    std::unique_ptr<IEventHandle> lastPage;
+    ui32 lastPageNodeId = 0;
+    bool firstReadCompleted = false;
+    bool rangeReplied = false;
+    env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (!lastPage && ev->GetTypeRewrite() == TEvBlobDepot::TEvResolveResult::EventType) {
+            auto& record = ev->Get<TEvBlobDepot::TEvResolveResult>()->Record;
+            if (record.GetStatus() == NKikimrProto::OK && record.ResolvedKeysSize() == 2 &&
+                    record.GetResolvedKeys(0).GetKey() == ids[reverse ? 1 : 0].AsBinaryString() &&
+                    record.GetResolvedKeys(1).GetKey() == ids[reverse ? 0 : 1].AsBinaryString()) {
+                // Split a real tablet response at a smaller page boundary, keeping the stream's request cookie.
+                auto final = std::make_unique<TEvBlobDepot::TEvResolveResult>();
+                final->Record.CopyFrom(record);
+                final->Record.MutableResolvedKeys()->DeleteSubrange(0, 1);
+                if (finalError) {
+                    final->Record.SetStatus(NKikimrProto::ERROR);
+                    final->Record.SetErrorReason("final resolve page failed");
+                    final->Record.ClearResolvedKeys();
+                }
+                agent = ev->Recipient;
+                lastPage = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, final.release(), ev->Flags, ev->Cookie);
+                lastPageNodeId = nodeId;
+                record.SetStatus(NKikimrProto::OVERRUN);
+                record.MutableResolvedKeys()->DeleteSubrange(1, 1);
+            }
+        } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->Recipient == agent) {
+            firstReadCompleted = true;
+        } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvRangeResult && ev->Recipient == edge) {
+            rangeReplied = true;
+            return false; // the edge actor is not waiting yet; assert the premature completion below
+        }
+        return true;
+    };
+    env.Runtime->WrapInActorContext(edge, [&] {
+        SendToBSProxy(edge, tenv.BlobDepot, new TEvBlobStorage::TEvRange(ids[0].TabletID(),
+            ids[reverse ? 1 : 0], ids[reverse ? 0 : 1], false, TInstant::Max(), false));
+    });
+    for (ui32 i = 0; i < 100 && !firstReadCompleted; ++i) {
+        env.Sim(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(lastPage);
+    UNIT_ASSERT(firstReadCompleted);
+    env.Sim(TDuration::MilliSeconds(100)); // process the physical completion and any resulting client reply
+    UNIT_ASSERT_C(!rangeReplied, "Range completed before the terminal Resolve page");
+
+    env.Runtime->FilterFunction = {};
+    env.Runtime->Send(lastPage.release(), lastPageNodeId);
+    auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false,
+        env.Runtime->GetClock() + TDuration::Seconds(30));
+    UNIT_ASSERT(result);
+    if (finalError) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->ErrorReason, "final resolve page failed");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.size(), ids.size());
+        for (size_t i = 0; i < ids.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[i].Id, ids[reverse ? 1 - i : i]);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[i].Buffer, data);
+        }
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepot) {
-    void LoadSeed(ui32& seed) {
-        ui32 constantSeed = 0;
-        if (TryIntFromString<10, ui32>(GetEnv("MERSENNE_SEED"), constantSeed)) {
-            seed = constantSeed;
-        } else {
-            Seed().LoadOrFail(&seed, sizeof(seed));
-        }
+    Y_UNIT_TEST(RangeWaitsForFinalResolvePage) {
+        CheckRangeWaitsForFinalResolve(false, false);
+    }
+
+    Y_UNIT_TEST(ReverseRangeWaitsForFinalResolvePage) {
+        CheckRangeWaitsForFinalResolve(true, false);
+    }
+
+    Y_UNIT_TEST(RangeReportsFinalResolveError) {
+        CheckRangeWaitsForFinalResolve(false, true);
     }
 
     void TestMaxGenerationBlock(bool collectByCompleteDeletionBlock) {

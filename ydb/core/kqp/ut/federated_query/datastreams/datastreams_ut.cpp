@@ -3,11 +3,8 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/tx/datashard/datashard.h>
 
->>>>>>> 8824b2928f0 (Don't lock snapshots and don't collect table locks for STREAMING QUERY (#55580))
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>

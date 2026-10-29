@@ -1286,15 +1286,12 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
-<<<<<<< HEAD
         YDB_LOG_DEBUG("Acquire persistent snapshot",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
-=======
         AFL_ENSURE(QueryState->UserRequestContext);
         AFL_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
->>>>>>> 8824b2928f0 (Don't lock snapshots and don't collect table locks for STREAMING QUERY (#55580))
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire persistent snapshot",

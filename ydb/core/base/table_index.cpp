@@ -374,6 +374,19 @@ bool IsBuildImplTable(std::string_view tableName) {
         || tableName.ends_with(NFulltext::RowIdSrcBuildSuffix);
 }
 
+bool HasReplicatedImplTables(NKikimrSchemeOp::EIndexType indexType) {
+    switch (indexType) {
+    case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+    case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+    case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+    case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+    case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+        return false;
+    default:
+        return true;
+    }
+}
+
 namespace NFulltext {
 
 namespace {

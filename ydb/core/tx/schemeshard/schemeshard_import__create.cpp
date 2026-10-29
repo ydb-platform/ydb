@@ -747,16 +747,25 @@ private:
         const auto path = TPath::Init(item.DstPathId, Self);
         for (const auto& [name, indexId] : path.Base()->GetChildren()) {
             const auto index = TPath::Init(indexId, Self);
-            if (index.IsDeleted() || (!index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
-                    && !index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique))) {
+            if (index.IsDeleted() || !index.IsTableIndex({}, false)) {
                 continue;
             }
-            const auto impl = index.Child(NTableIndex::ImplTable);
-            // Materialized indexes finalize through their own items. Built indexes
-            // have no item and finalize together with their source table.
-            if (impl.IsResolved() && !impl.IsDeleted() && !childTables.contains(impl.Base()->PathId)
-                    && Self->Tables.at(impl.Base()->PathId)->IsAsyncReplica()) {
-                result.push_back(impl.Base()->PathId);
+            const auto& indexInfo = Self->Indexes.at(index.Base()->PathId);
+            if (!NTableIndex::HasReplicatedImplTables(indexInfo->Type)) {
+                continue;
+            }
+            for (const auto& implTable : NTableIndex::GetImplTables(indexInfo->Type, indexInfo->IndexKeys)) {
+                const auto impl = index.Child(TString{implTable});
+                // Materialized indexes finalize through their own items. Built indexes
+                // have no item and finalize together with their source table.
+                if (!impl.IsResolved() || impl.IsDeleted() || childTables.contains(impl.Base()->PathId)) {
+                    continue;
+                }
+                if (Self->Tables.contains(impl.Base()->PathId)
+                        && Self->Tables.at(impl.Base()->PathId)->IsAsyncReplica())
+                {
+                    result.push_back(impl.Base()->PathId);
+                }
             }
         }
         return result;

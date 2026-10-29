@@ -449,12 +449,26 @@ void TReplication::RemoveTarget(ui64 id) {
     return Impl->RemoveTarget(id);
 }
 
+TString GetIndexTargetSrcIndexPath(const TReplication::ITarget& target) {
+    Y_ABORT_UNLESS(target.GetKind() == TReplication::ETargetKind::IndexTable);
+
+    // A replicated impl table is named after its destination impl table, while an index target
+    // (a secondary index or an index being built) refers to the source index itself.
+    const auto srcParts = SplitPath(target.GetSrcPath());
+    const auto dstParts = SplitPath(target.GetDstPath());
+    if (!srcParts.empty() && !dstParts.empty() && srcParts.back() == dstParts.back()) {
+        return CanonizePath(TString(ExtractParent(target.GetSrcPath())));
+    }
+
+    return CanonizePath(target.GetSrcPath());
+}
+
 const TReplication::ITarget* TReplication::FindBaseTableTarget(const ITarget& indexTarget) const {
     if (indexTarget.GetKind() != TReplication::ETargetKind::IndexTable) {
         return nullptr;
     }
 
-    const auto path = CanonizePath(TString(ExtractParent(indexTarget.GetSrcPath())));
+    const auto path = CanonizePath(TString(ExtractParent(GetIndexTargetSrcIndexPath(indexTarget))));
     for (const auto* target : GetTargets()) {
         if (target->GetKind() == TReplication::ETargetKind::Table && CanonizePath(target->GetSrcPath()) == path) {
             return target;

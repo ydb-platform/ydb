@@ -826,7 +826,7 @@ class TBinaryCdcSerializer: public TBaseSerializer {
             NKikimrChangeExchange::TDataChange::TSerializedCells& cells,
             const THashMap<ui32, ui32>& tagToIndex)
     {
-        for (int i = 0; i < cells.TagsSize(); ++i) {
+        for (ui32 i = 0; i < cells.TagsSize(); ++i) {
             const auto it = tagToIndex.find(cells.GetTags(i));
             Y_ENSURE(it != tagToIndex.end(), "Binary CDC record refers to unknown column tag " << cells.GetTags(i));
             cells.SetTags(i, it->second);
@@ -838,12 +838,12 @@ class TBinaryCdcSerializer: public TBaseSerializer {
         NKikimrChangeExchange::TDataChange change = record.GetDataChange();
 
         auto* key = change.MutableKey();
-        Y_ENSURE(key->TagsSize() == static_cast<int>(index.KeyOrder.size()),
+        Y_ENSURE(key->TagsSize() == index.KeyOrder.size(),
             "Binary CDC key width does not match the primary key");
-        for (int i = 0; i < key->TagsSize(); ++i) {
+        for (ui32 i = 0; i < key->TagsSize(); ++i) {
             Y_ENSURE(key->GetTags(i) == index.KeyOrder[i],
                 "Binary CDC key tag order does not match the primary key");
-            key->SetTags(i, static_cast<ui32>(i));
+            key->SetTags(i, i);
         }
 
         if (change.HasUpsert()) {

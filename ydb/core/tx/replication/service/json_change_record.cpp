@@ -281,7 +281,7 @@ bool TChangeRecord::EnsureProtoCells(TString& error) const {
     }
 
     ProtoDestTags.reserve(values->TagsSize());
-    for (int i = 0; i < values->TagsSize(); ++i) {
+    for (ui32 i = 0; i < values->TagsSize(); ++i) {
         const auto index = values->GetTags(i);
         if (index >= columns.size()) {
             return fail("binary CDC value index is out of range");

@@ -247,7 +247,12 @@ namespace NKikimr {
             std::unique_ptr<IEventBase> ProcessFullQuorumResponse(TThis& self, std::unique_ptr<TEvent> ev) {
                 // combine responses
                 Y_DEBUG_ABORT_UNLESS(!CombinedResponse || dynamic_cast<TEvent*>(CombinedResponse.get()));
-                Y_DEBUG_ABORT_UNLESS(ev->Status != NKikimrProto::NODATA);
+                if (ev->Status == NKikimrProto::NODATA) {
+                    // no request of this kind is answered so, the pile must be misbehaving
+                    Y_DEBUG_ABORT("unexpected NODATA from pile");
+                    ev->Status = NKikimrProto::ERROR;
+                    ev->ErrorReason = "unexpected NODATA from pile";
+                }
                 const bool readyToReply = !ResponsesPending || ev->Status != NKikimrProto::OK;
                 CombinedResponse = Combine(self, ev.get(), static_cast<TEvent*>(CombinedResponse.get()));
                 return readyToReply ? std::move(CombinedResponse) : nullptr;
@@ -395,8 +400,14 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(existing.Id == current.Id);
 
                         if (existing.Status == current.Status) {
-                            // status did not change, so there is nothing to do
-                            Y_DEBUG_ABORT_UNLESS(existing.Buffer == current.Buffer);
+                            // status did not change, so there is nothing to do, unless the piles have different data
+                            if (!(existing.Buffer == current.Buffer)) {
+                                STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB08, "piles have different data of the blob",
+                                    (GroupId, self.GroupId), (BlobId, existing.Id), (BridgePileId, pile.BridgePileId));
+                                existing = {};
+                                existing.Id = current.Id;
+                                existing.Status = NKikimrProto::ERROR;
+                            }
                         } else if (!MustRestoreFirst && current.Status == NKikimrProto::OK) {
                             // the blob found in any pile is there, whatever the other piles answer
                             existing = current;
@@ -569,8 +580,13 @@ namespace NKikimr {
                     item.WriteTo |= Processed;
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
                     item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
-                } else { // exactly same blob
-                    Y_ABORT_UNLESS(state.Buffer == ev->Buffer);
+                } else if (state.Buffer != ev->Buffer) { // same blob with different data
+                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB09, "piles have different data of the blob",
+                        (GroupId, self.GroupId), (BlobId, state.Id), (BridgePileId, pile.BridgePileId));
+                    auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::ERROR,
+                        state.MinGeneration, state.BlockedGeneration);
+                    res->ErrorReason = TStringBuilder() << "piles have different data of the blob " << state.Id;
+                    return res;
                 }
 
                 Processed.Set(pile.BridgePileId.GetPileIndex());
@@ -610,6 +626,7 @@ namespace NKikimr {
                     return RestoreQueue[it->second];
                 };
 
+                std::optional<TLogoBlobID> divergedId; // the blob piles have different data of
                 auto merge = [&](auto&& comp) {
                     auto& target = state.Response->Responses;
                     auto targetIt = std::ranges::begin(target);
@@ -647,9 +664,8 @@ namespace NKikimr {
                                 RestoreQueue[RestoreQueueIndex.at(targetIt->Id)].IssueKeepFlag =
                                     targetIt->DoNotKeep < targetIt->Keep;
                             }
-                            Y_ABORT_UNLESS(!targetIt->Buffer == !sourceIt->Buffer);
-                            if (targetIt->Buffer && sourceIt->Buffer) {
-                                Y_ABORT_UNLESS(targetIt->Buffer == sourceIt->Buffer);
+                            if (targetIt->Buffer != sourceIt->Buffer && !divergedId) {
+                                divergedId.emplace(targetIt->Id);
                             }
                             ++sourceIt;
                             ++targetIt;
@@ -673,6 +689,12 @@ namespace NKikimr {
                     merge(std::less<TLogoBlobID>());
                 } else {
                     merge(std::greater<TLogoBlobID>());
+                }
+                if (divergedId) {
+                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB10, "piles have different data of the blob",
+                        (GroupId, self.GroupId), (BlobId, *divergedId), (BridgePileId, pile.BridgePileId));
+                    return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(NKikimrProto::ERROR,
+                        TStringBuilder() << "piles have different data of the blob " << *divergedId, self.GroupId);
                 }
 
                 // mark pile as reponded
@@ -1142,7 +1164,9 @@ namespace NKikimr {
                         << " RequestId# " << request->RequestId
                         << " ErrorReason# " << msg->ErrorReason); // too often restarts do not make sense
 
-                    if (myGeneration < msg->RacingGeneration) {
+                    if (common->RestartCounter >= 100) {
+                        ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
+                    } else if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
                         // when the group is decommitted, its service id points to the BlobDepot agent, which would take

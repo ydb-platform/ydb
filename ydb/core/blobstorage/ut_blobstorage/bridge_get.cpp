@@ -434,4 +434,48 @@ Y_UNIT_TEST_SUITE(BridgeGet) {
         CheckAbsenceNeedsAllPiles(EAbsenceRead::Range);
     }
 
+
+    // the piles have different data of the same blob, as after a corruption; the reads comparing the answers of piles
+    // fail rather than return either of them or stop the node
+    Y_UNIT_TEST(DivergentPilesFailReads) {
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        const auto pileGroups = NBridgeTest::GetPileGroups(env, groupId);
+
+        const TLogoBlobID id(100500, 1, 1, 0, 4, 0);
+        for (ui32 pile : {0, 1}) {
+            const auto res = NBridgeTest::QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pileGroups[pile], 1 + 8 * pile,
+                new TEvBlobStorage::TEvPut(id, TString(4, 'a' + pile), TInstant::Max()));
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        }
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto send = [&](IEventBase *ev) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, ev);
+            });
+        };
+
+        send(new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        auto get = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(get->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(get->Get()->Responses[0].Status, NKikimrProto::ERROR, get->Get()->ToString());
+
+        send(new TEvBlobStorage::TEvRange(id.TabletID(), id, id, /*mustRestoreFirst=*/ false, TInstant::Max()));
+        auto range = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(range->Get()->Status, NKikimrProto::ERROR, range->Get()->ToString());
+
+        send(new TEvBlobStorage::TEvDiscover(id.TabletID(), 0, /*readBody=*/ true, /*discoverBlockedGeneration=*/ false,
+            TInstant::Max(), 0, false));
+        auto discover = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(discover->Get()->Status, NKikimrProto::ERROR, discover->Get()->ToString());
+    }
+
 }

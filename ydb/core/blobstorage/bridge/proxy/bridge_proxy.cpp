@@ -86,11 +86,89 @@ namespace NKikimr {
             struct TPutState {
             };
 
+            struct TCheckIntegrityState {
+                std::map<TBridgePileId, std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult>> Responses;
+            };
+
+            struct TAssimilateState {
+                using TResult = TEvBlobStorage::TEvAssimilateResult;
+                std::vector<std::unique_ptr<TResult>> Pages;
+
+                static size_t LastCategory(const TResult& page) {
+                    return !page.Blobs.empty() ? 2 : !page.Barriers.empty() ? 1 : !page.Blocks.empty() ? 0 : 3;
+                }
+
+                std::unique_ptr<TResult> Merge(bool reverse) {
+                    // A nonempty page certifies the inventory only through its last item; an empty page certifies EOF.
+                    // Categories always run blocks, barriers, blobs, including in reverse scans. Do not advance past
+                    // the earliest page endpoint: a later item from another pile could skip unseen items on continuation.
+                    size_t lastCategory = 3;
+                    for (const auto& page : Pages) {
+                        lastCategory = Min(lastCategory, LastCategory(*page));
+                    }
+                    auto result = std::make_unique<TResult>(NKikimrProto::OK, TString());
+                    auto merge = [&](size_t category, auto member, auto keyOf, auto mergeValues) {
+                        if (category > lastCategory) {
+                            return;
+                        }
+                        using TItem = typename std::decay_t<decltype(result.get()->*member)>::value_type;
+                        using TKey = decltype(keyOf(std::declval<TItem>()));
+                        const auto before = [reverse](const TKey& a, const TKey& b) { return reverse ? b < a : a < b; };
+                        std::optional<TKey> end;
+                        for (const auto& page : Pages) {
+                            if (LastCategory(*page) == category) {
+                                const auto key = keyOf((page.get()->*member).back());
+                                if (!end || before(key, *end)) {
+                                    end = key;
+                                }
+                            }
+                        }
+                        std::map<TKey, TItem, decltype(before)> items(before);
+                        for (const auto& page : Pages) {
+                            for (const auto& item : page.get()->*member) {
+                                const auto key = keyOf(item);
+                                if (end && before(*end, key)) {
+                                    break;
+                                }
+                                auto [it, inserted] = items.try_emplace(key, item);
+                                if (!inserted) {
+                                    mergeValues(it->second, item);
+                                }
+                            }
+                        }
+                        for (auto& [key, item] : items) {
+                            (result.get()->*member).push_back(std::move(item));
+                        }
+                    };
+                    merge(0, &TResult::Blocks, [](const auto& item) { return item.TabletId; },
+                        [](auto& to, const auto& from) { to.BlockedGeneration = Max(to.BlockedGeneration, from.BlockedGeneration); });
+                    merge(1, &TResult::Barriers, [](const auto& item) { return std::tuple(item.TabletId, item.Channel); },
+                        [](auto& to, const auto& from) {
+                            const auto mergeBarrier = [](auto& to, const auto& from) {
+                                if (std::tie(to.RecordGeneration, to.PerGenerationCounter) <
+                                        std::tie(from.RecordGeneration, from.PerGenerationCounter)) {
+                                    to = from;
+                                }
+                            };
+                            mergeBarrier(to.Soft, from.Soft);
+                            mergeBarrier(to.Hard, from.Hard);
+                        });
+                    merge(2, &TResult::Blobs, [](const auto& item) { return item.Id; },
+                        [](auto& to, const auto& from) {
+                            to.Keep |= from.Keep;
+                            to.DoNotKeep |= from.DoNotKeep;
+                        });
+                    return result;
+                }
+            };
+
             using TState = std::variant<std::monostate,
                 TDiscoverState,
                 TGetState,
                 TRangeState,
-                TPutState>;
+                TPutState,
+                TCheckIntegrityState,
+                TAssimilateState>;
 
             TState State;
 
@@ -168,6 +246,10 @@ namespace NKikimr {
                 } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvPut>) {
                     State = TPutState{
                     };
+                } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvAssimilate>) {
+                    State = TAssimilateState{};
+                } else if constexpr (std::is_same_v<TEvRequest, TEvBlobStorage::TEvCheckIntegrity>) {
+                    State = TCheckIntegrityState{};
                 }
 
                 OriginalRequest = std::move(request);
@@ -733,29 +815,44 @@ namespace NKikimr {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
-            template<typename TRequestEvent, typename TEvent>
-            std::unique_ptr<IEventBase> ProcessTrustedPileResponse(TThis& self, std::unique_ptr<TEvent> ev,
-                    const TBridgeInfo::TPile& pile) {
-                if (ev->Status != NKikimrProto::OK || DataIsTrustedInPile(pile)) {
-                    // synced pile holds the whole content of the group, so its answer is the answer
+            std::unique_ptr<IEventBase> ProcessResponse(TThis& /*self*/, std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> ev,
+                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
+                if (ev->Status != NKikimrProto::OK) {
                     return ev;
-                } else if (ResponsesPending) {
-                    return nullptr; // wait for the trusted pile
-                } else {
-                    Y_DEBUG_ABORT("missing response from trusted pile");
-                    return static_cast<TRequestEvent&>(*OriginalRequest).MakeErrorResponse(
-                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
                 }
+                auto& state = std::get<TAssimilateState>(State);
+                state.Pages.push_back(std::move(ev));
+                return ResponsesPending ? nullptr
+                    : state.Merge(static_cast<TEvBlobStorage::TEvAssimilate&>(*OriginalRequest).Reverse);
             }
 
-            std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> ev,
+            std::unique_ptr<IEventBase> ProcessResponse(TThis& /*self*/, std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> ev,
                     const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
-                return ProcessTrustedPileResponse<TEvBlobStorage::TEvAssimilate>(self, std::move(ev), pile);
-            }
-
-            std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> ev,
-                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
-                return ProcessTrustedPileResponse<TEvBlobStorage::TEvCheckIntegrity>(self, std::move(ev), pile);
+                if (ev->Status != NKikimrProto::OK) {
+                    ev->ErrorReason = TStringBuilder() << "BridgePileId# " << pile.BridgePileId << " " << ev->ErrorReason;
+                    return ev;
+                }
+                auto& responses = std::get<TCheckIntegrityState>(State).Responses;
+                responses.emplace(pile.BridgePileId, std::move(ev));
+                if (ResponsesPending) {
+                    return nullptr;
+                }
+                const auto& request = static_cast<TEvBlobStorage::TEvCheckIntegrity&>(*OriginalRequest);
+                auto result = std::make_unique<TEvBlobStorage::TEvCheckIntegrityResult>(NKikimrProto::OK);
+                result->Id = request.Id;
+                // The legacy field describes the first pile; diagnostics identify each pile's actual erasure scheme.
+                result->Erasure = responses.begin()->second->Erasure;
+                const char separator = request.SingleLine ? ' ' : '\n';
+                for (const auto& [pileId, response] : responses) {
+                    result->PlacementStatus = Max(result->PlacementStatus, response->PlacementStatus);
+                    result->DataStatus = Max(result->DataStatus, response->DataStatus);
+                    if (!response->DataInfo.empty()) {
+                        result->DataInfo += TStringBuilder() << "BridgePileId# " << pileId
+                            << " Erasure# " << TBlobStorageGroupType::ErasureSpeciesName(response->Erasure)
+                            << separator << response->DataInfo << separator;
+                    }
+                }
+                return result;
             }
         };
         struct TRequestInFlight {
@@ -1034,6 +1131,7 @@ namespace NKikimr {
             // decide which piles get the request with the group state and the cluster state we have now
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             std::vector<std::tuple<TBridgePileId, std::unique_ptr<IEventBase>>> subrequests;
+            bool hasTrustedPile = false;
             NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
                     const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
                 const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(bridgePileId);
@@ -1044,10 +1142,8 @@ namespace NKikimr {
                 } else if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
                     return; // skip this pile, no data quorum needed
                 }
-                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> ||
-                        std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
-                    // only the answer of the pile holding the whole content of the group is taken, while an error from
-                    // another one (e.g. degraded while being synced) would fail the request
+                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
+                    // Check every synchronized copy; incomplete parts being synced do not imply degradation.
                     if (!PartHoldsEverything(state, *pile)) {
                         return;
                     }
@@ -1055,10 +1151,15 @@ namespace NKikimr {
 
                 // check the sync state for this group
                 if (auto eventToSend = PrepareEvent(groupPileInfo, *ev->Get(), pile->BridgePileId)) {
+                    if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
+                        // A DATA part may already be the sole writer in a newer view. Its reply (or generation fence)
+                        // is needed even though this view still trusts another part for completeness.
+                        hasTrustedPile |= PartHoldsEverything(state, *pile);
+                    }
                     subrequests.emplace_back(pile->BridgePileId, std::move(eventToSend));
                 }
             });
-            if (subrequests.empty()) {
+            if (subrequests.empty() || (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> && !hasTrustedPile)) {
                 // no pile is able to take this request with the group state we have; it is older than the cluster state
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),

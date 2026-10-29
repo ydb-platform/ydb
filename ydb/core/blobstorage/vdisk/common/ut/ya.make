@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/common)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 PEERDIR(
     library/cpp/getopt

@@ -1,7 +1,11 @@
 UNITTEST_FOR(ydb/library/actors/core)
 
 FORK_SUBTESTS()
-REQUIREMENTS(cpu:4)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(cpu:3)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

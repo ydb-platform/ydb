@@ -3,7 +3,11 @@ UNITTEST_FOR(ydb/core/kqp/runtime/streaming)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(cpu:1)
+ELSE()
+    REQUIREMENTS(cpu:4)
+ENDIF()
 
 SRCS(
     kqp_streaming_aggregation_ut.cpp

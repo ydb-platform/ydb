@@ -295,6 +295,10 @@ struct TUserTable : public TThrRefBase {
         ui32 Family = 0;
         bool NotNull = false;
         bool SetNotNullInProgress = false;
+        // Set when the column default is a sequence: the path as written in the DDL
+        // (possibly relative to the table). The data shard resolves it against its own
+        // table path when it needs to address the sequence.
+        TString DefaultFromSequence;
 
         TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)

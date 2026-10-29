@@ -1200,6 +1200,12 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteSpecificGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDataCenterStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kTestResetDataCenterStates:
+<<<<<<< HEAD
+=======
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineFailRealmStates:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateStoragePoolSettings:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeStoragePoolBridgeMode:
+>>>>>>> 9e652f56288 ([BlobStorage] Add direct persistent fail-realm state assignment in BSC (#57363))
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

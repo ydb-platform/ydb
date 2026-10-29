@@ -504,6 +504,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "FailRealmStates",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 106,
                 "ColumnName": "BlobDepotConfig",
                 "ColumnType": "String"
@@ -563,6 +568,7 @@
                     15,
                     16,
                     17,
+                    18,
                     106,
                     109,
                     110,

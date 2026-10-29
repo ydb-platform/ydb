@@ -3311,6 +3311,8 @@ TStaticData::TStaticData()
           {TRule_id_without::GetDescriptor(), EScope::Identifier},
           {TRule_id_hint::GetDescriptor(), EScope::Identifier},
           {TRule_identifier::GetDescriptor(), EScope::Identifier},
+          {TRule_row_pattern_variable_name::GetDescriptor(), EScope::Identifier},
+          {TRule_an_id_pure::GetDescriptor(), EScope::Identifier},
           {TRule_id_table_or_type::GetDescriptor(), EScope::Identifier},
           {TRule_bind_parameter::GetDescriptor(), EScope::Identifier},
           {TRule_an_id_as_compat::GetDescriptor(), EScope::Identifier},

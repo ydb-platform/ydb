@@ -201,7 +201,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo3: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to3();
                 skipToPos = GetPos(skipTo.GetToken1());
-                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1();
                 auto var = identifier.GetToken1().GetValue();
                 varPos = GetPos(identifier.GetToken1());
                 if (!PatternVarNames_.contains(var)) {
@@ -213,7 +213,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo4: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to4();
                 skipToPos = GetPos(skipTo.GetToken1());
-                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1();
                 auto var = identifier.GetToken1().GetValue();
                 varPos = GetPos(identifier.GetToken1());
                 if (!PatternVarNames_.contains(var)) {
@@ -225,7 +225,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo5: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to5();
                 skipToPos = GetPos(skipTo.GetToken1());
-                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name3().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name3().GetRule_row_pattern_variable_name1();
                 auto var = identifier.GetToken1().GetValue();
                 varPos = GetPos(identifier.GetToken1());
                 if (!PatternVarNames_.contains(var)) {
@@ -261,8 +261,8 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
         switch (primaryAlt.GetAltCase()) {
             case TRule_row_pattern_primary::kAltRowPatternPrimary1: {
                 const auto& primary = primaryAlt.GetAlt_row_pattern_primary1();
-                const auto& identifier = primary.GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
-                const auto varName = Id(identifier, *this);
+                const auto& identifier = primary.GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1();
+                const auto varName = Identifier(identifier.GetToken1());
                 const auto var = BuildQuotedAtom(GetPos(identifier.GetToken1()), varName);
                 if (PatternVarNames_.insert(varName).second) {
                     PatternVars_->Add(var);
@@ -431,8 +431,8 @@ TMaybe<TNodePtr> TSqlMatchRecognizeClause::ParseSubset(TPosition pos, const TRul
 }
 
 TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node) {
-    const auto& identifier = node.GetRule_row_pattern_definition_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
-    auto defineName = Id(identifier, *this);
+    const auto& identifier = node.GetRule_row_pattern_definition_variable_name1().GetRule_row_pattern_variable_name1();
+    auto defineName = Identifier(identifier.GetToken1());
     TColumnRefScope scope(Ctx_, EColumnRefState::MatchRecognizeDefine, /*isTopLevelExpr=*/true, defineName);
     const auto& searchCondition = node.GetRule_row_pattern_definition_search_condition3().GetRule_search_condition1().GetRule_expr1();
     auto callable = Unwrap(TSqlExpression(*this).Build(searchCondition));

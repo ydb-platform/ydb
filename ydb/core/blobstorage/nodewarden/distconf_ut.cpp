@@ -7923,7 +7923,10 @@ selector_config: []
             nodeState->SetState(0);
         }
         runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
-        UNIT_ASSERT_C(SimUntil(runtime, [&] { return results.size() == 2; }), "Board self-heal did not complete");
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return reconfigurationRequests == 4 && results.size() == 1; }),
+            "Board self-heal did not complete with a single result");
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, 4);
         const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetStateStorageConfig().SerializeAsString(), originalStateStorage);

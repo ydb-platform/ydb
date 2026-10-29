@@ -279,7 +279,7 @@ In column-oriented and row-oriented tables you can define [local Bloom skip inde
 
 ### Local min_max index {#local-min-max-index}
 
-In columnar tables, you can define a [local min_max index](../../glossary.md#local-min-max-index) on columns using `LOCAL USING min_max`. The index is defined when [creating a table](../../../yql/reference/syntax/create_table/min_max_index.md) or added via [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). For more details: [local indexes](../../query_execution/local_indexes.md), [min_max index](../../../dev/min_max-skip-index.md).
+In columnar tables, you can define a local min_max index on columns using `LOCAL USING min_max`. The index is defined when [creating a table](../../../yql/reference/syntax/create_table/min_max_index.md) or added via [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-min-max). For more details: [local indexes](../../query_execution/local_indexes.md), [min_max index](../../../dev/min_max-skip-index.md).
 
 ### Partitioning Column-Oriented Tables {#olap-tables-partitioning}
 

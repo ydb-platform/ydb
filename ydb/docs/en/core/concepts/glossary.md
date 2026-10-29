@@ -225,8 +225,6 @@ A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki
 
 #### Local bloom index {#local-bloom-skip-index}
 
-#### Local min_max index {#local-min-max-index}
-
 A local Bloom index is a special case of a [local index](#local-index): a probabilistic filter on column values based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments where the searched value is guaranteed to be absent. For more information, see [Bloom indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
 
 #### Column family {#column-family}
@@ -393,10 +391,6 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 ### Scheme root {#scheme-root}
 
 **Cluster schema root** is the root element of the [{{ ydb-short-name }} namespace](datamodel/cluster-namespace.md), whose child elements are [databases](#database).
-
-#### Authentication token {#auth-token}
-
-An **authentication token** or **auth token** is a token used for [authentication](../security/authentication.md) in {{ ydb-short-name }}.
 
 ### Scheme object {#scheme-object}
 

@@ -447,7 +447,8 @@ void CheckMirror3dcSurvivingDiscovery(const TVector<NKikimrBlobStorage::TGroupIn
     runtime.Send(new IEventHandle(env.RealProxyActorId, testState.EdgeActor, discover.release()), 0, true);
     const TEvBlobStorage::TEvDiscoverResult::TPtr result = testState.GrabEventPtr<TEvBlobStorage::TEvDiscoverResult>();
     const bool allFailed = std::all_of(states.begin(), states.end(), [](TFailRealm::EState state) { return state == TFailRealm::F; });
-    const NKikimrProto::EReplyStatus expected = indexError || allFailed ? NKikimrProto::ERROR
+    // With E=0, an index-only candidate may be a lost blob; Get must report ERROR.
+    const NKikimrProto::EReplyStatus expected = indexError || allFailed || ghost ? NKikimrProto::ERROR
         : hasBlob ? NKikimrProto::OK : NKikimrProto::NODATA;
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expected);
     if (expected != NKikimrProto::ERROR) {
@@ -482,7 +483,7 @@ Y_UNIT_TEST(Mirror3dcZeroEnsuredEmptyAndFailedIndexes) {
     CheckMirror3dcSurvivingDiscovery({TFailRealm::F, TFailRealm::F, TFailRealm::F}, false, false);
 }
 
-Y_UNIT_TEST(Mirror3dcZeroEnsuredProbesIndexOnlyCandidates) {
+Y_UNIT_TEST(Mirror3dcZeroEnsuredRejectsIndexOnlyCandidates) {
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, false, true, false, true);
     CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, false, false, false, true);

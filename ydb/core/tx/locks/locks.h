@@ -521,7 +521,6 @@ public:
     const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
     void AddAncestorLock(TAncestorLock lock);
 
-    ui64 GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const;
     const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
     bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
     void SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db);

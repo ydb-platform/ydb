@@ -154,13 +154,6 @@ void TLockInfo::AddAncestorLock(TAncestorLock lock) {
     AncestorLocks[tabletId] = std::move(lock);
 }
 
-ui64 TLockInfo::GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const {
-    auto it = AncestorLocks.find(dataShard);
-    if (it == AncestorLocks.end()) return 0;
-    auto jt = it->second.WriteSeqNumStates.find(writerIndex);
-    return jt != it->second.WriteSeqNumStates.end() ? jt->second.WriteSeqNum : 0;
-}
-
 const TWriteSeqNumState* TLockInfo::FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const {
     auto it = AncestorLocks.find(dataShard);
     if (it == AncestorLocks.end()) return nullptr;

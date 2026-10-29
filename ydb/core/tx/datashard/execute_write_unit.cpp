@@ -9,9 +9,6 @@
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/library/aclib/user_context.h>
 
-#include <algorithm>
-#include <vector>
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -29,29 +26,12 @@ static void MergeOpStats(T& dst, const T& src) {
     }
 }
 
-// Merges the additive counters of src on top of dst; descriptive sizes missing
-// in dst are taken from src.
-static void MergePerShardStatsCounters(
-        NKikimrQueryStats::TPerShardStats& dst,
-        const NKikimrQueryStats::TPerShardStats& src) {
-    if (src.HasCpuTimeUsec()) {
-        dst.SetCpuTimeUsec(src.GetCpuTimeUsec() + (dst.HasCpuTimeUsec() ? dst.GetCpuTimeUsec() : 0));
-    }
-    if (src.HasOutgoingReadSetsCount()) {
-        dst.SetOutgoingReadSetsCount(src.GetOutgoingReadSetsCount() + (dst.HasOutgoingReadSetsCount() ? dst.GetOutgoingReadSetsCount() : 0));
-    }
-    if (!dst.HasProgramSize() && src.HasProgramSize()) {
-        dst.SetProgramSize(src.GetProgramSize());
-    }
-    if (!dst.HasReplySize() && src.HasReplySize()) {
-        dst.SetReplySize(src.GetReplySize());
-    }
-}
-
 // Adds the statistics of already applied (duplicate) operations on top of the fresh
 // statistics of the newly applied operations: the writer never saw the replies of the
 // lost deliveries, so the reply of a partially duplicate batch must report the sum.
-// Duration and CPU time describe the current delivery and are not merged.
+// PerShardStats of the lost delivery are not merged: FillExecutionStats is invoked on
+// the reply before it is sent and clears PerShardStats, filling in only the current
+// shard, so merged entries would never reach the writer anyway.
 static void MergeDuplicateTxStats(NKikimrQueryStats::TTxStats& dst, const NKikimrQueryStats::TTxStats& src) {
     Y_ENSURE(src.TableAccessStatsSize() <= 1);
     if (src.TableAccessStatsSize() == 1) {
@@ -71,41 +51,6 @@ static void MergeDuplicateTxStats(NKikimrQueryStats::TTxStats& dst, const NKikim
         }
         if (srcTable.HasAffectedRows()) {
             dstTable->SetAffectedRows(srcTable.GetAffectedRows() + (dstTable->HasAffectedRows() ? dstTable->GetAffectedRows() : 0));
-        }
-    }
-
-    // Sorts dst's per-shard entries in place and merges src's sorted entries
-    // into it from the back, so no extra copies are made: every entry is written
-    // exactly once, to its final position. Entries of the same shard add their
-    // counters up. The fresh reply gets its own entry from FillExecutionStats
-    // when it is sent.
-    std::vector<NKikimrQueryStats::TPerShardStats> srcShards(
-        src.GetPerShardStats().begin(), src.GetPerShardStats().end());
-    const auto byShardId = [](const auto& a, const auto& b) {
-        return a.GetShardId() < b.GetShardId();
-    };
-    std::sort(srcShards.begin(), srcShards.end(), byShardId);
-
-    auto* dstList = dst.MutablePerShardStats();
-    // Reserve up front so that adding the extension entries never reallocates
-    // the pointer array: the reverse iterators taken below stay valid.
-    dstList->Reserve(dstList->size() + static_cast<int>(srcShards.size()));
-    std::sort(dstList->begin(), dstList->end(), byShardId);
-    auto dstRead = dstList->rbegin();
-    const auto dstReadEnd = dstList->rend();
-    std::for_each(srcShards.cbegin(), srcShards.cend(), [dstList](const auto&) {
-        dstList->Add();
-    });
-    auto write = dstList->rbegin();
-    auto srcRead = srcShards.crbegin();
-    while (srcRead != srcShards.crend()) {
-        if (dstRead == dstReadEnd || dstRead->GetShardId() < srcRead->GetShardId()) {
-            *write++ = *srcRead++;
-        } else if (dstRead->GetShardId() > srcRead->GetShardId()) {
-            *write++ = *dstRead++;
-        } else {
-            *write = *dstRead++;
-            MergePerShardStatsCounters(*write++, *srcRead++);
         }
     }
 
@@ -382,7 +327,7 @@ public:
                 // The previous delivery of this position failed fatally and the
                 // writer never saw the reply: replay the stored error instead of
                 // executing.
-                writeOp->SetError(parsed.GetStatus(), "Replaying the stored result of the previous delivery");
+                writeOp->SetError(parsed.GetStatus(), {});
                 auto& record = writeOp->GetWriteResult()->Record;
                 *record.MutableIssues() = parsed.GetIssues();
                 if (parsed.HasTxStats()) {

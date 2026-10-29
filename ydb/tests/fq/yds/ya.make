@@ -4,7 +4,7 @@ STYLE_PYTHON()
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(80)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 

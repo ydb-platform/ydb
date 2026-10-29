@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -31,9 +32,16 @@ def _read_cmdline(pid: int) -> str:
         return ""
 
 
+def _read_cwd(pid: int) -> str:
+    try:
+        return os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        return ""
+
+
 def _is_ya_root(cmdline: str, comm: str) -> bool:
     """Process is a ya root (ya, ya-tc, ya.make). Match by executable basename or comm."""
-    ya_names = ("ya", "ya-tc", "ya.make")
+    ya_names = ("ya", "ya-tc", "ya.make", "ya-bin")
     c = (comm or "").lower()
     if c in ya_names:
         return True
@@ -48,7 +56,7 @@ def _is_ya_root(cmdline: str, comm: str) -> bool:
     # Fallback: ya invoked via python/wrapper (e.g. "python3 /path/to/ya make")
     for part in parts[1:3]:  # check first few args
         p = (part or "").lower()
-        if p.endswith("/ya") or p.endswith("/ya-tc") or p.endswith("/ya.make"):
+        if p.endswith("/ya") or p.endswith("/ya-tc") or p.endswith("/ya.make") or p.endswith("/ya-bin"):
             return True
     return False
 
@@ -194,6 +202,363 @@ def get_process_io(pid: int) -> tuple[int, int] | None:
         return None
 
 
+TEST_CGROUP_PREFIX = "ya-test-"
+SUITE_ROOTS = ("ydb/", "library/", "contrib/", "devtools/", "kikimr/")
+GENERIC_SUITE_NAMES = frozenset(
+    {
+        "unittest",
+        "py3test",
+        "pytest",
+        "gtest",
+        "exectest",
+        "fuzz",
+        "go_test",
+        "java",
+        "playwright",
+        "unknown",
+    }
+)
+CHUNK_IN_PATH_RE = re.compile(r"(?:^|/)chunk(\d+)(?:/|$)")
+
+
+def is_generic_suite(name: str | None) -> bool:
+    text = str(name or "").strip()
+    if not text:
+        return True
+    lower = text.lower()
+    return lower in GENERIC_SUITE_NAMES or lower.startswith(TEST_CGROUP_PREFIX)
+
+
+def identity_quality(ident: dict) -> int:
+    quality = 0
+    if not is_generic_suite(ident.get("suite")):
+        quality += 2
+    if ident.get("chunk") is not None:
+        quality += 1
+    return quality
+
+
+def chunk_from_text(text: str) -> int | None:
+    if not text:
+        return None
+    match = CHUNK_IN_PATH_RE.search(text)
+    return int(match.group(1)) if match else None
+
+
+def _suite_after_root(text: str, drop_last: bool) -> str | None:
+    if not text:
+        return None
+    best_pos = -1
+    used_root: str | None = None
+    for root in SUITE_ROOTS:
+        pos = text.rfind("/" + root)
+        if pos != -1 and pos > best_pos:
+            best_pos = pos
+            used_root = root
+        elif pos == -1 and text.startswith(root) and best_pos < 0:
+            best_pos = 0
+            used_root = root
+    if used_root is None:
+        return None
+    candidate = text if best_pos == 0 and text.startswith(used_root) else text[best_pos + 1 :]
+    parts = [part for part in candidate.split("/") if part]
+    if drop_last and len(parts) >= 2:
+        parts = parts[:-1]
+    if len(parts) < 2:
+        return None
+    return "/".join(parts)
+
+
+def suite_from_workdir(path: str) -> str | None:
+    if not path:
+        return None
+    marker = path.find("/test-results/")
+    if marker == -1:
+        marker = path.find("/test-results")
+    search = path[:marker] if marker != -1 else path
+    return _suite_after_root(search, drop_last=False)
+
+
+def suite_from_exe(path: str) -> str | None:
+    if not path:
+        return None
+    return _suite_after_root(path.split()[0], drop_last=True)
+
+
+def parse_cmdline_flag(cmdline: str, flag: str) -> str | None:
+    """Return the value of `--flag value` or `--flag=value` in a cmdline string."""
+    parts = (cmdline or "").split()
+    prefix = flag + "="
+    for i, part in enumerate(parts):
+        if part == flag and i + 1 < len(parts):
+            return parts[i + 1]
+        if part.startswith(prefix):
+            return part[len(prefix) :]
+    return None
+
+
+def read_environ(pid: int) -> dict[str, str]:
+    try:
+        raw = (Path("/proc") / str(pid) / "environ").read_bytes()
+    except OSError:
+        return {}
+    env: dict[str, str] = {}
+    for item in raw.split(b"\x00"):
+        if not item or b"=" not in item:
+            continue
+        key, value = item.split(b"=", 1)
+        env[key.decode("utf-8", "replace")] = value.decode("utf-8", "replace")
+    return env
+
+
+def read_cgroup_procs(cgroup: Path) -> list[int]:
+    try:
+        text = (cgroup / "cgroup.procs").read_text()
+    except OSError:
+        return []
+    pids: list[int] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.isdigit():
+            pids.append(int(line))
+    return pids
+
+
+def read_cpu_usage_usec(cgroup: Path) -> int | None:
+    try:
+        for line in (cgroup / "cpu.stat").read_text().splitlines():
+            if line.startswith("usage_usec"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def read_memory_current_bytes(cgroup: Path) -> int | None:
+    try:
+        return int((cgroup / "memory.current").read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def read_io_bytes(cgroup: Path) -> tuple[int, int] | None:
+    """Sum rbytes/wbytes from cgroup v2 io.stat. None if the file is missing."""
+    try:
+        text = (cgroup / "io.stat").read_text()
+    except OSError:
+        return None
+    read_b = 0
+    write_b = 0
+    found = False
+    for line in text.splitlines():
+        for tok in line.split():
+            if tok.startswith("rbytes="):
+                read_b += int(tok.split("=", 1)[1])
+                found = True
+            elif tok.startswith("wbytes="):
+                write_b += int(tok.split("=", 1)[1])
+                found = True
+    if not found:
+        return (0, 0)
+    return read_b, write_b
+
+
+def discover_test_cgroups(extra_root: Path | None = None) -> list[Path]:
+    """Find ya-test-* cgroups created by --limit-test-cpu."""
+    roots: list[Path] = []
+    env_root = os.environ.get("YA_CPU_CGROUP_ROOT")
+    if env_root:
+        roots.append(Path(env_root))
+    if extra_root is not None:
+        roots.append(extra_root)
+    roots.append(Path("/sys/fs/cgroup"))
+    found: list[Path] = []
+    seen: set[str] = set()
+    for base in roots:
+        if not base.is_dir():
+            continue
+        try:
+            for dirpath, dirnames, _filenames in os.walk(base, followlinks=False):
+                name = os.path.basename(dirpath)
+                if name.startswith(TEST_CGROUP_PREFIX):
+                    resolved = os.path.realpath(dirpath)
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        found.append(Path(dirpath))
+                    dirnames.clear()
+        except OSError:
+            continue
+    return found
+
+
+def identify_test_cgroup(cgroup: Path) -> dict:
+    """Resolve suite/chunk from test_tool flags, cwd, or the unittest binary path."""
+    identity = {
+        "cgroup": cgroup.name,
+        "suite": cgroup.name,
+        "chunk": None,
+        "test_name": None,
+        "uid": None,
+    }
+    for pid in read_cgroup_procs(cgroup):
+        cmdline = _read_cmdline(pid)
+        env = read_environ(pid)
+        cwd = _read_cwd(pid)
+        project = parse_cmdline_flag(cmdline, "--project-path")
+        split = parse_cmdline_flag(cmdline, "--split-index")
+        suite_name = parse_cmdline_flag(cmdline, "--test-suite-name") or env.get("TEST_NAME")
+        uid = env.get("TEST_NODE_SUITE_UID")
+        if project and not is_generic_suite(project):
+            identity["suite"] = project
+        elif is_generic_suite(identity.get("suite")):
+            path_suite = suite_from_workdir(cwd) or suite_from_exe(cmdline)
+            if path_suite:
+                identity["suite"] = path_suite
+        if split is not None and split.lstrip("-").isdigit():
+            identity["chunk"] = int(split)
+        elif identity.get("chunk") is None:
+            path_chunk = chunk_from_text(cwd) or chunk_from_text(cmdline)
+            if path_chunk is not None:
+                identity["chunk"] = path_chunk
+        if suite_name:
+            identity["test_name"] = suite_name
+        if uid:
+            identity["uid"] = uid
+        if identity_quality(identity) >= 3:
+            return identity
+    return identity
+
+
+class TestCgroupSampler:
+    """Per-cgroup interval CPU/RAM/disk. First sighting is a baseline."""
+
+    def __init__(self) -> None:
+        self.prev_cpu_usec: dict[str, int] = {}
+        self.prev_io: dict[str, tuple[int, int]] = {}
+        self.prev_pid_io: dict[tuple[str, tuple[int, int]], tuple[int, int] | None] = {}
+        self.identity: dict[str, dict] = {}
+
+    def sample(
+        self,
+        dt: float,
+        ts: float,
+        ts_us: int,
+        process_snapshot: dict[int, dict],
+        extra_root: Path | None = None,
+    ) -> list[dict]:
+        records: list[dict] = []
+        hz = 100
+        try:
+            hz = int(os.sysconf("SC_CLK_TCK") or 100)
+        except (OSError, ValueError):
+            hz = 100
+        if hz <= 0:
+            hz = 100
+        for cgroup in discover_test_cgroups(extra_root):
+            rec = self._sample_one(cgroup, dt, ts, ts_us, process_snapshot, hz)
+            if rec is not None:
+                records.append(rec)
+        return records
+
+    def _sample_one(
+        self,
+        cgroup: Path,
+        dt: float,
+        ts: float,
+        ts_us: int,
+        process_snapshot: dict[int, dict],
+        hz: int,
+    ) -> dict | None:
+        key = str(cgroup)
+        ident = self.identity.get(key)
+        if ident is None or identity_quality(ident) < 3:
+            fresh = identify_test_cgroup(cgroup)
+            if ident is None or identity_quality(fresh) > identity_quality(ident):
+                self.identity[key] = fresh
+                ident = fresh
+        pids = read_cgroup_procs(cgroup)
+
+        cpu_usec = read_cpu_usage_usec(cgroup)
+        if cpu_usec is None:
+            cpu_jiffies = 0
+            for pid in pids:
+                proc = process_snapshot.get(pid)
+                if not proc:
+                    continue
+                cpu_jiffies += int(proc.get("utime") or 0) + int(proc.get("stime") or 0)
+            cpu_usec = int(cpu_jiffies * 1_000_000 / hz)
+
+        mem_b = read_memory_current_bytes(cgroup)
+        if mem_b is None:
+            rss_kb = 0
+            for pid in pids:
+                proc = process_snapshot.get(pid)
+                if proc:
+                    rss_kb += int(proc.get("rss_kb") or 0)
+            mem_b = rss_kb * 1024
+
+        io_curr = read_io_bytes(cgroup)
+        if io_curr is None:
+            read_b = 0
+            write_b = 0
+            next_pid_io: dict[tuple[str, tuple[int, int]], tuple[int, int] | None] = {}
+            for pid in pids:
+                proc = process_snapshot.get(pid)
+                if not proc:
+                    continue
+                pid_ident = (key, process_identity(proc))
+                delta_r, delta_w = apply_io_sample(
+                    pid_ident,
+                    get_process_io(pid),
+                    self.prev_pid_io,
+                    next_pid_io,
+                )
+                read_b += delta_r
+                write_b += delta_w
+            self.prev_pid_io = {k: v for k, v in self.prev_pid_io.items() if k[0] != key}
+            self.prev_pid_io.update(next_pid_io)
+            io_delta = (read_b, write_b)
+            io_ready = key in self.prev_cpu_usec
+        else:
+            prev_io = self.prev_io.get(key)
+            self.prev_io[key] = io_curr
+            if prev_io is None:
+                io_delta = (0, 0)
+                io_ready = False
+            else:
+                io_delta = io_delta_bytes(prev_io, io_curr)
+                io_ready = True
+
+        prev_cpu = self.prev_cpu_usec.get(key)
+        self.prev_cpu_usec[key] = cpu_usec
+        if prev_cpu is None:
+            return None
+        if dt <= 0:
+            dt = 1.0
+        cpu_cores = max(cpu_usec - prev_cpu, 0) / dt / 1_000_000.0
+        if not io_ready:
+            io_delta = (0, 0)
+        read_mb = io_delta[0] / (1024 * 1024)
+        write_mb = io_delta[1] / (1024 * 1024)
+        return {
+            "kind": "test",
+            "ts": round(ts, 3),
+            "ts_us": ts_us,
+            "dt_sec": round(dt, 6),
+            "cgroup": ident.get("cgroup"),
+            "suite": ident.get("suite"),
+            "chunk": ident.get("chunk"),
+            "test_name": ident.get("test_name"),
+            "uid": ident.get("uid"),
+            "cpu_used_cores": round(cpu_cores, 3),
+            "ram_kb": int(mem_b / 1024),
+            "disk_read_mb_delta": round(read_mb, 2),
+            "disk_write_mb_delta": round(write_mb, 2),
+            "disk_read_mbps": round(read_mb / dt, 2),
+            "disk_write_mbps": round(write_mb / dt, 2),
+        }
+
+
 def _meminfo_kb() -> dict[str, int]:
     mem: dict[str, int] = {}
     with open("/proc/meminfo") as f:
@@ -265,6 +630,7 @@ def run_monitor(
     prev_disk = read_diskstats()
     seed_snapshot = read_process_snapshot()
     prev_pid_cpu, prev_pid_io = seed_ya_counters(seed_snapshot, find_ya_process_tree(seed_snapshot))
+    test_sampler = TestCgroupSampler()
     prev_ts = time.time()
     cpu_cores = get_cpu_cores()
     ram_total_gb = round(get_ram_total_gb(), 2)
@@ -358,7 +724,10 @@ def run_monitor(
             }
             record["cpu_cores"] = cpu_cores
             record["ram_total_gb"] = ram_total_gb
+            record["kind"] = "host"
             jf.write(json.dumps(record) + "\n")
+            for test_rec in test_sampler.sample(dt, ts, ts_us, process_snapshot):
+                jf.write(json.dumps(test_rec) + "\n")
             jf.flush()
 
             if ram_usage_txt:

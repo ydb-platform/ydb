@@ -382,7 +382,7 @@ runs:
         fi
 
         params+=(
-          --stat -DCONSISTENT_DEBUG
+          --stat -DCONSISTENT_DEBUG --no-dir-outputs
           # Keep chunk archives separate to avoid merging and repacking them.
           --dont-merge-split-tests
           --test-failure-code 0 --build-all

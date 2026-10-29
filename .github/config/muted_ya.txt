@@ -8,6 +8,7 @@ ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInferPDiskSlotCoun
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInferPDiskSlotCountWithRealNodeWarden
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.UseFixedVDiskSlotSizeRuntimeSwitch
+ydb/core/blobstorage/nodewarden/ut TDistconfNodeRoleTest.RepeatReplaceAfterExpansionRestart
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.ActivationAndValidation
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnectionPreservesOrdinaryQuorum
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeRestart.RegistrationSnapshotPrecedesDiskUpdates
@@ -298,6 +299,7 @@ ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlook
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-2]
 ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_time_ago[v1-mvp_external_ydb_endpoint0]
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]

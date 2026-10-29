@@ -725,7 +725,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using TFailRealm = TDataCenterStatesEnv::TFailRealm;
         using TDataCenter = TDataCenterStatesEnv::TDataCenter;
         TDataCenterStatesEnv env;
-        UNIT_ASSERT(env.Invoke(env.Define({{"2", TDataCenter::EXCLUDED}})).GetSuccess());
         ui32 groupId = 0;
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
@@ -738,6 +737,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const NKikimrBlobStorage::TGroupInfo original = env.ReadGroups().at(groupId);
         const ui32 recoveringNode = original.GetRings(2).GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
         const TString recoveringDataCenter = env.NodeDataCenters.at(recoveringNode);
+        UNIT_ASSERT(env.Invoke(env.Define({{recoveringDataCenter, TDataCenter::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, states)).GetSuccess());
         UNIT_ASSERT(env.Invoke(env.Define({{recoveringDataCenter, TDataCenter::RECOVERING}})).GetSuccess());
         const NKikimrBlobStorage::TGroupInfo overridden = env.ReadGroups().at(groupId);

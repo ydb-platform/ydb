@@ -4,6 +4,7 @@
 #include <ydb/core/blob_depot/blob_depot_tablet.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
 
@@ -257,9 +258,13 @@ namespace {
         // keep decommission in IN_PROGRESS state by holding the puts copying assimilated data into BlobDepot channels;
         // blocks and barriers get assimilated meanwhile, so the BlobDepot is ready for agent queries, while the data still
         // resides in the group being decommitted
-        TEventHold& hold = chain.AddHold([](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == TEvBlobStorage::EvPut &&
-                ev.Get<TEvBlobStorage::TEvPut>()->WriteSource == TWriteSource::BlobDepotPut;
+        TEventHold& hold = chain.AddHold([&env](IEventHandle& ev) {
+            if (ev.GetTypeRewrite() != TEvBlobStorage::EvPut ||
+                    ev.Get<TEvBlobStorage::TEvPut>()->WriteSource != TWriteSource::BlobDepotPut) {
+                return false;
+            }
+            auto *sender = env.Runtime->GetActor(ev.Sender);
+            return sender && TypeName(*sender).EndsWith("::TGroupAssimilator");
         });
         // remember the latest group info reported to nodes
         auto reportedGroupInfo = std::make_shared<TGroupInfoTracker>();
@@ -438,9 +443,78 @@ namespace {
         });
     }
 
+    void CheckDecommitResolveTimeout(bool holdPut) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        const TLogoBlobID id = std::get<1>(checker.GetWritten().back());
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TActorId resolver;
+        std::optional<TInstant> physicalDeadline;
+        bool timedOut = false;
+        bool resolveTimedOut = false;
+        TFilterChain chain(env);
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            UNIT_ASSERT_C(!timedOut || ev->Recipient != edge || ev->GetTypeRewrite() != TEvBlobStorage::EvGetResult,
+                "late physical response completed the expired resolve again");
+            const auto type = ev->GetTypeRewrite();
+            if (type == TEvBlobDepot::TEvResolveResult::EventType) {
+                const auto& record = ev->Get<TEvBlobDepot::TEvResolveResult>()->Record;
+                resolveTimedOut |= record.GetStatus() == NKikimrProto::ERROR &&
+                    record.GetErrorReason().Contains("decommission resolve timed out");
+            } else if (type == TEvBlobStorage::EvGet || type == TEvBlobStorage::EvPut) {
+                auto *sender = env.Runtime->GetActor(ev->Sender);
+                if (sender && TypeName(*sender).EndsWith("::TResolveDecommitActor")) {
+                    resolver = ev->Sender;
+                    const auto deadline = type == TEvBlobStorage::EvGet
+                        ? ev->Get<TEvBlobStorage::TEvGet>()->Deadline : ev->Get<TEvBlobStorage::TEvPut>()->Deadline;
+                    if (physicalDeadline) {
+                        UNIT_ASSERT_VALUES_EQUAL(deadline, *physicalDeadline);
+                    }
+                    physicalDeadline = deadline;
+                }
+            }
+            return true;
+        });
+        TEventHold& responseHold = chain.AddHold([&](IEventHandle& ev) {
+            return resolver && ev.Recipient == resolver && ev.GetTypeRewrite() ==
+                (holdPut ? TEvBlobStorage::EvPutResult : TEvBlobStorage::EvGetResult);
+        });
+        RunDecommission(env, chain, checker, groupId, {}, {
+            .InProgress = [&] {
+                const auto started = env.Runtime->GetClock();
+                env.Runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                        NKikimrBlobStorage::FastRead, true /*mustRestoreFirst*/));
+                });
+                // The caller has no deadline: the tablet-side actor must bound its own attempt.
+                auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false,
+                    started + TDuration::Minutes(6));
+                UNIT_ASSERT_C(result, "decommission resolve retained a silent dependency indefinitely");
+                UNIT_ASSERT(resolveTimedOut);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::ERROR);
+                UNIT_ASSERT(responseHold.HasHeld());
+                UNIT_ASSERT(physicalDeadline && *physicalDeadline <= started + TDuration::Minutes(6));
+                UNIT_ASSERT(!env.Runtime->GetActor(resolver));
+                timedOut = true;
+                responseHold.Release();
+                env.Sim(TDuration::Seconds(1));
+            },
+        });
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BridgeDecommit) {
+
+    Y_UNIT_TEST_TWIN(ResolveTimeout, holdPut) {
+        CheckDecommitResolveTimeout(holdPut);
+    }
 
     Y_UNIT_TEST(CheckIntegrityUsesCachedMappingAfterDone) {
         CheckIntegrityAfterDecommit(false);

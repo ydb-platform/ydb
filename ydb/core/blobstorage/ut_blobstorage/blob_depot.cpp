@@ -155,8 +155,13 @@ void CheckRangeWaitsForFinalResolve(bool reverse, bool finalError) {
     }
 }
 
+enum class EReadFailure { HeldResolve, HeldRead, PhysicalTimeout, ResolveError };
+
 template<typename TRequest, typename TResult>
-void CheckReadDeadline(bool holdResolve, bool physicalTimeout = false) {
+void CheckReadFailure(EReadFailure failure) {
+    const bool holdResolve = failure == EReadFailure::HeldResolve;
+    const bool physicalTimeout = failure == EReadFailure::PhysicalTimeout;
+    const bool resolveError = failure == EReadFailure::ResolveError;
     ui32 seed;
     LoadSeed(seed);
     TBlobDepotTestEnvironment tenv(seed);
@@ -199,10 +204,16 @@ void CheckReadDeadline(bool holdResolve, bool physicalTimeout = false) {
         }
         bool hold = false;
         if (ev->GetTypeRewrite() == TEvBlobDepot::TEvResolveResult::EventType) {
-            const auto& record = ev->Get<TEvBlobDepot::TEvResolveResult>()->Record;
+            auto& record = ev->Get<TEvBlobDepot::TEvResolveResult>()->Record;
             if (record.ResolvedKeysSize() == 1 && record.GetResolvedKeys(0).GetKey() == id.AsBinaryString()) {
                 agent = ev->Recipient;
-                hold = holdResolve;
+                if (resolveError) {
+                    record.SetStatus(NKikimrProto::ERROR);
+                    record.SetErrorReason("resolve failed before enumerating keys");
+                    record.ClearResolvedKeys();
+                } else {
+                    hold = holdResolve;
+                }
             }
         } else if (agent && ev->Sender == agent && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
             physicalDeadline = ev->Get<TEvBlobStorage::TEvGet>()->Deadline;
@@ -230,9 +241,20 @@ void CheckReadDeadline(bool holdResolve, bool physicalTimeout = false) {
     sendRead(deadline);
     auto result = env.WaitForEdgeActorEvent<TResult>(edge, false, deadline + TDuration::Seconds(2));
     UNIT_ASSERT_C(result, "read did not finish at its caller's deadline");
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::TIMEOUT, result->Get()->ToString());
-    UNIT_ASSERT(physicalTimeout ? timeoutInjected : !held.empty());
-    if (!holdResolve) {
+    if (resolveError) {
+        if constexpr (std::is_same_v<TResult, TEvBlobStorage::TEvGetResult>) {
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::ERROR);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->ErrorReason, "resolve failed before enumerating keys");
+        }
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::TIMEOUT, result->Get()->ToString());
+        UNIT_ASSERT(physicalTimeout ? timeoutInjected : !held.empty());
+    }
+    if (!holdResolve && !resolveError) {
         UNIT_ASSERT(physicalDeadline);
         UNIT_ASSERT_VALUES_EQUAL(*physicalDeadline, deadline);
     }
@@ -247,29 +269,46 @@ void CheckReadDeadline(bool holdResolve, bool physicalTimeout = false) {
     auto retry = env.WaitForEdgeActorEvent<TResult>(edge, false, env.Runtime->GetClock() + TDuration::Seconds(30));
     UNIT_ASSERT(retry);
     UNIT_ASSERT_VALUES_EQUAL_C(retry->Get()->Status, NKikimrProto::OK, retry->Get()->ToString());
+    if constexpr (std::is_same_v<TResult, TEvBlobStorage::TEvGetResult>) {
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->Responses[0].Buffer.ConvertToString(), data);
+    }
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepot) {
     Y_UNIT_TEST_TWIN(GetDeadline, holdResolve) {
-        CheckReadDeadline<TEvBlobStorage::TEvGet, TEvBlobStorage::TEvGetResult>(holdResolve);
+        CheckReadFailure<TEvBlobStorage::TEvGet, TEvBlobStorage::TEvGetResult>(
+            holdResolve ? EReadFailure::HeldResolve : EReadFailure::HeldRead);
     }
 
     Y_UNIT_TEST_TWIN(RangeDeadline, holdResolve) {
-        CheckReadDeadline<TEvBlobStorage::TEvRange, TEvBlobStorage::TEvRangeResult>(holdResolve);
+        CheckReadFailure<TEvBlobStorage::TEvRange, TEvBlobStorage::TEvRangeResult>(
+            holdResolve ? EReadFailure::HeldResolve : EReadFailure::HeldRead);
     }
 
     Y_UNIT_TEST_TWIN(DiscoverDeadline, holdResolve) {
-        CheckReadDeadline<TEvBlobStorage::TEvDiscover, TEvBlobStorage::TEvDiscoverResult>(holdResolve);
+        CheckReadFailure<TEvBlobStorage::TEvDiscover, TEvBlobStorage::TEvDiscoverResult>(
+            holdResolve ? EReadFailure::HeldResolve : EReadFailure::HeldRead);
     }
 
     Y_UNIT_TEST_TWIN(CheckIntegrityDeadline, holdResolve) {
-        CheckReadDeadline<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(holdResolve);
+        CheckReadFailure<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(
+            holdResolve ? EReadFailure::HeldResolve : EReadFailure::HeldRead);
     }
 
     Y_UNIT_TEST(CheckIntegrityPhysicalTimeoutIsNotSuccess) {
-        CheckReadDeadline<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(false, true);
+        CheckReadFailure<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(EReadFailure::PhysicalTimeout);
+    }
+
+    Y_UNIT_TEST(GetResolveFailureIsNotAbsence) {
+        CheckReadFailure<TEvBlobStorage::TEvGet, TEvBlobStorage::TEvGetResult>(EReadFailure::ResolveError);
+    }
+
+    Y_UNIT_TEST(CheckIntegrityResolveFailureIsNotAbsence) {
+        CheckReadFailure<TEvBlobStorage::TEvCheckIntegrity, TEvBlobStorage::TEvCheckIntegrityResult>(EReadFailure::ResolveError);
     }
 
     Y_UNIT_TEST(RangeWaitsForFinalResolvePage) {

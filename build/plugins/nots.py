@@ -1125,7 +1125,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
         build_command = "{} && {}".format(build_command, after_build_command)
-    if build_command:
+    if after_build_command or (unit.get("_TS_LIBRARY_FOR") == "yes" and build_command):
         _set_ts_build_command(unit, build_command)
 
     # Code navigation

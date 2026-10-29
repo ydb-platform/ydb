@@ -156,7 +156,7 @@ namespace NKikimr::NStorage {
                 throw TExError() << "Failed to generate a nonempty " << name << " configuration";
             }
         };
-        const auto *selfManagement = Self->Cfg->SelfManagementConfig.get();
+        const auto& selfManagement = Self->Cfg->SelfManagementConfig;
         ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageManagement(),
             targetConfig.GetStateStorageConfig(), "StateStorage");
         ensureGenerated(!selfManagement || selfManagement->GetAutomaticStateStorageBoardManagement(),

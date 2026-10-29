@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         auto nodeWardenConfig = MakeNodeWardenConfig(config, bridgeConfig);
         nodeWardenConfig->StartupConfigYaml = startupConfigYaml;
         if (dynamicPileName) {
-            nodeWardenConfig->DynamicNodeConfig = std::make_unique<NKikimrConfig::TDynamicNodeConfig>();
+            nodeWardenConfig->DynamicNodeConfig.emplace();
             auto *info = nodeWardenConfig->DynamicNodeConfig->MutableNodeInfo();
             info->SetNodeId(nodeId);
             info->MutableLocation()->SetBridgePileName(dynamicPileName);
@@ -10149,7 +10149,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
             NKikimrConfig::TDomainsConfig::TStateStorage generated;
             std::unordered_set<ui32> usedNodes;
-            const bool goodConfig = keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, nullptr,
+            const bool goodConfig = keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, {},
                 true, 0, 0, 1000);
 
             UNIT_ASSERT(!goodConfig);
@@ -10176,7 +10176,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         }
         NKikimrConfig::TDomainsConfig::TStateStorage generated;
         std::unordered_set<ui32> usedNodes;
-        UNIT_ASSERT(!keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, nullptr,
+        UNIT_ASSERT(!keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, {},
             true, /*overrideReplicasInRingCount=*/2, /*overrideRingsCount=*/9, 1000));
     }
 

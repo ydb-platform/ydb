@@ -700,10 +700,6 @@ namespace NKikimr::NBlobDepot {
             get.BlobIds.push_back(key.GetBlobId());
             get.AssimilatedBlobs.push_back({std::move(key), TData::TAssimilatedBlobInfo::TUpdate{
                 TBlobSeqId::FromLogoBlobId(msg.Id)}});
-        } else {
-            // this copy won't ever get its blob bound to the key, the retry writes another one, so it doesn't hold
-            // garbage collection back anymore
-            Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
         }
         if (!--get.PutsPending) {
             Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,

@@ -455,7 +455,6 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvResolve resolve;
             auto *item = resolve.AddItems();
             item->SetExactKey(checkContext.ReadArg.Key);
-            resolve.SetDataKind(checkContext.ReadArg.DataKind);
             YDB_LOG_DEBUG("Issuing extra resolve to check integrity",
                 {"marker", "BDA71"},
                 {"agentId", Agent.LogId},

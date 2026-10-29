@@ -1,6 +1,10 @@
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/events/control.h>
+#include <ydb/core/tx/columnshard/data_sharing/source/session/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
@@ -444,6 +448,35 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         runtime.WaitFor("schemas cleaned", [&] {
             return csControllerGuard->GetCleanupSchemasFinishedCounter().Val() > 0;
         }, TDuration::Seconds(30));
+    }
+
+    Y_UNIT_TEST(SharingSessionWaitsUntilEverythingIsLoaded) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        const NOlap::TSnapshot snapshot = StartShardWithRows(runtime, sender);
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(500));
+
+        TBlockEvents<TEvPipeCache::TEvForward> toDestination(runtime);
+        const auto shardTabletId = (NOlap::TTabletId)TTestTxConfig::TxTablet0;
+        const auto destinationTabletId = (NOlap::TTabletId)TTestTxConfig::TxTablet1;
+        const TInternalPathId pathId = csControllerGuard->GetTheOnlyShard()->GetTablesManager().ResolveInternalPathIdVerified(
+            TSchemeShardLocalPathId::FromRawValue(TableId), false);
+        const NOlap::NDataSharing::TSourceSession session("sharing",
+            NOlap::NDataSharing::TTransferContext(destinationTabletId, { shardTabletId }, snapshot, false), shardTabletId, { pathId },
+            destinationTabletId);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NOlap::NDataSharing::NEvents::TEvStartToSource(session));
+        const auto isStarted = [&] {
+            const auto source = csControllerGuard->GetTheOnlyShard()->GetSharingSessionsManager()->GetSourceSession("sharing");
+            return source && !source->IsReadyForStarting() && !source->IsPrepared();
+        };
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.SimulateSleep(NoAnswerWait);
+        UNIT_ASSERT(!isStarted());
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+        runtime.WaitFor("sharing session started", isStarted, TDuration::Seconds(30));
     }
 }
 

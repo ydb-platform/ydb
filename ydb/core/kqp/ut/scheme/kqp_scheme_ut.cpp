@@ -10813,6 +10813,98 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationAvailabilityPeriod, UseQueryService) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableTopicDiskSubDomainQuota(true);
+        TKikimrRunner kikimr(flags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        TReplicationClient replication(kikimr.GetDriver());
+        TTopicClient topics(kikimr.GetDriver());
+        using EKind = TReplicationDescription::EAvailabilityPeriodKind;
+        const TVector<TString> options = {"", "'UNLIMITED'", "Interval('PT0.000001S')", "Interval('PT10.001S')"};
+        for (ui32 i = 0; i < options.size(); ++i) {
+            const TString source = TStringBuilder() << "/Root/table" << i;
+            const TString target = TStringBuilder() << "/Root/replica" << i;
+            const TString path = TStringBuilder() << "/Root/replication" << i;
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(
+                "CREATE TABLE `%s` (Key Uint64, PRIMARY KEY (Key));", source.c_str()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TString availabilityOption;
+            if (!options[i].empty()) {
+                availabilityOption = TStringBuilder() << ", AVAILABILITY_PERIOD = " << options[i];
+            }
+            result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `%s` FOR `%s` AS `%s`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root'%s);
+            )", path.c_str(), source.c_str(), target.c_str(), kikimr.GetEndpoint().c_str(), availabilityOption.c_str()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const bool unlimited = i < 2;
+            const auto duration = i == 2 ? TDuration::MilliSeconds(1) : TDuration::MilliSeconds(10001);
+            bool ready = false;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (!ready && TInstant::Now() < deadline) {
+                const auto description = replication.DescribeReplication(path).ExtractValueSync();
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                const auto& desc = description.GetReplicationDescription();
+                UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == (unlimited ? EKind::Unlimited : EKind::Finite));
+                if (!unlimited) {
+                    UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), duration);
+                }
+                if (desc.GetState() == TReplicationDescription::EState::Error) {
+                    UNIT_FAIL(desc.GetErrorState().GetIssues().ToString());
+                }
+                const auto& items = desc.GetItems();
+                if (items.empty() || !items.front().SrcChangefeedName) {
+                    continue;
+                }
+                const TString stream = TStringBuilder() << source << "/" << *items.front().SrcChangefeedName;
+                const auto topic = topics.DescribeTopic(stream).ExtractValueSync();
+                if (!topic.IsSuccess()) {
+                    continue;
+                }
+                const auto& config = topic.GetTopicDescription();
+                if (config.GetConsumers().empty() || config.GetRetentionPeriod() != TDuration::Seconds(1)) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().front().GetImportant(), unlimited);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().front().GetAvailabilityPeriod(),
+                    unlimited ? TDuration::Zero() : duration);
+                ready = true;
+            }
+            UNIT_ASSERT_C(ready, TStringBuilder() << "Source consumer did not install availability policy for " << path);
+            result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(
+                "ALTER ASYNC REPLICATION `%s` SET (AVAILABILITY_PERIOD = 'UNLIMITED');", path.c_str()));
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "AVAILABILITY_PERIOD is not supported in ALTER");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationInvalidAvailabilityPeriod, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const auto created = ExecuteGeneric<UseQueryService>(queryClient, session,
+            "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const TVector<std::pair<TString, TString>> cases = {
+            {"Interval('PT0S')", "Availability period must be positive"},
+            {"Interval('-PT1S')", "Availability period must be positive"},
+            {"'FOREVER'", "Unknown availability period"},
+            {"1", "UNLIMITED or a literal of Interval type is expected"},
+            {"TRUE", "UNLIMITED or a literal of Interval type is expected"},
+        };
+        for (const auto& [value, issue] : cases) {
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/table` AS `/Root/replica`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root', AVAILABILITY_PERIOD = %s);
+            )", kikimr.GetEndpoint().c_str(), value.c_str()));
+            UNIT_ASSERT_C(!result.IsSuccess(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), issue);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithTokenSecret, UseSchemaSecrets) {
         using namespace NReplication;
 

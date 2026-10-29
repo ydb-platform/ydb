@@ -127,9 +127,6 @@ public:
         }
 
         Config->ApplyServiceConfig(Settings.TableService);
-        if (auto normalizer = AppData()->PathNormalizer) {
-            Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
-        }
 
         Config->FreezeDefaults();
 
@@ -170,7 +167,8 @@ public:
         Y_UNUSED(ctx);
     }
 
-    void HandleReady(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
+    void HandleReady(TEvKqp::TEvWorkerQueryRequest::TPtr &workerEv, const TActorContext &ctx) {
+        auto ev = workerEv->Get()->ReleaseRequest();
         ui64 proxyRequestId = ev->Cookie;
         if (!CheckRequest(ev->Get()->GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
             return;
@@ -190,6 +188,11 @@ public:
         QueryState->Sender = ev->Sender;
         QueryState->CollectTraceStats = bool(ev->TraceId);
         QueryState->RequestEv.reset(ev->Release().Release());
+
+        Config->NormalizePath = {};
+        if (auto normalizer = workerEv->Get()->PathNormalizer) {
+            Config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+        }
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
             Settings.Cluster, TlsActivationContext->ActorSystem(), Config, false, nullptr, std::nullopt, NWilson::TTraceId(ev->TraceId));
@@ -301,7 +304,8 @@ public:
         }
     }
 
-    void HandlePerformQuery(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
+    void HandlePerformQuery(TEvKqp::TEvWorkerQueryRequest::TPtr &workerEv, const TActorContext &ctx) {
+        auto ev = workerEv->Get()->ReleaseRequest();
         ReplyBusy(ev, ctx);
     }
 
@@ -334,7 +338,8 @@ public:
         }
     }
 
-    void HandlePerformCleanup(TEvKqp::TEvQueryRequest::TPtr &ev, const TActorContext &ctx) {
+    void HandlePerformCleanup(TEvKqp::TEvWorkerQueryRequest::TPtr &workerEv, const TActorContext &ctx) {
+        auto ev = workerEv->Get()->ReleaseRequest();
         ui64 proxyRequestId = ev->Cookie;
 
         if (!CheckRequest(ev->Get()->GetSessionId(), ev->Sender, proxyRequestId, ctx)) {
@@ -385,7 +390,7 @@ public:
     STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvQueryRequest, HandleReady);
+                HFunc(TEvKqp::TEvWorkerQueryRequest, HandleReady);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandleReady);
                 HFunc(TEvKqp::TEvContinueProcess, HandleReady);
             default:
@@ -399,7 +404,7 @@ public:
     STFUNC(PerformQueryState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvQueryRequest, HandlePerformQuery);
+                HFunc(TEvKqp::TEvWorkerQueryRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformQuery);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformQuery);
             default:
@@ -413,7 +418,7 @@ public:
     STFUNC(PerformCleanupState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                HFunc(TEvKqp::TEvQueryRequest, HandlePerformCleanup);
+                HFunc(TEvKqp::TEvWorkerQueryRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvCloseSessionRequest, HandlePerformCleanup);
                 HFunc(TEvKqp::TEvContinueProcess, HandlePerformCleanup);
             default:

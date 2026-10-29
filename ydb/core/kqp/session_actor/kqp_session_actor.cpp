@@ -378,8 +378,9 @@ public:
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         WorkerStatsMode = QueryState->GetStatsMode();
-        TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
-                    nullptr, QueryState->KqpSessionSpan.GetTraceId()));
+        auto request = MakeHolder<IEventHandle>(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
+            nullptr, QueryState->KqpSessionSpan.GetTraceId());
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), new TEvKqp::TEvWorkerQueryRequest(request.Release()));
         Become(&TKqpSessionActor::ExecuteState);
     }
 

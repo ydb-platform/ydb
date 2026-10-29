@@ -301,6 +301,7 @@ public:
 private:
     STFUNC(MainState) {
         switch (ev->GetTypeRewrite()) {
+            HFunc(TEvKqp::TEvWorkerQueryRequest, Handle);
             HFunc(TEvKqp::TEvCompileRequest, Handle);
             HFunc(TEvKqp::TEvCompileResponse, Handle);
             HFunc(TEvKqp::TEvCompileInvalidateRequest, Handle);
@@ -326,6 +327,12 @@ private:
     }
 
 private:
+    void Handle(TEvKqp::TEvWorkerQueryRequest::TPtr& ev, const TActorContext& ctx) {
+        ev->Get()->PathNormalizer = PathNormalizer;
+        const auto workerId = ev->Get()->Request->Recipient;
+        ctx.Send(ev->Forward(workerId));
+    }
+
     void CheckDatabaseType() {
         DatabaseTypeCheckScheduled = false;
         if (DatabaseType != EDatabaseType::Unknown) {

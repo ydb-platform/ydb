@@ -1606,6 +1606,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
                 ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);
             }
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
+            subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, kinds) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }

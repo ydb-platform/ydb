@@ -267,7 +267,7 @@ namespace NKikimr {
                         return std::visit(TOverloaded{
                             [&](TGetState& state) -> std::unique_ptr<IEventBase> {
                                 auto& r = state.Responses[payload.Index];
-                                r = {};
+                                r.Buffer = {};
                                 r.Status = NKikimrProto::ERROR;
                                 return IssueNextRestoreGet(self);
                             },
@@ -346,7 +346,7 @@ namespace NKikimr {
                         return std::visit(TOverloaded{
                             [&](TGetState& state) -> std::unique_ptr<IEventBase> {
                                 auto& r = state.Responses[payload.Index];
-                                r = {};
+                                r.Buffer = {};
                                 r.Status = NKikimrProto::ERROR;
                                 return IssueNextRestoreGet(self);
                             },

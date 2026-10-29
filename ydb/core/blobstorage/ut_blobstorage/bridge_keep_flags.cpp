@@ -276,9 +276,79 @@ namespace {
         env.Runtime->FilterFunction = {};
     }
 
+    void CheckRepairFailurePreservesIdentity(bool failPut) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+        const TString data = "two blobs needing repair";
+        const std::array<TLogoBlobID, 2> ids{{
+            TLogoBlobID(100500, 1, 1, 0, data.size(), 0),
+            TLogoBlobID(100500, 1, 2, 0, data.size(), 0),
+        }};
+        for (const auto& id : ids) {
+            PutToPileGroup(env, pileGroups[0], 1, id, data, true);
+        }
+
+        bool failureInjected = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 resultType = failPut ? TEvBlobStorage::EvPutResult : TEvBlobStorage::EvGetResult;
+            if (ev->GetTypeRewrite() != resultType) {
+                return true;
+            }
+            if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                    TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                if (!failPut) {
+                    auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                    // The original query asks for both blobs; the repair reads one full blob at a time.
+                    if (msg->ResponseSz == 1 && msg->Responses[0].Id == ids[0]) {
+                        msg->Responses[0].Status = NKikimrProto::NODATA;
+                        msg->Responses[0].Buffer = {};
+                        failureInjected = true;
+                    }
+                } else {
+                    if (auto *msg = ev->Get<TEvBlobStorage::TEvPutResult>(); msg->Id == ids[0]) {
+                        msg->Status = NKikimrProto::ERROR;
+                        failureInjected = true;
+                    }
+                }
+            }
+            return true;
+        };
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[2]);
+            for (ui32 i = 0; i < ids.size(); ++i) {
+                queries[i].Set(ids[i], 2, 3);
+            }
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(queries, ids.size(), TInstant::Max(),
+                NKikimrBlobStorage::FastRead, /*mustRestoreFirst=*/ true));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT(failureInjected);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, ids.size());
+        for (ui32 i = 0; i < ids.size(); ++i) {
+            const auto& r = res->Get()->Responses[i];
+            UNIT_ASSERT_VALUES_EQUAL(r.Id, ids[i]);
+            UNIT_ASSERT_VALUES_EQUAL(r.Shift, 2);
+            UNIT_ASSERT_VALUES_EQUAL(r.RequestedSize, 3);
+            UNIT_ASSERT(r.Keep);
+            UNIT_ASSERT_VALUES_EQUAL(r.Status, i ? NKikimrProto::OK : NKikimrProto::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(r.Buffer.ConvertToString(), i ? data.substr(2, 3) : TString());
+        }
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, ids[1], data), NKikimrProto::OK);
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
+
+    Y_UNIT_TEST_TWIN(GetRepairFailurePreservesIdentity, failPut) {
+        CheckRepairFailurePreservesIdentity(failPut);
+    }
 
     Y_UNIT_TEST_TWIN(GetMergeKeepsFlagsOnNodataReplacement, reverseOrder) {
         CheckGetMergeKeepsFlags(NKikimrProto::NODATA, reverseOrder);

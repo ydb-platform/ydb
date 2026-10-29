@@ -66,6 +66,7 @@ namespace NKikimr {
         };
         TInstant Deadline;
         std::deque<TItem> Items;
+        bool IgnoreConnectionQuorum = false;
 
         TString ToString() const {
             TStringStream s;
@@ -87,6 +88,8 @@ namespace NKikimr {
     struct TEvRecoverBlobResult : TEventLocal<TEvRecoverBlobResult, TEvBlobStorage::EvRecoverBlobResult> {
         struct TItem : TEvRecoverBlob::TItem {
             NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
+            bool Keep = false;
+            bool DoNotKeep = false;
 
             TItem(TEvRecoverBlob::TItem&& item)
                 : TEvRecoverBlob::TItem(std::move(item))

@@ -775,13 +775,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestVectorIndexPlanShape(F_COVERING, EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
+    void DoTestBadFormat(bool onBuild, bool streamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -795,40 +795,72 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString createTableSql(R"(
                 --!syntax_v1
                 CREATE TABLE TestVector2 (id Uint64, embedding String, PRIMARY KEY (id))
-                WITH (PARTITION_AT_KEYS = (9));
+                WITH (PARTITION_AT_KEYS = (100));
             )");
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        auto create = [&](bool expected_result) {
+        auto create = [&](bool expectOk, ui8 bad) {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
                 ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
             )"));
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess() == expected_result, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess() == expectOk, result.GetIssues().ToString());
+            if (!expectOk) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), Sprintf("Invalid vector format byte, got %02x, expected 02", bad));
+            }
         };
 
-        auto insert = [&]() {
-            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES
-                (1, ""), (2, "1"), (3, "40"), (4, "abcd"),
-                (5, "00\x02"), (6, "01\x02"), (7, "10\x02"), (8, "11\x02"),
-                (9, ""), (10, "1"), (11, "40"), (12, "abcd"),
-                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02"),
-                (17, null);)"));
+        TVector<TString> badValues = { "1", "40", "abcd", "02\\x81" };
+        TVector<ui8> badByte = { 0x31, 0x30, 0x64, 0x81 };
+        auto exec = [&](const TString query1) {
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
-        if (OnBuild) {
-            insert();
-            create(false);
+        if (onBuild) {
+            for (size_t i = 0; i < badValues.size(); i++) {
+                auto& bad = badValues[i];
+                TStringBuilder query1;
+                // One bad value + all good values for each partition
+                // "" and null in the beginning to check their skip
+                exec(Sprintf(
+                    R"(UPSERT INTO TestVector2 (id, embedding) VALUES
+                    (1, ""), (2, null), (3, "%s"), (4, "%s"), (5, "%s"),
+                    (10, "00\x02"), (11, "01\x02"), (12, "10\x02"), (13, "11\x02"),
+                    (100, ""), (101, null), (102, "%s"), (103, "%s"), (104, "%s"),
+                    (105, "00\x02"), (106, "01\x02"), (107, "10\x02"), (108, "11\x02"))",
+                    bad.c_str(), bad.c_str(), bad.c_str(),
+                    bad.c_str(), bad.c_str(), bad.c_str()
+                ));
+                create(false, badByte[i]);
+            }
         } else {
-            create(true);
-            insert();
+            create(true, 0);
+            // Add all bad and good values once
+            TStringBuilder query1;
+            query1 << "UPSERT INTO TestVector2 (id, embedding) VALUES (1, \"\"), (2, null)";
+            for (size_t i = 0; i < badValues.size(); i++) {
+                query1 << Sprintf(", (%zu, \"%s\")", 10+i, badValues[i].c_str());
+            }
+            query1 << R"(, (20, "00\x02"), (21, "01\x02"), (22, "10\x02"), (23, "11\x02"))";
+            exec(query1);
         }
+    }
+
+    Y_UNIT_TEST(BadFormat) {
+        DoTestBadFormat(false, false);
+    }
+
+    Y_UNIT_TEST(BadFormatWithStreamWrite) {
+        DoTestBadFormat(false, true);
+    }
+
+    Y_UNIT_TEST(BadFormatOnBuild) {
+        DoTestBadFormat(true, false);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {

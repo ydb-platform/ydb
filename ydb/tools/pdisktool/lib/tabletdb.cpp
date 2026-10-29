@@ -5,7 +5,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_dbase_naked.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/tablet_flat/flat_mem_warm.h>
 #include <ydb/core/tablet_flat/flat_part_loader.h>
 #include <ydb/core/tablet_flat/flat_part_store.h>
@@ -124,11 +124,21 @@ public:
     const TSharedData* TryGetPage(const NTable::TPart* part, const TPageLocation& location,
             TGroupId groupId) override
     {
+        return GetSlotPage(part, part ? part->DataSlot(groupId) : 0, location);
+    }
+
+    const TSharedData* TryGetIndexPage(const NTable::TPart* part, const TPageLocation& location,
+            TGroupId groupId) override
+    {
+        return GetSlotPage(part, part ? part->IndexSlot(groupId) : 0, location);
+    }
+
+    const TSharedData* GetSlotPage(const NTable::TPart* part, ui32 slot, const TPageLocation& location) {
         const auto* partStore = dynamic_cast<const NTable::TPartStore*>(part);
-        if (!partStore || groupId.Index >= partStore->PageCollections.size()) {
+        if (!partStore || slot >= partStore->PageCollections.size()) {
             return nullptr;
         }
-        return GetPage(partStore->PageCollections[groupId.Index].Get(), location);
+        return GetPage(partStore->PageCollections[slot].Get(), location);
     }
 
     const TSharedData* GetPage(const TPrivateCollection* collection, const TPageLocation& location) {

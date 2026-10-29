@@ -49,13 +49,7 @@ public:
             return;
         }
 
-        auto& record = Event->Get()->Record;
-        auto* cmd = record.MutableCommand();
-        auto* worker = Self->GetOrCreateWorker(Id, cmd);
-
-        if (!worker->HasCommand()) {
-            worker->SetCommand(cmd);
-        }
+        auto* worker = Self->GetOrCreateWorker(Id);
 
         if (!worker->HasSession()) {
             Self->BootQueue.insert(Id);

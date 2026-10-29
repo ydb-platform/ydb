@@ -1,0 +1,5 @@
+--- a/config-linux-x86_64.h
++++ b/config-linux-x86_64.h
+@@ -224,1 +223,1 @@
++/* undef HAVE_STATX */
+-#define HAVE_STATX 1

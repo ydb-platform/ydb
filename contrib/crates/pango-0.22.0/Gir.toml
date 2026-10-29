@@ -1,0 +1,472 @@
+[options]
+girs_directories = ["../gir-files"]
+library = "Pango"
+version = "1.0"
+target_path = "."
+work_mode = "normal"
+generate_safety_asserts = false
+min_cfg_version = "1.40"
+use_gi_docgen = true
+single_version_file = true
+deprecate_by_min_version = true
+trust_return_value_nullability = true
+
+generate = [
+    # "Pango.GlyphVisAttr",
+    # "Pango.LogAttr",
+    "Pango.Alignment",
+    "Pango.BaselineShift",
+    "Pango.BidiType",
+    "Pango.CoverageLevel",
+    "Pango.Direction",
+    "Pango.EllipsizeMode",
+    "Pango.FontColor",
+    "Pango.FontFace",
+    "Pango.FontMask",
+    "Pango.FontMetrics",
+    "Pango.FontScale",
+    "Pango.Fontset",
+    "Pango.FontsetSimple",
+    "Pango.Glyph",
+    "Pango.GlyphUnit",
+    "Pango.Gravity",
+    "Pango.GravityHint",
+    "Pango.LayoutDeserializeFlags",
+    "Pango.LayoutIter",
+    "Pango.LayoutRun",
+    "Pango.LayoutSerializeFlags",
+    "Pango.Overline",
+    "Pango.Renderer",
+    "Pango.RenderPart",
+    "Pango.Script",
+    "Pango.ShapeFlags",
+    "Pango.ShowFlags",
+    "Pango.Stretch",
+    "Pango.Style",
+    "Pango.TextTransform",
+    "Pango.Underline",
+    "Pango.Weight",
+    "Pango.WrapMode",
+]
+
+manual = [
+    "Gio.ListModel",
+    "GLib.Bytes",
+    "GLib.Error",
+    "GLib.MarkupParseContext",
+    "GLib.Quark",
+    "Pango.Analysis",
+    "Pango.AttrClass",
+    "Pango.AttrColor",
+    "Pango.AttrFloat",
+    "Pango.AttrFontDesc",
+    "Pango.AttrFontFeatures",
+    "Pango.AttrInt",
+    "Pango.AttrLanguage",
+    "Pango.AttrShape",
+    "Pango.AttrSize",
+    "Pango.AttrString",
+    "Pango.Coverage",
+    "Pango.GlyphGeometry",
+    "Pango.GlyphInfo",
+    "Pango.LayoutDeserializeError",
+    "Pango.Rectangle",
+]
+
+[[object]]
+name = "Pango.*"
+status = "generate"
+    [[object.constant]]
+    name = "VERSION_STRING"
+    ignore = true
+    [[object.function]]
+    name = "extents_to_pixels"
+    manual = true
+    [[object.function]]
+    name = "get_mirror_char"
+    #out param
+    ignore = true
+    [[object.function]]
+    name = "log2vis_get_embedding_levels"
+    #out param
+    ignore = true
+    [[object.function]]
+    pattern = "attr_.+"
+    #moved to Attribute
+    ignore = true
+    [[object.function]]
+    name = "itemize"
+    manual = true
+        [[object.function.parameter]]
+        name = "cached_iter"
+        const = true
+    [[object.function]]
+    name = "itemize_with_base_dir"
+    manual = true
+        [[object.function.parameter]]
+        name = "cached_iter"
+        const = true
+    [[object.function]]
+    name = "reorder_items"
+    manual = true
+    [[object.function]]
+    name = "shape_full"
+    # invalid length computation on Stash instead of str
+    manual = true
+    [[object.function]]
+    name = "shape_with_flags"
+    # invalid length computation on a Option<str>, it should fallback to 0.
+    manual = true
+    [[object.function]]
+    name = "shape"
+    # invalid length computation on Stash instead of str
+    manual = true
+    [[object.function]]
+    name = "shape_item"
+    # invalid length computation on Stash instead of str
+    # Needs PangoLogAttr bindings
+    ignore = true
+
+[[object]]
+name = "Pango.Attribute"
+status = "generate"
+concurrency = "send+sync"
+    [[object.function]]
+    name = "init"
+    # irrelevant with all the constructors and unusable like this
+    ignore = true
+    [[object.function]]
+    name = "get_type"
+    version = "1.44"
+    [[object.function]]
+    pattern = "as.*"
+    # casting functions, we go with IsAttribute trait in Rust
+    ignore = true
+
+[[object]]
+name = "Pango.AttrIterator"
+status = "manual"
+    [[object.function]]
+    name = "next"
+    rename = "next_style_change"
+
+[[object]]
+name = "Pango.AttrList"
+status = "generate"
+    [[object.derive]]
+    name = "Debug"
+    [[object.function]]
+    name = "change"
+    manual = true
+    [[object.function]]
+    name = "insert"
+    manual = true
+    [[object.function]]
+    name = "insert_before"
+    manual = true
+    [[object.function]]
+    name = "equal"
+    ignore = true
+    [[object.function]]
+    name = "from_string"
+        [object.function.return]
+        nullable_return_is_error = "Can't parse AttrList"
+    [[object.function]]
+    name = "get_iterator"
+    manual = true
+
+[[object]]
+name = "Pango.AttrType"
+status = "generate"
+    [[object.function]]
+    name = "register"
+    # Problematic function needs manual implementation
+    ignore = true
+    [[object.member]]
+    name = "line_height"
+    version = "1.50"
+    [[object.member]]
+    name = "absolute_line_height"
+    version = "1.50"
+    [[object.member]]
+    name = "text_transform"
+    version = "1.50"
+    [[object.member]]
+    name = "word"
+    version = "1.50"
+    [[object.member]]
+    name = "sentence"
+    version = "1.50"
+    [[object.member]]
+    name = "baseline_shift"
+    version = "1.50"
+    [[object.member]]
+    name = "font_scale"
+    version = "1.50"
+
+[[object]]
+name = "Pango.Color"
+status = "generate"
+boxed_inline = true
+    [[object.function]]
+    pattern = "(parse|parse_with_alpha)"
+    manual = true
+
+[[object]]
+name = "Pango.Context"
+status = "generate"
+    [[object.function]]
+    name = "new"
+        # Can be removed once https://gitlab.gnome.org/GNOME/pango/-/merge_requests/651
+        # has been merged.
+        [object.function.return]
+        nullable = false
+    [[object.function]]
+    name = "get_language"
+        # Can be removed once https://gitlab.gnome.org/GNOME/pango/-/issues/709
+        # has been fixed.
+        [object.function.return]
+        nullable = true
+    [[object.function]]
+    name = "get_metrics"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+        # Can be removed once https://gitlab.gnome.org/GNOME/pango/-/merge_requests/651
+        # has been merged.
+        [object.function.return]
+        nullable = false
+    [[object.function]]
+    name = "load_fontset"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+    [[object.function]]
+    name = "set_language"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+
+[[object]]
+name = "Pango.Font"
+status = "generate"
+    [[object.function]]
+    name = "descriptions_free"
+    ignore = true
+    [[object.function]]
+    name = "get_metrics"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+    [[object.function]]
+    name = "find_shaper"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+    [[object.function]]
+    name = "get_coverage"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+
+[[object]]
+name = "Pango.FontDescription"
+status = "generate"
+concurrency = "send+sync"
+    [[object.function]]
+    name = "set_family_static"
+    ignore = true
+    [[object.function]]
+    name = "copy_static"
+    ignore = true
+    [[object.function]]
+    name = "get_size_is_absolute"
+    rename = "is_size_absolute"
+    [[object.function]]
+    name = "merge_static"
+    ignore = true
+    [[object.function]]
+    name = "set_features_static"
+    ignore = true
+    [[object.function]]
+    name = "set_variations_static"
+    ignore = true
+
+[[object]]
+name = "Pango.FontFamily"
+status = "generate"
+    [[object.property]]
+    name = "item-type"
+    generate = [] # disable generated getter/notify, use the ones from GListModel iface
+    [[object.property]]
+    name = "n-items"
+    generate = [] # disable generated getter/notify, use the ones from GListModel iface
+
+[[object]]
+name = "Pango.FontMap"
+status = "generate"
+    [[object.property]]
+    name = "item-type"
+    generate = [] # disable generated getter/notify, use the ones from GListModel iface
+    [[object.property]]
+    name = "n-items"
+    generate = [] # disable generated getter/notify, use the ones from GListModel iface
+    [[object.function]]
+    name = "load_fontset"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+
+[[object]]
+name = "Pango.GlyphItem"
+status = "generate"
+    [[object.function]]
+    name = "get_logical_widths"
+    manual = true
+
+[[object]]
+name = "Pango.GlyphItemIter"
+status = "manual"
+    [[object.function]]
+    name = "init_start"
+    rename = "new_start"
+    [[object.function]]
+    name = "init_end"
+    rename = "new_end"
+
+[[object]]
+name = "Pango.GlyphString"
+status = "generate"
+concurrency = "send+sync"
+    [[object.function]]
+    name = "get_logical_widths"
+    manual = true
+    [[object.function]]
+    pattern = "(get_width|index_to_x|x_to_index)"
+        [[object.function.parameter]]
+        name = "glyphs"
+        const = true
+    [[object.function]]
+    pattern = "(index_to_x|x_to_index)"
+        [[object.function.parameter]]
+        name = "analysis"
+        const = true
+
+[[object]]
+name = "Pango.Item"
+status = "generate"
+    [[object.function]]
+    name = "get_char_offset"
+        [[object.function.parameter]]
+        name = "item"
+        const = true
+
+[[object]]
+name = "Pango.Language"
+status = "generate"
+    [[object.function]]
+    pattern = "get_scripts"
+    manual = true # enum arrays don't seem to be possible to be autogenerated
+    [[object.function]]
+    pattern = "(get_sample_string|includes_script|matches|to_string)"
+        [[object.function.parameter]]
+        name = "language"
+        const = true
+    [[object.function]]
+    name = "from_string"
+    # This only returns NULL when passing NULL
+        [[object.function.parameter]]
+        name = "language"
+        nullable = false
+        [object.function.return]
+        nullable = false
+
+[[object]]
+name = "Pango.Layout"
+status = "generate"
+    [[object.function]]
+    name = "xy_to_index"
+        [object.function.return]
+        nullable = false
+    [[object.function]]
+    name = "set_tabs"
+        [[object.function.parameter]]
+        name = "tabs"
+        const = true
+
+[[object]]
+name = "Pango.LayoutLine"
+status = "generate"
+    [[object.function]]
+    name = "x_to_index"
+    manual = true
+    [[object.function]]
+    name = "get_x_ranges"
+    manual = true
+
+[[object]]
+name = "Pango.Matrix"
+status = "generate"
+boxed_inline = true
+    [[object.function]]
+    name = "transform_pixel_rectangle"
+    manual = true
+    [[object.function]]
+    name = "transform_rectangle"
+    manual = true
+
+[[object]]
+name = "Pango.ScriptIter"
+status = "manual"
+    [[object.function]]
+    name = "next"
+    rename = "next_range"
+
+[[object]]
+name = "Pango.TabAlign"
+status = "generate"
+    [[object.member]]
+    name = "right"
+    version = "1.50"
+    [[object.member]]
+    name = "center"
+    version = "1.50"
+    [[object.member]]
+    name = "decimal"
+    version = "1.50"
+
+[[object]]
+name = "Pango.TabArray"
+status = "generate"
+concurrency = "send+sync"
+    [[object.function]]
+    pattern = "(to_string|get_decimal_point|get_positions_in_pixels|get_size|get_tab)"
+        [[object.function.parameter]]
+        pattern = "*" # because we can't target self
+        const = true
+    [[object.function]]
+    name = "get_tabs"
+    manual = true
+    [[object.function]]
+    name = "from_string"
+        [object.function.return]
+        nullable_return_is_error = "Can't parse a TabArray"
+
+[[object]]
+name = "Pango.Variant"
+status = "generate"
+    [[object.member]]
+    name = "all_small_caps"
+    version = "1.50"
+    [[object.member]]
+    name = "petite_caps"
+    version = "1.50"
+    [[object.member]]
+    name = "all_petite_caps"
+    version = "1.50"
+    [[object.member]]
+    name = "unicase"
+    version = "1.50"
+    [[object.member]]
+    name = "title_caps"
+    version = "1.50"

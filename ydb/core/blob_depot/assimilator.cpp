@@ -134,6 +134,14 @@ namespace NKikimr::NBlobDepot {
             UpdateAssimilatorPosition();
         }
 
+        // the blobs assimilated before the restart are in the index already, so reads don't have to look for them in the
+        // group being decommitted; the state is stored with the last data it covers, so it is never ahead of the index
+        if (Self->DecommitState >= EDecommitState::BlobsFinished) {
+            Self->Data->LastAssimilatedBlobId = Max<TLogoBlobID>();
+        } else if (SkipBlobsUpTo) {
+            Self->Data->LastAssimilatedBlobId = *SkipBlobsUpTo;
+        }
+
         Become(&TThis::StateFunc);
         Action();
         UpdateBytesCopiedQ();
@@ -166,6 +174,7 @@ namespace NKikimr::NBlobDepot {
             cFunc(TEvPrivate::EvRetryAssimilate, HandleRetryAssimilate);
             cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
+            cFunc(TEvPrivate::EvRestartScanDataForCopying, RestartScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
             cFunc(TEvPrivate::EvUpdateBytesCopiedQ, UpdateBytesCopiedQ);
             cFunc(TEvents::TSystem::Poison, PassAway);
@@ -516,15 +525,23 @@ namespace NKikimr::NBlobDepot {
                 // there are some unprocessed get queries, still have to wait
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
+            } else if (std::exchange(CopyReadErrors, false)) { // some blobs couldn't be read, try them again later
+                TActivationContext::Schedule(CopyRetryBackoff.Next(), new IEventHandle(
+                    TEvPrivate::EvRestartScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
             } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
-                LastScannedKey.reset();
-                LastPlanScannedKey.reset();
-                EntriesToProcess = PlanningComplete = ActionInProgress = false;
-                LeastBlobQueue.clear();
-                Action();
+                CopyRetryBackoff.Reset();
+                RestartScanDataForCopying();
             }
             break;
         }
+    }
+
+    void TAssimilator::RestartScanDataForCopying() {
+        LastScannedKey.reset();
+        LastPlanScannedKey.reset();
+        EntriesToProcess = PlanningComplete = ActionInProgress = false;
+        LeastBlobQueue.clear();
+        Action();
     }
 
     void TAssimilator::HandleResumeScanDataForCopying() {
@@ -589,6 +606,7 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     ++Self->AsStats.BlobsReadError;
+                    CopyReadErrors = true;
                     continue;
             }
 
@@ -685,6 +703,10 @@ namespace NKikimr::NBlobDepot {
             get.BlobIds.push_back(key.GetBlobId());
             get.AssimilatedBlobs.push_back({std::move(key), TData::TAssimilatedBlobInfo::TUpdate{
                 TBlobSeqId::FromLogoBlobId(msg.Id)}});
+        } else {
+            // this copy won't ever get its blob bound to the key, the retry writes another one, so it doesn't hold
+            // garbage collection back anymore
+            Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
         }
         if (!--get.PutsPending) {
             Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
@@ -845,7 +867,7 @@ namespace NKikimr::NBlobDepot {
 
         const ui8 stateBits = (SkipBlocksUpTo ? TStateBits::Blocks : 0)
             | (SkipBarriersUpTo ? TStateBits::Barriers : 0)
-            | (SkipBlocksUpTo ? TStateBits::Blocks : 0);
+            | (SkipBlobsUpTo ? TStateBits::Blobs : 0);
 
         Save(&stream, stateBits);
 

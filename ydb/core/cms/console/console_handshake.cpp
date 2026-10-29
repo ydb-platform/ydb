@@ -21,10 +21,13 @@ public:
     TConsoleCommitActor(
             TActorId senderId,
             const TString& mainYamlConfig,
+            TActorId pipeServerId,
+            ui32 yamlVersion,
             TActorId interconnectSession,
             ui64 cookie)
         : SenderId(senderId)
         , MainYamlConfig(mainYamlConfig)
+        , CommitContext{senderId, pipeServerId, yamlVersion}
         , InterconnectSession(interconnectSession)
         , Cookie(cookie)
     {}
@@ -35,6 +38,7 @@ public:
         request->Record.SetSkipAuditLog(true);
         request->Record.MutableRequest()->set_config(MainYamlConfig);
         request->Record.MutableRequest()->set_allow_unknown_fields(true);
+        request->ConsoleCommitContext = CommitContext;
         Send(consoleId, request.release());
         Become(&TThis::StateWork);
     }
@@ -48,7 +52,9 @@ public:
 
     void Handle(TEvConsole::TEvGenericError::TPtr& ev) {
         auto response = std::make_unique<TEvBlobStorage::TEvControllerConsoleCommitResponse>();
-        response->Record.SetStatus(NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted);
+        response->Record.SetStatus(ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::ABORTED
+            ? NKikimrBlobStorage::TEvControllerConsoleCommitResponse::SessionMismatch
+            : NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted);
         response->Record.SetErrorReason(SingleLineProto(ev->Get()->Record));
         SendInReply(std::move(response));
         PassAway();
@@ -63,6 +69,7 @@ public:
 private:
     TActorId SenderId;
     TString MainYamlConfig;
+    const TEvConsole::TEvSetYamlConfigRequest::TConsoleCommitContext CommitContext;
     TActorId InterconnectSession;
     ui64 Cookie;
 
@@ -74,6 +81,15 @@ private:
         TActivationContext::Send(h.release());
     }
 };
+
+bool TConfigsManager::IsCurrentConfigSession(const TActorId& senderId, const TActorId& pipeServerId) const {
+    for (const auto& [currentSenderId, currentPipeServerId] : Self.ConfigClients) {
+        if (currentSenderId == senderId && currentPipeServerId == pipeServerId) {
+            return true;
+        }
+    }
+    return false;
+}
 
 template <typename TRequestEvent, typename TResponse>
 bool TConfigsManager::CheckSession(TEventHandle<TRequestEvent>& ev, std::unique_ptr<TResponse>& failEvent,
@@ -144,6 +160,8 @@ void TConfigsManager::Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::
     IActor* actor = new TConsoleCommitActor(
         ev->Sender,
         mainYamlConfig,
+        ev->Recipient,
+        YamlVersion,
         ev->InterconnectSession,
         ev->Cookie);
     CommitActor = Register(actor);

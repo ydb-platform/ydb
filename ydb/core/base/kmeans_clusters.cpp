@@ -462,8 +462,7 @@ public:
             return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
         }
         if (FormatByte != data.back()) {
-            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
-                << " expected " << static_cast<ui8>(FormatByte);
+            return Sprintf("Invalid vector format byte, got %02x, expected %02x", static_cast<ui8>(data.back()), FormatByte);
         }
         if (IsBitQuantized()) {
             auto actualDim = 0;

@@ -1,0 +1,5 @@
+@startuml
+Created -[#blue]-> CommandIssued: CommandScheduled
+CommandIssued --> Done: CommandRecorded
+Done --> [*]
+@enduml

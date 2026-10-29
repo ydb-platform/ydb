@@ -426,6 +426,7 @@ def dump_test(unit, kw):
         ymake.report_configure_error(e)
     if valid_kw is None:
         return None
+    valid_kw.setdefault(df.BuildFolderPath.KEY, _common.get_norm_unit_path(unit))
     string_handler = StringIO()
     for k, v in valid_kw.items():
         print(k + ': ' + (v if isinstance(v, str) else str(v, encoding='utf-8')), file=string_handler)

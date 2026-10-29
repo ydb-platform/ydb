@@ -1,4 +1,8 @@
 #include "controller_impl.h"
+#include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/service/worker.h>
+#include <ydb/library/testlib/helpers.h>
+#include <atomic>
 
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -22,6 +26,181 @@ namespace NKikimr::NReplication::NController {
 // (DataEnd not resent), and re-adopted workers that were never rebooted.
 Y_UNIT_TEST_SUITE(WorkerLifecycle) {
     using namespace NTestHelpers;
+
+    struct TTransferErrorCounters {
+        std::atomic<ui32> Starts{0};
+        std::atomic<ui32> DataErrors{0};
+        std::atomic<ui32> OtherStops{0};
+        std::atomic<ui32> StopCommands{0};
+    };
+
+    // Runtime observers do not see ordinary actor deliveries with real threads.
+    // Observe service input without changing or dropping any events.
+    class TObservedReplicationService: public TDecorator {
+    public:
+        explicit TObservedReplicationService(std::shared_ptr<TTransferErrorCounters> counters)
+            : TDecorator(THolder<IActor>(CreateReplicationService()))
+            , Counters(std::move(counters))
+        {}
+
+        bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+            if (ev->GetTypeRewrite() == TEvService::TEvRunWorker::EventType) {
+                ++Counters->Starts;
+            } else if (ev->GetTypeRewrite() == TEvService::TEvStopWorker::EventType) {
+                ++Counters->StopCommands;
+            } else if (ev->GetTypeRewrite() == NService::TEvWorker::TEvGone::EventType) {
+                const auto* gone = ev->Get<NService::TEvWorker::TEvGone>();
+                if (gone->Status == NService::TEvWorker::TEvGone::DATA_ERROR
+                    && gone->ErrorDescription.Contains("Failed to decompress topic message:")) {
+                    ++Counters->DataErrors;
+                } else {
+                    ++Counters->OtherStops;
+                }
+            }
+            return true;
+        }
+
+    private:
+        const std::shared_ptr<TTransferErrorCounters> Counters;
+    };
+
+    Y_UNIT_TEST_QUAD(BrokenCompressedTransferStopsWithIssue, Local, InternalDecompression) {
+        for (const auto codec : {NYdb::NTopic::ECodec::GZIP, NYdb::NTopic::ECodec::ZSTD}) {
+            TEnv env(TFeatureFlags().SetTransferInternalDataDecompression(InternalDecompression));
+            auto& runtime = env.GetRuntime();
+            runtime.GetAppData().TransferWriterFactory = std::make_shared<NTransfer::TTransferWriterFactory>();
+            const auto counters = std::make_shared<TTransferErrorCounters>();
+            runtime.RegisterService(MakeReplicationServiceId(runtime.GetNodeId(0)),
+                runtime.Register(new TObservedReplicationService(counters)));
+
+            NYdb::NTable::TTableClient tables(env.GetDriver());
+            auto session = tables.CreateSession().GetValueSync().GetSession();
+            auto scheme = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/sink` (partition Uint64 NOT NULL, key Uint64 NOT NULL, value Utf8, PRIMARY KEY (partition, key));
+            )").GetValueSync();
+            UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+            NYdb::NTopic::TTopicClient topics(env.GetDriver());
+            auto topic = topics.CreateTopic("/Root/topic", NYdb::NTopic::TCreateTopicSettings()
+                .BeginConfigurePartitioningSettings().MinActivePartitions(2).EndConfigurePartitioningSettings()
+                .BeginAddConsumer().ConsumerName("consumer").EndAddConsumer()).GetValueSync();
+            UNIT_ASSERT_C(topic.IsSuccess(), topic.GetIssues().ToString());
+            auto write = [&](auto data, NYdb::NTopic::ECodec codec, ui32 partition = 0) {
+                const auto producer = std::string("producer-") + std::to_string(partition);
+                auto writer = topics.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
+                    .Path("/Root/topic").ProducerId(producer).MessageGroupId(producer).PartitionId(partition).Codec(codec));
+                UNIT_ASSERT(writer->Write(std::move(data)));
+                UNIT_ASSERT(writer->Close());
+            };
+            write(std::string("good-message"), NYdb::NTopic::ECodec::RAW);
+
+            TStringBuilder options;
+            options << "CONSUMER = 'consumer', FLUSH_INTERVAL = Interval('PT1S')";
+            if (!Local) {
+                options << ", CONNECTION_STRING = 'grpc://" << env.GetEndpoint() << "/?database=/Root'";
+            }
+            scheme = session.ExecuteSchemeQuery(TStringBuilder() << R"(
+                $l = ($x) -> { RETURN [<|partition: CAST($x._partition AS Uint64), key: $x._offset, value: CAST($x._data AS Utf8)|>]; };
+                CREATE TRANSFER `/Root/broken_transfer` FROM `/Root/topic` TO `/Root/sink` USING $l
+                WITH ()" << options << ");").GetValueSync();
+            UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+            auto committedOffset = [&]() -> ui64 {
+                auto consumer = topics.DescribeConsumer("/Root/topic", "consumer",
+                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+                UNIT_ASSERT_C(consumer.IsSuccess(), consumer.GetIssues().ToString());
+                const auto& partitions = consumer.GetConsumerDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
+                for (const auto& partition : partitions) {
+                    if (partition.GetPartitionId() == 0) {
+                        UNIT_ASSERT(partition.GetPartitionConsumerStats());
+                        return partition.GetPartitionConsumerStats()->GetCommittedOffset();
+                    }
+                }
+                UNIT_FAIL("Missing partition 0");
+                return 0;
+            };
+            auto rows = [&]() -> ui64 {
+                auto result = session.ExecuteDataQuery("SELECT COUNT(*) FROM `/Root/sink`",
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto parser = result.GetResultSetParser(0);
+                UNIT_ASSERT(parser.TryNextRow());
+                return parser.ColumnParser(0).GetUint64();
+            };
+            const auto healthyDeadline = TInstant::Now() + TDuration::Seconds(60);
+            while (TInstant::Now() < healthyDeadline && (rows() != 1 || committedOffset() != 1 || counters->Starts.load() != 2)) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(committedOffset(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(counters->Starts.load(), 2);
+            write(NYdb::NTopic::TWriteMessage::CompressedMessage("baddata", codec, 12345), codec);
+
+            const auto description = env.GetDescription("/Root/broken_transfer");
+            const auto controllerId = description.GetPathDescription().GetReplicationDescription().GetControllerId();
+            auto describe = [&]() {
+                auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+                env.GetPathId("/Root/broken_transfer").ToProto(request->Record.MutablePathId());
+                auto result = env.Send<TEvController::TEvDescribeReplicationResult>(controllerId, std::move(request));
+                UNIT_ASSERT_C(result->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
+                    result->Get()->Record.ShortDebugString());
+                return result->Get()->Record;
+            };
+            const auto errorDeadline = TInstant::Now() + TDuration::Seconds(30);
+            while (TInstant::Now() < errorDeadline
+                && (!describe().GetState().HasError() || counters->StopCommands.load() == 0)) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            auto checkError = [&]() {
+                const auto state = describe();
+                UNIT_ASSERT_C(state.GetState().HasError(), state.ShortDebugString());
+                const auto issue = state.GetState().GetError().ShortDebugString();
+                UNIT_ASSERT_STRING_CONTAINS(issue, "Failed to decompress topic message");
+                UNIT_ASSERT_STRING_CONTAINS(issue, Local || InternalDecompression ? "topic=/Root/topic" : "topic=topic");
+                UNIT_ASSERT_STRING_CONTAINS(issue, "partition=0");
+                UNIT_ASSERT_STRING_CONTAINS(issue, "offset=1");
+                UNIT_ASSERT_VALUES_EQUAL(counters->DataErrors.load(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(counters->OtherStops.load(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(counters->Starts.load(), 2);
+                UNIT_ASSERT_GE(counters->StopCommands.load(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(committedOffset(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(rows(), 1);
+            };
+            checkError();
+
+            // The other partition must stop too, although its data is valid.
+            write(std::string("must-not-be-transferred"), NYdb::NTopic::ECodec::RAW, 1);
+            Sleep(TDuration::Seconds(2));
+            checkError();
+
+            const auto lookupEdge = runtime.AllocateEdgeActor();
+            auto generation = [&]() {
+                runtime.Send(new IEventHandle(MakeStateStorageProxyID(), lookupEdge,
+                    new TEvStateStorage::TEvLookup(controllerId, 0)));
+                auto info = runtime.GrabEdgeEvent<TEvStateStorage::TEvInfo>(lookupEdge);
+                return info && info->Get()->Status == NKikimrProto::OK ? info->Get()->CurrentGeneration : 0;
+            };
+            const auto beforeRestart = generation();
+            ForwardToTablet(runtime, controllerId, env.GetSender(), new TEvents::TEvPoisonPill());
+            const auto rebootDeadline = TInstant::Now() + TDuration::Seconds(30);
+            while (TInstant::Now() < rebootDeadline && generation() <= beforeRestart) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_ASSERT_GT(generation(), beforeRestart);
+            InvalidateTabletResolverCache(runtime, controllerId);
+            Sleep(TDuration::Seconds(2));
+            checkError();
+            Cerr << "KIKIMR-27525 local=" << Local << " internal=" << InternalDecompression
+                << " codec=" << static_cast<ui32>(codec) << " data_errors=" << counters->DataErrors.load()
+                << " worker_start_requests=" << counters->Starts.load()
+                << " state=Error committed_offset=1 rows=1 survives_controller_restart=1" << Endl;
+
+            scheme = session.ExecuteSchemeQuery("DROP TRANSFER `/Root/broken_transfer`;").GetValueSync();
+            UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        }
+    }
 
     struct TSetup {
         TEnv<> Env;

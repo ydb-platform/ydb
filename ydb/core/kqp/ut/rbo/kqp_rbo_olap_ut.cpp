@@ -3480,6 +3480,38 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
              << " us, new optimizer=" << newOptimizerTotal << " us" << Endl;
     }
 
+    Y_UNIT_TEST(PatternHint_ComplexLike) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/likeHint` (
+                id Int64 NOT NULL,
+                message String,
+                PRIMARY KEY (id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+        auto it = tableClient.StreamExecuteScanQuery(
+            R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%aaa%bbb%')", scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto result = CollectStreamResult(it);
+        // The new optimizer explain plan has no SsaProgram key. The hint is a binary atom on
+        // KqpOlapApply. "%aaa%bbb%" encodes as that hex; a plain String literal does not.
+        const TString ast(result.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.Contains("KqpOlapApply"), ast);
+        UNIT_ASSERT_C(ast.Contains("x\"256161612562626225\""), ast);
+        // CaseSensitive false is a quoted atom. A bare 'false is not how this printer emits it.
+        UNIT_ASSERT_C(ast.Contains("'\"false\""), ast);
+    }
+
 }
 
 // Ported from ut/olap/aggregations_ut.cpp to run with the new optimizer, which aggregates blocks with

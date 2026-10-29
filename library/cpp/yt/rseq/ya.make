@@ -15,7 +15,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yt/assert
     library/cpp/yt/misc
 )
 

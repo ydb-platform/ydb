@@ -89,6 +89,10 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
+message TFailRealmStates {
+    repeated TGroupInfo.TFailRealm.EState State = 1;
+}
+
 message TVDiskLocation {
     optional uint32 NodeID = 1;
     optional uint32 PDiskID = 2;

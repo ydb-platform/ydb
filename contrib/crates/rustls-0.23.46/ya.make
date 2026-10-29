@@ -1,0 +1,157 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(rustls)
+
+CRATE_VERSION(0.23.46)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    src/bs_debug.rs
+    src/builder.rs
+    src/check.rs
+    src/client/builder.rs
+    src/client/client_conn.rs
+    src/client/common.rs
+    src/client/ech.rs
+    src/client/handy.rs
+    src/client/hs.rs
+    src/client/test.rs
+    src/client/tls12.rs
+    src/client/tls13.rs
+    src/common_state.rs
+    src/compress.rs
+    src/conn.rs
+    src/conn/kernel.rs
+    src/conn/unbuffered.rs
+    src/crypto/aws_lc_rs/hpke.rs
+    src/crypto/aws_lc_rs/mod.rs
+    src/crypto/aws_lc_rs/pq/hybrid.rs
+    src/crypto/aws_lc_rs/pq/mlkem.rs
+    src/crypto/aws_lc_rs/pq/mod.rs
+    src/crypto/aws_lc_rs/sign.rs
+    src/crypto/aws_lc_rs/ticketer.rs
+    src/crypto/aws_lc_rs/tls12.rs
+    src/crypto/aws_lc_rs/tls13.rs
+    src/crypto/cipher.rs
+    src/crypto/hash.rs
+    src/crypto/hmac.rs
+    src/crypto/hpke.rs
+    src/crypto/mod.rs
+    src/crypto/ring/hash.rs
+    src/crypto/ring/hmac.rs
+    src/crypto/ring/kx.rs
+    src/crypto/ring/mod.rs
+    src/crypto/ring/quic.rs
+    src/crypto/ring/sign.rs
+    src/crypto/ring/ticketer.rs
+    src/crypto/ring/tls12.rs
+    src/crypto/ring/tls13.rs
+    src/crypto/signer.rs
+    src/crypto/tls12.rs
+    src/crypto/tls13.rs
+    src/enums.rs
+    src/error.rs
+    src/hash_hs.rs
+    src/key_log.rs
+    src/key_log_file.rs
+    src/limited_cache.rs
+    src/lock.rs
+    src/manual/defaults.rs
+    src/manual/features.rs
+    src/manual/fips.rs
+    src/manual/howto.rs
+    src/manual/implvulns.rs
+    src/manual/mod.rs
+    src/manual/tlsvulns.rs
+    src/msgs/alert.rs
+    src/msgs/base.rs
+    src/msgs/ccs.rs
+    src/msgs/codec.rs
+    src/msgs/deframer/buffers.rs
+    src/msgs/deframer/handshake.rs
+    src/msgs/deframer/mod.rs
+    src/msgs/enums.rs
+    src/msgs/ffdhe_groups.rs
+    src/msgs/fragmenter.rs
+    src/msgs/handshake.rs
+    src/msgs/handshake_test.rs
+    src/msgs/macros.rs
+    src/msgs/message/inbound.rs
+    src/msgs/message/mod.rs
+    src/msgs/message/outbound.rs
+    src/msgs/message_test.rs
+    src/msgs/mod.rs
+    src/msgs/persist.rs
+    src/polyfill.rs
+    src/quic.rs
+    src/rand.rs
+    src/record_layer.rs
+    src/server/builder.rs
+    src/server/common.rs
+    src/server/handy.rs
+    src/server/hs.rs
+    src/server/server_conn.rs
+    src/server/test.rs
+    src/server/tls12.rs
+    src/server/tls13.rs
+    src/stream.rs
+    src/suites.rs
+    src/test_macros.rs
+    src/ticketer.rs
+    src/time_provider.rs
+    src/tls12/mod.rs
+    src/tls13/key_schedule.rs
+    src/tls13/mod.rs
+    src/vecbuf.rs
+    src/verify.rs
+    src/verifybench.rs
+    src/versions.rs
+    src/webpki/anchors.rs
+    src/webpki/client_verifier.rs
+    src/webpki/mod.rs
+    src/webpki/server_verifier.rs
+    src/webpki/verify.rs
+    src/x509.rs
+)
+
+CRATE_INPUTS(
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-ISC
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    log
+    logging
+    ring
+    std
+    tls12
+)
+
+PEERDIR(
+    contrib/crates/log-0.4.34
+    contrib/crates/once_cell-1.21.4
+    contrib/crates/ring-0.17.14
+    contrib/crates/rustls-pki-types-1.15.1
+    contrib/crates/rustls-webpki-0.103.16
+    contrib/crates/subtle-2.6.1
+    contrib/crates/zeroize-1.9.1
+)
+
+CRATE_DEPENDENCY_ALIAS(pki_types contrib/crates/rustls-pki-types-1.15.1)
+CRATE_BUILD_SCRIPT(contrib/crates/rustls-0.23.46/build_script)
+
+LICENSE("Apache-2.0 OR ISC OR MIT")
+VERSION(0.23.46)
+ORIGINAL_SOURCE(https://static.crates.io/crates/rustls/rustls-0.23.46.crate)
+
+END()
+
+RECURSE(build_script)

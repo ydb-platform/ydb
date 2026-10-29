@@ -1,0 +1,14 @@
+diff --git a/librsvg-c/Cargo.toml b/librsvg-c/Cargo.toml
+index 54116cc..7f6209b 100644
+--- a/librsvg-c/Cargo.toml
++++ b/librsvg-c/Cargo.toml
+@@ -29,6 +29,9 @@ avif = ["librsvg/avif"]
+ capi = ["librsvg/capi"]
+ pixbuf = ["dep:gdk-pixbuf"]
+ 
++[lib]
++crate-type = [ "staticlib" ]
++
+ [package.metadata.capi]
+ min_version = "0.10.10"
+ 

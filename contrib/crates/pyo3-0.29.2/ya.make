@@ -1,0 +1,291 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(pyo3)
+
+CRATE_VERSION(0.29.2)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    src/buffer.rs
+    src/byteswriter.rs
+    src/call.rs
+    src/conversion.rs
+    src/conversions/anyhow.rs
+    src/conversions/bigdecimal.rs
+    src/conversions/bytes.rs
+    src/conversions/chrono.rs
+    src/conversions/chrono_tz.rs
+    src/conversions/either.rs
+    src/conversions/eyre.rs
+    src/conversions/hashbrown.rs
+    src/conversions/indexmap.rs
+    src/conversions/jiff.rs
+    src/conversions/mod.rs
+    src/conversions/num_bigint.rs
+    src/conversions/num_complex.rs
+    src/conversions/num_rational.rs
+    src/conversions/ordered_float.rs
+    src/conversions/rust_decimal.rs
+    src/conversions/serde.rs
+    src/conversions/smallvec.rs
+    src/conversions/std/array.rs
+    src/conversions/std/cell.rs
+    src/conversions/std/cstring.rs
+    src/conversions/std/ipaddr.rs
+    src/conversions/std/map.rs
+    src/conversions/std/mod.rs
+    src/conversions/std/num.rs
+    src/conversions/std/option.rs
+    src/conversions/std/osstr.rs
+    src/conversions/std/path.rs
+    src/conversions/std/set.rs
+    src/conversions/std/slice.rs
+    src/conversions/std/string.rs
+    src/conversions/std/time.rs
+    src/conversions/std/vec.rs
+    src/conversions/time.rs
+    src/conversions/uuid.rs
+    src/coroutine.rs
+    src/coroutine/cancel.rs
+    src/coroutine/waker.rs
+    src/err/cast_error.rs
+    src/err/err_state.rs
+    src/err/impls.rs
+    src/err/mod.rs
+    src/exceptions.rs
+    src/ffi/mod.rs
+    src/ffi/tests.rs
+    src/ffi_ptr_ext.rs
+    src/fmt.rs
+    src/impl_.rs
+    src/impl_/callback.rs
+    src/impl_/concat.rs
+    src/impl_/coroutine.rs
+    src/impl_/deprecated.rs
+    src/impl_/exceptions.rs
+    src/impl_/extract_argument.rs
+    src/impl_/freelist.rs
+    src/impl_/frompyobject.rs
+    src/impl_/introspection.rs
+    src/impl_/panic.rs
+    src/impl_/pycell.rs
+    src/impl_/pyclass.rs
+    src/impl_/pyclass/assertions.rs
+    src/impl_/pyclass/doc.rs
+    src/impl_/pyclass/lazy_type_object.rs
+    src/impl_/pyclass/probes.rs
+    src/impl_/pyclass_init.rs
+    src/impl_/pyfunction.rs
+    src/impl_/pymethods.rs
+    src/impl_/pymodule.rs
+    src/impl_/trampoline.rs
+    src/impl_/unindent.rs
+    src/impl_/wrap.rs
+    src/inspect.rs
+    src/instance.rs
+    src/internal.rs
+    src/internal/get_slot.rs
+    src/internal/macros.rs
+    src/internal/pyclass_init.rs
+    src/internal/state.rs
+    src/internal_tricks.rs
+    src/interpreter_lifecycle.rs
+    src/macros.rs
+    src/marker.rs
+    src/marshal.rs
+    src/panic.rs
+    src/platform.rs
+    src/prelude.rs
+    src/py_result_ext.rs
+    src/pybacked.rs
+    src/pycell.rs
+    src/pycell/impl_.rs
+    src/pyclass.rs
+    src/pyclass/create_type_object.rs
+    src/pyclass/gc.rs
+    src/pyclass/guard.rs
+    src/pyclass_init.rs
+    src/sealed.rs
+    src/sync.rs
+    src/sync/critical_section.rs
+    src/sync/once_lock.rs
+    src/test_utils.rs
+    src/tests/hygiene/misc.rs
+    src/tests/hygiene/mod.rs
+    src/tests/hygiene/pyclass.rs
+    src/tests/hygiene/pyfunction.rs
+    src/tests/hygiene/pymethods.rs
+    src/tests/hygiene/pymodule.rs
+    src/tests/mod.rs
+    src/type_object.rs
+    src/types/any.rs
+    src/types/boolobject.rs
+    src/types/bytearray.rs
+    src/types/bytes.rs
+    src/types/capsule.rs
+    src/types/code.rs
+    src/types/complex.rs
+    src/types/datetime.rs
+    src/types/dict.rs
+    src/types/ellipsis.rs
+    src/types/float.rs
+    src/types/frame.rs
+    src/types/frozenset.rs
+    src/types/function.rs
+    src/types/genericalias.rs
+    src/types/iterator.rs
+    src/types/list.rs
+    src/types/mapping.rs
+    src/types/mappingproxy.rs
+    src/types/memoryview.rs
+    src/types/mod.rs
+    src/types/module.rs
+    src/types/mutex.rs
+    src/types/none.rs
+    src/types/notimplemented.rs
+    src/types/num.rs
+    src/types/pysuper.rs
+    src/types/range.rs
+    src/types/sequence.rs
+    src/types/set.rs
+    src/types/slice.rs
+    src/types/string.rs
+    src/types/traceback.rs
+    src/types/tuple.rs
+    src/types/typeobject.rs
+    src/types/weakref/anyref.rs
+    src/types/weakref/mod.rs
+    src/types/weakref/proxy.rs
+    src/types/weakref/reference.rs
+    src/version.rs
+    tests/test_utils/mod.rs
+)
+
+CRATE_INPUTS(
+    ${ARCADIA_ROOT}/contrib/crates/pyo3-build-config-0.29.2/python-config.txt
+    Architecture.md
+    CHANGELOG.md
+    CITATION.cff
+    Cargo.lock
+    Code-of-Conduct.md
+    Contributing.md
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+    Releasing.md
+    assets/script.py
+    branding/favicon/pyo3_16x16.png
+    branding/favicon/pyo3_32x32.png
+    branding/pyo3logo.png
+    branding/pyo3logo.svg
+    branding/pyotr.png
+    branding/pyotr.svg
+    guide/book.toml
+    guide/glossary_linker.py
+    guide/pyclass-parameters.md
+    guide/pyo3_version.py
+    guide/src/SUMMARY.md
+    guide/src/advanced.md
+    guide/src/advanced/sharing-types.md
+    guide/src/async-await.md
+    guide/src/building-and-distribution.md
+    guide/src/building-and-distribution/multiple-python-versions.md
+    guide/src/changelog.md
+    guide/src/class.md
+    guide/src/class/call.md
+    guide/src/class/numeric.md
+    guide/src/class/object.md
+    guide/src/class/protocols.md
+    guide/src/class/thread-safety.md
+    guide/src/contributing.md
+    guide/src/conversions.md
+    guide/src/conversions/tables.md
+    guide/src/conversions/traits.md
+    guide/src/debugging.md
+    guide/src/ecosystem.md
+    guide/src/ecosystem/async-await.md
+    guide/src/ecosystem/logging.md
+    guide/src/ecosystem/tracing.md
+    guide/src/exception.md
+    guide/src/faq.md
+    guide/src/features.md
+    guide/src/free-threading.md
+    guide/src/function-calls.md
+    guide/src/function.md
+    guide/src/function/error-handling.md
+    guide/src/function/signature.md
+    guide/src/getting-started.md
+    guide/src/glossary.md
+    guide/src/index.md
+    guide/src/migration.md
+    guide/src/module.md
+    guide/src/parallelism.md
+    guide/src/performance.md
+    guide/src/python-from-rust.md
+    guide/src/python-from-rust/calling-existing-code.md
+    guide/src/python-from-rust/function-calls.md
+    guide/src/python-typing-hints.md
+    guide/src/rust-from-python.md
+    guide/src/trait-bounds.md
+    guide/src/type-stub.md
+    guide/src/types.md
+    guide/theme/tabs.css
+    guide/theme/tabs.js
+    pyo3-runtime/LICENSE-APACHE
+    pyo3-runtime/LICENSE-MIT
+    pyo3-runtime/README.md
+    pyo3-runtime/pyproject.toml
+    pyo3-runtime/src/pyo3_runtime/__init__.py
+    typos.toml
+    uv.lock
+    wasm/common.mk
+    wasm/emscripten/Makefile
+    wasm/emscripten/runner.py
+    wasm/wasi/Makefile
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    default
+    extension-module
+    macros
+    pyo3-macros
+)
+
+PEERDIR(
+    contrib/crates/libc-0.2.191
+    contrib/crates/once_cell-1.21.4
+    contrib/crates/pyo3-ffi-0.29.2
+)
+
+CRATE_BUILD_SCRIPT(contrib/crates/pyo3-0.29.2/build_script)
+
+LICENSE("MIT OR Apache-2.0")
+VERSION(0.29.2)
+ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3/pyo3-0.29.2.crate)
+
+CRATE_FEATURES(
+    anyhow
+    inventory
+    multiple-pymethods
+)
+
+PEERDIR(
+    contrib/crates/anyhow-1.0.104
+    contrib/crates/inventory-0.3.25
+)
+
+# PyO3 0.29 reads its interpreter configuration when build.rs runs.
+CRATE_ENV(PYO3_CONFIG_FILE=${ARCADIA_ROOT}/contrib/crates/pyo3-build-config-0.29.2/python-config.txt)
+
+CRATE_PROC_MACROS(
+    contrib/crates/pyo3-macros-0.29.2
+)
+
+END()
+
+RECURSE(build_script)

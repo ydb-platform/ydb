@@ -175,7 +175,7 @@ namespace {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        NTable::TLoader::TLoaderEnv env(new TPageCollection(pageCollection));
+        NTable::TLoader::TLoaderEnv env(new TPageCollection(pageCollection), part->Slots);
         env.ProvidePart(part.Get());
         TKeysLoader loader(part.Get(), &env);
 

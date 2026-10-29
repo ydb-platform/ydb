@@ -93,7 +93,6 @@ public:
             }
             if (bridgePileId) {
                 node.BridgePileId = bridgePileId;
-                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
             }
 

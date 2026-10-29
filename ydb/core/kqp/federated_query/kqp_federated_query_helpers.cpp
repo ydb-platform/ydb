@@ -13,6 +13,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -193,6 +194,9 @@ std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::
     cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
     if (config.HasMaxGrpcMessageSize()) {
         cfg.SetMaxMessageSize(config.GetMaxGrpcMessageSize());
+    } else {
+        NKikimrPQ::TPQConfig pqconfig;
+        cfg.SetMaxMessageSize(pqconfig.GetMaxMessageSizeBytes());
     }
 
     auto driver = std::make_unique<NYdb::TDriver>(cfg);

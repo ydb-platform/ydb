@@ -1345,15 +1345,6 @@ namespace NKikimr {
                     const auto *groupPile = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
                     const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
 
-                    Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
-                        << " item.GroupId# " << item.GroupId
-                        << " myGeneration# " << myGeneration
-                        << " RacingGeneration# " << msg->RacingGeneration
-                        << " Info.Generation# " << request->Info->GroupGeneration
-                        << " Type# " << TypeName<TEvent>()
-                        << " RequestId# " << request->RequestId
-                        << " ErrorReason# " << msg->ErrorReason); // too often restarts do not make sense
-
                     if (common->RestartCounter >= 100) {
                         ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
                     } else if (myGeneration < msg->RacingGeneration) {

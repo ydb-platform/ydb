@@ -147,6 +147,23 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeRouting) {
 
+    Y_UNIT_TEST(RestartLimitReturnsError) {
+        TQueuedRoutingTest test;
+        test.MakeRoutingAvailable();
+        test.RaceWithNewerPileGeneration = true;
+        auto request = std::make_unique<TEvBlobStorage::TEvGet>(TLogoBlobID(100500, 1, 1, 0, 10, 0),
+            0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+        request->RestartCounter = 99; // the next RACE exhausts this request's retry budget
+        test.Env.Runtime->Send(new IEventHandle(test.Proxy, test.Edge, request.release(), 0, 1), 1);
+        WaitUntil(test.Env, [&] { return test.Results.contains(1); }, "restart limit error",
+            TDuration::MilliSeconds(10), 100);
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(test.Results.at(1)->ErrorReason, "too many restarts");
+        test.RaceWithNewerPileGeneration = false;
+        test.SendGet(2);
+        test.CheckSuccess(2);
+    }
+
     Y_UNIT_TEST(RoutingBudgetSurvivesConfigNotifications) {
         TQueuedRoutingTest test;
         test.SendGet(1);

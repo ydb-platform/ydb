@@ -5901,8 +5901,8 @@ Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
 Y_UNIT_TEST(CreateAsyncReplicationAvailabilityPeriod) {
     for (const auto& value : {"'UNLIMITED'", "'unlimited'", "Interval('PT0.000001S')", "Interval('PT10.001S')"}) {
         const auto res = SqlToYql(TStringBuilder()
-            << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
-            << "WITH (AVAILABILITY_PERIOD = " << value << ");");
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (AVAILABILITY_PERIOD = " << value << ");");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
@@ -5918,15 +5918,15 @@ Y_UNIT_TEST(CreateAsyncReplicationAvailabilityPeriod) {
 Y_UNIT_TEST(CreateAsyncReplicationInvalidAvailabilityPeriod) {
     for (const auto& value : {"'FOREVER'", "1", "TRUE", "NULL"}) {
         const auto res = SqlToYql(TStringBuilder()
-            << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
-            << "WITH (AVAILABILITY_PERIOD = " << value << ");");
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (AVAILABILITY_PERIOD = " << value << ");");
         UNIT_ASSERT(!res.IsOk());
     }
 }
 
 Y_UNIT_TEST(CreateAsyncReplicationDuplicateAvailabilityPeriod) {
     const auto res = SqlToYql("USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
-        "WITH (AVAILABILITY_PERIOD = 'UNLIMITED', availability_period = Interval('PT1S'));");
+                              "WITH (AVAILABILITY_PERIOD = 'UNLIMITED', availability_period = Interval('PT1S'));");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate replication setting");
 }

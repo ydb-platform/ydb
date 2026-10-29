@@ -1,7 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/test_utils.h>
-
 #include <array>
 #include <bit>
 #include <chrono>
@@ -10,6 +8,7 @@
 #include <vector>
 #include <random>
 
+#include <util/system/cpu_id.h>
 #include <util/system/fs.h>
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -131,46 +130,19 @@ Y_UNIT_TEST(TestCalculateCRC32Fallback) {
     TestCalculateCRC32_Impl<NSimd::TSimdFallbackTraits>();
 }
 
+Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+    if (NX86::HaveSSE42()) {
+        TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
+    }
 }
 
-Y_CPU_UNIT_TEST_SUITE(TestHashSSE42, SSE42, {
-Y_CPU_UNIT_TEST(TestCalculateCRC32SSE42) {
-    TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
-}
-})
-
-Y_CPU_UNIT_TEST_SUITE(TestHashAVX2, AVX2, {
-Y_CPU_UNIT_TEST(TestCalculateCRC32AVX2) {
-    TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
-}
-})
-
-Y_UNIT_TEST_SUITE(TupleLayoutFallback) {
-Y_UNIT_TEST(PackNarrowRowFallback) {
-    TestPackNarrowRowWithManySmallColumns(
-        [](const std::vector<TColumnDesc>& columns) -> THolder<TTupleLayout> {
-            return MakeHolder<TTupleLayoutFallback>(columns);
-        });
-}
+Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+    if (NX86::HaveAVX2()) {
+        TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
+    }
 }
 
-Y_CPU_UNIT_TEST_SUITE(TupleLayoutSSE42, SSE42, {
-Y_CPU_UNIT_TEST(PackNarrowRowSSE42) {
-    TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
 }
-
-Y_CPU_UNIT_TEST(PackSmallRowSSE42) {
-    // Three data bytes, four hash bytes and one null-mask byte: the
-    // 8-byte row fits the SSE small-tuple path with a 16-byte register.
-    TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
-}
-})
-
-Y_CPU_UNIT_TEST_SUITE(TupleLayoutAVX2, AVX2, {
-Y_CPU_UNIT_TEST(PackNarrowRowAVX2) {
-    TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
-}
-})
 
 Y_UNIT_TEST_SUITE(TupleLayout) {
 Y_UNIT_TEST(CreateLayout) {
@@ -200,6 +172,33 @@ Y_UNIT_TEST(CreateLayout) {
 
 Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
     TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
+}
+
+Y_UNIT_TEST(PackNarrowRowFallback) {
+    TestPackNarrowRowWithManySmallColumns(
+        [](const std::vector<TColumnDesc>& columns) -> THolder<TTupleLayout> {
+            return MakeHolder<TTupleLayoutFallback>(columns);
+        });
+}
+
+Y_UNIT_TEST(PackNarrowRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
+    }
+}
+
+Y_UNIT_TEST(PackSmallRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        // Three data bytes, four hash bytes and one null-mask byte: the
+        // 8-byte row fits the SSE small-tuple path with a 16-byte register.
+        TestPackFixedColumnsRoundTrip(CreateSSE42TupleLayout, std::array<size_t, 3>{1, 1, 1}, 8);
+    }
+}
+
+Y_UNIT_TEST(PackNarrowRowAVX2) {
+    if (NX86::HaveAVX2()) {
+        TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
+    }
 }
 
 Y_UNIT_TEST(Pack) {

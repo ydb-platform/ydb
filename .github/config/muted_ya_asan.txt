@@ -103,6 +103,7 @@ ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartition
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterRetentionStorageMb
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedDlqSetDeleteAndEmptyMoveRejected
 ydb/core/persqueue/public/schema/ut SchemaOps.ConsumerReadQuotaAndAvailabilityPeriod

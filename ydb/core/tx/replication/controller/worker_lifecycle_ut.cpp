@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
     Y_UNIT_TEST(EndToEndWithDisabledAutopartitioning) {
         TSetup s(false, false);
         const auto config = s.Env.GetDescription(s.StreamPath + "/streamImpl").GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::DISABLED);
+        UNIT_ASSERT(config.GetPartitionStrategy().GetPartitionStrategyType() == NKikimrPQ::TPQTabletConfig::DISABLED);
         UNIT_ASSERT_VALUES_EQUAL(s.Partitions().size(), 1);
 
         s.Upsert(101, 200);

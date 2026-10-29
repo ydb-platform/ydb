@@ -156,6 +156,29 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
 
+    def test_cli_fetch_output_directory_and_strip_metadata(self):
+        # the fetch through the config API must honor --output-directory and --strip-metadata
+        node = self.cluster.nodes[1]
+        base = [self.configurator.get_ydb_cli_path(), '--endpoint', f'grpc://{node.host}:{node.grpc_port}',
+                'admin', 'cluster', 'config', 'fetch']
+
+        def run(args):
+            result = yatest.common.execute(base + args, check_exit_code=False, timeout=60)
+            output = (result.std_out + result.std_err).decode('utf-8', errors='replace')
+            assert result.exit_code == 0, output
+            return result.std_out.decode('utf-8', errors='replace')
+
+        with tempfile.TemporaryDirectory() as out_dir:
+            run(['--output-directory', out_dir])
+            files = os.listdir(out_dir)
+            assert files, "the fetch wrote no config to the output directory"
+            for name in files:
+                with open(os.path.join(out_dir, name)) as f:
+                    assert 'metadata' in yaml.safe_load(f), name
+
+        stripped = yaml.safe_load(run(['--strip-metadata']))
+        assert 'metadata' not in stripped, stripped
+
     @pytest.mark.parametrize("target_kind", ["root", "direct"], ids=["root", "direct-bound"])
     def test_replace_static_node_fqdn(self, target_kind):
         target_node_id = None

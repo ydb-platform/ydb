@@ -2320,23 +2320,22 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 }
 
 class TDropAsyncReplication final: public TAsyncReplication {
-    static TString GetMode(EDropAsyncReplicationMode mode) {
-        switch (mode) {
-            case EDropAsyncReplicationMode::Drop:
-                return "drop";
-            case EDropAsyncReplicationMode::DropCascade:
-                return "dropCascade";
-            case EDropAsyncReplicationMode::DropForce:
-                return "dropForce";
-            case EDropAsyncReplicationMode::DropCascadeForce:
-                return "dropCascadeForce";
+    static TString GetMode(EDropAsyncReplicationCascade cascade, EDropAsyncReplicationForce force) {
+        TString mode = "drop";
+        if (cascade == EDropAsyncReplicationCascade::Cascade) {
+            mode += "Cascade";
         }
-        Y_UNREACHABLE();
+        if (force == EDropAsyncReplicationForce::Force) {
+            mode += "Force";
+        }
+        return mode;
     }
 
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, EDropAsyncReplicationMode mode, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, GetMode(mode), context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id,
+                                   EDropAsyncReplicationCascade cascade, EDropAsyncReplicationForce force,
+                                   const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, GetMode(cascade, force), context)
     {
     }
 
@@ -2347,8 +2346,10 @@ protected:
 
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, EDropAsyncReplicationMode mode, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, mode, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id,
+                                   EDropAsyncReplicationCascade cascade, EDropAsyncReplicationForce force,
+                                   const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, cascade, force, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {

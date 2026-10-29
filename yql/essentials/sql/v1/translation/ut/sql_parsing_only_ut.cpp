@@ -6204,7 +6204,7 @@ Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'drop)"));
         }
     };
 
@@ -6224,7 +6224,7 @@ Y_UNIT_TEST(DropAsyncReplicationCascade) {
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropCascade"));
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'dropCascade)"));
         }
     };
 
@@ -6235,12 +6235,22 @@ Y_UNIT_TEST(DropAsyncReplicationCascade) {
 }
 
 Y_UNIT_TEST(DropAsyncReplicationForce) {
-    for (const auto* query : {
-            "USE plato; DROP ASYNC REPLICATION MyReplication FORCE;",
-            "USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;",
-            "USE plato; DROP ASYNC REPLICATION fOrCe FORCE;"}) {
+    for (const auto& [query, mode] : {
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication FORCE;", "dropForce"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;", "dropCascadeForce"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION fOrCe FORCE;", "dropForce"}}) {
         const auto res = SqlToYql(query);
         UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(TStringBuilder() << "('mode '" << mode << ")"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 }
 

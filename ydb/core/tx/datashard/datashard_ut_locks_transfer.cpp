@@ -304,8 +304,6 @@ Y_UNIT_TEST(WriteSeqNumsRerouteMergesAppliedAndPending) {
         UNIT_ASSERT_VALUES_EQUAL(
             result->Record.GetStatus(),
             NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        // A mixed group is not a pure duplicate: IsDuplicate is not set in the reply.
-        UNIT_ASSERT(!result->Record.GetIsDuplicate());
         // The reply reports the sum of the batch's statistics: the duplicate
         // position's original delivery (1 written row, its reply was lost) plus
         // the fresh tail op for key 2.
@@ -340,8 +338,6 @@ Y_UNIT_TEST(WriteSeqNumsRerouteMergesAppliedAndPending) {
         UNIT_ASSERT_VALUES_EQUAL(
             result->Record.GetStatus(),
             NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        // A mixed group is not a pure duplicate: IsDuplicate is not set in the reply.
-        UNIT_ASSERT(!result->Record.GetIsDuplicate());
         // The duplicate position's stored statistics are reported even when the
         // batch's own ops are empty: the writer still never saw the lost delivery.
         UNIT_ASSERT_VALUES_EQUAL(

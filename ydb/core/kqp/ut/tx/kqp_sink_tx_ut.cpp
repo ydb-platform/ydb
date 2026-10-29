@@ -642,12 +642,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-    // A resent uncommitted write may be answered twice: with the original result and,
-    // once the shard has seen it, with IsDuplicate set. DataShard does not set
-    // IsDuplicate anymore (duplicates answer with a plain completed result), so the
-    // duplicate reply is fabricated here. The test checks that KQP does not inspect
-    // the flag: the write actor drops the second reply as already acknowledged
-    // (dedup by message cookie).
+    // A resent uncommitted write may be answered twice with the same completed
+    // result. The test checks that KQP tolerates this: the write actor drops the
+    // second reply as already acknowledged (dedup by message cookie).
     class TUncommittedWriteSeqNumAnsweredTwice : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -673,7 +670,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     {
                         auto again = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
                         again->Record = record;
-                        again->Record.SetIsDuplicate(true);
                         runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
                             again.release(), 0, ev->Cookie));
                         ++answeredTwice;

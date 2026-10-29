@@ -9,6 +9,9 @@
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/library/aclib/user_context.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -23,6 +26,25 @@ static void MergeOpStats(T& dst, const T& src) {
     }
     if (src.HasBytes()) {
         dst.SetBytes(src.GetBytes() + (dst.HasBytes() ? dst.GetBytes() : 0));
+    }
+}
+
+// Merges the additive counters of src on top of dst; descriptive sizes missing
+// in dst are taken from src.
+static void MergePerShardStatsCounters(
+        NKikimrQueryStats::TPerShardStats& dst,
+        const NKikimrQueryStats::TPerShardStats& src) {
+    if (src.HasCpuTimeUsec()) {
+        dst.SetCpuTimeUsec(src.GetCpuTimeUsec() + (dst.HasCpuTimeUsec() ? dst.GetCpuTimeUsec() : 0));
+    }
+    if (src.HasOutgoingReadSetsCount()) {
+        dst.SetOutgoingReadSetsCount(src.GetOutgoingReadSetsCount() + (dst.HasOutgoingReadSetsCount() ? dst.GetOutgoingReadSetsCount() : 0));
+    }
+    if (!dst.HasProgramSize() && src.HasProgramSize()) {
+        dst.SetProgramSize(src.GetProgramSize());
+    }
+    if (!dst.HasReplySize() && src.HasReplySize()) {
+        dst.SetReplySize(src.GetReplySize());
     }
 }
 
@@ -52,29 +74,38 @@ static void MergeDuplicateTxStats(NKikimrQueryStats::TTxStats& dst, const NKikim
         }
     }
 
-    // A write delivery has at most one PerShardStats entry (for this shard); the
-    // fresh reply gets its own entry from FillExecutionStats when it is sent.
-    Y_ENSURE(src.PerShardStatsSize() <= 1);
-    if (src.PerShardStatsSize() == 1) {
-        const auto& srcShard = src.GetPerShardStats(0);
-        if (dst.PerShardStatsSize() == 0) {
-            *dst.AddPerShardStats() = srcShard;
+    // Sorts dst's per-shard entries in place and merges src's sorted entries
+    // into it from the back, so no extra copies are made: every entry is written
+    // exactly once, to its final position. Entries of the same shard add their
+    // counters up. The fresh reply gets its own entry from FillExecutionStats
+    // when it is sent.
+    std::vector<NKikimrQueryStats::TPerShardStats> srcShards(
+        src.GetPerShardStats().begin(), src.GetPerShardStats().end());
+    const auto byShardId = [](const auto& a, const auto& b) {
+        return a.GetShardId() < b.GetShardId();
+    };
+    std::sort(srcShards.begin(), srcShards.end(), byShardId);
+
+    auto* dstList = dst.MutablePerShardStats();
+    // Reserve up front so that adding the extension entries never reallocates
+    // the pointer array: the reverse iterators taken below stay valid.
+    dstList->Reserve(dstList->size() + static_cast<int>(srcShards.size()));
+    std::sort(dstList->begin(), dstList->end(), byShardId);
+    auto dstRead = dstList->rbegin();
+    const auto dstReadEnd = dstList->rend();
+    std::for_each(srcShards.cbegin(), srcShards.cend(), [dstList](const auto&) {
+        dstList->Add();
+    });
+    auto write = dstList->rbegin();
+    auto srcRead = srcShards.crbegin();
+    while (srcRead != srcShards.crend()) {
+        if (dstRead == dstReadEnd || dstRead->GetShardId() < srcRead->GetShardId()) {
+            *write++ = *srcRead++;
+        } else if (dstRead->GetShardId() > srcRead->GetShardId()) {
+            *write++ = *dstRead++;
         } else {
-            // dst already has the entry of this shard: merge the counters on top.
-            Y_ENSURE(dst.PerShardStatsSize() == 1);
-            auto* dstShard = dst.MutablePerShardStats(0);
-            if (srcShard.HasCpuTimeUsec()) {
-                dstShard->SetCpuTimeUsec(srcShard.GetCpuTimeUsec() + (dstShard->HasCpuTimeUsec() ? dstShard->GetCpuTimeUsec() : 0));
-            }
-            if (srcShard.HasOutgoingReadSetsCount()) {
-                dstShard->SetOutgoingReadSetsCount(srcShard.GetOutgoingReadSetsCount() + (dstShard->HasOutgoingReadSetsCount() ? dstShard->GetOutgoingReadSetsCount() : 0));
-            }
-            if (!dstShard->HasProgramSize() && srcShard.HasProgramSize()) {
-                dstShard->SetProgramSize(srcShard.GetProgramSize());
-            }
-            if (!dstShard->HasReplySize() && srcShard.HasReplySize()) {
-                dstShard->SetReplySize(srcShard.GetReplySize());
-            }
+            *write = *dstRead++;
+            MergePerShardStatsCounters(*write++, *srcRead++);
         }
     }
 

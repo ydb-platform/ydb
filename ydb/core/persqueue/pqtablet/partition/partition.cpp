@@ -1093,6 +1093,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionsSize();
+        PartitionCountersLabeled->GetCounters()[METRIC_REPLICATION_FINISHED] = ReplicationDataFinished;
         ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
@@ -2596,6 +2597,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     }
 
     bool haveChanges = false;
+
+    SET_METRIC(PartitionCountersLabeled, METRIC_REPLICATION_FINISHED, ReplicationDataFinished);
 
     {
         auto count = SourceIdStorage.GetInMemorySourceIds().size();

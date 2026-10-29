@@ -497,12 +497,14 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(record.GetServiceSet().GroupsSize(), 1);
                 const NKikimrBlobStorage::TGroupInfo& info = record.GetServiceSet().GetGroups(0);
                 if (info.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                    UNIT_ASSERT_VALUES_EQUAL(group.FailRealmStatesSize(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(group.FailRealmsSize(), 3);
                     for (ui32 realm = 0; realm < 3; ++realm) {
-                        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetFailRealmStates(realm)), ui32(info.GetRings(realm).GetState()));
+                        UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetFailRealms(realm).GetState()), ui32(info.GetRings(realm).GetState()));
+                        const ui32 nodeId = info.GetRings(realm).GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
+                        UNIT_ASSERT_VALUES_EQUAL(group.GetFailRealms(realm).GetDataCenter(), NodeDataCenters.at(nodeId));
                     }
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL(group.FailRealmStatesSize(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(group.FailRealmsSize(), 0);
                 }
                 result.emplace(group.GetGroupId(), record.GetServiceSet().GetGroups(0));
             }

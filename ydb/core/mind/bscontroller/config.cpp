@@ -1519,7 +1519,7 @@ namespace NKikimr::NBsController {
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
                 for (ui32 realm = 0; realm < 3; ++realm) {
-                    pb->AddFailRealmStates(group.FailRealmStates ? (*group.FailRealmStates)[realm]
+                    pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
                         : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
                 }
             }

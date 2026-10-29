@@ -8,6 +8,20 @@
 
 namespace NKikimr::NBsController {
 
+    static void UpdateFailRealmDataCenter(NKikimrBlobStorage::TBaseConfig::TGroup::TFailRealm* realm,
+            ui32 nodeId, const THostRecordMapImpl& hostRecords) {
+        NActorsInterconnect::TNodeLocation location;
+        if (hostRecords.GetHostId(nodeId)) {
+            hostRecords.GetLocation(nodeId).Serialize(&location, false);
+        }
+        if (!realm->HasDataCenter()) {
+            realm->SetDataCenter(location.GetDataCenter());
+        } else if (realm->GetDataCenter() != location.GetDataCenter()) {
+            // Once the realm has an unknown or conflicting location, keep its name empty.
+            realm->SetDataCenter("");
+        }
+    }
+
     TBlobStorageController::TStoragePoolInfo TBlobStorageController::ResolveStoragePoolForPile(
             const TBoxStoragePoolId& id, const TStoragePoolInfo& pool, TBridgePileId pileId,
             const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config) {
@@ -907,6 +921,12 @@ namespace NKikimr::NBsController {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
                     auto* group = pb->AddGroup();
                     Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    if (group->FailRealmsSize()) {
+                        for (const TVSlotInfo* slot : groupInfo.VDisksInGroup) {
+                            UpdateFailRealmDataCenter(group->MutableFailRealms(slot->RingIdx),
+                                slot->VSlotId.NodeId, *HostRecords);
+                        }
+                    }
                     if (const auto pool = pools.find(groupInfo.StoragePoolId); pool != pools.end()) {
                         group->SetStoragePoolName(pool->second.Name);
                     }
@@ -979,13 +999,19 @@ namespace NKikimr::NBsController {
                         x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(info->Type.GetErasure()));
                         if (info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
                             for (ui32 realm = 0; realm < 3; ++realm) {
-                                x->AddFailRealmStates(info->GetFailRealmState(realm));
+                                x->AddFailRealms()->SetState(info->GetFailRealmState(realm));
                             }
                         }
+                        ui32 orderNumber = 0;
                         for (TActorId actorId : info->GetDynamicInfo().ServiceIdForOrderNumber) {
                             const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(actorId);
                             const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
                             vslotId.Serialize(x->AddVSlotId());
+                            if (x->FailRealmsSize()) {
+                                UpdateFailRealmDataCenter(x->MutableFailRealms(info->GetVDiskId(orderNumber).FailRealm),
+                                    nodeId, *HostRecords);
+                            }
+                            ++orderNumber;
                         }
                         const auto& status = group.GetStatus(finder, BridgeInfo.get());
                         x->SetOperatingStatus(status.OperatingStatus);

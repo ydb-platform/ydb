@@ -1219,8 +1219,8 @@ namespace NKikimr::NBsController {
             }
             const auto existing = Self.GroupMap.find(groupId);
             const bool isNew = existing == Self.GroupMap.end();
-            const auto previous = isNew ? normal : existing->second->FailRealmStates.value_or(normal);
-            auto states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
+            const TFailRealmStates previous = isNew ? normal : existing->second->FailRealmStates.value_or(normal);
+            TFailRealmStates states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
             if (!ResetDataCenterStates && (DataCenterStates.Changed() || isNew)) {
                 std::array<bool, 3> changedRealms{};
                 std::array<bool, 3> excludedRealms{};
@@ -1234,7 +1234,7 @@ namespace NKikimr::NBsController {
                     }
                     NActorsInterconnect::TNodeLocation location;
                     HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
-                    const auto& name = location.GetDataCenter();
+                    const TString& name = location.GetDataCenter();
                     const auto isExcluded = [&name](const TDataCenterStates& states) {
                         // Missing and unlisted datacenters are included.
                         const auto it = states.find(name);

@@ -37,7 +37,7 @@ Similarly, data chunk claims are controller bookkeeping. Current allocator candi
 
 Data placement enforces the pool's common realm constraints and distinct failure domains. It uses claim ordering and placement counts to distribute selected DDisks across nodes, PDisks, and slots.
 
-PB placement follows its pool's own geometry and allocation mode. While defining the initial PB list, the allocator uses the data DDisk at the corresponding index as a co-location hint. It first tries that data DDisk's node, then preferred nodes if supplied, then other eligible nodes. The corresponding data DDisk ID is excluded from PB candidates. If all PB candidates on a node are excluded, the allocator skips that node and tries other nodes.
+PB placement follows its pool's own geometry and allocation mode. While defining the initial PB list, the allocator uses the data DDisk at the corresponding index as a co-location hint. It first tries that data DDisk's node, then preferred nodes if supplied, then other eligible nodes. On an eligible node, it prefers a PB candidate whose DDisk ID is not among the selected data DDisk IDs. If all PB candidates on that node are also used for data, it can still select one of them.
 
 Consequently, `data[k]` and `pb[k]` are positionally paired, but neither identical slot IDs nor identical node IDs are guaranteed. A flush must use the returned PB ID rather than constructing one from the data DDisk ID.
 

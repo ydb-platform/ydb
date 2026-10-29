@@ -37,14 +37,19 @@ namespace NKikimr::NStorage {
         const auto promotedPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
         if (newClusterState.PerPileStateSize() != numPiles) {
             throw TExError() << "Incorrect number of per-pile states in new config";
-        } else if (primaryPileId.GetPileIndex() >= numPiles) {
+        } else if (!primaryPileId || primaryPileId.GetPileIndex() >= numPiles) {
             throw TExError() << "Incorrect primary pile";
-        } else if (promotedPileId.GetPileIndex() >= numPiles) {
+        } else if (!promotedPileId || promotedPileId.GetPileIndex() >= numPiles) {
             throw TExError() << "Incorrect promoted pile";
         } else if (newClusterState.GetPerPileState(primaryPileId.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
             throw TExError() << "Incorrect primary pile state";
         } else if (newClusterState.GetPerPileState(promotedPileId.GetPileIndex()) != NKikimrBridge::TClusterState::SYNCHRONIZED) {
             throw TExError() << "Incorrect promoted pile state";
+        }
+        for (const auto state : newClusterState.GetPerPileState()) {
+            if (!NKikimrBridge::TClusterState::EPileState_IsValid(state)) {
+                throw TExError() << "Incorrect pile state";
+            }
         }
 
         if (Self->StorageConfig->HasClusterState()) {

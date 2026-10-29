@@ -6,6 +6,43 @@
 using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeClusterState) {
+    Y_UNIT_TEST(RejectsInvalidPileRolesAndStates) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto current = QueryStorageConfig(env).GetClusterState();
+        auto check = [&](const auto& mutate, TStringBuf expected) {
+            auto next = current;
+            next.SetGeneration(next.GetGeneration() + 1);
+            mutate(next);
+            const auto response = InvokeDistconf(env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(next);
+            });
+            UNIT_ASSERT_EQUAL_C(response.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+                response.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetClusterState().SerializeAsString(),
+                current.SerializeAsString());
+        };
+        for (ui32 role : {0u, 3u, Max<ui32>()}) {
+            check([&](auto& state) { state.SetPrimaryPile(role); }, "Incorrect primary pile");
+            check([&](auto& state) { state.SetPromotedPile(role); }, "Incorrect promoted pile");
+        }
+        check([](auto& state) {
+            state.SetPerPileState(1, static_cast<NKikimrBridge::TClusterState::EPileState>(Max<int>()));
+        }, "Incorrect pile state");
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
     Y_UNIT_TEST(DisconnectReplacesSyncStateAfterAnotherPile) {
         TEnvironmentSetup env{{
             .NodeCount = 24,

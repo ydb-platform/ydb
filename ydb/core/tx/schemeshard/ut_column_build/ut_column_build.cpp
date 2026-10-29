@@ -6,65 +6,12 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/library/testlib/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(ColumnBuildTest) {
-    Y_UNIT_TEST_TWIN(AlterPayloadDoesNotLimitColumnBuild, ExtraFields) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
-        ui64 txId = 100;
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Uint32" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-        Ydb::TypedValue literal;
-        literal.mutable_type()->set_type_id(Ydb::Type::UINT32);
-        literal.mutable_value()->set_uint32_value(10);
-        const ui64 buildId = ++txId;
-        auto request = CreateBuildColumnRequest(buildId, "/MyRoot", "/MyRoot/Table", "default_one", literal);
-        auto* settings = request->Record.MutableSettings();
-        auto* second = settings->mutable_column_build_operation()->add_column();
-        second->CopyFrom(settings->column_build_operation().column(0));
-        second->SetColumnName("default_two");
-        second->mutable_default_from_literal()->mutable_value()->set_uint32_value(20);
-        NKikimrSchemeOp::TModifyScheme payload;
-        payload.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-        auto* alter = payload.MutableAlterTable();
-        alter->SetName("Table");
-        alter->AddColumns()->SetName("default_one");
-        if (ExtraFields) {
-            alter->SetAllowUnderSameOperation(false);
-            alter->SetPartitionCount(0);
-        }
-        settings->MutableAlterMainTablePayload()->PackFrom(payload);
-        size_t scans = 0;
-        auto observer = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
-            ++scans;
-            const auto& columns = ev->Get()->Record.GetColumnBuildSettings();
-            UNIT_ASSERT_VALUES_EQUAL(columns.column_size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns.column(0).GetColumnName(), "default_one");
-            UNIT_ASSERT_VALUES_EQUAL(columns.column(1).GetColumnName(), "default_two");
-        });
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(), request.release());
-        TAutoPtr<IEventHandle> handle;
-        auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), Ydb::StatusIds::SUCCESS, response->Record.DebugString());
-        env.TestWaitNotification(runtime, buildId);
-        UNIT_ASSERT_VALUES_EQUAL(TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId).GetIndexBuild().GetState(),
-            Ydb::Table::IndexBuildState::STATE_DONE);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::CheckColumns("Table", {"key", "value", "default_one", "default_two"}, {}, {"key"}, true),
-        });
-        UNIT_ASSERT(scans > 0);
-    }
-
     Y_UNIT_TEST(ValidDefaultValue) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));

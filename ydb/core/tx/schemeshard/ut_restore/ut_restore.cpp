@@ -7618,6 +7618,98 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", isShouldSuccess ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
     }
 
+    Y_UNIT_TEST(RestoredTableDoesNotInheritAsyncReplicationOwnership) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(false);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Construct managed metadata directly: this fixture does not run a
+        // replication controller for either the original or restored table.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Original"
+            StreamDescription {
+                Name: "managed_feed"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                State: ECdcStreamStateReady
+                UserAttributes {
+                    Key: "__async_replication"
+                    Value: "{\"id\":\"1\",\"path\":\"/other/receiver/table\",\"supports_topic_autopartitioning\":false}"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto topicConfig = DescribePrivatePath(runtime, "/MyRoot/Original/managed_feed/streamImpl")
+            .GetPathDescription().GetPersQueueGroup();
+        topicConfig.ClearTotalGroupCount();
+        topicConfig.MutablePQTabletConfig()->ClearPartitionKeySchema();
+        auto* consumer = topicConfig.MutablePQTabletConfig()->AddConsumers();
+        consumer->SetName("replicationConsumer");
+        consumer->SetImportant(false);
+        ++txId;
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(
+            AlterPQGroupRequest(txId, "/MyRoot/Original/managed_feed", topicConfig.DebugString())));
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/Original" destination_prefix: "" }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "" destination_path: "/MyRoot/Restored" }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto original = DescribePath(runtime, "/MyRoot/Original");
+        const auto restored = DescribePath(runtime, "/MyRoot/Restored");
+        UNIT_ASSERT_VALUES_UNEQUAL(original.GetPathId(), restored.GetPathId());
+        for (const auto& stream : restored.GetPathDescription().GetTable().GetCdcStreams()) {
+            for (const auto& attribute : stream.GetUserAttributes()) {
+                UNIT_ASSERT_C(attribute.GetKey() != "__async_replication",
+                    "Independent S3 restore copied async replication ownership: table=/MyRoot/Restored"
+                    << " changefeed=" << stream.GetName()
+                    << " ownership=" << attribute.GetValue());
+            }
+        }
+
+        // An independent restored table must not inherit the original
+        // replication's restrictions on schema changes.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Restored"
+            Columns { Name: "extra" Type: "Uint64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST_FLAG(ChangefeedsExportRestore, EnableDataShardDirectPartImport) {
         ChangefeedsExportRestore(true, EnableDataShardDirectPartImport);
     }

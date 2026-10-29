@@ -864,6 +864,74 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         }
     }
 
+    // successful source reads must back off too when the destination has no space to allocate a copy
+    Y_UNIT_TEST(ChannelAllocationFailureBacksOff) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SetupSchemeCacheStub(env);
+
+        bool noCapacity = true;
+        ui32 spaceReports = 0;
+        std::vector<TInstant> copyReads;
+        TFilterChain chain(env);
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (noCapacity && ev->GetTypeRewrite() == TEvBlobStorage::EvStatusResult) {
+                auto *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                if (actor && TypeName(*actor).EndsWith("::TBlobDepot")) {
+                    auto& msg = *ev->Get<TEvBlobStorage::TEvStatusResult>();
+                    UNIT_ASSERT_VALUES_EQUAL(msg.Status, NKikimrProto::OK);
+                    msg.StatusFlags = NKikimrBlobStorage::StatusIsValid |
+                        NKikimrBlobStorage::StatusDiskSpaceLightYellowMove | NKikimrBlobStorage::StatusDiskSpaceYellowStop;
+                    ++spaceReports;
+                }
+            } else if (noCapacity && ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                UNIT_ASSERT_C(ev->Get<TEvBlobStorage::TEvPut>()->WriteSource != TWriteSource::BlobDepotPut,
+                    "copy should wait until a destination channel is available");
+            }
+            return true;
+        });
+        // Keep the destination assignment stable while the monitor reports that it has no capacity.
+        TEventHold& reassignHold = chain.AddHold([](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvHive::TEvReassignTabletSpace::EventType;
+        });
+        auto isCopyRead = [&](IEventHandle& ev) {
+            if (ev.GetTypeRewrite() != TEvBlobStorage::EvGetResult) {
+                return false;
+            }
+            auto *actor = env.Runtime->GetActor(ev.GetRecipientRewrite());
+            return actor && TypeName(*actor).EndsWith("::TGroupAssimilator");
+        };
+        TEventHold& readHold = chain.AddHold(isCopyRead);
+        chain.Add([&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (noCapacity && isCopyRead(*ev)) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvBlobStorage::TEvGetResult>()->Status, NKikimrProto::OK);
+                const auto now = env.Runtime->GetClock();
+                if (!copyReads.empty()) {
+                    UNIT_ASSERT_GE_C(now - copyReads.back(), TDuration::MilliSeconds(10),
+                        "source was reread immediately after channel allocation failed");
+                }
+                copyReads.push_back(now);
+            }
+            return true;
+        });
+        UNIT_ASSERT(DecommitGroup(env, groupId).GetSuccess());
+        readHold.WaitForHeld();
+        WaitUntil(env, [&] { return spaceReports != 0; }, "destination capacity report");
+        env.Sim(TDuration::MilliSeconds(1));
+        readHold.Release();
+        WaitUntil(env, [&] { return copyReads.size() >= 6; }, "copy retries after channel allocation failure");
+        UNIT_ASSERT(GetDecommitStatus(env, groupId) == NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
+
+        noCapacity = false; // the next space-monitor poll permits allocation and copying resumes
+        reassignHold.Release();
+        WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::DONE);
+        checker.CheckAll();
+    }
+
     // the copy of the decommitted group's blob into BlobDepot fails; it never gets bound to the key, and the retry writes
     // another blob, so the failed one must not hold BlobDepot garbage collection back
     Y_UNIT_TEST(FailedCopyReleasesGarbageCollection) {

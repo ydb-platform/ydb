@@ -65,10 +65,10 @@ void CheckRescheduleTimeout(bool fast) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestRuntimeFastTime) {
-    Y_UNIT_TEST(EnabledByDefaultAndCanBeDisabledPerRuntime) {
+    Y_UNIT_TEST(DisabledByDefaultAndCanBeEnabledPerRuntime) {
         TTestActorRuntimeBase runtime;
-        UNIT_ASSERT(runtime.SetFastSimulatedTime(false));
         UNIT_ASSERT(!runtime.SetFastSimulatedTime(true));
+        UNIT_ASSERT(runtime.SetFastSimulatedTime(false));
     }
 
     Y_UNIT_TEST(RescheduleExhaustsDispatchBudgetInFastMode) {

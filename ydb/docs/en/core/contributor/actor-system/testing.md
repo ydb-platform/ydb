@@ -20,7 +20,7 @@ Build and test invocation is described in [Ya Make](../build-ya.md); apply the a
 
 ## Fast simulated time
 
-`TTestActorRuntimeBase` enables fast simulated time by default. When immediate events have been processed and a timer or frozen mailbox remains, the runtime skips the real 10 ms wait before inspecting that work and advancing simulated time. It still waits when there is no such work. Real-thread runtimes and dispatch with `Quiet` retain their existing behavior.
+In this experimental branch, `TTestActorRuntimeBase` disables fast simulated time by default to compare S3 tests with injected HTTP latency against PR #56795. Tests can still enable it explicitly with `runtime.SetFastSimulatedTime(true)`. When enabled, after immediate events have been processed and a timer or frozen mailbox remains, the runtime skips the real 10 ms wait before inspecting that work and advancing simulated time. It still waits when there is no such work. Real-thread runtimes and dispatch with `Quiet` retain their existing behavior.
 
 A test that needs an external operation to complete before simulated timers run or simulated time advances can disable this optimization for its runtime. For an existing runtime named `runtime`, call the following before dispatching events, and document the external dependency in the test:
 

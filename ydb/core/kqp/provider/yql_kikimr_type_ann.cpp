@@ -521,7 +521,7 @@ namespace {
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
     {
-        if (!defaultType) {
+        if (!defaultType || IsNullLiteral(defaultExpr)) {
             return std::nullopt;
         }
 
@@ -535,19 +535,6 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Default expr " << name
                         << " is nullable or optional, but column has not null constraint."));
-                }
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
-                if (table) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Column: \"" << name
-                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
                 }
                 return IGraphTransformer::TStatus::Error;
             }
@@ -840,7 +827,8 @@ namespace {
     }
 
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
-        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
+        TCoNameValueTuple constraint, bool& needEval, bool& hasNullDefault, bool isAlter = false)
+    {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -868,11 +856,17 @@ namespace {
                 }
             }
 
-            if (columnMeta.IsDefaultKindDefined()) {
+            if (columnMeta.IsDefaultKindDefined() || hasNullDefault) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for " << columnName
                     << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
                 return false;
+            }
+
+            if (IsNullLiteral(constrValue)) {
+                hasNullDefault = true;
+                columnMeta.DefaultFromLiteral.Clear();
+                return true;
             }
 
             columnMeta.SetDefaultFromLiteral();
@@ -888,7 +882,7 @@ namespace {
                 return false;
             }
 
-            if (columnMeta.IsDefaultKindDefined()) {
+            if (columnMeta.IsDefaultKindDefined() || hasNullDefault) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for "
                     << columnName << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
@@ -907,7 +901,7 @@ namespace {
                 return false;
             }
 
-            if (columnMeta.IsDefaultKindDefined()) {
+            if (columnMeta.IsDefaultKindDefined() || hasNullDefault) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder()
                     << "Column " << columnName << " is GENERATED and can not have a Serial/DEFAULT value at the same time"));
                 return false;
@@ -1586,9 +1580,10 @@ private:
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                bool hasNullDefault = false;
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, hasNullDefault)) {
                         return TStatus::Error;
                     }
 
@@ -2327,9 +2322,10 @@ private:
                     columnMeta.Name = name;
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
+                        bool hasNullDefault = false;
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, hasNullDefault, true)) {
                                 return TStatus::Error;
                             }
 
@@ -2496,13 +2492,6 @@ private:
                         }
 
                         if (column) {
-                            if (!column->IsDefaultKindDefined()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                    << " Column: \"" << name
-                                    << "\" has no default to drop"));
-                                return TStatus::Error;
-                            }
                             if (column->IsDefaultFromSequence()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                     << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)

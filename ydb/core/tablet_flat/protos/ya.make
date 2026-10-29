@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    flat_executor.proto
     flat_table_part.proto
     flat_table_shard.proto
 )

@@ -688,13 +688,13 @@ public:
         }
 
         RebuildSharedServiceConfigs();
-
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
-        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1771,6 +1771,7 @@ public:
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
+            hFunc(TEvKqp::TEvGetVectorIndexLevelsCacheRequest, Handle)
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -2275,6 +2276,12 @@ private:
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {
         HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
+    }
+
+    void Handle(TEvKqp::TEvGetVectorIndexLevelsCacheRequest::TPtr& ev) {
+        auto result = std::make_unique<TEvKqp::TEvGetVectorIndexLevelsCacheResponse>();
+        result->CachePtr = VectorIndexLevelsCache;
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
     }
 
     void InitSharedReading() {

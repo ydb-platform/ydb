@@ -14,6 +14,10 @@ import "google/protobuf/timestamp.proto";
 
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+
+    // Also query static-node connectivity, without requiring BSC or tablets.
+    // An older node in the forwarding path may reject this optional query.
+    bool include_pile_connectivity = 2;
 }
 
 message GetClusterStateResponse {
@@ -30,6 +34,39 @@ message GetClusterStateResult {
     bool conversion_in_progress = 3;
     // Operation changing the set of piles of the cluster that is not finished yet
     optional PendingPileOperation pending_pile_operation = 4;
+    optional PileConnectivityReport pile_connectivity = 5;
+}
+
+message PileConnectivity {
+    string pile_name = 1;
+    uint32 static_nodes = 2;
+    uint32 connected_static_nodes = 3;
+
+    // Whether connected static nodes satisfy this pile's distconf node quorum.
+    // This measures node connectivity, not working disks. INACTIVE piles report false.
+    bool has_node_quorum = 4;
+
+    // Only piles in config quorum can block configuration commits. NOT_SYNCHRONIZED
+    // stage 1 is in neither quorum; stage 2 is in both quorums.
+    bool in_config_quorum = 5;
+    bool in_data_quorum = 6;
+}
+
+// A snapshot of one distconf binding component. During a partition, each side can
+// report the other as lacking quorum. This is not a vote and must not select which
+// side survives. Rebinding can temporarily report only part of a reachable pile.
+// DISCONNECTED and INACTIVE piles do not connect to other piles, so their missing
+// quorum is expected when viewed from another pile.
+message PileConnectivityReport {
+    uint32 reporter_node_id = 1;
+    bool reporter_is_root = 2;
+    bool binding_in_progress = 3;
+
+    // Reporter cluster-state generation; may differ from GetClusterStateResult.generation.
+    uint64 generation = 4;
+
+    // Names and quorum requirements come from the reporter, independently of pile_states.
+    repeated PileConnectivity piles = 5;
 }
 
 message PendingPileOperation {
@@ -50,9 +87,9 @@ message UpdateClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // List of desired pile states to update
     repeated PileState updates = 2 [(size).ge = 1];
-    // List of piles that are required to form a quorum for this update to succeed.
-    // These piles act as "witnesses" for the operation.
-    // If empty, all piles in the cluster will be used for the quorum check.
+    // Deprecated and ignored. The update is committed by the quorum of every pile that takes part in the
+    // configuration quorum in the new cluster state, that is, every pile not DISCONNECTED, SUSPENDED or INACTIVE
+    // there; to go on without an unavailable pile, set it DISCONNECTED in the same update.
     repeated string quorum_piles = 3;
 }
 
@@ -64,10 +101,14 @@ message UpdateClusterStateResult {
 }
 
 // Convert a running non-bridged cluster into a bridged one with a single pile. All nodes of the cluster must already
-// run with a single-pile bridge config. Storage groups are converted in the background after the call succeeds; see
-// GetClusterStateResult.conversion_in_progress.
+// run with a single-pile bridge config. By default, existing storage pools and their groups are converted in the
+// background after the call succeeds; see GetClusterStateResult.conversion_in_progress.
 message ConvertToBridgeRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+    // Leave existing storage pools and their groups non-bridged; they are not replicated to added piles until converted
+    // separately. Static storage groups are still converted to bridge mode. The bridge config must enable non-uniform
+    // storage, which gets activated along with the conversion.
+    bool skip_storage_pool_conversion = 2;
 }
 
 message ConvertToBridgeResponse {

@@ -12,6 +12,7 @@
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -237,18 +238,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
         Send(YdbProxy, new TEvYdbProxy::TEvListDirectoryRequest(it->second.first, {}), 0, it->first);
     }
 
-    static bool IsSystemObject(const NYdb::NScheme::TSchemeEntry& entry) {
-        if (entry.Type != NYdb::NScheme::ESchemeEntryType::Directory) {
-            return false;
-        }
-
-        return entry.Name.starts_with("~")
-            || entry.Name.starts_with(".sys")
-            || entry.Name.starts_with(".tmp")
-            || entry.Name.starts_with(".metadata")
-            || entry.Name.starts_with("export-");
-    }
-
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
@@ -270,7 +259,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 switch (child.Type) {
                 case NYdb::NScheme::ESchemeEntryType::SubDomain:
                 case NYdb::NScheme::ESchemeEntryType::Directory:
-                    if (!IsSystemObject(child)) {
+                    if (child.Type != NYdb::NScheme::ESchemeEntryType::Directory
+                        || !NNaming::IsInternalName(child.Name))
+                    {
                         ListDirectory(std::make_pair(
                             path.first  + '/' + child.Name,
                             path.second + '/' + child.Name));

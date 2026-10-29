@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package temporal.api.rules.v1;
+
+option go_package = "go.temporal.io/api/rules/v1;rules";
+option java_package = "io.temporal.api.rules.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Rules::V1";
+option csharp_namespace = "Temporalio.Api.Rules.V1";
+
+
+import "google/protobuf/timestamp.proto";
+
+message WorkflowRuleAction {
+  message ActionActivityPause {
+  }
+
+  // Supported actions.
+  oneof variant  {
+    ActionActivityPause activity_pause = 1;
+  }
+}
+
+message WorkflowRuleSpec {
+  // The id of the new workflow rule. Must be unique within the namespace.
+  // Can be set by the user, and can have business meaning.
+  string id = 1;
+
+  // Activity trigger will be triggered when an activity is about to start.
+  message ActivityStartingTrigger {
+    // Activity predicate is a SQL-like string filter parameter.
+    // It is used to match against workflow data.
+    // The following activity attributes are supported as part of the predicate:
+    // - ActivityType: An Activity Type is the mapping of a name to an Activity Definition..
+    // - ActivityId: The ID of the activity.
+    // - ActivityAttempt: The number attempts of the activity.
+    // - BackoffInterval: The current amount of time between scheduled attempts of the activity.
+    // - ActivityStatus: The status of the activity. Can be one of "Scheduled", "Started", "Paused".
+    // - TaskQueue: The name of the task queue the workflow specified that the activity should run on.
+    // Activity predicate support the following operators:
+    //  * =, !=, >, >=, <, <=
+    //  * AND, OR, ()
+    //  * BETWEEN ... AND
+    //    STARTS_WITH
+    string predicate = 1;
+  }
+
+  // Specifies how the rule should be triggered and evaluated.
+  // Currently, only "activity start" type is supported.
+  oneof trigger {
+    ActivityStartingTrigger activity_start = 2;
+  }
+
+  // Restricted Visibility query.
+  // This query is used to filter workflows in this namespace to which this rule should apply.
+  // It is applied to any running workflow each time a triggering event occurs, before the trigger predicate is evaluated.
+  // The following workflow attributes are supported:
+  // - WorkflowType
+  // - WorkflowId
+  // - StartTime
+  // - ExecutionStatus
+  string visibility_query = 3;
+
+  // WorkflowRuleAction to be taken when the rule is triggered and predicate is matched.
+  repeated WorkflowRuleAction actions = 4;
+
+  // Expiration time of the rule. After this time, the rule will be deleted.
+  // Can be empty if the rule should never expire.
+  google.protobuf.Timestamp expiration_time = 5;
+}
+
+// WorkflowRule describes a rule that can be applied to any workflow in this namespace.
+message WorkflowRule {
+  // Rule creation time.
+  google.protobuf.Timestamp create_time = 1;
+
+  // Rule specification
+  WorkflowRuleSpec spec = 2;
+
+  // Identity of the actor that created the rule
+  // (-- api-linter: core::0140::prepositions=disabled
+  //     aip.dev/not-precedent: It is better reflect the intent this way, we will also have updated_by. --)
+  // (-- api-linter: core::0142::time-field-names=disabled
+  //     aip.dev/not-precedent: Same as above. All other options sounds clumsy --)
+  string created_by_identity = 3;
+
+  // Rule description.
+  string description = 4;
+}

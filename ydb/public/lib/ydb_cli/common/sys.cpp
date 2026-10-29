@@ -1,26 +1,8 @@
 #include "sys.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <util/generic/hash_set.h>
 
 namespace NYdb::NConsoleClient {
-
-namespace {
-
-// In future should be syncronized with 'ydb/core/tx/schemeshard/schemeshard_system_names.cpp'
-const THashSet<TStringBuf> SystemReservedNames = {
-    SYSVIEWS_DIR_NAME,
-    METADATA_DIR_NAME,
-    TMP_DIR_NAME,
-    BACKUPS_DIR_NAME,
-};
-
-}
-
-bool IsSystemName(const TStringBuf name) {
-    return SystemReservedNames.contains(name)
-        || name.StartsWith("~");
-}
 
 bool IsSystemDir(const NScheme::TSchemeEntry& entry) {
     if (entry.Type == NScheme::ESchemeEntryType::Directory) {
@@ -32,6 +14,18 @@ bool IsSystemDir(const NScheme::TSchemeEntry& entry) {
 
 bool IsSystemObject(const NScheme::TSchemeEntry& entry) {
     return IsSystemDir(entry) || entry.Type == NScheme::ESchemeEntryType::SysView;
+}
+
+bool IsTemporaryDir(const NScheme::TSchemeEntry& entry) {
+    return entry.Type == NScheme::ESchemeEntryType::Directory && IsTemporaryName(entry.Name);
+}
+
+bool IsInternalDir(const NScheme::TSchemeEntry& entry) {
+    return entry.Type == NScheme::ESchemeEntryType::Directory && IsInternalName(entry.Name);
+}
+
+bool IsInternalObject(const NScheme::TSchemeEntry& entry) {
+    return IsSystemObject(entry) || IsTemporaryDir(entry);
 }
 
 }

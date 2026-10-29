@@ -44,25 +44,28 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMemTableAllocation) {
-    Y_UNIT_TEST(SmallStringsDoNotReuseAnOlderChunkTail) {
+    Y_UNIT_TEST(SmallStringsReuseAnOlderChunkTail) {
         NUtil::TMemoryPool pool(4032);
         const TString first(3 * MiB, 'a');
         const TString second(2 * MiB, 'b');
         const TString small(MiB / 2, 'c');
-        pool.Append(first.data(), first.size());
+        auto* firstData = static_cast<char*>(pool.Append(first.data(), first.size()));
         pool.Append(second.data(), second.size());
 
-        // This includes chunk headers as well as tails unavailable to normal append allocations
         const size_t unavailable = pool.Wasted() - pool.Available();
-        UNIT_ASSERT_C(unavailable > MiB, unavailable);
         const size_t capacity = pool.Total();
 
-        pool.Append(small.data(), small.size());
+        UNIT_ASSERT(pool.Append(small.data(), small.size()) == firstData + first.size());
+        const TString next(15 * MiB / 4, 'd');
+        auto* nextData = static_cast<char*>(pool.Append(next.data(), next.size()));
 
         UNIT_ASSERT_VALUES_EQUAL(pool.Total(), capacity);
         UNIT_ASSERT_VALUES_EQUAL(pool.Wasted() - pool.Available(), unavailable);
-        UNIT_ASSERT_VALUES_EQUAL(pool.Used(), first.size() + second.size() + small.size());
+        UNIT_ASSERT_VALUES_EQUAL(pool.Used(), first.size() + second.size() + small.size() + next.size());
         UNIT_ASSERT_VALUES_EQUAL(pool.Used() + pool.Wasted(), pool.Total());
+        UNIT_ASSERT(memcmp(firstData, first.data(), first.size()) == 0);
+        UNIT_ASSERT(memcmp(firstData + first.size(), small.data(), small.size()) == 0);
+        UNIT_ASSERT(memcmp(nextData, next.data(), next.size()) == 0);
         Cerr << "pool,unused_tail,used_bytes=" << pool.Used() << ",wasted_bytes=" << pool.Wasted()
              << ",available_bytes=" << pool.Available() << ",unavailable_bytes=" << unavailable << Endl;
     }

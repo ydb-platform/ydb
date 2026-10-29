@@ -26,6 +26,6 @@ struct TAggregateFunction {
 
 const TAggregateFunction& GetAggregateFunction(TStringBuf name);
 const TFunction* FindFunction(const TString& name);
-void EnumerateFunctions(const std::function<void(const TString& name, const TString& bindingName)>& callback);
+void EnumerateFunctions(const std::function<void(const TString& name, const TFunction& function)>& callback);
 
 } // namespace NYql::NSpark

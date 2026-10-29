@@ -13,4 +13,8 @@ PEERDIR(
     build/plugins/lib/nots/package_manager
 )
 
+DATA(
+    arcadia/devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml
+)
+
 END()

@@ -2,6 +2,8 @@
 #include "yaml_config_parser_impl.h"
 #include "yaml_config_helpers.h"
 
+#include <ydb/library/yaml_json/yaml_to_json.h>
+
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 
@@ -10,6 +12,35 @@
 using namespace NKikimr::NYaml;
 
 Y_UNIT_TEST_SUITE(YamlConfigParser) {
+    Y_UNIT_TEST(EmptyOverrideMessagesKeepPresence) {
+        const auto json = Yaml2Json(YAML::Load(R"(
+blob_storage_config:
+  storage_pool_pile_overrides:
+    - pile_name: [dc2, dc3]
+      all_kinds: true
+      erasure_species: block-4-2
+      geometry: {}
+      pdisk_filters: {}
+    - pile_name: [dc4]
+      all_kinds: true
+      erasure_species: block-4-2
+)"), true);
+        NKikimrConfig::TAppConfig config;
+        Parse(json, GetJsonToProtoConfig(false), config, false);
+        const auto& rules = config.GetBlobStorageConfig().GetStoragePoolPileOverrides();
+        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].PileNameSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].GetPileName(0), "dc2");
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].GetPileName(1), "dc3");
+        UNIT_ASSERT_VALUES_EQUAL(rules[1].PileNameSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rules[1].GetPileName(0), "dc4");
+        UNIT_ASSERT(rules[0].HasGeometry());
+        UNIT_ASSERT(rules[0].HasPDiskFilters());
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].GetPDiskFilters().PDiskFilterSize(), 0);
+        UNIT_ASSERT(!rules[1].HasGeometry());
+        UNIT_ASSERT(!rules[1].HasPDiskFilters());
+    }
+
     Y_UNIT_TEST(Iterate) {
         NJson::TJsonValue e1;
         e1.SetType(NJson::EJsonValueType::JSON_MAP);

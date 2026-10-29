@@ -847,8 +847,9 @@ public:
         Props.OutputIUs.reset();
     }
     bool IsDistinctAll() const { return DistinctAll; }
-    // DISTINCT and grouping-only aggregates just remove duplicate rows.
-    bool IsDeduplication() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
+    // A trivial DISTINCT: DISTINCT or a grouping-only aggregate, which just
+    // removes duplicate rows.
+    bool IsTrivialDistinct() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
     // An intermediate aggregate pushed down to column shards. It is computed by
     // the program of the column table read under it, see MatchOlapAggregate.
     bool IsPushedToOlap() const { return PushedToOlap; }
@@ -1181,6 +1182,7 @@ public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
              std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     const TUnorderedIUs& GetUniqueRawInputIUs() const override;
     virtual TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;

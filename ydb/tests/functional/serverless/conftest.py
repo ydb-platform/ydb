@@ -51,12 +51,15 @@ def ydb_hostel_db_ctx(ydb_cluster, ydb_root, encryption_key=None, timeout_second
     finally:
         logger.info("destroy ydb_hostel_db for %s", database)
 
+        # wait_tenant_up only needs one usable endpoint; another static slot
+        # may still be resolving the tenant. Stop all slots before dropping
+        # the database so they cannot resolve a deleted tenant and abort.
+        ydb_cluster.unregister_and_stop_slots(database_nodes)
+
         ydb_cluster.remove_database(
             database,
             timeout_seconds=timeout_seconds
         )
-
-        ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
 @pytest.fixture(scope='module')

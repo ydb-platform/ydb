@@ -20,7 +20,7 @@ inputs:
     description: "Test threads count"
   link_threads:
     type: string
-    default: 12
+    default: 2
     description: "link threads count"
   test_size:
     type: string
@@ -73,6 +73,24 @@ defaults:
 runs:
   using: "composite"
   steps:
+    - name: Configure runner limits
+      shell: bash
+      run: |
+        # test_tool requests 1 MiB stderr pipes. Parallel runs can exhaust the
+        # per-user pipe budget, preventing pipe growth. With a small buffer,
+        # test_tool's 100 ms polling sleep can block chatty tests on stderr writes
+        # and cause timeouts. Raise the soft budget to 8 GiB per user.
+        sysctl fs.pipe-user-pages-soft fs.pipe-user-pages-hard fs.pipe-max-size
+        pipe_soft_pages=$((8 * 1024 * 1024 * 1024 / $(getconf PAGESIZE)))
+        current_soft_pages=$(sysctl -n fs.pipe-user-pages-soft)
+        # Zero means unlimited; preserve it and any higher existing limit.
+        if (( current_soft_pages > 0 && current_soft_pages < pipe_soft_pages )); then
+          sudo -n sysctl -w "fs.pipe-user-pages-soft=$pipe_soft_pages"
+        fi
+        # Disable any preconfigured hard cap that could restrict this budget.
+        sudo -n sysctl -w fs.pipe-user-pages-hard=0
+        sysctl fs.pipe-user-pages-soft fs.pipe-user-pages-hard fs.pipe-max-size
+
     - name: Prepare folder prefix
       id: prepare_prefix
       shell: bash
@@ -190,6 +208,18 @@ runs:
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
         analytics end init --conclusion success
+        if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
+          chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
+          if [ "${GH_PROXY_USED}" = true ]; then
+            chosen_mbps="${GH_PROXY_PROXY_MBPS}"
+          fi
+          analytics track github_proxy --kind info --source ya_phase \
+            --value "$chosen_mbps" --unit "MB/s" \
+            --label "use_proxy=${GH_PROXY_USED}" \
+            --label "direct_mbps=${GH_PROXY_DIRECT_MBPS}" \
+            --label "proxy_mbps=${GH_PROXY_PROXY_MBPS}"
+          analytics flush
+        fi
 
     - name: Clean ya cache
       id: clean_ya_cache
@@ -352,7 +382,9 @@ runs:
         fi
 
         params+=(
-          --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          --stat -DCONSISTENT_DEBUG
+          # Keep chunk archives separate to avoid merging and repacking them.
+          --dont-merge-split-tests
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
         )
@@ -622,14 +654,13 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
 
-          CURRENT_REPORT="$CURRENT_REPORT" RESOURCES_JSONL="$RESOURCES_JSONL" \
+          CURRENT_REPORT="$CURRENT_REPORT" RESOURCES_JSONL="$RESOURCES_JSONL" YA_MAKE_OUT_DIR="$YA_MAKE_OUT_DIR" \
           RETRY="$RETRY" DASHBOARD_SANITIZER="$DASHBOARD_SANITIZER" \
           BRANCH_NAME="$BRANCH_NAME" ORIGINAL_HEAD="$ORIGINAL_HEAD" \
           bash .github/scripts/utils/dashboard/build_tests_dashboard.sh || true
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
-          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
           analytics end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then

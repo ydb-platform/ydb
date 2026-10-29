@@ -24,7 +24,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface/type_desc
     ydb/public/lib/scheme_types
     # temporary.
-    ydb/library/pretty_types_print/protobuf
     library/cpp/lwtrace/mon
     library/cpp/containers/absl
 )

@@ -181,7 +181,7 @@ private:
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
     bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
-    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
     void SendSchemaChangeResult(const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,

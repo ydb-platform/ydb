@@ -1,0 +1,14 @@
+Let contrib/libs/harfbuzz/src/hb-glib.h predeclare GUnicodeScript.
+
+--- a/glib/gunicode.h
++++ b/glib/gunicode.h
+@@ -435,6 +435,9 @@ typedef enum
+  * See [Unicode Standard Annex #24: Script names](http://www.unicode.org/reports/tr24/).
+  */
+ typedef enum
++#ifdef __cplusplus
++GUnicodeScript : int
++#endif
+ {                         /* ISO 15924 code */
+   G_UNICODE_SCRIPT_INVALID_CODE = -1,
+   G_UNICODE_SCRIPT_COMMON       = 0,   /* Zyyy */

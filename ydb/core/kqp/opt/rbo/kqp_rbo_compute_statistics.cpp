@@ -496,7 +496,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // If the aggregate just adds more columns to existing key columns, use original key columns
     if (DistinctAll) {
         Props.Metadata->KeyColumns = TOrderedIUs<>(outputIUs.begin(), outputIUs.end());
-    } else if (IsDeduplication()) {
+    } else if (IsTrivialDistinct()) {
         // Like DistinctAll: the whole grouping tuple is unique, even when the
         // input has no known key.
         Props.Metadata->KeyColumns = KeyColumns;
@@ -826,6 +826,23 @@ void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Cost = cost;
     } else {
         Props.Cost = std::nullopt;
+    }
+}
+
+void TOpLimit::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (!HasOffset() && GetLimitCond().IsLiteralOne()) {
+        switch(Props.Metadata->LogicalCard) {
+            case ELogicalCardinality::OneOrMore:
+            case ELogicalCardinality::One:
+                Props.Metadata->LogicalCard = ELogicalCardinality::One;
+                break;
+            case ELogicalCardinality::Zero:
+                break;
+            default:
+                Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrOne;
+                break;
+        }
     }
 }
 

@@ -129,6 +129,8 @@ public:
             }
         }
 
+        Self->LagExpiryQueue.Remove(Id);
+        Self->StoppingWorkers.erase(Id);
         Self->Workers.erase(Id);
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();

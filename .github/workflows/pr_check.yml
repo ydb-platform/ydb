@@ -7,8 +7,7 @@ on:
       - 'nbs-*'
       - 'prestable-*'
       - 'stream-nb-*'
-      - 'dev-*'
-      - 'dev/**'
+      - 'dev/**/*'
       - 'rc-*'
       - 'q-stable-*'
     types:

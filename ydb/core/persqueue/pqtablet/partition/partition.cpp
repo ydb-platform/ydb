@@ -3916,6 +3916,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         const auto oldHeadOffset = Max(BlobEncoder.NewHead.Offset, BlobEncoder.MirroredOffset);
 
         if (!t.WriteInfo->BodyKeys.empty()) {
+            BlobEncoder.NewHead.Offset = oldHeadOffset;
             bool needCompactHead =
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 

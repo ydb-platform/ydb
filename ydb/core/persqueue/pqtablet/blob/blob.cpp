@@ -758,7 +758,6 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size, TInstant timestamp, bo
         NewHead.Offset = StartOffset;
     }
 
-    StartOffset = Max(StartOffset, Offset);
     auto newKey = TKey::FromKey(oldKey, TKeyPrefix::TypeData, Partition, StartOffset);
     if (isFastWrite) {
         newKey.SetFastWrite();

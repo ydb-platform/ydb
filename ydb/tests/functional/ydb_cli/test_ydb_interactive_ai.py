@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import pexpect
+import pytest
 import re
 import sys
 import threading
@@ -2142,11 +2143,11 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self.mock_server.clear()
             child.close()
 
-    def test_list_directory_tool(self):
-        """list_directory tool: lists database root directory, returns JSON
-        with the test table, and sends correct parameters to the API."""
+    @pytest.mark.parametrize("directory", ["", "/"])
+    def test_list_directory_tool(self, directory):
+        """Empty paths list the database root; absolute '/' lists the cluster root."""
         handler, call_count = self._make_tool_handler(
-            "list_directory", {"directory": ""}, "Directory listed successfully."
+            "list_directory", {"directory": directory}, "Directory listed successfully."
         )
         self._set_handler(handler)
         child = self._spawn()
@@ -2158,15 +2159,16 @@ class _ToolTestBase(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
 
             assert call_count[0] >= 2, "Tool round-trip requires at least 2 API calls"
-            self._validate_tool_call_in_first_request("list_directory", {"directory": ""})
+            self._validate_tool_call_in_first_request("list_directory", {"directory": directory})
 
             tool_result = self._get_tool_result_content()
             parsed = json.loads(tool_result)
             assert isinstance(parsed, list), "list_directory must return a JSON array"
             names = [entry["name"] for entry in parsed]
-            assert self.tmp_path.name in names, (
-                "Expected test table '{}' in directory listing, got: {}".format(
-                    self.tmp_path.name, names
+            expected_name = self.root_dir.strip("/") if directory == "/" else self.tmp_path.name
+            assert expected_name in names, (
+                "Expected '{}' in directory listing, got: {}".format(
+                    expected_name, names
                 )
             )
 

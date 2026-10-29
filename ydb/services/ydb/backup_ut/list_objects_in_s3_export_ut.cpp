@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
             exportSettings
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/Root/Table0"})
-                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/dir1/Table1"})
+                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/Root/dir1/Table1"})
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1/dir2//Table2"});
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
             WaitOpSuccess(res);
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
             exportSettings
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!")
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/Root/Table0"})
-                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/dir1/Table1"})
+                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/Root/dir1/Table1"})
                 .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1/dir2//Table2"});
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
             WaitOpSuccess(res);

@@ -261,6 +261,7 @@ Y_UNIT_TEST_SUITE(Path) {
             NormalizePath(TString{"/Root/Db"}, TString{"account//topic"}),
             "/Root/Db/account/topic");
     }
+
 }
 
 }

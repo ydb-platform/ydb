@@ -1,3 +1,5 @@
+* Added support for database paths relative to the cluster root in the YDB CLI when the server's `EnableRelativePaths` flag is enabled. Only paths starting with `/` are absolute; slashless paths starting with the cluster name are now relative too.
+* Resource paths in the YDB CLI are relative to the database unless they start with `/`. The CLI expands relative database names against the cluster root before resolving resource paths. Existing CLI handling of `.` and `./path` is preserved. `ydb tools restore` supports relative destinations whose parent directories do not yet exist.
 * Added `--skip-storage-pool-conversion` option to `ydb admin bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
 * Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
 * Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.

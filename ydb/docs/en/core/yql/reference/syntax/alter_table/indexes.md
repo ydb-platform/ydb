@@ -57,7 +57,7 @@ You can also add a secondary index using the [table index](../../../../reference
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), only local indexes are supported via `ADD INDEX`: [bloom index](#local-bloom) and [min_max index](#local-min-max).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
 
 Features of local bloom indexes:
 

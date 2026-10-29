@@ -303,7 +303,7 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
-    TryNotifyReplicationDataFinished(ctx);
+    TryToFinishReplication(ctx);
     ctx.Send(PartitionActor, new TEvPQ::TEvMirrorerCounters(Counters));
     Counters.Cumulative().ResetCounters();
     Counters.Percentile().ResetCounters();
@@ -462,17 +462,13 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 }
 
 void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
-    if (!EndPartitionSessionEvent) {
+    if (Config.GetIsForTopicReplication() || !EndPartitionSessionEvent) {
         return;
     }
-    if (WriteRequestInFlight || !Queue.empty()) {
+    if (WriteRequestInFlight || !WriteInFlight.empty() || !Queue.empty()) {
         LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
-    if (Config.GetIsForTopicReplication() && !ReplicationDataFinished && ReadWritesInSourceTopicDisabled) {
-        ReplicationDataFinished = true;
-    }
-    TryNotifyReplicationDataFinished(ctx);
     if (!AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
         return;
     }
@@ -575,6 +571,7 @@ void TMirrorer::HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& /*ev*/, const TActo
 void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
+    TryToFinishReplication(ctx);
     TryToSplitMerge(ctx);
     TryToSendReplicationData(ctx);
 }
@@ -701,10 +698,24 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
+bool TMirrorer::IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const {
+    if (message.GetOffset() != 0) {
+        return false;
+    }
+
+    const auto& messageMeta = message.GetMessageMeta();
+    for (const auto& attribute : messageMeta->Fields) {
+        if (attribute.first == "_ydb_service_replication_message") {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
-        if (offset == 0) {
+        if (IsServiceReplicationMessage(msg)) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
                 ReadWritesInSourceTopicDisabled = replicationData.GetSourceTopicIsClosedForReadWrites();
@@ -981,15 +992,30 @@ void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorConte
     Send(SelfId(), new TEvents::TEvWakeup());
 }
 
-void TMirrorer::TryNotifyReplicationDataFinished(const TActorContext& ctx) {
-    if (!Config.GetIsForTopicReplication() || !ReplicationDataFinished || ReplicationDataPersisted) {
+void TMirrorer::TryToFinishReplication(const TActorContext& ctx) {
+    if (!Config.GetIsForTopicReplication() || !EndPartitionSessionEvent || ReplicationDataPersisted) {
         return;
     }
+    if (!ReadWritesInSourceTopicDisabled || WriteRequestInFlight || !WriteInFlight.empty() || !Queue.empty()
+        || !ReplicationDataQueue.empty() || !ReplicationDataInFlight.empty()) {
+        return;
+    }
+    ReplicationDataFinished = true;
     if (LastReplicationDataNotification != TInstant::Zero()
         && ctx.Now() - LastReplicationDataNotification < REPLICATION_FINISHED_RETRY_INTERVAL) {
         return;
     }
-    ctx.Send(PartitionActor, new TEvPQ::TEvPartitionReplicationFinished(Partition), 0, ReplicationDataNotificationCookie);
+    auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(Partition);
+    if (!EndPartitionSessionEvent->GetChildPartitionIds().empty()) {
+        auto* participants = event->Record.MutableParticipatingPartitions();
+        for (const auto child : EndPartitionSessionEvent->GetChildPartitionIds()) {
+            participants->AddChildPartitionIds(child);
+        }
+        for (const auto adjacent : EndPartitionSessionEvent->GetAdjacentPartitionIds()) {
+            participants->AddAdjacentPartitionIds(adjacent);
+        }
+    }
+    ctx.Send(PartitionActor, event.Release(), 0, ReplicationDataNotificationCookie);
     LastReplicationDataNotification = ctx.Now();
 }
 

@@ -422,6 +422,7 @@ private:
 
     bool ReadOnlyLocal;
     bool BatchingSupported = false;
+    bool SupportsReplicationMessages = false;
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;

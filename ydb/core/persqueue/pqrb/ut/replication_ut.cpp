@@ -1,6 +1,7 @@
 #include "pqrb_ut_common.h"
 
 #include <ydb/core/persqueue/pqrb/topic_configuration_replicator.h>
+#include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -108,6 +109,72 @@ Y_UNIT_TEST(RequestReplicationConfigurationOnlyAfterAllPartitionsFinish) {
     SendBalancerUpdate(tc, update);
     checkProgress();
     UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 3);
+    tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST(CombinedCompletionWaitsForSplitAndChildren) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+    PQTabletPrepare({}, {}, tc);
+    TBalancerUpdate update{
+        .Partitions = {{0, {tc.TabletId, 1}}},
+        .Strategy = NKikimrPQ::TPQTabletConfig::CAN_SPLIT,
+        .ReplicationStatus = NKikimrPQ::ReplicationData,
+        .DatabasePath = "/Root",
+    };
+    SendBalancerUpdate(tc, update);
+    WaitBalancerReady(tc);
+
+    TProposeCapture proxy;
+    InstallProposeCapture(tc, proxy);
+    TVector<THolder<IEventHandle>> proposals;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType) {
+            proposals.emplace_back(ev.Release());
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    auto checkProgress = [&] {
+        ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, new TEvents::TEvWakeup(12));
+        tc.Runtime->SimulateSleep(TDuration::MilliSeconds(200));
+    };
+    auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(0);
+    event->Record.MutableParticipatingPartitions()->AddChildPartitionIds(1);
+    event->Record.MutableParticipatingPartitions()->AddChildPartitionIds(2);
+    ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge, event.Release());
+    checkProgress();
+    UNIT_ASSERT(proposals.empty()); // The split is queued until the database is known.
+    NotifyDatabasePath(tc);
+    checkProgress();
+    // The parent is finished, but the only proposal must be the split.
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
+    const auto& split = proposals.front()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record
+        .GetTransaction().GetModifyScheme().GetAlterPersQueueGroup();
+    UNIT_ASSERT_VALUES_EQUAL(split.SplitSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(split.GetSplit(0).ChildPartitionIdsSize(), 2);
+    UNIT_ASSERT(!split.GetPQTabletConfig().HasReplicationStatus());
+
+    // The new config may arrive before the scale request reports completion.
+    update.Partitions.push_back({1, {tc.TabletId, 2}});
+    update.Partitions.push_back({2, {tc.TabletId, 3}});
+    update.ChildPartitionIds[0] = {1, 2};
+    update.ParentPartitionIds[1] = {0};
+    update.ParentPartitionIds[2] = {0};
+    SendBalancerUpdate(tc, update);
+    SendFinished(tc, 1, 2);
+    SendFinished(tc, 2, 3);
+    checkProgress();
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 1);
+
+    ForwardToTablet(*tc.Runtime, tc.BalancerTabletId, tc.Edge,
+        new TPartitionScaleRequest::TEvPartitionScaleRequestDone(
+            TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete));
+    checkProgress();
+    UNIT_ASSERT_VALUES_EQUAL(proposals.size(), 2);
+    UNIT_ASSERT(proposals.back()->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction()
+        .GetModifyScheme().GetAlterPersQueueGroup().GetPQTabletConfig().GetReplicationStatus() == NKikimrPQ::ReplicationConfiguration);
     tc.Runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 

@@ -109,6 +109,8 @@ private:
 
     TString GetCurrentState() const;
 
+    bool IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
@@ -128,7 +130,7 @@ public:
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext& ctx);
-    void TryNotifyReplicationDataFinished(const TActorContext& ctx);
+    void TryToFinishReplication(const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);

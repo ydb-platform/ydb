@@ -290,6 +290,19 @@ TReadSessionEvent::TDataReceivedEvent MakeDataEvent(
     return TReadSessionEvent::TDataReceivedEvent({}, std::move(compressedMessages), partition);
 }
 
+TReadSessionEvent::TDataReceivedEvent MakeReplicationDataEvent(
+    const TIntrusivePtr<TMockPartitionSession>& partition, bool sourceClosed, ui64 consumerOffset)
+{
+    NKikimrPQ::TReplicationDataPayload payload;
+    payload.SetSourceTopicIsClosedForReadWrites(sourceClosed);
+    (*payload.MutableOffsetsByConsumers())["consumer"] = consumerOffset;
+    auto message = MakeCompressed(partition, 0, payload.SerializeAsString());
+    message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
+    std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+    messages.push_back(std::move(message));
+    return TReadSessionEvent::TDataReceivedEvent({}, std::move(messages), partition);
+}
+
 THolder<TEvPersQueue::TEvResponse> MakeWriteResponse(
     ui64 offset,
     ui64 cookie,
@@ -354,6 +367,7 @@ struct TMirrorerEnv {
     std::vector<THolder<TEvPersQueue::TEvRequest>> CapturedRequests;
     std::vector<THolder<TEvPQ::TEvPartitionScaleStatusChanged>> CapturedScale;
     std::vector<THolder<TEvPQ::TEvPartitionReplicationFinished>> CapturedReplicationFinished;
+    std::vector<THolder<TEvPQ::TEvReplicationData>> CapturedReplicationData;
     ui64 ReplicationFinishedCookie = 0;
     ui32 ErrorCount = 0;
     ui32 CounterEventCount = 0;
@@ -392,6 +406,10 @@ struct TMirrorerEnv {
         Partition = Runtime.AllocateEdgeActor();
 
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvReplicationData::EventType) {
+                CapturedReplicationData.emplace_back(ev->Release<TEvPQ::TEvReplicationData>());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
             if (ev->Recipient == Partition && ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType) {
                 ReplicationFinishedCookie = ev->Cookie;
                 CapturedReplicationFinished.emplace_back(ev->Release<TEvPQ::TEvPartitionReplicationFinished>());
@@ -503,6 +521,16 @@ struct TMirrorerEnv {
         Runtime.Send(new IEventHandle(
             Mirrorer, sender, new TEvPQ::TEvPartitionReplicationFinishedAck(partitionId), 0, cookie
         ), 0, true);
+        Dispatch();
+    }
+
+    void PushReplicationData(bool sourceClosed = true, ui64 consumerOffset = 0) {
+        Factory.Session(0).PushEvent(MakeReplicationDataEvent(Factory.Session(0).Partition, sourceClosed, consumerOffset));
+        Dispatch();
+    }
+
+    void AckReplicationData() {
+        Runtime.Send(new IEventHandle(Mirrorer, Partition, new TEvPQ::TEvReplicationDataAck()), 0, true);
         Dispatch();
     }
 
@@ -754,6 +782,8 @@ Y_UNIT_TEST(ReplicationFinishedWaitsForWrites) {
     TMirrorerEnv env({.EnableSplitMerge = false, .IsForTopicReplication = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 10);
+    env.PushReplicationData();
+    env.AckReplicationData();
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
     env.Dispatch();
     UNIT_ASSERT(env.FindRequest(1));
@@ -780,6 +810,8 @@ Y_UNIT_TEST(ReplicationFinishedIsSentToPartition) {
     TMirrorerEnv env({.EnableSplitMerge = false, .IsForTopicReplication = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 0);
+    env.PushReplicationData();
+    env.AckReplicationData();
     env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
         env.Factory.Session(0).Partition, {}, {}
     ));
@@ -792,20 +824,28 @@ Y_UNIT_TEST(ReplicationFinishedRetriesUntilPersistedAck) {
     TMirrorerEnv env({.IsForTopicReplication = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 0);
+    env.PushReplicationData();
+    env.AckReplicationData();
     env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
         env.Factory.Session(0).Partition, {}, {1, 2}
     ));
     env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedScale.size(), 1u);
+    UNIT_ASSERT(env.CapturedScale.empty());
+    const auto& participants = env.CapturedReplicationFinished.back()->Record.GetParticipatingPartitions();
+    UNIT_ASSERT_VALUES_EQUAL(participants.ChildPartitionIdsSize(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(participants.GetChildPartitionIds(0), 1);
+    UNIT_ASSERT_VALUES_EQUAL(participants.GetChildPartitionIds(1), 2);
 
-    // Retry must work even after TryToSplitMerge has cleared EndPartitionSessionEvent.
+    // Retries carry both completion and the prescribed split.
     env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 2u);
     env.AckReplicationFinished(env.Partition, env.PartitionId + 1, env.ReplicationFinishedCookie);
     env.AckReplicationFinished(env.Partition, env.PartitionId, env.ReplicationFinishedCookie + 1);
     env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.back()->Record.GetParticipatingPartitions().SerializeAsString(),
+        participants.SerializeAsString());
 
     env.AckReplicationFinished(env.Partition, env.PartitionId, env.ReplicationFinishedCookie);
     env.Advance(TDuration::Seconds(6));
@@ -816,6 +856,8 @@ Y_UNIT_TEST(ReplicationFinishedIgnoresAckFromOtherActor) {
     TMirrorerEnv env({.EnableSplitMerge = false, .IsForTopicReplication = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 0, 0);
+    env.PushReplicationData();
+    env.AckReplicationData();
     env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
         env.Factory.Session(0).Partition, {}, {}
     ));
@@ -829,6 +871,79 @@ Y_UNIT_TEST(ReplicationFinishedIgnoresAckFromOtherActor) {
     env.AckReplicationFinished(env.Partition, env.PartitionId, env.ReplicationFinishedCookie);
     env.Advance(TDuration::Seconds(6));
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 2u);
+}
+
+Y_UNIT_TEST(ReplicationFinishedWaitsForSourceClosedAndPersistedOffsets) {
+    TMirrorerEnv env({.IsForTopicReplication = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 0);
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
+        env.Factory.Session(0).Partition, {}, {1, 2}
+    ));
+    env.Dispatch();
+    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
+    UNIT_ASSERT(env.CapturedScale.empty());
+
+    env.PushReplicationData(false, 5);
+    env.AckReplicationData();
+    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
+    UNIT_ASSERT(env.CapturedScale.empty());
+
+    env.PushReplicationData(true, 7);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetOffsetsByConsumers().at("consumer"), 7u);
+    env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Runtime.AllocateEdgeActor(), new TEvPQ::TEvReplicationDataAck()), 0, true);
+    env.Advance(TDuration::Seconds(6));
+    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
+    UNIT_ASSERT(env.CapturedScale.empty());
+
+    env.AckReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
+    UNIT_ASSERT(env.CapturedScale.empty());
+    UNIT_ASSERT(env.CapturedRequests.empty());
+}
+
+Y_UNIT_TEST(ReplicationFinishedWaitsForEndPartitionSession) {
+    TMirrorerEnv env({.IsForTopicReplication = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 0);
+    env.PushReplicationData();
+    env.AckReplicationData();
+    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
+    UNIT_ASSERT(env.CapturedScale.empty());
+
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
+        env.Factory.Session(0).Partition, {}, {1, 2}
+    ));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
+    UNIT_ASSERT(env.CapturedScale.empty());
+}
+
+Y_UNIT_TEST(ReplicationFinishedWaitsForQueuedReplicationData) {
+    TMirrorerEnv env({.IsForTopicReplication = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 0);
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TEndPartitionSessionEvent(
+        env.Factory.Session(0).Partition, {}, {1, 2}
+    ));
+    env.PushReplicationData(true, 7);
+    env.PushReplicationData(true, 9);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    env.Advance(TDuration::Seconds(6));
+    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
+    UNIT_ASSERT(env.CapturedScale.empty());
+
+    env.AckReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->Data.front().GetOffsetsByConsumers().at("consumer"), 9u);
+    env.Advance(TDuration::Seconds(6));
+    UNIT_ASSERT(env.CapturedReplicationFinished.empty());
+    UNIT_ASSERT(env.CapturedScale.empty());
+
+    env.AckReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationFinished.size(), 1u);
+    UNIT_ASSERT(env.CapturedScale.empty());
 }
 
 Y_UNIT_TEST(RegularMirrorDoesNotSendReplicationFinished) {

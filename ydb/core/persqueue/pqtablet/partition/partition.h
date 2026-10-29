@@ -1047,6 +1047,7 @@ private:
     std::optional<ui64> ReplicationFinishedMirrorerCookie;
     ui64 ReplicationFinishedForwardCookie = 0;
     bool ReplicationDataFinished = false; // Committed in the partition's KV metadata.
+    TMaybe<NKikimrPQ::TPartitionScaleParticipants> ReplicationDataFinishedParticipants;
     bool ReplicationDataFinishedPending = false;
     bool ReplicationDataFinishedWriteInProgress = false;
     std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;

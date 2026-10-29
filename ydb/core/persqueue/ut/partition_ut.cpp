@@ -59,6 +59,7 @@ struct TCreatePartitionParams {
     TVector<TCreateConsumerParams> ExtraDiskConsumers;
     TInstant EndWriteTimestamp;
     bool ReplicationDataFinished = false;
+    TVector<ui32> ReplicationFinishedChildren;
     bool FillHead = false;
     // Meta has [Begin, End) but data range returns NODATA (issue #49507).
     bool NoDataKeys = false;
@@ -203,6 +204,7 @@ protected:
         TMaybe<ui64> MetaStartOffset;
         TMaybe<ui64> MetaEndOffset;
         TMaybe<bool> ReplicationDataFinished;
+        TMaybe<TVector<ui32>> ReplicationFinishedChildren;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
         THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
@@ -320,7 +322,8 @@ protected:
     void WaitDiskStatusRequest();
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
     void WaitMetaReadRequest();
-    void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp, bool replicationDataFinished = false);
+    void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp,
+        bool replicationDataFinished = false, const TVector<ui32>& replicationFinishedChildren = {});
     void WaitBlobReadRequest();
     void SendBlobReadResponse(ui64 begin, ui64 end);
     void WaitInfoRangeRequest();
@@ -531,7 +534,8 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendDiskStatusResponse();
 
         WaitMetaReadRequest();
-        SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp, params.ReplicationDataFinished);
+        SendMetaReadResponse(params.Begin, params.End, params.PlanStep, params.TxId, params.EndWriteTimestamp,
+            params.ReplicationDataFinished, params.ReplicationFinishedChildren);
 
         WaitInfoRangeRequest();
         {
@@ -668,6 +672,10 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             if (matcher.ReplicationDataFinished.Defined()) {
                 UNIT_ASSERT_VALUES_EQUAL(*matcher.ReplicationDataFinished, meta.GetReplicationDataFinished());
             }
+            if (matcher.ReplicationFinishedChildren) {
+                const auto& children = meta.GetReplicationDataFinishedParticipants().GetChildPartitionIds();
+                UNIT_ASSERT_VALUES_EQUAL(TVector<ui32>(children.begin(), children.end()), *matcher.ReplicationFinishedChildren);
+            }
             metaFound = true;
             break;
         }
@@ -760,7 +768,8 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
         }
     }
 
-    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined() || matcher.ReplicationDataFinished.Defined()) {
+    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined() || matcher.ReplicationDataFinished.Defined()
+        || matcher.ReplicationFinishedChildren.Defined()) {
         UNIT_ASSERT(metaFound);
     }
 }
@@ -957,7 +966,8 @@ void TPartitionFixture::WaitMetaReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 2);
 }
 
-void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp, bool replicationDataFinished)
+void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp,
+    bool replicationDataFinished, const TVector<ui32>& replicationFinishedChildren)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -974,6 +984,9 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
         meta.SetEndOffset(end);
         meta.SetEndWriteTimestamp(endWriteTimestamp.MilliSeconds());
         meta.SetReplicationDataFinished(replicationDataFinished);
+        for (const auto child : replicationFinishedChildren) {
+            meta.MutableReplicationDataFinishedParticipants()->AddChildPartitionIds(child);
+        }
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
@@ -3211,6 +3224,10 @@ Y_UNIT_TEST_F(ReplicationFinishedRoutesThroughPartition, TPartitionFixture)
         if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType
             && (ev->Recipient == balancer || ev->Recipient == restartedBalancer)) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvPQ::TEvPartitionReplicationFinished>()->Record.GetPartitionId(), 0);
+            const auto& children = ev->Get<TEvPQ::TEvPartitionReplicationFinished>()->Record.GetParticipatingPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(children.ChildPartitionIdsSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(children.GetChildPartitionIds(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(children.GetChildPartitionIds(1), 2);
             notifications.push_back({ev->Sender, ev->Recipient, ev->Cookie});
             return TTestActorRuntimeBase::EEventAction::DROP;
         }
@@ -3223,7 +3240,10 @@ Y_UNIT_TEST_F(ReplicationFinishedRoutesThroughPartition, TPartitionFixture)
     });
     auto drain = [&] { Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100)); };
     auto notify = [&](ui64 cookie) {
-        Ctx->Runtime->Send(new IEventHandle(ActorId, mirrorer, new TEvPQ::TEvPartitionReplicationFinished(0), 0, cookie), 0, true);
+        auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(0);
+        event->Record.MutableParticipatingPartitions()->AddChildPartitionIds(1);
+        event->Record.MutableParticipatingPartitions()->AddChildPartitionIds(2);
+        Ctx->Runtime->Send(new IEventHandle(ActorId, mirrorer, event.Release(), 0, cookie), 0, true);
         drain();
     };
     Config.SetVersion(2);
@@ -3238,7 +3258,7 @@ Y_UNIT_TEST_F(ReplicationFinishedRoutesThroughPartition, TPartitionFixture)
     SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(balancer));
     drain();
     notify(41);
-    WaitCmdWrite({.ReplicationDataFinished = true});
+    WaitCmdWrite({.ReplicationDataFinished = true, .ReplicationFinishedChildren = TVector<ui32>{1, 2}});
     notify(41); // A retry while KV is in flight must not be acknowledged early.
     UNIT_ASSERT(notifications.empty());
     UNIT_ASSERT(acknowledgements.empty());
@@ -3268,7 +3288,8 @@ Y_UNIT_TEST_F(ReplicationFinishedRestoredFromMeta, TPartitionFixture)
 {
     const TConfigParams initialConfig{.Version = 1};
     CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10, .Config = initialConfig,
-        .EndWriteTimestamp = TInstant::MilliSeconds(1), .ReplicationDataFinished = true, .FillHead = true}, initialConfig);
+        .EndWriteTimestamp = TInstant::MilliSeconds(1), .ReplicationDataFinished = true,
+        .ReplicationFinishedChildren = {1, 2}, .FillHead = true}, initialConfig);
     const auto balancer = Ctx->Runtime->AllocateEdgeActor();
     size_t notifications = 0;
     Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -3278,6 +3299,10 @@ Y_UNIT_TEST_F(ReplicationFinishedRestoredFromMeta, TPartitionFixture)
         }
         if (ev->GetTypeRewrite() == TEvPQ::TEvPartitionReplicationFinished::EventType && ev->Recipient == balancer) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvPQ::TEvPartitionReplicationFinished>()->Record.GetPartitionId(), 0);
+            const auto& children = ev->Get<TEvPQ::TEvPartitionReplicationFinished>()->Record.GetParticipatingPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(children.ChildPartitionIdsSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(children.GetChildPartitionIds(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(children.GetChildPartitionIds(1), 2);
             ++notifications;
             return TTestActorRuntimeBase::EEventAction::DROP;
         }
@@ -3286,7 +3311,7 @@ Y_UNIT_TEST_F(ReplicationFinishedRestoredFromMeta, TPartitionFixture)
     Config.SetVersion(2);
     Config.MutablePartitionConfig()->MutableMirrorFrom()->SetIsForTopicReplication(true);
     SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    WaitCmdWrite({.ReplicationDataFinished = true}); // Subsequent meta writes preserve the flag.
+    WaitCmdWrite({.ReplicationDataFinished = true, .ReplicationFinishedChildren = TVector<ui32>{1, 2}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitPartitionConfigChanged();
     SendEvent(new TEvPQ::TEvReadBalancerActorIdChanged(balancer));

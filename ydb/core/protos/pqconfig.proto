@@ -33,6 +33,7 @@ message TPartitionMeta {
     optional uint64 FirstUncompactedOffset = 6; //deprecated
     optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
     optional bool ReplicationDataFinished = 8 [default = false];
+    optional TPartitionScaleParticipants ReplicationDataFinishedParticipants = 9;
 }
 
 message TPartitionTxMeta {

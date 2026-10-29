@@ -761,6 +761,9 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
     meta.SetReplicationDataFinished(ReplicationDataFinished || ReplicationDataFinishedWriteInProgress);
+    if (meta.GetReplicationDataFinished() && ReplicationDataFinishedParticipants) {
+        meta.MutableReplicationDataFinishedParticipants()->CopyFrom(*ReplicationDataFinishedParticipants);
+    }
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -5265,6 +5268,10 @@ void TPartition::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const 
         || ev->Get()->Record.GetPartitionId() != Partition.InternalPartitionId) {
         return;
     }
+    if (ev->Get()->Record.HasParticipatingPartitions() && !ReplicationDataFinishedParticipants) {
+        ReplicationDataFinishedParticipants = ev->Get()->Record.GetParticipatingPartitions();
+        ReplicationDataFinished = false;
+    }
     if (!ReplicationFinishedMirrorerCookie || *ReplicationFinishedMirrorerCookie != ev->Cookie) {
         ReplicationFinishedMirrorerCookie = ev->Cookie;
         ++ReplicationFinishedForwardCookie;
@@ -5291,8 +5298,11 @@ void TPartition::ForwardReplicationFinished(const TActorContext& ctx) {
         ReplicationFinishedMirrorerCookie.reset();
     }
     if (ReadBalancerActorId && Config.GetPartitionConfig().GetMirrorFrom().GetIsForTopicReplication()) {
-        ctx.Send(ReadBalancerActorId, new TEvPQ::TEvPartitionReplicationFinished(Partition.OriginalPartitionId),
-            0, ReplicationFinishedForwardCookie);
+        auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(Partition.OriginalPartitionId);
+        if (ReplicationDataFinishedParticipants) {
+            event->Record.MutableParticipatingPartitions()->CopyFrom(*ReplicationDataFinishedParticipants);
+        }
+        ctx.Send(ReadBalancerActorId, event.Release(), 0, ReplicationFinishedForwardCookie);
     }
 }
 

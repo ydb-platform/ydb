@@ -243,7 +243,8 @@ void TPersQueueReadBalancer::CheckReplicationDataFinished(const TActorContext& c
         }
     }
     LOG_D("Checked partition replication progress", {"all_partitions_synced", allPartitionsSynced});
-    if (allPartitionsSynced && WaitingResponse.empty()) {
+    if (allPartitionsSynced && WaitingResponse.empty()
+        && (!PartitionsScaleManager || !PartitionsScaleManager->HasPendingScaleRequests())) {
         RequestReplicationStatus(NKikimrPQ::ReplicationConfiguration, ctx);
     }
     ScheduleWaitingReplicationData(ctx);
@@ -1027,18 +1028,15 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr
     if (!Inited || !record.HasPartitionId() || !PartitionsInfo.contains(record.GetPartitionId())) {
         return;
     }
-    PartitionsInfo.at(record.GetPartitionId()).ReplicationDataFinished = true;
-
-    bool allPartitionsFinished = true;
-    for (const auto& [partition, info] : PartitionsInfo) {
-        if (!info.ReplicationDataFinished) {
-            allPartitionsFinished = false;
-            break;
+    if (record.HasParticipatingPartitions()) {
+        if (!SplitMergeEnabled(TabletConfig) || !PartitionsScaleManager) {
+            return;
         }
+        PartitionsScaleManager->HandleScaleStatusChange(record.GetPartitionId(), NKikimrPQ::EScaleStatus::NEED_SPLIT,
+            MakeMaybe(record.GetParticipatingPartitions()), Nothing(), ctx);
     }
-    if (allPartitionsFinished) {
-        RequestReplicationStatus(NKikimrPQ::ReplicationConfiguration, ctx);
-    }
+    PartitionsInfo.at(record.GetPartitionId()).ReplicationDataFinished = true;
+    CheckReplicationDataFinished(ctx);
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {

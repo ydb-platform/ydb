@@ -118,7 +118,7 @@ message TGroupInfo {
             F = 3; // Failure.
             R = 4; // Recovery.
         }
-        optional EState RealmState = 2 [default = Invariant0];
+        optional EState State = 2 [default = Invariant0];
         message TFailDomain {
             repeated TVDiskLocation VDiskLocations = 1;
         }

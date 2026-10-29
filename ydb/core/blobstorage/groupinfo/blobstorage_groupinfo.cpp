@@ -739,7 +739,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
-        dyn.FailRealmStates.push_back(realm.GetRealmState());
+        dyn.FailRealmStates.push_back(realm.GetState());
         TBlobStorageGroupInfo::TFailRealm& bsFailRealm = topology.FailRealms[ringIdx];
         bsFailRealm.FailDomains.resize(realm.FailDomainsSize());
         for (ui32 domainIdx = 0; domainIdx < realm.FailDomainsSize(); ++domainIdx) {

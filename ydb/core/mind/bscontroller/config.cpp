@@ -1634,7 +1634,7 @@ namespace NKikimr::NBsController {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
                         if (groupInfo.FailRealmStates) {
-                            realm->SetRealmState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
                         }
                         domain = nullptr;
                     }

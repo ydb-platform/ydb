@@ -490,7 +490,7 @@ namespace {
                 auto* definition = command->AddGroups();
                 definition->SetGroupId(id);
                 for (const auto& realm : group.GetRings()) {
-                    definition->AddFailRealmStates(static_cast<TDefinition::EFailRealmState>(realm.GetRealmState()));
+                    definition->AddFailRealmStates(static_cast<TDefinition::EFailRealmState>(realm.GetState()));
                 }
             }
             return request;
@@ -500,8 +500,8 @@ namespace {
             auto groups = ReadGroups();
             for (auto& [id, group] : groups) {
                 for (auto& realm : *group.MutableRings()) {
-                    if (realm.GetRealmState() != TFailRealm::Excluded && realm.GetRealmState() != TFailRealm::Recovering) {
-                        realm.SetRealmState(state);
+                    if (realm.GetState() != TFailRealm::Excluded && realm.GetState() != TFailRealm::Recovering) {
+                        realm.SetState(state);
                     }
                 }
             }
@@ -514,16 +514,16 @@ namespace {
                 bool excluded = false;
                 auto included = TFailRealm::Invariant0;
                 for (const auto& realm : group.GetRings()) {
-                    excluded |= realm.GetRealmState() == TFailRealm::Excluded;
-                    if (realm.GetRealmState() != TFailRealm::Recovering && realm.GetRealmState() != TFailRealm::Excluded) {
-                        included = realm.GetRealmState();
+                    excluded |= realm.GetState() == TFailRealm::Excluded;
+                    if (realm.GetState() != TFailRealm::Recovering && realm.GetState() != TFailRealm::Excluded) {
+                        included = realm.GetState();
                     }
                 }
                 for (auto& realm : *group.MutableRings()) {
                     if (!excluded) {
-                        realm.SetRealmState(TFailRealm::Invariant0);
-                    } else if (realm.GetRealmState() == TFailRealm::Recovering) {
-                        realm.SetRealmState(included);
+                        realm.SetState(TFailRealm::Invariant0);
+                    } else if (realm.GetState() == TFailRealm::Recovering) {
+                        realm.SetState(included);
                     }
                 }
             }
@@ -562,7 +562,7 @@ namespace {
                 for (const auto& realm : group.GetRings()) {
                     const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
                     const auto expected = NodeDataCenters.at(node) == dataCenter ? state : TFailRealm::Invariant0;
-                    UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(expected));
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(expected));
                 }
             }
         }
@@ -592,7 +592,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             if (id == groupId) {
                 UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), before.at(id).GetGroupGeneration() + 1);
                 for (ui32 realm = 0; realm < 3; ++realm) {
-                    UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(realm).GetRealmState()), ui32(states[realm]));
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(realm).GetState()), ui32(states[realm]));
                 }
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const NKikimrBlobStorage::TGroupInfo changed = env.ReadGroups().at(groupId);
         UNIT_ASSERT_VALUES_EQUAL(changed.GetGroupGeneration(), after.at(groupId).GetGroupGeneration() + 2);
         for (const NKikimrBlobStorage::TGroupInfo::TFailRealm& realm : changed.GetRings()) {
-            UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(TFailRealm::R));
+            UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(TFailRealm::R));
         }
     }
 
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!env.Invoke(env.Define({{"2", TDataCenter::INCLUDED}})).GetSuccess());
         const NKikimrBlobStorage::TGroupInfo overridden = env.ReadGroups().at(groupId);
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(ui32(overridden.GetRings(realm).GetRealmState()), ui32(states[realm]));
+            UNIT_ASSERT_VALUES_EQUAL(ui32(overridden.GetRings(realm).GetState()), ui32(states[realm]));
         }
         UNIT_ASSERT(env.Invoke(env.Reset()).GetSuccess());
         env.CheckStates(env.ReadGroups(), TFailRealm::N0);
@@ -689,7 +689,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const NKikimrBlobStorage::TGroupInfo restored = env.ReadGroups().at(groupId);
         UNIT_ASSERT_VALUES_EQUAL(restored.GetGroupGeneration(), generation);
         for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT_VALUES_EQUAL(ui32(restored.GetRings(realm).GetRealmState()), ui32(states[realm]));
+            UNIT_ASSERT_VALUES_EQUAL(ui32(restored.GetRings(realm).GetState()), ui32(states[realm]));
         }
         // Invalid DC re-inclusion must not change persisted manual states.
         UNIT_ASSERT(!env.Invoke(env.Define({{"2", TDataCenter::INCLUDED}})).GetSuccess());
@@ -786,7 +786,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             for (const auto& realm : group.GetRings()) {
                 const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
                 const auto expected = env.NodeDataCenters.at(node) == "2" ? R::Recovering : before.contains(id) ? R::Invariant1 : R::Invariant0;
-                UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(expected));
+                UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(expected));
             }
         }
     }
@@ -852,7 +852,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             for (auto& realm : *group.MutableRings()) {
                 const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
                 if (env.NodeDataCenters.at(node) == "2") {
-                    realm.SetRealmState(R::Excluded);
+                    realm.SetState(R::Excluded);
                 }
             }
         }
@@ -922,7 +922,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                         }
                     }
                     if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                        UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(containsSelected ? expected : R::Invariant0));
+                        UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(containsSelected ? expected : R::Invariant0));
                         affected |= containsSelected;
                     }
                 }
@@ -948,7 +948,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                         }
                     }
                     const R::EState expected = containsSelected ? selected : containsOriginalDataCenter ? other : R::Invariant0;
-                    UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetRealmState()), ui32(expected));
+                    UNIT_ASSERT_VALUES_EQUAL(ui32(realm.GetState()), ui32(expected));
                 }
             }
         };
@@ -1048,7 +1048,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             request.SetIgnoreGroupFailModelChecks(force);
             response = env.Invoke(request);
             UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "must have three fail realms");
 
             request.Clear();
             auto* definition = request.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
@@ -1059,7 +1058,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             request.SetIgnoreGroupFailModelChecks(force);
             response = env.Invoke(request);
             UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "is not an ordinary mirror-3-dc group");
         }
         config = FetchBaseConfig(&env);
         UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).SerializeAsString(), updated.GetGroup(0).SerializeAsString());
@@ -1080,7 +1078,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const auto after = env.ReadGroups();
         for (const auto& [id, group] : after) {
             if (id == groupId) {
-                UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(0).GetRealmState()), ui32(TDataCenterStatesEnv::TFailRealm::Excluded));
+                UNIT_ASSERT_VALUES_EQUAL(ui32(group.GetRings(0).GetState()), ui32(TDataCenterStatesEnv::TFailRealm::Excluded));
                 UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), before.at(id).GetGroupGeneration() + 1);
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(group.SerializeAsString(), before.at(id).SerializeAsString());

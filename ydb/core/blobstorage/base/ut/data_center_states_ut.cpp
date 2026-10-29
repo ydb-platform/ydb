@@ -1,4 +1,7 @@
 #include <ydb/core/blobstorage/base/data_center_states.h>
+#include <ydb/core/protos/blobstorage.pb.h>
+
+#include <google/protobuf/text_format.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 
@@ -40,6 +43,28 @@ TEST(DataCenterStates, ParseValidateAndRoundTrip) {
     command.MutableDataCenter(0)->SetState(DC::INCLUDED);
     command.MutableDataCenter(0)->SetName("");
     EXPECT_FALSE(ParseDataCenterStates(command).has_value());
+}
+
+TEST(FailRealmStates, LegacyNodeWardenCacheTextFormat) {
+    NKikimrBlobStorage::TNodeWardenCache cache;
+    ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(R"(
+        ServiceSet {
+            Groups {
+                Rings { State: N0 }
+                Rings { State: N1 }
+                Rings { State: N2 }
+                Rings { State: F }
+                Rings { State: R }
+                Rings {}
+            }
+        }
+    )", &cache));
+    const auto& group = cache.GetServiceSet().GetGroups(0);
+    const R::EState expected[] = {R::Invariant0, R::Invariant1, R::Invariant2, R::Excluded, R::Recovering, R::Invariant0};
+    ASSERT_EQ(group.RingsSize(), std::size(expected));
+    for (ui32 realm = 0; realm < std::size(expected); ++realm) {
+        EXPECT_EQ(group.GetRings(realm).GetState(), expected[realm]);
+    }
 }
 
 TEST(FailRealmStates, Rfc190TransitionTable) {

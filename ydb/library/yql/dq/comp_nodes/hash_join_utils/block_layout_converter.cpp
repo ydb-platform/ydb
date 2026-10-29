@@ -638,13 +638,8 @@ struct TColumnDataExtractorTraits {
 
     constexpr static bool PassType = true;
 
-    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, const NYql::NUdf::TType* type, arrow::MemoryPool* pool) {
-        Y_UNUSED(pgBuilder);
-        if (desc.PassByValue) {
-            return std::make_unique<TFixedSize<ui64, true>>(type, pool);
-        } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>(type, pool);
-        }
+    static TResult::TPtr MakePg(const NUdf::TPgTypeDescription&, const NUdf::IPgBuilder*, const NYql::NUdf::TType*, arrow::MemoryPool*) {
+        MKQL_ENSURE(false, "PG types are not supported in block hash join");
     }
 
     template <bool IsNull>

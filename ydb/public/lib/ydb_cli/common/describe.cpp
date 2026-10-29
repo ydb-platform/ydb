@@ -1027,6 +1027,22 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
 
     PrintConnectionParams(connParams, Out);
 
+    Out << Endl << "Availability period: ";
+    switch (desc.GetAvailabilityPeriodKind()) {
+    case NReplication::TReplicationDescription::EAvailabilityPeriodKind::Unknown:
+        Out << "unknown";
+        break;
+    case NReplication::TReplicationDescription::EAvailabilityPeriodKind::Finite:
+        Out << *desc.GetAvailabilityPeriod();
+        break;
+    case NReplication::TReplicationDescription::EAvailabilityPeriodKind::Unlimited:
+        Out << "UNLIMITED";
+        break;
+    case NReplication::TReplicationDescription::EAvailabilityPeriodKind::Invalid:
+        Out << "invalid";
+        break;
+    }
+
     Out << Endl << "Consistency level: " << desc.GetConsistencyLevel();
     switch (desc.GetConsistencyLevel()) {
     case NReplication::TReplicationDescription::EConsistencyLevel::Row:

@@ -558,7 +558,7 @@ public:
                 break;
             }
             const auto dispatched = DispatchFront(unweighted->second, sourceLimit - RequestedObjects.size(), std::nullopt, requestedAddresses, now);
-            if (dispatched.PutBack || (dispatched.NewAddresses == 0 && unweighted->second.empty())) {
+            if (dispatched.PutBack) {
                 break;
             }
         }

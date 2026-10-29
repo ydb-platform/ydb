@@ -153,12 +153,13 @@ private:
     }
 
     bool DoIsAborted() const override {
-        return false;
+        return Aborted;
     }
 
 public:
     bool Ready = false;
     bool HasErrors = false;
+    bool Aborted = false;
 };
 
 template <bool Evict>
@@ -198,12 +199,14 @@ public:
         Processor = CurrentProcessor<Evict>;
     }
 
-    std::shared_ptr<TCallback<Evict>> Add(const ui64 source, const EConsumer consumer, const std::vector<ui64>& ids, const ui64 owner = 1) {
+    std::shared_ptr<TCallback<Evict>> Add(const ui64 source, const EConsumer consumer, const std::vector<ui64>& ids, const ui64 owner = 1,
+        const bool aborted = false) {
         THashSet<TAddress> addresses;
         for (const ui64 id : ids) {
             addresses.insert(TAddress{ source, id, owner });
         }
         auto callback = std::make_shared<TCallback<Evict>>();
+        callback->Aborted = aborted;
         std::shared_ptr<NKikimr::NGeneralCache::NPublic::ICallback<TPolicy<Evict>>> base = callback;
         Manager->AddRequest(std::make_shared<TRequest>(std::move(addresses), std::move(base), consumer, TMonotonic::Now()));
         return callback;
@@ -359,6 +362,24 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         harness.Finish(harness.Processor->Asks.at(1));
         UNIT_ASSERT(scan->Ready);
         UNIT_ASSERT(compaction->Ready);
+    }
+
+    Y_UNIT_TEST(AbortedHigherUnweightedDoesNotStallLower) {
+        NGeneralCacheUt::THarness<false> harness(1, { { "SCAN", 1, 0 }, { "COMPACTION", 0, 0 } });
+        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 });
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1 }, 1);
+
+        auto aborted = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 2 }, 1, true);
+        auto compaction = harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 10 });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
+        UNIT_ASSERT(!aborted->Ready);
+        UNIT_ASSERT(!compaction->Ready);
+
+        harness.Finish(harness.Processor->Asks.at(0));
+        UNIT_ASSERT(scan->Ready);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(1).Ids(), { 10 }, 1);
+        UNIT_ASSERT(!aborted->Ready);
     }
 
     Y_UNIT_TEST(StaleSourceCookieDoesNotTouchTheNewSource) {

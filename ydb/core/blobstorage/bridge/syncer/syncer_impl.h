@@ -22,9 +22,12 @@ namespace NKikimr::NBridge {
         bool Finished = false;
         ui32 Step = 0;
         std::deque<TLogoBlobID> RestoreQueue;
-        // blobs being restored having Keep flag in the source group, as assimilation (reading every VDisk) tells; the read
-        // of the blob may come from VDisks not knowing the flag yet, while the target group has got the barriers already
-        THashSet<TLogoBlobID> SourceKeepFlags;
+        struct TSourceBlobFlags {
+            bool Keep = false;
+            bool DoNotKeep = false;
+        };
+        // Preserve both flags observed by assimilation: the later data read may use VDisks that do not know them yet.
+        THashMap<TLogoBlobID, TSourceBlobFlags> SourceBlobFlags;
         TReplQuoter::TPtr SyncRateQuoter;
         const TBlobStorageGroupType SourceGroupType;
 
@@ -92,6 +95,7 @@ namespace NKikimr::NBridge {
         static constexpr ui32 MaxDataPerIndexQuery = 10_MB;
 
         void ProcessRestoreQueue();
+        TSourceBlobFlags TakeSourceBlobFlags(const TLogoBlobID& id);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Per-group assimilation status

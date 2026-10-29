@@ -198,7 +198,7 @@ namespace NKikimr::NBridge {
                     break;
 
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    if (sourceItem && sourceItem->DoNotKeep && targetItem && !targetItem->DoNotKeep) {
+                    if (sourceItem && sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
                         doNotKeepToIssue.push_back(blobId);
                     } else if (!sourceItem && targetItem && targetItem->Keep && !targetItem->DoNotKeep) {
                         // The source scan may predate a concurrent Put followed by Keep, which reaches the target
@@ -216,8 +216,11 @@ namespace NKikimr::NBridge {
                         break;
                     }
                     RestoreQueue.push_back(blobId);
-                    if (sourceItem->Keep) {
-                        SourceKeepFlags.insert(blobId);
+                    if (sourceItem->Keep || sourceItem->DoNotKeep) {
+                        SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
+                    }
+                    if (sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
+                        doNotKeepToIssue.push_back(blobId);
                     }
                     SyncerDataStats->BytesTotal += blobId.BlobSize();
                     ++SyncerDataStats->BlobsTotal;
@@ -493,7 +496,7 @@ namespace NKikimr::NBridge {
             }
         } else if (msg.GroupId == SourceGroupId.GetRawId()) { // it was a data query for copying
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
-                const bool sourceKeep = SourceKeepFlags.erase(msg.Responses[i].Id);
+                const auto sourceFlags = TakeSourceBlobFlags(msg.Responses[i].Id);
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // rewrite this blob with keep flag, if set; DataKind is deliberately left at
                     // USER -- it is a per-request admission hint that is never stored with the blob,
@@ -506,7 +509,7 @@ namespace NKikimr::NBridge {
                         .HandleClass = NKikimrBlobStorage::TabletLog,
                         .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                         .WriteSource = TWriteSource::SyncerMergePut,
-                        .IssueKeepFlag = r.Keep || sourceKeep,
+                        .IssueKeepFlag = (r.Keep || sourceFlags.Keep) && !(r.DoNotKeep || sourceFlags.DoNotKeep),
                         .IgnoreBlock = true,
                     }));
                 } else if (r.Status == NKikimrProto::NODATA) {
@@ -529,7 +532,8 @@ namespace NKikimr::NBridge {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
                     // the blob has been written since then without it, as the bridge proxy restoring it may do
-                    if (SourceKeepFlags.erase(r.Id) && !r.Keep) {
+                    const auto sourceFlags = TakeSourceBlobFlags(r.Id);
+                    if (sourceFlags.Keep && !sourceFlags.DoNotKeep && !r.Keep && !r.DoNotKeep) {
                         if (!keep) {
                             keep = std::make_unique<TVector<TLogoBlobID>>();
                         }
@@ -543,7 +547,7 @@ namespace NKikimr::NBridge {
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
                         NKikimrBlobStorage::FastRead), {}, quoterBytes);
                 } else if (r.Status == NKikimrProto::ERROR) {
-                    SourceKeepFlags.erase(r.Id);
+                    SourceBlobFlags.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";
@@ -566,6 +570,15 @@ namespace NKikimr::NBridge {
             (ErrorReason, errorReason));
         OnQueryFinished(ev->Cookie, !errorReason);
         CheckIfDone();
+    }
+
+    TSyncerActor::TSourceBlobFlags TSyncerActor::TakeSourceBlobFlags(const TLogoBlobID& id) {
+        if (const auto it = SourceBlobFlags.find(id); it != SourceBlobFlags.end()) {
+            const auto flags = it->second;
+            SourceBlobFlags.erase(it);
+            return flags;
+        }
+        return {};
     }
 
     TSyncerActor::TQueryPayload TSyncerActor::OnQueryFinished(ui64 cookie, bool success) {

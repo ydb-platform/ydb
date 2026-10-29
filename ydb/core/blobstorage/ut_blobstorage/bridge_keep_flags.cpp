@@ -88,6 +88,57 @@ namespace {
     }
 
     enum class ERepairRead { Get, Range, Discover };
+    void CheckSyncerCopiesDoNotKeep(bool dropReadFlag) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto pileGroups = GetPileGroups(env, groupId);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+        const TString data = "blob whose Keep has been released";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        PutToPileGroup(env, pileGroups[0], 1, id, data, true);
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, 0, false, 0, 0,
+            nullptr, new TVector<TLogoBlobID>{id}, TInstant::Max(), false), {}, groupId);
+
+        ui32 numDropped = 0;
+        if (dropReadFlag) {
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev->HasEvent()) {
+                    auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                    IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                    if (msg->GroupId == pileGroups[0] && actor && TypeName(*actor).Contains("TSyncerActor")) {
+                        for (ui32 i = 0; i < msg->ResponseSz; ++i) {
+                            auto& r = msg->Responses[i];
+                            if (r.Id == id && r.Status == NKikimrProto::OK && r.DoNotKeep) {
+                                r.DoNotKeep = false;
+                                ++numDropped;
+                            }
+                        }
+                    }
+                }
+                return true;
+            };
+        }
+        RejoinPile(env, 1);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(!dropReadFlag || numDropped, "the source read must exercise stale GC metadata");
+
+        // Copying the body must not reintroduce effective Keep, even if the data read missed DoNotKeep.
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, pileGroups[1], 9, id, data), NKikimrProto::OK);
+        const TLogoBlobID probe(100500, 1, 2, 0, data.size(), 0);
+        for (ui32 pile : {0, 1}) {
+            PutToPileGroup(env, pileGroups[pile], 1 + 8 * pile, probe, data);
+        }
+        CollectGarbage(env, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 1, 0, true, 1, 10,
+            nullptr, nullptr, TInstant::Max(), false), {}, groupId);
+        for (ui32 pile : {0, 1}) {
+            WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, probe, data);
+            WaitForBarrierInEffect(env, pileGroups[pile], 1 + 8 * pile, id, data);
+        }
+    }
 
     void CheckSyncerCollectsObsoleteKeptBlob(std::optional<NKikimrProto::EReplyStatus> confirmationError = {},
             bool threePiles = false) {
@@ -428,6 +479,14 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
 
     Y_UNIT_TEST_TWIN(GetMergeKeepsFlagsOnErrorReplacement, reverseOrder) {
         CheckGetMergeKeepsFlags(NKikimrProto::ERROR, reverseOrder);
+    }
+
+    Y_UNIT_TEST(SyncerCopiesDoNotKeepToMissingTarget) {
+        CheckSyncerCopiesDoNotKeep(false);
+    }
+
+    Y_UNIT_TEST(SyncerKeepsDoNotKeepFromAssimilation) {
+        CheckSyncerCopiesDoNotKeep(true);
     }
 
     Y_UNIT_TEST(SyncerCollectsObsoleteKeptBlob) {

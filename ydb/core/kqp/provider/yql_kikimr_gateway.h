@@ -25,6 +25,7 @@
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
@@ -1312,6 +1313,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
+    TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {

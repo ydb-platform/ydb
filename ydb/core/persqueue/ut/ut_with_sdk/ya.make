@@ -1,4 +1,4 @@
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:4)
 UNITTEST_FOR(ydb/core/persqueue)
 
 ADDINCL(

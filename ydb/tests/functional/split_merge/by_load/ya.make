@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

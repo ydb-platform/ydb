@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/fq/libs/row_dispatcher)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)

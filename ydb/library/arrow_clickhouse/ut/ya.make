@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/library/arrow_clickhouse)
 
 FORK_SUBTESTS()

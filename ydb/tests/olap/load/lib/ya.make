@@ -30,6 +30,7 @@ PY3_LIBRARY()
 
     )
 
+REQUIREMENTS(cpu:2)
     PEERDIR (
         contrib/python/allure-pytest
         contrib/python/allure-python-commons

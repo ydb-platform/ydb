@@ -1,4 +1,4 @@
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:3)
 UNITTEST_FOR(ydb/core/tx/tiering)
 
 FORK_SUBTESTS()

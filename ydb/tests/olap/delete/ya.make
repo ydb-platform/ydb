@@ -9,7 +9,7 @@ PY3TEST()
         test_delete_all_after_inserts.py
     )
 
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:2)
     IF (SANITIZER_TYPE)
         SIZE(LARGE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

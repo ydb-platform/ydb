@@ -15,7 +15,7 @@ IF (SANITIZER_TYPE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ENDIF()
 ELSE()
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:6)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

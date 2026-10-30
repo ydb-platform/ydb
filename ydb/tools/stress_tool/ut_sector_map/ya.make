@@ -1,4 +1,4 @@
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:6)
 UNITTEST_FOR(ydb/tools/stress_tool/lib)
 
 SIZE(MEDIUM)

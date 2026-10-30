@@ -62,6 +62,7 @@ PY_SRCS(
     dstool_cmd_cluster_list.py
 )
 
+REQUIREMENTS(cpu:2)
 PEERDIR(
     contrib/python/PyYAML
     ydb/apps/dstool/protos

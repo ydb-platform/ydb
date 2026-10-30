@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 PY3_PROGRAM(local_cluster)
 
 PY_SRCS(

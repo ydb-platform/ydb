@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/library/yql/dq/comp_nodes/hash_join_utils)
 
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)

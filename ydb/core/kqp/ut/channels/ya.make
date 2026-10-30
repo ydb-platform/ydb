@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/library/yql/dq/runtime)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:3)
 
 SRCS(
     dq_channel_failure_ut.cpp

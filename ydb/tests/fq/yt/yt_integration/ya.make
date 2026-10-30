@@ -1,6 +1,7 @@
 # Integration tests for QYT with local YT in Docker.
 # Uses docker-compose to spin up a YT cluster for each test run.
 
+REQUIREMENTS(cpu:2)
 PY3TEST()
 
 STYLE_PYTHON()

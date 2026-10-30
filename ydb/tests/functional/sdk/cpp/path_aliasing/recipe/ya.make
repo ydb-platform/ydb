@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 PY3_PROGRAM(path_aliasing_recipe)
 
 PY_SRCS(__main__.py)

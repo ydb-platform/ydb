@@ -45,6 +45,7 @@ PY_SRCS(
     web.py
 )
 
+REQUIREMENTS(cpu:2)
 PEERDIR(
     library/python/resource
     contrib/python/grpcio

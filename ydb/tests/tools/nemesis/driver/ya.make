@@ -1,4 +1,5 @@
 SUBSCRIBER(g:kikimr)
+REQUIREMENTS(cpu:2)
 PY3_PROGRAM(nemesis)
 
 PY_SRCS(

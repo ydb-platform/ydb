@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:3)
 UNITTEST_FOR(ydb/services/ydb)
 
 IF (SANITIZER_TYPE == "thread")

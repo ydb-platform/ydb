@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 PY3_PROGRAM(kqprun_recipe)
 
 STYLE_PYTHON()

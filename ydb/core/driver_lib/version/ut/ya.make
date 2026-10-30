@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/driver_lib/version)
 
 SRCS(version_ut.cpp)

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/kqp)
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:3)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

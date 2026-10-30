@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 PY3_PROGRAM(pile_promotion_workload)
 
 PY_SRCS(

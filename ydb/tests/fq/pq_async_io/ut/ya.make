@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/library/yql/providers/pq/async_io)
 
 SIZE(MEDIUM)

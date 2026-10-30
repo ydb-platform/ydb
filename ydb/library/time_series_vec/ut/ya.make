@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/library/time_series_vec)
 
 FORK_SUBTESTS()

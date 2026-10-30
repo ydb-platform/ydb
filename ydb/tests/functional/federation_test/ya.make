@@ -33,6 +33,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/federation_recipe/recipe.inc)
 
 SIZE(MEDIUM)
 
-REQUIREMENTS(ram:16 cpu:4)
+REQUIREMENTS(ram:16 cpu:3)
 
 END()

@@ -94,6 +94,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
+        HFunc(TEvPrivate::TEvExpireWorkerLag, Handle);
         HFunc(TEvPrivate::TEvRestoreSession, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
@@ -181,6 +182,9 @@ void TController::Reset() {
     UnresolvedDatabaseReplications.clear();
     AssignedTxIds.clear();
     Workers.clear();
+    LagExpiryQueue.Clear();
+    LagExpiryScheduled = false;
+    StoppingWorkers.clear();
     WorkersWithHeartbeat.clear();
     WorkersByHeartbeat.clear();
 }
@@ -445,12 +449,14 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
         }
 
         auto& worker = it->second;
+        InvalidateLag(id);
+        StoppingWorkers.erase(id);
         worker.ClearSession();
 
         // The stop acknowledgement is lost with the session, nothing else completes the removal
         if (RemoveQueue.contains(id)) {
             RemoveWorker(id, ctx);
-        } else if (worker.HasCommand()) {
+        } else {
             BootQueue.insert(id);
         }
     }
@@ -491,12 +497,6 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
         }
 
         auto* worker = GetOrCreateWorker(id);
-        if (!worker->HasCommand()) {
-            if (const auto* target = FindTarget(id)) {
-                auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
-                worker->SetCommand(ev->Record.MutableCommand());
-            }
-        }
 
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
@@ -504,6 +504,11 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
                 Sessions[sessionId].DetachWorker(id);
                 StopQueue.emplace(id, sessionId);
             }
+        }
+
+        if (!HasWorkerSession(id, nodeId)) {
+            InvalidateLag(id);
+            StoppingWorkers.erase(id);
         }
 
         session.AttachWorker(id);
@@ -530,8 +535,14 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
         if (!session.HasWorker(id)) {
             StopQueue.emplace(id, nodeId);
+        } else if (!HasWorkerSession(id, nodeId)) {
+            break;
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
-            UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
+            if (record.HasLagMilliSeconds() && !StoppingWorkers.contains(id)) {
+                LagExpiryQueue.SetDeadline(id, ctx.Monotonic() + WorkerLagTimeout);
+                ScheduleLagExpiry(ctx);
+                UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
+            }
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_STATS) {
             UpdateStats(id, record.GetStats());
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ACK) {
@@ -539,6 +550,13 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+        if (!HasWorkerSession(id, nodeId)) {
+            session.DetachWorker(id);
+            break;
+        }
+
+        InvalidateLag(id);
+        StoppingWorkers.insert(id);
         UpdateStats(id, record.GetStatus());
         if (!MaybeRemoveWorker(id, ctx)) {
             if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
@@ -550,7 +568,7 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                     if (worker->second.HasSession() && worker->second.GetSession() == nodeId) {
                         worker->second.ClearSession();
                     }
-                    if (IsValidWorker(id) && !worker->second.HasSession() && worker->second.HasCommand()) {
+                    if (IsValidWorker(id) && !worker->second.HasSession()) {
                         BootQueue.insert(id);
                     }
                 }
@@ -587,9 +605,54 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     }
 
     target->UpdateLag(id.WorkerId(), lag);
+    // The numeric counter retains its last valid sample; availability is exposed
+    // by the optional lag fields in describe responses.
     if (const auto lag = replication->GetLag()) {
         TabletCounters->Simple()[COUNTER_DATA_LAG] = lag->MilliSeconds();
     }
+}
+
+void TController::InvalidateLag(const TWorkerId& id) {
+    LagExpiryQueue.Remove(id);
+    if (auto* target = FindTarget(id)) {
+        target->InvalidateLag(id.WorkerId());
+    }
+}
+
+void TController::ScheduleLagExpiry(const TActorContext& ctx) {
+    if (LagExpiryScheduled) {
+        // Receipt times only advance, so refreshed and newly added deadlines
+        // cannot precede the wakeup already pending, even if the queue was emptied.
+        return;
+    }
+
+    const auto deadline = LagExpiryQueue.GetNextDeadline();
+    if (!deadline) {
+        return;
+    }
+
+    LagExpiryScheduled = true;
+    if (*deadline <= ctx.Monotonic()) {
+        // Yield the mailbox between batches when many workers expire together.
+        Send(SelfId(), new TEvPrivate::TEvExpireWorkerLag());
+    } else {
+        ctx.Schedule(*deadline, new TEvPrivate::TEvExpireWorkerLag());
+    }
+}
+
+void TController::Handle(TEvPrivate::TEvExpireWorkerLag::TPtr&, const TActorContext& ctx) {
+    LagExpiryScheduled = false;
+    const auto now = ctx.Monotonic();
+    for (ui32 i = 0; i < ProcessBatchLimit; ++i) {
+        const auto id = LagExpiryQueue.PopExpired(now);
+        if (!id) {
+            break;
+        }
+
+        InvalidateLag(*id);
+    }
+
+    ScheduleLagExpiry(ctx);
 }
 
 void TController::UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats) {
@@ -616,16 +679,12 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
 
     auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
-    auto* cmd = record.MutableCommand();
 
     if (!IsValidWorker(id)) {
         return;
     }
 
-    auto* worker = GetOrCreateWorker(id, cmd);
-    if (!worker->HasCommand()) {
-        worker->SetCommand(cmd);
-    }
+    auto* worker = GetOrCreateWorker(id);
 
     if (!worker->HasSession()) {
         BootQueue.insert(id);
@@ -673,7 +732,8 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
             return;
         }
         for (auto partitionId : record.GetChildPartitionsIds()) {
-            auto ev = MakeRunWorkerEv(replication, *target, partitionId);
+            auto ev = MakeHolder<TEvService::TEvRunWorker>();
+            TWorkerId(id.ReplicationId(), id.TargetId(), partitionId).Serialize(*ev->Record.MutableWorker());
             Send(SelfId(), std::move(ev));
         }
     }
@@ -705,10 +765,15 @@ bool TController::IsValidWorker(const TWorkerId& id) const {
     return true;
 }
 
-TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd) {
+bool TController::HasWorkerSession(const TWorkerId& id, ui32 nodeId) const {
+    const auto it = Workers.find(id);
+    return it != Workers.end() && it->second.HasSession() && it->second.GetSession() == nodeId;
+}
+
+TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id) {
     auto it = Workers.find(id);
     if (it == Workers.end()) {
-        it = Workers.emplace(id, cmd).first;
+        it = Workers.try_emplace(id).first;
         TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
     }
 
@@ -770,6 +835,13 @@ void TController::ProcessBootQueue(const TActorContext&) {
         auto replication = Find(id.ReplicationId());
         Y_ABORT_UNLESS(replication);
 
+        if (!replication->IsCredentialsReady()) {
+            ++iter;
+            continue;
+        }
+
+        const auto* target = replication->FindTarget(id.TargetId());
+
         const auto& tenant = replication->GetDatabase();
         if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
@@ -782,8 +854,12 @@ void TController::ProcessBootQueue(const TActorContext&) {
             continue;
         }
 
-        Y_ABORT_UNLESS(worker.HasCommand());
-        BootWorker(nodeId, id, *worker.GetCommand());
+        // Commands are not persisted or cached: credentials may have resolved
+        // since recovery, adoption, or the registrar's request.
+        const auto ev = MakeRunWorkerEv(replication, *target, id.WorkerId());
+        BootWorker(nodeId, id, ev->Record.GetCommand());
+        InvalidateLag(id);
+        StoppingWorkers.erase(id);
         worker.AttachSession(nodeId);
 
         BootQueue.erase(iter++);
@@ -838,6 +914,11 @@ void TController::StopWorker(ui32 nodeId, const TWorkerId& id) {
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
 
+    if (HasWorkerSession(id, nodeId)) {
+        InvalidateLag(id);
+        StoppingWorkers.insert(id);
+    }
+
     auto ev = MakeHolder<TEvService::TEvStopWorker>();
     auto& record = ev->Record;
 
@@ -887,6 +968,8 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
         }
     }
 
+    LagExpiryQueue.Remove(id);
+    StoppingWorkers.erase(id);
     Workers.erase(id);
     TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
 

@@ -2602,6 +2602,11 @@ message TChangefeedUnderlyingTopics {
     repeated TPathDescription ChangefeedUnderlyingTopics = 1;
 }
 
+message TExportIndexEncryption {
+    // Relative index impl-table path -> IV of its separate backup item.
+    map<string, bytes> IVs = 1;
+}
+
 message TExportMetadata {
     message TSchemaMappingItem {
         optional string SourcePath = 1;
@@ -2609,6 +2614,7 @@ message TExportMetadata {
 
         // encryption details
         optional bytes IV = 3;
+        optional TExportIndexEncryption IndexEncryption = 4;
     }
 
     repeated TSchemaMappingItem SchemaMapping = 1;

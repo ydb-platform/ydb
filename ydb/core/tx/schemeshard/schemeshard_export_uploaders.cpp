@@ -534,6 +534,9 @@ private:
                 .ObjectPath = item.GetSourcePath(),
                 .IV = item.HasIV() ? TMaybe<NBackup::TEncryptionIV>(NBackup::TEncryptionIV::FromBinaryString(item.GetIV())) : Nothing()
             });
+            for (const auto& [path, indexIV] : item.GetIndexEncryption().GetIVs()) {
+                schemaMapping.Items.back().IndexIVs.emplace(path, NBackup::TEncryptionIV::FromBinaryString(indexIV));
+            }
         }
 
         TMaybe<NBackup::TEncryptionIV> iv;

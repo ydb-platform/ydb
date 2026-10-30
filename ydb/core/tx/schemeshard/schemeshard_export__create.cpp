@@ -658,6 +658,19 @@ private:
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
             }
         }
+        if (iv) {
+            // SchemeShard writes the authenticated index IVs itself. DataShards
+            // only need the existing per-item encryption settings, including
+            // when their binaries predate encrypted index materialization.
+            for (ui32 indexIdx : xrange(exportInfo.Items.size())) {
+                const auto& indexItem = exportInfo.Items[indexIdx];
+                if (indexItem.ParentIdx != Max<ui32>()) {
+                    auto& parent = *exportInfo.ExportMetadata.MutableSchemaMapping(indexItem.ParentIdx);
+                    (*parent.MutableIndexEncryption()->MutableIVs())[indexItem.SourcePathName] =
+                        NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, indexIdx + 1, 0).GetBinaryString();
+                }
+            }
+        }
         if (!exportSettings.SerializeToString(&exportInfo.Settings)) {
             issues = "Failed to serialize settings";
             return false;

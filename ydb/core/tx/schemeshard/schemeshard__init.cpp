@@ -5321,6 +5321,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
                         item.ExportItemIV = ::NKikimr::NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }
+                    if (rowset.HaveValue<Schema::ImportItems::IndexEncryption>()) {
+                        item.ExportIndexEncryption = rowset.GetValue<Schema::ImportItems::IndexEncryption>();
+                    }
 
                     if (item.WaitTxId != InvalidTxId) {
                         Self->TxIdToImport[item.WaitTxId] = {importId, itemIdx};

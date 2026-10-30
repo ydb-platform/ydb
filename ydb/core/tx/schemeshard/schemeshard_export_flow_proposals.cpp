@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
@@ -225,6 +226,20 @@ void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
     task.MutableTable()->CopyFrom(sourceDescription);
 }
 
+TString GetExportItemIV(const TExportInfo& exportInfo, ui32 itemIdx) {
+    if (exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>()) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
+        return exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV();
+    }
+
+    // Index impl tables are appended after the user items and are not
+    // independent objects in SchemaMapping. Their persisted item numbers
+    // extend the same IV namespace used by FillExportMetadata.
+    const auto exportIV = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV());
+    return NBackup::TEncryptionIV::Combine(
+        exportIV, NBackup::EBackupFileType::Metadata, itemIdx + 1, 0).GetBinaryString();
+}
+
 template <typename TSettings>
 void FillEncryptionSettings(
     NKikimrSchemeOp::TBackupTask& task,
@@ -235,8 +250,7 @@ void FillEncryptionSettings(
     if (exportSettings.has_encryption_settings()) {
         auto& encryptionSettings = *task.MutableEncryptionSettings();
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
-        Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
-        encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+        encryptionSettings.SetIV(GetExportItemIV(exportInfo, itemIdx));
         *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
     }
 }

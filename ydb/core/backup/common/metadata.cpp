@@ -5,6 +5,9 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
+
 namespace NKikimr::NBackup {
 
 void TMetadata::AddFullBackup(TFullBackupMetadata::TPtr fb) {
@@ -94,6 +97,9 @@ TString TMetadata::Serialize() const {
             NJson::TJsonMap indexMap;
             indexMap["export_prefix"] = index.ExportPrefix;
             indexMap["impl_table_prefix"] = index.ImplTablePrefix;
+            if (index.IV) {
+                indexMap["iv"] = index.IV->GetHexString();
+            }
             indexes.AppendValue(std::move(indexMap));
         }
     }
@@ -133,9 +139,16 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         result.Indexes.emplace();
         const NJson::TJsonValue& indexes = json["indexes"];
         for (const NJson::TJsonValue& index : indexes.GetArray()) {
+            TMaybe<TEncryptionIV> iv;
+            if (index.Has("iv")) {
+                Y_ENSURE(index["iv"].IsString(), "Index IV is not a string");
+                iv = TEncryptionIV::FromHexString(index["iv"].GetString());
+                Y_ENSURE(iv->Size() == TEncryptionIV::SIZE, "Invalid index IV size");
+            }
             result.AddIndex({
                 .ExportPrefix = index["export_prefix"].GetString(),
                 .ImplTablePrefix = index["impl_table_prefix"].GetString(),
+                .IV = std::move(iv),
             });
         }
     }
@@ -157,6 +170,14 @@ TString TSchemaMapping::Serialize() const {
         writer.Write("exportPrefix", item.ExportPrefix);
         if (item.IV) {
             writer.Write("iv", item.IV->GetHexString());
+        }
+        if (!item.IndexIVs.empty()) {
+            writer.WriteKey("indexIVs");
+            writer.OpenMap();
+            for (const auto& [path, iv] : item.IndexIVs) {
+                writer.Write(path, iv.GetHexString());
+            }
+            writer.CloseMap();
         }
         writer.CloseMap();
     }
@@ -207,6 +228,27 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
         item.ObjectPath = exportObject;
         if (hasIV) {
             item.IV = TEncryptionIV::FromHexString(iv.GetString());
+        }
+        if (info.Has("indexIVs")) {
+            const auto& indexIVs = info["indexIVs"];
+            if (!hasIV || !indexIVs.IsMap()) {
+                error = "Incorrect indexIVs in schema mapping json";
+                return false;
+            }
+            for (const auto& [path, indexIV] : indexIVs.GetMap()) {
+                if (!indexIV.IsString()) {
+                    error = "Index IV in schema mapping json is not a string";
+                    return false;
+                }
+                try {
+                    auto parsedIV = TEncryptionIV::FromHexString(indexIV.GetString());
+                    Y_ENSURE(parsedIV.Size() == TEncryptionIV::SIZE, "Invalid index IV size");
+                    item.IndexIVs.emplace(path, std::move(parsedIV));
+                } catch (const std::exception& ex) {
+                    error = TStringBuilder() << "Invalid index IV in schema mapping json: " << ex.what();
+                    return false;
+                }
+            }
         }
     }
     return true;

@@ -5,6 +5,7 @@
 #include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 #include <functional>
@@ -135,6 +136,8 @@ struct TEvWorker {
 
     struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
         TDuration Lag;
+        TString SourceOffsetMismatch;
+        TMaybe<ui64> SourceCommittedOffset;
         std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);
@@ -170,7 +173,9 @@ struct TEvWorker {
 IActor* CreateWorker(
     const TActorId& parent,
     std::function<IActor*(void)>&& createReaderFn,
-    std::function<IActor*(void)>&& createWriterFn);
+    std::function<IActor*(void)>&& createWriterFn,
+    bool trackSourceOffsets = false,
+    TMaybe<ui64> processedSourceOffset = Nothing());
 
 } // NService
 } // NKikimr::NReplication

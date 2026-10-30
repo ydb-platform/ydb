@@ -1493,7 +1493,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             EnableDatabase(dbInfos, 1);
         }
     }
-
 }
 
 }

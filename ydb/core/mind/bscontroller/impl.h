@@ -16,6 +16,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
@@ -639,9 +640,8 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
-        // Effective realm states; explicit overrides are stored separately from volatile DC-derived states.
+        // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
-        bool HasExplicitFailRealmStates = false; // Persisted override takes precedence over volatile DC states.
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -1499,8 +1499,9 @@ private:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     TActorId ResponsivenessActorID;
     TTabletResponsivenessPinger* ResponsivenessPinger;
-    using TDataCenterStates = THashMap<TString, NKikimrBlobStorage::TGroupInfo::TFailRealm::EState>;
-    TDataCenterStates DataCenterStates; // Not persisted.
+    using TDataCenterStates = std::unordered_map<TString,
+        NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
+    TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;

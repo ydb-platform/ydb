@@ -6,6 +6,8 @@
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#include <expected>
+
 namespace NKikimr {
     namespace NBsController {
 
@@ -146,7 +148,8 @@ namespace NKikimr {
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
 
-            std::optional<TString> ApplyDataCenterStates();
+            bool ResetDataCenterStates = false;
+            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking);
 
             bool PushStaticGroupsToSelfHeal = false;
 

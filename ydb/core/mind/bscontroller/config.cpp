@@ -3,6 +3,11 @@
 #include "diff.h"
 #include "table_merger.h"
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/blobstorage/base/data_center_states.h>
+#include <ydb/core/blobstorage/base/utility.h>
+>>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
@@ -337,8 +342,8 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (const auto error = state.ApplyDataCenterStates()) {
-                *errorDescription = *error;
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking || state.ResetDataCenterStates); !result) {
+                *errorDescription = result.error();
                 return false;
             }
 
@@ -587,11 +592,14 @@ namespace NKikimr::NBsController {
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);
 
+            if (state.DataCenterStates.Changed()) {
+                db.Table<Schema::State>().Key(true).Update<Schema::State::DataCenterStates>(
+                    SerializeDataCenterStates(state.DataCenterStates.Get()));
+            }
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 if (overlay->second) {
                     NKikimrBlobStorage::TFailRealmStates states;
-                    if (overlay->second->HasExplicitFailRealmStates) {
-                        Y_ABORT_UNLESS(overlay->second->FailRealmStates);
+                    if (overlay->second->FailRealmStates) {
                         for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
                             states.AddState(value);
                         }

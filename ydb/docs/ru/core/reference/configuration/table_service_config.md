@@ -21,7 +21,7 @@ table_service_config:
 
 ### Конфигурация директории
 
-#### local_file_config.root
+#### local_file_config.root {#root}
 
 **Тип:** `string`  
 **По умолчанию:** `""` (временная директория)  
@@ -64,7 +64,7 @@ table_service_config:
 
 - `Permission denied` — недостаточные права доступа к директории. См. [{#T}](../../troubleshooting/spilling/permission-denied.md)
 
-#### local_file_config.max_total_size
+#### local_file_config.max_total_size {#local-file-config-max-total-size}
 
 **Тип:** `uint64`  
 **По умолчанию:** `21474836480` (20 GiB)  
@@ -86,11 +86,11 @@ table_service_config:
 
 **Важно:** Пул потоков спиллинга отделен от пулов потоков акторной системы.
 
-Для получения информации о настройке пулов потоков акторной системы и их влиянии на производительность системы см. [Конфигурация акторной системы](index.md#actor-system) и [Изменение конфигурации акторной системы](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). Для Configuration V2 настройки акторной системы описаны в [настройках Configuration V2](../../devops/configuration-management/configuration-v2/config-settings.md).
+Для получения информации о настройке пулов потоков акторной системы и их влиянии на производительность системы см. [Конфигурация акторной системы](actor_system_config.md#actor-system) и [Изменение конфигурации акторной системы](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). Для Configuration V2 настройки акторной системы описаны в [настройках Configuration V2](../../devops/configuration-management/configuration-v2/config-settings.md).
 
 {% endnote %}
 
-#### local_file_config.io_thread_pool.workers_count
+#### local_file_config.io_thread_pool.workers_count {#workerscount}
 
 **Тип:** `uint32`  
 **По умолчанию:** `2`  
@@ -133,7 +133,7 @@ table_service_config:
 
 {% endnote %}
 
-### Требования к файловой системе
+### Требования к файловой системе {#file-system-requirements}
 
 #### Файловые дескрипторы
 
@@ -181,7 +181,7 @@ table_service_config:
 
 Следующие параметры управляют включением и отключением различных типов спиллинга. Их следует изменять только при наличии специфических требований системы.
 
-##### local_file_config.enable
+##### local_file_config.enable {#local-file-config-enable}
 
 **Расположение:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Тип:** `boolean`  

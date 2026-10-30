@@ -10,7 +10,9 @@ ALTER TOPIC topic_path action1, action2, ..., actionN;
 
 `action` is one of the alter actions described below.
 
-## Updating a set of consumers
+## Updating a set of consumers {#consumer}
+
+### ADD CONSUMER {#add-consumer}
 
 `ADD CONSUMER`: Adds a [consumer](../../../concepts/datamodel/topic#consumer) to a topic.
 
@@ -98,7 +100,7 @@ ALTER TOPIC `my_topic`
     ALTER CONSUMER my_consumer SET (important = false);
 ```
 
-## Updating topic settings
+## Updating topic settings {#alter-topic}
 
 Using the `SET (option = value[, ...])` action, you can update your topic settings.
 

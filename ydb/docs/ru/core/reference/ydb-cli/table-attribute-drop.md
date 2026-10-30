@@ -1,6 +1,6 @@
 # table attribute drop
 
-С помощью команды `table attribute drop` вы можете удалить [пользовательский атрибут](../../concepts/datamodel/table.md#users-attr) указанной таблицы.
+С помощью команды `table attribute drop` вы можете удалить [пользовательский атрибут](../../concepts/datamodel/table.md) указанной таблицы.
 
 Общий вид команды:
 

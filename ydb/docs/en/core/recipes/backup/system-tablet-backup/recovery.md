@@ -2,7 +2,7 @@
 
 {% note info %}
 
-For conceptual information about the mechanism, see the [System tablet backup](../../../concepts/backup.md#system-tablet-backup) section.
+For conceptual information about the mechanism, see the [System tablet backup](../../../concepts/backup.md) section.
 
 {% endnote %}
 

@@ -1,6 +1,6 @@
 # Custom attributes in tables
 
-You can use [custom attributes](../concepts/datamodel/table.md#users-attr) to store any information and process it in your app or using the CLI.
+You can use [custom attributes](../concepts/datamodel/table.md) to store any information and process it in your app or using the CLI.
 
 For example, your application uses a database table. It stores versions of the table's scheme in custom attributes. You need to migrate data when the table scheme changes. To make sure that your application runs a relevant migration, rather than a previous one, when started, access the custom attributes to check the scheme version:
 

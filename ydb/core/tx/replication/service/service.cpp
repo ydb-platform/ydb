@@ -175,9 +175,11 @@ public:
         ActorId = ev->Sender;
         Generation = generation;
         SupportsIndexMetadata = ev->Get()->Record.GetSupportsIndexMetadata();
+        SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
 
         auto status = MakeHolder<TEvService::TEvStatus>();
         auto& record = status->Record;
+        record.SetSupportsSourceOffsets(true);
 
         for (const auto& [id, _] : Workers) {
             id.Serialize(*record.AddWorkers());
@@ -211,6 +213,17 @@ public:
     }
 
     void SetIndexBuildWorker(const TWorkerId& id) { IndexBuildWorkers.insert(id); }
+
+    void Handle(const TActorContext& ctx, TEvService::TEvSourceOffsetReport::TPtr& ev) {
+        if (!SupportsSourceOffsets) {
+            return; // old controller: do not authorize further source commits
+        }
+        const auto id = GetWorkerId(ev->Sender);
+        AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
+        auto& record = ev->Get()->Record;
+        id.Serialize(*record.MutableWorker());
+        ctx.Send(ev->Forward(ActorId));
+    }
 
     void Handle(IActorOps* ops, TEvService::TEvIndexBuildProgress::TPtr& ev) {
         const auto id = GetWorkerId(ev->Sender);
@@ -534,6 +547,7 @@ private:
     TActorId ActorId;
     ui64 Generation;
     bool SupportsIndexMetadata = false;
+    bool SupportsSourceOffsets = false;
     const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
@@ -785,7 +799,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto& cmd = record.GetCommand();
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
-        bool autoCommit = true;
+        bool autoCommit = !cmd.GetTrackSourceOffsets();
         bool reportStats = false;
         ui32 poolId = AppData()->UserPoolId;
         std::function<IActor*(void)> writerFn;
@@ -811,7 +825,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             CreateWorker(
                 SelfId(),
                 ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
-                std::move(writerFn)),
+                std::move(writerFn), cmd.GetTrackSourceOffsets(),
+                cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
             poolId,
             cmd.GetReplicationLocation(),
             cmd.GetMetricsLevel()
@@ -920,6 +935,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             {"worker", ev->Sender},
             {"version", TRowVersion::FromProto(ev->Get()->Record.GetVersion())});
         session->Handle(this, ev);
+    }
+
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev) {
+        auto* session = SessionFromWorker(ev->Sender);
+        if (session && session->HasWorker(ev->Sender)) {
+            session->Handle(ActorContext(), ev);
+        }
     }
 
     void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev) {
@@ -1050,7 +1072,12 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto* session = SessionFromWorker(ev->Sender);
         if (session && session->HasWorker(ev->Sender)) {
             const auto& workerId = session->GetWorkerId(ev->Sender);
-            if (ev->Get()->DetailedStats) {
+            if (!ev->Get()->SourceOffsetMismatch.empty()) {
+                session->SendWorkerStatus(this, workerId,
+                    NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING,
+                    NKikimrReplication::TEvWorkerStatus::REASON_SOURCE_OFFSET_MISMATCH,
+                    ev->Get()->SourceOffsetMismatch, ev->Get()->SourceCommittedOffset);
+            } else if (ev->Get()->DetailedStats) {
                 session->ApplyWorkerStats(workerId, std::move(ev->Get()->DetailedStats));
             } else {
                 session->SendWorkerStatus(this, workerId, ev->Get()->Lag);
@@ -1131,6 +1158,7 @@ public:
             hFunc(TEvService::TEvHeartbeat, Handle);
             hFunc(TEvService::TEvSchemaChangeReport, Handle);
             hFunc(TEvService::TEvIndexBuildProgress, Handle);
+            hFunc(TEvService::TEvSourceOffsetReport, Handle);
             hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(TEvService::TEvSchemaChangeResult, Handle);
             hFunc(TEvWorker::TEvDataEnd, Handle);

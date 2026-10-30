@@ -2439,9 +2439,10 @@ def build_html_dashboard(
       const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
       // Put clock warning into the tile label when needed; keep the plot clean.
       const titleEl = document.querySelector('#yaActivityGrid .chart-tile-title');
-      if (titleEl) titleEl.textContent = activityUnaligned
-        ? 'ya make concurrency (clock unaligned)'
-        : 'ya make concurrency';
+      if (titleEl) {{
+        const main = activityUnaligned ? 'ya make concurrency (clock unaligned)' : 'ya make concurrency';
+        titleEl.innerHTML = main + '<span class="chart-tile-sub">build, archives, cache, test workers, links</span>';
+      }}
       const ax = axisLayout(allX, true);
       Plotly.newPlot('yaActivity', traces, {{
         title: false,

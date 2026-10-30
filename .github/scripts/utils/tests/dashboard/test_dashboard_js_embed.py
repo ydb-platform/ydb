@@ -116,6 +116,9 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("function fullEvlogRangeMs()", source)
         self.assertIn('id="testsBySuiteDetails"', source)
         self.assertIn("Tests in parallel by suite", source)
+        self.assertIn("Active chunks by suite", source)
+        self.assertIn("CPU by suite · estimated cores", source)
+        self.assertIn("chart-tile-sub", source)
         # Expand grows to full row width, not a tall half-column (f-string doubles braces).
         self.assertIn(".chart-tile.expanded {{\n      grid-column: 1 / -1;\n    }}", source)
         self.assertIn("Expand to full width", source)

@@ -1212,7 +1212,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 
     TString schemeUpdate;
     TString dataUpdate;
-    TStackVec<TString> partSwitches;
+    TStackVec<TProtoBox<NKikimrExecutorFlat::TTablePartSwitch>> partSwitches;
     TStackVec<TLogoBlob> loanPartInfos;
     TVector<NPageCollection::TMemGlob> annex;
 
@@ -1249,7 +1249,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
                     schemeUpdate = body;
                 break;
             case NBoot::TCookie::EIdx::TurnLz4:
-                partSwitches.push_back(body);
+                partSwitches.emplace_back(NPageCollection::TSlicer::Lz4()->Decode(body));
                 break;
             case NBoot::TCookie::EIdx::Loan:
                 loanPartInfos.push_back(TLogoBlob(id, body));
@@ -1263,11 +1263,19 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         }
     }
 
-    if (schemeUpdate || dataUpdate || annex) {
+    TVector<ui32> truncatedTables;
+    for (const auto& proto : partSwitches) {
+        if (proto.GetTruncated()) {
+            truncatedTables.push_back(proto.GetTableId());
+        }
+    }
+
+    if (schemeUpdate || dataUpdate || annex || truncatedTables) {
         if (dataUpdate)
             dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
 
-        for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex, Owner->GetFollowerRedoObserver()))
+        for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex,
+                Owner->GetFollowerRedoObserver(), truncatedTables))
             for (auto &partView: subset->Flatten)
                 DropPartStorePageCollections(*partView);
 
@@ -1306,9 +1314,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 
         ui32 nextAuxIdx = 0;
         for (ui32 idx : xrange(partSwitches.size())) {
-            const TString uncompressed = NPageCollection::TSlicer::Lz4()->Decode(partSwitches[idx]);
-
-            const TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(uncompressed);
+            const auto& proto = partSwitches[idx];
 
             const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux = nullptr;
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
@@ -2796,6 +2802,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                 // Serialize removed subset as if it was compacted into nothing
                 NKikimrExecutorFlat::TTablePartSwitch proto;
                 proto.SetTableId(table);
+                proto.SetTruncated(true);
 
                 NTable::TSnapEdge edge(change->Stamp - 1, subset->Head);
                 LogicRedo->CutLog(table, edge, commit->GcDelta);

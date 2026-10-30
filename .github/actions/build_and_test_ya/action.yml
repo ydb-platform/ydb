@@ -395,10 +395,7 @@ runs:
         echo "GITHUB_EVENT_NAME = ${GITHUB_EVENT_NAME}"
 
         if [ -z "${{ inputs.custom_branch_name }}" ]; then
-          # For pull requests, use the target branch (base_ref) - this ensures that:
-          # - Test history is shown for the target branch (e.g., stable-25-3)
-          # - Test results are uploaded for the target branch
-          # For other events (push, workflow_dispatch), use ref_name (the branch that triggered the workflow)
+          # Attribute PR results and history to the target branch.
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
             BRANCH_NAME="${GITHUB_BASE_REF}"
           else
@@ -594,7 +591,7 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
-          # Persist the attempt start in YDB; GitHub's display timestamps are not uploader input.
+          # Store the attempt start, not the upload time.
           ATTEMPT_STARTED_AT=$(date +%s)
           analytics end prepare_ya_make
           YA_MAKE_NAME="ya_make_try_${RETRY}"
@@ -796,7 +793,7 @@ runs:
           esac
           run_name="${run_name}_attempt_${RETRY}"
           analytics start upload_tests_results
-          # Stream output directly: capturing unused stdout buffers logs and makes xtrace replay them as one assignment.
+          # Stream logs instead of buffering and replaying them through xtrace.
           .github/scripts/analytics/upload_tests_results.py \
             --test-results-file "${CURRENT_REPORT}" \
             --run-timestamp "${ATTEMPT_STARTED_AT}" \

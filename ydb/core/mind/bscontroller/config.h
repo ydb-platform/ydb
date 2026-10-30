@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#include <expected>
+
 namespace NKikimr {
     namespace NBsController {
 
@@ -160,7 +162,8 @@ namespace NKikimr {
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            std::optional<TString> ApplyDataCenterStates();
+            bool ResetDataCenterStates = false;
+            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking);
 
             bool PushStaticGroupsToSelfHeal = false;
 

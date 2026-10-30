@@ -25,6 +25,8 @@ struct TS3ReadActorFactoryConfig {
     ui64 BlockFileSizeLimit = 50_GB;
     std::unordered_map<std::string, ui64> FormatSizeLimits;
     bool EnableScheduling = false;
+    bool BatchedRowGroupDecode = true;
+    ui64 BatchDecodeTargetBytes = 16_MB;
 };
 
 class IS3ActorsFactory {

@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                     }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
             }
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(

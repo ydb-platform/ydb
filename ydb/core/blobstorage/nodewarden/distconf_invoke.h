@@ -41,6 +41,8 @@ namespace NKikimr::NStorage {
         bool Detached = false;
         bool AdvancesConflictingGeneration = false;
         bool RecoveryProposition = false;
+        // the audit record of the configuration replacement, made when it is proposed and sent when its result is known
+        std::optional<TVector<std::pair<TString, TString>>> ReplaceConfigAuditParts;
 
     public: // Error handling
         struct TExError : yexception {

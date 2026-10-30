@@ -523,8 +523,11 @@ namespace NKikimr::NStorage {
         }
 
         if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && !RecoveryProposition) {
-            if (const auto& record = op->Command; record.HasReplaceStorageConfig()) {
-                AUDIT_LOG(
+            if (const auto& record = op->Command; record.HasReplaceStorageConfig() &&
+                    ::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {
+                ReplaceConfigAuditParts.emplace();
+                auto& auditParts = *ReplaceConfigAuditParts;
+                {
                     const auto& replaceConfig = record.GetReplaceStorageConfig();
 
                     const TString oldConfig = TStringBuilder()
@@ -553,12 +556,10 @@ namespace NKikimr::NStorage {
                     AUDIT_PART("remote_address", wrapEmpty(NKikimr::NAddressClassifier::ExtractAddress(replaceConfig.GetPeerName())))
                     AUDIT_PART("subject", wrapEmpty(userToken.GetUserSID()))
                     AUDIT_PART("sanitized_token", wrapEmpty(userToken.GetSanitizedToken()))
-                    AUDIT_PART("status", "SUCCESS")
-                    AUDIT_PART("reason", TString(), false)
                     AUDIT_PART("operation", "REPLACE CONFIG")
                     AUDIT_PART("old_config", oldConfig)
                     AUDIT_PART("new_config", newConfig)
-                );
+                }
             }
         }
 
@@ -650,6 +651,16 @@ namespace NKikimr::NStorage {
             {"record", record});
 
         std::optional<TString> switchToError; // when set, we will switch distconf keeper to error state with this reason
+
+        // the replacement of the configuration is audited with its result
+        if (ReplaceConfigAuditParts) {
+            auto parts = std::exchange(ReplaceConfigAuditParts, std::nullopt);
+            AUDIT_LOG(
+                auditParts = std::move(*parts);
+                AUDIT_PART("status", status == TResult::OK ? TString("SUCCESS") : TString("ERROR"))
+                AUDIT_PART("reason", errorReason ? TString(*errorReason) : TString())
+            );
+        }
 
         std::visit(TOverloaded{
             [&](TInvokeExternalOperation& op) {

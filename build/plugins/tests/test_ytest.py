@@ -7,6 +7,9 @@ class Unit:
     def path(self):
         return '$S/project/module'
 
+    def get(self, name):
+        return ''
+
     def message(self, message):
         pytest.fail(str(message))
 

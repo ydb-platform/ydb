@@ -658,14 +658,14 @@ def build_html_dashboard(
             (withLimit ? ('<td>' + (limit == null || limit === '' ? '—' : limit) + '</td>') : '') +
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +
-            statCell(metric, stats, 'median') +
+            statCell(metric, stats, 'avg') +
           '</tr>';
         }}).join('');
         return (
           '<table class="headline-table"><thead><tr>' +
             '<th></th>' +
             (withLimit ? '<th title="CPU cores and MemTotal from /proc on this host. Disk rows are throughput, so they have no capacity limit.">limit</th>' : '') +
-            '<th>max</th><th>p95</th><th>median</th>' +
+            '<th>max</th><th>p95</th><th>avg</th>' +
           '</tr></thead><tbody>' + body + '</tbody></table>'
         );
       }}
@@ -702,7 +702,13 @@ def build_html_dashboard(
           ['Disk read, MB/s', 'disk', diskRead, null],
           ['Disk write, MB/s', 'disk', diskWrite, null],
         ];
-        [
+        hostBlock =
+          '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
+          statTable(hostRows, true) +
+          '</div>';
+      }}
+      const telemetryRows = [];
+      [
           ['CPU iowait, %', 'pct', hs.cpu_iowait_pct],
           ['CPU PSI some, %', 'pct', hs.pressure_cpu_some_pct],
           ['CPU PSI full, %', 'pct', hs.pressure_cpu_full_pct],
@@ -712,15 +718,36 @@ def build_html_dashboard(
           ['I/O PSI full, %', 'pct', hs.pressure_io_full_pct],
           ['Disk busy, %', 'pct', hs.disk_busy_pct],
           ['Disk queue, requests', 'queue', hs.disk_io_in_progress],
-        ].forEach(row => {{ if (row[2]) hostRows.push(row.concat([null])); }});
-        hostBlock =
-          '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
-          statTable(hostRows, true) +
-          '</div>';
-      }}
+      ].forEach(row => {{ if (row[2]) telemetryRows.push(row); }});
+      const telemetryBlock = telemetryRows.length
+        ? '<div class="headline-block"><h4>Host · telemetry</h4>' +
+          statTable(telemetryRows, false) +
+          '</div>'
+        : '';
+      const cgroupRows = [
+        ['CPU, cores', 'cpu', hs.cpu_cgroup],
+        ['RAM, GB', 'ram', hs.ram_cgroup],
+        ['Disk read, MB/s', 'disk', hs.disk_read_cgroup],
+        ['Disk write, MB/s', 'disk', hs.disk_write_cgroup],
+        ['Active cgroups', 'count', hs.active_cgroups],
+      ].filter(row => row[2]);
+      const cgroupSamples = cgroupRows.length
+        ? Math.round(Number((cgroupRows[0][2] || {{}}).samples || 0))
+        : 0;
+      const cgroupBlock = cgroupRows.length
+        ? '<div class="headline-block"><h4>Tests · cgroups' +
+          (cgroupSamples ? ' · ' + String(cgroupSamples) + ' samples' : '') +
+          '</h4>' +
+          statTable(cgroupRows, false) +
+          '</div>'
+        : '';
       grid.innerHTML =
         runLine +
         '<div class="headline-tables">' +
+          telemetryBlock +
+          cgroupBlock +
+        '</div>' +
+        '<div class="headline-tables" style="margin-top:16px;">' +
           '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
           hostBlock +
         '</div>';

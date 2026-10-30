@@ -305,55 +305,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         WaitForTableSplit(runtime, "/MyRoot/Table");
     }
 
-    Y_UNIT_TEST(SplitShardsWithPgKey) {
-        TTestBasicRuntime runtime;
-
-        TTestEnvOptions opts;
-        opts.EnableBackgroundCompaction(false);
-        opts.EnableTablePgTypes(true);
-        opts.DataShardStatsReportIntervalSeconds(1);
-
-        TTestEnv env(runtime, opts);
-
-        ui64 txId = 100;
-
-        NDataShard::gDbStatsDataSizeResolution = 10;
-        NDataShard::gDbStatsRowCountResolution = 10;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_CRIT);
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-                        Name: "Table"
-                        Columns { Name: "key"       Type: "pgint8"}
-                        Columns { Name: "value"      Type: "Utf8"}
-                        KeyColumnNames: ["key"]
-                        UniformPartitionsCount: 1
-                        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TString valueString(1000, 'A');;
-        for (ui64 key = 0; key < 1000; ++key) {
-            auto pgKey = NPg::PgNativeBinaryFromNativeText(ToString(key * 1'000'000), NPg::TypeDescFromPgTypeName("pgint8")).Str;
-            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell(pgKey)}, {TCell(valueString)});
-        }
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionCount(1)});
-
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
-                        Name: "Table"
-                        PartitionConfig {
-                            PartitioningPolicy {
-                                MinPartitionsCount: 100
-                                MaxPartitionsCount: 100
-                                SizeToSplit: 1
-                            }
-                        }
-                    )");
-        env.TestWaitNotification(runtime, txId);
-
-        WaitForTableSplit(runtime, "/MyRoot/Table");
-    }
 
     Y_UNIT_TEST(Merge1KShards) {
         TTestBasicRuntime runtime;

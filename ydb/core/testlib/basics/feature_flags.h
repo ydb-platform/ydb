@@ -47,7 +47,6 @@ public:
     FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
     FEATURE_FLAG_SETTER(EnableUuidAsPrimaryKey)
-    FEATURE_FLAG_SETTER(EnableTablePgTypes)
     FEATURE_FLAG_SETTER(EnableServerlessExclusiveDynamicNodes)
     FEATURE_FLAG_SETTER(EnableAddColumsWithDefaults)
     FEATURE_FLAG_SETTER(EnableReplaceIfExistsForExternalEntities)

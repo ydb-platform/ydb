@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
             auto db = kikimr.GetTableClient();
             auto session = db.GetSession().GetValueSync().GetSession();
 
-            CreateSampleTablesWithIndex(session, true, false);
+            CreateSampleTablesWithIndex(session, true);
         }
 
         auto db = kikimr.GetQueryClient();

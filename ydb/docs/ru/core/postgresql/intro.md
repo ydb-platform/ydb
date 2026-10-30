@@ -36,7 +36,8 @@
 
 * **[Federated Query](../concepts/query_execution/federated_query/postgresql.md)** — выполнение YQL-запросов к **внешним** кластерам PostgreSQL
 * **[UDF Pg::](../yql/reference/udf/list/postgres.md)** — функции и литералы в стиле PostgreSQL внутри YQL
-* **Типы колонок PostgreSQL** (`pgint4`, `pgtext` и другие) — опциональные типы колонок таблиц в YQL, управляются настройкой `enable_table_pg_types`
+
+Типы PostgreSQL (`pgint4`, `pgtext` и другие) остаются доступны в вычислениях запросов. Они не поддерживаются для колонок хранимых строковых и колоночных таблиц, а также для sequences.
 
 ## Вопросы и обратная связь
 

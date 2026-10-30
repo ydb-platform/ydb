@@ -1,0 +1,15 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 86bed74..70f1239 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -18,6 +18,10 @@ rust-version = "1.92.0"
+ inherits = "release"
+ overflow-checks = true
+ 
++[profile.release]
++debug = true
++panic = "abort"
++
+ [workspace]
+ members = [
+     "ci",

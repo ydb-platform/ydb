@@ -327,18 +327,21 @@ public:
         for (auto&& i : Portions) {
             OnAfterChangePortion(i.second, true);
         }
-        if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
-            auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
-            for (auto&& p : Portions) {
-                request->AddPortion(p.second);
-            }
-            request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
-
-            DataAccessorsManager->AskData(request);
-        }
         if (ActualizationIndex->IsStarted()) {
             RefreshScheme();
         }
+    }
+
+    void PrefetchPortionsMetadata() {
+        if (!MetadataMemoryManager->NeedPrefetch() || Portions.empty()) {
+            return;
+        }
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
+        for (auto&& p : Portions) {
+            request->AddPortion(p.second);
+        }
+        request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
+        DataAccessorsManager->AskData(request);
     }
 
     void AddLoadedPortionsToOptimizer() {

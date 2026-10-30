@@ -2,6 +2,8 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -76,6 +78,7 @@ public:
         }
 
         // State
+        Self->DataCenterStates.clear();
         {
             using T = Schema::State;
             auto state = db.Table<T>().Select();
@@ -122,6 +125,11 @@ public:
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
+                if (state.HaveValue<T::DataCenterStates>()) {
+                    auto states = ParseDataCenterStates(state.GetValue<T::DataCenterStates>());
+                    Y_VERIFY_S(states.has_value(), states.error());
+                    Self->DataCenterStates = std::move(*states);
+                }
             }
         }
 
@@ -269,6 +277,16 @@ public:
 
                 if (groups.HaveValue<T::BridgeGroupInfo>()) {
                     group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
+                }
+                if (groups.HaveValue<T::FailRealmStates>()) {
+                    const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.StateSize()) {
+                        Y_ABORT_UNLESS(states.StateSize() == 3);
+                        group.FailRealmStates.emplace();
+                        for (ui32 realm = 0; realm < 3; ++realm) {
+                            (*group.FailRealmStates)[realm] = states.GetState(realm);
+                        }
+                    }
                 }
 
 #undef OPTIONAL
@@ -654,7 +672,7 @@ public:
             }
         }
 
-        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+        std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
         for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
@@ -675,10 +693,11 @@ public:
             group->CalculateGroupStatus();
 
             group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
-                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
-                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
-                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType, jt->second);
+                    if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                            Self->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                     } else {
                         Y_DEBUG_ABORT();
                     }

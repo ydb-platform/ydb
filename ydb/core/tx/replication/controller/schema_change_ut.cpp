@@ -2574,32 +2574,47 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
         AttachWorkers(env, info.ControllerId, {worker});
+
+        // Fail the current PAUSE operation, preserving its alterer's identity.
+        // A worker error after its normal stop would be an obsolete report.
+        bool destinationFailed = false;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (destinationFailed || !ev->HasEvent()) {
+                return;
+            }
+            const auto* result = dynamic_cast<TEvPrivate::TEvAlterDstResult*>(ev->GetBase());
+            if (!result) {
+                return;
+            }
+
+            UNIT_ASSERT(result->IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result->ReplicationId, worker.ReplicationId());
+            UNIT_ASSERT_VALUES_EQUAL(result->TargetId, worker.TargetId());
+            ev.Reset(new IEventHandle(
+                ev->GetRecipientRewrite(),
+                ev->Sender,
+                new TEvPrivate::TEvAlterDstResult(
+                    result->ReplicationId,
+                    result->TargetId,
+                    NKikimrScheme::StatusSchemeError,
+                    "destination alter failed"),
+                0,
+                ev->Cookie));
+            destinationFailed = true;
+        });
         UNIT_ASSERT(alter("STATE = \"PAUSED\"").IsSuccess());
         SendWorkerStopped(env, info.ControllerId, worker);
-        runtime.WaitFor(
-            "ordinary PAUSE",
-            [&] {
-                return DescribeReplication(env, info)->Get()->Record.GetState().HasPaused();
-            },
-            TDuration::Seconds(30));
-        // A late failed writer report is a destination error, even though this
-        // replication originally bootstrapped with INITIAL_SCAN=false.
-        auto error = MakeHolder<TEvService::TEvWorkerStatus>(
-            worker,
-            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
-            NKikimrReplication::TEvWorkerStatus::REASON_ERROR,
-            "writer failed");
-        env.SendAsync(info.ControllerId, std::move(error));
         runtime.WaitFor(
             "destination error",
             [&] {
                 return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
             },
             TDuration::Seconds(30));
+        UNIT_ASSERT(destinationFailed);
         const auto assertError = [&] {
             const auto state = DescribeReplication(env, info)->Get()->Record.GetState();
             UNIT_ASSERT_C(state.HasError(), state.DebugString());
-            UNIT_ASSERT_C(state.DebugString().Contains("writer failed"), state.DebugString());
+            UNIT_ASSERT_C(state.DebugString().Contains("destination alter failed"), state.DebugString());
             AssertDestinationMode(
                 env,
                 "/Root/replica1",
@@ -5308,9 +5323,12 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
             .DiscoveryEndpoint(env.GetEndpoint())
             .Database(env.GetDatabase()));
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto session = CreateTableSession(env, client);
         const auto upsert = [&](ui32 key) {
-            for (ui32 attempt = 0; attempt < 50; ++attempt) {
+            constexpr ui32 MaxUpsertAttempts = 50;
+            const auto retryDelay = TDuration::MilliSeconds(100);
+
+            for (ui32 attempt = 0; attempt < MaxUpsertAttempts; ++attempt) {
                 const auto result = session.ExecuteDataQuery(Sprintf(
                     "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
                     NYdb::NTable::TTxControl::BeginTx()
@@ -5320,10 +5338,15 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
                 }
 
                 const auto status = result.GetStatus();
-                UNIT_ASSERT_C(attempt + 1 < 50 &&
-                    (status == NYdb::EStatus::ABORTED || status == NYdb::EStatus::SCHEME_ERROR),
-                    result.GetIssues().ToString());
-                Sleep(TDuration::MilliSeconds(100));
+                // Source stream setup and index changes can temporarily block writes.
+                const bool retryable = status == NYdb::EStatus::ABORTED
+                    || status == NYdb::EStatus::SCHEME_ERROR
+                    || status == NYdb::EStatus::OVERLOADED;
+                UNIT_ASSERT_C(retryable, status << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(attempt + 1 < MaxUpsertAttempts,
+                    "Upsert retry limit reached: " << status << ": " << result.GetIssues().ToString());
+
+                Sleep(retryDelay);
             }
         };
         const auto waitForRow = [&](ui32 key) {

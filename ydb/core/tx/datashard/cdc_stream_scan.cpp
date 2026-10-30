@@ -47,6 +47,11 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
         Y_ENSURE(!Scans.contains(streamPathId));
         auto& info = Scans[streamPathId];
 
+        info.TablePathId = TPathId(
+            rowset.GetValue<Schema::CdcStreamScans::TableOwnerId>(),
+            rowset.GetValue<Schema::CdcStreamScans::TablePathId>()
+        );
+
         info.SnapshotVersion = TRowVersion(
             rowset.GetValue<Schema::CdcStreamScans::SnapshotStep>(),
             rowset.GetValue<Schema::CdcStreamScans::SnapshotTxId>()
@@ -73,6 +78,7 @@ void TCdcStreamScanManager::Add(NTable::TDatabase& db, const TPathId& tablePathI
 {
     Y_ENSURE(!Scans.contains(streamPathId));
     auto& info = Scans[streamPathId];
+    info.TablePathId = tablePathId;
     info.SnapshotVersion = snapshotVersion;
 
     NIceDb::TNiceDb nicedb(db);
@@ -84,11 +90,12 @@ void TCdcStreamScanManager::Forget(NTable::TDatabase& db, const TPathId& tablePa
     PersistRemove(nicedb, tablePathId, streamPathId);
 }
 
-void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId) {
+void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId, const TActorId& replyTo) {
     Y_ENSURE(Scans.contains(streamPathId));
     auto& info = Scans.at(streamPathId);
     info.TxId = txId;
     info.ScanId = scanId;
+    info.ReplyTo = replyTo;
     TxIdToPathId[txId] = streamPathId;
 }
 
@@ -120,6 +127,7 @@ void TCdcStreamScanManager::Fail(ui64 txId) {
     info.TxId = 0;
     info.ScanId = 0;
     info.ActorId = {};
+    info.ReplyTo = {};
 }
 
 bool TCdcStreamScanManager::IsCompleted(const TPathId& streamPathId) const {
@@ -137,6 +145,10 @@ TCdcStreamScanManager::TScanInfo* TCdcStreamScanManager::Get(const TPathId& stre
 
 const TCdcStreamScanManager::TScanInfo* TCdcStreamScanManager::Get(const TPathId& streamPathId) const {
     return Scans.FindPtr(streamPathId);
+}
+
+const TPathId& TCdcStreamScanManager::GetStreamPathId(ui64 txId) const {
+    return TxIdToPathId.at(txId);
 }
 
 bool TCdcStreamScanManager::Has(const TPathId& streamPathId) const {
@@ -407,31 +419,20 @@ public:
 class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, public IScan {
     using TStats = TCdcStreamScanManager::TStats;
 
-    struct TDataShardId {
-        TActorId ActorId;
-        ui64 TabletId;
-    };
-
     using TLimits = NStreamScan::TLimits;
     using TBuffer = NStreamScan::TBuffer;
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             hFunc(TDataShard::TEvPrivate::TEvCdcStreamScanContinue, Handle);
         }
-    }
-
-    void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
-        ReplyTo = ev->Sender;
-        Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::IN_PROGRESS);
     }
 
     void Progress() {
         Stats.RowsProcessed += Buffer.Rows();
         Stats.BytesProcessed += Buffer.Bytes();
 
-        Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvCdcStreamScanProgress(
+        Send(DataShardActorId, new TDataShard::TEvPrivate::TEvCdcStreamScanProgress(
             TablePathId, StreamPathId, ReadVersion, ValueTags, std::move(Buffer.Flush()), Stats
         ));
     }
@@ -440,27 +441,13 @@ class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, publ
         Driver->Touch(NoMoreData ? EScan::Final : EScan::Feed);
     }
 
-    void Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus status, const TString& error = {}) {
-        auto response = MakeHolder<TEvDataShard::TEvCdcStreamScanResponse>();
-
-        response->Record.SetTabletId(DataShard.TabletId);
-        TablePathId.ToProto(response->Record.MutableTablePathId());
-        StreamPathId.ToProto(response->Record.MutableStreamPathId());
-        response->Record.SetStatus(status);
-        response->Record.SetErrorDescription(error);
-        Stats.Serialize(*response->Record.MutableStats());
-
-        Send(ReplyTo, std::move(response));
-    }
-
 public:
-    explicit TCdcStreamScan(const TDataShard* const self, const TActorId& replyTo, ui64 txId,
+    explicit TCdcStreamScan(const TDataShard* const self, ui64 txId,
             const TPathId& tablePathId, const TPathId& streamPathId, const TRowVersion& readVersion,
             const TVector<TTag>& valueTags, const TMaybe<TSerializedCellVec>& lastKey,
             const TStats& stats, const TLimits& limits)
         : IActorCallback(static_cast<TReceiveFunc>(&TCdcStreamScan::StateWork), NKikimrServices::TActivity::CDC_STREAM_SCAN_ACTOR)
-        , DataShard{self->SelfId(), self->TabletID()}
-        , ReplyTo(replyTo)
+        , DataShardActorId(self->SelfId())
         , TxId(txId)
         , TablePathId(tablePathId)
         , StreamPathId(streamPathId)
@@ -490,7 +477,7 @@ public:
     }
 
     void Registered(TActorSystem* sys, const TActorId&) override {
-        sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvCdcStreamScanRegistered(TxId, SelfId()));
+        sys->Send(DataShardActorId, new TDataShard::TEvPrivate::TEvCdcStreamScanRegistered(TxId, SelfId()));
     }
 
     EScan Seek(TLead& lead, ui64) override {
@@ -530,13 +517,7 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status) override {
-        if (status != EStatus::Done) {
-            Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
-        } else {
-            Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
-        }
-
+    TAutoPtr<IDestructable> Finish(EStatus) override {
         PassAway();
         return nullptr;
     }
@@ -550,8 +531,7 @@ public:
     }
 
 private:
-    const TDataShardId DataShard;
-    TActorId ReplyTo;
+    const TActorId DataShardActorId;
     const ui64 TxId;
     const TPathId TablePathId;
     const TPathId StreamPathId;
@@ -635,12 +615,17 @@ public:
             return true;
         }
 
-        if (const auto* info = Self->CdcStreamScanManager.Get(streamPathId)) {
-            if (const auto& to = info->ActorId) {
-                Response = Request->Forward(to);
+        if (auto* info = Self->CdcStreamScanManager.Get(streamPathId)) {
+            if (info->ScanId) {
+                // Keep the current subscriber even while the scan is queued or its
+                // actor has exited but ScanComplete has not been processed yet.
+                info->ReplyTo = Request->Sender;
+                Response = MakeResponse(ctx, info->ActorId
+                    ? NKikimrTxDataShard::TEvCdcStreamScanResponse::IN_PROGRESS
+                    : NKikimrTxDataShard::TEvCdcStreamScanResponse::ACCEPTED);
+                info->Stats.Serialize(
+                    *Response->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record.MutableStats());
                 return true;
-            } else if (info->ScanId) {
-                return true; // nop, scan actor will report state when it starts
             }
         } else if (Self->CdcStreamScanManager.IsCompleted(streamPathId)) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
@@ -706,7 +691,7 @@ public:
         Y_ENSURE(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
 
         const ui64 localTxId = Self->NextTieBreakerIndex++;
-        auto scan = MakeHolder<TCdcStreamScan>(Self, Request->Sender, localTxId,
+        auto scan = MakeHolder<TCdcStreamScan>(Self, localTxId,
             tablePathId, streamPathId, snapshotVersion, valueTags, info->LastKey, info->Stats, record.GetLimits());
         const ui64 scanId = Self->QueueScan(table->LocalTid, scan.Release(), localTxId,
             TScanOptions()
@@ -714,7 +699,7 @@ public:
                 .SetReadAhead(readAheadLo, readAheadHi)
                 .SetSnapshotRowVersion(snapshotVersion)
         );
-        Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId);
+        Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId, Request->Sender);
 
         YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Starting CDC stream scan",
             {"tabletId", TabletID()},

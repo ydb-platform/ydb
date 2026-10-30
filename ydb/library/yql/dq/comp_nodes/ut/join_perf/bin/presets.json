@@ -96,4 +96,52 @@
         [64, 64],
         [128, 128]
     ]
+    ,"TpchLineitemSupplier": [
+        [1048576, 16384]
+    ]
+    ,"TpchLineitemOrdersFiltered": [
+        [1048576, 262144]
+    ]
+    ,"TpchOrdersLineitem": [
+        [262144, 1048576]
+    ]
+    ,"TpchPartsuppSupplier": [
+        [524288, 128]
+    ]
+    ,"TpcdsFactItem": [
+        [1048576, 16384]
+    ]
+    ,"TpcdsFactDateFiltered": [
+        [1048576, 2048]
+    ]
+    ,"TpcdsFactCustomer": [
+        [1048576, 131072]
+    ]
+    ,"TpcdsSalesReturns": [
+        [1048576, 98304]
+    ]
+    ,"TpcdsCustomerAddress": [
+        [262144, 131072]
+    ]
+    ,"AnDim1K": [
+        [1048576, 1024]
+    ]
+    ,"AnDim32K": [
+        [1048576, 32768]
+    ]
+    ,"AnDim512K": [
+        [1048576, 524288]
+    ]
+    ,"AnFactFact": [
+        [1048576, 1048576]
+    ]
+    ,"AnChain1": [
+        [1048576, 2048]
+    ]
+    ,"AnChain2": [
+        [524288, 32768]
+    ]
+    ,"AnChain3": [
+        [262144, 524288]
+    ]
 }

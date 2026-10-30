@@ -605,7 +605,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void UpdateSigFor(ui64 cookie, ui64 sig) {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
+        const bool isNewOutcome = sig == Max<ui64>()
+            ? UndeliveredReplicas.insert(replicaId).second
+            : !Signature.HasReplicaSignature(replicaId);
+
+        if (isNewOutcome) {
             if (sig != Max<ui64>()) {
                 Signature.SetReplicaSignature(replicaId, sig);
             }
@@ -789,11 +793,69 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     TEvStateStorage::TSignature Signature;
 
+    enum class ERequestKind : ui8 {
+        None,
+        Lookup,
+        Mutation,
+    };
+
+    ERequestKind RequestKind = ERequestKind::None;
+    TEvStateStorage::TProxyOptions ProxyOptions;
+    NKikimrProto::EReplyStatus AggregatedStatus = NKikimrProto::OK;
+    NKikimrProto::EReplyStatus StateStatus = NKikimrProto::UNKNOWN;
+    ui32 StateRingGroupIdx = Max<ui32>();
+    bool HasState = false;
+
+    static bool HasTabletState(NKikimrProto::EReplyStatus status) {
+        return status == NKikimrProto::OK || status == NKikimrProto::RACE;
+    }
+
+    static ui32 StatusPriority(NKikimrProto::EReplyStatus status) {
+        switch (status) {
+            case NKikimrProto::OK: return 0;
+            case NKikimrProto::NODATA: return 1;
+            case NKikimrProto::TIMEOUT: return 2;
+            case NKikimrProto::ERROR: return 3;
+            case NKikimrProto::RACE: return 4;
+            default: return 5;
+        }
+    }
+
+    void MergeStatus(NKikimrProto::EReplyStatus status) {
+        if (StatusPriority(status) > StatusPriority(AggregatedStatus)) {
+            AggregatedStatus = status;
+        }
+    }
+
+    bool SameState(const TEvStateStorage::TEvInfo& msg) const {
+        return CurrentLeader == msg.CurrentLeader
+            && CurrentLeaderTablet == msg.CurrentLeaderTablet
+            && CurrentGeneration == msg.CurrentGeneration
+            && CurrentStep == msg.CurrentStep
+            && Locked == msg.Locked;
+    }
+
+    void SelectState(ui32 ringGroupIdx, const TEvStateStorage::TEvInfo& msg) {
+        CurrentLeader = msg.CurrentLeader;
+        CurrentLeaderTablet = msg.CurrentLeaderTablet;
+        CurrentGeneration = msg.CurrentGeneration;
+        CurrentStep = msg.CurrentStep;
+        Locked = msg.Locked;
+        LockedFor = msg.LockedFor;
+        StateStatus = msg.Status;
+        StateRingGroupIdx = ringGroupIdx;
+        HasState = true;
+    }
+
 
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
+        TabletID = msg->TabletID;
+        Cookie = msg->Cookie;
+        RequestKind = ERequestKind::Lookup;
+        ProxyOptions = msg->ProxyOptions;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -806,6 +868,10 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new TEvStateStorage::TEvLookup(*msg));
         }
+        if (RingGroupActors.empty()) {
+            Reply(NKikimrProto::ERROR);
+            PassAway();
+        }
     }
 
     template<class T>
@@ -813,6 +879,10 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
+        TabletID = msg->TabletID;
+        Cookie = msg->Cookie;
+        RequestKind = ERequestKind::Mutation;
+        ProxyOptions = msg->ProxyOptions;
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleInit",
             {"ev", msg->ToString()});
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
@@ -825,27 +895,43 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new T(*msg));
         }
+        if (RingGroupActors.empty()) {
+            Reply(NKikimrProto::ERROR);
+            PassAway();
+        }
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (!Info->RingGroups[ringGroupIdx].WriteOnly && Info->RingGroups[ringGroupIdx].State == ERingGroupState::PRIMARY) {
-            // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
-            TabletID = msg->TabletID;
-            Cookie = msg->Cookie;
-            CurrentLeader = msg->CurrentLeader;
-            CurrentLeaderTablet = msg->CurrentLeaderTablet;
-            CurrentGeneration = msg->CurrentGeneration;
-            CurrentStep = msg->CurrentStep;
-            Locked = msg->Locked;
-            LockedFor = msg->LockedFor;
+        if (!Info->RingGroups[ringGroupIdx].WriteOnly) {
+            MergeStatus(msg->Status);
             for (const auto& followerInfo : msg->Followers) {
                 Followers.insert_or_assign(followerInfo.Follower, followerInfo);
+            }
+            if (HasTabletState(msg->Status)) {
+                if (!HasState) {
+                    SelectState(ringGroupIdx, *msg);
+                } else if (!SameState(*msg) || StateStatus != msg->Status) {
+                    YDB_LOG_ERROR("StateStorage ring groups returned different tablet state",
+                        {"tabletId", TabletID},
+                        {"selectedRingGroup", StateRingGroupIdx},
+                        {"selectedStatus", static_cast<ui32>(StateStatus)},
+                        {"selectedLeader", CurrentLeader},
+                        {"selectedGeneration", CurrentGeneration},
+                        {"selectedStep", CurrentStep},
+                        {"ringGroup", ringGroupIdx},
+                        {"ev", msg->ToString()});
+                }
             }
         }
         Signature.Merge(msg->Signature);
     }
 
     bool ShouldReply() {
+        if (RequestKind == ERequestKind::Lookup && HasState
+                && ProxyOptions.SigWaitMode != TEvStateStorage::TProxyOptions::SigSync
+                && !ProxyOptions.WaitForAllRingGroups) {
+            return true;
+        }
         for(ui32 i : xrange(Info->RingGroups.size())) {
             auto& rg = Info->RingGroups[i];
             if (!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
@@ -876,17 +962,20 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Replied = true;
     }
 
-    void MaybeReply(NKikimrProto::EReplyStatus status) {
+    void MaybeReply() {
         if (!ShouldReply()) {
             return;
         }
         if (Replied) {
+            if (ProxyOptions.SigWaitMode != TEvStateStorage::TProxyOptions::SigAsync) {
+                return;
+            }
             auto* msg = new TEvStateStorage::TEvUpdateSignature(TabletID, Signature);
             YDB_LOG_DEBUG("RingGroupProxyRequest::Reply TEvUpdateSignature",
                 {"ev", msg->ToString()});
             Send(Source, msg, 0, SourceCookie);
         } else {
-            Reply(status);
+            Reply(RequestKind == ERequestKind::Lookup && HasState ? StateStatus : AggregatedStatus);
         }
     }
 
@@ -896,32 +985,39 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         YDB_LOG_DEBUG("RingGroupProxyRequest::HandleTEvInfo",
             {"ev", msg->ToString()});
-        MaybeReply(msg->Status);
+        MaybeReply();
     }
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
         Signature.Merge(msg->Signature);
-        MaybeReply(NKikimrProto::OK);
+        MaybeReply();
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
         TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
         if (Info->ClusterStateGeneration < msg->ClusterStateGeneration ||
             (Info->ClusterStateGeneration == msg->ClusterStateGeneration && Info->ClusterStateGuid != msg->ClusterStateGuid)) {
-            Reply(NKikimrProto::ERROR);
+            if (!Replied) {
+                Reply(NKikimrProto::ERROR);
+            }
             PassAway();
         }
     }
 
     void Timeout() {
+        if (!Replied) {
+            // Missing ring-group replies must not turn a mutation into a success.
+            MergeStatus(NKikimrProto::TIMEOUT);
+            Reply(RequestKind == ERequestKind::Lookup && HasState ? StateStatus : AggregatedStatus);
+        }
         PassAway();
     }
 
     void Handle(TEvStateStorage::TEvRingGroupPassAway::TPtr& /*ev*/) {
         RingGroupPassAwayCounter++;
-        if (RingGroupPassAwayCounter >= Info->RingGroups.size()) {
-            PassAway();
+        if (RingGroupPassAwayCounter >= RingGroupActors.size()) {
+            Timeout();
         }
     }
 
@@ -1180,11 +1276,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         ui64 fakeTabletId;
         switch (msg->KeyType) {
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePath:
-            fakeTabletId = CityHash64(msg->Path);
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->Path);
             break;
 
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePathId:
-            fakeTabletId = msg->PathId.Hash();
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->PathId);
             break;
 
         default:

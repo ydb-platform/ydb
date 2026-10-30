@@ -6,6 +6,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package NKikimrReplication;
@@ -25,10 +26,15 @@ message TReplicationDefaults {
         optional bool EnableSsl = 5 [default = true];
     }
 
-    optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
+    optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // Bootstrap retention, 1d
     optional TSchemeOperationLimits SchemeOperationLimits = 2;
     optional TIamServiceControl IamServiceControl = 3;
     optional bool InitialScan = 4 [default = true];
+    // Retention after installing the replication consumer. Increase when the
+    // source cluster's ValidRetentionLimits disallow the minimum of one second.
+    optional uint32 StreamRetentionPeriodSeconds = 5 [default = 1];
+    // Uncommitted messages are protected only for this finite window.
+    optional uint32 ConsumerAvailabilityPeriodSeconds = 6 [default = 86400]; // 1d
 }
 
 message TStaticCredentials {
@@ -80,6 +86,13 @@ message TBatchingSettings {
     optional uint64 BatchSizeBytes = 2 [default = 8388608];
 }
 
+message TAvailabilityPeriod {
+    oneof Value {
+        google.protobuf.Duration Duration = 1;
+        google.protobuf.Empty Unlimited = 2;
+    }
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -129,6 +142,7 @@ message TReplicationConfig {
     optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
+    optional TAvailabilityPeriod AvailabilityPeriod = 12;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -285,6 +299,7 @@ message TEvDescribeReplicationResult {
     optional TReplicationState State = 4;
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
     optional TReplicationStats Stats = 7;
+    optional TAvailabilityPeriod AvailabilityPeriod = 8;
 }
 
 message TControllerIdentity {

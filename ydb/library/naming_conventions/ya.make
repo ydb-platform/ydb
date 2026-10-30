@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     naming_conventions.cpp
+    scheme_object_names.cpp
 )
 
 END()

@@ -51,6 +51,16 @@ namespace {
 using namespace NKikimr;
 using NMonitoring::TEvMon;
 
+using TPathNormalizer = std::shared_ptr<const std::function<TString(TStringBuf)>>;
+
+TPathNormalizer MakePathNormalizer(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) {
+    if (!normalizer || !normalizer->HasRules()) {
+        return {};
+    }
+    return std::make_shared<const std::function<TString(TStringBuf)>>(
+        [normalizer = std::move(normalizer)](TStringBuf path) { return normalizer->NormalizePath(path); });
+}
+
 struct TIssueInfo {
     const Ydb::Issue::IssueMessage* Issue = nullptr;
     ui64 Depth = 0;
@@ -67,8 +77,8 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     event->Database = ExtractMonDatabaseParam(event->Request.Get());
-    if (!event->Database.empty() && HasAppData() && AppData()->PathNormalizer) {
-        event->Database = AppData()->PathNormalizer->NormalizePath(CanonizePath(event->Database));
+    if (!event->Database.empty() && event->PathNormalizer && *event->PathNormalizer) {
+        event->Database = (**event->PathNormalizer)(CanonizePath(event->Database));
     }
 }
 
@@ -671,8 +681,9 @@ public:
             LogAuthorizedHttpRequest(AppData(), ActorMonPage->GrpcProxyCounters, result, *request, Event->Get()->Database);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
-        Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
-            Container, serializedToken, Event->Get()->Database), IEventHandle::FlagTrackDelivery);
+        auto* requestEvent = new NMon::TEvHttpInfo(Container, serializedToken, Event->Get()->Database);
+        requestEvent->PathNormalizer = Event->Get()->PathNormalizer;
+        Send(ActorMonPage->TargetActorId, requestEvent, IEventHandle::FlagTrackDelivery);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
@@ -743,8 +754,9 @@ public:
 // receives all requests for one actor page and converts them to request-actors
 class THttpMonServiceLegacyActor : public TActorBootstrapped<THttpMonServiceLegacyActor> {
 public:
-    THttpMonServiceLegacyActor(TIntrusivePtr<TActorMonPage> actorMonPage)
+    THttpMonServiceLegacyActor(TIntrusivePtr<TActorMonPage> actorMonPage, TPathNormalizer pathNormalizer)
         : ActorMonPage(std::move(actorMonPage))
+        , PathNormalizer(std::move(pathNormalizer))
     {
     }
 
@@ -757,17 +769,28 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        if (!ev->Get()->PathNormalizer) {
+            ev->Get()->PathNormalizer = PathNormalizer;
+        }
         Register(new THttpMonLegacyActorRequest(std::move(ev), ActorMonPage));
+    }
+
+    void Handle(TEvMon::TEvUpdatePathNormalizer::TPtr& ev) {
+        PathNormalizer = ev->Get()->PathNormalizer;
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(TEvMon::TEvUpdatePathNormalizer, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
 
     TIntrusivePtr<TActorMonPage> ActorMonPage;
+
+private:
+    TPathNormalizer PathNormalizer;
 };
 
 inline TActorId MakeNodeProxyId(ui32 node) {
@@ -1589,9 +1612,10 @@ class THttpMonPageService : public TActor<THttpMonPageService> {
     TMon::TRequestAuthorizer Authorizer;
     TVector<TString> AllowedSIDs;
     TMon::EAuthMode AuthMode;
+    TPathNormalizer PathNormalizer;
 
 public:
-THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page,
+THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::IMonPage> page, TPathNormalizer pathNormalizer,
     TMon::TRequestAuthorizer authorizer = {}, TVector<TString> allowedSIDs = {},
     TMon::EAuthMode authMode = TMon::EAuthMode::Enforce
 )
@@ -1601,6 +1625,7 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
         , Authorizer(std::move(authorizer))
         , AllowedSIDs(std::move(allowedSIDs))
         , AuthMode(authMode)
+        , PathNormalizer(std::move(pathNormalizer))
     {
     }
 
@@ -1632,6 +1657,9 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        if (!ev->Get()->PathNormalizer) {
+            ev->Get()->PathNormalizer = PathNormalizer;
+        }
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
@@ -1643,9 +1671,14 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
         );
     }
 
+    void Handle(TEvMon::TEvUpdatePathNormalizer::TPtr& ev) {
+        PathNormalizer = ev->Get()->PathNormalizer;
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(TEvMon::TEvUpdatePathNormalizer, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
@@ -1660,6 +1693,7 @@ public:
         TVector<TString> allowedSIDs,
         TMon::TRequestAuthorizer authorizer,
         NKikimr::NGRpcService::IGRpcProxyCounters::TPtr grpcProxyCounters,
+        TPathNormalizer pathNormalizer,
         const TString& redirectRoot = {},
         bool needMonLegacyAudit = true)
         : TActor(&THttpMonIndexService::StateWork)
@@ -1670,6 +1704,7 @@ public:
         , GrpcProxyCounters(std::move(grpcProxyCounters))
         , RedirectRoot(redirectRoot)
         , NeedMonLegacyAudit(needMonLegacyAudit)
+        , PathNormalizer(std::move(pathNormalizer))
     {
     }
 
@@ -1701,6 +1736,9 @@ public:
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        if (!ev->Get()->PathNormalizer) {
+            ev->Get()->PathNormalizer = PathNormalizer;
+        }
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
         }
@@ -1775,10 +1813,15 @@ public:
         Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(ev->Get()->Fields.Path, SelfId()));
     }
 
+    void Handle(TEvMon::TEvUpdatePathNormalizer::TPtr& ev) {
+        PathNormalizer = ev->Get()->PathNormalizer;
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvMon::TEvRegisterHandler, Handle);
+            hFunc(TEvMon::TEvUpdatePathNormalizer, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
@@ -1792,6 +1835,9 @@ public:
     NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
     TString RedirectRoot;
     bool NeedMonLegacyAudit;
+
+private:
+    TPathNormalizer PathNormalizer;
 };
 
 class THttpMonPingService : public TActor<THttpMonPingService> {
@@ -1857,6 +1903,10 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     Y_ABORT_UNLESS(actorSystem);
     TGuard<TMutex> g(Mutex);
     ActorSystem = actorSystem;
+    if (!PathNormalizer) {
+        auto* appData = ActorSystem->AppData<NKikimr::TAppData>();
+        PathNormalizer = MakePathNormalizer(appData ? appData->GetPathNormalizer() : nullptr);
+    }
     if (auto* appData = ActorSystem->AppData<NKikimr::TAppData>()) {
         GrpcProxyCounters = NKikimr::NGRpcService::CreateGRpcProxyCounters(appData->Counters);
     }
@@ -1883,11 +1933,11 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, *PathNormalizer, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpAuthMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, Config.RedirectMainPageTo, false),
+        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, *PathNormalizer, Config.RedirectMainPageTo, false),
         TMailboxType::ReadAsFilled,
         executorPool);
     RegisterLwtrace();
@@ -1903,12 +1953,14 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
             CountersMonPage,
+            *PathNormalizer,
             Config.Authorizer,
             GetCountersAllowedSIDs(ActorSystem->AppData<NKikimr::TAppData>()));
     } else {
         countersMonPageServiceActor = new THttpMonPageService(
             HttpProxyActorId,
-            CountersMonPage);
+            CountersMonPage,
+            *PathNormalizer);
     }
     CountersServiceActorId = ActorSystem->Register(countersMonPageServiceActor, TMailboxType::ReadAsFilled, executorPool);
     ActorSystem->RegisterLocalService(CountersServiceActorId, CountersServiceActorId);
@@ -1949,6 +2001,19 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     return future;
 }
 
+void TMon::UpdatePathNormalizer(std::shared_ptr<const NKikimr::NPathAliasing::TPathNormalizer> normalizer) {
+    TGuard<TMutex> g(Mutex);
+    PathNormalizer = MakePathNormalizer(std::move(normalizer));
+    if (ActorSystem) {
+        for (const auto& actorId : {HttpMonServiceActorId, HttpAuthMonServiceActorId, CountersServiceActorId}) {
+            ActorSystem->Send(actorId, new TEvMon::TEvUpdatePathNormalizer(*PathNormalizer));
+        }
+        for (const auto& [path, actorId] : ActorServices) {
+            ActorSystem->Send(actorId, new TEvMon::TEvUpdatePathNormalizer(*PathNormalizer));
+        }
+    }
+}
+
 void TMon::Stop() {
     TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
@@ -1984,7 +2049,7 @@ void TMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
             ActorSystem->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
         }
         actorId = ActorSystem->Register(
-            new THttpMonServiceLegacyActor(actorMonPage),
+            new THttpMonServiceLegacyActor(actorMonPage, *PathNormalizer),
             TMailboxType::ReadAsFilled,
             ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(pageInfo.Path, actorId));

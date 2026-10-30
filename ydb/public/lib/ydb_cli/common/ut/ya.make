@@ -21,6 +21,7 @@ SRCS(
     print_utils_ut.cpp
     recursive_remove_ut.cpp
     scheme_query_utils_ut.cpp
+    sys_ut.cpp
     tabbed_table_ut.cpp
     tx_mode_utils_ut.cpp
     utf8_utils_ut.cpp

@@ -19,7 +19,6 @@ PEERDIR(
     ydb/core/tx/scheme_board
     # ydb/library/yql/public/udf/service/stub
     ydb/library/actors/core
-    ydb/library/actors/interconnect/mock
     ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/containers/stack_vector

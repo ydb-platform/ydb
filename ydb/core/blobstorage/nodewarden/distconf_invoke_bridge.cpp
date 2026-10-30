@@ -111,44 +111,51 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto *clusterState = config.MutableClusterState();
-        std::vector<size_t> changedPileIndices;
+        auto *details = config.MutableClusterStateDetails();
+        std::vector<std::pair<size_t, NKikimrBridge::TClusterState::EPileState>> changedPiles;
         for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
             if (clusterState->GetPerPileState(i) != newClusterState.GetPerPileState(i)) {
-                changedPileIndices.push_back(i);
+                changedPiles.emplace_back(i, clusterState->GetPerPileState(i));
             }
         }
         clusterState->CopyFrom(newClusterState);
 
-        std::vector<size_t> disconnectedPileIndices;
-        for (size_t changedPileIndex : changedPileIndices) {
-            auto *details = config.MutableClusterStateDetails();
+        auto markPileUnsynced = [&](size_t pileIndex) {
+            for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
+                const auto& item = details->GetPileSyncState(i);
+                const auto bridgePileId = TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId);
+                if (bridgePileId.GetPileIndex() != pileIndex) {
+                    continue;
+                }
+                details->MutablePileSyncState()->DeleteSubrange(i, 1);
+                break;
+            }
+            auto *state = details->AddPileSyncState();
+            TBridgePileId::FromPileIndex(pileIndex).CopyToProto(state,
+                &std::decay_t<decltype(*state)>::SetBridgePileId);
+            state->SetBecameUnsyncedGeneration(clusterState->GetGeneration());
+            state->SetUnsyncedBSC(true);
+        };
 
+        std::vector<size_t> disconnectedPileIndices;
+        for (const auto& [changedPileIndex, prevState] : changedPiles) {
             switch (clusterState->GetPerPileState(changedPileIndex)) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                 case NKikimrBridge::TClusterState::SUSPENDED:
                     // This pile no longer participates in replication.
-                    for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
-                        const auto& item = details->GetPileSyncState(i);
-                        const auto bridgePileId = TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId);
-                        if (bridgePileId.GetPileIndex() != changedPileIndex) {
-                            continue;
-                        }
-                        details->MutablePileSyncState()->DeleteSubrange(i, 1);
-                        break;
-                    }
-                    {
-                        // mark pile unsynced
-                        auto *state = details->AddPileSyncState();
-                        TBridgePileId::FromPileIndex(changedPileIndex).CopyToProto(state,
-                            &std::decay_t<decltype(*state)>::SetBridgePileId);
-                        state->SetBecameUnsyncedGeneration(clusterState->GetGeneration());
-                        state->SetUnsyncedBSC(true);
-
-                        disconnectedPileIndices.push_back(changedPileIndex);
-                    }
+                    markPileUnsynced(changedPileIndex);
+                    disconnectedPileIndices.push_back(changedPileIndex);
                     break;
 
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
+                    if (prevState == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2) {
+                        // The pile is being synced and its groups have got their parts resynced already, which BSC has
+                        // reported (or is about to). The re-run of rejoin makes writers skip the pile without bumping
+                        // the generations of its parts, so the parts would keep the SYNCED stage of their previous
+                        // sync while missing the writes made meanwhile; the pile has to go through the whole sync
+                        // again, like when it is cut off.
+                        markPileUnsynced(changedPileIndex);
+                    }
                     break;
 
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
@@ -288,7 +295,7 @@ namespace NKikimr::NStorage {
         StartProposition(&config, /*mindPrev=*/ false);
     }
 
-    void TInvokeRequestHandlerActor::ConvertToBridge(const TQuery::TConvertToBridge& /*cmd*/) {
+    void TInvokeRequestHandlerActor::ConvertToBridge(const TQuery::TConvertToBridge& cmd) {
         RunCommonChecks();
 
         if (!Self->SelfManagementEnabled) {
@@ -307,9 +314,11 @@ namespace NKikimr::NStorage {
         for (const auto& node : Self->StorageConfig->GetAllNodes()) {
             requiredNodeIds.insert(node.GetNodeId());
         }
-        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this] {
+        const bool skipStoragePoolConversion = cmd.GetSkipStoragePoolConversion();
+        RequireBridgeCapability(BridgeFeatureLevel, std::move(requiredNodeIds), {}, [this, skipStoragePoolConversion] {
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
+            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig,
+                    skipStoragePoolConversion)) {
                 throw TExError() << *error;
             }
             StartProposition(&config);

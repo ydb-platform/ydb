@@ -1,0 +1,9 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "YFM-extended markdown processor for Cloud deploy (v3)",
+        "definition": {
+            "formula": "build/platform/yfm/resources.json"
+        }
+    }
+}

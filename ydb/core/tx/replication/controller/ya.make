@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
+    ydb/library/naming_conventions
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json
@@ -69,6 +70,7 @@ SRCS(
     tx_resolve_secret_result.cpp
     tx_run_worker.cpp
     tx_worker_error.cpp
+    worker_lag_expiry_queue.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)

@@ -109,6 +109,70 @@ class TMirror3dcWriteQuorumChecker {
     }
 
 public:
+    static bool CheckFailModelForGroup(const TBlobStorageGroupInfo& info,
+            const TBlobStorageGroupInfo::TGroupVDisks& failedDisks) {
+        using G = TBlobStorageGroupInfo;
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const auto& topology = info.GetTopology();
+        if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+                || topology.GetTotalFailRealmsNum() != 3 || failedDisks.GetTopology() != &topology) {
+            return false;
+        }
+        const std::array<EMirror3dcFailRealmState, 3> realms = {
+            info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2)};
+        const auto state = GetMirror3dcGroupState(realms[0], realms[1], realms[2]);
+        if (!state) {
+            return false;
+        }
+        const auto layouts = *GetMirror3dcGroupLayouts(*state);
+        const TMirror3dcWriteQuorumChecker checker(realms, layouts.Write, layouts.Ensured);
+        const auto failedDomains = G::TGroupFailDomains::CreateFromGroupDiskSet(
+            failedDisks, G::TGroupFailDomains::EDiskCondition::ANY);
+        std::array<ui32, 3> uncertain{};
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            if (realms[realm] != R::F) {
+                for (const auto& domain : topology.FailRealms[realm].FailDomains) {
+                    uncertain[realm] += failedDomains[domain.FailDomainOrderNumber];
+                }
+            }
+        }
+        // A range is complete only if no blob's ensured layout can hide in failed domains.
+        return !checker.CheckCounts(uncertain, layouts.Ensured);
+    }
+
+    static bool CheckQuorumForFullSync(const TBlobStorageGroupInfo& info,
+            const TBlobStorageGroupInfo::TGroupVDisks& syncedDisks) {
+        const TBlobStorageGroupInfo::TTopology& topology = info.GetTopology();
+        if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+                || topology.GetTotalFailRealmsNum() != 3 || syncedDisks.GetTopology() != &topology) {
+            return false;
+        }
+        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(info.GetFailRealmState(0),
+            info.GetFailRealmState(1), info.GetFailRealmState(2));
+        if (!state) {
+            return false;
+        }
+        if (GetMirror3dcGroupLayouts(*state)->Ensured != EMirror3dcLayout::LAYOUT_0) {
+            return CheckFailModelForGroup(info, ~syncedDisks);
+        }
+        // E=0 cannot prove completeness by intersection. Collect every surviving normal source.
+        bool hasNormalSource = false;
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            if (info.IsFailedFailRealm(realm) || info.IsRecoveringFailRealm(realm)) {
+                continue;
+            }
+            hasNormalSource = true;
+            for (const TBlobStorageGroupInfo::TFailDomain& domain : topology.FailRealms[realm].FailDomains) {
+                for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domain.VDisks) {
+                    if (!syncedDisks[disk.OrderNumber]) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return hasNormalSource;
+    }
+
     EMirror3dcLayout GetWriteLayout() const {
         return WriteLayout;
     }
@@ -163,8 +227,68 @@ public:
         return CheckCounts(CountParts(parts), WriteLayout);
     }
 
+    ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        Y_ABORT_UNLESS(idxInSubgroup < 9);
+        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
+        Y_ABORT_UNLESS(state);
+        const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
+        const std::array<ui32, 3> copies = CountParts(parts);
+        const ui32 localRealm = idxInSubgroup % 3;
+        const bool localRealmIsFailed = Realms[localRealm] == TFailRealm::F;
+        const bool durabilitySatisfied = CheckCounts(copies, durability);
+        const bool localPartAlreadyPresent = (parts.GetDisksWithPart(localRealm) & (1u << idxInSubgroup)) != 0;
+        if (localRealmIsFailed || durabilitySatisfied || localPartAlreadyPresent) {
+            return 0;
+        }
+
+        ui32 requiredRealms = 0;
+        ui32 requiredCopies = 0;
+        switch (durability) {
+            case EMirror3dcLayout::LAYOUT_111:
+                requiredRealms = 3;
+                requiredCopies = 1;
+                break;
+            case EMirror3dcLayout::LAYOUT_11:
+                requiredRealms = 2;
+                requiredCopies = 1;
+                break;
+            case EMirror3dcLayout::LAYOUT_22:
+                requiredRealms = 2;
+                requiredCopies = 2;
+                break;
+            case EMirror3dcLayout::LAYOUT_1:
+                requiredRealms = 1;
+                requiredCopies = 1;
+                break;
+            case EMirror3dcLayout::LAYOUT_2:
+                requiredRealms = 1;
+                requiredCopies = 2;
+                break;
+            default:
+                Y_ABORT("Unsupported mirror-3-dc durability layout");
+        }
+        ui32 normalRealms = 0;
+        ui32 activeDisks = 0;
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            if (Realms[realm] != TFailRealm::F) {
+                activeDisks |= 0b001001001u << realm;
+                normalRealms += Realms[realm] != TFailRealm::R;
+            }
+        }
+        const ui32 present = parts.GetDisksWithPart(0) | parts.GetDisksWithPart(1) | parts.GetDisksWithPart(2);
+        const bool hasActiveSource = (present & activeDisks) != 0;
+        const bool localRealmIsRecovering = Realms[localRealm] == TFailRealm::R;
+        const bool normalRealmsCanSatisfyDurability = normalRealms >= requiredRealms;
+        const bool skipRecoveringRealm = localRealmIsRecovering && normalRealmsCanSatisfyDurability;
+        if (!hasActiveSource || skipRecoveringRealm) {
+            return 0;
+        }
+        return copies[localRealm] < requiredCopies ? 1u << localRealm : 0;
+    }
+
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.
-    // R contributes only known copies; failures in R and copies in F are ignored.
+    // R participates only in layout alternatives that need it; F never contributes.
     // For E > 0, uncertainty that can hide E takes precedence over known copies.
     TBlobStorageGroupInfo::EBlobState GetBlobState(const TSubgroupPartLayout& parts,
             const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const {
@@ -181,7 +305,7 @@ public:
             if (Realms[realm] != R::F) {
                 // A mirror part can recover the blob even when stored in the wrong position.
                 hasCopy |= bool(present & (1u << disk));
-                uncertain[realm] += Realms[realm] != R::R && failedDisks[disk];
+                uncertain[realm] += failedDisks[disk];
             }
         }
 

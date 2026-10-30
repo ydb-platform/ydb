@@ -184,8 +184,10 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .FailOnRestrictedCreateInTempZone();
 
     if (path.IsResolved()) {
-        if (checks && !path.IsDeleted() && path.IsWaitingImportReplica()) {
-            checks.NotUnderDeleting().NotUnderOperation();
+        if (!path.IsDeleted() && path.IsWaitingImportReplica()) {
+            checks
+                .NotUnderDeleting()
+                .NotUnderOperation();
         } else if (path->IsSysView()) {
             checks
                 .IsResolved()

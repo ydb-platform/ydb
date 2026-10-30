@@ -83,11 +83,14 @@ struct TEvService {
             }
         }
 
-        explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag) {
+        explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag, TMaybe<bool> inflightBatch = Nothing()) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_INFO);
             Record.SetLagMilliSeconds(lag.MilliSeconds());
+            if (inflightBatch.Defined()) {
+                Record.SetInflightBatch(*inflightBatch);
+            }
         }
 
         template <typename TContainer>

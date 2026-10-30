@@ -130,6 +130,12 @@ public:
         uint64_t WriteTxId = 0;
     };
 
+    struct TApplyStatus {
+        uint64_t Workers = 0;
+        uint64_t InflightWorkers = 0;
+        uint64_t UnknownWorkers = 0;
+    };
+
     struct TTransactions {
         // Both lists are ordered by interval version.
         std::vector<TAssignedTransaction> Assigned;
@@ -180,6 +186,11 @@ public:
     // Missing means unavailable; empty lists do not imply that replication caught up.
     const std::optional<TTransactions>& GetTransactions() const;
 
+    // Last reported ROW-mode activity, independently of IncludeStats.
+    // Missing or expired worker reports are counted as unknown. Values may lag
+    // behind current activity and do not indicate that replication caught up.
+    const std::optional<TApplyStatus>& GetApplyStatus() const;
+
     EState GetState() const;
     const TRunningState& GetRunningState() const;
     const TErrorState& GetErrorState() const;
@@ -192,6 +203,7 @@ private:
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
     std::optional<TTransactions> Transactions_;
+    std::optional<TApplyStatus> ApplyStatus_;
 
     std::variant<
         TRowConsistency,

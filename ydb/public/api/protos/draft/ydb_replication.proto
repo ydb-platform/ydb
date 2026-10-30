@@ -78,6 +78,17 @@ message DescribeReplicationResult {
         repeated VirtualTimestamp pending = 2;
     }
 
+    // Last reported application activity in ROW consistency mode.
+    // Reports are asynchronous; these counts do not indicate source catch-up.
+    message ApplyStatus {
+        // Number of registered workers, including workers without a recent report.
+        uint64 workers = 1;
+        // Workers that reported a received batch not yet fully applied.
+        uint64 inflight_workers = 2;
+        // Workers with missing or expired reports, including after restart.
+        uint64 unknown_workers = 3;
+    }
+
     message Stats {
         optional google.protobuf.Duration lag = 1;
         optional float initial_scan_progress = 2;
@@ -125,6 +136,8 @@ message DescribeReplicationResult {
     // Reported independently of include_stats; absent when unavailable or in row mode.
     // Empty lists do not prove that replication caught up with the source.
     Transactions transactions = 11;
+    // Reported in ROW mode independently of include_stats; absent when unsupported.
+    ApplyStatus apply_status = 12;
 }
 
 message DescribeTransferRequest {

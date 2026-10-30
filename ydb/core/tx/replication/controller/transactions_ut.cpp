@@ -120,6 +120,7 @@ struct TTransactionsEnv: TEnv<> {
         const auto& record = response->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(ui32(record.GetStatus()), ui32(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS));
         UNIT_ASSERT(record.HasTransactions());
+        UNIT_ASSERT(!record.HasApplyStatus());
         return record.GetTransactions();
     }
 
@@ -127,14 +128,24 @@ struct TTransactionsEnv: TEnv<> {
         return Describe().assigned_size();
     }
 
-    std::optional<NYdb::NReplication::TReplicationDescription::TTransactions> SdkTransactions(bool stats) {
+    NYdb::NReplication::TReplicationDescription SdkDescription(bool stats) {
         return RunCall([&] {
             NYdb::NReplication::TReplicationClient client(GetDriver());
             auto result = client.DescribeReplication("/Root/replication",
                 NYdb::NReplication::TDescribeReplicationSettings().IncludeStats(stats)).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            return result.GetReplicationDescription().GetTransactions();
+            return result.GetReplicationDescription();
         });
+    }
+
+    std::optional<NYdb::NReplication::TReplicationDescription::TTransactions> SdkTransactions(bool stats) {
+        return SdkDescription(stats).GetTransactions();
+    }
+
+    void ReportActivity(TMaybe<bool> inflight) {
+        auto* event = new TEvService::TEvWorkerStatus(
+            TWorkerId::Parse(Worker), TDuration::Zero(), inflight);
+        SendAsync(Controller, event);
     }
 
     ui64 Assign(ui64 step) {
@@ -256,6 +267,78 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         UNIT_ASSERT(!response->Get()->Record.HasTransactions());
         UNIT_ASSERT(!env.SdkTransactions(false));
         UNIT_ASSERT(!env.SdkTransactions(true));
+    }
+
+    void CheckApplyStatus(TTransactionsEnv& env, ui64 workers, ui64 inflight, ui64 unknown) {
+        auto response = env.Send<TEvController::TEvDescribeReplicationResult>(env.TabletId, env.Request());
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT(!record.HasTransactions());
+        UNIT_ASSERT(record.HasApplyStatus());
+        const auto& status = record.GetApplyStatus();
+        UNIT_ASSERT_VALUES_EQUAL(status.workers(), workers);
+        UNIT_ASSERT_VALUES_EQUAL(status.inflight_workers(), inflight);
+        UNIT_ASSERT_VALUES_EQUAL(status.unknown_workers(), unknown);
+        for (const bool stats : {false, true}) {
+            const auto description = env.SdkDescription(stats);
+            UNIT_ASSERT(!description.GetTransactions());
+            UNIT_ASSERT(description.GetApplyStatus());
+            const auto& sample = *description.GetApplyStatus();
+            UNIT_ASSERT_VALUES_EQUAL(sample.Workers, workers);
+            UNIT_ASSERT_VALUES_EQUAL(sample.InflightWorkers, inflight);
+            UNIT_ASSERT_VALUES_EQUAL(sample.UnknownWorkers, unknown);
+        }
+    }
+
+    Y_UNIT_TEST(RowActivityReportsBusyIdleAndMissingSamples) {
+        TTransactionsEnv env(false);
+        CheckApplyStatus(env, 1, 0, 1);
+        env.ReportActivity(true);
+        CheckApplyStatus(env, 1, 1, 0);
+        // A duplicate sample is not another unfinished batch.
+        env.ReportActivity(true);
+        CheckApplyStatus(env, 1, 1, 0);
+        env.ReportActivity(false);
+        CheckApplyStatus(env, 1, 0, 0);
+        // Older services report lag without activity information.
+        env.ReportActivity(Nothing());
+        CheckApplyStatus(env, 1, 0, 1);
+        env.ReportActivity(true);
+        CheckApplyStatus(env, 1, 1, 0);
+        env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
+        env.Handshake();
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        CheckApplyStatus(env, 1, 0, 1);
+        env.ReportActivity(false);
+        CheckApplyStatus(env, 1, 0, 0);
+    }
+
+    Y_UNIT_TEST(RowActivityExpiresWithoutReports) {
+        TTransactionsEnv env(false, ERuntimeMode::Simulated);
+        env.ReportActivity(false);
+        CheckApplyStatus(env, 1, 0, 0);
+        env.GetRuntime().SimulateSleep(TDuration::Seconds(61));
+        CheckApplyStatus(env, 1, 0, 1);
+        env.ReportActivity(true);
+        CheckApplyStatus(env, 1, 1, 0);
+    }
+
+    Y_UNIT_TEST(SdkPreservesApplyStatusPresence) {
+        Ydb::Replication::DescribeReplicationResult proto;
+        UNIT_ASSERT(!NYdb::NReplication::TReplicationDescription(proto).GetApplyStatus());
+        auto* status = proto.mutable_apply_status();
+        const auto empty = NYdb::NReplication::TReplicationDescription(proto).GetApplyStatus();
+        UNIT_ASSERT(empty);
+        UNIT_ASSERT_VALUES_EQUAL(empty->Workers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(empty->InflightWorkers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(empty->UnknownWorkers, 0);
+        status->set_workers(7);
+        status->set_inflight_workers(3);
+        status->set_unknown_workers(2);
+        const auto result = NYdb::NReplication::TReplicationDescription(proto).GetApplyStatus();
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Workers, 7);
+        UNIT_ASSERT_VALUES_EQUAL(result->InflightWorkers, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->UnknownWorkers, 2);
     }
 
     Y_UNIT_TEST(CommitInProgressAndRetryRemainCounted) {

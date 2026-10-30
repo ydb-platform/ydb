@@ -152,6 +152,10 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         }
     }
 
+    if (desc.has_apply_status()) {
+        const auto& status = desc.apply_status();
+        ApplyStatus_ = TApplyStatus{status.workers(), status.inflight_workers(), status.unknown_workers()};
+    }
     if (desc.has_transactions()) {
         auto& transactions = Transactions_.emplace();
         transactions.Assigned.reserve(desc.transactions().assigned_size());
@@ -236,6 +240,10 @@ const TGlobalConsistency& TReplicationDescription::GetGlobalConsistency() const 
 
 const std::optional<TReplicationDescription::TTransactions>& TReplicationDescription::GetTransactions() const {
     return Transactions_;
+}
+
+const std::optional<TReplicationDescription::TApplyStatus>& TReplicationDescription::GetApplyStatus() const {
+    return ApplyStatus_;
 }
 
 TReplicationDescription::EState TReplicationDescription::GetState() const {

@@ -245,6 +245,28 @@ public:
             }
         }
 
+        if (replication->GetConfig().GetConsistencySettings().HasRow()) {
+            auto* status = Result->Record.MutableApplyStatus();
+            ui64 workers = 0;
+            ui64 inflight = 0;
+            ui64 unknown = 0;
+            for (const auto* target : replication->GetTargets()) {
+                for (const auto workerId : target->GetWorkers()) {
+                    ++workers;
+                    const TWorkerId id(replication->GetId(), target->GetId(), workerId);
+                    const auto it = Self->Workers.find(id);
+                    if (it == Self->Workers.end() || !it->second.InflightBatch.Defined()) {
+                        ++unknown;
+                    } else if (*it->second.InflightBatch) {
+                        ++inflight;
+                    }
+                }
+            }
+            status->set_workers(workers);
+            status->set_inflight_workers(inflight);
+            status->set_unknown_workers(unknown);
+        }
+
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;
         std::optional<TInitialScanProgress> totalScanProgress;
 

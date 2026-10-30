@@ -623,6 +623,8 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
                 record.HasSourceCommittedOffset() ? TMaybe<ui64>(record.GetSourceCommittedOffset()) : Nothing());
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
             if (record.HasLagMilliSeconds() && !StoppingWorkers.contains(id)) {
+                Workers.at(id).InflightBatch = record.HasInflightBatch()
+                    ? TMaybe<bool>(record.GetInflightBatch()) : Nothing();
                 LagExpiryQueue.SetDeadline(id, ctx.Monotonic() + WorkerLagTimeout);
                 ScheduleLagExpiry(ctx);
                 UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
@@ -698,6 +700,9 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
 }
 
 void TController::InvalidateLag(const TWorkerId& id) {
+    if (auto it = Workers.find(id); it != Workers.end()) {
+        it->second.InflightBatch.Clear();
+    }
     LagExpiryQueue.Remove(id);
     if (auto* target = FindTarget(id)) {
         target->InvalidateLag(id.WorkerId());

@@ -87,6 +87,67 @@ Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
 Y_UNIT_TEST_SUITE(Worker) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST(ActivitySampleSurvivesWriterRetryUntilBatchCompletes) {
+        class TPeer final : public TActor<TPeer> {
+        public:
+            TPeer(TActorId edge, TActorId& id)
+                : TActor(&TThis::StateWork)
+                , Edge(edge)
+                , Id(id)
+            {}
+
+            STATEFN(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                case TEvWorker::EvHandshake:
+                    Id = SelfId();
+                    Send(ev->Sender, new TEvWorker::TEvHandshake());
+                    break;
+                default:
+                    Send(ev->Forward(Edge));
+                    break;
+                }
+            }
+
+        private:
+            const TActorId Edge;
+            TActorId& Id;
+        };
+
+        TEnv env(true, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        const auto edge = env.GetSender();
+        TActorId reader;
+        TActorId writer;
+        const auto worker = runtime.Register(CreateWorker(edge,
+            [edge, &reader] { return new TPeer(edge, reader); },
+            [edge, &writer] { return new TPeer(edge, writer); }));
+        runtime.GrabEdgeEventRethrow<TEvWorker::TEvPoll>(edge);
+        auto check = [&](bool inflight) {
+            runtime.Send(new IEventHandle(worker, edge, new TEvents::TEvWakeup()));
+            const auto report = runtime.GrabEdgeEventRethrow<TEvWorker::TEvStatus>(edge);
+            UNIT_ASSERT(report->Get()->InflightBatch.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(*report->Get()->InflightBatch, inflight);
+        };
+        check(false);
+        runtime.Send(new IEventHandle(worker, reader, new TEvWorker::TEvData(0, "source", {
+            TTopicMessage(0, "first"), TTopicMessage(1, "second"),
+        })));
+        runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(edge);
+        check(true);
+        const auto oldWriter = writer;
+        runtime.Send(new IEventHandle(worker, oldWriter,
+            new TEvWorker::TEvGone(TEvWorker::TEvGone::UNAVAILABLE)));
+        runtime.GrabEdgeEventRethrow<TEvWorker::TEvData>(edge);
+        UNIT_ASSERT(writer != oldWriter);
+        check(true);
+        // Completion from the old writer cannot release the retained batch.
+        runtime.Send(new IEventHandle(worker, oldWriter, new TEvWorker::TEvPoll()));
+        check(true);
+        runtime.Send(new IEventHandle(worker, writer, new TEvWorker::TEvPoll()));
+        runtime.GrabEdgeEventRethrow<TEvWorker::TEvPoll>(edge);
+        check(false);
+    }
+
     Y_UNIT_TEST(SchemaEqualityAcceptsMissingIndexMetadata) {
         NKikimrReplication::TSchemaChange legacy;
         legacy.SetSourceSchemaVersion(1);

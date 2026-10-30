@@ -579,19 +579,10 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )
 
-          # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
-          # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
-          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
-            YA_MAKE_RUN_CMD=(
-              prlimit --core=unlimited:unlimited
-              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
-              "${YA_MAKE_CMD[@]}"
-            )
-          else
-            YA_MAKE_RUN_CMD=(
-              sudo -n -E -u "$(id -un)" -- "${YA_MAKE_CMD[@]}"
-            )
-          fi
+          # With custom ya --account-test-cgroup: Delegate=yes + ya_cgroup_exec so the
+          # scope can host nested ya-test-* cgroups (monitor kind=test samples).
+          # Otherwise keep the usual core-dump / sudo drop path.
+          install_cpu_quota_wrapper
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
@@ -608,6 +599,7 @@ runs:
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
+             "${DELEGATE_CPU[@]}" \
              -- "${YA_MAKE_RUN_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e

@@ -11,7 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
-#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -71,10 +71,10 @@ public:
             settingsCustomizer(nodeId, common->Settings);
         }
 
-        if (common->Settings.V2.Enable) {
-            // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
-            // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
-            // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
+        if (common->Settings.V2.Enable && common->Settings.V2.Threads) {
+            // Mirror production: create the shared v2 engine only when v2 is enabled, then install
+            // its actor-system client on startup. Shard count is overridable via YDB_IC_V2_SHARDS
+            // so tests can force many connections onto one ring.
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
                 common->Settings.V2.Threads = FromString<ui32>(s);
             }
@@ -82,9 +82,9 @@ public:
                 common->Settings.V2.RingsPerShard = FromString<ui32>(s);
             }
             common->UringEngineV2 = CreateUringEngine(common);
-            setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
-                if (engine) {
-                    engine->SetActorSystem(actorSystem);
+            setup.OnActorSystemCreated.push_back([common = common](TActorSystem *actorSystem) {
+                if (const auto& engine = common->UringEngineV2) {
+                    engine->SetClient(CreateUringEngineClient(*common, actorSystem));
                 }
             });
         }

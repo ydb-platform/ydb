@@ -261,6 +261,32 @@ namespace NKikimr {
             WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, child.Offset + 1}});
         }
 
+        // Without auto-partitioning support the children of a skipped parent are balanced on their own,
+        // so the reader of a child may be a session that has never seen the parent.
+        Y_UNIT_TEST(ChildCommitOnAnotherReader_NoAutoPartitioningSupport) {
+            TTopicSdkTestSetup setup = CreateSplitSetup();
+            WriteMessage(setup, "parent-0", 1);
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, ParentPartition, "a");
+            const TInstant readFrom = TInstant::Now();
+            WriteToPartition(setup, "child-1", 1);
+            WriteToPartition(setup, "child-2", 2);
+
+            // The explicit partition pins the parent to its own session, the children go to the other one.
+            TRawReadSessionSettings parentSettings = RawSettings(false, readFrom);
+            parentSettings.PartitionIds = {ParentPartition};
+            TRawReadSession parentReader(setup, parentSettings);
+            parentReader.WaitPartitionSession(TEST_TOPIC, ParentPartition);
+            TRawReadSession childReader(setup, RawSettings(false, readFrom));
+
+            childReader.WaitFor([&]() { return !childReader.GetMessages().empty(); }, "a child message");
+            UNIT_ASSERT(!childReader.FindPartitionSession(TEST_TOPIC, ParentPartition));
+            const TRawReadSession::TMessage child = childReader.GetMessages().front();
+            childReader.Commit(child);
+            childReader.WaitCommitted(TEST_TOPIC, child.PartitionId, child.Offset + 1);
+            WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {child.PartitionId, child.Offset + 1}});
+        }
+
     } // Y_UNIT_TEST_SUITE(SplitReadFromTimestampRawStream)
 
 } // namespace NKikimr

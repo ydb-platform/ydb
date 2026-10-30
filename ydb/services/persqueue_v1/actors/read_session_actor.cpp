@@ -1351,14 +1351,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
         }
     }
 
-    std::unordered_set<ui64> skippedParents;
-    for (const auto* parent: partitionNode->AllParents) {
-        for (auto& [_, actorInfo]: Partitions) {
-            if (actorInfo.Partition.Partition == parent->Id && actorInfo.ReadingFinished && actorInfo.StartedFromEnd) {
-                skippedParents.emplace(actorInfo.Partition.Partition);
-            }
-        }
-    }
+    const std::unordered_set<ui64> skippedParents(record.GetSkippedParentPartitions().begin(), record.GetSkippedParentPartitions().end());
 
     const auto database = topic->DbPath;
     const TActorId actorId = ctx.Register(new TPartitionActor(

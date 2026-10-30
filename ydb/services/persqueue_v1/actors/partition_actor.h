@@ -294,7 +294,7 @@ private:
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
-    const std::unordered_set<ui64> SkippedParents; // Set of parent partitions that don't contain any data for this session
+    const std::unordered_set<ui64> SkippedParents; // Ancestors that finished without delivering any data to the consumer
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

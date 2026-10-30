@@ -430,6 +430,7 @@ runs:
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         # Comparison draft PRs: always run the complete small/medium set with --retest
+        # retrigger after Copilot placement fix (trusted push)
         # (skip graph_compare incremental filter). Same mode as prior telemetry A/B PRs.
         if false; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"

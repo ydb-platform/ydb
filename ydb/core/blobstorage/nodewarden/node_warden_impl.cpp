@@ -992,7 +992,10 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         }
 
         if (saveCtx->DeleteStorage) {
-            std::filesystem::remove(std::filesystem::path(saveCtx->ConfigDirPath.c_str()) / StorageConfigFileName);
+            // the storage YAML goes away only with the new main YAML in place, the old one relies on it
+            if (success) {
+                std::filesystem::remove(std::filesystem::path(saveCtx->ConfigDirPath.c_str()) / StorageConfigFileName);
+            }
         } else if (success && saveCtx->UpdateStorage) {
             success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
             if (success) {

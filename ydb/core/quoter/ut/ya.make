@@ -16,6 +16,7 @@ IF (NOT OS_WINDOWS)
     )
 
     SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
     END()
 ENDIF()

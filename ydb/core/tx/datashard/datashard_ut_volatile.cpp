@@ -2061,7 +2061,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 NKikimrTxDataShard::TEvEraseRowsResponse::OK);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<TEvDataShard::TEvUploadRowsResponse*>(result.Event.Get())->Record.GetStatus(),
-                NKikimrTxDataShard::TError::OK);
+                static_cast<ui32>(NKikimrTxDataShard::TError::OK));
         }
 
         runTx([&](auto& txc) {

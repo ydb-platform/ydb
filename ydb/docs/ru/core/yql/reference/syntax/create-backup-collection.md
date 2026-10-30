@@ -8,9 +8,23 @@ CREATE BACKUP COLLECTION collection_name (
 ) WITH (option = value [, ...]);
 ```
 
+{% note warning %}
+
+В YDB 26.2 коллекции резервных копий скрыты за функциональным флагом
+`enable_backup_service`, который по умолчанию выключен. При выключенном флаге
+`CREATE BACKUP COLLECTION` завершается ошибкой `Backup collections are
+disabled`. Перед использованием коллекций включите флаг в конфигурации
+кластера.
+
+{% endnote %}
+
 ## Параметры
 
-* `collection_name` — имя создаваемой коллекции резервных копий.
+* `collection_name` — имя создаваемой коллекции резервных копий. Используйте
+  одно имя, например `daily_backups`, а не произвольный путь в схеме. YDB
+  автоматически хранит коллекцию по пути
+  `<database>/.backups/collections/<collection_name>`. В выражениях `BACKUP`,
+  `RESTORE` и `DROP BACKUP COLLECTION` обращайтесь к ней по тому же имени.
 * `table_name` — полный путь к таблице для включения в коллекцию. Можно указать несколько таблиц.
 * Опции:
 

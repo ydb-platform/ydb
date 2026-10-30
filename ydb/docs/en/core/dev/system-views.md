@@ -695,7 +695,7 @@ Table structure:
 | `GroupSid` | Group SID.<br />Type: `Utf8`.<br />Key: `0`. |
 | `MemberSid` | Group member SID. Can be either a user SID or a group SID.<br />Type: `Utf8`.<br />Key: `1`. |
 
-### Information about access rights {#information-about-access-rights} {#information-about-access-rights}
+### Information about access rights {#information-about-access-rights}
 
 The views contain a list of granted [access rights](../concepts/glossary.md#access-right).
 

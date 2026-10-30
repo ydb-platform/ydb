@@ -274,6 +274,14 @@ public:
 using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
 using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
 
+// Whether a propose response means the operation actually started (accepted, done,
+// or conditionally accepted on a retry). A null response or any other status means
+// the propose was rejected.
+inline bool IsOperationIgnited(const THolder<TProposeResponse>& response) {
+    return response
+        && (response->IsAccepted() || response->IsDone() || response->IsConditionalAccepted());
+}
+
 class ISubOperation: public TSimpleRefCount<ISubOperation>, public ISubOperationState {
 public:
     using TPtr = TIntrusivePtr<ISubOperation>;

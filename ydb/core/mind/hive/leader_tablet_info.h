@@ -110,36 +110,8 @@ public:
         return !NeedToReleaseFromParent && State == ETabletState::ReadyToWork && !IsBootingSuppressed();
     }
 
-    bool IsReadyToBoot() const {
-        return IsReadyToWork() && TTabletInfo::IsReadyToBoot();
-    }
-
-    bool IsReadyToStart(TInstant now) const {
-        return IsReadyToWork() && TTabletInfo::IsReadyToStart(now);
-    }
-
     bool IsReadyToBlockStorage() const {
         return State == ETabletState::BlockStorage;
-    }
-
-    bool IsStarting() const {
-        return IsReadyToWork() && TTabletInfo::IsStarting();
-    }
-
-    bool IsStartingOnNode(TNodeId nodeId) const {
-        return IsReadyToWork() && TTabletInfo::IsStartingOnNode(nodeId);
-    }
-
-    bool IsRunning() const {
-        return IsReadyToWork() && TTabletInfo::IsRunning();
-    }
-
-    bool IsAlive() const {
-        return IsReadyToWork() && TTabletInfo::IsAlive();
-    }
-
-    bool IsAliveOnLocal(const TActorId& local) const {
-        return IsReadyToWork() && TTabletInfo::IsAliveOnLocal(local);
     }
 
     bool IsDeleting() const {
@@ -324,6 +296,8 @@ public:
     TActorId ClearLockedToActor() {
         return SetLockedToActor(TActorId(), TDuration());
     }
+
+    void RestoreLockedTabletMetrics();
 
     void ActualizeTabletStatistics(TInstant now);
 

@@ -1,4 +1,4 @@
-* Added `Float8E4M3` (E4M3FN) and `Float8E5M2` vector index types.
+* Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it are dropped; partition sessions of a dropped database get `TPartitionSessionClosedEvent` with the `ConnectionLost` reason. A listed database that becomes unavailable keeps its subsession. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
 
 * Fixed Query session shutdown racing with session pool return.
 

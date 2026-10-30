@@ -50,6 +50,7 @@ struct TEvPrivate {
         EvUpdateYdbProxy,
         EvCancelCreateStream,
         EvCancelDropStream,
+        EvExpireWorkerLag,
 
         EvEnd,
     };
@@ -222,6 +223,8 @@ struct TEvPrivate {
         explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
     };
+
+    struct TEvExpireWorkerLag: public TEventLocal<TEvExpireWorkerLag, EvExpireWorkerLag> {};
 
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };

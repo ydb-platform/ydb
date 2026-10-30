@@ -8057,6 +8057,9 @@ selector_config: []
             nodeState->SetState(nodeId == 1 ? NKikimr::BAD : NKikimr::GOOD); // node 1 is bad
         }
         runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
         SimUntil(runtime, [&] { return reassignedNode || reconfigured; });
         UNIT_ASSERT_C(reassignedNode != 3u, "the ring of the healthy node 3 is disabled while the ring of node 1 is out");
         UNIT_ASSERT_C(reassignedNode || reconfigured, "self-heal didn't move the state storage off node 3");

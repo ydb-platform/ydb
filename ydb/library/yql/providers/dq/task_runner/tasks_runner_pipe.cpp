@@ -1105,6 +1105,15 @@ public:
         return Finished;
     }
 
+    void Finish() override {
+        NDqProto::TCommandHeader header;
+        header.SetVersion(3);
+        header.SetCommand(NDqProto::TCommandHeader::FINISH_OUTPUT);
+        header.SetTaskId(TaskId);
+        header.SetChannelId(ChannelId);
+        header.Save(&Output);
+    }
+
 private:
     mutable bool Finished = false;
     ui64 TaskId;
@@ -1181,12 +1190,7 @@ public:
 
     void Finish() override {
         try {
-            NDqProto::TCommandHeader header;
-            header.SetVersion(3);
-            header.SetCommand(NDqProto::TCommandHeader::FINISH_OUTPUT);
-            header.SetTaskId(TaskId);
-            header.SetChannelId(PopStats.ChannelId);
-            header.Save(&Output);
+            Delegate->Finish();
         } catch (...) {
             TaskRunner->RaiseException();
         }

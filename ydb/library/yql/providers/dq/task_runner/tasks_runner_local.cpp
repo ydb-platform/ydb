@@ -84,6 +84,10 @@ public:
         return Channel->IsFinished();
     }
 
+    void Finish() override {
+        Channel->Finish();
+    }
+
 private:
     void UpdateOutputChannelStats()
     {

@@ -104,7 +104,9 @@ namespace {
                 && a.Codec == b.Codec
                 && a.Small == b.Small
                 && a.Large == b.Large
-                && a.CacheMode == b.CacheMode;
+                && a.CacheMode == b.CacheMode
+                && a.KeyIndexInDescriptor == b.KeyIndexInDescriptor
+                && a.GroupIndexesInDescriptor == b.GroupIndexesInDescriptor;
         }
 
         static bool IsTheSame(const TColumn &a, const TColumn &b) noexcept
@@ -463,6 +465,96 @@ Y_UNIT_TEST_SUITE(TSchemeTiering) {
         const auto& preserved = rollback.Tables.at(TableId);
         UNIT_ASSERT(preserved);
         UNIT_ASSERT(TCompare().Do(*preserved, before));
+    }
+
+    Y_UNIT_TEST(IndexPlacement) {
+        TScheme scheme = Apply(BuildTiered());
+
+        // Indexes are kept in the descriptor by default
+        for (ui32 family : {ui32(TModel::GroupId1), ui32(TModel::GroupId2), HddTier, ArchiveTier}) {
+            const auto& settings = Table(scheme).Families.at(family);
+            UNIT_ASSERT(settings.KeyIndexInDescriptor);
+            UNIT_ASSERT(settings.GroupIndexesInDescriptor);
+        }
+
+        TAlter change;
+        change.SetFamilyIndexPlacement(TableId, HddTier, false, false);
+        UNIT_ASSERT(TSchemeModifier(scheme).Apply(*change.Flush()));
+        UNIT_ASSERT(!Table(scheme).Families.at(HddTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(!Table(scheme).Families.at(HddTier).GroupIndexesInDescriptor);
+        UNIT_ASSERT(Table(scheme).Families.at(ArchiveTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(Table(scheme).Families.at(ArchiveTier).GroupIndexesInDescriptor);
+
+        // Applying the same flags again is a no-op
+        TAlter same;
+        same.SetFamilyIndexPlacement(TableId, HddTier, false, false);
+        UNIT_ASSERT(!TSchemeModifier(scheme).Apply(*same.Flush()));
+
+        // Other family settings keep the flags
+        TAlter other;
+        other.SetFamilyCache(TableId, HddTier, ECache::Once);
+        other.SetFamilyCompression(TableId, HddTier, ECodec::Plain);
+        other.SetFamilyBlobs(TableId, HddTier, 100, 1000);
+        UNIT_ASSERT(TSchemeModifier(scheme).Apply(*other.Flush()));
+        UNIT_ASSERT(!Table(scheme).Families.at(HddTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(!Table(scheme).Families.at(HddTier).GroupIndexesInDescriptor);
+
+        // The flags are independent
+        TAlter key;
+        key.SetFamilyIndexPlacement(TableId, HddTier, true, false);
+        UNIT_ASSERT(TSchemeModifier(scheme).Apply(*key.Flush()));
+        UNIT_ASSERT(Table(scheme).Families.at(HddTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(!Table(scheme).Families.at(HddTier).GroupIndexesInDescriptor);
+    }
+
+    Y_UNIT_TEST(IndexPlacementSnapshot) {
+        auto hasIndexPlacement = [](const TSchemeChanges& changes) {
+            for (const auto& delta : changes.GetDelta()) {
+                if (delta.HasKeyIndexInDescriptor() || delta.HasGroupIndexesInDescriptor()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Snapshots of tables with default flags are the same as before the flags
+        UNIT_ASSERT(!hasIndexPlacement(*Apply(BuildTiered()).GetSnapshot()));
+
+        auto alter = BuildTiered();
+        alter.SetFamilyIndexPlacement(TableId, HddTier, false, false);
+        alter.SetFamilyIndexPlacement(TableId, ArchiveTier, true, false);
+        const TScheme origin = Apply(alter);
+
+        const auto snapshot = origin.GetSnapshot();
+        UNIT_ASSERT(hasIndexPlacement(*snapshot));
+
+        TScheme restored;
+        TSchemeModifier(restored).Apply(*snapshot);
+        UNIT_ASSERT(TCompare().Do(TableId, origin, restored));
+        UNIT_ASSERT(!Table(restored).Families.at(HddTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(!Table(restored).Families.at(HddTier).GroupIndexesInDescriptor);
+        UNIT_ASSERT(Table(restored).Families.at(ArchiveTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(!Table(restored).Families.at(ArchiveTier).GroupIndexesInDescriptor);
+    }
+
+    Y_UNIT_TEST(IndexPlacementRollback) {
+        TScheme scheme = Apply(BuildTiered());
+        const TScheme::TTableInfo before = Table(scheme);
+
+        TAlter change;
+        change.SetFamilyIndexPlacement(TableId, HddTier, false, false);
+
+        TSchemeRollbackState rollback;
+        UNIT_ASSERT(TSchemeModifier(scheme, &rollback).Apply(*change.Flush()));
+        UNIT_ASSERT(!Table(scheme).Families.at(HddTier).KeyIndexInDescriptor);
+
+        // The state before the change is preserved for rollback
+        UNIT_ASSERT(rollback.Tables.contains(TableId));
+        const auto& preserved = rollback.Tables.at(TableId);
+        UNIT_ASSERT(preserved);
+        UNIT_ASSERT(TCompare().Do(*preserved, before));
+        UNIT_ASSERT(preserved->Families.at(HddTier).KeyIndexInDescriptor);
+        UNIT_ASSERT(preserved->Families.at(HddTier).GroupIndexesInDescriptor);
     }
 
     Y_UNIT_TEST(InvalidPolicy) {

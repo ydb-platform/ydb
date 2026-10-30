@@ -2,7 +2,6 @@
 #include "log.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -137,7 +136,11 @@ TViewerPipeClient::TViewerPipeClient(NWilson::TTraceId traceId) {
 }
 
 TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter) const {
-    if (!HasAppData() || !AppData()->PathNormalizer || !AppData()->PathNormalizer->HasRules()) {
+    if (!Event && !HttpEvent) {
+        return path;
+    }
+    const auto& normalizer = Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer;
+    if (!normalizer || !*normalizer) {
         return path;
     }
     if (parameter == "database" && Params.Get(parameter).empty()) {
@@ -171,7 +174,7 @@ TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter
 void TViewerPipeClient::BuildParamsFromJson(TStringBuf data, bool pathList) {
     NJson::TJsonValue jsonData;
     if (NJson::ReadJsonTree(data, &jsonData)) {
-        NormalizePathParameters(jsonData, pathList);
+        NormalizePathParameters(jsonData, (Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer).value_or(nullptr), pathList);
         if (jsonData.IsMap()) {
             for (const auto& [key, value] : jsonData.GetMap()) {
                 switch (value.GetType()) {
@@ -197,7 +200,7 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data, bool pathList) {
 }
 
 void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data, bool pathList) {
-    for (const auto& [key, value] : NormalizePathParameters(TCgiParameters(data), pathList)) {
+    for (const auto& [key, value] : NormalizePathParameters(TCgiParameters(data), (Event ? Event->Get()->PathNormalizer : HttpEvent->Get()->PathNormalizer).value_or(nullptr), pathList)) {
         Params.InsertUnescaped(key, value);
     }
 }
@@ -253,7 +256,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NMon::TEvHttpInfo::TPtr& e
     , Event(ev)
 {
     const bool pathList = Event->Get()->Request.GetPath().EndsWith("/storage_stats");
-    Params = NormalizePathParameters(Event->Get()->Request.GetParams(), pathList);
+    Params = NormalizePathParameters(Event->Get()->Request.GetParams(), Event->Get()->PathNormalizer.value_or(nullptr), pathList);
     if (NHttp::Trim(Event->Get()->Request.GetHeader("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(Event->Get()->Request.GetPostContent(), pathList);
     }
@@ -272,7 +275,7 @@ TViewerPipeClient::TViewerPipeClient(IViewer* viewer, NHttp::TEvHttpProxy::TEvHt
     , HttpEvent(ev)
 {
     const bool pathList = HttpEvent->Get()->Request->URL.Before('?').EndsWith("/storage_stats");
-    Params = NormalizePathParameters(TCgiParameters(HttpEvent->Get()->Request->URL.After('?')), pathList);
+    Params = NormalizePathParameters(TCgiParameters(HttpEvent->Get()->Request->URL.After('?')), HttpEvent->Get()->PathNormalizer.value_or(nullptr), pathList);
     NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
     if (NHttp::Trim(headers.Get("Content-Type").Before(';'), ' ') == "application/json") {
         BuildParamsFromJson(HttpEvent->Get()->Request->Body, pathList);

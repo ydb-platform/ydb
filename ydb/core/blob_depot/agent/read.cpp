@@ -76,6 +76,20 @@ namespace NKikimr::NBlobDepot {
         void End(TQuery *query) {
             query->OnCheckIntegrity(TCheckOutcome{std::move(Result)});
         }
+
+        void AddErrorReason(const TString& part, const TString& errorReason) {
+            if (Result->ErrorReason) {
+                Result->ErrorReason += "; ";
+            }
+            Result->ErrorReason += part + " " + errorReason;
+        }
+
+        void AddDataInfo(const TString& part, const TString& dataInfo) {
+            if (Result->DataInfo) {
+                Result->DataInfo += "; ";
+            }
+            Result->DataInfo += part + " " + dataInfo;
+        }
     };
 
     bool TBlobDepotAgent::TQuery::IssueRead(TReadArg&& arg, TString& error) {
@@ -348,6 +362,23 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TBlobDepotAgent::TQuery::HandleResolveDisconnected(const TRequestContext::TPtr& context) {
+        // the only tablet request issued by a read is the extra resolve after NODATA; physical reads go through the
+        // proxy and are not affected by the tablet disconnection
+        auto& readContext = context->Obtain<TReadContext>();
+        if (readContext.Terminated) {
+            return;
+        }
+        YDB_LOG_DEBUG("HandleResolveDisconnected",
+            {"marker", "BDA68"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"readId", readContext.GetTag()},
+            {"key", Agent.PrettyKey(readContext.ReadArg.Key)});
+        readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "BlobDepot tablet disconnected while"
+            " resolving BlobId# " << readContext.BlobWithoutData << " after NODATA");
+    }
+
     void TBlobDepotAgent::TQuery::IssueCheckIntegrity(TReadArg&& arg) {
         YDB_LOG_DEBUG("IssueCheckIntegrity",
             {"marker", "BDA62"},
@@ -357,6 +388,9 @@ namespace NKikimr::NBlobDepot {
             {"value", arg.Value});
 
         auto checkContext = std::make_shared<TCheckContext>(std::move(arg));
+
+        // count every part before issuing any of them, so the check does not end before all of them are issued
+        checkContext->NumPartsPending = 1;
 
         for (const auto& value : checkContext->ReadArg.Value.Chain) {
             if (value.Blob) {
@@ -374,8 +408,109 @@ namespace NKikimr::NBlobDepot {
 
                 Agent.SendToProxy(groupId, std::move(event), this, checkContext);
                 ++checkContext->NumPartsPending;
+            } else if (const auto& locator = value.S3Locator) {
+#ifndef KIKIMR_DISABLE_S3_OPS
+                // the object is checked by reading the range the value refers to: this is all the agent can tell about
+                // the data stored in S3
+                TString key = locator->MakeObjectName(Agent.S3BasePath);
+                const ui32 len = value.SubrangeEnd - value.SubrangeBegin;
+
+                YDB_LOG_DEBUG("Issuing S3 read to check integrity",
+                    {"marker", "BDA69"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"key", Agent.PrettyKey(checkContext->ReadArg.Key)},
+                    {"s3key", key},
+                    {"offset", value.SubrangeBegin},
+                    {"len", len});
+
+                auto finish = [checkContext, key, len, this](std::optional<TString> data, const char *error) {
+                    HandleCheckIntegrityS3Result(*checkContext, key, len, std::move(data), error);
+                };
+                IssueReadS3(key, value.SubrangeBegin, len, finish, 0);
+                ++checkContext->NumPartsPending;
+#else
+                Y_ABORT("S3 is not supported");
+#endif
             }
         }
+
+        OnCheckIntegrityPartDone(*checkContext);
+    }
+
+    void TBlobDepotAgent::TQuery::HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
+            std::optional<TString> data, const char *error) {
+        YDB_LOG_DEBUG("HandleCheckIntegrityS3Result",
+            {"marker", "BDA70"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"key", Agent.PrettyKey(checkContext.ReadArg.Key)},
+            {"s3key", key},
+            {"size", data ? data->size() : 0},
+            {"error", error});
+
+        if (!data) {
+            checkContext.Result->Status = NKikimrProto::ERROR;
+            checkContext.AddErrorReason(key, TStringBuilder() << "failed to read from S3: " << error);
+        } else if (data->size() != len) {
+            checkContext.Result->Status = NKikimrProto::ERROR;
+            checkContext.AddErrorReason(key, TStringBuilder() << "S3 read returned " << data->size() << " bytes instead"
+                " of " << len);
+        } else {
+            checkContext.AddDataInfo(key, "S3 range is readable");
+        }
+
+        OnCheckIntegrityPartDone(checkContext);
+    }
+
+    void TBlobDepotAgent::TQuery::OnCheckIntegrityPartDone(TCheckContext& checkContext) {
+        if (--checkContext.NumPartsPending) {
+            return;
+        }
+
+        if (checkContext.Result->Status == NKikimrProto::NODATA) {
+            // the mapping may have changed while the parts were being checked (e.g. the value was assimilated), so
+            // NODATA is reported only after the key is resolved again and still points to the same value, as reads do
+            NKikimrBlobDepot::TEvResolve resolve;
+            auto *item = resolve.AddItems();
+            item->SetExactKey(checkContext.ReadArg.Key);
+            resolve.SetDataKind(checkContext.ReadArg.DataKind);
+            YDB_LOG_DEBUG("Issuing extra resolve to check integrity",
+                {"marker", "BDA71"},
+                {"agentId", Agent.LogId},
+                {"queryId", GetQueryId()},
+                {"key", Agent.PrettyKey(checkContext.ReadArg.Key)},
+                {"msg", resolve});
+            Agent.Issue(std::move(resolve), this, checkContext.shared_from_this());
+        } else {
+            checkContext.End(this);
+        }
+    }
+
+    void TBlobDepotAgent::TQuery::HandleCheckIntegrityResolveResult(const TRequestContext::TPtr& context,
+            TEvBlobDepot::TEvResolveResult& msg) {
+        auto& checkContext = context->Obtain<TCheckContext>();
+
+        YDB_LOG_DEBUG("HandleCheckIntegrityResolveResult",
+            {"marker", "BDA72"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"key", Agent.PrettyKey(checkContext.ReadArg.Key)},
+            {"msg", msg.Record});
+
+        if (msg.Record.GetStatus() != NKikimrProto::OK) {
+            checkContext.Result->Status = NKikimrProto::ERROR;
+            checkContext.AddErrorReason("resolve", msg.Record.GetErrorReason());
+        } else if (msg.Record.ResolvedKeysSize() == 1) {
+            if (TResolvedValue value(msg.Record.GetResolvedKeys(0)); value.Supersedes(checkContext.ReadArg.Value)) {
+                checkContext.ReadArg.Value = std::move(value);
+                return IssueCheckIntegrity(std::move(checkContext.ReadArg)); // value chain has changed, check it again
+            }
+        } else {
+            Y_ABORT_UNLESS(!msg.Record.ResolvedKeysSize());
+        }
+
+        checkContext.End(this);
     }
 
     void TBlobDepotAgent::TQuery::HandleCheckIntegrityResult(const TRequestContext::TPtr& context,
@@ -404,23 +539,15 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (msg.ErrorReason) {
-            if (result->ErrorReason) {
-                result->ErrorReason += "; ";
-            }
-            result->ErrorReason += msg.Id.ToString() + " " + msg.ErrorReason;
+            checkContext.AddErrorReason(msg.Id.ToString(), msg.ErrorReason);
         }
 
         result->PlacementStatus = std::max(msg.PlacementStatus, result->PlacementStatus);
         result->DataStatus = std::max(msg.DataStatus, result->DataStatus);
 
-        if (result->DataInfo) {
-            result->DataInfo += "; ";
-        }
-        result->DataInfo += msg.Id.ToString() + " " + msg.DataInfo;
+        checkContext.AddDataInfo(msg.Id.ToString(), msg.DataInfo);
 
-        if (!--checkContext.NumPartsPending) {
-            checkContext.End(this);
-        }
+        OnCheckIntegrityPartDone(checkContext);
     }
 
 } // NKikimr::NBlobDepot

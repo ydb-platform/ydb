@@ -847,8 +847,9 @@ public:
         Props.OutputIUs.reset();
     }
     bool IsDistinctAll() const { return DistinctAll; }
-    // DISTINCT and grouping-only aggregates just remove duplicate rows.
-    bool IsDeduplication() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
+    // A trivial DISTINCT: DISTINCT or a grouping-only aggregate, which just
+    // removes duplicate rows.
+    bool IsTrivialDistinct() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
     // An intermediate aggregate pushed down to column shards. It is computed by
     // the program of the column table read under it, see MatchOlapAggregate.
     bool IsPushedToOlap() const { return PushedToOlap; }

@@ -1938,6 +1938,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearDefineBox();
     }
     bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
+    bsTo->MutableStoragePoolPileOverrides()->CopyFrom(bsFrom.GetStoragePoolPileOverrides());
 
     if (bsFrom.HasBscSettings()) {
         bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());

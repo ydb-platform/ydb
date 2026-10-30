@@ -367,6 +367,16 @@ WHERE ApplicationName = 'my_analytics_app'
 ```
 
 
+### Terminating a session {#terminate-session}
+
+To terminate a selected session and its running query, copy its `SessionId` and submit a separate [`KILL SESSION`](../yql/reference/syntax/kill-session.md) query:
+
+```yql
+KILL SESSION `ydb://session/3?node_id=52910&id=MWFmNGYwYTAtYzJkN2RhOWEtZmFkMDhlMTUtZjU0ZDE0OTA%3D`;
+```
+
+Replace the example ID with a value from the query results. See the [statement reference](../yql/reference/syntax/kill-session.md#permissions) for the required permissions and operation result.
+
 ## Query compilation cache {#compile-cache-queries}
 
 The following system view contains information about queries stored in the compilation cache on all cluster nodes:
@@ -613,7 +623,7 @@ WHERE Name = "default";
 
 ## Resource pool classifier information {#resource_pools_classifiers}
 
-The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#common-parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
 
 System view structure:
 
@@ -655,7 +665,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | User [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | User [SID](../concepts/glossary.md#access-sid).<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates whether login is allowed for this user; used for explicit blocking by an administrator. Independent of `IsLockedOut`.<br />Type: `Bool`. |
 | `IsLockedOut` | Indicates that this user is automatically blocked due to exceeding the number of failed authentications. Does not depend on `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | User creation time.<br />Type: `Timestamp`. |
@@ -674,7 +684,7 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | Group [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | Group [SID](../concepts/glossary.md#access-sid).<br />Type: `Utf8`.<br />Key: `0`. |
 
 ### Information about group membership
 
@@ -689,7 +699,7 @@ Table structure:
 | `GroupSid` | Group SID.<br />Type: `Utf8`.<br />Key: `0`. |
 | `MemberSid` | Group member SID. Can be either a user SID or a group SID.<br />Type: `Utf8`.<br />Key: `1`. |
 
-### Information about access rights
+### Information about access rights {#information-about-access-rights}
 
 The views contain a list of granted [access rights](../concepts/glossary.md#access-right).
 

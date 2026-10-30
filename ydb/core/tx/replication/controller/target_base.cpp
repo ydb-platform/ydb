@@ -174,12 +174,21 @@ void TTargetBase::SetIssue(const TString& value) {
 }
 
 void TTargetBase::AddWorker(ui64 id) {
-    Workers.emplace(id, TWorker{});
-    TLagProvider::AddPendingLag(id);
+    if (Workers.try_emplace(id).second) {
+        TLagProvider::AddPendingLag(id);
+        Replication->UpdateLag(GetId(), GetLag());
+    }
 }
 
 void TTargetBase::RemoveWorker(ui64 id) {
-    Workers.erase(id);
+    const auto it = Workers.find(id);
+    if (it == Workers.end()) {
+        return;
+    }
+
+    TLagProvider::RemoveLag(it->second, id);
+    Workers.erase(it);
+    Replication->UpdateLag(GetId(), GetLag());
 }
 
 const NKikimrReplication::TReplicationLocationConfig& TTargetBase::GetLocation() const {
@@ -218,8 +227,18 @@ void TTargetBase::UpdateLag(ui64 workerId, TDuration lag) {
     }
 
     if (TLagProvider::UpdateLag(it->second, workerId, lag)) {
-        Replication->UpdateLag(GetId(), TLagProvider::GetLag().value());
+        Replication->UpdateLag(GetId(), GetLag());
     }
+}
+
+void TTargetBase::InvalidateLag(ui64 workerId) {
+    const auto it = Workers.find(workerId);
+    if (it == Workers.end()) {
+        return;
+    }
+
+    TLagProvider::InvalidateLag(it->second, workerId);
+    Replication->UpdateLag(GetId(), GetLag());
 }
 
 const std::optional<TDuration> TTargetBase::GetLag() const {

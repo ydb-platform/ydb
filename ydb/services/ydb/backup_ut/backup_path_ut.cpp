@@ -541,6 +541,57 @@ void ExportWholeDatabaseByExplicitRootItemImpl(TBackupTestFixture& f, bool isOla
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportTildeDirectoriesByExplicitRootItemImpl(TBackupTestFixture& f) {
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    // Legacy system-prefixed directories can exist with names protection disabled.
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableSystemNamesProtection(false);
+
+    for (const auto* directory : {
+        "~my_directory", "~backup", "~backup_12345", "export-12345",
+        ".sys_health", ".metadata_user", ".tmp_user", ".backups_user", ".backups",
+    }) {
+        auto res = f.YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
+            CREATE TABLE `/Root/{}/table` (
+                key Uint32 NOT NULL,
+                value String,
+                PRIMARY KEY (key)
+            );
+        )sql", directory), NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    auto exportSettings = traits.MakeExportSettings(f, "");
+    exportSettings.AppendItem(typename TExportSettings::TItem{.Src = "/Root"});
+    auto res = traits.Export(f, exportSettings);
+    f.WaitOpSuccess(res);
+
+    TSet<TString> files;
+    auto addFile = [&](const TString& path) {
+        files.insert(prefix + path);
+        files.insert(prefix + path + ".sha256");
+    };
+    for (const auto* file : {"metadata.json", "SchemaMapping/metadata.json", "SchemaMapping/mapping.json"}) {
+        addFile(file);
+    }
+    TSet<TString> completionMarkers = {prefix + "export_complete.json"};
+    for (const TString table : {
+        "RecursiveFolderProcessing/Table0",
+        "RecursiveFolderProcessing/dir1/Table1",
+        "RecursiveFolderProcessing/dir1/dir2/Table2",
+        "~my_directory/table",
+        "~backup/table",
+    }) {
+        for (const auto* file : {"metadata.json", "scheme.pb", "permissions.pb", "data_00.csv"}) {
+            addFile(table + "/" + file);
+        }
+        completionMarkers.insert(prefix + table + "/data_complete.json");
+    }
+    traits.ValidateFileList(f, files, completionMarkers);
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
     {
@@ -2198,6 +2249,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseByExplicitRootItem, IsOlap) {
         ExportWholeDatabaseByExplicitRootItemImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST(ExportTildeDirectoriesByExplicitRootItem) {
+        ExportTildeDirectoriesByExplicitRootItemImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this);
     }
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseWithEncryption, IsOlap) {

@@ -176,6 +176,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         MultiPart = false;
         Last = false;
         Parts.clear();
+        UploadId.Clear();
 
         if (Attempt) {
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
@@ -526,6 +527,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
     }
 
+    void CreateMultipartUpload() {
+        CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
+        auto request = Aws::S3::Model::CreateMultipartUploadRequest()
+            .WithKey(CurrentObjectKey);
+        this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
+    }
+
     void Handle(TEvDataShard::TEvS3Upload::TPtr& ev) {
         auto& upload = ev->Get()->Upload;
 
@@ -533,17 +541,23 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"upload", upload});
 
         if (!upload) {
-            CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
-            auto request = Aws::S3::Model::CreateMultipartUploadRequest()
-                .WithKey(CurrentObjectKey);
-            this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
+            CreateMultipartUpload();
         } else if (ForceNewUpload) {
             ForceNewUpload = false;
-            UploadId = upload->Id;
+            UploadId.Clear();
             Parts.clear();
+            // Persist restart intent before aborting: a reboot must rescan, not complete the old upload.
             this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(
                 this->SelfId(), TxId,
                 TS3Upload::EStatus::UploadParts, TVector<TString>{}));
+        } else if (upload->Status == TS3Upload::EStatus::UploadParts && !UploadId) {
+            // A new scan must use a fresh session: the old one may have extra parts or requests in flight.
+            RestartingUpload = true;
+            CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
+            auto request = Aws::S3::Model::AbortMultipartUploadRequest()
+                .WithKey(CurrentObjectKey)
+                .WithUploadId(upload->Id);
+            this->Send(Client, new TEvExternalStorage::TEvAbortMultipartUploadRequest(request));
         } else {
             UploadId = upload->Id;
 
@@ -597,7 +611,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return;
         }
 
-        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
+        // The Store reply can resume this session; a saved UploadParts reply with no local id must restart it.
+        UploadId = result.GetResult().GetUploadId().c_str();
+        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, *UploadId));
     }
 
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
@@ -716,6 +732,16 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvAbortMultipartUploadResponse",
             {"result", result});
+
+        if (RestartingUpload) {
+            RestartingUpload = false;
+            if (!result.IsSuccess() && result.GetError().GetErrorType() != Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
+                YDB_LOG_WARN("[Export] Cannot abort previous multipart upload before restarting",
+                    {"key", CurrentObjectKey},
+                    {"error", result.GetError()});
+            }
+            return CreateMultipartUpload();
+        }
 
         if (result.IsSuccess()) {
             return PassAway();
@@ -1060,6 +1086,7 @@ private:
 
     TMaybe<TString> UploadId;
     bool ForceNewUpload = false;
+    bool RestartingUpload = false;
     TVector<TString> Parts;
     TMaybe<TString> Error;
     TString CurrentObjectKey;

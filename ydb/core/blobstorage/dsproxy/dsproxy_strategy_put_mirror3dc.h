@@ -174,6 +174,7 @@ public:
             return checker->CheckQuorumForSubgroup(
                 TBlobStorageGroupInfo::TSubgroupVDisks::CreateFromMask(&info.GetTopology(), mask));
         };
+        TBlobStorageGroupInfo::TSubgroupVDisks failed(&info.GetTopology());
         ui32 available = 0;
         ui32 present = 0;
         ui32 sent = 0;
@@ -184,11 +185,17 @@ public:
             }
             const auto situation = state.Disks[disk].DiskParts[disk % 3].Situation;
             const ui32 bit = 1u << disk;
-            if (situation != TSituation::Error) {
+            if (situation == TSituation::Error) {
+                failed += TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), disk);
+            } else {
                 available |= bit;
                 present |= situation == TSituation::Present ? bit : 0;
                 sent |= situation == TSituation::Sent ? bit : 0;
             }
+        }
+        if (checker->GetEnsuredLayout() != EMirror3dcLayout::LAYOUT_0
+                && checker->GetBlobState({}, failed) == TBlobStorageGroupInfo::EBS_DISINTEGRATED) {
+            return EStrategyOutcome::Error("Mirror-3-dc write exceeds the ensured failure model");
         }
         if (check(present)) {
             return EStrategyOutcome::DONE;

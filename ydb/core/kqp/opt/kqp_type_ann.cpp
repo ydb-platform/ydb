@@ -1492,8 +1492,20 @@ TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3U, ctx)) {
+    if (!EnsureMinArgsCount(*node, 3U, ctx) || !EnsureMaxArgsCount(*node, 4U, ctx)) {
         return TStatus::Error;
+    }
+    if (node->ChildrenSize() == 4U) {
+        const auto& hint = *node->Child(3);
+        if (!hint.IsList() || hint.ChildrenSize() != 4U) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "KqpOlapApply LikeHint must be a list of four atoms"));
+            return TStatus::Error;
+        }
+        for (const auto& atom : hint.Children()) {
+            if (!EnsureAtom(*atom, ctx)) {
+                return TStatus::Error;
+            }
+        }
     }
 
     TExprList args = TExprList(node->Child(TKqpOlapApply::idx_Args));
@@ -2814,6 +2826,28 @@ TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) 
     return TStatus::Ok;
 }
 
+TStatus AnnotateUnsafeTruncate(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlUnsafeTruncate::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateTableTruncateSettings(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)
+        || !EnsureAtom(*node->Child(TKqpTableTruncateSettings::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateExternalEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 1, ctx)) {
         return TStatus::Error;
@@ -4106,6 +4140,8 @@ public:
         AddHandler({TKqpReadRangesSourceSettings::CallableName()}, HndlInt(&AnnotateKqpSourceSettings));
         AddHandler({TKqpReadSysViewSourceSettings::CallableName()}, HndlInt(&AnnotateSysViewSourceSettings));
         AddHandler({TKqlExternalEffect::CallableName()}, Hndl(&AnnotateExternalEffect));
+        AddHandler({TKqlUnsafeTruncate::CallableName()}, Hndl(&AnnotateUnsafeTruncate));
+        AddHandler({TKqpTableTruncateSettings::CallableName()}, Hndl(&AnnotateTableTruncateSettings));
         AddHandler({TKqpSinkEffect::CallableName()}, Hndl(&AnnotateKqpSinkEffect));
         AddHandler({TKqlReturningList::CallableName()}, HndlInt(&AnnotateReturningList));
         AddHandler({TKqpTableSinkSettings::CallableName()}, Hndl(&AnnotateTableSinkSettings));

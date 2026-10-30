@@ -11,7 +11,7 @@ The possible names of rights are listed in the table below.
 | `ydb.database.drop` | `DROP` | The right to delete databases in the cluster |
 | **Elementary rights for database objects** |  |  |
 | `ydb.granular.select_row` | `SELECT ROW` | The right to read rows from a table (select), read messages from topics, use secret values |
-| `ydb.granular.update_row` | `UPDATE ROW` | The right to update rows in a table (insert, update, upsert, replace), write messages to topics |
+| `ydb.granular.update_row` | `UPDATE ROW` | The right to update rows in a table (insert, update, upsert, replace), write messages to topics{% if backend_name == "YDB" %}. On the database root, also allows terminating other users' sessions with [KILL SESSION](../syntax/kill-session.md#permissions), provided the caller has `CONNECT`{% endif %} |
 | `ydb.granular.erase_row` | `ERASE ROW` | The right to delete rows from a table (delete) |
 | `ydb.granular.create_directory` | `CREATE DIRECTORY` | The right to create and delete directories, including existing and nested ones |
 | `ydb.granular.create_table` | `CREATE TABLE` | The right to create tables (including index, external, columnar), views, sequences |

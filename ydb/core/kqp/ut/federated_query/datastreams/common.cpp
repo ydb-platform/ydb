@@ -232,7 +232,8 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         LogSettings.AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
             .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
-            .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG)
+            .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO)
+            .AddLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_INFO)
             .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(),

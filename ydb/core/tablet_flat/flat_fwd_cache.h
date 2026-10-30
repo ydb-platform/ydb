@@ -69,37 +69,27 @@ namespace NFwd {
         TPageOffset MaxSeenOffset;
     };
 
+    /**
+     * Levels of index pages of a single column group, by page offset
+     */
     class TIndexPageLocator {
-        using TGroupId = NPage::TGroupId;
-
-        struct TIndexPageLocation {
-            TGroupId GroupId;
-            ui32 Level;
-        };
-
     public:
-        void Add(TPageOffset offset, TGroupId groupId, ui32 level) {
-            Y_ENSURE(Map.emplace(offset, TIndexPageLocation{groupId, level}).second, "All index pages should be unique");
+        void Add(TPageOffset offset, ui32 level) {
+            Y_ENSURE(Map.emplace(offset, level).second, "All index pages should be unique");
         }
 
         ui32 GetLevel(TPageOffset offset) const {
             auto ptr = Map.FindPtr(offset);
             Y_ENSURE(ptr, "Unknown page");
-            return ptr->Level;
+            return *ptr;
         }
 
-        TGroupId GetGroup(TPageOffset offset) {
-            auto ptr = Map.FindPtr(offset);
-            Y_ENSURE(ptr, "Unknown page");
-            return ptr->GroupId;
-        }
-
-        const TMap<TPageOffset, TIndexPageLocation>& GetMap() {
+        const TMap<TPageOffset, ui32>& GetMap() {
             return Map;
         }
 
     private:
-        TMap<TPageOffset, TIndexPageLocation> Map;
+        TMap<TPageOffset, ui32> Map;
     };
 
     class TFlatIndexCache : public IPageLoadingLogic {
@@ -119,7 +109,7 @@ namespace NFwd {
                 EndRowId = Max<TRowId>();
             }
 
-            indexPageLocator.Add(IndexPage.Offset, GroupId, 0);
+            indexPageLocator.Add(IndexPage.Offset, 0);
         }
 
         ~TFlatIndexCache()
@@ -335,7 +325,7 @@ namespace NFwd {
             Levels[0].BeginOffset = rootLoc.Offset;
             Levels[0].EndOffset = rootLoc.Offset;
             if (Meta.LevelCount()) {
-                IndexPageLocator.Add(rootLoc.Offset, GroupId, 0);
+                IndexPageLocator.Add(rootLoc.Offset, 0);
             }
         }
 
@@ -402,7 +392,7 @@ namespace NFwd {
                 NPage::TBtreeIndexNode node(page.Data, Meta.HasRootV2());
                 for (auto pos : xrange(node.GetChildrenCount())) {
                     auto childLoc = node.GetChildLocation(pos, false, Part, GroupId);
-                    IndexPageLocator.Add(childLoc.Offset, GroupId, levelId + 1);
+                    IndexPageLocator.Add(childLoc.Offset, levelId + 1);
                 }
             }
 

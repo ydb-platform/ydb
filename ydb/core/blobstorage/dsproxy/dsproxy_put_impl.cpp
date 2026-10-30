@@ -1,5 +1,6 @@
 #include "dsproxy_put_impl.h"
 #include "dsproxy_blackboard.h"
+#include "dsproxy_strategy_put_mirror3dc.h"
 
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -20,9 +21,8 @@ void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults,
 
     switch (Info->Type.GetErasure()) {
         case TBlobStorageGroupType::ErasureMirror3dc:
-            return accelerate
-                ? RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired)
-                : RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
+            return RunStrategy(logCtx, TMirror3dcPutStrategy(Tactic, EnableRequestMod3x3ForMinLatecy, accelerate),
+                outPutResults, expired);
         case TBlobStorageGroupType::ErasureMirror3of4:
             return accelerate
                 ? RunStrategy(logCtx, TPut3of4Strategy(Tactic, true), outPutResults, expired)
@@ -90,6 +90,9 @@ void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
         if (item.DataKind != NKikimrBlobStorage::TDataKind::USER) {
             pb->SetDataKind(item.DataKind);
         }
+        if (item.WriteSource != UnknownWriteSource()) {
+            pb->SetWriteSourceOp(WriteSourceToProto(item.WriteSource));
+        }
         for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
             auto *check = pb->AddExtraBlockChecks();
             check->SetTabletId(tabletId);
@@ -109,6 +112,20 @@ void TPutImpl::ProcessInterpilePutResult(TEvInterpilePutResult& ev, TLogContext&
         return PrepareReply(NKikimrProto::ERROR, logCtx, "incorrect TEvInterpilePutResult", outPutResults);
     }
 
+    // the remote pile's answers tell the same the VDisks would, had the blobs been written to them from here
+    for (size_t i = 0; i < Blobs.size(); ++i) {
+        auto& item = ev.Record.GetItems(i);
+        WrittenBeyondBarrier[i] = WrittenBeyondBarrier[i] || item.GetWrittenBeyondBarrier();
+        if (item.HasStatusFlags()) {
+            StatusFlags.Merge(item.GetStatusFlags());
+        }
+        if (item.HasApproximateFreeSpaceShare()) {
+            const float share = item.GetApproximateFreeSpaceShare();
+            if (ApproximateFreeSpaceShare == 0.f || share < ApproximateFreeSpaceShare) {
+                ApproximateFreeSpaceShare = share;
+            }
+        }
+    }
     for (size_t i = 0; i < Blobs.size(); ++i) {
         auto& item = ev.Record.GetItems(i);
         PrepareOneReply(item.GetStatus(), i, logCtx, item.GetErrorReason(), outPutResults);

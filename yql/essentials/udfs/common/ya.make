@@ -13,6 +13,8 @@ IF (NOT EXPORT_CMAKE)
         hyperloglog
         hyperloglog/impl
         ip_base
+        ip_base/impl
+        ip_base/fat
         json
         json2
         json2/impl
@@ -77,9 +79,13 @@ IF (NOT EXPORT_CMAKE)
             )
         ENDIF()
         IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
-            RECURSE(string/static_host)
+            RECURSE(
+                string/static_host
+            )
         ELSEIF (SANITIZER_TYPE == "undefined")
-            RECURSE(string/static_host)
+            RECURSE(
+                string/static_host
+            )
         ENDIF()
     ENDIF()
     IF (ARCH_X86_64)

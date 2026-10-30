@@ -60,6 +60,11 @@ struct TPullQueueOptions
 struct TPullQueueResult
 {
     NQueueClient::IQueueRowsetPtr Rowset;
+
+    //! Whether the server stopped reading because a row-count or data-weight limit was reached,
+    //! including its internal response data-weight limit.
+    //! Null if the server does not report this information.
+    std::optional<bool> ResponseSizeLimitReached;
 };
 
 struct TPullQueueConsumerOptions

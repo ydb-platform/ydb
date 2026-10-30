@@ -120,7 +120,7 @@ linq2db — лёгкий и быстрый ORM для .NET, предоставл
 
 ---
 
-### Пример кастомного Decimal {#primer-kastomnogo-decimal} {#primer-kastomnogo-decimal}
+### Пример кастомного Decimal {#primer-kastomnogo-decimal}
 
 ```csharp
 [Table("amounts")]
@@ -134,7 +134,7 @@ public sealed class AmountRow
 }
 ```
 
-### Пример кастомного DbType {#primer-kastomnogo-dbtype} {#primer-kastomnogo-dbtype}
+### Пример кастомного DbType {#primer-kastomnogo-dbtype}
 
 ```csharp
 [Table("events")]

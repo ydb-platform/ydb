@@ -321,6 +321,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
         if (CreatePlaceholder) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+        } else if (!InitialScan) {
+            replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         }
     }
 
@@ -364,7 +366,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         tx.SetInternal(true);
         DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
         FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
-        tx.MutableAlterTable()->MutableReplicationConfig()->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         ExecuteSchemeTx(tx);
     }
 

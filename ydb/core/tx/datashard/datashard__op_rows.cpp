@@ -205,12 +205,7 @@ static bool AllowExecuteAtReplicated(TDataShard*, TEvRequest&) {
 }
 
 static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
-    for (const auto& [_, info] : self->GetUserTables()) {
-        if (info->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
-            return true;
-        }
-    }
-    return false;
+    return self->IsImportingReplica();
 }
 
 template <typename TEvResponse>

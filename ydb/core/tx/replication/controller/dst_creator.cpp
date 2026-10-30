@@ -475,7 +475,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        if (!InitialScan && !CreatePlaceholder
+        const bool requiresCompletedImport = !InitialScan && !CreatePlaceholder;
+        if (requiresCompletedImport
                 && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;

@@ -116,6 +116,8 @@ struct TKqpCompileRequest {
 
     bool FindInCache = true;
 
+    ui64 ConfigGeneration = 0;
+
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
     bool IsIntrestedInResult() const {
@@ -494,6 +496,7 @@ private:
                 {"output", diff.value_or("path aliases changed")});
 
             QueryCache->Clear();
+            ++ConfigGeneration;
         }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -749,7 +752,14 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
+                    if (compileRequest.ConfigGeneration == ConfigGeneration) {
+                        UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
+                    } else {
+                        YDB_LOG_INFO_CTX(ctx, "Skipped caching compile result from stale config generation",
+                            {"queryUid", compileResult->Uid},
+                            {"requestGeneration", compileRequest.ConfigGeneration},
+                            {"currentGeneration", ConfigGeneration});
+                    }
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -1006,6 +1016,7 @@ private:
             {"sender", request.Sender},
             {"compileActor", compileActorId});
         request.CompileActor = compileActorId;
+        request.ConfigGeneration = ConfigGeneration;
 
         RequestsQueue.AddActiveRequest(std::move(request));
     }
@@ -1114,6 +1125,8 @@ private:
 
     TTableServiceConfig TableServiceConfig;
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+
+    ui64 ConfigGeneration = 0;
     TQueryServiceConfig QueryServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;

@@ -245,6 +245,91 @@ Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
     compile("", false);
 }
 
+// A compilation that was in flight during a cache-invalidating config change
+// must not land in the cleared cache: its result is compiled with the old config.
+Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false);
+    TKikimrRunner kikimr(settings);
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId(0));
+    const auto serviceActor = runtime.GetLocalServiceId(service);
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("stale-generation", "/Root", "stale-generation");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+
+    auto send = [&](const TString& text) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
+            text, TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), std::move(query), true, false, false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    auto receive = [&](bool fromCache) {
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+            response->Get()->CompileResult->Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, fromCache);
+        return response;
+    };
+
+    // Baseline: a fresh compile is cached, the follow-up request is a hit.
+    const TString q1 = "SELECT 41 AS stale_generation;";
+    send(q1);
+    receive(false);
+    send(q1);
+    receive(true);
+
+    // Hold the compile actor's response: the observer captures it (dropping it
+    // from delivery) so the config change is processed deterministically while
+    // the compilation is in flight, without relying on compilation speed.
+    const TString q2 = "SELECT 42 AS stale_generation;";
+    bool holdNext = true;
+    TAutoPtr<IEventHandle> blockedCompile;
+    const auto holdObserver = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
+        [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
+            if (holdNext && ev->Recipient == serviceActor) {
+                holdNext = false;
+                blockedCompile = ev.Release();
+            }
+        });
+
+    send(q2);
+    {
+        TDispatchOptions opts;
+        // An observer drop never reaches FinalEvents (only PROCESSed events do),
+        // so wait on a condition checked outside the event path.
+        opts.CustomFinalCondition = [&] { return bool(blockedCompile); };
+        runtime.DispatchEvents(opts, TDuration::Seconds(5));
+    }
+    UNIT_ASSERT_C(blockedCompile, "Compile response should have been captured");
+
+    // Invalidate the cache while the response is held; the acknowledgement
+    // proves HandleConfig has run (cache cleared, config generation bumped).
+    NKikimrConfig::TTableServiceConfig newConfig = settings.AppConfig.GetTableServiceConfig();
+    newConfig.MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(
+        newConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() + 1);
+    auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    *notification->Record.MutableConfig()->MutableTableServiceConfig() = newConfig;
+    runtime.Send(new IEventHandle(service, edge, notification.Release()));
+    UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+
+    // The in-flight client still gets its (old-config) result ...
+    runtime.Send(blockedCompile.Release());
+    receive(false);
+
+    // ... but the result must not have been inserted into the cleared cache.
+    send(q2);
+    receive(false);
+
+    // Post-change compilations are cached as usual.
+    send(q2);
+    receive(true);
+}
+
 auto GetYqlStreamIterator(
         TKikimrRunner& kikimr,
         ECollectQueryStatsMode mode,

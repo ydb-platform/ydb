@@ -174,6 +174,7 @@ def build_dashboard_payload(
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
     issues_summary: Optional[dict[str, int]] = None,
     suite_chunk_issues_summary: Optional[dict[str, int]] = None,
+    ya_activity: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
@@ -218,6 +219,14 @@ def build_dashboard_payload(
     top_tests_suite = topn_other_map(tests_time_by_suite, top_n)
     xs_tests_suite, tests_tracks_suite = build_step_series(enriched, "tests_in_chunk", set(top_tests_suite), label_mode="suite")
     xs_active, ys_active = build_active_series(enriched)
+    activity_series: dict[str, dict[str, list[float]]] = {}
+    for kind in ("build", "archive", "cache", "link", "test_report", "test_tm"):
+        kind_runs = [row for row in (ya_activity or []) if row.get("kind") == kind]
+        activity_xs, activity_ys = build_active_series(kind_runs)
+        activity_xs, activity_ys = downsample_active_series(
+            activity_xs, activity_ys, max_points
+        )
+        activity_series[kind] = {"xs": activity_xs, "ys": activity_ys}
 
     headline_stats = _build_headline_stats(
         cpu_tracks_suite=cpu_tracks_suite,
@@ -443,6 +452,7 @@ def build_dashboard_payload(
         "tests_tracks_suite": tests_tracks_suite,
         "xs_active": xs_active,
         "ys_active": ys_active,
+        "ya_activity": activity_series,
         "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
         "pie_cpu_vals": [cpu_by_label.get(lb, 0.0) for lb in top_cpu]
         + (

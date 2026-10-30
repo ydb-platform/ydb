@@ -21,6 +21,7 @@ import zlib
 from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
+from statistics import median
 from typing import Any, Optional
 
 # Same-dir library for ya.make REQUIREMENTS (reserved cpu/ram)
@@ -93,6 +94,109 @@ def _default_repo_root() -> Optional[Path]:
 EVLOG_AUX_OUTPUT_RE = re.compile(
     r"(?:^|/)(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)(?=\s|$)"
 )
+
+_COMPILE_PREFIXES = ("Preprocess", "Compile")
+_LINK_PREFIXES = ("CompileAndLink", "SharedLibrary", "Link", "Archive")
+_CACHE_PREFIXES = ("FromDistCache", "PutInDistCache", "PutInCache", "WriteThroughCaches")
+_LINK_OUTPUT_SUFFIXES = (".a", ".so", ".dylib")
+
+
+def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
+    """Classify a ya worker node for the whole-build concurrency chart."""
+    tag_upper = str(tag or "").strip().upper()
+    for prefix in _CACHE_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "cache"
+    for prefix in _LINK_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "link"
+    for prefix in _COMPILE_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "build"
+    if not name.startswith("Run("):
+        return None
+    # Worker tags are authoritative when present. In particular, LD also
+    # covers executable links whose output has no file extension, while AR
+    # means archive creation and is shown separately from compilations/build.
+    if tag_upper == "LD":
+        return "link"
+    if tag_upper == "AR":
+        return "archive"
+    if tag_upper == "TM":
+        return "test_tm"
+    if "test-results" in name:
+        suite, _group, chunk = extract_suite_group_chunk_from_run_name(name)
+        if (
+            suite is not None
+            and chunk is not None
+            and "/chunk" in name
+            and not EVLOG_AUX_OUTPUT_RE.search(name)
+        ):
+            return "test"
+        # Test result packaging (meta.json, traces, archives) is not a test job.
+        return None
+    path = name.split("(", 1)[1]
+    if "$(BUILD_ROOT)" in path:
+        path = path.split("$(BUILD_ROOT)", 1)[1]
+    path = path.rstrip(")").lower()
+    if not tag_upper and path.endswith(_LINK_OUTPUT_SUFFIXES):
+        return "link"
+    # Non-test Run nodes are build/codegen jobs even when their output has no
+    # recognizable suffix (generated packages and executable targets).
+    return "build"
+
+
+def parse_evlog_activity(evlog_path: Path) -> list[dict[str, Any]]:
+    """Return compile/link/test worker intervals from the complete ya make evlog."""
+    events = load_json_or_jsonl(evlog_path)
+    activity: list[dict[str, Any]] = []
+    stacks: dict[tuple[int, int], list[tuple[float, str]]] = defaultdict(list)
+    for ev in events:
+        if "ph" not in ev:
+            if ev.get("namespace") != "worker_threads" or ev.get("event") != "node-finished":
+                continue
+            value = ev.get("value") if isinstance(ev.get("value"), dict) else {}
+            raw_time = value.get("time")
+            if not (isinstance(raw_time, list) and len(raw_time) == 2):
+                continue
+            try:
+                start_sec, end_sec = float(raw_time[0]), float(raw_time[1])
+            except (TypeError, ValueError):
+                continue
+            kind = _evlog_activity_kind(
+                str(value.get("name") or ""),
+                str(value.get("tag") or ""),
+            )
+            if kind and end_sec > start_sec:
+                activity.append(
+                    {
+                        "kind": kind,
+                        "start_us": start_sec * 1_000_000.0,
+                        "end_us": end_sec * 1_000_000.0,
+                    }
+                )
+            continue
+
+        ph = ev.get("ph")
+        if ph not in ("B", "E"):
+            continue
+        key = (int(ev.get("pid", 0)), int(ev.get("tid", 0)))
+        ts = float(ev.get("ts", 0.0) or 0.0)
+        if ph == "B":
+            args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
+            kind = _evlog_activity_kind(
+                str(args.get("name") or ""),
+                str(args.get("tag") or ev.get("tag") or ""),
+            )
+            stacks[key].append((ts, kind or ""))
+            continue
+        if not stacks[key]:
+            continue
+        start_us, kind = stacks[key].pop()
+        if kind and ts > start_us:
+            activity.append({"kind": kind, "start_us": start_us, "end_us": ts})
+    activity.sort(key=lambda row: (float(row["start_us"]), str(row["kind"])))
+    return activity
 
 
 def _suites_with_indexed_chunks(
@@ -1012,6 +1116,7 @@ def _build_resources_overlay(
     resources_path: Path,
     enriched_runs: list[dict[str, Any]],
     records: Optional[list[dict[str, Any]]] = None,
+    activity: Optional[list[dict[str, Any]]] = None,
 ) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
     try:
@@ -1041,8 +1146,6 @@ def _build_resources_overlay(
         if v is not None and (isinstance(v, (int, float)) and v > 0):
             cpu_cores = int(v)
             break
-    min_evlog = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
-    max_evlog = max(float(r.get("end_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     xs_evlog: list[float] = []
     cpu_total_cores: list[float] = []
     ram_gb: list[float] = []
@@ -1051,8 +1154,6 @@ def _build_resources_overlay(
     for r in records:
         ts = float(r.get("ts", 0) or 0)
         evlog_sec = ref_start_ev + (ts - ref_report_ts)
-        if not (min_evlog <= evlog_sec <= max_evlog):
-            continue
         xs_evlog.append(evlog_sec)
         cpu_total_cores.append(float(r.get("cpu_total_pct", 0) or 0) / 100.0 * cpu_cores)
         ram_gb.append(float(r.get("ram_used_kb", 0) or 0) / (1024 * 1024))
@@ -1075,13 +1176,18 @@ def _build_resources_overlay(
     ram_total_gb = _first_positive("ram_total_gb")
     if not xs_evlog:
         return None
+    timeline_starts = [min(xs_evlog)]
+    timeline_ends = [max(xs_evlog)]
+    if activity:
+        timeline_starts.extend(float(row.get("start_us", 0) or 0) / 1_000_000.0 for row in activity)
+        timeline_ends.extend(float(row.get("end_us", 0) or 0) / 1_000_000.0 for row in activity)
     return {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
         "ram_gb": ram_gb,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
-        "evlog_range_sec": [min_evlog, max_evlog],
+        "evlog_range_sec": [min(timeline_starts), max(timeline_ends)],
         "cpu_cores": cpu_cores,
         "ram_total_gb": ram_total_gb,
     }
@@ -1413,6 +1519,7 @@ def main() -> None:
         if not _is_dependency_sole_chunk_run(rr, suites_with_indexed)
     ]
     evlog_runs = parse_evlog_runs(args.evlog, args.suite_path)
+    evlog_activity = parse_evlog_activity(args.evlog)
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
@@ -1421,6 +1528,7 @@ def main() -> None:
             evlog_by_key[k] = er
     runs = []
     enriched_by_evlog = 0
+    activity_offsets_us: list[float] = []
     for rr in report_runs:
         k = (str(rr.get("suite_path", "")), normalize_chunk_group(rr.get("chunk_group")), int(rr.get("chunk", 0)))
         best = evlog_by_key.get(k)
@@ -1430,7 +1538,34 @@ def main() -> None:
             out["uid"] = best.get("uid")
             out["raw_name"] = best.get("raw_name") or out.get("raw_name")
             enriched_by_evlog += 1
+            activity_offsets_us.append(
+                float(rr.get("start_us", 0) or 0)
+                - float(best.get("start_us", 0) or 0)
+            )
         runs.append(out)
+    activity_offset_us = float(median(activity_offsets_us)) if activity_offsets_us else 0.0
+    if activity_offset_us:
+        evlog_activity = [
+            {
+                **row,
+                "start_us": float(row.get("start_us", 0) or 0) + activity_offset_us,
+                "end_us": float(row.get("end_us", 0) or 0) + activity_offset_us,
+            }
+            for row in evlog_activity
+        ]
+    # Keep raw TM worker spans and add report-backed chunk spans as a separate
+    # series so the dashboard can compare scheduler occupancy with suite times.
+    evlog_activity = [
+        row for row in evlog_activity if row.get("kind") != "test"
+    ] + [
+        {
+            "kind": "test_report",
+            "start_us": float(row.get("start_us", 0) or 0),
+            "end_us": float(row.get("end_us", 0) or 0),
+        }
+        for row in runs
+    ]
+    evlog_activity.sort(key=lambda row: (float(row["start_us"]), str(row["kind"])))
 
     requirements_cache = None
     repo_root = args.repo_root.resolve() if args.repo_root else _default_repo_root()
@@ -1456,6 +1591,7 @@ def main() -> None:
     stats["runs_from_report"] = len(report_runs)
     stats["runs_from_evlog"] = len(evlog_runs)
     stats["runs_enriched_by_evlog"] = enriched_by_evlog
+    stats["evlog_activity_offset_sec"] = activity_offset_us / 1_000_000.0
     stats["repo_root"] = str(repo_root) if repo_root else None
     stats["suites_missing_ya_make"] = suites_missing_ya_make
     if suites_missing_ya_make:
@@ -1493,7 +1629,12 @@ def main() -> None:
         except ImportError:
             from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
         resources_records = load_resources_jsonl(args.resources_jsonl)
-        resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs, records=resources_records)
+        resources_overlay = _build_resources_overlay(
+            args.resources_jsonl,
+            enriched_runs,
+            records=resources_records,
+            activity=evlog_activity,
+        )
 
     runner_footprint = resolve_runner_footprint(build_preset=args.build_preset)
     resources_overlay = enrich_resources_overlay(
@@ -1678,6 +1819,7 @@ def main() -> None:
             tests_per_chunk_by_label=tests_per_chunk_by_label,
             issues_summary=issues_summary,
             suite_chunk_issues_summary=suite_chunk_issues_summary,
+            ya_activity=evlog_activity,
         )
         if args.full_table:
             out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")

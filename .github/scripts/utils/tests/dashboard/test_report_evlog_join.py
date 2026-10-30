@@ -13,7 +13,13 @@ from _paths import TEST_METRICS, add_product_paths
 
 add_product_paths(TEST_METRICS)
 
-from tests_resource_dashboard import parse_evlog_runs, parse_report_chunks
+from tests_resource_dashboard import (
+    _build_resources_overlay,
+    parse_evlog_activity,
+    parse_evlog_runs,
+    parse_report_chunks,
+)
+from dashboard_html_series import downsample_active_series
 
 
 def test_report_chunk_key_and_evlog_run_match():
@@ -89,11 +95,108 @@ def test_suite_rows_are_not_tests_and_later_chunk_finish_wins():
     assert suite_chunk_issues["duplicate_chunk_rows"] == 1
 
 
+def test_evlog_activity_covers_compile_link_and_test_jobs():
+    events = [
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
+            "value": {"name": "FromDistCache(hash)", "time": [5, 15]},
+        },
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
+            "value": {"name": "Compile(a.cpp)", "time": [10, 20]},
+        },
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
+            "value": {"name": "Link(lib.a)", "time": [15, 30]},
+        },
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
+            "value": {
+                "name": "Run(hash$(BUILD_ROOT)/bin/executable)",
+                "time": [16, 31],
+                "tag": "LD",
+            },
+        },
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
+            "value": {
+                "name": "Run(hash$(BUILD_ROOT)/lib/archive.a)",
+                "time": [17, 32],
+                "tag": "AR",
+            },
+        },
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
+            "value": {
+                "name": "Run(rnd-a$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/testing_out_stuff/chunk1/run)",
+                "time": [25, 40],
+                "tag": "TM",
+            },
+        },
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        evlog_path = Path(tmp) / "ya_evlog.jsonl"
+        evlog_path.write_text(
+            "".join(json.dumps(event) + "\n" for event in events),
+            encoding="utf-8",
+        )
+        activity = parse_evlog_activity(evlog_path)
+    kinds = [row["kind"] for row in activity]
+    assert kinds.count("cache") == 1
+    assert kinds.count("build") == 1
+    assert kinds.count("archive") == 1
+    assert kinds.count("link") == 2
+    assert kinds.count("test_tm") == 1
+    assert activity[0]["start_us"] == 5_000_000.0
+    assert activity[-1]["end_us"] == 40_000_000.0
+
+
+def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
+    enriched_runs = [
+        {
+            "start_us": 100_000_000.0,
+            "end_us": 150_000_000.0,
+            "report_suite_start_ts": 1000.0,
+        }
+    ]
+    records = [
+        {"ts": 900.0, "cpu_total_pct": 10, "cpu_cores": 8, "ram_used_kb": 1024},
+        {"ts": 1100.0, "cpu_total_pct": 20, "cpu_cores": 8, "ram_used_kb": 2048},
+    ]
+    activity = [{"kind": "compile", "start_us": -50_000_000.0, "end_us": 250_000_000.0}]
+    overlay = _build_resources_overlay(
+        Path("unused.jsonl"),
+        enriched_runs,
+        records=records,
+        activity=activity,
+    )
+    assert overlay is not None
+    assert overlay["xs_evlog_sec"] == [0.0, 200.0]
+    assert overlay["evlog_range_sec"] == [-50.0, 250.0]
+
+
+def test_active_series_downsampling_preserves_short_peak():
+    xs = [float(i) for i in range(100)]
+    ys = [0.0] * 100
+    ys[51] = 77.0
+    _sampled_xs, sampled_ys = downsample_active_series(xs, ys, 10)
+    assert max(sampled_ys) == 77.0
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     for fn in (
         test_report_chunk_key_and_evlog_run_match,
         test_suite_rows_are_not_tests_and_later_chunk_finish_wins,
+        test_evlog_activity_covers_compile_link_and_test_jobs,
+        test_resources_overlay_keeps_samples_before_and_after_test_chunks,
+        test_active_series_downsampling_preserves_short_peak,
     ):
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite

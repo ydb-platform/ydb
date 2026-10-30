@@ -35,6 +35,7 @@ def build_html_dashboard(
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
     issues_summary: Optional[dict[str, int]] = None,
     suite_chunk_issues_summary: Optional[dict[str, int]] = None,
+    ya_activity: Optional[list[dict[str, Any]]] = None,
 ) -> None:
     payload = build_dashboard_payload(
         suite_filter=suite_filter,
@@ -51,6 +52,7 @@ def build_html_dashboard(
         tests_per_chunk_by_label=tests_per_chunk_by_label,
         issues_summary=issues_summary,
         suite_chunk_issues_summary=suite_chunk_issues_summary,
+        ya_activity=ya_activity,
     )
 
     rf = (run_config or {}).get("runner_footprint") or {}
@@ -407,8 +409,7 @@ def build_html_dashboard(
       </details>
     </div>
   </details>
-  <div id="activeChunks" class="wide"></div>
-  <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
+  <div id="yaActivity" class="wide"></div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
@@ -477,8 +478,8 @@ def build_html_dashboard(
       // Hidden-tab Plotly charts need explicit resize after becoming visible.
       setTimeout(() => {{
         const ids = id === 'suiteTab'
-          ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite', 'activeChunks']
-          : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie', 'activeChunks'];
+          ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
+          : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
         ids.forEach(cid => {{
           const el = document.getElementById(cid);
           if (el && window.Plotly) {{
@@ -758,7 +759,6 @@ def build_html_dashboard(
       else if (plotId === 'cpuLayer') xs = data.xs_cpu;
       else if (plotId === 'ramLayer') xs = data.xs_ram;
       else if (plotId === 'activeLayerChunk') xs = data.xs_active_chunk;
-      else if (plotId === 'activeChunks') xs = data.xs_active;
       if (!Array.isArray(xs) || i >= xs.length) return null;
       const tSec = Number(xs[i]);
       return Number.isFinite(tSec) ? tSec : null;
@@ -804,7 +804,7 @@ def build_html_dashboard(
         tickVals = ticks.map(ms => new Date(ms).toISOString());
         tickText = ticks.map(ms => _formatTick(ms));
       }}
-      return {{
+      const layout = {{
         title: axisTitle(),
         type: 'date',
         tickmode: tickVals ? 'array' : 'auto',
@@ -812,9 +812,14 @@ def build_html_dashboard(
         ticktext: tickText || undefined,
         hoverformat: '',
       }};
+      const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
+      if (Array.isArray(fullRange) && fullRange.length >= 2) {{
+        layout.range = [xToDisplay(Number(fullRange[0])), xToDisplay(Number(fullRange[1]))];
+      }}
+      return layout;
     }}
     function applyTimezoneToAllCharts() {{
-      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+      const ids = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
       for (const id of ids) {{
         const el = document.getElementById(id);
         if (!el || !el.data || !el.layout || !window.Plotly) continue;
@@ -990,7 +995,7 @@ def build_html_dashboard(
     setupMonitoringLink();
 
     // Marker state lives at top scope so all functions can access it.
-    const _markerChartIds = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+    const _markerChartIds = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
     // Each entry: {{ shapes: [...], annotations: [...] }} by suite_path.
     const _suiteMarkerData = {{}};
 
@@ -2043,31 +2048,45 @@ def build_html_dashboard(
       }});
     }}
 
-    Plotly.newPlot('activeChunks', [{{
-      x: (data.xs_active || []).map(xToDisplay),
-      y: data.ys_active,
-      mode: 'lines',
-      name: 'active_chunks',
-      line: {{color: '#444', width: 2, shape: 'hv'}},
-      hoverinfo: 'none',
-    }}], {{
-      title: 'Concurrent running chunks',
-      xaxis: axisLayout((data.xs_active || []).map(xToDisplay)),
-      yaxis: {{title: 'count'}},
-      hovermode: 'x unified',
-    }}, {{responsive: true}});
     (function() {{
-      const plot = document.getElementById('activeChunks');
-      const panel = document.getElementById('activeChunksClick');
-      if (plot && panel) {{
-        plot.on('plotly_click', (ev) => {{
-          if (!ev || !ev.points || !ev.points.length) return;
-          const t = ev.points[0].x;
-          const y = Number(ev.points[0].y);
-          const n = Number.isFinite(y) ? Math.round(y) : activeCountAtTime(t);
-          panel.innerHTML = '<b>t=' + formatPointTime(ev.points[0]) + '</b>: ' + (n != null ? n + ' tests (chunks) running' : '—');
+      const activity = data.ya_activity || {{}};
+      const specs = [
+        ['build', 'Build/codegen (CC/AS/PY/…)', '#2563eb', 'solid'],
+        ['archive', 'Archives (AR)', '#0891b2', 'solid'],
+        ['cache', 'Cache (From/Put cache)', '#f59e0b', 'solid'],
+        ['test_report', 'Test chunks (report)', '#16a34a', 'solid'],
+        ['test_tm', 'Test workers (TM)', '#4ade80', 'dash'],
+        ['link', 'Links (LD)', '#9333ea', 'solid'],
+      ];
+      const traces = [];
+      const allX = [];
+      for (const [kind, name, color, dash] of specs) {{
+        const series = activity[kind] || {{}};
+        const xs = (series.xs || []).map(xToDisplay);
+        if (!xs.length) continue;
+        allX.push(...xs);
+        traces.push({{
+          x: xs,
+          y: series.ys || [],
+          mode: 'lines',
+          name,
+          line: {{color, width: 2, shape: 'hv', dash}},
+          hovertemplate: name + ': %{{y:.0f}}<extra></extra>',
         }});
       }}
+      const el = document.getElementById('yaActivity');
+      if (!traces.length) {{
+        if (el) el.style.display = 'none';
+        return;
+      }}
+      Plotly.newPlot('yaActivity', traces, {{
+        title: 'ya make concurrency: build, archives, cache, test chunks, and links',
+        xaxis: axisLayout(allX),
+        yaxis: {{title: 'active jobs', rangemode: 'tozero'}},
+        hovermode: 'x unified',
+        legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
+        margin: {{l: 60, r: 20, t: 50, b: 90}},
+      }}, {{responsive: true}});
     }})();
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
@@ -2108,6 +2127,8 @@ def build_html_dashboard(
             yaxis: {{ title: 'MB/s' }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
+            legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
+            margin: {{l: 60, r: 20, t: 50, b: 90}},
           }}, {{ responsive: true }});
         }}
       }}
@@ -2158,6 +2179,8 @@ def build_html_dashboard(
           yaxis: {{ title: 'MB/s' }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},
+          legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
+          margin: {{l: 60, r: 20, t: 50, b: 90}},
         }}, {{ responsive: true }});
       }}
     }}

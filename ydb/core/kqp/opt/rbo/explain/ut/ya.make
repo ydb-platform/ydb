@@ -1,6 +1,7 @@
 UNITTEST()
 
 SRCS(
+    kqp_expression_explain_ut.cpp
     kqp_read_ranges_ut.cpp
 )
 

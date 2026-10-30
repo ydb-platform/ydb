@@ -235,6 +235,15 @@ void CreateExpressionPrintingTestTables(TKikimrRunner& kikimr) {
             c Int64,
             primary key(id)
         );
+
+        CREATE TABLE `/Root/baz` (
+            id Int64 NOT NULL,
+            b Int64,
+            c Int64,
+            s Utf8,
+            d Date,
+            primary key(id)
+        );
     )").GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
@@ -1306,9 +1315,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(limitOp, plan);
 
         const auto mapName = GetStringField(*mapOp, "Name");
-        UNIT_ASSERT_C(mapName == "Map [next_id := /Root/foo.id + 1]", plan);
+        UNIT_ASSERT_C(mapName == "Map [next_id := `/Root/foo`.id + 1]", plan);
         const auto predicate = GetStringField(*filterOp, "Predicate");
-        UNIT_ASSERT_C(predicate == "/Root/foo.b > 10", plan);
+        UNIT_ASSERT_C(predicate == "`/Root/foo`.b > 10", plan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*limitOp, "Limit"), "3", plan);
 
         // A unique public name needs no final output-renaming OrderedMap,
@@ -1349,6 +1358,76 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(joinOp, plan);
         const auto condition = GetStringField(*joinOp, "Condition");
         UNIT_ASSERT_C(condition.Contains("id") && condition.Contains(" = "), plan);
+    }
+
+    // How SQL predicates look in explain after translation to YQL. Filters on non-key
+    // columns stay in a Filter instead of becoming read ranges.
+    Y_UNIT_TEST(ExplainExpressionPrintingPredicates) {
+        const std::pair<TString, TString> cases[] = {
+            {"t.b > 10 AND (t.c < 5 OR t.s = 'x')", R"(t.b > 10 AND (t.c < 5 OR t.s == "x"))"},
+            {"t.b % 2 = 0 OR t.c IS NULL", "t.b % 2 == 0 OR t.c IS NULL"},
+            {"NOT (t.b > 1 OR t.c > 1)", "NOT (t.b > 1 OR t.c > 1)"},
+            {"t.b + t.c * 2 > 10", "t.b + t.c * 2 > 10"},
+            {"(t.b + t.c) * 2 > 10", "(t.b + t.c) * 2 > 10"},
+            {"t.b - (t.c - 1) > 0", "t.b - (t.c - 1) > 0"},
+            {"-t.b > 1", "-t.b > 1"},
+            {"t.b IN (1, 2, 3)", "t.b IN (1, 2, 3)"},
+            {"t.b NOT IN (1, 2)", "t.b NOT IN (1, 2)"},
+            {"t.s IS NULL", "t.s IS NULL"},
+            {"t.s IS NOT NULL", "t.s IS NOT NULL"},
+            {"t.b BETWEEN 1 AND 5", "t.b >= 1 AND t.b <= 5"},
+            {"COALESCE(t.b, 0) < 5", "Coalesce(t.b, Convert(0, Int64)) < 5"},
+            {"CASE WHEN t.b > 0 THEN t.c ELSE 0 END > 1", "If(t.b > 0, t.c, Convert(0, Int64)) > 1"},
+            {"t.d > Date('2020-01-01')", R"(t.d > Date("2020-01-01"))"},
+            {"t.s || 'x' = 'yx'", R"(t.s || "x" == "yx")"},
+            {"t.s LIKE 'ab%'", R"(StartsWith(t.s, "ab"))"},
+            {"t.s LIKE '%ab'", R"(EndsWith(t.s, "ab"))"},
+            {"t.s LIKE '%ab%'", R"(StringContains(t.s, "ab"))"},
+            {"String::Contains(t.s, 'ab')", R"(String::Contains(ToString(t.s), "ab"))"},
+            {"CAST(t.b AS String) = '1'", R"(CAST(t.b AS String?) == "1")"},
+            {"t.b IS DISTINCT FROM t.c", "t.b IS DISTINCT FROM t.c"},
+        };
+
+        TExpressionPrintingTestContext testContext;
+        TStringBuilder mismatches;
+        for (const auto& [where, expected] : cases) {
+            const auto plan = ExecuteExplain(testContext.GetSession(), TStringBuilder()
+                << "PRAGMA YqlSelect = 'force';\n"
+                << "SELECT t.id FROM `/Root/baz` AS t WHERE " << where << ";");
+            const auto simplifiedPlan = GetSimplifiedPlan(plan);
+            const auto* filterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+            const auto predicate = filterOp ? GetStringField(*filterOp, "Predicate") : TString("<no Filter>");
+            if (predicate != expected) {
+                mismatches << "\n" << where << "\n  expected: " << expected << "\n  actual:   " << predicate;
+            }
+        }
+        // Explaining is slow, so report all mismatches at once.
+        UNIT_ASSERT_C(mismatches.empty(), mismatches);
+    }
+
+    Y_UNIT_TEST(ExplainConfiguredUdf) {
+        TExpressionPrintingTestContext testContext;
+        const auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT t.id FROM `/Root/baz` AS t WHERE Re2::Match('a.*')(t.s);
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* filterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+        UNIT_ASSERT_C(filterOp, plan);
+        const auto predicate = GetStringField(*filterOp, "Predicate");
+        UNIT_ASSERT_C(predicate.Contains("Re2.Match") && predicate.Contains("\"a.*\"") && predicate.Contains("t.s"), predicate);
+    }
+
+    Y_UNIT_TEST(ExplainReservedAlias) {
+        TExpressionPrintingTestContext testContext;
+        const auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            SELECT `not`.id FROM `/Root/baz` AS `not` WHERE `not`.b > 1;
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* filterOp = FindOperatorByNamePrefix(simplifiedPlan, "Filter");
+        UNIT_ASSERT_C(filterOp, plan);
+        UNIT_ASSERT_VALUES_EQUAL(GetStringField(*filterOp, "Predicate"), "`not`.b > 1");
     }
 
     Y_UNIT_TEST(ExplainExpressionPrintingJoinFilters) {

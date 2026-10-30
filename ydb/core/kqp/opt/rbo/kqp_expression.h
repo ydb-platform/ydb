@@ -101,7 +101,7 @@ class TExpression {
     // Produce a pretty string for this expression
     TString ToString() const;
 
-    // Produce a compact string suitable for explain output. Complex expressions are summarized by dependencies.
+    // Produce a YQL-like string for explain output, summarizing subtrees past the size budget.
     TString ToExplainString(const TInfoUnitRegistry& registry) const;
 
     TExprNode::TPtr Node;

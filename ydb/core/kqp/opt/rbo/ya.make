@@ -59,6 +59,7 @@ PEERDIR(
     ydb/core/kqp/tracing
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
+    yql/essentials/minikql
     yql/essentials/public/decimal
     yql/essentials/types/uuid
     yql/essentials/utils

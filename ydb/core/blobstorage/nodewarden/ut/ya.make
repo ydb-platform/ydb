@@ -18,6 +18,7 @@ PEERDIR(
 SRCS(
     blobstorage_node_warden_ut.cpp
     bind_queue_ut.cpp
+    distconf_selfheal_ut.cpp
     distconf_ut.cpp
 )
 

@@ -90,6 +90,8 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     static const TSet<TString> ModeSettings = {
         "consistency_level",
         "commit_interval",
+        "initial_scan",
+        "availability_period",
     };
 
     static const TSet<TString> StateSettings = {
@@ -113,9 +115,25 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
-    if (keyName == "commit_interval") {
+    if (keyName == "availability_period") {
+        if (value->GetOpName() != "Interval") {
+            if (!value->IsLiteral() || value->GetLiteralType() != "String") {
+                ctx.Context().Error() << "UNLIMITED or a literal of Interval type is expected for " << key.Name;
+                return false;
+            }
+            if (to_lower(value->GetLiteralValue()) != "unlimited") {
+                ctx.Context().Error() << "Unknown availability period: " << value->GetLiteralValue();
+                return false;
+            }
+        }
+    } else if (keyName == "commit_interval") {
         if (value->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << key.Name;
+            return false;
+        }
+    } else if (keyName == "initial_scan") {
+        if (!value->IsLiteral() || value->GetLiteralType() != "Bool") {
+            ctx.Context().Error() << "Literal of Bool type is expected for " << key.Name;
             return false;
         }
     } else {

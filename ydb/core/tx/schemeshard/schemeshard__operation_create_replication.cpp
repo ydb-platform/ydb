@@ -5,6 +5,11 @@
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/util/proto_duration.h>
+
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -40,10 +45,40 @@ struct TReplicationStrategy : public IStrategy {
             return true;
         }
 
+        if (desc.GetConfig().HasAvailabilityPeriod()) {
+            const auto& period = desc.GetConfig().GetAvailabilityPeriod();
+            if (period.HasDuration()) {
+                const auto& duration = period.GetDuration();
+                if (!google::protobuf::util::TimeUtil::IsDurationValid(duration)
+                    || duration.seconds() < 0 || duration.nanos() < 0
+                    || (duration.seconds() == 0 && duration.nanos() == 0))
+                {
+                    result.SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Availability period must be a positive, representable duration");
+                    return true;
+                }
+
+                if (GetDuration(duration).MicroSeconds() >= NYql::NUdf::MAX_TIMESTAMP) {
+                    result.SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Availability period cannot be represented as SQL Interval after rounding to milliseconds");
+                    return true;
+                }
+            } else if (!period.HasUnlimited()) {
+                result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period is not set");
+                return true;
+            }
+        }
+
         return false;
     }
 
-    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString&) const override {
+        if (!config.HasAvailabilityPeriod()) {
+            config.MutableAvailabilityPeriod()->MutableUnlimited();
+        } else if (config.GetAvailabilityPeriod().HasDuration()) {
+            auto& duration = *config.MutableAvailabilityPeriod()->MutableDuration();
+            SetDuration(GetDuration(duration), duration);
+        }
     }
 };
 
@@ -55,6 +90,10 @@ struct TTransferStrategy : public IStrategy {
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
+            return true;
+        }
+        if (desc.GetConfig().HasAvailabilityPeriod()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period is only supported for replication");
             return true;
         }
         if (desc.HasState()) {
@@ -476,7 +515,16 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
-        desc.MutableState()->MutableStandBy();
+        if (desc.GetConfig().HasTransferSpecific()) {
+            desc.MutableConfig()->ClearInitialScan();
+        } else if (!desc.GetConfig().HasInitialScan()) {
+            desc.MutableConfig()->SetInitialScan(AppData()->ReplicationConfig.GetInitialScan());
+        }
+        if (desc.GetConfig().GetInitialScan()) {
+            desc.MutableState()->MutableStandBy();
+        } else {
+            desc.MutableState()->MutablePaused();
+        }
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications[path->PathId] = replication;
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);

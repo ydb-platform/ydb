@@ -2,6 +2,9 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
 
 #include <google/protobuf/text_format.h>
 #include <util/folder/path.h>
@@ -268,6 +271,103 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_C(!dataContent.empty(), "Data file is empty");
         UNIT_ASSERT_C(dataContent.Contains("row1") || dataContent.Contains("row2") || dataContent.Contains("row3"),
                      "Data file doesn't contain expected rows");
+    }
+
+    Y_UNIT_TEST(ShouldRestartMultipartUploadAfterCompletionFailure) {
+        using namespace NKikimr::NWrappers::NExternalStorage;
+
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 3, "row3");
+
+        TString firstUploadId;
+        TString completedUploadId;
+        bool failedCompletion = false;
+        bool abortedOldUpload = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::EvProposeTransaction: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    if (record.GetTxKind() != NKikimrTxDataShard::ETransactionKind::TX_KIND_SCHEME) {
+                        break;
+                    }
+
+                    NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                    UNIT_ASSERT(schemeTx.ParseFromString(record.GetTxBody()));
+                    if (schemeTx.HasBackup()) {
+                        schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableFSSettings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(schemeTx.SerializeAsString());
+                    }
+                    break;
+                }
+
+                case EvCompleteMultipartUploadRequest: {
+                    const auto& request = ev->Get<TEvCompleteMultipartUploadRequest>()->GetRequest();
+                    UNIT_ASSERT(request.GetMultipartUpload().GetParts().size() > 1);
+                    completedUploadId = request.GetUploadId().c_str();
+                    if (firstUploadId.empty()) {
+                        firstUploadId = completedUploadId;
+                        // Make the actual filesystem completion fail while its session still holds the file lock.
+                        const TString incompletePath = TStringBuilder() << request.GetKey().c_str() << ".incomplete";
+                        UNIT_ASSERT(NFs::Remove(incompletePath));
+                    }
+                    break;
+                }
+
+                case EvCompleteMultipartUploadResponse: {
+                    const auto& result = ev->Get<TEvCompleteMultipartUploadResponse>()->Result;
+                    if (!result.IsSuccess()) {
+                        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetExceptionName(), "FsCompleteMultipartUploadFailed");
+                        failedCompletion = true;
+                    }
+                    break;
+                }
+
+                case EvAbortMultipartUploadRequest: {
+                    const auto& request = ev->Get<TEvAbortMultipartUploadRequest>()->GetRequest();
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetUploadId(), firstUploadId);
+                    abortedOldUpload = true;
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              number_of_retries: 1
+              items {
+                source_path: "/MyRoot/Table"
+                destination_path: "backup/Table"
+              }
+            }
+        )", tempDir.Path().c_str()));
+        env.TestWaitNotification(runtime, txId);
+        runtime.SetObserverFunc(prevObserver);
+
+        TestGetExport(runtime, txId, "/MyRoot");
+        UNIT_ASSERT(failedCompletion);
+        UNIT_ASSERT(abortedOldUpload);
+        UNIT_ASSERT_VALUES_UNEQUAL(completedUploadId, firstUploadId);
+        const TString dataPath = MakeExportPath(tempDir.Path(), "backup/Table", "data_00.csv");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(dataPath), "1,\"row1\"\n2,\"row2\"\n3,\"row3\"\n");
+        UNIT_ASSERT(!FileExists(dataPath + ".incomplete"));
     }
 
     Y_UNIT_TEST(ShouldExportMultipleTablesWithData) {

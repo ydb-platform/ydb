@@ -198,8 +198,9 @@ public:
         , TabletId(tabletId)
         , ResultIndexSchema(schema)
     {
-        AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId))("cursor", ScanCursor->GetTabletId())(
-                                                                "tablet_id", TabletId);
+        AFL_VERIFY(!ScanCursor || !ScanCursor->GetTabletId() || (*ScanCursor->GetTabletId() == TabletId),
+            {"cursor", ScanCursor->GetTabletId()},
+            {"tabletId", TabletId});
     }
 
     virtual ~TReadMetadataBase() = default;

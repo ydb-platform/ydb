@@ -134,7 +134,8 @@ void TColumnShard::InitFindEmptyHistoryIntervals() {
     for (ui32 channel = FirstDataChannel; channel < Info()->Channels.size(); ++channel) {
         const auto& history = Info()->Channels[channel].History;
         for (size_t i = 0; i + 1 < history.size(); ++i) {
-            AFL_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration)("channel", channel);
+            AFL_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration,
+                {"channel", channel});
             if (history[i + 1].FromGeneration >= Generation()) {
                 break;
             }

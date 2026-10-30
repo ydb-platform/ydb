@@ -8,8 +8,8 @@
 namespace NKikimr::NOlap {
 
 bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs) {
-    AFL_VERIFY(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize())(
-                                                                   "event", "we need be sure that 2 * small < big");
+    AFL_VERIFY(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize(),
+        {"event", "we need be sure that 2 * small < big"});
     const auto pred = [](const TSplittedEntity* l, const TSplittedEntity* r) {
         return r->GetSize() < l->GetSize();
     };
@@ -60,8 +60,10 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const THashMap<ui32, std::vecto
             if (!recordsCount) {
                 recordsCount = entity.GetRecordsCount();
             } else {
-                AFL_VERIFY(*recordsCount == entity.GetRecordsCount())("records_count", *recordsCount)("column", entity.GetRecordsCount())(
-                                              "chunks", chunks.size());
+                AFL_VERIFY(*recordsCount == entity.GetRecordsCount(),
+                    {"recordsCount", *recordsCount},
+                    {"column", entity.GetRecordsCount()},
+                    {"chunks", chunks.size()});
             }
         }
         Size += entity.GetSize();

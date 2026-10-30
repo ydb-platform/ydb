@@ -150,7 +150,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             }
         }
     }
-    AFL_VERIFY(dbPortions.size() == recordsByPortion.size())("portions", dbPortions.size())("records", recordsByPortion.size());
+    AFL_VERIFY(dbPortions.size() == recordsByPortion.size(),
+        {"portions", dbPortions.size()},
+        {"records", recordsByPortion.size()});
 
     for (auto&& i : indexesByPortion) {
         AFL_VERIFY(dbPortions.contains(i.first));

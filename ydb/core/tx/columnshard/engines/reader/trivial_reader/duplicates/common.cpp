@@ -15,7 +15,8 @@ TPortionStore::TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
 
 TPortionInfo::TConstPtr TPortionStore::GetPortionVerified(const ui64 portionId) const {
     auto* findPortion = Portions.FindPtr(portionId);
-    AFL_VERIFY(findPortion)("portion", portionId);
+    AFL_VERIFY(findPortion,
+        {"portion", portionId});
     return *findPortion;
 }
 

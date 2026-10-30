@@ -33,7 +33,9 @@ void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr
 }
 
 void ITask::DoOnCannotExecute(const TString& reason) {
-    AFL_VERIFY(false)("problem", "cannot execute conveyor task")("reason", reason);
+    AFL_VERIFY(false,
+        {"problem", "cannot execute conveyor task"},
+        {"reason", reason});
 }
 
 void TProcessGuard::Finish() {

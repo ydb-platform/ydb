@@ -179,7 +179,9 @@ public:
         auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
         AFL_VERIFY(it != SchemeShardLocalPathIds.end());
         auto& pathInfo = it->second;
-        AFL_VERIFY(!pathInfo.DropVersion)("exists", pathInfo.DropVersion->DebugString())("version", version.DebugString());
+        AFL_VERIFY(!pathInfo.DropVersion,
+            {"exists", pathInfo.DropVersion->DebugString()},
+            {"version", version.DebugString()});
         pathInfo.DropVersion = version;
     }
 
@@ -202,13 +204,17 @@ public:
 
     void SetCopyVersion(const TSchemeShardLocalPathId& schemeShardLocalPathId, const NOlap::TSnapshot& version) {
         auto& pathInfo = SchemeShardLocalPathIds[schemeShardLocalPathId];
-        AFL_VERIFY(!pathInfo.CopyVersion)("exists", pathInfo.CopyVersion->DebugString())("version", version.DebugString());
+        AFL_VERIFY(!pathInfo.CopyVersion,
+            {"exists", pathInfo.CopyVersion->DebugString()},
+            {"version", version.DebugString()});
         pathInfo.CopyVersion = version;
     }
 
     void SetReadOnly(const TSchemeShardLocalPathId& schemeShardLocalPathId, const bool isReadOnly) {
         auto& pathInfo = SchemeShardLocalPathIds[schemeShardLocalPathId];
-        AFL_VERIFY(!pathInfo.IsReadOnly)("exists", pathInfo.IsReadOnly)("version", isReadOnly);
+        AFL_VERIFY(!pathInfo.IsReadOnly,
+            {"exists", pathInfo.IsReadOnly},
+            {"version", isReadOnly});
         pathInfo.IsReadOnly = isReadOnly;
     }
 
@@ -260,8 +266,9 @@ public:
                            .second);
             return;
         }
-        AFL_VERIFY(dstIt->second.CopyVersion == copyVersion)("expected", copyVersion.DebugString())(
-            "actual", dstIt->second.CopyVersion->DebugString());
+        AFL_VERIFY(dstIt->second.CopyVersion == copyVersion,
+            {"expected", copyVersion.DebugString()},
+            {"actual", dstIt->second.CopyVersion->DebugString()});
         AFL_VERIFY(dstIt->second.IsReadOnly);
     }
 
@@ -336,7 +343,8 @@ private:
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
-        AFL_VERIFY(inserted || it->second == ttl)("snapshot", snapshot);
+        AFL_VERIFY(inserted || it->second == ttl,
+            {"snapshot", snapshot});
     }
 
 public:

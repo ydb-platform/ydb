@@ -24,7 +24,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             << " original data: " << Base64Encode(originalData));
     }
     auto rb = *rbParsed;
-    AFL_VERIFY(rb->num_columns() == 2)("count", rb->num_columns())("schema", rb->schema()->ToString());
+    AFL_VERIFY(rb->num_columns() == 2,
+        {"count", rb->num_columns()},
+        {"schema", rb->schema()->ToString()});
     NArrow::NAccessor::TSparsedArray::TBuilder builder(externalInfo.GetDefaultValue(), externalInfo.GetColumnType());
     builder.AddChunk(externalInfo.GetRecordsCount(), rb);
     return builder.Finish();

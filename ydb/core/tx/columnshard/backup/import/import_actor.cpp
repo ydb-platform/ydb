@@ -171,7 +171,8 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
         return;
     }
 
-    AFL_VERIFY(ev->Get()->Data)("error", "empty record batch");
+    AFL_VERIFY(ev->Get()->Data,
+        {"error", "empty record batch"});
     NArrow::TBatchSplittingContext context(48 * 1024 * 1024);
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
     TString splitError;
@@ -264,7 +265,10 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
 }
 
 void TImportActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    AFL_VERIFY(Stage == from,
+        {"from", (ui32)from},
+        {"real", (ui32)Stage},
+        {"to", (ui32)to});
     Stage = to;
     StageStartTime = TInstant::Now();
 }
@@ -298,12 +302,14 @@ TImportActor::TImportActor(std::shared_ptr<NBackground::TSession> bgSession, con
 void TImportActor::OnSessionProgressSaved() {
     Counters.OnSaveProgressFinished(TInstant::Now() - SaveProgressStartTime);
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor,
+            {"real", (ui32)Stage});
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
     } else {
-        AFL_VERIFY(Stage == EStage::WaitData)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData,
+            {"real", (ui32)Stage});
         StageStartTime = TInstant::Now();
         AFL_VERIFY(ImportActorId);
         Counters.OnReadStarted();

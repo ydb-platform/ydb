@@ -53,8 +53,11 @@ public:
         while (true) {
             AFL_VERIFY(!Result);
             AFL_VERIFY(++Iterations < 100);
-            AFL_VERIFY(SplitFactor <= Data->num_rows())("factor", SplitFactor)("records", Data->num_rows())("iteration", Iterations)(
-                                        "size", NArrow::GetBatchDataSize(Data));
+            AFL_VERIFY(SplitFactor <= Data->num_rows(),
+                {"factor", SplitFactor},
+                {"records", Data->num_rows()},
+                {"iteration", Iterations},
+                {"size", NArrow::GetBatchDataSize(Data)});
             bool found = false;
             std::vector<TSplitChunk> result;
             if (SplitFactor == 1) {
@@ -91,7 +94,9 @@ public:
                         Y_ABORT_UNLESS(!linearSplitting.IsMinimalGranularity());
                     } else {
                         if (badStartPosition) {
-                            AFL_VERIFY(badBatchRecordsCount && badBatchCount)("count", badBatchCount)("records", badBatchRecordsCount);
+                            AFL_VERIFY(badBatchRecordsCount && badBatchCount,
+                                {"count", badBatchCount},
+                                {"records", badBatchRecordsCount});
                             auto badSlice = Data->Slice(*badStartPosition, badBatchRecordsCount);
                             TBatchSerializationStat stats(badBatchSerializedSize, badBatchRecordsCount, Max<ui32>());
                             result.emplace_back(

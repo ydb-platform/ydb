@@ -184,7 +184,9 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
 
 TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
     auto it = Scopes.find(scopeName);
-    AFL_VERIFY(it != Scopes.end())("cat", GetCategory())("scope", scopeName);
+    AFL_VERIFY(it != Scopes.end(),
+        {"cat", GetCategory()},
+        {"scope", scopeName});
     return *it->second;
 }
 
@@ -252,8 +254,10 @@ bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& pr
     }
     AFL_VERIFY(WeightedProcesses.size());
     auto itW = WeightedProcesses.find(process->GetWeightedUsage());
-    AFL_VERIFY(itW != WeightedProcesses.end())("weight", process->GetWeightedUsage().GetValue())("size", WeightedProcesses.size())(
-                        "first", WeightedProcesses.begin()->first.GetValue());
+    AFL_VERIFY(itW != WeightedProcesses.end(),
+        {"weight", process->GetWeightedUsage().GetValue()},
+        {"size", WeightedProcesses.size()},
+        {"first", WeightedProcesses.begin()->first.GetValue()});
     for (ui32 i = 0; i < itW->second.size(); ++i) {
         if (itW->second[i]->GetProcessId() != process->GetProcessId()) {
             continue;

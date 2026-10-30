@@ -4,7 +4,8 @@
 namespace NKikimr::NArrow {
 
 void TStatusValidator::Validate(const arrow::Status& status) {
-    AFL_VERIFY(status.ok())("problem", status.ToString().c_str());
+    AFL_VERIFY(status.ok(),
+        {"problem", status});
 }
 
 }

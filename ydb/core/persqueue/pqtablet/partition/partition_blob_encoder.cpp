@@ -26,12 +26,12 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
         ui32 s = 0;
         for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
             AFL_ENSURE(p < HeadKeys.size());
-            AFL_ENSURE(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key)
-                ("j", j)
-                ("k", k)
-                ("p", p)
-                ("l", DataKeysHead[j].GetKey(k).ToString())
-                ("r", HeadKeys[p].Key.ToString());
+            AFL_ENSURE(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key,
+                {"j", j},
+                {"k", k},
+                {"p", p},
+                {"l", DataKeysHead[j].GetKey(k)},
+                {"r", HeadKeys[p].Key});
             AFL_ENSURE(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
             s += DataKeysHead[j].GetSize(k);
             AFL_ENSURE(j + 1 == totalLevels || DataKeysHead[j].GetSize(k) >= compactLevelBorder[j + 1]);
@@ -40,10 +40,10 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
         AFL_ENSURE(s < DataKeysHead[j].Border());
     }
     AFL_ENSURE(DataKeysBody.empty() ||
-                   Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount())
-                   ("DataKeysBody.size", DataKeysBody.size())
-                   ("lastKey", DataKeysBody.back().Key.ToString())
-                   ("head.offset", Head.Offset);
+                   Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount(),
+        {"#_DataKeysBody.size", DataKeysBody.size()},
+        {"lastKey", DataKeysBody.back().Key},
+        {"#_head.offset", Head.Offset});
     AFL_ENSURE(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         AFL_ENSURE(HeadKeys.size() <= totalMaxCount);
@@ -239,11 +239,11 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
             --it; //point to blob with this offset
         AFL_ENSURE(it != DataKeysBody.end());
         sizeLag = DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - it->CumulativeSize;
-        AFL_ENSURE(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize)
-            ("BodySize", BodySize)
-            ("DataKeysBody.back().CumulativeSize", DataKeysBody.back().CumulativeSize)
-            ("DataKeysBody.back().Size", DataKeysBody.back().Size)
-            ("DataKeysBody.front().CumulativeSize", DataKeysBody.front().CumulativeSize);
+        AFL_ENSURE(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize,
+            {"bodySize", BodySize},
+            {"#_DataKeysBody.back().CumulativeSize", DataKeysBody.back().CumulativeSize},
+            {"#_DataKeysBody.back().Size", DataKeysBody.back().Size},
+            {"#_DataKeysBody.front().CumulativeSize", DataKeysBody.front().CumulativeSize});
     }
 
     if (HeadKeys.empty()) {
@@ -346,7 +346,8 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     }
 
     for (const auto& b : NewHead.GetBatches()) {
-        AFL_ENSURE(b.Packed)("key", key.ToString());
+        AFL_ENSURE(b.Packed,
+            {"key", key});
         b.SerializeTo(valueD);
         writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
     }
@@ -354,7 +355,11 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     AFL_ENSURE(size >= valueD.size());
 
     if (size > valueD.size() && key.HasSuffix()) { //change to real size if real packed size is smaller
-        AFL_ENSURE(false)("reason", "Can't be here right now, only after merging of small batches")("key", key.ToString())("size", size)("value_size", valueD.size());
+        AFL_ENSURE(false,
+            {"reason", "Can't be here right now, only after merging of small batches"},
+            {"key", key},
+            {"size", size},
+            {"valueSize", valueD.size()});
 
         //for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         //    if (it->KeysCount() > 0 ) {
@@ -525,9 +530,9 @@ void TPartitionBlobEncoder::SyncDataKeysBody(TInstant now,
         //if (!(lastOffset <= key.GetOffset())) {
         //    Dump();
         //}
-        AFL_ENSURE(lastOffset <= key.GetOffset())
-            ("lastOffset", lastOffset)
-            ("key", key.ToString());
+        AFL_ENSURE(lastOffset <= key.GetOffset(),
+            {"lastOffset", lastOffset},
+            {"key", key});
 
         if (DataKeysBody.empty()) {
             startOffset = key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
@@ -573,7 +578,8 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset)
 {
     AFL_ENSURE(ForFastWrite);
-    AFL_ENSURE(Head.PackedSize == 0)("Head.PackedSize", Head.PackedSize);
+    AFL_ENSURE(Head.PackedSize == 0,
+        {"#_Head.PackedSize", Head.PackedSize});
 
     // We calculate the initial offset if this is the first write operation.
     if (NewHead.PackedSize > 0 && DataKeysBody.empty()) {

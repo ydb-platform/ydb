@@ -143,11 +143,17 @@ void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 
 void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx) {
     auto cookiesIt = TabletIdToCookies.find(tabletId);
-    AFL_ENSURE(cookiesIt != TabletIdToCookies.end())("tablet_id", tabletId)("group", Message->GroupId.value())("database", Context->DatabasePath);
+    AFL_ENSURE(cookiesIt != TabletIdToCookies.end(),
+        {"tabletId", tabletId},
+        {"group", Message->GroupId.value()},
+        {"database", Context->DatabasePath});
 
     for (auto cookie: cookiesIt->second) {
         auto requestInfoIt = CookieToRequestInfo.find(cookie);
-        AFL_ENSURE(requestInfoIt != CookieToRequestInfo.end())("tablet_id", tabletId)("cookie", cookie)("database", Context->DatabasePath);
+        AFL_ENSURE(requestInfoIt != CookieToRequestInfo.end(),
+            {"tabletId", tabletId},
+            {"cookie", cookie},
+            {"database", Context->DatabasePath});
 
         if (!requestInfoIt->second.Done) {
             requestInfoIt->second.Done = true;
@@ -319,7 +325,9 @@ void TKafkaOffsetCommitActor::SendCommits(const TActorContext& ctx) {
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());
-    AFL_ENSURE(requestInfo != CookieToRequestInfo.end())("cookie", partitionResult.GetCookie())("database", Context->DatabasePath);
+    AFL_ENSURE(requestInfo != CookieToRequestInfo.end(),
+        {"cookie", partitionResult.GetCookie()},
+        {"database", Context->DatabasePath});
 
     requestInfo->second.Done = true;
     const auto pqError = ev->Get()->Record.GetErrorCode();

@@ -156,15 +156,20 @@ public:
 
     template <typename T = TArrayVecPtr>
     std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
-        AFL_VERIFY(GetColumnsCount())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
-        AFL_VERIFY(GetColumnsCount() == (ui32)schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
+        AFL_VERIFY(GetColumnsCount(),
+            {"columns", DebugString()},
+            {"schema", JoinSeq(",", schema->field_names())});
+        AFL_VERIFY(GetColumnsCount() == (ui32)schema->num_fields(),
+            {"columns", DebugString()},
+            {"schema", JoinSeq(",", schema->field_names())});
         const auto& columns = *Columns;
         return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
     }
 
     template <typename T = TArrayVecPtr>
     std::vector<std::shared_ptr<arrow::Field>> RestoreFakeFields() const {
-        AFL_VERIFY(GetColumnsCount())("columns", DebugString());
+        AFL_VERIFY(GetColumnsCount(),
+            {"columns", DebugString()});
         return BuildFakeFields(*Columns);
     }
 

@@ -151,8 +151,12 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
         const auto& record = ev->Get()->Record;
 
         AFL_VERIFY(RetryBySubscription);
-        AFL_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo)("event_seq_no", record.GetSeqNo())("last_overload_seq_no", LastOverloadSeqNo);
-        AFL_VERIFY(record.GetTabletID() == ShardId)("ev_tablet_id", record.GetTabletID())("shard_id", ShardId);
+        AFL_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo,
+            {"eventSeqNo", record.GetSeqNo()},
+            {"lastOverloadSeqNo", LastOverloadSeqNo});
+        AFL_VERIFY(record.GetTabletID() == ShardId,
+            {"evTabletId", record.GetTabletID()},
+            {"shardId", ShardId});
         if (record.GetSeqNo() != LastOverloadSeqNo) {
             return;
         }

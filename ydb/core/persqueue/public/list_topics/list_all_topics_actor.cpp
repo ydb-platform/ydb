@@ -128,7 +128,8 @@ class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsAct
             } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
                 || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
             {
-                AFL_ENSURE(entry.ListNodeEntry)("reason", "ListNodeEntry is zero");
+                AFL_ENSURE(entry.ListNodeEntry,
+                    {"reason", "ListNodeEntry is zero"});
                 for (const auto& child : entry.ListNodeEntry->Children) {
                     TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
                     switch (child.Kind) {

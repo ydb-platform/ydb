@@ -110,8 +110,9 @@ public:
         if (meta.IsKnown()) {
             auto& stored = shardInfo.Meta;
             if (stored.IsKnown()) {
-                AFL_ENSURE(stored.TableId == meta.TableId)
-                    ("stored", stored.TableId)("incoming", meta.TableId);
+                AFL_ENSURE(stored.TableId == meta.TableId,
+                    {"stored", stored.TableId},
+                    {"incoming", meta.TableId});
                 // Metadata may arrive as borders-with-version or version-only (the
                 // caller had no resolved partitioning at hand). Compare borders only
                 // when both sides carry them. A version-only meta describes a shard
@@ -124,14 +125,14 @@ public:
                 const bool bordersKnown = stored.Borders.From.size() > 0 || stored.Borders.To.size() > 0;
                 const bool incomingBorders = meta.Borders.From.size() > 0 || meta.Borders.To.size() > 0;
                 if (bordersKnown && incomingBorders) {
-                    AFL_ENSURE(SameBorders(stored.Borders, meta.Borders))
-                        ("shardId", shardId)
-                        ("storedFrom", stored.Borders.From.size())
-                        ("storedTo", stored.Borders.To.size())
-                        ("storedVersion", stored.PartitioningVersion)
-                        ("incomingFrom", meta.Borders.From.size())
-                        ("incomingTo", meta.Borders.To.size())
-                        ("incomingVersion", meta.PartitioningVersion);
+                    AFL_ENSURE(SameBorders(stored.Borders, meta.Borders),
+                        {"shardId", shardId},
+                        {"storedFrom", stored.Borders.From.size()},
+                        {"storedTo", stored.Borders.To.size()},
+                        {"storedVersion", stored.PartitioningVersion},
+                        {"incomingFrom", meta.Borders.From.size()},
+                        {"incomingTo", meta.Borders.To.size()},
+                        {"incomingVersion", meta.PartitioningVersion});
                 }
                 if (incomingBorders) {
                     // Borders always belong to the partitioning snapshot they came
@@ -315,22 +316,23 @@ public:
             const bool toMetaUsable = to.Meta.IsKnown() && !to.Meta.Borders.From.empty();
             if (fromMetaUsable && toMetaUsable) {
                 const auto* tableMeta = TableMetas.FindPtr(from.Meta.TableId);
-                AFL_ENSURE(tableMeta)("tableId", from.Meta.TableId);
+                AFL_ENSURE(tableMeta,
+                    {"tableId", from.Meta.TableId});
                 const auto& keyColumnTypes = tableMeta->KeyColumnTypes;
-                AFL_ENSURE(from.Meta.TableId == to.Meta.TableId)
-                    ("fromShardId", fromShardId)
-                    ("toShardId", toShardId)
-                    ("fromTableId", from.Meta.TableId)
-                    ("toTableId", to.Meta.TableId);
-                AFL_ENSURE(from.Meta.PartitioningVersion < to.Meta.PartitioningVersion)
-                    ("fromShardId", fromShardId)
-                    ("toShardId", toShardId)
-                    ("fromVersion", from.Meta.PartitioningVersion)
-                    ("toVersion", to.Meta.PartitioningVersion);
-                AFL_ENSURE(!Intersect(keyColumnTypes, from.Meta.Borders, to.Meta.Borders).IsEmptyRange(keyColumnTypes))
-                    ("fromShardId", fromShardId)
-                    ("toShardId", toShardId)
-                    ("keyColumnsCount", keyColumnTypes.size());
+                AFL_ENSURE(from.Meta.TableId == to.Meta.TableId,
+                    {"fromShardId", fromShardId},
+                    {"toShardId", toShardId},
+                    {"fromTableId", from.Meta.TableId},
+                    {"toTableId", to.Meta.TableId});
+                AFL_ENSURE(from.Meta.PartitioningVersion < to.Meta.PartitioningVersion,
+                    {"fromShardId", fromShardId},
+                    {"toShardId", toShardId},
+                    {"fromVersion", from.Meta.PartitioningVersion},
+                    {"toVersion", to.Meta.PartitioningVersion});
+                AFL_ENSURE(!Intersect(keyColumnTypes, from.Meta.Borders, to.Meta.Borders).IsEmptyRange(keyColumnTypes),
+                    {"fromShardId", fromShardId},
+                    {"toShardId", toShardId},
+                    {"keyColumnsCount", keyColumnTypes.size()});
             }
             // Metadata is not inherited from the removed shard: after a split/merge
             // the target covers a different key range, and the targets that receive
@@ -787,7 +789,9 @@ public:
             Coordinator = result.Coordinator;
         }
 
-        AFL_ENSURE(Coordinator && Coordinator == result.Coordinator)("prev_coordinator", Coordinator)("new_coordinator", result.Coordinator);
+        AFL_ENSURE(Coordinator && Coordinator == result.Coordinator,
+            {"prevCoordinator", Coordinator},
+            {"newCoordinator", result.Coordinator});
 
         return ShardsToWait.empty();
     }
@@ -838,7 +842,9 @@ public:
             // Every participant holds at least one action; a lock-only shard
             // always registers an action together with its locks (see AddLock
             // call sites).
-            AFL_ENSURE(shardInfo.Flags != 0)("shardId", shardId)("lockCount", shardInfo.Locks.size());
+            AFL_ENSURE(shardInfo.Flags != 0,
+                {"shardId", shardId},
+                {"lockCount", shardInfo.Locks.size()});
             flags |= (shardInfo.Flags & EAction::PESSIMISTIC_LOCK) ? EAction::WRITE : 0;
             const ui32 affectedFlags = flags;
 

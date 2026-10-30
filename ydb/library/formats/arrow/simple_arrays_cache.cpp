@@ -19,7 +19,9 @@ std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetConstImpl(
     const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount) {
     AFL_VERIFY(type);
     AFL_VERIFY(scalar);
-    AFL_VERIFY(scalar->type->id() == type->id())("scalar", scalar->type->ToString())("field", type->ToString());
+    AFL_VERIFY(scalar->type->id() == type->id(),
+        {"scalar", scalar->type->ToString()},
+        {"field", type->ToString()});
     const auto initializer = [scalar](const ui32 recordsCount) {
         return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*scalar, recordsCount));
     };

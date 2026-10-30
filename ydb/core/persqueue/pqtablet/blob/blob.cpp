@@ -57,10 +57,11 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , ExplicitHashKey(std::move(explicitHashKey))
         , LogicalMessageCount(logicalMessageCount)
         , IsBatch(isBatch) {
-    AFL_ENSURE(PartitionKey.size() <= 256)("partition_key_size", PartitionKey.size());
-    AFL_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT)
-        ("logical_message_count", LogicalMessageCount)
-        ("max_logical_message_count", MAX_LOGICAL_MESSAGE_COUNT);
+    AFL_ENSURE(PartitionKey.size() <= 256,
+        {"partitionKeySize", PartitionKey.size()});
+    AFL_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT,
+        {"logicalMessageCount", LogicalMessageCount},
+        {"maxLogicalMessageCount", MAX_LOGICAL_MESSAGE_COUNT});
 }
 
 
@@ -384,9 +385,9 @@ ui32 THead::GetCount() const
         return 0;
 
     //how much offsets before last batch and how much offsets in last batch
-    AFL_ENSURE(Batches.front().GetOffset() == Offset)
-        ("front.Offset", Batches.front().GetOffset())
-        ("offset", Offset);
+    AFL_ENSURE(Batches.front().GetOffset() == Offset,
+        {"#_front.Offset", Batches.front().GetOffset()},
+        {"offset", Offset});
 
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
@@ -602,20 +603,20 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
 
     // check the invariant that there is not holes in the glued content
     if (headIncluded && newHeadIncluded) {
-        AFL_ENSURE(NewHead.Offset == Head.GetNextOffset())
-            ("Head.Offset", Head.Offset)
-            ("Head.GetNextOffset()", Head.GetNextOffset())
-            ("NewHead.Offset", NewHead.Offset);
+        AFL_ENSURE(NewHead.Offset == Head.GetNextOffset(),
+            {"#_Head.Offset", Head.Offset},
+            {"#_Head.GetNextOffset", Head.GetNextOffset()},
+            {"#_NewHead.Offset", NewHead.Offset});
     }
 
     // check the invariant that the offset is the end of the glued content
     if (!Blobs.empty() && (headIncluded || newHeadIncluded)) {
         const ui64 gluedContentEnd = newHeadIncluded ? NewHead.GetNextOffset() : Head.GetNextOffset();
-        AFL_ENSURE(Offset == gluedContentEnd)
-            ("Offset", Offset)
-            ("gluedContentEnd", gluedContentEnd)
-            ("GlueHead", GlueHead)
-            ("GlueNewHead", GlueNewHead);
+        AFL_ENSURE(Offset == gluedContentEnd,
+            {"offset", Offset},
+            {"gluedContentEnd", gluedContentEnd},
+            {"glueHead", GlueHead},
+            {"glueNewHead", GlueNewHead});
     }
 
     ui64 offsetDelta = 0;
@@ -718,7 +719,9 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
 auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 {
-    AFL_ENSURE(NewHead.Offset >= Head.Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset);
+    AFL_ENSURE(NewHead.Offset >= Head.Offset,
+        {"#_Head.Offset", Head.Offset},
+        {"#_NewHead.Offset", NewHead.Offset});
     const ui32 size = blob.GetSerializedSize();
     AFL_ENSURE(InternalPartsCount < 1000); //just check for future packing
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
@@ -806,7 +809,9 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     , Count(0)
     , InternalPartsCount(0)
 {
-    AFL_ENSURE(Data != End)("Key", Key.ToString())("blob.size", blob.size());
+    AFL_ENSURE(Data != End,
+        {"key", Key},
+        {"#_blob.size", blob.size()});
     ParseBatch();
     AFL_ENSURE(Header.GetPartNo() == Key.GetPartNo());
 }

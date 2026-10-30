@@ -424,7 +424,9 @@ public:
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
-        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
+        AFL_VERIFY(it != Portions.end(),
+            {"portionId", portion},
+            {"count", Portions.size()});
         return *it->second;
     }
 

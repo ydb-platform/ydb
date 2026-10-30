@@ -177,7 +177,8 @@ public:
                 Sleep(TDuration::Seconds(1));
             }
         }
-        AFL_VERIFY(false)("reason", "condition not reached");
+        AFL_VERIFY(false,
+            {"reason", "condition not reached"});
     }
 
     void WaitActualization(const TDuration d, const bool waitWrites = false) const {

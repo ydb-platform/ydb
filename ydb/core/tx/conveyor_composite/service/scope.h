@@ -33,8 +33,9 @@ public:
     }
 
     void IncInFlight() {
-        AFL_VERIFY(CountInFlight.Inc() <= std::ceil(ScopeLimits->GetCPUThreadsLimit()))("in_flight", CountInFlight.Inc())(
-                                            "limit", ScopeLimits->GetCPUThreadsLimit());
+        AFL_VERIFY(CountInFlight.Inc() <= std::ceil(ScopeLimits->GetCPUThreadsLimit()),
+            {"inFlight", CountInFlight.Inc()},
+            {"limit", ScopeLimits->GetCPUThreadsLimit()});
     }
 
     void DecInFlight() {

@@ -16,7 +16,8 @@ TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    AFL_ENSURE(Shards.emplace(result->TabletId, result).second)("tablet_id", result->TabletId);
+    AFL_ENSURE(Shards.emplace(result->TabletId, result).second,
+        {"tabletId", result->TabletId});
     return result;
 }
 
@@ -28,7 +29,8 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
         Finished = true;
     }
     AFL_ENSURE(ActorId);
-    AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flightCount", DataChunksInFlightCount);
+    AFL_ENSURE(!DataChunksInFlightCount,
+        {"dataChunksInFlightCount", DataChunksInFlightCount});
     std::vector<std::unique_ptr<TComputeTaskData>> result;
     if (data.IsEmpty()) {
         AFL_ENSURE(data.Finished);

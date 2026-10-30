@@ -198,8 +198,9 @@ public:
         auto it = StatsByColumnId.find(info.GetColumnId());
         if (it == StatsByColumnId.end()) {
             ColumnStat.emplace_back(info);
-            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
-                                                                      "column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second,
+                {"columnId", info.GetColumnId()},
+                {"columnName", info.GetColumnName()});
             AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
                                                                           "column_name", info.GetColumnName());
         } else {

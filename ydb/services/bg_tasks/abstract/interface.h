@@ -192,7 +192,8 @@ public:
     using TBase::TBase;
 
     [[nodiscard]] bool Initialize(const TString& className, const bool maybeExists = false) {
-        AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
+        AFL_VERIFY(maybeExists || !Object,
+            {"problem", "initialize for not-empty-object"});
         Object.reset(TFactory::Construct(className));
         if (!Object) {
             YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class name",

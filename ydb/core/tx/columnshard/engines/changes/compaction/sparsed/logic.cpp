@@ -44,8 +44,9 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end(), heapComparator);
         AFL_VERIFY(heap.back()->IsValid());
-        AFL_VERIFY(heap.back()->GetGlobalResultIndexVerified() < chunkContext.GetRemapper().GetRecordsCount())(
-                                                                   "cursor", heap.back()->DebugString())("context", chunkContext.DebugString());
+        AFL_VERIFY(heap.back()->GetGlobalResultIndexVerified() < chunkContext.GetRemapper().GetRecordsCount(),
+            {"cursor", heap.back()->DebugString()},
+            {"context", chunkContext.DebugString()});
         AFL_VERIFY(heap.back()->AddIndexTo(*writer));
         if (!heap.back()->Next()) {
             YDB_LOG_TRACE("",
@@ -155,7 +156,9 @@ std::optional<i64> TSparsedMerger::TSparsedChunkCursor::GetGlobalResultIndexImpl
     if (*result < 0) {
         return result;
     }
-    AFL_VERIFY(*GlobalResultOffset <= *result)("result", result)("offset", GlobalResultOffset);
+    AFL_VERIFY(*GlobalResultOffset <= *result,
+        {"result", result},
+        {"offset", GlobalResultOffset});
     return *result - *GlobalResultOffset;
 }
 

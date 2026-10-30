@@ -201,7 +201,9 @@ private:
 
     template <class T, typename... Args>
     std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
-        AFL_VERIFY(index <= Steps.size())("index", index)("size", Steps.size());
+        AFL_VERIFY(index <= Steps.size(),
+            {"index", index},
+            {"size", Steps.size()});
         auto result = std::make_shared<T>(args...);
         Steps.insert(Steps.begin() + index, result);
         return result;

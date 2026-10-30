@@ -289,7 +289,9 @@ public:
         TExternalDataSourceInfo::TPtr oldDataSource;
         {
             const auto oldExternalTableRecord = context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-            AFL_ENSURE(oldExternalTableRecord)("path", dstPath.PathString())("path_id", dstPath->PathId);
+            AFL_ENSURE(oldExternalTableRecord,
+                {"path", dstPath.PathString()},
+                {"pathId", dstPath->PathId});
             const auto oldDataSourcePath = TPath::Resolve(oldExternalTableRecord->DataSourcePath, context.SS);
             RETURN_RESULT_UNLESS(IsDataSourcePathValid(result, oldDataSourcePath));
 
@@ -304,7 +306,9 @@ public:
 
         const auto oldExternalTableInfo =
             context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-        AFL_ENSURE(oldExternalTableInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
+        AFL_ENSURE(oldExternalTableInfo,
+            {"path", dstPath.PathString()},
+            {"pathId", dstPath->PathId});
         auto [externalTableInfo, maybeError] =
             NExternalTable::CreateExternalTable(externalDataSource->SourceType,
                                                 externalTableDescription,

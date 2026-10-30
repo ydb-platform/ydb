@@ -167,7 +167,9 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
     if (!RemainingPath.empty()) {
         NYql::TIssues issues;
         RemainingPathPtr = NYql::NJsonPath::ParseJsonPath(RemainingPath, issues, 5);
-        AFL_VERIFY(issues.Empty())("RemainingPath", RemainingPath)("issues", issues.ToString());
+        AFL_VERIFY(issues.Empty(),
+            {"remainingPath", RemainingPath},
+            {"issues", issues});
     }
 }
 

@@ -280,7 +280,9 @@ public:
 
         void AdvanceRecordIndex(const ui32 recordIndex) {
             if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                AFL_VERIFY(*LastRecordIndex < recordIndex,
+                    {"last", LastRecordIndex},
+                    {"index", recordIndex});
             }
             LastRecordIndex = recordIndex;
         }

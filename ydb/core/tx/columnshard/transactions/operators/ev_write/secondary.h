@@ -219,7 +219,9 @@ private:
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(
         TColumnShard& owner, const ui64 recvTabletId) const override {
-        AFL_VERIFY(recvTabletId == ArbiterTabletId)("recv", recvTabletId)("arbiter", ArbiterTabletId);
+        AFL_VERIFY(recvTabletId == ArbiterTabletId,
+            {"recv", recvTabletId},
+            {"arbiter", ArbiterTabletId});
         return std::make_unique<TTxWriteReceivedAck>(owner, GetTxId());
     }
 

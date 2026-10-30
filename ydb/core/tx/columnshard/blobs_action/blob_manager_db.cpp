@@ -67,7 +67,10 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_VERIFY(unifiedBlobId.IsValid(),
+                {"event", "cannot_parse_blob"},
+                {"error", error},
+                {"originalString", blobIdStr});
             YDB_LOG_DEBUG("",
                 {"event", "LOAD_KEEP"},
                 {"blobId", unifiedBlobId.ToStringNew()});
@@ -89,7 +92,10 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_VERIFY(unifiedBlobId.IsValid(),
+                {"event", "cannot_parse_blob"},
+                {"error", error},
+                {"originalString", blobIdStr});
             YDB_LOG_DEBUG("",
                 {"event", "LOAD_DELETE"},
                 {"blobId", unifiedBlobId.ToStringNew()});
@@ -111,7 +117,10 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDeleteWT::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_VERIFY(unifiedBlobId.IsValid(),
+                {"event", "cannot_parse_blob"},
+                {"error", error},
+                {"originalString", blobIdStr});
             blobsToDeleteLocal.Add((TTabletId)rowset.GetValue<Schema::BlobsToDeleteWT::TabletId>(), unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
@@ -169,7 +178,10 @@ bool TBlobManagerDb::LoadTierLists(
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_VERIFY(unifiedBlobId.IsValid(),
+                {"event", "cannot_parse_blob"},
+                {"error", error},
+                {"originalString", blobIdStr});
 
             localBlobsToDelete.Add(selfTabletId, unifiedBlobId);
             if (!rowset.Next()) {
@@ -189,7 +201,10 @@ bool TBlobManagerDb::LoadTierLists(
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDeleteWT::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_VERIFY(unifiedBlobId.IsValid(),
+                {"event", "cannot_parse_blob"},
+                {"error", error},
+                {"originalString", blobIdStr});
 
             localBlobsToDelete.Add((TTabletId)rowset.GetValue<Schema::TierBlobsToDeleteWT::TabletId>(), unifiedBlobId);
             if (!rowset.Next()) {
@@ -209,7 +224,10 @@ bool TBlobManagerDb::LoadTierLists(
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsDraft::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_VERIFY(unifiedBlobId.IsValid(),
+                {"event", "cannot_parse_blob"},
+                {"error", error},
+                {"originalString", blobIdStr});
 
             localDraftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
             if (!rowset.Next()) {

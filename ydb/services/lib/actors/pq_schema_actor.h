@@ -353,11 +353,13 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response) override {
             if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
                 if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
-                    AFL_ENSURE(response.ListNodeEntry)
-                        ("path", GetTopicPath())("database", TActorBase::Database);
-                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1)
-                        ("path", GetTopicPath())("database", TActorBase::Database)
-                        ("children", response.ListNodeEntry->Children.size());
+                    AFL_ENSURE(response.ListNodeEntry,
+                        {"path", GetTopicPath()},
+                        {"database", TActorBase::Database});
+                    AFL_ENSURE(response.ListNodeEntry->Children.size() == 1,
+                        {"path", GetTopicPath()},
+                        {"database", TActorBase::Database},
+                        {"children", response.ListNodeEntry->Children.size()});
                     PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
 
                     if (response.Self) {

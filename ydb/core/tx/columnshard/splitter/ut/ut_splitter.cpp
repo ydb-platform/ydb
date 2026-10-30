@@ -134,8 +134,9 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     }
                     portionSize += bSize;
                     AFL_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
-                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))("blob_size", bSize)(
-                                                                                                 "min", settings.GetMinBlobSize());
+                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1),
+                        {"blobSize", bSize},
+                        {"min", settings.GetMinBlobSize()});
                 }
                 AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)(
                                                                                "limit", settings.GetMaxPortionSize());
@@ -167,20 +168,32 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     AFL_VERIFY(count == portionRecordsCount);
                 }
                 AFL_VERIFY(entitiesByRecordsCount.size() >= i.size());
-                AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1)("restore", pagesRestore)("original", pagesOriginal);
+                AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1,
+                    {"restore", pagesRestore},
+                    {"original", pagesOriginal});
                 for (auto&& [_, c] : entityChunks.begin()->second) {
                     portionShift += c->GetRecordsCountVerified();
                 }
             }
             AFL_VERIFY(portionShift = batch->num_rows());
-            AFL_VERIFY(pagesSum == generalSlices.size())("sum", pagesSum)("general_slices", generalSlices.size());
-            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))("expected", *ExpectedInternalSplitsCount)(
-                                                "real", internalSplitsCount);
-            AFL_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount))("blobs_count", blobsCount)("expected", *ExpectBlobsCount);
-            AFL_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum))("sum", pagesSum)("expected", *ExpectSlicesCount);
-            AFL_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount))("portions_count", portionsCount)(
-                                          "expected", *ExpectPortionsCount);
-            AFL_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount))("chunks_count", chunksCount)("expected", *ExpectChunksCount);
+            AFL_VERIFY(pagesSum == generalSlices.size(),
+                {"sum", pagesSum},
+                {"generalSlices", generalSlices.size()});
+            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount),
+                {"expected", *ExpectedInternalSplitsCount},
+                {"real", internalSplitsCount});
+            AFL_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount),
+                {"blobsCount", blobsCount},
+                {"expected", *ExpectBlobsCount});
+            AFL_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum),
+                {"sum", pagesSum},
+                {"expected", *ExpectSlicesCount});
+            AFL_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount),
+                {"portionsCount", portionsCount},
+                {"expected", *ExpectPortionsCount});
+            AFL_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount),
+                {"chunksCount", chunksCount},
+                {"expected", *ExpectChunksCount});
         }
     };
 

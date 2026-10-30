@@ -74,7 +74,8 @@ protected:
                 return i;
             }
         }
-        AFL_VERIFY(false)("id", entityId);
+        AFL_VERIFY(false,
+            {"id", entityId});
         return Data.front();
     }
 
@@ -114,7 +115,9 @@ public:
         for (auto&& i : Data) {
             result += i.GetPackedSize();
         }
-        AFL_VERIFY(Size == result)("size", Size)("result", result);
+        AFL_VERIFY(Size == result,
+            {"size", Size},
+            {"result", result});
         return result;
     }
 

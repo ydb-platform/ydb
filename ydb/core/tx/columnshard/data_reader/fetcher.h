@@ -96,7 +96,9 @@ public:
             CurrentContext.Abort();
         }
         AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
-            || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
+            || Callback->IsAborted(),
+            {"stage", Guard.GetStage()},
+            {"className", Callback->GetClassName()});
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,

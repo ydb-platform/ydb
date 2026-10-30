@@ -208,9 +208,11 @@ namespace NPQ {
                 error = TErrorInfo(NPersQueue::NErrorCode::ERROR, Sprintf("Got bad response: %s", resp.DebugString().c_str()));
             } else {
 
-                AFL_ENSURE(resp.ReadResultSize() && resp.ReadResultSize() + cachedCount == outBlobs.size())
-                    ("resultSize", resp.ReadResultSize())("cachedCount", cachedCount)
-                    ("outBlobs.size()", outBlobs.size())("proto", ev->Get()->ToString());
+                AFL_ENSURE(resp.ReadResultSize() && resp.ReadResultSize() + cachedCount == outBlobs.size(),
+                    {"resultSize", resp.ReadResultSize()},
+                    {"cachedCount", cachedCount},
+                    {"#_outBlobs.size", outBlobs.size()},
+                    {"proto", ev->Get()->ToString()});
 
                 TVector<bool> kvBlobs(outBlobs.size(), false);
                 ui32 pos = 0;
@@ -222,7 +224,9 @@ namespace NPQ {
                         {"status", r->GetStatus()}
                     );
                     if (r->GetStatus() == NKikimrProto::OVERRUN) { //this blob and next are not readed at all. Return as answer only previous blobs
-                        AFL_ENSURE(i > 0)("description", "OVERRUN in first read request")("i", i);
+                        AFL_ENSURE(i > 0,
+                            {"description", "OVERRUN in first read request"},
+                            {"i", i});
                         break;
                     } else if (r->GetStatus() == NKikimrProto::OK) {
                         AFL_ENSURE(r->HasValue() && r->GetValue().size());
@@ -232,8 +236,10 @@ namespace NPQ {
                             ++pos;
                         }
 
-                        AFL_ENSURE(pos < outBlobs.size())("description", "Got resulting blob with no place for it")
-                            ("pos", pos)("outBlobs.size()", outBlobs.size());
+                        AFL_ENSURE(pos < outBlobs.size(),
+                            {"description", "Got resulting blob with no place for it"},
+                            {"pos", pos},
+                            {"#_outBlobs.size", outBlobs.size()});
                         kvBlobs[pos] = true;
 
                         AFL_ENSURE(outBlobs[pos].Empty());
@@ -275,13 +281,16 @@ namespace NPQ {
         {
             auto& resp = ev->Get()->Record;
             if (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
-                AFL_ENSURE(resp.WriteResultSize() == (kvReq.Blobs.size() + kvReq.MetadataWritesCount))
-                    ("description", "Mismatch write result size")("size", resp.WriteResultSize())
-                    ("kvReq.Blobs.size()", kvReq.Blobs.size())("kvReq.MetadataWritesCount", kvReq.MetadataWritesCount);
+                AFL_ENSURE(resp.WriteResultSize() == (kvReq.Blobs.size() + kvReq.MetadataWritesCount),
+                    {"description", "Mismatch write result size"},
+                    {"size", resp.WriteResultSize()},
+                    {"#_kvReq.Blobs.size", kvReq.Blobs.size()},
+                    {"#_kvReq.MetadataWritesCount", kvReq.MetadataWritesCount});
 
                 for (ui32 i = 0; i < resp.WriteResultSize(); ++i) {
                     auto status = resp.GetWriteResult(i).GetStatus();
-                    AFL_ENSURE(status == NKikimrProto::OK)("Not OK from KV blob", ev->Get()->ToString());
+                    AFL_ENSURE(status == NKikimrProto::OK,
+                        {"#_Not OK from KV blob", ev->Get()->ToString()});
                 }
 
                 Cache.SaveHeadBlobs(ctx, kvReq);
@@ -333,8 +342,9 @@ namespace NPQ {
                 const auto& cmd = srcRequest.GetCmdWrite(i);
                 const TString& strKey = cmd.GetKey();
                 if (IsDataKey(strKey)) {
-                    AFL_ENSURE(TKey::IsValidSerializedSize(strKey.size()))
-                        ("Unexpected key size", strKey.size())("key", strKey);
+                    AFL_ENSURE(TKey::IsValidSerializedSize(strKey.size()),
+                        {"#_Unexpected key size", strKey.size()},
+                        {"key", strKey});
                     auto key = TKey::FromString(strKey);
 
                     const TString& value = cmd.GetValue();

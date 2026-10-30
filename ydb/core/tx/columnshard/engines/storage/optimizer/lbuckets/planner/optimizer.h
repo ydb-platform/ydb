@@ -861,7 +861,8 @@ public:
                 stopInstant = Others.GetFutureStartInstant();
             }
         }
-        AFL_VERIFY(portions.size() > 1)("size", portions.size());
+        AFL_VERIFY(portions.size() > 1,
+            {"size", portions.size()});
         ui64 size = 0;
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
@@ -923,8 +924,10 @@ public:
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto gChartsThis = StartModificationGuard();
-        AFL_VERIFY(Others.Remove(portion))("portion", portion->DebugString())("bucket_start",
-            MainPortion ? MainPortion->DebugString(true) : "-inf")("bucket_finish", NextBorder ? NextBorder->DebugString() : "undef");
+        AFL_VERIFY(Others.Remove(portion),
+            {"portion", portion->DebugString()},
+            {"bucketStart", MainPortion ? MainPortion->DebugString(true) : "-inf"},
+            {"bucketFinish", NextBorder ? NextBorder->DebugString() : "undef"});
     }
 
     void MergeOthersFrom(TPortionsBucket& dest) {

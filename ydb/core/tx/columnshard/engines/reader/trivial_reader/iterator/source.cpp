@@ -64,7 +64,8 @@ void IDataSource::InitializeProcessing() {
 
 void IDataSource::ContinueCursor(std::unique_ptr<NCommon::TDataSourceLease> sourceLease) {
     auto& self = *sourceLease->GetSource().MutableAs<IDataSource>();
-    AFL_VERIFY(!!self.ScriptCursor)("source_idx", self.GetSourceIdx());
+    AFL_VERIFY(!!self.ScriptCursor,
+        {"sourceIdx", self.GetSourceIdx()});
     if (self.ScriptCursor->Next()) {
         YDB_LOG_DEBUG("",
             {"sourceIdx", self.GetSourceIdx()},
@@ -150,7 +151,9 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
+        AFL_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", Portion->GetRecordsCount()});
     }
     YDB_LOG_DEBUG("",
         {"event", "chunks_stats"},

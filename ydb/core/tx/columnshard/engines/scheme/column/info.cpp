@@ -30,7 +30,8 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
 }
 
 void TSimpleColumnInfo::SetDefaultSerializer(const NArrow::NSerialization::TSerializerContainer& serializer) {
-    AFL_VERIFY(!OwnSerializer)("column_id", ColumnId);
+    AFL_VERIFY(!OwnSerializer,
+        {"columnId", ColumnId});
     Serializer = serializer;
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
 }

@@ -506,9 +506,11 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     Y_DEBUG_ABORT_UNLESS(!HasSpecialSession(),
         "Cannot merge into a special-session family %zu", Id);
 
-    AFL_ENSURE(this != other)
-        ("this_id", Id)("other_id", other->Id)
-        ("this_partitions", Partitions.size())("other_partitions", other->Partitions.size());
+    AFL_ENSURE(this != other,
+        {"thisId", Id},
+        {"otherId", other->Id},
+        {"thisPartitions", Partitions.size()},
+        {"otherPartitions", other->Partitions.size()});
 
     Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
     UpdatePartitionMapping(other->Partitions);
@@ -1035,9 +1037,11 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
     }
     Y_DEBUG_ABORT_UNLESS(!lhs->HasSpecialSession(),
         "Cannot merge into a special-session family %zu", lhs->Id);
-    AFL_ENSURE(lhs != rhs)
-        ("lhs_id", lhs->Id)("rhs_id", rhs->Id)
-        ("lhs_partitions", lhs->Partitions.size())("rhs_partitions", rhs->Partitions.size());
+    AFL_ENSURE(lhs != rhs,
+        {"lhsId", lhs->Id},
+        {"rhsId", rhs->Id},
+        {"lhsPartitions", lhs->Partitions.size()},
+        {"rhsPartitions", rhs->Partitions.size()});
 
     auto srcHasUnreadable = [&](TPartitionFamily* family) {
         return AnyOf(family->Partitions, [&](ui32 id) { return !IsReadable(id); });

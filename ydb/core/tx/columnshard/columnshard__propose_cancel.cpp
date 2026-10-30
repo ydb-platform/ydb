@@ -38,7 +38,9 @@ public:
             return true;
         }
         if (auto* lock = Self->GetOperationsManager().GetLockFeaturesForTxOptional(TxId)) {
-            AFL_VERIFY(lock->IsTxIdAssigned())("tx_id", TxId)("lock_id", lock->GetLockId());
+            AFL_VERIFY(lock->IsTxIdAssigned(),
+                {"txId", TxId},
+                {"lockId", lock->GetLockId()});
             lock->SetNeedsAborting();
             if (lock->ReadyForAborting()) {
                 lock->SetAborting();

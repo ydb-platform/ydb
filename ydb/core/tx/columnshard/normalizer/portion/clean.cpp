@@ -88,7 +88,8 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(
             }
         } else if (storageId == NBlobOperations::TGlobal::LocalMetadataStorageId) {
         } else {
-            AFL_VERIFY(false)("details", "Invalid storage for normalizer");
+            AFL_VERIFY(false,
+                {"details", "Invalid storage for normalizer"});
         }
     }
     return std::make_shared<TBlobsRemovingTask>(std::move(blobIds), std::move(portions));

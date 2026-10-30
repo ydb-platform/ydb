@@ -200,7 +200,8 @@ ui64 TSpecificShardingInfo::GetUnifiedDistributionBorder(const ui32 idx, const u
         return Max<ui64>();
     }
 #ifdef KIKIMR_DISABLE_WINDOWS
-    AFL_VERIFY(false)("error", "windows implementation doesn't works");
+    AFL_VERIFY(false,
+        {"error", "windows implementation doesn't works"});
     return 0;
 #else
     return Max<ui64>() * (1.0 * idx / shardsCount);

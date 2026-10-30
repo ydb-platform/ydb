@@ -86,7 +86,9 @@ public:
         template <class TAppender>
         void AddAt(const ui32 recordIndex, const TAppender& append) {
             if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                AFL_VERIFY(*LastRecordIndex < recordIndex,
+                    {"last", LastRecordIndex},
+                    {"index", recordIndex});
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex - 1));
             } else {
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
@@ -107,7 +109,9 @@ public:
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
             if (LastRecordIndex) {
-                AFL_VERIFY(*LastRecordIndex < recordsCount)("last", LastRecordIndex)("count", recordsCount);
+                AFL_VERIFY(*LastRecordIndex < recordsCount,
+                    {"last", LastRecordIndex},
+                    {"count", recordsCount});
                 TStatusValidator::Validate(Builder->AppendNulls(recordsCount - *LastRecordIndex - 1));
             } else {
                 TStatusValidator::Validate(Builder->AppendNulls(recordsCount));

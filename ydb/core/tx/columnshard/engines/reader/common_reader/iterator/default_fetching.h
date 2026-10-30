@@ -123,7 +123,9 @@ private:
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", source.GetRecordsCount());
+        AFL_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", source.GetRecordsCount()});
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }

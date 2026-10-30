@@ -102,7 +102,13 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             //                    {"d", *d},
             //                    {"tiering", Tiering->GetDebugString()},
             //                    {"pathId", PathId});
-            //                AFL_VERIFY(false)("tiering_info", tieringInfo.DebugString())("max", max->ToString())("now", now.ToString())("d", *d)("tiering", Tiering->GetDebugString())("pathId", PathId);
+            //                AFL_VERIFY(false,
+                                  {"tieringInfo", tieringInfo.DebugString()},
+                                  {"max", max->ToString()},
+                                  {"now", now},
+                                  {"d", *d},
+                                  {"tiering", Tiering->GetDebugString()},
+                                  {"pathId", PathId});
             //            }
             auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(targetTierName);
             auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
@@ -121,7 +127,8 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         //        if (currentTierName == "deploy_logs_s3") {
         //            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         //                  {"pathId", PathId});
-        //            AFL_VERIFY(false)("pathId", PathId);
+        //            AFL_VERIFY(false,
+                          {"pathId", PathId});
         //        }
         auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(IStoragesManager::DefaultStorageId);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
@@ -152,8 +159,12 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
             return;
         }
     } else {
-        AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
-        AFL_VERIFY(!NewPortionIds.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
+        AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()),
+            {"id", portion.GetPortionId()},
+            {"pathId", portion.GetPathId()});
+        AFL_VERIFY(!NewPortionIds.contains(portion.GetPortionId()),
+            {"id", portion.GetPortionId()},
+            {"pathId", portion.GetPathId()});
     }
     if (!Tiering || MaxByPortionId.contains(portion.GetPortionId())) {
         AddPortionImpl(portion, addContext.GetNow());

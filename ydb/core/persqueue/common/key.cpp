@@ -104,7 +104,9 @@ void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)
             c = ServiceTypeTxMeta;
             break;
         default:
-            AFL_ENSURE(false)("type", static_cast<int>(type))("type_char", c);
+            AFL_ENSURE(false,
+                {"type", static_cast<int>(type)},
+                {"typeChar", c});
         }
     }
 

@@ -744,7 +744,8 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             RuntimeError(
@@ -3818,7 +3819,8 @@ public:
                 hFunc(TEvBufferWrite, Handle);
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
-                AFL_ENSURE(false)("StateWrite: unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_StateWrite: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -3834,7 +3836,8 @@ public:
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
-                AFL_ENSURE(false)("StateWaitTasks: unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_StateWaitTasks: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -3856,7 +3859,8 @@ public:
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
             default:
-                AFL_ENSURE(false)("StateResolveRound: unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_StateResolveRound: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -3872,7 +3876,8 @@ public:
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
-                AFL_ENSURE(false)("StateFlush: unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_StateFlush: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -3896,7 +3901,8 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
-                AFL_ENSURE(false)("StatePrepare: unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_StatePrepare: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -3920,7 +3926,8 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
-                AFL_ENSURE(false)("StateCommit: unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_StateCommit: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             ReplyMemoryLimitError();
@@ -6353,16 +6360,16 @@ public:
 
     void OnCommitted(ui64 shardId, ui64, std::optional<TCommitTimestamp> writeResultTimestamp) override {
         if (CommitTimestamp && writeResultTimestamp) {
-            AFL_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep)
-                ("reason", "commit timestamp PlanStep mismatch")
-                ("coordinator", CommitTimestamp->PlanStep)
-                ("writeResult", writeResultTimestamp->PlanStep)
-                ("shardId", shardId);
-            AFL_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId)
-                ("reason", "commit timestamp TxId mismatch")
-                ("coordinator", CommitTimestamp->TxId)
-                ("writeResult", writeResultTimestamp->TxId)
-                ("shardId", shardId);
+            AFL_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep,
+                {"reason", "commit timestamp PlanStep mismatch"},
+                {"coordinator", CommitTimestamp->PlanStep},
+                {"writeResult", writeResultTimestamp->PlanStep},
+                {"shardId", shardId});
+            AFL_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId,
+                {"reason", "commit timestamp TxId mismatch"},
+                {"coordinator", CommitTimestamp->TxId},
+                {"writeResult", writeResultTimestamp->TxId},
+                {"shardId", shardId});
         }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
@@ -6998,7 +7005,8 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBufferWriteResult, Handle);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false,
+                    {"#_unknown message", ev->GetTypeRewrite()});
             }
         } catch (...) {
             RuntimeError(

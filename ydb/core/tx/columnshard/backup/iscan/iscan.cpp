@@ -331,7 +331,9 @@ public:
             {"txId", msg.TxId},
             {"status", static_cast<ui8>(msg.Status)});
         auto it = S3Uploads.find(msg.TxId);
-        AFL_VERIFY(it != S3Uploads.end())("tx_id", msg.TxId)("event", "ChangeS3UploadStatus without prior StoreS3UploadId");
+        AFL_VERIFY(it != S3Uploads.end(),
+            {"txId", msg.TxId},
+            {"event", "ChangeS3UploadStatus without prior StoreS3UploadId"});
         it->second.Status = msg.Status;
         it->second.Error = std::move(msg.Error);
         it->second.Parts = std::move(msg.Parts);

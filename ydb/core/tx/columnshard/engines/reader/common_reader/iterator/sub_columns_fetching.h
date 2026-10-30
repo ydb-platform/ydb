@@ -217,7 +217,9 @@ public:
                 const auto& subColumnName = subColumns[i];
                 auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(
                     PartialArray->GetHeader().GetColumnStats(), PartialArray->GetHeader().GetOtherStats(), parsedPaths[i]);
-                AFL_VERIFY(pathResult.IsSuccess())("subColumnName", subColumnName)("error", pathResult.GetErrorMessage());
+                AFL_VERIFY(pathResult.IsSuccess(),
+                    {"subColumnName", subColumnName},
+                    {"error", pathResult.GetErrorMessage()});
                 const auto path = pathResult.DetachResult();
                 if (path && path->IsColumn) {
                     if (Chunks.contains(path->Path.ColumnIndex)) {
@@ -272,7 +274,8 @@ public:
         AFL_VERIFY(!HeaderRange);
         AFL_VERIFY(!PartialArray);
         AFL_VERIFY(accessor);
-        AFL_VERIFY(accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray)("type", accessor->GetType());
+        AFL_VERIFY(accessor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray,
+            {"type", accessor->GetType()});
         PartialArray = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsPartialArray>(accessor);
     }
 
@@ -366,18 +369,22 @@ private:
                     return conclusion;
                 }
                 if (!i.GetFullChunkRange().GetSize()) {
-                    AFL_VERIFY(!*conclusion)("entity", GetEntityId());
+                    AFL_VERIFY(!*conclusion,
+                        {"entity", GetEntityId()});
                 } else if (usedDictionaryOnly) {
-                    AFL_VERIFY(*conclusion)("entity", GetEntityId());
+                    AFL_VERIFY(*conclusion,
+                        {"entity", GetEntityId()});
                 } else {
-                    AFL_VERIFY(!*conclusion)("entity", GetEntityId());
+                    AFL_VERIFY(!*conclusion,
+                        {"entity", GetEntityId()});
                 }
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
             context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
             if (usedDictionaryOnly) {
                 const NArrow::TColumnFilter& filter = context.GetAccessors().GetFilter();
-                AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter))("filter", filter.DebugString());
+                AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter),
+                    {"filter", filter.DebugString()});
                 context.GetSource().MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
                 context.GetSource().GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
             }
@@ -439,7 +446,9 @@ private:
                     } else {
                         size = *fullHeader;
                     }
-                    AFL_VERIFY(blob.size() < size)("blob", blob.size())("size", size);
+                    AFL_VERIFY(blob.size() < size,
+                        {"blob", blob.size()},
+                        {"size", size});
                     const TBlobRange headerRange = i.GetFullChunkRange().BuildSubset(blob.size(), size - blob.size());
                     reading->AddRange(headerRange);
                     i.SetHeaderRange(headerRange);
@@ -532,7 +541,10 @@ private:
                 const TBlobRange range = source.RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
                 ColumnChunks.emplace_back(range, ChunkExternalInfo.GetSubset(meta.GetRecordsCount()), Settings);
                 if (!NeedToAddResource) {
-                    AFL_VERIFY(resChunkIdx < chunks.size())("chunks", chunks.size())("meta", columnChunks.size())("need", NeedToAddResource);
+                    AFL_VERIFY(resChunkIdx < chunks.size(),
+                        {"chunks", chunks.size()},
+                        {"meta", columnChunks.size()},
+                        {"need", NeedToAddResource});
                     ColumnChunks.back().InitPartialReader(chunks[resChunkIdx]);
                     ++resChunkIdx;
                 }
@@ -543,7 +555,9 @@ private:
             itFinished = !itFilter.Next(meta.GetRecordsCount());
         }
         AFL_VERIFY(NeedToAddResource || (resChunkIdx == chunks.size()));
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", context.GetRecordsCount());
+        AFL_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", context.GetRecordsCount()});
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }
@@ -567,12 +581,14 @@ public:
         }
         for (const auto& jsonPath : JsonPaths) {
             auto parsedPath = NArrow::NAccessor::NSubColumns::ParseJsonPath(jsonPath);
-            AFL_VERIFY(parsedPath.IsSuccess())("path", jsonPath)("error", parsedPath.GetErrorMessage());
+            AFL_VERIFY(parsedPath.IsSuccess(),
+                {"path", jsonPath},
+                {"error", parsedPath.GetErrorMessage()});
             ParsedPaths.emplace_back(parsedPath.DetachResult());
         }
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
-        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
-            "type", loader->GetAccessorConstructor()->GetType());
+        AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray,
+            {"type", loader->GetAccessorConstructor()->GetType()});
     }
 
     TSubColumnsFetchLogic(const ui32 columnId, IDataSource& source, const std::vector<TString>& subColumns, const bool dictionaryOnly = false)

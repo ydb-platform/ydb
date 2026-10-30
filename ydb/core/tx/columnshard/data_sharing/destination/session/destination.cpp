@@ -17,7 +17,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
     auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
-        AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
+        AFL_VERIFY(it != PathIds.end(),
+            {"pathIdUndefined", i.first});
         for (auto&& portion : i.second.DetachPortions()) {
             portion->MutablePortionInfo().SetPathId(it->second);
             index.AppendPortion(portion);

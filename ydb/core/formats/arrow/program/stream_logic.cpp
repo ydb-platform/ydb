@@ -82,10 +82,12 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             return HandleMonoValue(*isMonoInput.GetResult(), false, accumulatedResult, context);
         }
         if (!accumulatedResult) {
-            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
+            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id(),
+                {"type", accessorInput->GetDataType()->ToString()});
             context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessorInput, false);
         } else if (monoResult) {
-            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
+            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id(),
+                {"type", accessorInput->GetDataType()->ToString()});
             context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessorInput, false);
             return IsFinishAccessor(accessorInput);
         } else {
@@ -95,7 +97,8 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     } else {
         const auto& scalarInput = context.GetResources().GetConstantScalarVerified(inputId);
         if (!scalarInput->is_valid) {
-            AFL_VERIFY(scalarInput->type->id() == arrow::uint8()->id())("type", scalarInput->type->ToString());
+            AFL_VERIFY(scalarInput->type->id() == arrow::uint8()->id(),
+                {"type", scalarInput->type->ToString()});
             if (!accumulatedResult) {
                 context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
                     std::make_shared<NAccessor::TTrivialArray>(TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
@@ -207,7 +210,8 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
                 }
             }
         } else {
-            AFL_VERIFY(false)("op", Operation);
+            AFL_VERIFY(false,
+                {"op", Operation});
         }
         return true;
     };
@@ -235,7 +239,8 @@ TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::
 
 TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
     AFL_VERIFY(scalar);
-    AFL_VERIFY(scalar->type->id() == arrow::uint8()->id())("type", scalar->type->ToString());
+    AFL_VERIFY(scalar->type->id() == arrow::uint8()->id(),
+        {"type", scalar->type->ToString()});
     return static_cast<const arrow::UInt8Scalar*>(scalar.get())->value != 0;
 }
 

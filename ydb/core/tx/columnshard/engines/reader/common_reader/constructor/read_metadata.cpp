@@ -112,7 +112,8 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     std::set<ui32> result(ids.begin(), ids.end());
     AFL_VERIFY(result.size() == ids.size());
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
-        AFL_VERIFY(indexInfo.HasColumnId(i))("column_id", i);
+        AFL_VERIFY(indexInfo.HasColumnId(i),
+            {"columnId", i});
     }
     return result;
 }

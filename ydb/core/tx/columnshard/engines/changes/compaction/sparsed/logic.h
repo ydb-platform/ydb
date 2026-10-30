@@ -76,7 +76,8 @@ private:
         [[nodiscard]] ui32 GetGlobalResultIndexVerified() const {
             std::optional<i64> result = GetGlobalResultIndexImpl();
             AFL_VERIFY(result);
-            AFL_VERIFY(*result >= 0)("result", result);
+            AFL_VERIFY(*result >= 0,
+                {"result", result});
             return *result;
         }
 

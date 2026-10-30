@@ -443,7 +443,8 @@ public:
         virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) = 0;
 
         virtual void RegisterSubscriber(const TActorId&) {
-            AFL_VERIFY(false)("message", "Not implemented");
+            AFL_VERIFY(false,
+                {"message", "Not implemented"});
         };
 
         void OnTabletInit(TColumnShard& owner) {
@@ -497,7 +498,8 @@ public:
             return nullptr;
         }
         auto resultClass = dynamic_pointer_cast<TExpectedTransactionOperator>(result);
-        AFL_VERIFY(resultClass)("tx_id", txId);
+        AFL_VERIFY(resultClass,
+            {"txId", txId});
         return resultClass;
     }
 

@@ -24,7 +24,10 @@ NBinaryJson::TBinaryJson JsonValueToBinaryJsonVerified(const NJson::TJsonValue& 
     const auto dumpedJson = WriteJsonRoundTripSafe(json);
     auto result = NBinaryJson::SerializeToBinaryJson(dumpedJson);
     if (std::holds_alternative<TString>(result)) {
-        AFL_VERIFY(false)("error", std::get<TString>(result))("type", json.GetType())("input_dump", EscapeC(dumpedJson));
+        AFL_VERIFY(false,
+            {"error", std::get<TString>(result)},
+            {"type", json.GetType()},
+            {"inputDump", EscapeC(dumpedJson)});
     }
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
 }

@@ -303,7 +303,8 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
-            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
+            AFL_ENSURE(topicInfo.Info,
+                {"path", FullTopicPath_});
             Fifo_ = QueueUrl_->Fifo;
             ApplyContentBasedDeduplication(
                 Fifo_ && topicInfo.Info->Description.GetPQTabletConfig().GetContentBasedDeduplication());

@@ -275,7 +275,9 @@ public:
                     GlobalPosition = globalPosition;
                     return false;
                 }
-                AFL_VERIFY(globalPosition < Input->GetRecordsCount())("pos", globalPosition)("size", Input->GetRecordsCount());
+                AFL_VERIFY(globalPosition < Input->GetRecordsCount(),
+                    {"pos", globalPosition},
+                    {"size", Input->GetRecordsCount()});
                 CurrentChunk = Input->GetArray(CurrentChunk, globalPosition, Input);
                 if (CurrentChunk->GetArray()->GetType() == TArrayImpl::GetTypeStatic()) {
                     CurrentArray = std::static_pointer_cast<TArrayImpl>(CurrentChunk->GetArray());
@@ -341,7 +343,10 @@ public:
                 return GlobalPosition < Input->GetRecordsCount();
             }
             AFL_VERIFY(Input);
-            AFL_VERIFY(GlobalPosition < globalPosition)("old", GlobalPosition)("new", globalPosition)("count", Input->GetRecordsCount());
+            AFL_VERIFY(GlobalPosition < globalPosition,
+                {"old", GlobalPosition},
+                {"new", globalPosition},
+                {"count", Input->GetRecordsCount()});
             if (CurrentChunk->GetAddress().Contains(globalPosition)) {
                 LocalPosition = CurrentChunk->GetAddress().GetLocalIndex(globalPosition);
                 GlobalPosition = globalPosition;
@@ -394,8 +399,9 @@ public:
 
     TColumnPortionResult Execute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
         auto result = DoExecute(context, mergeContext);
-        AFL_VERIFY(result.GetRecordsCount() == context.GetRemapper().GetSize())("result", result.GetRecordsCount())(
-                                                 "remapper", context.GetRemapper().GetSize());
+        AFL_VERIFY(result.GetRecordsCount() == context.GetRemapper().GetSize(),
+            {"result", result.GetRecordsCount()},
+            {"remapper", context.GetRemapper().GetSize()});
         return result;
     }
 };

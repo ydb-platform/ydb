@@ -47,7 +47,9 @@ NKikimrKqp::TTopicDeferredPublicationRequest::EOp MapFinalizeOp(EFinalizePublica
         case EFinalizePublicationOp::Cancel:
             return NKikimrKqp::TTopicDeferredPublicationRequest::Cancel;
         default:
-            AFL_ENSURE(false)("reason", "unexpected EFinalizePublicationOp")("op", static_cast<int>(op));
+            AFL_ENSURE(false,
+                {"reason", "unexpected EFinalizePublicationOp"},
+                {"op", static_cast<int>(op)});
     }
 }
 
@@ -58,8 +60,12 @@ bool BuildDeferredPublicationRequest(
     NKikimrKqp::TTopicDeferredPublicationRequest* request,
     NYql::TIssues* issues)
 {
-    AFL_ENSURE(request != nullptr)("op", static_cast<int>(op))("int_publication_id", intPublicationId);
-    AFL_ENSURE(issues != nullptr)("op", static_cast<int>(op))("int_publication_id", intPublicationId);
+    AFL_ENSURE(request != nullptr,
+        {"op", static_cast<int>(op)},
+        {"intPublicationId", intPublicationId});
+    AFL_ENSURE(issues != nullptr,
+        {"op", static_cast<int>(op)},
+        {"intPublicationId", intPublicationId});
 
     request->Clear();
     request->SetOp(MapFinalizeOp(op));
@@ -251,8 +257,10 @@ private:
             return ReplyAndPassAway(response.Status, response.Issues);
         }
 
-        AFL_ENSURE(response.Data.Defined())
-            ("database", Database)("int_publication_id", IntPublicationId)("op", static_cast<int>(Op));
+        AFL_ENSURE(response.Data.Defined(),
+            {"database", Database},
+            {"intPublicationId", IntPublicationId},
+            {"op", static_cast<int>(Op)});
         ListDestinationsData = *response.Data;
 
         if (!IsPublicationOwnedByCaller(CallerSid, ListDestinationsData->CreatedBy)) {
@@ -297,8 +305,10 @@ private:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        AFL_ENSURE(!KqpSessionId.empty())
-            ("database", Database)("int_publication_id", IntPublicationId)("op", static_cast<int>(Op));
+        AFL_ENSURE(!KqpSessionId.empty(),
+            {"database", Database},
+            {"intPublicationId", IntPublicationId},
+            {"op", static_cast<int>(Op)});
         SendKqpBeginTx();
     }
 
@@ -311,9 +321,11 @@ private:
         switch (Step) {
             case EStep::KqpBeginTx: {
                 TxId = record.GetResponse().GetTxMeta().id();
-                AFL_ENSURE(!TxId.empty())
-                    ("database", Database)("int_publication_id", IntPublicationId)
-                    ("op", static_cast<int>(Op))("kqp_session", KqpSessionId);
+                AFL_ENSURE(!TxId.empty(),
+                    {"database", Database},
+                    {"intPublicationId", IntPublicationId},
+                    {"op", static_cast<int>(Op)},
+                    {"kqpSession", KqpSessionId});
                 SendKqpDelete();
                 return;
             }

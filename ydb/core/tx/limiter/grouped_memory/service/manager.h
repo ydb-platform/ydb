@@ -64,7 +64,8 @@ private:
             if (Released) {
                 return;
             }
-            AFL_VERIFY(Processes->erase(Start))("start", Start.DebugString());
+            AFL_VERIFY(Processes->erase(Start),
+                {"start", Start.DebugString()});
             AFL_VERIFY(Processes->emplace(Process.BuildUsageAddress(), &Process).second);
             WaitingProcesses->erase(Start);
             if (Process.HasWaitingAllocations()) {

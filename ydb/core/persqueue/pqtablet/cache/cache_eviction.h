@@ -513,9 +513,9 @@ namespace NKikimr::NPQ {
                 return nullptr;
             }
 
-            AFL_ENSURE(data->GetDataSize() == it->second.DataSize)
-                ("data->GetDataSize()", data->GetDataSize())
-                ("it->second.DataSize", it->second.DataSize);
+            AFL_ENSURE(data->GetDataSize() == it->second.DataSize,
+                {"#_data->GetDataSize", data->GetDataSize()},
+                {"#_it->second.DataSize", it->second.DataSize});
 
             const TBlobId& blob = it->first;
             LOG_D("Got data from cache. Partition offset partno count parts_count source size accessed times before, last time",
@@ -546,7 +546,8 @@ namespace NKikimr::NPQ {
                     ++numCached;
                     blob.Batches = cached->GetValue();
                     blob.Cached = true;
-                    AFL_ENSURE(cached->GetDataSize())("d", "Got empty blob from cache");
+                    AFL_ENSURE(cached->GetDataSize(),
+                        {"d", "Got empty blob from cache"});
                 }
             }
             return numCached;
@@ -583,7 +584,8 @@ namespace NKikimr::NPQ {
             auto it = Cache.find(blob);
             if (it != Cache.end()) {
                 out = it->second;
-                AFL_ENSURE(out.GetBlob())("d", "Duplicate blob in L1 with no data");
+                AFL_ENSURE(out.GetBlob(),
+                    {"d", "Duplicate blob in L1 with no data"});
                 LOG_D("Duplicate blob in L1. Partition offset count size actorID is actual",
                     {"blobPartition", blob.Partition},
                     {"blobOffset", blob.Offset},

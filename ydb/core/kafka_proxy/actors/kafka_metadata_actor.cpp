@@ -112,7 +112,8 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Path);
-        AFL_ENSURE(it != ev->Get()->Topics.end())("path", Path);
+        AFL_ENSURE(it != ev->Get()->Topics.end(),
+            {"path", Path});
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::Success) {
             auto status = NDescriber::Convert(topicInfo.Status);
@@ -390,7 +391,9 @@ void TKafkaMetadataActor::ProcessTopicsFromRequest() {
 }
 
 void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
-    AFL_ENSURE(PendingResponses > 0)("pending", PendingResponses)("database", Context->DatabasePath);
+    AFL_ENSURE(PendingResponses > 0,
+        {"pending", PendingResponses},
+        {"database", Context->DatabasePath});
     PendingResponses--;
     auto topics = std::move(ev->Get()->Topics);
     Response->Topics.resize(topics.size());

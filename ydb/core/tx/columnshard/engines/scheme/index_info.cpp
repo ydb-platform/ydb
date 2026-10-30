@@ -52,7 +52,10 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))("names", JoinSeq(",", GetColumnNames()));
+    AFL_VERIFY(!!id,
+        {"columnName", name},
+        {"idxs", JoinSeq(",", ColumnIdxSortedByName)},
+        {"names", JoinSeq(",", GetColumnNames())});
     return *id;
 }
 
@@ -79,7 +82,9 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const std::string& name) 
 TString TIndexInfo::GetColumnName(const ui32 id, bool required) const {
     const auto& f = GetColumnFeaturesOptional(id);
     if (!f) {
-        AFL_VERIFY(!required)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
+        AFL_VERIFY(!required,
+            {"id", id},
+            {"indexes", JoinSeq(",", SchemaColumnIdsWithSpecials)});
         return "";
     } else {
         return f->GetColumnName();
@@ -203,7 +208,8 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
 
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
-    AFL_VERIFY(!!result)("column_id", columnId);
+    AFL_VERIFY(!!result,
+        {"columnId", columnId});
     return result;
 }
 
@@ -523,7 +529,10 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     for (auto&& chunk : chunks) {
         checkRecordsCount += chunk->GetRecordsCountVerified();
     }
-    AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
+    AFL_VERIFY(checkRecordsCount == recordsCount,
+        {"indexId", indexId},
+        {"sum", checkRecordsCount},
+        {"portion", recordsCount});
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
     const i64 maxBlobSize = opStorage->GetBlobSplitSettings().GetMaxBlobSize();
@@ -641,7 +650,9 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
 }
 
 std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const {
-    AFL_VERIFY(colIndex < ColumnFeatures.size())("index", colIndex)("size", ColumnFeatures.size());
+    AFL_VERIFY(colIndex < ColumnFeatures.size(),
+        {"index", colIndex},
+        {"size", ColumnFeatures.size()});
     return ColumnFeatures[colIndex]->GetDefaultValue().GetValue();
 }
 
@@ -827,7 +838,9 @@ TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(const 
 
 ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
     auto result = GetColumnIndexOptional(id);
-    AFL_VERIFY(result)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
+    AFL_VERIFY(result,
+        {"id", id},
+        {"indexes", JoinSeq(",", SchemaColumnIdsWithSpecials)});
     return *result;
 }
 

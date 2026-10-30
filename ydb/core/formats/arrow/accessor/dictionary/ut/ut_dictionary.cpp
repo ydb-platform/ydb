@@ -169,7 +169,8 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
         auto conclusion = NDictionary::TConstructor::BuildDictionaryOnlyReader(dictionaryBlobOnly, infoWithMeta);
-        AFL_VERIFY(conclusion.IsSuccess())("error", conclusion.GetErrorMessage());
+        AFL_VERIFY(conclusion.IsSuccess(),
+            {"error", conclusion.GetErrorMessage()});
         auto dictionaryArray = conclusion.DetachResult();
         AFL_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetDictionary()->ToString()));
         AFL_VERIFY(dictionaryArray->length() == dict->GetDictionary()->length());
@@ -226,8 +227,11 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        AFL_VERIFY(dict->GetPositions()->type()->id() == expectedPositionsType)
-            ("numDistinct", numDistinct)("withNulls", withNulls)("expected", static_cast<int>(expectedPositionsType))("actual", static_cast<int>(dict->GetPositions()->type()->id()));
+        AFL_VERIFY(dict->GetPositions()->type()->id() == expectedPositionsType,
+            {"numDistinct", numDistinct},
+            {"withNulls", withNulls},
+            {"expected", static_cast<int>(expectedPositionsType)},
+            {"actual", static_cast<int>(dict->GetPositions()->type()->id())});
         AFL_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
 
         auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
@@ -285,10 +289,12 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             AFL_VERIFY(arr);
             visited.emplace_back(arr);
         });
-        AFL_VERIFY(visited.size() == 1)("size", visited.size());
-        AFL_VERIFY((ui32)visited[0]->length() == dict->GetRecordsCount())("len", visited[0]->length());
-        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["abc","abcd","abcd",null,"abc",null,"ab",null,null,null])")(
-            "actual", PrepareToCompare(visited[0]->ToString()));
+        AFL_VERIFY(visited.size() == 1,
+            {"size", visited.size()});
+        AFL_VERIFY((ui32)visited[0]->length() == dict->GetRecordsCount(),
+            {"len", visited[0]->length()});
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["abc","abcd","abcd",null,"abc",null,"ab",null,null,null])",
+            {"actual", PrepareToCompare(visited[0]->ToString())});
         AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == PrepareToCompare(dict->GetChunkedArray()->chunk(0)->ToString()));
     }
 
@@ -303,11 +309,13 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             AFL_VERIFY(arr);
             visited.emplace_back(arr);
         });
-        AFL_VERIFY(visited.size() == 1)("size", visited.size());
+        AFL_VERIFY(visited.size() == 1,
+            {"size", visited.size()});
         // Deduplicated: length == #distinct (+ null slot), strictly less than the record count.
-        AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount())("len", visited[0]->length());
-        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
-            "actual", PrepareToCompare(visited[0]->ToString()));
+        AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount(),
+            {"len", visited[0]->length()});
+        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])",
+            {"actual", PrepareToCompare(visited[0]->ToString())});
     }
 
     void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {

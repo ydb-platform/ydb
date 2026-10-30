@@ -86,7 +86,8 @@ public:
 
     TString ExtractVerified(const TBlobRange& bRange) {
         auto result = ExtractOptional(bRange);
-        AFL_VERIFY(result)("range", bRange.ToString());
+        AFL_VERIFY(result,
+            {"range", bRange});
         return std::move(*result);
     }
 
@@ -135,12 +136,18 @@ public:
             AFL_VERIFY(currentRange);
             AFL_VERIFY(currentList.size());
             for (const auto& sub : currentList) {
-                AFL_VERIFY(currentRange->GetBlobId() == sub.GetBlobId())("group", currentRange->ToString())("sub", sub.ToString());
-                AFL_VERIFY(currentRange->Offset <= sub.Offset)("group", currentRange->ToString())("sub", sub.ToString());
-                AFL_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize())
-                ("group", currentRange->ToString())("sub", sub.ToString());
+                AFL_VERIFY(currentRange->GetBlobId() == sub.GetBlobId(),
+                    {"group", currentRange->ToString()},
+                    {"sub", sub});
+                AFL_VERIFY(currentRange->Offset <= sub.Offset,
+                    {"group", currentRange->ToString()},
+                    {"sub", sub});
+                AFL_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize(),
+                    {"group", currentRange->ToString()},
+                    {"sub", sub});
             }
-            AFL_VERIFY(result.emplace(*currentRange, std::move(currentList)).second)("group", currentRange->ToString());
+            AFL_VERIFY(result.emplace(*currentRange, std::move(currentList)).second,
+                {"group", currentRange->ToString()});
             currentList.clear();
         };
         for (auto&& br : ranges) {
@@ -184,7 +191,8 @@ protected:
 
     virtual void DoRetryRead(const TBlobRange& range) {
         Y_UNUSED(range);
-        AFL_VERIFY(false)("error", "DoRetryRead not implemented for this storage");
+        AFL_VERIFY(false,
+            {"error", "DoRetryRead not implemented for this storage"});
     }
 
     void StartReading(std::vector<TBlobRange>&& ranges);

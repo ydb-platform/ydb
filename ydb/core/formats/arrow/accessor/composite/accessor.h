@@ -51,7 +51,8 @@ protected:
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
-        AFL_VERIFY(false)("problem", "cannot use method");
+        AFL_VERIFY(false,
+            {"problem", "cannot use method"});
         return nullptr;
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
@@ -148,7 +149,9 @@ public:
 
         void AddChunk(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
             AFL_VERIFY(!Finished);
-            AFL_VERIFY(arr->GetDataType()->id() == Type->id())("incoming", arr->GetDataType()->ToString())("main", Type->ToString());
+            AFL_VERIFY(arr->GetDataType()->id() == Type->id(),
+                {"incoming", arr->GetDataType()->ToString()},
+                {"main", Type->ToString()});
             Chunks.emplace_back(arr);
             RecordsCount += arr->GetRecordsCount();
         }

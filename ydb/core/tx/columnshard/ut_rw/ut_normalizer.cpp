@@ -307,7 +307,8 @@ public:
         while (!rowset.EndOfSet()) {
             auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
             NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
-            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
+            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()),
+                {"event", "cannot parse metadata as protobuf"});
             {
                 auto chunk = metaProto.AddChunks();
                 chunk->SetSSColumnId(ColumnId);

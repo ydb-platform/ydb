@@ -21,9 +21,14 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
         {"portion", info->DebugString()},
         {"pathId", GetPathId()});
     AFL_VERIFY(!Portions.contains(info->GetPortionId()));
-    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
+    AFL_VERIFY(info->GetPathId() == GetPathId(),
+        {"event", "incompatible_granule"},
+        {"portion", info->DebugString()},
+        {"pathId", GetPathId()});
 
-    AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
+    AFL_VERIFY(info->ValidSnapshotInfo(),
+        {"event", "incorrect_portion_snapshots"},
+        {"portion", info->DebugString()});
 
     OnBeforeChangePortion(nullptr);
     Portions.emplace(info->GetPortionId(), info);

@@ -15,7 +15,8 @@ TFilterAccumulator::TFilterAccumulator(
 }
 
 TFilterAccumulator::~TFilterAccumulator() {
-    AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());
+    AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped(),
+        {"state", DebugString()});
     Counters->OnRequestFinish((TInstant::Now() - StartTime).MilliSeconds());
 }
 

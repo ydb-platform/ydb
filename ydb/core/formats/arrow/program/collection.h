@@ -303,10 +303,13 @@ public:
         void AddArray(const std::shared_ptr<IChunkedArray>& arr, ui32 columnId) {
             AFL_VERIFY(!Started);
             if (Arrays.size()) {
-                AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount())("last", ArraysOriginal.back()->GetRecordsCount())(
-                                                                         "new", arr->GetRecordsCount())("last_type",
-                                                                         ArraysOriginal.back()->GetType())("current_type", arr->GetType())
-                                                                         ("last_column", LastColumnId)("current_column", columnId);
+                AFL_VERIFY(ArraysOriginal.back()->GetRecordsCount() == arr->GetRecordsCount(),
+                    {"last", ArraysOriginal.back()->GetRecordsCount()},
+                    {"new", arr->GetRecordsCount()},
+                    {"lastType", ArraysOriginal.back()->GetType()},
+                    {"currentType", arr->GetType()},
+                    {"lastColumn", LastColumnId},
+                    {"currentColumn", columnId});
             }
             LastColumnId = columnId;
             ArraysOriginal.emplace_back(arr);
@@ -501,7 +504,8 @@ public:
 
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = Accessors.find(columnId);
-        AFL_VERIFY(it != Accessors.end())("id", columnId);
+        AFL_VERIFY(it != Accessors.end(),
+            {"id", columnId});
         return it->second.GetData();
     }
 

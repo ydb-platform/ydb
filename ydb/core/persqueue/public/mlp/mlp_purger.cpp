@@ -32,7 +32,8 @@ void TPurgerActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     ChildActorId = {};
 
     auto& topics = ev->Get()->Topics;
-    AFL_ENSURE(topics.size() == 1)("s", topics.size());
+    AFL_ENSURE(topics.size() == 1,
+        {"s", topics.size()});
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {

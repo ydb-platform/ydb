@@ -10,7 +10,8 @@ TString SerializeDestinationBlob(const NKikimrPQ::TDeferredPublishDestinationBlo
 }
 
 bool ParseDestinationBlob(TStringBuf bytes, NKikimrPQ::TDeferredPublishDestinationBlob* blob) {
-    AFL_ENSURE(blob != nullptr)("reason", "destination blob is null");
+    AFL_ENSURE(blob != nullptr,
+        {"reason", "destination blob is null"});
     return blob->ParseFromArray(bytes.data(), bytes.size());
 }
 
@@ -38,7 +39,8 @@ void AddOrUpdateTopicPartition(
     ui32 partitionId,
     ui64 tabletId)
 {
-    AFL_ENSURE(blob != nullptr)("reason", "destination blob is null");
+    AFL_ENSURE(blob != nullptr,
+        {"reason", "destination blob is null"});
 
     for (auto& partition : *blob->MutablePartitions()) {
         if (partition.GetPartitionId() == partitionId) {

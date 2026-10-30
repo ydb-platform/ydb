@@ -23,12 +23,16 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
     }
     if (!!Data) {
         auto result = Loader->ApplyConclusion(Data, GetRecordsCount(), std::nullopt, AdditionalAccessorData);
-        AFL_VERIFY(result.IsSuccess())("event", "deserialization_error")("error", result.GetErrorMessage());
+        AFL_VERIFY(result.IsSuccess(),
+            {"event", "deserialization_error"},
+            {"error", result.GetErrorMessage()});
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     } else {
         AFL_VERIFY(!!DataBuffer);
         auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount(), std::nullopt, AdditionalAccessorData);
-        AFL_VERIFY(result.IsSuccess())("event", "deserialization_error")("error", result.GetErrorMessage());
+        AFL_VERIFY(result.IsSuccess(),
+            {"event", "deserialization_error"},
+            {"error", result.GetErrorMessage()});
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     }
 }

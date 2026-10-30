@@ -22,7 +22,8 @@ public:
 
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = ColumnsData.find(columnId);
-        AFL_VERIFY(it != ColumnsData.end())("id", columnId);
+        AFL_VERIFY(it != ColumnsData.end(),
+            {"id", columnId});
         return it->second;
     }
 
@@ -134,7 +135,9 @@ public:
 
     bool NeedFetch(const std::string_view colName) const {
         auto pathResult = NSubColumns::ResolveBestPath(Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName));
-        AFL_VERIFY(pathResult.IsSuccess())("column", colName)("error", pathResult.GetErrorMessage());
+        AFL_VERIFY(pathResult.IsSuccess(),
+            {"column", colName},
+            {"error", pathResult.GetErrorMessage()});
         const auto path = pathResult.DetachResult();
         if (path && path->IsColumn) {
             return !PartialColumnsData.HasColumn(path->Path.ColumnIndex);

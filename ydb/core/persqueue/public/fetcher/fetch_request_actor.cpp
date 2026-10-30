@@ -248,7 +248,8 @@ public:
             }
 
             bool res = topicInfo.PartitionToTablet.insert({partitionId, tabletId}).second;
-            AFL_ENSURE(res)("partitionId", partitionId);
+            AFL_ENSURE(res,
+                {"partitionId", partitionId});
 
             if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                 auto& tabletInfo = TabletInfo[tabletId];
@@ -284,9 +285,9 @@ public:
             return;
         }
 
-        AFL_ENSURE(FetchRequestCurrentPartitionIndex <= Settings.Partitions.size())
-            ("l", FetchRequestCurrentPartitionIndex)
-            ("r", Settings.Partitions.size());
+        AFL_ENSURE(FetchRequestCurrentPartitionIndex <= Settings.Partitions.size(),
+            {"l", FetchRequestCurrentPartitionIndex},
+            {"r", Settings.Partitions.size()});
 
         while (true) {
             LOG_D("Processing /",
@@ -323,16 +324,16 @@ public:
             auto partitionId = req.Partition;
 
             ui64 tabletId = topicInfo.PartitionToTablet[partitionId];
-            AFL_ENSURE(tabletId)
-                ("topic", topic)
-                ("partition", partitionId)
-                ("tabletId", tabletId);
+            AFL_ENSURE(tabletId,
+                {"topic", topic},
+                {"partition", partitionId},
+                {"tabletId", tabletId});
 
             auto jt = TabletInfo.find(tabletId);
-            AFL_ENSURE(jt != TabletInfo.end())
-                ("topic", topic)
-                ("partition", partitionId)
-                ("tabletId", tabletId);
+            AFL_ENSURE(jt != TabletInfo.end(),
+                {"topic", topic},
+                {"partition", partitionId},
+                {"tabletId", tabletId});
             auto& tabletInfo = jt->second;
             AFL_ENSURE(!tabletInfo.BrokenPipe); // If pipe is broken, than partition status is DataReceived. It is verified early.
 
@@ -480,7 +481,8 @@ public:
     void HandlePipeError(const ui64 tabletId, const TActorContext& ctx) {
         auto it = TabletInfo.find(tabletId);
         // All pipes openned for tablets from the TabletInfo
-        AFL_ENSURE(it != TabletInfo.end())("tabletId", tabletId);
+        AFL_ENSURE(it != TabletInfo.end(),
+            {"tabletId", tabletId});
         auto& pipeInfo = it->second;
 
         pipeInfo.BrokenPipe = true;
@@ -540,7 +542,8 @@ public:
 
     std::pair<const TString&, TTopicInfo&> GetTopicInfo(const TString& topicPath) {
         auto it = TopicInfo.find(CanonizePath(topicPath));
-        AFL_ENSURE(it != TopicInfo.end())("topic", topicPath);
+        AFL_ENSURE(it != TopicInfo.end(),
+            {"topic", topicPath});
 
         return {it->second.RealPath, it->second};
     }

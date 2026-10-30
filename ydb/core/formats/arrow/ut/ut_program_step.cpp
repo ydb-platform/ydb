@@ -61,7 +61,8 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
     }
 
     sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
-    AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2)("count", sds->GetResources().GetColumnsCount());
+    AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2,
+        {"count", sds->GetResources().GetColumnsCount()});
     return sds->GetResources().GetRecordsCountActualVerified();
 }
 
@@ -659,7 +660,8 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         arrow::UInt32Builder sb;
         sb.AppendNulls(10).ok();
         auto arr = std::dynamic_pointer_cast<arrow::UInt32Array>(*sb.Finish());
-        AFL_VERIFY(arr->Value(0) == 0)("val", arr->Value(0));
+        AFL_VERIFY(arr->Value(0) == 0,
+            {"val", arr->Value(0)});
     }
 
     Y_UNIT_TEST(MergeFilterSimple) {
@@ -674,12 +676,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         auto chain = BuildMergeFilterSimpleGraph(false);
         Cerr << chain->DebugDOT() << Endl;
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];",
+            {"debug", chain->DebugStats()});
     }
 
     Y_UNIT_TEST(MergeFilterSimpleIndexMemory) {
         auto chain = BuildMergeFilterSimpleGraph(true);
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:2;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:2;];SUB:[AssembleOriginalData:1;];",
+            {"debug", chain->DebugStats()});
         UNIT_ASSERT_VALUES_EQUAL(CountIndexReservesWiredToIndexFetch(chain), 1);
     }
 

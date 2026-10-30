@@ -52,7 +52,9 @@ bool TGraphNode::HasEdgeTo(const ui32 nodeId, const ui32 resourceId) const {
 bool TGraph::HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const {
     const bool hasEdgeTo = from->HasEdgeTo(to->GetIdentifier(), resourceId);
     const bool hasEdgeFrom = to->HasEdgeFrom(from->GetIdentifier(), resourceId);
-    AFL_VERIFY(hasEdgeTo == hasEdgeFrom)("from", hasEdgeFrom)("to", hasEdgeTo);
+    AFL_VERIFY(hasEdgeTo == hasEdgeFrom,
+        {"from", hasEdgeFrom},
+        {"to", hasEdgeTo});
     return hasEdgeFrom;
 }
 

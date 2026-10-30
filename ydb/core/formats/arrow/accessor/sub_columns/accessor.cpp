@@ -43,7 +43,9 @@ TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type,
     , ColumnsData(NSubColumns::TColumnsData::BuildEmpty(recordsCount))
     , OthersData(NSubColumns::TOthersData::BuildEmpty())
     , Settings(settings) {
-    AFL_VERIFY(type->id() == arrow::binary()->id())("type", type->ToString())("error", "currently supported JsonDocument only");
+    AFL_VERIFY(type->id() == arrow::binary()->id(),
+        {"type", type->ToString()},
+        {"error", "currently supported JsonDocument only"});
 }
 
 TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others,
@@ -52,7 +54,9 @@ TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColu
     , ColumnsData(std::move(columns))
     , OthersData(std::move(others))
     , Settings(settings) {
-    AFL_VERIFY(type->id() == arrow::binary()->id())("type", type->ToString())("error", "currently supported JsonDocument only");
+    AFL_VERIFY(type->id() == arrow::binary()->id(),
+        {"type", type->ToString()},
+        {"error", "currently supported JsonDocument only"});
 }
 
 TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& externalInfo) const {
@@ -143,7 +147,9 @@ std::vector<NSubColumns::TSplittedJsonPath> BuildResolvedPathsByIndex(const NSub
     for (ui32 index = 0; index < stats.GetColumnsCount(); ++index) {
         const auto path = stats.GetColumnName(index);
         auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path));
-        AFL_VERIFY(parsedResult.IsSuccess())("error", parsedResult.GetErrorMessage())("path", path);
+        AFL_VERIFY(parsedResult.IsSuccess(),
+            {"error", parsedResult.GetErrorMessage()},
+            {"path", path});
         result.emplace_back(std::move(parsedResult.DetachResult().Items));
     }
     return result;
@@ -169,7 +175,9 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
         it.SkipRecordTo(recordIndex);
         TJsonRestorer value;
         auto onStartRecord = [&](const ui32 index) {
-            AFL_VERIFY(recordIndex == index)("count", recordIndex)("index", index);
+            AFL_VERIFY(recordIndex == index,
+                {"count", recordIndex},
+                {"index", index});
         };
         auto onFinishRecord = [&]() {
             if (value.IsNull()) {

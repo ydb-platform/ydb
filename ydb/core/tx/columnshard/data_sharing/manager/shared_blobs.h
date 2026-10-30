@@ -107,7 +107,11 @@ public:
                     shared = true;
                 }
             }
-            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1)("b", borrowed)("d", direct)("s", shared)("blob_id", i.ToStringNew());
+            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1,
+                {"b", borrowed},
+                {"d", direct},
+                {"s", shared},
+                {"blobId", i.ToStringNew()});
         }
         return result;
     }
@@ -141,7 +145,9 @@ public:
             }
             auto infoInsert = BorrowedBlobIds.emplace(i.first, i.second);
             if (!infoInsert.second) {
-                AFL_VERIFY(infoInsert.first->second == i.second)("before", infoInsert.first->second)("after", i.second);
+                AFL_VERIFY(infoInsert.first->second == i.second,
+                    {"before", infoInsert.first->second},
+                    {"after", i.second});
             }
         }
     }
@@ -248,7 +254,8 @@ public:
 
     std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerVerified(const TString& storageId) const {
         auto it = Storages.find(storageId);
-        AFL_VERIFY(it != Storages.end())("storage_id", storageId);
+        AFL_VERIFY(it != Storages.end(),
+            {"storageId", storageId});
         return it->second;
     }
 

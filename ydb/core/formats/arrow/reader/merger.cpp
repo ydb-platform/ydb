@@ -8,7 +8,9 @@
 namespace NKikimr::NArrow::NMerger {
 
 void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy) {
-    AFL_VERIFY(point.IsSameSortingSchema(*SortSchema))("point", point.DebugJson())("schema", SortSchema->ToString());
+    AFL_VERIFY(point.IsSameSortingSchema(*SortSchema),
+        {"point", point.DebugJson()},
+        {"schema", SortSchema->ToString()});
     Y_ABORT_UNLESS(point.IsReverseSort() == Reverse);
     Y_ABORT_UNLESS(++ControlPoints == 1);
 
@@ -29,8 +31,10 @@ void TMergePartialStream::CheckSequenceInDebug(const TRWSortableBatchPosition& n
         const bool linearExecutionCorrectness = nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::greater;
         if (!linearExecutionCorrectness) {
             const bool newSegmentScan = nextKeyColumnsPosition.GetPosition() == 0;
-            AFL_VERIFY(newSegmentScan && nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::less)
-                ("merge_debug", DebugJson())("current_ext", nextKeyColumnsPosition.DebugJson())("newSegmentScan", newSegmentScan);
+            AFL_VERIFY(newSegmentScan && nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::less,
+                {"mergeDebug", DebugJson()},
+                {"currentExt", nextKeyColumnsPosition.DebugJson()},
+                {"newSegmentScan", newSegmentScan});
         }
     }
     CurrentKeyColumns = nextKeyColumnsPosition.BuildSortingCursor();

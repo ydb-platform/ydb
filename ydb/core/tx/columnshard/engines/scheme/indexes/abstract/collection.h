@@ -93,7 +93,9 @@ public:
     }
 
     const std::shared_ptr<IIndexHeader>& GetHeader(const ui32 idx) const {
-        AFL_VERIFY(idx < Chunks.size())("idx", idx)("chunks", Chunks.size());
+        AFL_VERIFY(idx < Chunks.size(),
+            {"idx", idx},
+            {"chunks", Chunks.size()});
         return Chunks[idx].GetHeader();
     }
 
@@ -182,8 +184,9 @@ public:
 
     void AddData(const NRequest::TOriginalDataAddress& dataAddress, const TIndexDataAddress& indexAddress, const std::vector<TString>& data) {
         auto& index = MutableIndexDataVerified(indexAddress.GetIndexId());
-        AFL_VERIFY(IndexByOriginalData[dataAddress].emplace(indexAddress.GetIndexId(), &index).second)("address", dataAddress.DebugString())(
-                                                                                          "index", indexAddress.DebugString());
+        AFL_VERIFY(IndexByOriginalData[dataAddress].emplace(indexAddress.GetIndexId(), &index).second,
+            {"address", dataAddress.DebugString()},
+            {"index", indexAddress.DebugString()});
         index.AddData(indexAddress.GetCategory(), data);
     }
 

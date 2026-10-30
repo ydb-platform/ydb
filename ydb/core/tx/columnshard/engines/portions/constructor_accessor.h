@@ -107,14 +107,20 @@ private:
                         recordsCount = recordsCountCurrent;
                     }
                 }
-                AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
+                AFL_VERIFY(entityId < i.GetEntityId(),
+                    {"entity", entityId},
+                    {"next", i.GetEntityId()},
+                    {"details", debugString()});
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
                 recordsCountCurrent = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)(
-                                                "details", debugString());
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
+                    {"chunkIdx", chunkIdx},
+                    {"#_i.GetChunkIdx", i.GetChunkIdx()},
+                    {"entity", entityId},
+                    {"details", debugString()});
                 chunkIdx = i.GetChunkIdx();
             }
             recordsCountCurrent += GetRecordsCount(i);

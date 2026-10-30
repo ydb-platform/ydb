@@ -69,7 +69,9 @@ void TManager::AskMax(const ui64 clientId, const ui32 count, const std::shared_p
 
 void TManager::AskImpl(TClientStatus& client, const ui64 extPriority, TAskRequest&& request) {
     RemoveFromQueue(client);
-    AFL_VERIFY(request.GetSize() <= Config.GetLimit())("requested", request.GetSize())("limit", Config.GetLimit());
+    AFL_VERIFY(request.GetSize() <= Config.GetLimit(),
+        {"requested", request.GetSize()},
+        {"limit", Config.GetLimit()});
     TPriority priority(extPriority);
     client.SetLastPriority(priority);
     AFL_VERIFY(WaitingQueue.emplace(priority, std::move(request)).second);

@@ -136,8 +136,8 @@ private:
             }
         }
         if (IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(Settings_.Ru, EWakeupTag::RlAllowed, ctx))
-                ("ru", Settings_.Ru);
+            AFL_ENSURE(MaybeRequestQuota(Settings_.Ru, EWakeupTag::RlAllowed, ctx),
+                {"ru", Settings_.Ru});
             return;
         }
         WriteBill(ctx);

@@ -19,9 +19,11 @@ TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data, const s
 }
 
 void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data) {
-    AFL_VERIFY(blobId.IsValid())("blob_id", blobId.ToStringNew());
+    AFL_VERIFY(blobId.IsValid(),
+        {"blobId", blobId.ToStringNew()});
     AFL_VERIFY(blobId.BlobSize() == data.size());
-    AFL_VERIFY(BlobsForWrite.emplace(blobId, data).second)("blob_id", blobId.ToStringNew());
+    AFL_VERIFY(BlobsForWrite.emplace(blobId, data).second,
+        {"blobId", blobId.ToStringNew()});
     BlobsWaiting.emplace(blobId);
     BlobsWriteCount += 1;
     SumSize += data.size();
@@ -50,7 +52,8 @@ void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const 
         const auto& storageId = GetStorageId();
         if (!storageId || storageId == NBlobOperations::TGlobal::DefaultStorageId) {
             auto dataIt = BlobsForWrite.find(blobId);
-            AFL_VERIFY(dataIt != BlobsForWrite.end())("blob_id", blobId.ToStringNew());
+            AFL_VERIFY(dataIt != BlobsForWrite.end(),
+                {"blobId", blobId.ToStringNew()});
             NBlobCache::AddRangeToCache(TBlobRange::FromBlobId(blobId), dataIt->second);
         }
     }

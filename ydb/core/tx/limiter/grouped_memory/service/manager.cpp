@@ -215,9 +215,11 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
         }
     } else {
         LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, false);
-        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))(
-                                                               "process", externalProcessId)("scope", externalScopeId)(
-                                                               "ext_group", externalGroupId)("stage_idx", stageIdx);
+        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation),
+            {"process", externalProcessId},
+            {"scope", externalScopeId},
+            {"extGroup", externalGroupId},
+            {"stageIdx", stageIdx});
     }
     RefreshSignals();
 }
@@ -234,9 +236,11 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
         UpdateWaitingProcesses(&info.first->second);
     } else {
         auto& process = Processes.find(*internalId)->second;
-        AFL_VERIFY(process.GetStages().size() == stages.size())("external_process_id", externalProcessId)(
-            "registered_stages", process.GetStages().size())("new_stages", stages.size())(
-            "reason", "process_id_collision: externalProcessId reused for a different set of stages");
+        AFL_VERIFY(process.GetStages().size() == stages.size(),
+            {"externalProcessId", externalProcessId},
+            {"registeredStages", process.GetStages().size()},
+            {"newStages", stages.size()},
+            {"reason", "process_id_collision: externalProcessId reused for a different set of stages"});
         ++process.MutableLinksCount();
     }
     RefreshSignals();

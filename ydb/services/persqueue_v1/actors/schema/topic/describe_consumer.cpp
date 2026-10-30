@@ -102,7 +102,8 @@ private:
         const auto* consumer = NPQ::GetConsumer(
             ev->Get()->TopicInfo.Info->Description.GetPQTabletConfig(),
             consumerName);
-        AFL_ENSURE(consumer)("consumer", consumerName);
+        AFL_ENSURE(consumer,
+            {"consumer", consumerName});
 
         Ydb::StatusIds::StatusCode status;
         TString error;

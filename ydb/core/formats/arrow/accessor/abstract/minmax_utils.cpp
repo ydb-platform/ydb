@@ -22,7 +22,8 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
     namespace arrow5 = arrow;
 
     arrow5::Status export_status = arrow5::ExportArray(*arr, &c_array, &c_schema);
-    AFL_VERIFY(export_status.ok())("error", export_status.ToString());
+    AFL_VERIFY(export_status.ok(),
+        {"error", export_status});
 
     auto import_result = arrow20::ImportArray(&c_array, &c_schema).ValueOrDie();
 
@@ -31,7 +32,8 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
     auto new_array = arrow20::MakeArrayFromScalar(*scalar20, 1).ValueOrDie();
 
     arrow20::Status export_status20 = arrow20::ExportArray(*new_array, &c_array, &c_schema);
-    AFL_VERIFY(export_status20.ok())("error", export_status20.ToString());
+    AFL_VERIFY(export_status20.ok(),
+        {"error", export_status20});
 
     auto import_result5 = arrow5::ImportArray(&c_array, &c_schema).ValueOrDie();
     auto res= *dynamic_cast<arrow5::StructScalar*>(import_result5->GetScalar(0).ValueOrDie().get());
@@ -41,7 +43,8 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
 }
 
 std::shared_ptr<arrow::DataType> TMinMax::ElementType() const {
-    AFL_VERIFY(Min()->type->Equals(Max()->type))("details", "inconsistent TMinMax state");
+    AFL_VERIFY(Min()->type->Equals(Max()->type),
+        {"details", "inconsistent TMinMax state"});
     return Min()->type;
 }
 
@@ -57,7 +60,8 @@ using TSizeType = ui32;
 constexpr char NullTMinMaxFlag = '0';
 
 TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<arrow::DataType>& fieldType) {
-    AFL_VERIFY(!data.empty())("details", "empty binary minmax payload");
+    AFL_VERIFY(!data.empty(),
+        {"details", "empty binary minmax payload"});
     if (data[0] == NullTMinMaxFlag) {
         AFL_VERIFY(data.size() == 1);
         return MakeNull(fieldType);
@@ -66,14 +70,14 @@ TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<a
     ui64 offset = 1;
     auto readNext = [&] {
         TSizeType size = 0;
-        AFL_VERIFY(offset <= data.size() && sizeof(TSizeType) <= data.size() - offset )("details",
-                                                               Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
-                                                                   data.size(), offset, sizeof(TSizeType)));
+        AFL_VERIFY(offset <= data.size() && sizeof(TSizeType) <= data.size() - offset,
+            {"details", Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
+                                                                   data.size(), offset, sizeof(TSizeType))});
         memcpy(&size, data.data() + offset, sizeof(size));
         offset += sizeof(TSizeType);
-        AFL_VERIFY(offset <= data.size() && size <= data.size() - offset)(
-                                                  "details", Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
-                                                                 data.size(), offset, size));
+        AFL_VERIFY(offset <= data.size() && size <= data.size() - offset,
+            {"details", Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
+                                                                 data.size(), offset, size)});
         auto res = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(
             TStringBuf{ data.data() + offset, data.data() + offset + size }, fieldType)
                        .DetachResult();
@@ -106,7 +110,8 @@ TString TMinMax::ToBinaryString() const {
 }
 
 bool TMinMax::IsNull() const {
-    AFL_VERIFY(Min()->is_valid == Max()->is_valid)("details", "inconsistent state");
+    AFL_VERIFY(Min()->is_valid == Max()->is_valid,
+        {"details", "inconsistent state"});
     return !Min()->is_valid;
 }
 

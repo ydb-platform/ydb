@@ -25,7 +25,8 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
         return;
     }
 
-    AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
+    AFL_VERIFY(result.GetPortions().size() == 1,
+        {"count", result.GetPortions().size()});
     source.SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
     auto context = source.GetContext()->GetCommonContext();
     auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(SourceLease), std::move(Step), ScanActorId, false);

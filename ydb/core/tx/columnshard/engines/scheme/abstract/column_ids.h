@@ -37,7 +37,9 @@ public:
     }
 
     ui32 operator[](size_t idx) const {
-        AFL_VERIFY(idx < ColumnIds.size())("idx", idx)("size", ColumnIds.size());
+        AFL_VERIFY(idx < ColumnIds.size(),
+            {"idx", idx},
+            {"size", ColumnIds.size()});
         return ColumnIds[idx];
     }
 

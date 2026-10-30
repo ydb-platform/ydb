@@ -109,7 +109,8 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
     auto schema = index.GetSchemaVerified(SchemaVersion);
-    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion);
+    AFL_VERIFY(!!schema,
+        {"details", TStringBuilder() << "cannot find schema for version " << SchemaVersion});
     return schema;
 }
 

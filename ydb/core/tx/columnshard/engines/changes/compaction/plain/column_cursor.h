@@ -21,7 +21,9 @@ private:
 
 public:
     ~TPortionColumnCursor() {
-        AFL_VERIFY(!RecordIndexStart)("start", RecordIndexStart)("finish", RecordIndexFinish);
+        AFL_VERIFY(!RecordIndexStart,
+            {"start", RecordIndexStart},
+            {"finish", RecordIndexFinish});
     }
 
     bool Next(const ui32 portionRecordIdx, TMergedColumn& column);

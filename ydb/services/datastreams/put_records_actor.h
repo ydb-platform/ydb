@@ -134,7 +134,8 @@ namespace NKikimr::NDataStreams::V1 {
             }
 
             AFL_ENSURE(ev->Get()->Record.HasPartitionResponse());
-            AFL_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0)("reason", "Wrong number of cmd write commands");
+            AFL_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0,
+                {"reason", "Wrong number of cmd write commands"});
             auto offset = ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult(0).GetOffset();
             ReplySuccessAndDie(ctx, offset);
         }

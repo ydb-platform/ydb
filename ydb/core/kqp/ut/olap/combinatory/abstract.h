@@ -28,7 +28,9 @@ public:
 
     TString GetVerified(const TString& propertyName) const {
         auto it = Properties.find(propertyName);
-        AFL_VERIFY(it != Properties.end())("name", propertyName)("props", DebugString());
+        AFL_VERIFY(it != Properties.end(),
+            {"name", propertyName},
+            {"props", DebugString()});
         return it->second;
     }
 
@@ -44,7 +46,9 @@ public:
     }
 
     TString GetFreeArgumentVerified(const ui32 idx) const {
-        AFL_VERIFY(idx < FreeArguments.size())("idx", idx)("props", DebugString());
+        AFL_VERIFY(idx < FreeArguments.size(),
+            {"idx", idx},
+            {"props", DebugString()});
         return FreeArguments[idx];
     }
 };

@@ -33,7 +33,8 @@ protected:
         Y_DEBUG_ABORT_UNLESS(data->ValidateFull().ok());
         AFL_VERIFY(data->num_rows());
         AFL_VERIFY(data->num_columns());
-        AFL_VERIFY(data->num_rows() <= 2)("count", data->num_rows());
+        AFL_VERIFY(data->num_rows() <= 2,
+            {"count", data->num_rows()});
     }
 
 public:

@@ -515,8 +515,9 @@ void TColumnShard::RunAlterStore(
     AFL_VERIFY(proto.HasStorePathId());
     const auto& storeSchemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(proto);
     const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
-    AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId)("tablet_path_id", tabletSchemeShardLocalPathId)(
-        "store_path_id", storeSchemeShardLocalPathId);
+    AFL_VERIFY(tabletSchemeShardLocalPathId == storeSchemeShardLocalPathId,
+        {"tabletPathId", tabletSchemeShardLocalPathId},
+        {"storePathId", storeSchemeShardLocalPathId});
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!TablesManager.HasPreset(id)) {
@@ -1101,7 +1102,8 @@ public:
                 db.Table<SchemaPresetVersionInfo>().Key(i.GetPresetId(), i.GetSnapshot().GetPlanStep(), i.GetSnapshot().GetTxId()).Select();
             if (rowset.IsReady()) {
                 toRemove.emplace_back(i);
-                AFL_VERIFY(!rowset.EndOfSet())("address", i.DebugString());
+                AFL_VERIFY(!rowset.EndOfSet(),
+                    {"address", i.DebugString()});
                 TSchemaPreset::TSchemaPresetVersionInfo info;
                 Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
                 Fetched.emplace(i, std::move(info));
@@ -1320,7 +1322,9 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
+    AFL_VERIFY(ev->Get()->GetGeneration() == Generation(),
+        {"ev", ev->Get()->GetGeneration()},
+        {"tablet", Generation()});
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
@@ -1470,8 +1474,9 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvStartToSource::TPtr& 
 
     auto currentSession = SharingSessionsManager->GetSourceSession(reqSession->GetSessionId());
     if (currentSession) {
-        AFL_VERIFY(currentSession->IsEqualTo(*reqSession))("session_current", currentSession->DebugString())(
-            "session_new", reqSession->DebugString());
+        AFL_VERIFY(currentSession->IsEqualTo(*reqSession),
+            {"sessionCurrent", currentSession->DebugString()},
+            {"sessionNew", reqSession->DebugString()});
         return;
     }
 
@@ -1492,15 +1497,16 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
     }
 
     // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
-    AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())(
-                                                              "reason", "can not send schemas and data in the same package");
+    AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty(),
+        {"reason", "can not send schemas and data in the same package"});
 
     THashMap<TInternalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
         auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(
             i, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex(), dsGroupSelector);
-        AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
+        AFL_VERIFY(data.IsSuccess(),
+            {"error", data.GetErrorMessage()});
         AFL_VERIFY(dataByPathId.emplace(TInternalPathId::FromProto(i), data.DetachResult()).second);
     }
 
@@ -1631,8 +1637,12 @@ public:
 
     std::shared_ptr<NOlap::TPortionDataAccessor> BuildAccessor() {
         AFL_VERIFY(PortionInfo);
-        AFL_VERIFY(Records)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
-        AFL_VERIFY(Indexes)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
+        AFL_VERIFY(Records,
+            {"portionId", PortionInfo->GetPortionId()},
+            {"pathId", PortionInfo->GetPathId()});
+        AFL_VERIFY(Indexes,
+            {"portionId", PortionInfo->GetPortionId()},
+            {"pathId", PortionInfo->GetPathId()});
         return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), Records->CreateBuildInfo(), std::move(*Indexes));
     }
 };
@@ -1653,7 +1663,8 @@ private:
     }
 
     virtual void DoOnCannotExecute(const TString& reason) override {
-        AFL_VERIFY(false)("cannot parse metadata", reason);
+        AFL_VERIFY(false,
+            {"#_cannot parse metadata", reason});
     }
 
 public:
@@ -1719,8 +1730,10 @@ public:
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
-                                "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            AFL_VERIFY(!rowset.EndOfSet(),
+                                {"pathId", i.first},
+                                {"portionId", p},
+                                {"debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true)});
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1807,8 +1820,9 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
                 for (const ui32 columnId : Schema->GetColumnIds()) {
                     auto address = NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId);
                     auto columnData = container->GetAccessorByNameVerified(Schema->GetFieldByColumnIdVerified(columnId)->name());
-                    AFL_VERIFY(Schema->GetFieldByColumnIdVerified(columnId)->type()->Equals(columnData->GetDataType()))(
-                        "schema", Schema->GetFieldByColumnIdVerified(columnId)->ToString())("data", columnData->GetDataType()->ToString());
+                    AFL_VERIFY(Schema->GetFieldByColumnIdVerified(columnId)->type()->Equals(columnData->GetDataType()),
+                        {"schema", Schema->GetFieldByColumnIdVerified(columnId)->ToString()},
+                        {"data", columnData->GetDataType()->ToString()});
                     AFL_VERIFY(result.emplace(address, columnData).second);
                 }
             }
@@ -1900,12 +1914,14 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
 
     auto task = std::make_shared<NOlap::NDataSharing::TTaskForTablet>((NOlap::TTabletId)TabletID());
     auto parsed = task->DeserializeFromProto(ev->Get()->Record.GetTask());
-    AFL_VERIFY(!!parsed)("error", parsed.GetErrorMessage());
+    AFL_VERIFY(!!parsed,
+        {"error", parsed.GetErrorMessage()});
 
     AFL_VERIFY(task->GetTabletId() == (NOlap::TTabletId)TabletID());
     auto txConclusion = task->BuildModificationTransaction(this, (NOlap::TTabletId)ev->Get()->Record.GetInitiatorTabletId(),
         ev->Get()->Record.GetSessionId(), ev->Get()->Record.GetPackIdx(), task);
-    AFL_VERIFY(!!txConclusion)("error", txConclusion.GetErrorMessage());
+    AFL_VERIFY(!!txConclusion,
+        {"error", txConclusion.GetErrorMessage()});
     Execute(txConclusion->release(), ctx);
 }
 
@@ -1970,7 +1986,8 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     NOlap::TTabletsByBlob blobs;
     for (auto&& i : ev->Get()->Record.GetBlobIds()) {
         auto blobId = NOlap::TUnifiedBlobId::BuildFromString(i, nullptr);
-        AFL_VERIFY(!!blobId)("problem", blobId.GetErrorMessage());
+        AFL_VERIFY(!!blobId,
+            {"problem", blobId.GetErrorMessage()});
         AFL_VERIFY(blobs.Add((NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), blobId.DetachResult()));
     }
     Execute(new TTxRemoveSharedBlobs(

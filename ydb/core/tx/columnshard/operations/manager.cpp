@@ -7,7 +7,10 @@
 namespace NKikimr::NColumnShard {
 
 void TLockFeatures::SetTxId(const ui64 txId) {
-    AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
+    AFL_VERIFY(!TxId || TxId == txId,
+        {"txId", txId},
+        {"lockId", GetLockId()},
+        {"txIdAssigned", TxId});
     TxId = txId;
 }
 
@@ -24,7 +27,8 @@ bool TLockFeatures::IsTxIdAssigned() const {
 }
 
 ui64 TLockFeatures::GetTxId() const {
-    AFL_VERIFY(IsTxIdAssigned())("lock_id", GetLockId());
+    AFL_VERIFY(IsTxIdAssigned(),
+        {"lockId", GetLockId()});
     return TxId;
 }
 
@@ -85,7 +89,9 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             auto& lock = it->second;
 
-            AFL_VERIFY(lock.TryProposeTransaction(txId))("lock_id", lockId)("tx_id", txId);
+            AFL_VERIFY(lock.TryProposeTransaction(txId),
+                {"lockId", lockId},
+                {"txId", txId});
             // we cannot persist the lock state reliably and cheaply enough,
             // so if the shard restarted/crashed/whatever, we assume the lock is broken
             lock.SetBroken();
@@ -196,7 +202,9 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
         {"lockId", lockId});
 
     auto& lock = GetLockVerified(lockId);
-    AFL_VERIFY(lock.IsAborted())("lock_id", lockId)("tx_id", txId);
+    AFL_VERIFY(lock.IsAborted(),
+        {"lockId", lockId},
+        {"txId", txId});
 
     TVector<TWriteOperation::TPtr> aborted;
     for (auto&& opPtr : lock.GetWriteOperations()) {

@@ -69,16 +69,20 @@ void TGeneralContainer::Initialize() {
     if (Schema->num_fields() == 0) {
         recordsCount = 0;
     }
-    AFL_VERIFY(Schema->num_fields() == (i32)Columns.size())("schema", Schema->num_fields())("columns", Columns.size());
+    AFL_VERIFY(Schema->num_fields() == (i32)Columns.size(),
+        {"schema", Schema->num_fields()},
+        {"columns", Columns.size()});
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         AFL_VERIFY(Columns[i]);
         AFL_VERIFY(Schema->field(i)->type()->Equals(Columns[i]->GetDataType()));
         if (!recordsCount) {
             recordsCount = Columns[i]->GetRecordsCount();
         } else {
-            AFL_VERIFY(*recordsCount == Columns[i]->GetRecordsCount())
-            ("event", "inconsistency_records_count")("expect", *recordsCount)("real", Columns[i]->GetRecordsCount())(
-                "field_name", Schema->field(i)->name());
+            AFL_VERIFY(*recordsCount == Columns[i]->GetRecordsCount(),
+                {"event", "inconsistency_records_count"},
+                {"expect", *recordsCount},
+                {"real", Columns[i]->GetRecordsCount()},
+                {"fieldName", Schema->field(i)->name()});
         }
     }
     AFL_VERIFY(recordsCount);
@@ -138,7 +142,10 @@ TGeneralContainer::TGeneralContainer(const ui32 recordsCount)
 
 std::shared_ptr<NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
     auto result = GetAccessorByNameOptional(fieldId);
-    AFL_VERIFY(result)("event", "cannot_find_accessor_in_general_container")("field_id", fieldId)("schema", Schema->ToString());
+    AFL_VERIFY(result,
+        {"event", "cannot_find_accessor_in_general_container"},
+        {"fieldId", fieldId},
+        {"schema", Schema->ToString()});
     return result;
 }
 
@@ -162,7 +169,9 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTable
         if (!count) {
             count = columns.back()->length();
         } else {
-            AFL_VERIFY(*count == columns.back()->length())("count", count)("local", columns.back()->length());
+            AFL_VERIFY(*count == columns.back()->length(),
+                {"count", count},
+                {"local", columns.back()->length()});
         }
         fields.emplace_back(Schema->field(i));
     }
@@ -185,7 +194,9 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessor
     if (idx == -1) {
         return nullptr;
     }
-    AFL_VERIFY((ui32)idx < Columns.size())("idx", idx)("count", Columns.size());
+    AFL_VERIFY((ui32)idx < Columns.size(),
+        {"idx", idx},
+        {"count", Columns.size()});
     return Columns[idx];
 }
 

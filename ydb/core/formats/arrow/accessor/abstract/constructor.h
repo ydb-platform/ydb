@@ -75,8 +75,9 @@ public:
             if (result.IsFail()) {
                 return result;
             }
-            AFL_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount())("result", result.GetResult()->GetRecordsCount())(
-                                                      "original", originalArray->GetRecordsCount());
+            AFL_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount(),
+                {"result", result.GetResult()->GetRecordsCount()},
+                {"original", originalArray->GetRecordsCount()});
             return result;
         }
     }

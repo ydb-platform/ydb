@@ -85,7 +85,9 @@ ui64 TBuildFilterContext::GetDataSize() const {
 
 TPortionInfo::TConstPtr TBuildFilterContext::GetPortion(const ui64 portionId) const {
     auto* findPortion = RequiredPortions.FindPtr(portionId);
-    AFL_VERIFY(findPortion)("id", portionId)("context", DebugString());
+    AFL_VERIFY(findPortion,
+        {"id", portionId},
+        {"context", DebugString()});
     return *findPortion;
 }
 

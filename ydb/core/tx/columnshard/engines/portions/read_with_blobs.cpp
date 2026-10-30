@@ -15,8 +15,10 @@ namespace NKikimr::NOlap {
 
 void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
     auto address = chunk->GetChunkAddressVerified();
-    AFL_VERIFY(PortionInfo.HasEntityAddress(address))("address", address.DebugString());
-    AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
+    AFL_VERIFY(PortionInfo.HasEntityAddress(address),
+        {"address", address.DebugString()});
+    AFL_VERIFY(Chunks.emplace(address, chunk).second,
+        {"address", address.DebugString()});
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
@@ -63,7 +65,9 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TReadPortionInfoWithBlobs::GetEn
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
+        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size(),
+            {"idx", i.second->GetChunkIdxVerified()},
+            {"size", result.size()});
         result.emplace_back(i.second);
     }
     return result;
@@ -159,7 +163,9 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {
     auto it = Chunks.find(TChunkAddress(columnId, chunkId));
-    AFL_VERIFY(it != Chunks.end())("column_id", columnId)("chunk_idx", chunkId);
+    AFL_VERIFY(it != Chunks.end(),
+        {"columnId", columnId},
+        {"chunkIdx", chunkId});
     return it->second->GetData();
 }
 

@@ -194,7 +194,8 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
-            AFL_ENSURE(topicInfo.Info)("path", FullTopicPath_);
+            AFL_ENSURE(topicInfo.Info,
+                {"path", FullTopicPath_});
             PQGroup = topicInfo.Info->Description;
             SelfInfo = topicInfo.Self->Info;
             ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());

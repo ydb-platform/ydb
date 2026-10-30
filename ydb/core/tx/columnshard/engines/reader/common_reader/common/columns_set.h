@@ -24,7 +24,8 @@ public:
         : IndexIds(indexIds.begin(), indexIds.end())
         , IndexIdsSet(indexIds)
     {
-        AFL_VERIFY(IndexIds.size() == IndexIdsSet.size())("indexes", JoinSeq(",", IndexIds));
+        AFL_VERIFY(IndexIds.size() == IndexIdsSet.size(),
+            {"indexes", JoinSeq(",", IndexIds)});
     }
 
     TIndexesSet(const ui32& indexId)

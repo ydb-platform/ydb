@@ -9,8 +9,9 @@ void IColumnMerger::Start(const std::vector<std::shared_ptr<NArrow::NAccessor::I
         if (!i) {
             continue;
         }
-        AFL_VERIFY(i->GetDataType()->Equals(*Context.GetResultField()->type()))("input", i->GetDataType()->ToString())(
-            "result", Context.GetResultField()->ToString());
+        AFL_VERIFY(i->GetDataType()->Equals(*Context.GetResultField()->type()),
+            {"input", i->GetDataType()->ToString()},
+            {"result", Context.GetResultField()->ToString()});
     }
     return DoStart(input, mergeContext);
 }

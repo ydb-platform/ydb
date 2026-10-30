@@ -28,8 +28,13 @@ std::vector<ui32> TSimilarPacker::SizesToRecordsCount(
     const double rowsPerByte = 1.0 * serializedRecordsCount / dataSerialization.size();
     i32 remainedParts = splitPartSizesLocal.size();
     for (ui32 idx = 0; idx < splitPartSizesLocal.size(); ++idx) {
-        AFL_VERIFY(remainedRecordsCount >= remainedParts)("remained_records_count", remainedRecordsCount)("remained_parts", remainedParts)(
-            "idx", idx)("size", splitPartSizesLocal.size())("sizes", JoinSeq(",", splitPartSizesLocal))("data_size", dataSerialization.size());
+        AFL_VERIFY(remainedRecordsCount >= remainedParts,
+            {"remainedRecordsCount", remainedRecordsCount},
+            {"remainedParts", remainedParts},
+            {"idx", idx},
+            {"size", splitPartSizesLocal.size()},
+            {"sizes", JoinSeq(",", splitPartSizesLocal)},
+            {"dataSize", dataSerialization.size()});
         --remainedParts;
         i64 expectedRecordsCount = rowsPerByte * splitPartSizesLocal[idx];
         if (expectedRecordsCount < 1) {
@@ -64,10 +69,17 @@ std::vector<i64> TSimilarPacker::SplitWithExpected(
 
     const i64 partResultCount = count / partsCount;
     const i64 sumResultCount = partsCount * partResultCount;
-    AFL_VERIFY(sumResultCount <= count)("count", count)("expect", sumResultCount)("propose", partResultCount);
+    AFL_VERIFY(sumResultCount <= count,
+        {"count", count},
+        {"expect", sumResultCount},
+        {"propose", partResultCount});
     const ui32 delta = count - sumResultCount;
-    AFL_VERIFY(delta < partsCount)("delta", delta)("part_size", partResultCount)("expectation", expectation)("count", count)(
-        "parts_count", partsCount);
+    AFL_VERIFY(delta < partsCount,
+        {"delta", delta},
+        {"partSize", partResultCount},
+        {"expectation", expectation},
+        {"count", count},
+        {"partsCount", partsCount});
     std::vector<i64> result(partsCount - delta, partResultCount);
     for (ui32 i = 0; i < delta; ++i) {
         result.emplace_back(partResultCount + 1);

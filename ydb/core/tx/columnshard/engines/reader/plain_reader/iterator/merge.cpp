@@ -70,7 +70,9 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
             {"afterData", NArrow::GetTableDataSize(ResultBatch)},
             {"guard", AllocationGuard->GetMemory()});
         //        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
-        AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount())("lpk", !!LastPK)("sb", ShardedBatch->GetRecordsCount());
+        AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount(),
+            {"lpk", !!LastPK},
+            {"sb", ShardedBatch->GetRecordsCount()});
     } else {
         AllocationGuard = nullptr;
         ResultBatch = nullptr;
@@ -167,12 +169,14 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
         ResultBatch = Merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
         if (ResultBatch) {
             Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
-            AFL_VERIFY(ResultBatch->schema()->Equals(Context->GetProgramInputColumns()->GetSchema()))("res", ResultBatch->schema()->ToString())(
-                "ctx", Context->GetProgramInputColumns()->GetSchema()->ToString());
+            AFL_VERIFY(ResultBatch->schema()->Equals(Context->GetProgramInputColumns()->GetSchema()),
+                {"res", ResultBatch->schema()->ToString()},
+                {"ctx", Context->GetProgramInputColumns()->GetSchema()->ToString()});
         }
         if (MergingContext->GetIncludeFinish() && originalSourcesCount == 1) {
-            AFL_VERIFY(Merger->IsEmpty())("merging_context_finish", MergingContext->GetFinish().DebugJson().GetStringRobust())(
-                "merger", Merger->DebugString());
+            AFL_VERIFY(Merger->IsEmpty(),
+                {"mergingContextFinish", MergingContext->GetFinish().DebugJson().GetStringRobust()},
+                {"merger", Merger->DebugString()});
         }
     } else {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::MANY", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));

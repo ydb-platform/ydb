@@ -69,7 +69,9 @@ namespace NKikimr::NPQ::NMirror {
                     .Error = std::format("Missing partition #{} in the source topic description", id),
                 };
             }
-            AFL_ENSURE(sourceIt->second != nullptr)("d", "BuildPartitionIndexMap invariant failed")("id", id);
+            AFL_ENSURE(sourceIt->second != nullptr,
+                {"d", "BuildPartitionIndexMap invariant failed"},
+                {"id", id});
         }
 
         // Target topic has a set [0, ..., firstMissingRootPartitionId) of root partitions.
@@ -78,7 +80,9 @@ namespace NKikimr::NPQ::NMirror {
         alterRootPartitions.reserve(lastMissingRootPartitionId + 1);
         for (ui32 id = 0; id <= lastMissingRootPartitionId; ++id) {
             const auto* sourcePartitionInfo = sourcePartitionIndexMap.at(id);
-            AFL_ENSURE(sourcePartitionInfo != nullptr)("d", "BuildPartitionIndexMap invariant failed")("id", id);
+            AFL_ENSURE(sourcePartitionInfo != nullptr,
+                {"d", "BuildPartitionIndexMap invariant failed"},
+                {"id", id});
             const auto* targetNode = target.GetPartition(id);
             const bool newPart = targetNode == nullptr;
 

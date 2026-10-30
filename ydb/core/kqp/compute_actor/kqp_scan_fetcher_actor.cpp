@@ -151,7 +151,10 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     if (!state || state->Generation != ev->Get()->Generation) {
         return;
     }
-    AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
+    AFL_ENSURE(state->State == EShardState::Running,
+        {"state", state->State},
+        {"actorId", state->ActorId},
+        {"evSender", ev->Sender});
 
     if (auto scanner = InFlightShards.GetShardScanner(state->TabletId)) {
         scanner->Trace.OnData(
@@ -467,13 +470,15 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
                     {"state", state->State},
                     {"details", info->ToString()},
                     {"node", SelfId().NodeId()});
-                AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::Starting)("state", state->State);
+                AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::Starting,
+                    {"state", state->State});
                 RetryDeliveryProblem(state);
             }
             return;
         }
     }
-    AFL_ENSURE(false && "Unexpected event type")("source_type", ev->Get()->SourceType);
+    AFL_ENSURE(false && "Unexpected event type",
+        {"sourceType", ev->Get()->SourceType});
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -617,7 +622,9 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         Counters->ScanQueryRateLimitLatency->Collect(latency.MilliSeconds());
     }
 
-    AFL_ENSURE(state->ActorId == ev->Sender)("expected", state->ActorId)("got", ev->Sender);
+    AFL_ENSURE(state->ActorId == ev->Sender,
+        {"expected", state->ActorId},
+        {"got", ev->Sender});
 
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
@@ -646,8 +653,9 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         {"brokenLocksCount", msg.LocksInfo.BrokenLocks.size()});
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);
     auto tasksForCompute = shardScanner->OnReceiveData(msg, shardScanner);
-    AFL_ENSURE(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size())(
-        "size", tasksForCompute.size())("compute_size", ComputeActorIds.size());
+    AFL_ENSURE(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size(),
+        {"size", tasksForCompute.size()},
+        {"computeSize", ComputeActorIds.size()});
     for (auto&& i : tasksForCompute) {
         const std::optional<ui32> computeShardId = i->GetComputeShardId();
         InFlightComputes.OnReceiveData(computeShardId, std::move(i));
@@ -682,7 +690,8 @@ void TKqpScanFetcherActor::ProcessScanData() {
         return;
     }
 
-    AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::PostRunning)("state", state->State);
+    AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::PostRunning,
+        {"state", state->State});
     ProcessPendingScanDataItem(ev, enqueuedAt);
 }
 

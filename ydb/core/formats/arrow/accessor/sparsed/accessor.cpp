@@ -77,8 +77,10 @@ ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batc
     AFL_VERIFY(batch);
     AFL_VERIFY(batch->num_rows());
     auto c = batch->GetColumnByName("index");
-    AFL_VERIFY(c)("schema", batch->schema()->ToString());
-    AFL_VERIFY(c->type_id() == arrow::uint32()->id())("type", c->type()->ToString());
+    AFL_VERIFY(c,
+        {"schema", batch->schema()->ToString()});
+    AFL_VERIFY(c->type_id() == arrow::uint32()->id(),
+        {"type", c->type()->ToString()});
     auto ui32Column = static_pointer_cast<arrow::UInt32Array>(c);
     return ui32Column->Value(ui32Column->length() - 1);
 }
@@ -135,8 +137,9 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     AFL_VERIFY(ColIndex->type_id() == arrow::uint32()->id());
     UI32ColIndex = static_pointer_cast<arrow::UInt32Array>(ColIndex);
     if (UI32ColIndex->length()) {
-        AFL_VERIFY(UI32ColIndex->Value(UI32ColIndex->length() - 1) < recordsCount)("val", UI32ColIndex->Value(UI32ColIndex->length() - 1))(
-            "count", recordsCount);
+        AFL_VERIFY(UI32ColIndex->Value(UI32ColIndex->length() - 1) < recordsCount,
+            {"val", UI32ColIndex->Value(UI32ColIndex->length() - 1)},
+            {"count", recordsCount});
     }
     NotDefaultRecordsCount = UI32ColIndex->length();
     RawValues = UI32ColIndex->raw_values();
@@ -154,7 +157,10 @@ TSparsedArrayChunk::TSparsedArrayChunk(
             if (idx - startIndexInt) {
                 RemapExternalToInternal.emplace_back(startIndexExt, startIndexInt, idx - startIndexInt, false);
             }
-            AFL_VERIFY(columnIndex > nextIndex)("next", nextIndex)("idx", idx)("val", columnIndex);
+            AFL_VERIFY(columnIndex > nextIndex,
+                {"next", nextIndex},
+                {"idx", idx},
+                {"val", columnIndex});
             RemapExternalToInternal.emplace_back(nextIndex, 0, columnIndex - nextIndex, true);
             startIndexExt = columnIndex;
             startIndexInt = idx;
@@ -174,7 +180,9 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     for (ui32 i = 0; i + 1 < RemapExternalToInternal.size(); ++i) {
         AFL_VERIFY(RemapExternalToInternal[i + 1].GetStartExt() == RemapExternalToInternal[i].GetStartExt() + RemapExternalToInternal[i].GetSize());
     }
-    AFL_VERIFY(count == RecordsCount)("count", count)("records_count", RecordsCount);
+    AFL_VERIFY(count == RecordsCount,
+        {"count", count},
+        {"recordsCount", RecordsCount});
     AFL_VERIFY(ColValue);
 }
 
@@ -217,7 +225,9 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     if (UI32ColIndex->length() == 0) {
         return TSparsedArrayChunk(filter.GetFilteredCountVerified(), Records, DefaultValue);
     }
-    AFL_VERIFY(filter.GetRecordsCountVerified() == RecordsCount)("filter", filter.GetRecordsCountVerified())("chunk", RecordsCount);
+    AFL_VERIFY(filter.GetRecordsCountVerified() == RecordsCount,
+        {"filter", filter.GetRecordsCountVerified()},
+        {"chunk", RecordsCount});
     ui32 recordIndex = 0;
     ui32 filterIntervalStart = 0;
     ui32 skippedCount = 0;
@@ -245,7 +255,9 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
         currentAcceptance = !currentAcceptance;
         filterIntervalStart += *it;
     }
-    AFL_VERIFY(filteredCount <= filter.GetFilteredCountVerified())("count", filteredCount)("filtered", filter.GetFilteredCountVerified());
+    AFL_VERIFY(filteredCount <= filter.GetFilteredCountVerified(),
+        {"count", filteredCount},
+        {"filtered", filter.GetFilteredCountVerified()});
     AFL_VERIFY(recordIndex == UI32ColIndex->length());
     auto indexesArr = NArrow::FinishBuilder(std::move(indexesBuilder));
     auto valuesArr = NArrow::FinishBuilder(std::move(valuesBuilder));
@@ -255,7 +267,10 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
 }
 
 TSparsedArrayChunk TSparsedArrayChunk::Slice(const ui32 offset, const ui32 count) const {
-    AFL_VERIFY(offset + count <= RecordsCount)("offset", offset)("count", count)("records", RecordsCount);
+    AFL_VERIFY(offset + count <= RecordsCount,
+        {"offset", offset},
+        {"count", count},
+        {"records", RecordsCount});
     std::optional<ui32> startPosition = NArrow::FindUpperOrEqualPosition(*UI32ColIndex, offset);
     std::optional<ui32> finishPosition = NArrow::FindUpperOrEqualPosition(*UI32ColIndex, offset + count);
     if (!startPosition || startPosition == finishPosition) {
@@ -276,14 +291,22 @@ TSparsedArrayChunk TSparsedArrayChunk::Slice(const ui32 offset, const ui32 count
 void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& data) {
     AFL_VERIFY(data);
     AFL_VERIFY(recordsCount);
-    AFL_VERIFY(data->num_rows() <= recordsCount)("rows", data->num_rows())("count", recordsCount);
-    AFL_VERIFY(data->num_columns() == 2)("count", data->num_columns());
-    AFL_VERIFY(data->column(0)->type_id() == arrow::uint32()->id())("type", data->column(0)->type()->ToString());
-    AFL_VERIFY(data->column(1)->type_id() == Type->id())("type", Type->ToString())("ext_type", data->column(0)->type()->ToString());
+    AFL_VERIFY(data->num_rows() <= recordsCount,
+        {"rows", data->num_rows()},
+        {"count", recordsCount});
+    AFL_VERIFY(data->num_columns() == 2,
+        {"count", data->num_columns()});
+    AFL_VERIFY(data->column(0)->type_id() == arrow::uint32()->id(),
+        {"type", data->column(0)->type()->ToString()});
+    AFL_VERIFY(data->column(1)->type_id() == Type->id(),
+        {"type", Type->ToString()},
+        {"extType", data->column(0)->type()->ToString()});
     AFL_VERIFY_DEBUG(data->schema()->field(0)->name() == "index")("name", data->schema()->field(0)->name());
     if (data->num_rows()) {
         auto* arr = static_cast<const arrow::UInt32Array*>(data->column(0).get());
-        AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
+        AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount,
+            {"val", arr->Value(arr->length() - 1)},
+            {"count", recordsCount});
     }
     Chunks.emplace_back(recordsCount, data, DefaultValue);
     RecordsCount += recordsCount;
@@ -295,13 +318,22 @@ void TSparsedArray::TBuilder::AddChunk(
     AFL_VERIFY(indexes);
     AFL_VERIFY(values);
     AFL_VERIFY(recordsCount);
-    AFL_VERIFY(indexes->length() == values->length())("indexes", indexes->length())("values", values->length());
-    AFL_VERIFY(indexes->length() <= recordsCount)("indexes", indexes->length())("count", recordsCount);
-    AFL_VERIFY(indexes->type_id() == arrow::uint32()->id())("type", indexes->type()->ToString());
-    AFL_VERIFY(values->type_id() == Type->id())("type", Type->ToString())("ext_type", values->type()->ToString());
+    AFL_VERIFY(indexes->length() == values->length(),
+        {"indexes", indexes->length()},
+        {"values", values->length()});
+    AFL_VERIFY(indexes->length() <= recordsCount,
+        {"indexes", indexes->length()},
+        {"count", recordsCount});
+    AFL_VERIFY(indexes->type_id() == arrow::uint32()->id(),
+        {"type", indexes->type()->ToString()});
+    AFL_VERIFY(values->type_id() == Type->id(),
+        {"type", Type->ToString()},
+        {"extType", values->type()->ToString()});
     if (indexes->length()) {
         auto* arr = static_cast<const arrow::UInt32Array*>(indexes.get());
-        AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
+        AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount,
+            {"val", arr->Value(arr->length() - 1)},
+            {"count", recordsCount});
     }
     Chunks.emplace_back(recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
     RecordsCount += recordsCount;

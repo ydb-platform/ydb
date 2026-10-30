@@ -170,8 +170,9 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
         return false;
     }
-    AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation)("prepared", GCBarrierPreparation)(
-                                                       "last", LastCollectedGenStep);
+    AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation,
+        {"prepared", GCBarrierPreparation},
+        {"last", LastCollectedGenStep});
 
     // Load the keep and delete queues
     std::vector<TUnifiedBlobId> blobsToKeep;
@@ -190,7 +191,8 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
         Y_ABORT_UNLESS(LastCollectedGenStep < TGenStep(blobId));
 
-        AFL_VERIFY(blobsToKeepLocal.Add(blobId))("blob_to_keep_double", unifiedBlobId.ToStringNew());
+        AFL_VERIFY(blobsToKeepLocal.Add(blobId),
+            {"blobToKeepDouble", unifiedBlobId.ToStringNew()});
     }
     std::swap(blobsToKeepLocal, BlobsToKeep);
     BlobsManagerCounters.OnBlobsToKeep(BlobsToKeep);
@@ -309,7 +311,9 @@ bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
         {"gsBlobsToKeepCount", BlobsToKeep.GetSize()});
 
     const auto pred = [&](const TGenStep& genStep, const TLogoBlobID& logoBlobId) {
-        AFL_VERIFY(LastCollectedGenStep < genStep)("last", LastCollectedGenStep.ToString())("gen", genStep.ToString());
+        AFL_VERIFY(LastCollectedGenStep < genStep,
+            {"last", LastCollectedGenStep},
+            {"gen", genStep});
         const ui32 blobGroup = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
         TBlobAddress bAddress(blobGroup, logoBlobId.Channel());
         const TUnifiedBlobId keepUnified(blobGroup, logoBlobId);
@@ -394,8 +398,9 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
             FirstGC = false;
         }
         if (!BlobsToKeep.IsEmpty()) {
-            AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)(
-                                                   "first", BlobsToKeep.GetMinGenStepVerified());
+            AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified(),
+                {"gs", *CollectGenStepInFlight},
+                {"first", BlobsToKeep.GetMinGenStepVerified()});
         }
         AFL_VERIFY(LastCollectedGenStep < *CollectGenStepInFlight);
     }
@@ -464,7 +469,10 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{ logoBlobId.Generation(), logoBlobId.Step() };
 
-        AFL_VERIFY(genStep > edgeGenStep)("gen_step", genStep)("edge_gen_step", edgeGenStep)("blob_id", blobId.ToStringNew());
+        AFL_VERIFY(genStep > edgeGenStep,
+            {"genStep", genStep},
+            {"edgeGenStep", edgeGenStep},
+            {"blobId", blobId.ToStringNew()});
         YDB_LOG_INFO("",
             {"toKeep", logoBlobId});
 
@@ -487,7 +495,10 @@ void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobMa
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{ logoBlobId.Generation(), logoBlobId.Step() };
 
-        AFL_VERIFY(genStep > edgeGenStep)("gen_step", genStep)("edge_gen_step", edgeGenStep)("blob_id", blobId.ToStringNew());
+        AFL_VERIFY(genStep > edgeGenStep,
+            {"genStep", genStep},
+            {"edgeGenStep", edgeGenStep},
+            {"blobId", blobId.ToStringNew()});
         YDB_LOG_INFO("",
             {"toKeepOnExecute", logoBlobId});
         db.AddBlobToKeep(blobId);
@@ -561,7 +572,9 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
     if (genStep) {
         LastCollectedGenStep = *genStep;
-        AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);
+        AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep,
+            {"prepare", GCBarrierPreparation},
+            {"last", LastCollectedGenStep});
         CollectGenStepInFlight.reset();
     } else {
         AFL_VERIFY(!CollectGenStepInFlight);
@@ -570,14 +583,18 @@ void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep
 
 void TBlobManager::OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
     if (genStep) {
-        AFL_VERIFY(LastCollectedGenStep < *genStep)("last", LastCollectedGenStep)("prepared", genStep);
+        AFL_VERIFY(LastCollectedGenStep < *genStep,
+            {"last", LastCollectedGenStep},
+            {"prepared", genStep});
         db.SaveGCBarrierPreparation(*genStep);
     }
 }
 
 void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
     if (genStep) {
-        AFL_VERIFY(GCBarrierPreparation <= *genStep)("last", GCBarrierPreparation)("prepared", genStep);
+        AFL_VERIFY(GCBarrierPreparation <= *genStep,
+            {"last", GCBarrierPreparation},
+            {"prepared", genStep});
         GCBarrierPreparation = *genStep;
     }
 }

@@ -118,7 +118,8 @@ public:
     TEntityGroups(const TGroupFeatures& defaultGroup)
         : DefaultGroupFeatures(defaultGroup)
     {
-        AFL_VERIFY(DefaultGroupFeatures.IsEmpty())("problem", "default group cannot be not empty");
+        AFL_VERIFY(DefaultGroupFeatures.IsEmpty(),
+            {"problem", "default group cannot be not empty"});
     }
 
     TEntityGroups(const TSplitSettings& splitSettings, const TString& name)

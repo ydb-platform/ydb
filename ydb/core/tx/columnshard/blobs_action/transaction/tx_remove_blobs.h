@@ -37,8 +37,9 @@ public:
                 {"tabletId", it.GetTabletId()});
         }
         AFL_VERIFY(categories.GetBorrowed().IsEmpty());
-        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())("sharing_category", categories.GetSharing().GetSize())(
-                                                          "sharing", SharingBlobIds.GetSize());
+        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize(),
+            {"sharingCategory", categories.GetSharing().GetSize()},
+            {"sharing", SharingBlobIds.GetSize()});
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

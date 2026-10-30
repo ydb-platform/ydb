@@ -79,7 +79,9 @@ public:
             hFunc(NEvents::TEvDeleteSharedBlobsFinished, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             default:
-                AFL_VERIFY(false)("problem", "unexpected event")("event_type", ev->GetTypeName());
+                AFL_VERIFY(false,
+                    {"problem", "unexpected event"},
+                    {"eventType", ev->GetTypeName()});
         }
     }
 

@@ -64,8 +64,9 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         AFL_VERIFY(dWait);
         Counters.OnPortionToDrop(info->GetTotalBlobBytes(), *dWait);
         it->second.back().GetTask()->AddPortionToRemove(info);
-        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())(
-            "f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount(),
+            {"rw", features.GetRWAddress().DebugString()},
+            {"f", it->first.DebugString()});
     } else {
         if (!dWait) {
             AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
@@ -73,8 +74,9 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
-        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())(
-            "f", it->first.DebugString());
+        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions(),
+            {"rw", features.GetRWAddress().DebugString()},
+            {"f", it->first.DebugString()});
     }
     return EAddPortionResult::SUCCESS;
 }

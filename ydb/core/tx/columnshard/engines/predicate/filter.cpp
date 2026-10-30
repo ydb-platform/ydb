@@ -23,7 +23,9 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
         std::vector<std::string> cols = pred.GetColumnNames();
         auto it = cols.empty() ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
                                : NArrow::NMerger::TRWSortableBatchPosition(data, 0, cols, {}, false);
-        AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)))("atPos", atPos)("recordsCount", recordsCount);
+        AFL_VERIFY(it.InitPosition(static_cast<i64>(atPos)),
+            {"atPos", atPos},
+            {"recordsCount", recordsCount});
         return it;
     };
 
@@ -264,11 +266,15 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
         for (size_t i = 0; i < size; ++i) {
             if (i < cells.size() && !cells[i].IsNull()) {
                 cellsWithDefaults.push_back(cells[i]);
-                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                AFL_VERIFY(explicitPrefixLen == i,
+                    {"serializedPrefixLen", explicitPrefixLen},
+                    {"i", i});
                 ++explicitPrefixLen;
             } else if (i < cells.size() && cells[i].IsNull()) {
                 cellsWithDefaults.emplace_back();
-                AFL_VERIFY(explicitPrefixLen == i)("serialized_prefix_len", explicitPrefixLen)("i", i);
+                AFL_VERIFY(explicitPrefixLen == i,
+                    {"serializedPrefixLen", explicitPrefixLen},
+                    {"i", i});
                 ++explicitPrefixLen;
             } else {
                 TConclusion<TCell> defaultCell = MakeDefaultCell(YdbPK[i]);

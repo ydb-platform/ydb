@@ -157,7 +157,8 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        AFL_VERIFY(array->type_id() == arrow::utf8()->id() || array->type_id() == arrow::binary()->id())("id", array->type()->ToString());
+        AFL_VERIFY(array->type_id() == arrow::utf8()->id() || array->type_id() == arrow::binary()->id(),
+            {"id", array->type()->ToString()});
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
@@ -218,7 +219,8 @@ void VisitAllChunksWithBuilder(
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
+    AFL_VERIFY(reader.GetColumnsCount() == 1,
+        {"count", reader.GetColumnsCount()});
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const bool useOldSizing = Request.IsOldSizingMode();
@@ -297,7 +299,8 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::opt
     const bool caseSensitive = Request.ResolvedCaseSensitive();
     const ui32 ngramSize = Request.ResolvedNGrammSize();
     AFL_VERIFY(!category);
-    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
+    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id(),
+        {"id", value->type->ToString()});
     bool result = true;
     const ui32 bitsCount = data.GetBitsCount();
     const auto predSet = [&](const ui64 hashSecondary) {

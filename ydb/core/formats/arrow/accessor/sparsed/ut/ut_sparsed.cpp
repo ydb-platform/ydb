@@ -21,8 +21,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
         auto arr = builder.Finish(10);
         {
             const TString arrString = PrepareToCompare(arr->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[\"aaa\",\"aaa\",\"aaa\",\"aaa\",\"aaa\"],[\"abc5\",\"abcd6\"],[\"aaa\"],[\"abcde8\"],[\"aaa\"]]")(
-                "string", arrString);
+            AFL_VERIFY(arrString == "[[\"aaa\",\"aaa\",\"aaa\",\"aaa\",\"aaa\"],[\"abc5\",\"abcd6\"],[\"aaa\"],[\"abcde8\"],[\"aaa\"]]",
+                {"string", arrString});
             AFL_VERIFY(arr->GetScalar(3)->ToString() == "aaa");
         }
         {
@@ -30,21 +30,24 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             AFL_VERIFY(arrSlice->GetRecordsCount() == 4);
             AFL_VERIFY(arrSlice->GetScalar(3)->ToString() == "aaa");
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[\"aaa\",\"aaa\",\"aaa\",\"aaa\"]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[\"aaa\",\"aaa\",\"aaa\",\"aaa\"]]",
+                {"string", arrString});
         }
         {
             auto arrSlice = arr->ISlice(2, 4);
             AFL_VERIFY(arrSlice->GetRecordsCount() == 4);
             AFL_VERIFY(arrSlice->GetScalar(3)->ToString() == "abc5");
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[\"aaa\",\"aaa\",\"aaa\"],[\"abc5\"]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[\"aaa\",\"aaa\",\"aaa\"],[\"abc5\"]]",
+                {"string", arrString});
         }
         {
             auto arrSlice = arr->ISlice(6, 3);
             AFL_VERIFY(arrSlice->GetRecordsCount() == 3);
             AFL_VERIFY(arrSlice->GetScalar(0)->ToString() == "abcd6");
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[\"abcd6\"],[\"aaa\"],[\"abcde8\"]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[\"abcd6\"],[\"aaa\"],[\"abcde8\"]]",
+                {"string", arrString});
         }
     }
 
@@ -56,7 +59,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
         auto arr = builder.Finish(10);
         {
             const TString arrString = PrepareToCompare(arr->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[null,null,null,null,null],[\"abc5\",\"abcd6\"],[null],[\"abcde8\"],[null]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[null,null,null,null,null],[\"abc5\",\"abcd6\"],[null],[\"abcde8\"],[null]]",
+                {"string", arrString});
             AFL_VERIFY(!arr->GetScalar(3));
         }
         {
@@ -64,7 +68,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             AFL_VERIFY(arrSlice->GetRecordsCount() == 4);
             AFL_VERIFY(!arrSlice->GetScalar(3));
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[null,null,null,null]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[null,null,null,null]]",
+                {"string", arrString});
         }
         {
             auto arrSlice = arr->ISlice(2, 4);
@@ -72,14 +77,16 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             AFL_VERIFY(arrSlice->GetScalar(3)->ToString() == "abc5");
             AFL_VERIFY(!arrSlice->GetScalar(0));
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[null,null,null],[\"abc5\"]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[null,null,null],[\"abc5\"]]",
+                {"string", arrString});
         }
         {
             auto arrSlice = arr->ISlice(6, 3);
             AFL_VERIFY(arrSlice->GetRecordsCount() == 3);
             AFL_VERIFY(arrSlice->GetScalar(0)->ToString() == "abcd6");
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == "[[\"abcd6\"],[null],[\"abcde8\"]]")("string", arrString);
+            AFL_VERIFY(arrString == "[[\"abcd6\"],[null],[\"abcde8\"]]",
+                {"string", arrString});
         }
     }
     Y_UNIT_TEST(FiltersDef) {
@@ -98,7 +105,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(false, 5);
             auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
-            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null]])")("string", PrepareToCompare(arrFiltered->ToString()));
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null]])",
+                {"string", PrepareToCompare(arrFiltered->ToString())});
         }
         {
             TColumnFilter filter = TColumnFilter::BuildAllowFilter();
@@ -110,8 +118,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(true, 5);
             auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
-            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null],["abc5","abcd6"],[null],["abcde8"],[null]])")(
-                "string", PrepareToCompare(arrFiltered->ToString()));
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null],["abc5","abcd6"],[null],["abcde8"],[null]])",
+                {"string", PrepareToCompare(arrFiltered->ToString())});
         }
         {
             TColumnFilter filter = TColumnFilter::BuildAllowFilter();
@@ -119,8 +127,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(false, 4);
             auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
-            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null,null,null],["abc5"]])")(
-                "string", PrepareToCompare(arrFiltered->ToString()));
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null,null,null],["abc5"]])",
+                {"string", PrepareToCompare(arrFiltered->ToString())});
         }
         {
             TColumnFilter filter = TColumnFilter::BuildAllowFilter();
@@ -129,8 +137,8 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             filter.Add(false, 4);
             auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
             auto arrSlice = PrepareToCompare(arrFiltered->ToString());
-            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([["abc5"]])")(
-                "string", PrepareToCompare(arrFiltered->ToString()));
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([["abc5"]])",
+                {"string", PrepareToCompare(arrFiltered->ToString())});
         }
     }
 

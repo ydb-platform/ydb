@@ -35,7 +35,9 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
     }
 
     const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
-    AFL_VERIFY(keyAccessor)("column", columnName)("key_column_id", KeyColumnId);
+    AFL_VERIFY(keyAccessor,
+        {"column", columnName},
+        {"keyColumnId", KeyColumnId});
 
     const ui32 recordsCount = keyAccessor->GetRecordsCount();
     if (!recordsCount) {
@@ -54,8 +56,10 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
         // Dictionary-only accessors are indexed by dictionary entries: portion-row deny filters (PK range, duplicates,
         // deletions) are excluded by the fetch guards, so a filter here was produced by the program over the same
         // entries (e.g. the projection cut to the requested limit) and its length must match the accessor.
-        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount)("filter", existing->GetRecordsCountVerified())("records", recordsCount)(
-            "dictionary_only", isDictionaryOnlyFetch);
+        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount,
+            {"filter", existing->GetRecordsCountVerified()},
+            {"records", recordsCount},
+            {"dictionaryOnly", isDictionaryOnlyFetch});
         applyRowFilter = true;
         filterIterator.emplace(existing->GetBegin(false, recordsCount));
     }

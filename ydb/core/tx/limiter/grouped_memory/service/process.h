@@ -346,8 +346,10 @@ public:
         AFL_VERIFY(stage);
         if (!GroupIds.HasExternalId(externalGroupId)) {
             LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), TDuration::Zero(), false, false);
-            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))
-                ("ext_group", externalGroupId)("min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
+            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation),
+                {"extGroup", externalGroupId},
+                {"minExtGroup", GroupIds.GetMinExternalIdOptional()},
+                {"stage", stage->GetName()});
             AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
             auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
@@ -728,7 +730,8 @@ public:
             Y_UNUSED(i.second->Unregister());
         }
         RefreshMemoryUsage();
-        //        AFL_VERIFY(MemoryUsage == 0)("usage", MemoryUsage);
+        //        AFL_VERIFY(MemoryUsage == 0,
+                      {"usage", MemoryUsage});
         AllocationScopes.clear();
         WaitingScopes.clear();
     }

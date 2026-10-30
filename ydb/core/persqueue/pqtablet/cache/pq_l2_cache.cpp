@@ -28,7 +28,8 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     THolder<TCacheL2Request> request(ev->Get()->Data.Release());
     ui64 tabletId = request->TabletId;
 
-    AFL_ENSURE(tabletId != 0)("d", "PQ L2. Empty tabletID in L2");
+    AFL_ENSURE(tabletId != 0,
+        {"d", "PQ L2. Empty tabletID in L2"});
 
     TouchBlobs(ctx, tabletId, request->RequestedBlobs);
     TouchBlobs(ctx, tabletId, request->ExpectedBlobs, false);
@@ -57,7 +58,8 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
             resp->TabletId = key.TabletId;
         }
 
-        AFL_ENSURE(key.TabletId == resp->TabletId)("d", "PQ L2. Multiple topics in one PQ tablet.");
+        AFL_ENSURE(key.TabletId == resp->TabletId,
+            {"d", "PQ L2. Multiple topics in one PQ tablet."});
         resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.Suffix, evicted);
 
         RetentionTime = now - evicted->GetAccessTime();
@@ -87,7 +89,8 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
     Y_UNUSED(ctx);
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
-        AFL_ENSURE(blob.Value->GetDataSize())("d", "Trying to place empty blob into L2 cache");
+        AFL_ENSURE(blob.Value->GetDataSize(),
+            {"d", "Trying to place empty blob into L2 cache"});
 
         TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
@@ -98,25 +101,25 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             continue;
         }
 
-        AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE)
-            ("Key", key.ToString())
-            ("CurrentSize", CurrentSize)
-            ("Cache.Size", Cache.Size())
-            ("MAX_BLOB_SIZE", MAX_BLOB_SIZE);
+        AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE,
+            {"key", key},
+            {"currentSize", CurrentSize},
+            {"#_Cache.Size", Cache.Size()},
+            {"MAXBLOBSIZE", MAX_BLOB_SIZE});
 
         CurrentSize += blob.Value->GetDataSize();
 
         // manualy manage LRU size
         while (CurrentSize > MaxSize) {
             auto oldest = Cache.FindOldest();
-            AFL_ENSURE(oldest != Cache.End())
-                ("Tablet", tabletId)
-                ("Cache.Size()", Cache.Size())
-                ("CurrentSize", CurrentSize)
-                ("MaxSize", MaxSize)
-                ("blob.Value->GetDataSize()", blob.Value->GetDataSize())
-                ("blobs.size()", blobs.size())
-                ("outEvicted.size()", outEvicted.size());
+            AFL_ENSURE(oldest != Cache.End(),
+                {"tablet", tabletId},
+                {"#_Cache.Size", Cache.Size()},
+                {"currentSize", CurrentSize},
+                {"maxSize", MaxSize},
+                {"#_blob.Value->GetDataSize", blob.Value->GetDataSize()},
+                {"#_blobs.size", blobs.size()},
+                {"#_outEvicted.size", outEvicted.size()});
 
             TCacheValue::TPtr value = oldest.Value();
             outEvicted.emplace(oldest.Key(), value);

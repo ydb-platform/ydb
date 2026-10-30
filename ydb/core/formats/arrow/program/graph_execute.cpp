@@ -96,7 +96,9 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         }
         currentNodes = std::move(nextNodes);
     }
-    AFL_VERIFY(nodesCount == Nodes.size())("init", nodesCount)("nodes", Nodes.size());
+    AFL_VERIFY(nodesCount == Nodes.size(),
+        {"init", nodesCount},
+        {"nodes", Nodes.size()});
 
     {
         std::vector<ui32> toRemoveConst;
@@ -108,7 +110,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                     AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
                 } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
-                    AFL_VERIFY(!ResultRoot)("debug", DebugDOT());
+                    AFL_VERIFY(!ResultRoot,
+                        {"debug", DebugDOT()});
                     ResultRoot = i.second;
                 } else {
                     toRemoveConst.emplace_back(i.first);
@@ -148,7 +151,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             ++currentIndex;
         }
     }
-    AFL_VERIFY(sortedNodes.size() == Nodes.size())("debug", DebugDOT());
+    AFL_VERIFY(sortedNodes.size() == Nodes.size(),
+        {"debug", DebugDOT()});
     THashMap<ui32, TStepResourcesUsage> stepInfo;
     for (auto&& u : usage) {
         if (u.second.GetLastUsage()) {
@@ -471,12 +475,16 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::On
         return conclusion;
     }
     if (*conclusion == EVisitStatus::Finished) {
-        AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY(Current.erase(node.GetIdentifier()),
+            {"id", node.GetIdentifier()});
     } else if (*conclusion == EVisitStatus::Skipped) {
-        AFL_VERIFY(Current.erase(node.GetIdentifier()))("id", node.GetIdentifier());
-        AFL_VERIFY(Visited.erase(node.GetIdentifier()))("id", node.GetIdentifier());
+        AFL_VERIFY(Current.erase(node.GetIdentifier()),
+            {"id", node.GetIdentifier()});
+        AFL_VERIFY(Visited.erase(node.GetIdentifier()),
+            {"id", node.GetIdentifier()});
     } else {
-        AFL_VERIFY(Executed.emplace(node.GetIdentifier()).second)("id", node.GetIdentifier());
+        AFL_VERIFY(Executed.emplace(node.GetIdentifier()).second,
+            {"id", node.GetIdentifier()});
     }
     return conclusion;
 }

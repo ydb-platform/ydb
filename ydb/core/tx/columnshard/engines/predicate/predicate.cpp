@@ -22,7 +22,9 @@ std::vector<TString> TPredicate::ColumnNames() const {
 
 NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(
     const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    AFL_VERIFY((i64)rowIdx < batch->num_rows())("idx", rowIdx)("count", batch->num_rows());
+    AFL_VERIFY((i64)rowIdx < batch->num_rows(),
+        {"idx", rowIdx},
+        {"count", batch->num_rows()});
     std::vector<std::string> colsNotNull;
     for (const auto& field : pkSchema->field_names()) {
         if (batch->GetColumnByName(field)->IsNull(rowIdx)) {

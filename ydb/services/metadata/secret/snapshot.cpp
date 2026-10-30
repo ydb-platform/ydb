@@ -111,7 +111,8 @@ TConclusion<TString> TSnapshot::GetSecretValue(const TSecretIdOrValue& sId) cons
                                                                      << name.GetSecretId());
                                   }
                                   auto secret = Secrets.find(*findSecrets->begin());
-                                  AFL_VERIFY(secret != Secrets.end())("secret", findSecrets->begin()->SerializeToString());
+                                  AFL_VERIFY(secret != Secrets.end(),
+                                      {"secret", findSecrets->begin()->SerializeToString()});
                                   return secret->second.GetValue();
                               }
                               return TConclusionStatus::Fail(TStringBuilder() << "No such secret: " << name.SerializeToString());

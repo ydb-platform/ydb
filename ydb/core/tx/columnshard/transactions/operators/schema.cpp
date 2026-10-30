@@ -201,7 +201,9 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transaction for moving pathId only
             if (!txIdsToWait.empty()) {
-                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
+                AFL_VERIFY(!txIdsToWait.contains(GetTxId()),
+                    {"txId", GetTxId()},
+                    {"txIds", JoinSeq(",", txIdsToWait)});
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
             owner.TablesManager.MoveTablePropose(srcSchemeShardLocalPathId);
@@ -355,7 +357,9 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             // CopyTablePlanStep persists dst in TableInfoV1 before progress completes. After tablet restart
             // dst is already in SchemeShardLocalToInternal, so replay must be idempotent (same as CopyTableProgress).
             if (const auto dstInternalPathId = owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
-                AFL_VERIFY(*dstInternalPathId == *srcInternalPathId)("src", *srcInternalPathId)("dst", *dstInternalPathId);
+                AFL_VERIFY(*dstInternalPathId == *srcInternalPathId,
+                    {"src", *srcInternalPathId},
+                    {"dst", *dstInternalPathId});
             }
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;

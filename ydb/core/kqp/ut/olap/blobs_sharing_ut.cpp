@@ -43,7 +43,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         static const inline auto Registrator = TFactory::TRegistrator<TTestController>("test");
     protected:
         virtual void DoProposeError(const TString& sessionId, const TString& message) const override {
-            AFL_VERIFY(false)("session_id", sessionId)("message", message);
+            AFL_VERIFY(false,
+                {"sessionId", sessionId},
+                {"message", message});
         }
         virtual void DoProposeSuccess(const TString& sessionId) const override {
             CSTransferStatus->SetProposed(true);
@@ -118,7 +120,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
             Helper.CreateTestOlapTable(ShardsCount, ShardsCount);
             ShardIds = Controller->GetShardActualIds();
-            AFL_VERIFY(ShardIds.size() == ShardsCount)("count", ShardIds.size())("ids", JoinSeq(",", ShardIds));
+            AFL_VERIFY(ShardIds.size() == ShardsCount,
+                {"count", ShardIds.size()},
+                {"ids", JoinSeq(",", ShardIds)});
             std::set<NColumnShard::TInternalPathId> pathIdsSet;
             for (auto&& i : ShardIds) {
                 const auto pathIdTranslator = Controller->GetPathIdTranslator(i);
@@ -126,7 +130,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 pathIdsSet.insert(pathIds.begin(), pathIds.end());
             }
             PathIds = std::vector<NColumnShard::TInternalPathId>(pathIdsSet.begin(), pathIdsSet.end());
-            AFL_VERIFY(PathIds.size() == 1)("count", PathIds.size())("ids", JoinSeq(",", PathIds));
+            AFL_VERIFY(PathIds.size() == 1,
+                {"count", PathIds.size()},
+                {"ids", JoinSeq(",", PathIds)});
         }
 
         void WaitNormalization() {
@@ -363,7 +369,8 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             AFL_VERIFY(CSController->GetShardingFiltersCount().Val() == 0);
             CheckCount(230000);
             i64 count = CSController->GetShardingFiltersCount().Val();
-            AFL_VERIFY(count >= 16)("count", count);
+            AFL_VERIFY(count >= 16,
+                {"count", count});
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->WaitCompactions(TDuration::Seconds(3));
             WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
@@ -377,8 +384,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
             CheckCount(230000);
 
-            AFL_VERIFY(count == CSController->GetShardingFiltersCount().Val())("count", count)(
-                                  "val", CSController->GetShardingFiltersCount().Val());
+            AFL_VERIFY(count == CSController->GetShardingFiltersCount().Val(),
+                {"count", count},
+                {"val", CSController->GetShardingFiltersCount().Val()});
             const ui32 portionsCount = 16;
             for (ui32 i = 0; i < 4; ++i) {
                 {
@@ -391,8 +399,9 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 //            CSController->WaitCleaning(TDuration::Seconds(5));
 
                 CheckCount(230000);
-                AFL_VERIFY(count + portionsCount == CSController->GetShardingFiltersCount().Val())("count", count)(
-                                                    "val", CSController->GetShardingFiltersCount().Val());
+                AFL_VERIFY(count + portionsCount == CSController->GetShardingFiltersCount().Val(),
+                    {"count", count},
+                    {"val", CSController->GetShardingFiltersCount().Val()});
                 count += portionsCount;
             }
             {

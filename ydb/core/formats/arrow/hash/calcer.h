@@ -42,7 +42,9 @@ private:
                     case ENoColumnPolicy::Ignore:
                         break;
                     case ENoColumnPolicy::Verify:
-                        AFL_VERIFY(false)("reason", "no_column")("column_name", colName);
+                        AFL_VERIFY(false,
+                            {"reason", "no_column"},
+                            {"columnName", colName});
                     case ENoColumnPolicy::ReturnEmpty:
                         return {};
                 }

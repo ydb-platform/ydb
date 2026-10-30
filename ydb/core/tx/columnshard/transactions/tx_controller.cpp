@@ -60,7 +60,8 @@ bool TTxController::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         const ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
         const NKikimrTxColumnShard::ETransactionKind txKind = rowset.GetValue<Schema::TxInfo::TxKind>();
         ITransactionOperator::TPtr txOperator(ITransactionOperator::TFactory::Construct(txKind, TTxInfo(txKind, txId)));
-        AFL_VERIFY(!!txOperator)("kind", txKind);
+        AFL_VERIFY(!!txOperator,
+            {"kind", txKind});
         const TString txBody = rowset.GetValue<Schema::TxInfo::TxBody>();
         AFL_VERIFY(txOperator->Parse(Owner, txBody, true));
 
@@ -161,9 +162,13 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
 
 bool TTxController::AbortTx(const TPlanQueueItem planQueueItem) {
     auto opIt = Operators.find(planQueueItem.TxId);
-    AFL_VERIFY(opIt != Operators.end())("tx_id", planQueueItem.TxId);
-    AFL_VERIFY(!opIt->second->IsPlanned())("tx_id", planQueueItem.TxId)("plan_step", opIt->second->GetTxInfo().PlanStep);
-    AFL_VERIFY(DeadlineQueue.erase(planQueueItem))("tx_id", planQueueItem.TxId);
+    AFL_VERIFY(opIt != Operators.end(),
+        {"txId", planQueueItem.TxId});
+    AFL_VERIFY(!opIt->second->IsPlanned(),
+        {"txId", planQueueItem.TxId},
+        {"planStep", opIt->second->GetTxInfo().PlanStep});
+    AFL_VERIFY(DeadlineQueue.erase(planQueueItem),
+        {"txId", planQueueItem.TxId});
     Owner.CancelTransaction(planQueueItem.TxId);
     YDB_LOG_WARN("",
         {"event", "abort_tx"},
@@ -173,7 +178,9 @@ bool TTxController::AbortTx(const TPlanQueueItem planQueueItem) {
 
 bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     ITransactionOperator::TPtr op = MoveOperatorToCompleting(txId);
-    AFL_VERIFY(!op->IsPlanned())("tx_id", txId)("plan_step", op->GetStep());
+    AFL_VERIFY(!op->IsPlanned(),
+        {"txId", txId},
+        {"planStep", op->GetStep()});
 
     if (op->GetTxInfo().MaxStep != Max<ui64>()) {
         DeadlineQueue.erase(TPlanQueueItem(op->GetTxInfo().MaxStep, txId));
@@ -188,8 +195,11 @@ bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTrans
 
 bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) {
     auto opIt = CompletingOperators.find(txId);
-    AFL_VERIFY(opIt != CompletingOperators.end())("tx_id", txId);
-    AFL_VERIFY(!opIt->second->IsPlanned())("tx_id", txId)("plan_step", opIt->second->GetTxInfo().PlanStep);
+    AFL_VERIFY(opIt != CompletingOperators.end(),
+        {"txId", txId});
+    AFL_VERIFY(!opIt->second->IsPlanned(),
+        {"txId", txId},
+        {"planStep", opIt->second->GetTxInfo().PlanStep});
 
     opIt->second->CompleteOnAbort(Owner, ctx);
 
@@ -231,27 +241,32 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
 
 void TTxController::ProgressOnComplete(const TPlanQueueItem& txItem) {
     OnTxCompleted(txItem.TxId);
-    AFL_VERIFY(RunningQueue.erase(txItem))("info", txItem.DebugString());
+    AFL_VERIFY(RunningQueue.erase(txItem),
+        {"info", txItem.DebugString()});
 }
 
 TTxController::ITransactionOperator::TPtr TTxController::MoveOperatorToCompleting(const ui64 txId) {
     auto opIt = Operators.find(txId);
-    AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
+    AFL_VERIFY(opIt != Operators.end(),
+        {"txId", txId});
 
     ITransactionOperator::TPtr op = std::move(opIt->second);
     Operators.erase(opIt);
 
-    AFL_VERIFY(CompletingOperators.emplace(txId, op).second)("tx_id", txId);
+    AFL_VERIFY(CompletingOperators.emplace(txId, op).second,
+        {"txId", txId});
     return op;
 }
 
 void TTxController::OnTxCompleted(const ui64 txId) {
-    AFL_VERIFY(CompletingOperators.erase(txId))("tx_id", txId);
+    AFL_VERIFY(CompletingOperators.erase(txId),
+        {"txId", txId});
     Owner.Subscribers->OnEvent(std::make_shared<NColumnShard::NSubscriber::TEventTxCompleted>(txId));
 }
 
 void TTxController::WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
-    AFL_VERIFY(GetTxOperator(txId, ETxOperatorStatus::InProgress))("tx_id", txId);
+    AFL_VERIFY(GetTxOperator(txId, ETxOperatorStatus::InProgress),
+        {"txId", txId});
     NIceDb::TNiceDb db(txc.DB);
     NColumnShard::Schema::UpdateTxInfoBody(db, txId, data);
 }
@@ -302,9 +317,12 @@ TTxController::ITransactionOperator::TPtr TTxController::GetTxOperator(const ui6
             break;
         }
         default:
-            AFL_VERIFY(false)("status", status);
+            AFL_VERIFY(false,
+                {"status", status});
     }
-    AFL_VERIFY(optional || result)("tx_id", txId)("status", status);
+    AFL_VERIFY(optional || result,
+        {"txId", txId},
+        {"status", status});
     return result;
 }
 
@@ -506,7 +524,11 @@ void TTxController::FinishProposeOnComplete(const ui64 txId, const TActorContext
 }
 
 void TTxController::ITransactionOperator::SwitchStateVerified(const EStatus from, const EStatus to) {
-    AFL_VERIFY(!Status || *Status == from)("error", "incorrect expected status")("real_state", *Status)("expected", from)("details", DebugString());
+    AFL_VERIFY(!Status || *Status == from,
+        {"error", "incorrect expected status"},
+        {"realState", *Status},
+        {"expected", from},
+        {"details", DebugString()});
     Status = to;
 }
 

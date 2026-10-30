@@ -15,13 +15,20 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
     std::unique_ptr<NWrappers::NExternalStorage::TEvGetObjectResponse>&& ev) const {
     TLogoBlobID logoBlobId;
     TString error;
-    AFL_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error))("error", error)("str_blob_id", *ev->Key);
+    AFL_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error),
+        {"error", error},
+        {"strBlobId", *ev->Key});
     TBlobRange bRange(TUnifiedBlobId(Max<ui32>(), logoBlobId), ev->GetReadInterval().first, ev->GetReadIntervalLength());
     if (ev->IsSuccess()) {
-        AFL_VERIFY(ev->Body.size() == ev->GetReadIntervalLength())("body_size", ev->Body.size())("result", ev->GetReadIntervalLength());
+        AFL_VERIFY(ev->Body.size() == ev->GetReadIntervalLength(),
+            {"bodySize", ev->Body.size()},
+            {"result", ev->GetReadIntervalLength()});
     }
     if (ev->IsSuccess()) {
-        AFL_VERIFY(!!ev->Body)("key", ev->Key)("interval_from", ev->GetReadInterval().first)("interval_to", ev->GetReadInterval().second);
+        AFL_VERIFY(!!ev->Body,
+            {"key", ev->Key},
+            {"intervalFrom", ev->GetReadInterval().first},
+            {"intervalTo", ev->GetReadInterval().second});
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(
             bRange, NKikimrProto::EReplyStatus::OK, ev->Body, TString{}, false, StorageId);
     } else {
@@ -48,7 +55,9 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
     TLogoBlobID logoBlobId;
     TString error;
     Y_ABORT_UNLESS(ev->Key);
-    AFL_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error))("error", error)("str_blob_id", *ev->Key);
+    AFL_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error),
+        {"error", error},
+        {"strBlobId", *ev->Key});
     if (ev->IsSuccess()) {
         return std::make_unique<TEvBlobStorage::TEvPutResult>(
             NKikimrProto::EReplyStatus::OK, logoBlobId, 0, TGroupId::FromValue(Max<ui32>()), 0, StorageId);

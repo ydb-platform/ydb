@@ -20,7 +20,12 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
         Workers.emplace_back(usage, std::make_unique<TWorker>(conveyorName, usage, distributorId, i, Counters.SendFwdHistogram, Counters.SendFwdDuration));
         MaxWorkerThreads += usage;
     }
-    AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)("count", WorkersCount);
+    AFL_VERIFY(WorkersCount,
+        {"name", conveyorName},
+        {"action", "conveyor_registered"},
+        {"config", config.DebugString()},
+        {"actorId", distributorId},
+        {"count", WorkersCount});
     Counters.AmountCPULimit->Set(0);
     Counters.AvailableWorkersCount->Set(0);
     Counters.WorkersCountLimit->Set(WorkersCount);

@@ -87,7 +87,8 @@ public:
 
     std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 entityId) {
         auto result = ExtractFetcherOptional(entityId);
-        AFL_VERIFY(!!result)("column_id", entityId);
+        AFL_VERIFY(!!result,
+            {"columnId", entityId});
         return result;
     }
 
@@ -296,8 +297,12 @@ public:
 
     void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 indexStart, const ui32 recordsCount) {
         auto page = ExtractPageForResult();
-        AFL_VERIFY(page.GetIndexStart() == indexStart)("real", page.GetIndexStart())("expected", indexStart);
-        AFL_VERIFY(page.GetRecordsCount() == recordsCount)("real", page.GetRecordsCount())("expected", recordsCount);
+        AFL_VERIFY(page.GetIndexStart() == indexStart,
+            {"real", page.GetIndexStart()},
+            {"expected", indexStart});
+        AFL_VERIFY(page.GetRecordsCount() == recordsCount,
+            {"real", page.GetRecordsCount()},
+            {"expected", recordsCount});
         AFL_VERIFY(!ChunkToReply);
         ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, std::move(table));
     }

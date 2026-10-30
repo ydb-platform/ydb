@@ -465,17 +465,20 @@ public:
     }
 
     void SetOutputResourceIdOnce(const ui32 resourceId) {
-        AFL_VERIFY(Output.size() == 1)("size", Output.size());
+        AFL_VERIFY(Output.size() == 1,
+            {"size", Output.size()});
         Output.front() = TColumnChainInfo(resourceId);
     }
 
     ui32 GetOutputColumnIdOnce() const {
-        AFL_VERIFY(Output.size() == 1)("size", Output.size());
+        AFL_VERIFY(Output.size() == 1,
+            {"size", Output.size()});
         return Output.front().GetColumnId();
     }
 
     ui32 GetInputColumnIdOnce() const {
-        AFL_VERIFY(Input.size() == 1)("size", Input.size());
+        AFL_VERIFY(Input.size() == 1,
+            {"size", Input.size()});
         return Input.front().GetColumnId();
     }
 

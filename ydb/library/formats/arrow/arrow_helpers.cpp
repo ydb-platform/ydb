@@ -68,8 +68,11 @@ std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>&
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(tableExt->num_columns());
     for (auto& col : res->columns()) {
-        AFL_VERIFY(col->num_chunks() == 1)("size", col->num_chunks())("size_bytes", GetTableDataSize(res))("schema", res->schema()->ToString())(
-            "size_new", GetTableDataSize(res));
+        AFL_VERIFY(col->num_chunks() == 1,
+            {"size", col->num_chunks()},
+            {"sizeBytes", GetTableDataSize(res)},
+            {"schema", res->schema()->ToString()},
+            {"sizeNew", GetTableDataSize(res)});
         columns.push_back(col->chunk(0));
     }
     return arrow::RecordBatch::Make(res->schema(), res->num_rows(), columns);
@@ -203,7 +206,9 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
         if (sizeByColumn.size()) {
             auto it = sizeByColumn.find(field->name());
             if (it != sizeByColumn.end()) {
-                AFL_VERIFY(NArrow::ReserveData(*builder, it->second))("size", it->second)("field", field->name());
+                AFL_VERIFY(NArrow::ReserveData(*builder, it->second),
+                    {"size", it->second},
+                    {"field", field->name()});
             }
         }
 
@@ -363,7 +368,8 @@ std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataTy
         }
         return true;
     });
-    AFL_VERIFY(out)("type", type->ToString());
+    AFL_VERIFY(out,
+        {"type", type->ToString()});
     return out;
 }
 
@@ -409,7 +415,9 @@ bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 posit
     if (!s) {
         return c->IsNull(position);
     }
-    AFL_VERIFY(c->type()->Equals(s->type))("s", s->type->ToString())("c", c->type()->ToString());
+    AFL_VERIFY(c->type()->Equals(s->type),
+        {"s", s->type->ToString()},
+        {"c", c->type()->ToString()});
 
     return SwitchTypeImpl<bool, 0>(c->type()->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
@@ -753,7 +761,8 @@ std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_p
             }
         }
         for (auto&& field : batch->schema()->fields()) {
-            AFL_VERIFY(columnNames.emplace(field->name()).second)("field_name", field->name());
+            AFL_VERIFY(columnNames.emplace(field->name()).second,
+                {"fieldName", field->name()});
             fields.emplace_back(field);
         }
     }
@@ -776,13 +785,17 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
                 positions.emplace_back(pos);
                 pos += arr->length();
             }
-            AFL_VERIFY(pos == t->num_rows())("pos", pos)("length", t->num_rows());
+            AFL_VERIFY(pos == t->num_rows(),
+                {"pos", pos},
+                {"length", t->num_rows()});
         }
         positions.emplace_back(t->num_rows());
     }
     std::sort(positions.begin(), positions.end());
     positions.erase(std::unique(positions.begin(), positions.end()), positions.end());
-    AFL_VERIFY(positions.size() > 1)("size", positions.size())("positions", JoinSeq(",", positions));
+    AFL_VERIFY(positions.size() > 1,
+        {"size", positions.size()},
+        {"positions", JoinSeq(",", positions)});
     std::vector<std::vector<std::shared_ptr<arrow::Array>>> slicedData;
     slicedData.resize(positions.size() - 1);
     for (auto&& i : t->columns()) {
@@ -799,7 +812,10 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
         initializeIt();
         for (ui32 idx = 0; idx + 1 < positions.size(); ++idx) {
             AFL_VERIFY(it != i->chunks().end());
-            AFL_VERIFY(positions[idx + 1] - currentPosition <= length)("length", length)("idx+1", positions[idx + 1])("pos", currentPosition);
+            AFL_VERIFY(positions[idx + 1] - currentPosition <= length,
+                {"length", length},
+                {"#_idx+1", positions[idx + 1]},
+                {"pos", currentPosition});
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
             AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])
             ("length", chunk->length())("expect", positions[idx + 1] - positions[idx]);
@@ -819,8 +835,12 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
         result.emplace_back(arrow::RecordBatch::Make(t->schema(), i.front()->length(), i));
         count += result.back()->num_rows();
     }
-    AFL_VERIFY(count == t->num_rows())("count", count)("t", t->num_rows())("sd_size", slicedData.size())("columns", t->num_columns())(
-                          "schema", t->schema()->ToString());
+    AFL_VERIFY(count == t->num_rows(),
+        {"count", count},
+        {"t", t->num_rows()},
+        {"sdSize", slicedData.size()},
+        {"columns", t->num_columns()},
+        {"schema", t->schema()->ToString()});
     return result;
 }
 

@@ -34,7 +34,8 @@ bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const
     }
     {
         auto it = AgentsWaiting.find(storageId);
-        AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
+        AFL_VERIFY(it != AgentsWaiting.end(),
+            {"storageId", storageId});
         it->second->OnReadError(range, status);
         if (it->second->IsFinished()) {
             AgentsWaiting.erase(it);
@@ -72,7 +73,8 @@ void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const 
     Y_ABORT_UNLESS(BlobsFetchingStarted);
     {
         auto it = AgentsWaiting.find(storageId);
-        AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
+        AFL_VERIFY(it != AgentsWaiting.end(),
+            {"storageId", storageId});
         it->second->OnReadResult(range, data, fromCache);
         if (it->second->IsFinished()) {
             AgentsWaiting.erase(it);

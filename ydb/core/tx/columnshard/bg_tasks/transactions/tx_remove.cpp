@@ -10,7 +10,9 @@ bool TTxRemoveSession::Execute(NTabletFlatExecutor::TTransactionContext& txc, co
 }
 
 void TTxRemoveSession::Complete(const TActorContext& /*ctx*/) {
-    AFL_VERIFY(Sessions->RemoveSession(ClassName, Identifier))("class_name", ClassName)("id", Identifier);
+    AFL_VERIFY(Sessions->RemoveSession(ClassName, Identifier),
+        {"className", ClassName},
+        {"id", Identifier});
 }
 
 }   // namespace NKikimr::NOlap::NBackground

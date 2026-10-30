@@ -166,7 +166,8 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                 return true;
             }
             return false;
-        }))("type", Iterators[inputIdx].GetCurrentDataChunk().GetDataType()->ToString());
+        }),
+            {"type", Iterators[inputIdx].GetCurrentDataChunk().GetDataType()->ToString()});
     }
 
     std::shared_ptr<NArrow::NAccessor::TDictionaryArray> dictArr;

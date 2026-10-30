@@ -32,7 +32,8 @@ void TRemovePortionsChange::DoApplyOnExecute(
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
     for (auto&& [_, i] : Portions) {
         Y_ABORT_UNLESS(!i->HasRemoveSnapshot());
-        AFL_VERIFY(usedPortionIds.emplace(i->GetPortionId()).second)("portion_info", i->DebugString(true));
+        AFL_VERIFY(usedPortionIds.emplace(i->GetPortionId()).second,
+            {"portionInfo", i->DebugString(true)});
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };

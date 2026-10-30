@@ -378,8 +378,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             auto bJsonArr = arrBuilder.Finish(jsons.size());
             auto arrData = TSubColumnsArray::Make(bJsonArr, settings, bJsonArr->GetDataType()).DetachResult();
             Cerr << arrData->DebugJson() << Endl;
-            AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":1,"b":1,"c":"111"},null,{"a1":2,"b":2,"c":"222"},{"a":3,"b":3,"c":"333"},null,{"a":5,"b1":5}]])")(
-                    "string", PrintBinaryJsons(arrData->GetChunkedArray()));
+            AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":1,"b":1,"c":"111"},null,{"a1":2,"b":2,"c":"222"},{"a":3,"b":3,"c":"333"},null,{"a":5,"b1":5}]])",
+                {"string", PrintBinaryJsons(arrData->GetChunkedArray())});
             {
                 TColumnFilter filter = TColumnFilter::BuildAllowFilter();
                 filter.Add(true, 1);
@@ -389,8 +389,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 filter.Add(true, 1);
                 filter.Add(false, 1);
                 auto arrSlice = filter.Apply(arrData);
-                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":1,"b":1,"c":"111"},{"a1":2,"b":2,"c":"222"},null]])")(
-                        "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":1,"b":1,"c":"111"},{"a1":2,"b":2,"c":"222"},null]])",
+                    {"string", PrintBinaryJsons(arrSlice->GetChunkedArray())});
             }
             {
                 TColumnFilter filter = TColumnFilter::BuildAllowFilter();
@@ -401,8 +401,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 filter.Add(false, 1);
                 filter.Add(true, 1);
                 auto arrSlice = filter.Apply(arrData);
-                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[null,{"a":3,"b":3,"c":"333"},{"a":5,"b1":5}]])")(
-                    "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[null,{"a":3,"b":3,"c":"333"},{"a":5,"b1":5}]])",
+                    {"string", PrintBinaryJsons(arrSlice->GetChunkedArray())});
             }
             {
                 TColumnFilter filter = TColumnFilter::BuildAllowFilter();
@@ -410,8 +410,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 filter.Add(true, 3);
                 filter.Add(false, 2);
                 auto arrSlice = filter.Apply(arrData);
-                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[null,{"a1":2,"b":2,"c":"222"},{"a":3,"b":3,"c":"333"}]])")(
-                        "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[null,{"a1":2,"b":2,"c":"222"},{"a":3,"b":3,"c":"333"}]])",
+                    {"string", PrintBinaryJsons(arrSlice->GetChunkedArray())});
             }
             {
                 TColumnFilter filter = TColumnFilter::BuildAllowFilter();
@@ -419,16 +419,16 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 filter.Add(true, 1);
                 filter.Add(false, 4);
                 auto arrSlice = filter.Apply(arrData);
-                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[null]])")(
-                    "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[null]])",
+                    {"string", PrintBinaryJsons(arrSlice->GetChunkedArray())});
             }
             {
                 TColumnFilter filter = TColumnFilter::BuildAllowFilter();
                 filter.Add(true, 1);
                 filter.Add(false, 5);
                 auto arrSlice = filter.Apply(arrData);
-                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":1,"b":1,"c":"111"}]])")(
-                    "string", PrintBinaryJsons(arrSlice->GetChunkedArray()));
+                AFL_VERIFY(PrintBinaryJsons(arrSlice->GetChunkedArray()) == R"([[{"a":1,"b":1,"c":"111"}]])",
+                    {"string", PrintBinaryJsons(arrSlice->GetChunkedArray())});
             }
         }
     }

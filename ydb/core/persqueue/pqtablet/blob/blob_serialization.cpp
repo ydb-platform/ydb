@@ -17,7 +17,8 @@ const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
 static_assert(LOGICAL_MESSAGE_COUNT_BITS + MESSAGE_METADATA_RESERVED_BITS == 32);
 
 ui32 PackMessageMetadata(const TClientBlob& blob) {
-    AFL_ENSURE(blob.LogicalMessageCount >= 1 && blob.LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT)("logicalMessageCount", blob.LogicalMessageCount);
+    AFL_ENSURE(blob.LogicalMessageCount >= 1 && blob.LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT,
+        {"logicalMessageCount", blob.LogicalMessageCount});
     return (blob.LogicalMessageCount << MESSAGE_METADATA_RESERVED_BITS) | (blob.IsBatch ? 1 : 0);
 }
 
@@ -631,7 +632,9 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
             TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>(*this).Unpack(blobs);
             break;
         default:
-            AFL_ENSURE(false)("reason", "unknown type")("format", static_cast<int>(type));
+            AFL_ENSURE(false,
+                {"reason", "unknown type"},
+                {"format", static_cast<int>(type)});
     };
 }
 

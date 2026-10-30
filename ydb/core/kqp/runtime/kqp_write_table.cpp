@@ -1429,7 +1429,8 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     case NScheme::NTypeIds::Int32:
         return MakeIntrusive<TFulltextTokenizeProjection<i32>>(columnTypes, dataColumnCount, withFreq, added, settings, indexes, std::move(alloc));
     }
-    AFL_ENSURE(false)("Unsupported primary key type", columnTypes[prefixSize + 1].GetTypeId());
+    AFL_ENSURE(false,
+        {"#_Unsupported primary key type", columnTypes[prefixSize + 1].GetTypeId()});
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch, const size_t offset) {

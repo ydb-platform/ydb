@@ -76,7 +76,10 @@ void TKafkaDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
 };
 
 void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1)("result_set_size", ev->Get()->Request.Get()->ResultSet.size())("database", Database)("path", TopicPath); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1,
+        {"resultSetSize", ev->Get()->Request.Get()->ResultSet.size()},
+        {"database", Database},
+        {"path", TopicPath}); // describe for only one topic
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -183,7 +186,8 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
         response->Results.emplace_back(std::move(singleConfig));
         return;
     }
-    AFL_ENSURE(ev != nullptr)("database", Context->DatabasePath);
+    AFL_ENSURE(ev != nullptr,
+        {"database", Context->DatabasePath});
     AddConfigEntry(singleConfig, "compression.type", "producer", EKafkaConfigType::STRING);
 
     // these are default

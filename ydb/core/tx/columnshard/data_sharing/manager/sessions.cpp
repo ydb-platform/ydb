@@ -28,13 +28,15 @@ void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
     for (auto&& i : SourceSessions) {
         if (i.second->IsPrepared()) {
             TConclusionStatus status = i.second->TryStart(shard);
-            AFL_VERIFY(status.Ok())("failed to start source session", status.GetErrorMessage());
+            AFL_VERIFY(status.Ok(),
+                {"#_failed to start source session", status.GetErrorMessage()});
         }
     }
     for (auto&& i : DestSessions) {
         if (i.second->IsPrepared() && i.second->IsConfirmed()) {
             TConclusionStatus status = i.second->TryStart(shard);
-            AFL_VERIFY(status.Ok())("failed to start dest session", status.GetErrorMessage());
+            AFL_VERIFY(status.Ok(),
+                {"#_failed to start dest session", status.GetErrorMessage()});
 
             if (!i.second->GetSourcesInProgressCount()) {
                 i.second->Finish(shard, shard.GetDataLocksManager());

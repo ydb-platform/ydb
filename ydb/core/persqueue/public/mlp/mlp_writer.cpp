@@ -46,7 +46,8 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     ChildActorId = {};
 
     auto& topics = ev->Get()->Topics;
-    AFL_ENSURE(topics.size() == 1)("s", topics.size());
+    AFL_ENSURE(topics.size() == 1,
+        {"s", topics.size()});
 
     auto& topic = topics.begin()->second;
     DescribeStatus = topic.Status;
@@ -138,7 +139,8 @@ void TWriterActor::DoWrite() {
             partition = TopicInfo->PartitionChooser->GetRandomPartition();
         }
 
-        AFL_ENSURE(partition)("t", TopicInfo->Description.GetName());
+        AFL_ENSURE(partition,
+            {"t", TopicInfo->Description.GetName()});
 
         PendingMessages.push_back({
             .Index = message.Index,
@@ -171,7 +173,8 @@ void TWriterActor::DoWrite() {
         }
 
         const auto* node = TopicInfo->PartitionGraph->GetPartition(partitionId);
-        AFL_ENSURE(node)("p", partitionId);
+        AFL_ENSURE(node,
+            {"p", partitionId});
         SendToTablet(node->TabletId, request.release());
         ++PendingRequests;
     }

@@ -37,7 +37,9 @@ TString TFixStringBitsStorageConstructor::DoSerializeToString(TDynBitMap&& bitsV
     if (byteCurrent) {
         result[byteIdx] = (char)byteCurrent;
     }
-    AFL_VERIFY(byteIdx + 1 == result.size())("idx", byteIdx)("data", result.size());
+    AFL_VERIFY(byteIdx + 1 == result.size(),
+        {"idx", byteIdx},
+        {"data", result.size()});
     return result;
 }
 

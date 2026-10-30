@@ -242,7 +242,8 @@ TString TSimpleRowViewV0::BuildString(const std::shared_ptr<arrow::RecordBatch>&
                 result.append((const char*)&value, sizeof(CType));
                 return true;
             }
-            AFL_VERIFY(false)("type", batch->column(i)->type()->ToString());
+            AFL_VERIFY(false,
+                {"type", batch->column(i)->type()->ToString()});
             return false;
         });
     }

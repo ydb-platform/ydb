@@ -408,7 +408,9 @@ bool TManager::Stop() {
 }
 
 bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    AFL_VERIFY(!S3Settings)("tier", TierId)("event", "already started");
+    AFL_VERIFY(!S3Settings,
+        {"tier", TierId},
+        {"event", "already started"});
     auto patchedConfig = config.GetPatchedConfig(secrets);
     if (patchedConfig.IsFail()) {
         YDB_LOG_ERROR("",
@@ -445,7 +447,8 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 void TTiersManager::OnConfigsUpdated(bool notifyShard) {
     for (auto& [tierId, manager] : Managers) {
         auto* findTier = Tiers.FindPtr(tierId);
-        AFL_VERIFY(findTier)("id", tierId);
+        AFL_VERIFY(findTier,
+            {"id", tierId});
         if (Secrets && findTier->HasConfig()) {
             if (manager.IsReady()) {
                 manager.Restart(findTier->GetConfigVerified(), Secrets);
@@ -523,7 +526,8 @@ const NTiers::TManager* TTiersManager::GetManagerOptional(const NTiers::TExterna
 }
 
 void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig) {
-    AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
+    AFL_VERIFY(Actor,
+        {"error", "tiers_manager_is_not_started"});
     for (const NTiers::TExternalStorageId& tierId : usedTiers) {
         auto findTier = Tiers.find(tierId);
         const bool newTier = (findTier == Tiers.end());
@@ -532,7 +536,8 @@ void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& us
         }
         if (newTier || (findTier->second.GetState() != TTiersManager::ETierState::AVAILABLE && resubscribeToConfig)) {
             const auto& actorContext = NActors::TActivationContext::AsActorContext();
-            AFL_VERIFY(&actorContext)("error", "no_actor_context");
+            AFL_VERIFY(&actorContext,
+                {"error", "no_actor_context"});
             actorContext.Send(Actor->SelfId(), new NTiers::TEvWatchSchemeObject({ tierId.GetConfigPath() }));
         }
     }
@@ -569,7 +574,8 @@ void TTiersManager::UpdateTierConfig(
         }
     }
 
-    AFL_VERIFY(found)("tier", tierId.ToString());
+    AFL_VERIFY(found,
+        {"tier", tierId});
     OnConfigsUpdated(notifyShard);
 }
 

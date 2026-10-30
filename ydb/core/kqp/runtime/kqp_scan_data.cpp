@@ -351,10 +351,13 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
         bool changed = false;
         if (!currentIdxFrom) {
             address = reader.GetReadChunk(rowIndexFrom);
-            AFL_ENSURE(rowIndexFrom == 0)("real", rowIndexFrom);
+            AFL_ENSURE(rowIndexFrom == 0,
+                {"real", rowIndexFrom});
             changed = true;
         } else {
-            AFL_ENSURE(rowIndexFrom == *currentIdxFrom + 1)("next", rowIndexFrom)("current", *currentIdxFrom);
+            AFL_ENSURE(rowIndexFrom == *currentIdxFrom + 1,
+                {"next", rowIndexFrom},
+                {"current", *currentIdxFrom});
             if (!address->NextPosition()) {
                 address = reader.GetReadChunk(rowIndexFrom);
                 changed = true;

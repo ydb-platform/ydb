@@ -205,8 +205,12 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         csConfig.SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
         csConfig.SetDefaultCompressionLevel(1);
         auto [rawBytesPK2, bytesPK2] = GetVolumesColumnWithCompression(csConfig);
-        AFL_VERIFY(rawBytesPK2 == rawBytesPK1)("pk1", rawBytesPK1)("pk2", rawBytesPK2);
-        AFL_VERIFY(bytesPK2 < bytesPK1 / 3)("pk1", bytesPK1)("pk2", bytesPK2);
+        AFL_VERIFY(rawBytesPK2 == rawBytesPK1,
+            {"pk1", rawBytesPK1},
+            {"pk2", rawBytesPK2});
+        AFL_VERIFY(bytesPK2 < bytesPK1 / 3,
+            {"pk1", bytesPK1},
+            {"pk2", bytesPK2});
     }
 
     Y_UNIT_TEST(DifferentColumnCodecsOnInsert) {

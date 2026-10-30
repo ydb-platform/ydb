@@ -102,7 +102,8 @@ TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
     const std::shared_ptr<arrow::DataType> requiredPositionsType = GetTypeByVariantsCount(arrDictionary->length());
     if (!arrPositions->type()->Equals(*requiredPositionsType)) {
         auto castResult = arrow::compute::Cast(*arrPositions, requiredPositionsType);
-        AFL_VERIFY(castResult.ok())("error", castResult.status().ToString());
+        AFL_VERIFY(castResult.ok(),
+            {"error", castResult.status()});
         arrPositions = std::move(*castResult);
     }
     auto schemaDictionary = NArrow::BuildFakeSchema({ arrDictionary });
@@ -193,7 +194,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
             return true;
         }
         return false;
-    }))("type", builderRecords->type()->ToString());
+    }),
+        {"type", builderRecords->type()->ToString()});
     auto arrVariants = NArrow::FinishBuilder(std::move(builderVariants));
     auto arrRecords = NArrow::FinishBuilder(std::move(builderRecords));
     return std::make_shared<TDictionaryArray>(arrVariants, arrRecords);

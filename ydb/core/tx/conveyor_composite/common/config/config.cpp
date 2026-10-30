@@ -104,7 +104,8 @@ double TWorkersPool::GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThr
         return 1;
     } else {
         AFL_VERIFY(workerIdx == wholePart);
-        AFL_VERIFY(fractionalPart)("count", workersCountDouble);
+        AFL_VERIFY(fractionalPart,
+            {"count", workersCountDouble});
         return fractionalPart;
     }
 }

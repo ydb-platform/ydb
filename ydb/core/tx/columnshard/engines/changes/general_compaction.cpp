@@ -45,7 +45,9 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         } else if (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
             compactedPortions.AddPortion(i);
         } else {
-            AFL_VERIFY(false)("portion_prod", i->GetProduced())("portion_type", i->GetPortionType());
+            AFL_VERIFY(false,
+                {"portionProd", i->GetProduced()},
+                {"portionType", i->GetPortionType()});
         }
     }
     NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);

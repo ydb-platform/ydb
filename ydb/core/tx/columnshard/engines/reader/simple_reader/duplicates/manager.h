@@ -161,7 +161,8 @@ private:
             hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+                AFL_VERIFY(false,
+                    {"unexpectedEvent", ev->GetTypeName()});
         }
     }
 

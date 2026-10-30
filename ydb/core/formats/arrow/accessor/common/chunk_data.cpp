@@ -15,12 +15,16 @@ TChunkConstructionData::TChunkConstructionData(const ui32 recordsCount, const st
     , AdditionalAccessorData(std::move(additionalAccessorData)) {
     AFL_VERIFY(ColumnType);
     AFL_VERIFY(RecordsCount);
-    AFL_VERIFY(!NotNullRecordsCount || *NotNullRecordsCount <= RecordsCount)("records", RecordsCount)("not_null", NotNullRecordsCount);
+    AFL_VERIFY(!NotNullRecordsCount || *NotNullRecordsCount <= RecordsCount,
+        {"records", RecordsCount},
+        {"notNull", NotNullRecordsCount});
     AFL_VERIFY(!!DefaultSerializer);
 }
 
 TChunkConstructionData TChunkConstructionData::GetSubset(const ui32 recordsCount, const std::optional<ui32>& notNullRecordsCount) const {
-    AFL_VERIFY(recordsCount <= RecordsCount)("sub", recordsCount)("global", RecordsCount);
+    AFL_VERIFY(recordsCount <= RecordsCount,
+        {"sub", recordsCount},
+        {"global", RecordsCount});
     return TChunkConstructionData(recordsCount, DefaultValue, ColumnType, DefaultSerializer, notNullRecordsCount, AdditionalAccessorData);
 }
 

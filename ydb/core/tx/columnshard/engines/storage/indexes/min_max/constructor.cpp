@@ -59,7 +59,8 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableMinMaxIndex();
-    AFL_VERIFY(!!ColumnName)("problem", "not initialized min_max index info trying to serialize");
+    AFL_VERIFY(!!ColumnName,
+        {"problem", "not initialized min_max index info trying to serialize"});
     filterProto->SetColumnName(ColumnName);
     *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }

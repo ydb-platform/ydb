@@ -40,14 +40,18 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         };
 
     {
-        AFL_VERIFY(guard.InitSortingPosition(posStart))("start", posStart)("finish", posFinish);
+        AFL_VERIFY(guard.InitSortingPosition(posStart),
+            {"start", posStart},
+            {"finish", posFinish});
         auto cmp = position.Compare(forFound);
         if (cond(cmp)) {
             return TFoundPosition(posStart, cmp);
         }
     }
     {
-        AFL_VERIFY(guard.InitSortingPosition(posFinish))("start", posStart)("finish", posFinish);
+        AFL_VERIFY(guard.InitSortingPosition(posFinish),
+            {"start", posStart},
+            {"finish", posFinish});
         auto cmp = position.Compare(forFound);
         if (!cond(cmp)) {
             return std::nullopt;
@@ -59,14 +63,18 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             if (finish + 1 == start) {
                 return true;
             }
-            AFL_VERIFY(finish + 1 < start)("finish", finish)("start", start);
+            AFL_VERIFY(finish + 1 < start,
+                {"finish", finish},
+                {"start", start});
             return false;
         } :
         [](const ui64 start, const ui64 finish) -> bool {
             if (start + 1 == finish) {
                 return true;
             }
-            AFL_VERIFY(start + 1 < finish)("start", start)("finish", finish);
+            AFL_VERIFY(start + 1 < finish,
+                {"start", start},
+                {"finish", finish});
             return false;
         };
 
@@ -79,7 +87,10 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             posStart = position.Position;
         }
     }
-    AFL_VERIFY(checkBoundIsFound(posStart, posFinish))("finish", posFinish)("start", posStart)("reverse", position.ReverseSort);
+    AFL_VERIFY(checkBoundIsFound(posStart, posFinish),
+        {"finish", posFinish},
+        {"start", posStart},
+        {"reverse", position.ReverseSort});
     AFL_VERIFY(guard.InitSortingPosition(posFinish));
     const auto comparision = position.Compare(forFound);
     AFL_VERIFY(cond(comparision));
@@ -143,11 +154,18 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
         AFL_VERIFY(guard.InitSortingPosition(*overrideFound));
         pos = TFoundPosition(*overrideFound, Compare(forFound));
     }
-    AFL_VERIFY(pos)("has_override", !!overrideFound);
+    AFL_VERIFY(pos,
+        {"hasOverride", !!overrideFound});
     if (ReverseSort) {
-        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
+        AFL_VERIFY(Position <= posStart,
+            {"pos", Position},
+            {"posSkip", pos->GetPosition()},
+            {"reverse", true});
     } else {
-        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+        AFL_VERIFY(posStart <= Position,
+            {"pos", Position},
+            {"posSkip", pos->GetPosition()},
+            {"reverse", false});
     }
     return *pos;
 }
@@ -156,7 +174,10 @@ TSortableScanData::TSortableScanData(
     const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetAccessorByNameOptional(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
+        AFL_VERIFY(c,
+            {"columnName", i},
+            {"columns", JoinSeq(",", columns)},
+            {"batch", batch->DebugString()});
         Columns.emplace_back(c);
         auto f = batch->GetSchema()->GetFieldByName(i);
         AFL_VERIFY(f);
@@ -175,7 +196,9 @@ TSortableScanData::TSortableScanData(
     const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
+        AFL_VERIFY(c,
+            {"columnName", i},
+            {"columns", JoinSeq(",", columns)});
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
         auto f = batch->schema()->GetFieldByName(i);
         AFL_VERIFY(f);
@@ -195,7 +218,10 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
 TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
+        AFL_VERIFY(c,
+            {"batchNames", JoinSeq(",", batch->schema()->field_names())},
+            {"columnName", i},
+            {"columns", JoinSeq(",", columns)});
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialChunkedArray>(c));
         auto f = batch->schema()->GetFieldByName(i);
         AFL_VERIFY(f);
@@ -322,7 +348,9 @@ void TCursor::ValidateSchema(const TSortableScanData& position) const {
     for (ui64 i = 0; i < PositionAddress.size(); ++i) {
         const auto& posType = position.GetFields()[i]->type();
         const auto& cursorType = PositionAddress[i].GetArray()->type();
-        AFL_VERIFY(posType->Equals(cursorType))("pos", posType->ToString())("cursor", cursorType->ToString());
+        AFL_VERIFY(posType->Equals(cursorType),
+            {"pos", posType->ToString()},
+            {"cursor", cursorType->ToString()});
     }
 }
 

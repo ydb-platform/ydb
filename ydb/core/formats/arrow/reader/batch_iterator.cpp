@@ -14,8 +14,10 @@ NKikimr::NArrow::NMerger::TSortableBatchPosition::TFoundPosition TBatchIterator:
     auto result = KeyColumns.SkipToLower(pos);
     const i32 delta = IsReverse() ? (posStart - KeyColumns.GetPosition()) : (KeyColumns.GetPosition() - posStart);
     AFL_VERIFY(delta >= 0);
-    AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()))("pos", KeyColumns.GetPosition())
-        ("size", VersionColumns.GetRecordsCount())("key_size", KeyColumns.GetRecordsCount());
+    AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()),
+        {"pos", KeyColumns.GetPosition()},
+        {"size", VersionColumns.GetRecordsCount()},
+        {"keySize", KeyColumns.GetRecordsCount()});
     if (FilterIterator && delta) {
         AFL_VERIFY(FilterIterator->Next(delta));
     }

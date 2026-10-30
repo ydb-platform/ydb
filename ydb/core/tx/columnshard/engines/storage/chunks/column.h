@@ -74,7 +74,9 @@ public:
         , Record(columnChunk)
         , ColumnInfo(columnInfo)
     {
-        AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0)("data", Data.size())("record", Record.BlobRange.Size);
+        AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0,
+            {"data", Data.size()},
+            {"record", Record.BlobRange.Size});
     }
 
     TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address,

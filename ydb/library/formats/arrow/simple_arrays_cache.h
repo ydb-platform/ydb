@@ -67,7 +67,9 @@ private:
             }
         }
         AFL_VERIFY(result);
-        AFL_VERIFY(recordsCountExt <= result->length())("result", result->length())("ext", recordsCountExt);
+        AFL_VERIFY(recordsCountExt <= result->length(),
+            {"result", result->length()},
+            {"ext", recordsCountExt});
         YDB_LOG_INFO_COMP(NKikimrServices::ARROW_HELPER, "",
             {"event", "slice_from_cache"},
             {"key", key},

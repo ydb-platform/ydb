@@ -318,7 +318,8 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             });
         return NArrow::FinishBuilder(std::move(builder));
     }
-    AFL_VERIFY(false)("column_id", columnId);
+    AFL_VERIFY(false,
+        {"columnId", columnId});
     return nullptr;
 }
 

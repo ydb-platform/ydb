@@ -15,10 +15,10 @@ namespace NKikimr::NPQ {
         , CreationUnixTime(creationUnixTime)
         , Batches(nullptr)
     {
-        AFL_ENSURE(RawValue.size() <= Size)
-            ("RawValue.size()", RawValue.size())
-            ("Size", Size)
-            ("key", Key.ToString());
+        AFL_ENSURE(RawValue.size() <= Size,
+            {"#_RawValue.size", RawValue.size()},
+            {"size", Size},
+            {"key", Key});
     }
 
     bool TRequestedBlob::Empty() const {
@@ -49,7 +49,9 @@ namespace NKikimr::NPQ {
 namespace NKikimr {
 
     TEvPQ::TEvMLPChangeMessageDeadlineRequest::TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps) {
-        AFL_ENSURE(deadlineTimestamps.size() == offsets.size())("deadlines", deadlineTimestamps.size())("offsets", offsets.size());
+        AFL_ENSURE(deadlineTimestamps.size() == offsets.size(),
+            {"deadlines", deadlineTimestamps.size()},
+            {"offsets", offsets.size()});
         Record.SetTopic(topic);
         Record.SetConsumer(consumer);
         Record.SetPartitionId(partitionId);

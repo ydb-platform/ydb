@@ -55,7 +55,8 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
     auto schema = index.GetSchemaVerified(SchemaVersion.value());
-    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
+    AFL_VERIFY(!!schema,
+        {"details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value()});
     return schema;
 }
 

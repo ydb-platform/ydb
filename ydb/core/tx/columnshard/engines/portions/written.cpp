@@ -51,8 +51,9 @@ void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& 
             TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)GetInsertWriteId())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
-        AFL_VERIFY(GetRecordsCount() == GetMeta().GetDeletionsCount() || GetMeta().GetDeletionsCount() == 0)("deletes", GetMeta().GetDeletionsCount())(
-                                                                         "count", GetRecordsCount());
+        AFL_VERIFY(GetRecordsCount() == GetMeta().GetDeletionsCount() || GetMeta().GetDeletionsCount() == 0,
+            {"deletes", GetMeta().GetDeletionsCount()},
+            {"count", GetRecordsCount()});
         column.AddBlobInfo(0, GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(GetRecordsCount(),
                                                      std::make_shared<arrow::BooleanScalar>((bool)GetMeta().GetDeletionsCount())));
     }

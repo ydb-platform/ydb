@@ -62,7 +62,8 @@ template <>
 class TCoderMask<false> {
 public:
     inline size_t MaxSize() const { return 0; }
-    inline void AddNull() { AFL_ENSURE(false)("reason", "Null values are not supported."); }
+    inline void AddNull() { AFL_ENSURE(false,
+                                {"reason", "Null values are not supported."}); }
     inline void AddNonNull() { }
     inline void Seal(TBuffer&) { }
 };
@@ -89,7 +90,9 @@ public:
 
 protected:
     void DoAddData(const char* data, size_t size) override {
-        AFL_ENSURE(size == Size)("l", size)("r", Size);
+        AFL_ENSURE(size == Size,
+            {"l", size},
+            {"r", Size});
         Mask.AddNonNull();
         DataSize += Size;
         Output.Append(data, size);
@@ -302,7 +305,8 @@ protected:
     }
 
     void DoAddNull() override {
-        AFL_ENSURE(IsNullable)("description", "Null values are not supported.");
+        AFL_ENSURE(IsNullable,
+            {"description", "Null values are not supported."});
         Mask.Append(0, 2);
     }
 

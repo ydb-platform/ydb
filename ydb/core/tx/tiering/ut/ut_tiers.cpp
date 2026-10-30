@@ -987,7 +987,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == purposeMinTimestamp);
             }
 
-            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize)("collector", bsCollector.GetChannelSize(2))("purpose", purposeSize);
+            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize,
+                {"collector", bsCollector.GetChannelSize(2)},
+                {"purpose", purposeSize});
         }
 
         {

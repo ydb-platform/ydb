@@ -53,7 +53,8 @@ void TCommonCountersOwner::DeepSubGroup(const TString& id, const TString& value)
 }
 
 void TCommonCountersOwner::DeepSubGroup(const TString& componentName) {
-    AFL_VERIFY(SignalKeys.emplace("component", componentName).second)("component", componentName);
+    AFL_VERIFY(SignalKeys.emplace("component", componentName).second,
+        {"component", componentName});
     SubGroup = SubGroup->GetSubgroup("component", componentName);
 }
 

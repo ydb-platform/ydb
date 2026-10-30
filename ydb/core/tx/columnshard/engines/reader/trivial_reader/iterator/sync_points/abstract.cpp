@@ -29,7 +29,8 @@ void ISyncPoint::OnSourcePrepared(std::unique_ptr<NCommon::TDataSourceLease> lea
         {"eventLog", source.GetEventsReport()},
         {"count", SourcesSequentially.size()},
         {"sourceIdx", source.GetSourceIdx()});
-    AFL_VERIFY(source.IsSyncSection())("source_idx", source.GetSourceIdx());
+    AFL_VERIFY(source.IsSyncSection(),
+        {"sourceIdx", source.GetSourceIdx()});
     InitSourceTracingMetrics(source);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "OnSourcePrepared"},
@@ -39,7 +40,8 @@ void ISyncPoint::OnSourcePrepared(std::unique_ptr<NCommon::TDataSourceLease> lea
     const auto itEntry = FindIf(SourcesSequentially, [&](const TSourceEntry& entry) {
         return entry.SourceIdx == source.GetSourceIdx();
     });
-    AFL_VERIFY(itEntry != SourcesSequentially.end())("source_idx", source.GetSourceIdx());
+    AFL_VERIFY(itEntry != SourcesSequentially.end(),
+        {"sourceIdx", source.GetSourceIdx()});
     AFL_VERIFY(!itEntry->Lease);
     itEntry->Lease = std::move(lease);
     AFL_VERIFY(itEntry != SourcesSequentially.begin() || IsPrepared(*itEntry));
@@ -141,9 +143,9 @@ TString ISyncPoint::DebugString() const {
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front().SourceIdx == continueAddress.GetSourceIdx())(
-                                                                                      "first_source_idx", SourcesSequentially.front().SourceIdx)(
-                                                                                      "continue_source_idx", continueAddress.GetSourceIdx());
+    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front().SourceIdx == continueAddress.GetSourceIdx(),
+        {"firstSourceIdx", SourcesSequentially.front().SourceIdx},
+        {"continueSourceIdx", continueAddress.GetSourceIdx()});
     YDB_LOG_CREATE_CONTEXT(
         {"syncPoint", GetPointName()},
         {"event", "continue_source"});
@@ -168,7 +170,9 @@ void ISyncPoint::AddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
     // Sources arrive in increasing SourceIdx order, which is what keeps the result stream ordered.
     // Conflicting sources are scanned first and produce no rows, so they carry no place in that order.
     if (!source.IsConflicting()) {
-        AFL_VERIFY(!LastSourceIdx || *LastSourceIdx < source.GetSourceIdx())("idx_last", LastSourceIdx)("idx_new", source.GetSourceIdx());
+        AFL_VERIFY(!LastSourceIdx || *LastSourceIdx < source.GetSourceIdx(),
+            {"idxLast", LastSourceIdx},
+            {"idxNew", source.GetSourceIdx()});
         LastSourceIdx = source.GetSourceIdx();
     }
     if (auto toProcess = OnAddSource(std::move(lease))) {

@@ -954,11 +954,14 @@ runs:
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`
+        if [[ -z "$comment_raw" ]]; then
+          echo "Skipped build size difference: no comparison available"
+          exit 0
+        fi
 
         IFS=';;;'
         read -ra comment_arr <<< "$comment_raw"
 
-        printf "$comment"
         if [[ ${comment_raw} != "Error"* ]]; then
           color=${comment_arr[0]}
           replace=$color";;;"

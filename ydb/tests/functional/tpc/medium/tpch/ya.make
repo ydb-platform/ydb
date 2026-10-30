@@ -1,5 +1,5 @@
-REQUIREMENTS(cpu:2)
 PY3TEST()
+REQUIREMENTS(cpu:2)
 
 TEST_SRCS(
     test_decimal.py

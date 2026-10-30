@@ -1,5 +1,5 @@
-REQUIREMENTS(cpu:2)
 PY3_LIBRARY(dstool_lib)
+REQUIREMENTS(cpu:2)
 
 PY_SRCS(
     arg_parser.py

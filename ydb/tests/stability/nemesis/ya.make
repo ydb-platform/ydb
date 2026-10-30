@@ -1,5 +1,5 @@
-REQUIREMENTS(cpu:2)
 PY3_PROGRAM()
+REQUIREMENTS(cpu:2)
 
 PY_SRCS(
     __main__.py

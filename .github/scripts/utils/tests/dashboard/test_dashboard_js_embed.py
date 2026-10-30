@@ -119,9 +119,11 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("Active chunks by suite", source)
         self.assertIn("CPU by suite · estimated cores", source)
         self.assertIn("chart-tile-sub", source)
-        # Expand grows to full row width, not a tall half-column (f-string doubles braces).
-        self.assertIn(".chart-tile.expanded {{\n      grid-column: 1 / -1;\n    }}", source)
-        self.assertIn("Expand to full width", source)
+        # Expand matches the ya-activity full-row slot (same as .span-2).
+        self.assertIn(".chart-tile.span-2,\n    .chart-tile.expanded {{", source)
+        self.assertIn("grid-column: 1 / -1;", source)
+        self.assertIn("height: 520px;", source)
+        self.assertIn("Expand to full width (same as ya make concurrency)", source)
         # Tests chart stays under a closed <details>, not in the main suite grid.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')

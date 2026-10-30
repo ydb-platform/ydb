@@ -147,17 +147,24 @@ def build_html_dashboard(
     .chart-tile-expand:hover {{ opacity: 1; text-decoration: underline; }}
     .chart-pane {{
       width: 100%;
-      height: 300px;
+      height: 280px;
       min-width: 0;
       border-radius: 6px;
       overflow: hidden;
     }}
-    /* Expand = full row width (not a tall half-column) + detail tables. */
+    /*
+     * Reference width/height = ya make concurrency (.span-2).
+     * Expand promotes a tile to that same full-row slot; expand all ⇒ old
+     * vertical stack of wide charts.
+     */
+    .chart-tile.span-2,
     .chart-tile.expanded {{
       grid-column: 1 / -1;
+      width: 100%;
     }}
+    .chart-tile.span-2 .chart-pane,
     .chart-tile.expanded .chart-pane {{
-      height: 420px;
+      height: 520px;
     }}
     .chart-tile-meta {{
       display: none;
@@ -168,19 +175,13 @@ def build_html_dashboard(
     }}
     .chart-tile-meta .hoverbox,
     .chart-tile-meta .clickbox {{
-      margin: 6px 0;
-      max-height: 180px;
+      margin: 6px 0 12px 0;
+      max-height: 220px;
       border-color: #eaeef2;
       background: #fafbfc;
     }}
-    .chart-tile.span-2 {{
-      grid-column: 1 / -1;
-    }}
-    .chart-tile.span-2 .chart-pane {{
-      height: 300px;
-    }}
-    .chart-tile.span-2.expanded .chart-pane {{
-      height: 400px;
+    .chart-tile.expanded .chart-tile-meta .clickbox {{
+      max-height: 320px;
     }}
     .chart-secondary {{
       margin: 0 0 16px 0;
@@ -534,7 +535,6 @@ def build_html_dashboard(
     <div class="chart-tile span-2" data-pane="yaActivity">
       <div class="chart-tile-head">
         <span class="chart-tile-title">ya make concurrency<span class="chart-tile-sub">build, archives, cache, test workers, links</span></span>
-        <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
       </div>
       <div id="yaActivity" class="chart-pane"></div>
     </div>
@@ -548,7 +548,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="activeLayerChunk">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">how many suite+chunk runs are alive at each moment</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -559,7 +559,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU · estimated cores<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -570,7 +570,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM · GB<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -581,7 +581,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
       </div>
@@ -599,7 +599,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="activeLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Active chunks by suite<span class="chart-tile-sub">how many suite runs are alive at each moment</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="activeLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -610,7 +610,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU by suite · estimated cores<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -629,7 +629,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM by suite · GB<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -640,7 +640,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
       </div>
@@ -711,10 +711,17 @@ def build_html_dashboard(
       if (!tile) return;
       const open = tile.classList.toggle('expanded');
       btn.textContent = open ? 'collapse' : 'expand';
-      btn.title = open ? 'Collapse to tile' : 'Expand to full width';
+      btn.title = open
+        ? 'Collapse to half-width tile'
+        : 'Expand to full width (same as ya make concurrency)';
       const paneId = tile.getAttribute('data-pane');
+      // Resize this pane and neighbours — grid reflow changes sibling widths too.
+      const grid = tile.parentElement;
+      const panes = grid
+        ? Array.from(grid.querySelectorAll('.chart-pane')).map(el => el.id).filter(Boolean)
+        : (paneId ? [paneId] : []);
       setTimeout(() => {{
-        resizeChartPanes(paneId ? [paneId] : []);
+        resizeChartPanes(panes);
         if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
       }}, 0);
     }}

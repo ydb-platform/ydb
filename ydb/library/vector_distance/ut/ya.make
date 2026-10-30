@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/vector_distance)
 SRCS(
     float8_ut.cpp
     float8_load_ut.cpp
+    float8_torch_ut.cpp
 )
 
 IF (USE_SSE4 == "yes" AND OS_LINUX == "yes")

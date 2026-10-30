@@ -506,7 +506,6 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
-    TDeque<TPathId> PathsToPublish;
 
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
@@ -586,11 +585,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext& ctx) override {
+    void DoComplete(const TActorContext&) override {
         YDB_LOG_DEBUG("TImport::TTxProgress: DoComplete");
-        if (PathsToPublish) {
-            Self->PublishToSchemeBoard(TTxId(), std::move(PathsToPublish), ctx);
-        }
     }
 
 private:
@@ -655,12 +651,7 @@ private:
                 NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
         }
 
-        const auto& path = Self->PathsById.at(pathId);
-        // Publish the metadata change without changing the DataShard schema version.
-        ++path->DirAlterVersion;
-        Self->PersistPathDirAlterVersion(db, path);
-        Self->ClearDescribePathCaches(path);
-        PathsToPublish.push_back(pathId);
+        Self->ClearDescribePathCaches(Self->PathsById.at(pathId));
     }
 
     void FinishImportItem(TItem& item, NIceDb::TNiceDb& db) {

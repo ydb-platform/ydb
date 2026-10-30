@@ -102,6 +102,20 @@ _CACHE_PREFIXES = ("FromDistCache", "PutInDistCache", "PutInCache", "WriteThroug
 _LINK_OUTPUT_SUFFIXES = (".a", ".so", ".dylib")
 
 
+def classify_evlog_run_name(
+    name: str,
+) -> tuple[Optional[str], Optional[str], Optional[int], bool]:
+    """Shared Run(...) name parse: suite, group, chunk, is_aux packaging run."""
+    suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(name)
+    is_aux = bool(
+        chunk is not None
+        and chunk == 0
+        and "/chunk" not in name
+        and EVLOG_AUX_OUTPUT_RE.search(name)
+    )
+    return suite_raw, chunk_group, chunk, is_aux
+
+
 def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
     """Classify a ya worker node for the whole-build concurrency chart."""
     tag_upper = str(tag or "").strip().upper()
@@ -129,16 +143,11 @@ def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
     if tag_upper == "TM":
         return "test_tm"
     if "test-results" in name:
-        suite, _group, chunk = extract_suite_group_chunk_from_run_name(name)
-        if (
-            suite is not None
-            and chunk is not None
-            and "/chunk" in name
-            and not EVLOG_AUX_OUTPUT_RE.search(name)
-        ):
-            return "test"
-        # Test result packaging (meta.json, traces, archives) is not a test job.
-        return None
+        suite, _group, chunk, is_aux = classify_evlog_run_name(name)
+        if is_aux or suite is None or chunk is None or "/chunk" not in name:
+            # Packaging (meta.json, traces, archives) is not a test worker job.
+            return None
+        return "test"
     path = name.split("(", 1)[1]
     if "$(BUILD_ROOT)" in path:
         path = path.split("$(BUILD_ROOT)", 1)[1]
@@ -155,13 +164,29 @@ def parse_evlog_activity(
     *,
     events: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
-    """Return compile/link/test worker intervals from the complete ya make evlog."""
+    """Return compile/link/test worker intervals from the complete ya make evlog.
+
+    Emits compact (kind, start, end) tuples during the sweep and only materializes
+    dict rows at the end so peak memory stays closer to one pass over the events.
+    """
     if events is None:
         if evlog_path is None:
             raise ValueError("parse_evlog_activity requires evlog_path or events")
         events = load_json_or_jsonl(evlog_path)
-    activity: list[dict[str, Any]] = []
-    stacks: dict[tuple[int, int], list[tuple[float, str]]] = defaultdict(list)
+    # Per-kind +1/-1 deltas; converted to intervals once at the end.
+    deltas: dict[str, list[tuple[float, int]]] = defaultdict(list)
+    stacks: dict[tuple[int, int], list[tuple[float, str, Optional[str]]]] = defaultdict(list)
+    open_by_uid: dict[str, tuple[tuple[int, int], float, str]] = {}
+    completed_uids: set[str] = set()
+
+    def _open(kind: str, start_us: float) -> None:
+        if kind:
+            deltas[kind].append((start_us, +1))
+
+    def _close(kind: str, end_us: float) -> None:
+        if kind:
+            deltas[kind].append((end_us, -1))
+
     for ev in events:
         if "ph" not in ev:
             if ev.get("namespace") != "worker_threads" or ev.get("event") != "node-finished":
@@ -179,13 +204,10 @@ def parse_evlog_activity(
                 str(value.get("tag") or ""),
             )
             if kind and end_sec > start_sec:
-                activity.append(
-                    {
-                        "kind": kind,
-                        "start_us": start_sec * 1_000_000.0,
-                        "end_us": end_sec * 1_000_000.0,
-                    }
-                )
+                start_us = start_sec * 1_000_000.0
+                end_us = end_sec * 1_000_000.0
+                _open(kind, start_us)
+                _close(kind, end_us)
             continue
 
         ph = ev.get("ph")
@@ -195,18 +217,61 @@ def parse_evlog_activity(
         ts = float(ev.get("ts", 0.0) or 0.0)
         if ph == "B":
             args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
-            # Chrome-trace worker type lives in event name (CC/LD/AR/TM), not args.tag.
+            arg_name = str(args.get("name") or "")
+            # Newer traces close Run(rnd-…) with B: Result(rnd-…) and no E.
+            m_res = RESULT_UID_RE.search(arg_name)
+            if m_res:
+                uid = m_res.group(1)
+                if uid in completed_uids:
+                    continue
+                begin = open_by_uid.pop(uid, None)
+                if begin is not None:
+                    b_key, start_us, kind = begin
+                    stack = stacks.get(b_key) or []
+                    for i in range(len(stack) - 1, -1, -1):
+                        if stack[i][2] == uid:
+                            stack.pop(i)
+                            break
+                    if kind and ts > start_us:
+                        _close(kind, ts)
+                    completed_uids.add(uid)
+                continue
+            # Chrome-trace worker type lives in event name (CC/LD/AR/TM).
             kind = _evlog_activity_kind(
-                str(args.get("name") or ""),
+                arg_name,
                 str(args.get("tag") or ev.get("tag") or ev.get("name") or ""),
-            )
-            stacks[key].append((ts, kind or ""))
+            ) or ""
+            m_uid = RUN_UID_RE.search(arg_name)
+            uid = m_uid.group(1) if m_uid else None
+            stacks[key].append((ts, kind, uid))
+            if kind:
+                _open(kind, ts)
+            if uid and kind:
+                open_by_uid[uid] = (key, ts, kind)
             continue
         if not stacks[key]:
             continue
-        start_us, kind = stacks[key].pop()
+        start_us, kind, uid = stacks[key].pop()
+        if uid and uid in completed_uids:
+            continue
+        if uid:
+            open_by_uid.pop(uid, None)
+            completed_uids.add(uid)
         if kind and ts > start_us:
-            activity.append({"kind": kind, "start_us": start_us, "end_us": ts})
+            _close(kind, ts)
+
+    # Reconstruct non-overlapping/concurrent intervals via per-kind start stacks.
+    activity: list[dict[str, Any]] = []
+    for kind, kind_deltas in deltas.items():
+        starts: list[float] = []
+        # Process closes before opens at the same timestamp.
+        for ts, sign in sorted(kind_deltas, key=lambda item: (item[0], item[1])):
+            if sign > 0:
+                starts.append(ts)
+            elif starts:
+                start_us = starts.pop()
+                if ts > start_us:
+                    activity.append({"kind": kind, "start_us": start_us, "end_us": ts})
     activity.sort(key=lambda row: (float(row["start_us"]), str(row["kind"])))
     return activity
 
@@ -915,7 +980,8 @@ def parse_evlog_runs(
             if suite_raw is None or chunk is None:
                 continue
             # Skip aux-only runs (meta.json, run_test.log, etc.): they are side-effect events, not real chunk runs.
-            if chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
+            _suite, _group, _chunk, is_aux = classify_evlog_run_name(arg_name)
+            if is_aux:
                 continue
             if suite_filter is not None and normalize_suite_path(suite_raw) != suite_filter:
                 continue
@@ -998,7 +1064,7 @@ def parse_evlog_runs(
                 and (suite_filter is None or suite_norm == suite_filter)
             )
             # Skip aux-only runs (meta.json, run_test.log, etc.) in trace format too.
-            if is_target and chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
+            if is_target and classify_evlog_run_name(arg_name)[3]:
                 is_target = False
             if is_target and m_uid:
                 run_by_uid[m_uid.group(1)] = {
@@ -1545,6 +1611,7 @@ def main() -> None:
     evlog_events = load_json_or_jsonl(args.evlog)
     evlog_runs = parse_evlog_runs(args.evlog, args.suite_path, events=evlog_events)
     evlog_activity = parse_evlog_activity(args.evlog, events=evlog_events)
+    del evlog_events
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
@@ -1569,20 +1636,18 @@ def main() -> None:
             )
         runs.append(out)
     activity_offset_us = float(median(activity_offsets_us)) if activity_offsets_us else 0.0
-    if activity_offsets_us:
-        if activity_offset_us:
-            evlog_activity = [
-                {
-                    **row,
-                    "start_us": float(row.get("start_us", 0) or 0) + activity_offset_us,
-                    "end_us": float(row.get("end_us", 0) or 0) + activity_offset_us,
-                }
-                for row in evlog_activity
-            ]
-    else:
-        # Without matched report↔evlog runs we cannot align ya-make clock to
-        # report epoch; keep only report-backed spans to avoid a mixed axis.
-        evlog_activity = []
+    activity_offset_unaligned = not bool(activity_offsets_us)
+    # Fallback offset 0 keeps build/link activity when clocks already match;
+    # stats flag marks that the shift was not median-validated.
+    if activity_offsets_us and activity_offset_us:
+        evlog_activity = [
+            {
+                **row,
+                "start_us": float(row.get("start_us", 0) or 0) + activity_offset_us,
+                "end_us": float(row.get("end_us", 0) or 0) + activity_offset_us,
+            }
+            for row in evlog_activity
+        ]
     # Keep raw TM worker spans and add report-backed chunk spans as a separate
     # series so the dashboard can compare scheduler occupancy with suite times.
     evlog_activity = [
@@ -1622,6 +1687,7 @@ def main() -> None:
     stats["runs_from_evlog"] = len(evlog_runs)
     stats["runs_enriched_by_evlog"] = enriched_by_evlog
     stats["evlog_activity_offset_sec"] = activity_offset_us / 1_000_000.0
+    stats["evlog_activity_offset_unaligned"] = activity_offset_unaligned
     stats["repo_root"] = str(repo_root) if repo_root else None
     stats["suites_missing_ya_make"] = suites_missing_ya_make
     if suites_missing_ya_make:

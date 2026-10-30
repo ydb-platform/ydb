@@ -12,7 +12,12 @@ from _paths import TEST_METRICS, add_product_paths
 
 add_product_paths(TEST_METRICS)
 
-from html_embed import js_script_json, strip_suggestion_hover_text, write_dashboard_data_json
+from html_embed import (
+    js_script_json,
+    sanitize_for_json,
+    strip_suggestion_hover_text,
+    write_dashboard_data_json,
+)
 
 _DIR = TEST_METRICS
 
@@ -53,6 +58,15 @@ class JsScriptJsonTest(unittest.TestCase):
             write_dashboard_data_json(path, {"a": 1, "b": [2, 3]})
             text = path.read_text(encoding="utf-8")
             self.assertEqual(text, '{"a":1,"b":[2,3]}')
+
+    def test_sanitize_non_finite_floats_for_json_parse(self):
+        import math
+
+        cleaned = sanitize_for_json({"x": math.nan, "y": [math.inf, 1.5]})
+        self.assertEqual(cleaned, {"x": None, "y": [None, 1.5]})
+        raw = js_script_json({"x": math.nan})
+        self.assertIn("null", raw)
+        self.assertNotIn("NaN", raw)
 
     def test_cpu_seconds_keeps_seconds(self):
         from tests_resource_dashboard import cpu_seconds

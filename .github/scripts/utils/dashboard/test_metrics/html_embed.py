@@ -3,19 +3,33 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 
 def js_script_json(value: Any) -> str:
     """JSON safe to embed in a <script> tag (any case of </script>)."""
-    text = json.dumps(value, ensure_ascii=False)
+    text = json.dumps(sanitize_for_json(value), ensure_ascii=False, allow_nan=False)
     text = text.replace("<", "\\u003c")
     text = text.replace(">", "\\u003e")
     text = text.replace("&", "\\u0026")
     text = text.replace("\u2028", "\\u2028")
     text = text.replace("\u2029", "\\u2029")
     return text
+
+
+def sanitize_for_json(value: Any) -> Any:
+    """Replace non-finite floats with null so fetch()+JSON.parse stays valid."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: sanitize_for_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [sanitize_for_json(item) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_for_json(item) for item in value]
+    return value
 
 
 def strip_suggestion_hover_text(suggestions: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -39,6 +53,11 @@ def strip_suggestion_hover_text(suggestions: list[dict[str, Any]]) -> list[dict[
 def write_dashboard_data_json(path: Path, payload: Any) -> None:
     """Write compact JSON next to dashboard.html (loaded via fetch)."""
     path.write_text(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        json.dumps(
+            sanitize_for_json(payload),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ),
         encoding="utf-8",
     )

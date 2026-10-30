@@ -221,7 +221,7 @@ def build_dashboard_payload(
         )
     top_tests_suite = topn_other_map(tests_time_by_suite, top_n)
     xs_tests_suite, tests_tracks_suite = build_step_series(enriched, "tests_in_chunk", set(top_tests_suite), label_mode="suite")
-    xs_active, ys_active = build_active_series(enriched)
+    xs_active_exact, ys_active_exact = build_active_series(enriched)
     activity_series: dict[str, dict[str, list[float]]] = {}
     for kind in ("build", "archive", "cache", "link", "test_report", "test_tm"):
         kind_runs = [row for row in (ya_activity or []) if row.get("kind") == kind]
@@ -234,7 +234,7 @@ def build_dashboard_payload(
     headline_stats = _build_headline_stats(
         cpu_tracks_suite=cpu_tracks_suite,
         ram_tracks_suite=ram_tracks_suite,
-        ys_active=ys_active,
+        ys_active=ys_active_exact,
         tests_tracks_suite=tests_tracks_suite,
         runs=runs,
         tests_per_suite=tests_per_suite,
@@ -247,7 +247,7 @@ def build_dashboard_payload(
     xs_ram_suite, ram_tracks_suite = downsample_step_series(xs_ram_suite, ram_tracks_suite, max_points)
     xs_active_suite, active_tracks_suite = downsample_step_series(xs_active_suite, active_tracks_suite, max_points)
     xs_tests_suite, tests_tracks_suite = downsample_step_series(xs_tests_suite, tests_tracks_suite, max_points)
-    xs_active, ys_active = downsample_active_series(xs_active, ys_active, max_points)
+    xs_active, ys_active = downsample_active_series(xs_active_exact, ys_active_exact, max_points)
 
     has_synthetic = (stats.get("runs_with_synthetic_metrics") or 0) > 0
 
@@ -455,6 +455,9 @@ def build_dashboard_payload(
         "tests_tracks_suite": tests_tracks_suite,
         "xs_active": xs_active,
         "ys_active": ys_active,
+        # Undownsampled active series for click-table exact concurrency counts.
+        "xs_active_exact": xs_active_exact,
+        "ys_active_exact": ys_active_exact,
         "ya_activity": activity_series,
         "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
         "pie_cpu_vals": [cpu_by_label.get(lb, 0.0) for lb in top_cpu]

@@ -171,7 +171,7 @@ def test_evlog_activity_chrome_trace_uses_event_name_as_tag():
             "ts": 100.0,
             "name": "TM",
             "args": {
-                "name": "Run(rnd$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/testing_out_stuff/chunk1/run)"
+                "name": "Run(rnd-aaa$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/testing_out_stuff/chunk1/run)"
             },
         },
         {"ph": "E", "pid": 1, "tid": 1, "ts": 250.0},
@@ -190,6 +190,44 @@ def test_evlog_activity_chrome_trace_uses_event_name_as_tag():
     assert kinds == ["test_tm", "archive"]
     assert activity[0]["start_us"] == 100.0
     assert activity[0]["end_us"] == 250.0
+
+
+def test_evlog_activity_closes_tm_on_result_without_e():
+    events = [
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 7,
+            "ts": 10.0,
+            "name": "TM",
+            "args": {
+                "name": "Run(rnd-xyz$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/testing_out_stuff/chunk1/run)"
+            },
+        },
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 7,
+            "ts": 40.0,
+            "name": "result[TM]",
+            "args": {"name": "Result(rnd-xyz)"},
+        },
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 7,
+            "ts": 50.0,
+            "name": "CC",
+            "args": {"name": "Compile(b.cpp)"},
+        },
+        {"ph": "E", "pid": 1, "tid": 7, "ts": 60.0},
+    ]
+    activity = parse_evlog_activity(events=events)
+    by_kind = {row["kind"]: row for row in activity}
+    assert by_kind["test_tm"]["start_us"] == 10.0
+    assert by_kind["test_tm"]["end_us"] == 40.0
+    assert by_kind["build"]["start_us"] == 50.0
+    assert by_kind["build"]["end_us"] == 60.0
 
 
 def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
@@ -232,6 +270,7 @@ def load_tests(loader, tests, pattern):
         test_suite_rows_are_not_tests_and_later_chunk_finish_wins,
         test_evlog_activity_covers_compile_link_and_test_jobs,
         test_evlog_activity_chrome_trace_uses_event_name_as_tag,
+        test_evlog_activity_closes_tm_on_result_without_e,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
         test_active_series_downsampling_preserves_short_peak,
     ):
@@ -244,6 +283,7 @@ if __name__ == "__main__":
     test_suite_rows_are_not_tests_and_later_chunk_finish_wins()
     test_evlog_activity_covers_compile_link_and_test_jobs()
     test_evlog_activity_chrome_trace_uses_event_name_as_tag()
+    test_evlog_activity_closes_tm_on_result_without_e()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
     test_active_series_downsampling_preserves_short_peak()
     print("OK")

@@ -472,6 +472,15 @@ def build_html_dashboard(
     </div>
   </div>
   <script>
+    // Stubs so inline onclick/onchange stay defined even if data fetch fails.
+    window.showTab = function() {{}};
+    window.clearSuiteSearch = function() {{}};
+    window.clearAllMarkers = function() {{}};
+    window.applyTimezoneToAllCharts = function() {{}};
+    window.applyMarkersToCharts = function() {{}};
+    window.toggleSuiteMarkers = function() {{}};
+    window.applyLayerToggles = function() {{}};
+
     (async function() {{
     const dataUrl = {data_url_js};
     let data;
@@ -813,7 +822,7 @@ def build_html_dashboard(
       }}
       return total > 0 ? String(Math.round(total)) : '';
     }}
-    function axisLayout(xsDisp) {{
+    function axisLayout(xsDisp, useFullMakeRange) {{
       const msVals = Array.isArray(xsDisp) ? xsDisp.map(_toMs).filter(v => v != null) : [];
       let tickVals = null;
       let tickText = null;
@@ -836,9 +845,13 @@ def build_html_dashboard(
         ticktext: tickText || undefined,
         hoverformat: '',
       }};
-      const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
-      if (Array.isArray(fullRange) && fullRange.length >= 2) {{
-        layout.range = [xToDisplay(Number(fullRange[0])), xToDisplay(Number(fullRange[1]))];
+      // Full ya-make range only for activity / monitor overlays; suite/chunk
+      // charts keep their natural data span so long builds do not compress them.
+      if (useFullMakeRange) {{
+        const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
+        if (Array.isArray(fullRange) && fullRange.length >= 2) {{
+          layout.range = [xToDisplay(Number(fullRange[0])), xToDisplay(Number(fullRange[1]))];
+        }}
       }}
       return layout;
     }}
@@ -857,8 +870,9 @@ def build_html_dashboard(
           }}
         }}
         if (xs.length === 0) continue;
-        const ax = axisLayout(xs);
-        Plotly.relayout(el, {{
+        const fullIds = {{yaActivity:1, diskLayer:1, diskLayerSuite:1, cpuLayer:1, ramLayer:1, cpuLayerSuite:1, ramLayerSuite:1}};
+        const ax = axisLayout(xs, !!fullIds[id]);
+        const patch = {{
           'xaxis.title': ax.title,
           'xaxis.type': 'date',
           'xaxis.tickmode': ax.tickmode,
@@ -867,7 +881,9 @@ def build_html_dashboard(
           'xaxis.hoverformat': '',
           'hoverdistance': -1,
           'spikedistance': -1,
-        }});
+        }};
+        if (ax.range) patch['xaxis.range'] = ax.range;
+        Plotly.relayout(el, patch);
       }}
       for (const id of ids) {{
         const el = document.getElementById(id);
@@ -1918,8 +1934,10 @@ def build_html_dashboard(
       return Number.isFinite(Number(sec)) ? Number(sec) : null;
     }}
     function activeCountAtSec(tSec) {{
-      const xs = data.xs_active;
-      const ys = data.ys_active;
+      const xs = Array.isArray(data.xs_active_exact) && data.xs_active_exact.length
+        ? data.xs_active_exact : data.xs_active;
+      const ys = Array.isArray(data.ys_active_exact) && data.ys_active_exact.length
+        ? data.ys_active_exact : data.ys_active;
       if (!Array.isArray(xs) || !Array.isArray(ys) || !Number.isFinite(Number(tSec))) return null;
       let idx = -1;
       for (let i = 0; i < xs.length; i++) {{
@@ -2105,7 +2123,7 @@ def build_html_dashboard(
       }}
       Plotly.newPlot('yaActivity', traces, {{
         title: 'ya make concurrency: build, archives, cache, test chunks, and links',
-        xaxis: axisLayout(allX),
+        xaxis: axisLayout(allX, true),
         yaxis: {{title: 'active jobs', rangemode: 'tozero'}},
         hovermode: 'x unified',
         legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
@@ -2134,20 +2152,17 @@ def build_html_dashboard(
         addRamLimitTraces('ramLayer', ro);
         Plotly.relayout('cpuLayer', {{ hovermode: 'x unified' }});
         Plotly.relayout('ramLayer', {{ hovermode: 'x unified' }});
+        Plotly.relayout('cpuLayer', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
+        Plotly.relayout('ramLayer', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
         const diskEl = document.getElementById('diskLayer');
         if (diskEl) {{
           diskEl.style.display = '';
-          const evlogRange = ro.evlog_range_sec || [];
-          const xaxisOpt = Object.assign({{}}, axisLayout(xDisp));
-          if (evlogRange.length >= 2) {{
-            xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
-          }}
           Plotly.newPlot('diskLayer', [
             {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
             {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
           ], {{
             title: 'Disk bandwidth (+Write, -Read)',
-            xaxis: xaxisOpt,
+            xaxis: axisLayout(xDisp, true),
             yaxis: {{ title: 'MB/s' }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
@@ -2186,20 +2201,17 @@ def build_html_dashboard(
       addRamLimitTraces('ramLayerSuite', ro);
       Plotly.relayout('cpuLayerSuite', {{ hovermode: 'x unified' }});
       Plotly.relayout('ramLayerSuite', {{ hovermode: 'x unified' }});
+      Plotly.relayout('cpuLayerSuite', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
+      Plotly.relayout('ramLayerSuite', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
       const diskEl = document.getElementById('diskLayerSuite');
       if (diskEl) {{
         diskEl.style.display = '';
-        const evlogRange = ro.evlog_range_sec || [];
-        const xaxisOpt = Object.assign({{}}, axisLayout(xDisp));
-        if (evlogRange.length >= 2) {{
-          xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
-        }}
         Plotly.newPlot('diskLayerSuite', [
           {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
           {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
         ], {{
           title: 'Disk bandwidth (+Write, -Read)',
-          xaxis: xaxisOpt,
+          xaxis: axisLayout(xDisp, true),
           yaxis: {{ title: 'MB/s' }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},

@@ -19,7 +19,7 @@ Please note that currently, the `NOT NULL` constraint can only be applied to col
 
 {{ ydb-short-name }} supports the creation of both row-oriented and column-oriented tables. The primary difference between them lies in their use cases and how data is stored on the disk drive. In row-oriented tables, data is stored sequentially in the form of rows, while in column-oriented tables, data is stored in the form of columns. Each table type has its own specific purpose.
 
-## Column Naming Rules {#column-naming-rules}
+### Column Naming Rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 
@@ -156,7 +156,7 @@ Syntax of TTL value is described in the article [{#T}](../../../yql/reference/sy
 
 {{ ydb-short-name }} lets you rename an existing table, move it to another directory of the same database, or replace one table with another, deleting the data in the replaced table. Only the metadata of the table is changed by operations (for example, its path and name). The table data is neither moved nor overwritten.
 
-Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#termination-statuses).
+Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#handling-retryable-errors).
 
 The speed of renaming is determined by the type of data transactions currently running against the table and doesn't depend on the table size.
 

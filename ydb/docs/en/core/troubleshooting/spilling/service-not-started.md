@@ -16,6 +16,6 @@ To enable spilling:
 
 {% note info %}
 
-Read more about the spilling architecture in [Spilling in {{ ydb-short-name }}](../../concepts/query_execution/spilling.md#spilling-in-ydb-short-name).
+Read more about the spilling architecture in [Spilling in {{ ydb-short-name }}](../../concepts/query_execution/spilling.md#architecture).
 
 {% endnote %}

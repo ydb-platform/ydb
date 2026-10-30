@@ -61,8 +61,8 @@ From the user's perspective, everything inside {{ ydb-short-name }} is organized
 
 {{ ydb-short-name }} provides users with a well-known abstraction — tables. In {{ ydb-short-name }}, there are two main types of tables:
 
-* [Row-oriented tables](datamodel/table.md#row-tables) are designed for OLTP workloads.
-* [Column-oriented tables](datamodel/table.md#column-tables) are designed for OLAP workloads.
+* [Row-oriented tables](datamodel/table.md#row-oriented-tables) are designed for OLTP workloads.
+* [Column-oriented tables](datamodel/table.md#column-oriented-tables) are designed for OLAP workloads.
 
 Logically, from the user's perspective, both types of tables look the same. The main difference between row-oriented and column-oriented tables lies in how the data is physically stored. In row-oriented tables, the values of all columns in each row are stored together. In contrast, in column-oriented tables, each column is stored separately, meaning that cells from different rows are stored next to each other within the same column.
 

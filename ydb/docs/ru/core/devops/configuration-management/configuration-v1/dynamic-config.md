@@ -26,7 +26,7 @@
          admin console configs dump-yaml > dynconfig.yaml
     ```
 
-    Предварительно необходимо получить токен аутентификации с помощью команды `ydb auth get-token`, аналогично [процедуре инициализации кластера](../../../devops/deployment-options/manual/initial-deployment/index.md#initialize-cluster).
+    Предварительно необходимо получить токен аутентификации с помощью команды `ydb auth get-token`, аналогично [процедуре инициализации кластера](../../../devops/deployment-options/manual/initial-deployment/deployment-configuration-v1.md#initialize-cluster).
 
 3. Сформируйте первоначальный файл динамической конфигурации:
 

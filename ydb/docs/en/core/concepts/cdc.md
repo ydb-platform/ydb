@@ -74,7 +74,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 {% note warning %}
 
-[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table and [barriers](#barriers) are not emitted to the changefeed during the initial scan.
+[Automatic partitioning](datamodel/table.md#partitioning_row_table) processes are suspended in the table and [barriers](#barriers) are not emitted to the changefeed during the initial scan.
 
 {% endnote %}
 
@@ -287,12 +287,12 @@ my/table/updates_feed
 
 The topic settings can be updated using the expression [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Supported actions:
 
-* [updating settings](../yql/reference/syntax/alter-topic.md#updating-topic-settings):
+* [updating settings](../yql/reference/syntax/alter-topic.md#alter-topic):
 
   * `retention_period`;
   * `retention_storage_mb`;
 
-* [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
+* [updating consumers](../yql/reference/syntax/alter-topic.md#consumer).
 
 ## CDC Purpose and Use {#best_practices}
 

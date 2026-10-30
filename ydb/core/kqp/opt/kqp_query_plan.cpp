@@ -33,6 +33,7 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/queue.h>
 #include <util/string/hex.h>
 #include <util/string/strip.h>
@@ -846,11 +847,24 @@ private:
         TOperator op;
 
         TVector<TString> readColumns;
+        TTableRead readInfo;
+        bool mainTableCovered = true;
         for(const auto& column: columns) {
             readColumns.push_back(TString(column.Value()));
             if (readColumns.back() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 op.Properties["RelevanceQuery"] = "True";
+            } else {
+                readInfo.Columns.push_back(readColumns.back());
+                // Match TMainTableReader::FromSettings: only primary keys and relevance
+                // can be returned without looking up documents in the main table.
+                mainTableCovered &= IsIn(tableData.Metadata->KeyColumnNames, readColumns.back());
             }
+        }
+
+        if (!mainTableCovered) {
+            readInfo.Type = EPlanTableReadType::Lookup;
+            readInfo.LookupBy = tableData.Metadata->KeyColumnNames;
+            SerializerCtx.Tables[TString(tablePath)].Reads.push_back(std::move(readInfo));
         }
 
         op.Properties["Table"] = TString(tablePath);
@@ -1477,6 +1491,7 @@ private:
             op.Properties["Name"] = "Aggregate";
             op.Properties["Blocks"] = "True";
             op.Properties["Phase"] = "Final";
+            AddOptimizerEstimates(op, TExprBase(node));
             operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
@@ -1669,18 +1684,20 @@ private:
         return flatMapInputs;
     }
 
-    std::variant<ui32, TArgContext> Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoCondense1& condense, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         op.Properties["Phase"] = "Intermediate";
+        AddOptimizerEstimates(op, condense);
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoCondense& condense, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         op.Properties["Phase"] = "Final";
+        AddOptimizerEstimates(op, condense);
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1691,6 +1708,7 @@ private:
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
         op.Properties["Phase"] = "Intermediate";
+        AddOptimizerEstimates(op, combiner);
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
@@ -1728,16 +1746,18 @@ private:
         }
         op.Properties["Phase"] = "Intermediate";
 
+        AddOptimizerEstimates(op, blockCombine);
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TCoWideCombiner& /* combiner */, TQueryPlanNode& planNode) {
+    std::variant<ui32, TArgContext> Visit(const TCoWideCombiner& combiner, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
         // op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         // op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
         // op.Properties["Finish"] = NPlanUtils::PrettyExprStr(combiner.FinishHandler());
         op.Properties["Phase"] = "Final";
+        AddOptimizerEstimates(op, combiner);
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
@@ -1947,6 +1967,7 @@ private:
             op.Properties["Input"] = inputValue;
         }
 
+        AddOptimizerEstimates(op, partitionByKey);
         return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
@@ -3254,6 +3275,11 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     }
 
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
+        // Unsafe truncate runs in a separate executer and has no DQ execution plan.
+        if (GetTableTruncateSettings(tx)) {
+            return;
+        }
+
         NJsonWriter::TBuf txWriter;
         txWriter.SetIndentSpaces(2);
         TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx, txProto);

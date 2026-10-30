@@ -11,6 +11,9 @@ import "ydb/public/api/protos/draft/ydb_bridge.proto";
 // Service for managing cluster in bridge mode
 service BridgeService {
 
+    // Change bridge mode of the specified database.
+    rpc SetDatabaseBridgeMode(Ydb.Bridge.SetDatabaseBridgeModeRequest) returns (Ydb.Bridge.SetDatabaseBridgeModeResponse);
+
     // Get current cluster state
     // Useful for monitoring and decision-making before state changes
     rpc GetClusterState(Ydb.Bridge.GetClusterStateRequest) returns (Ydb.Bridge.GetClusterStateResponse);
@@ -27,5 +30,11 @@ service BridgeService {
 
     // Remove a DISCONNECTED pile from the cluster along with all its data, so that it becomes INACTIVE
     rpc RemovePile(Ydb.Bridge.RemovePileRequest) returns (Ydb.Bridge.RemovePileResponse);
+
+    // Report how far the rollback of a cluster prepared for bridge mode back to ordinary mode has gone
+    rpc GetRollbackStatus(Ydb.Bridge.GetRollbackStatusRequest) returns (Ydb.Bridge.GetRollbackStatusResponse);
+
+    // Roll a cluster converted from an ordinary one back to it, while it has the only pile, the original one
+    rpc Rollback(Ydb.Bridge.RollbackRequest) returns (Ydb.Bridge.RollbackResponse);
 
 }

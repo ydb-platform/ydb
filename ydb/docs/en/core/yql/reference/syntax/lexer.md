@@ -218,7 +218,7 @@ SELECT $text;
 
 ### Typed string literals {#typed-string-literals}
 
-* For string literals, including [multi-string](#multiline-string-literals) ones, the `String` type is used by default (see also [PRAGMA UnicodeLiterals](pragma.md#UnicodeLiterals)).
+* For string literals, including [multi-string](#multiline-string-literals) ones, the `String` type is used by default (see also [PRAGMA UnicodeLiterals](pragma.md#unicodeliterals)).
 * You can use the following suffixes to explicitly control the literal type:
 
   * `s` — `String`

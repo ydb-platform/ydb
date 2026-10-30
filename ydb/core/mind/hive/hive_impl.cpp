@@ -11,6 +11,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <util/generic/strbuf.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
@@ -149,10 +150,6 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
         RecordNodeEvent(*node, EHiveEventType::Deleted, EHiveEventReason::NodeExpired,
             TStringBuilder() << "lastAlive=" << TInstant::MilliSeconds(node->Statistics.GetLastAliveTimestamp())
                 << " nodeDeletePeriod=" << GetNodeDeletePeriod());
-        if (BridgeInfo) {
-            auto& pileInfo = GetPile(node->BridgePileId);
-            pileInfo.Nodes.erase(node->Id);
-        }
         if (node->Down) {
             UpdateCounterNodesDown(-1);
         }
@@ -1028,7 +1025,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
-        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
+        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck, 0, ev->Cookie);
     }
 }
 
@@ -2591,6 +2588,9 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         if (!node.Name.empty()) {
             nodeStats.SetNodeName(node.Name);
         }
+        if (node.BridgePileId) {
+            node.BridgePileId.CopyToProto(&nodeStats, &NKikimrHive::THiveNodeStats::SetBridgePileId);
+        }
         if (request.GetReturnExtendedTabletInfo()) {
             if (request.HasFilterTabletsByPathId()) {
                 auto itTabletsOfObject = node.TabletsOfObject.find({request.GetFilterTabletsBySchemeShardId(), request.GetFilterTabletsByPathId()});
@@ -2800,7 +2800,13 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
+    const NKikimrConfig::THiveConfig previousConfig = CurrentConfig;
     BuildCurrentConfig();
+    if (TString changes = GetHiveConfigDiffText(previousConfig, CurrentConfig)) {
+        YDB_LOG_INFO("Handle TEvConsole::TEvConfigNotificationRequest: effective config changed",
+            {"logPrefix", GetLogPrefix()},
+            {"changes", changes});
+    }
     YDB_LOG_DEBUG("Handle TEvConsole::TEvConfigNotificationRequest: merged config",
         {"logPrefix", GetLogPrefix()},
         {"config", CurrentConfig});
@@ -2956,8 +2962,7 @@ void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
-        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessTabletBalancer: postponed because of sub-actor activity",
-            {"logPrefix", GetLogPrefix()});
+        LogBalancerNotStarted({}, EBalancerSuppressReason::SubActorActivity);
         ProcessTabletBalancerPostponed = true;
         return;
     }
@@ -2969,6 +2974,10 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         size_t typeIndex = static_cast<size_t>(settings->Type);
         if (LastBalancerTrigger == settings->Type
             && BalancerStats[typeIndex].LastRunMovements == 0) {
+            YDB_LOG_DEBUG("Balancer candidate deferred while considering alternatives",
+                {"logPrefix", GetLogPrefix()},
+                {"balancerType", EBalancerTypeName(settings->Type)},
+                {"reason", EBalancerSuppressReasonName(EBalancerSuppressReason::PreviousRunNoMovements)});
             return false;
         }
         if (balancersStarted.test(typeIndex) && settings->Type != EBalancerType::Emergency) {
@@ -2997,6 +3006,10 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             .FilterNodeIds = std::move(objectToBalance.Nodes),
             .ResourceToBalance = EResourceToBalance::Counter,
             .FilterObjectId = objectToBalance.ObjectId,
+            .Trigger = "object imbalance",
+            .TriggerDetails = TStringBuilder() << "objectId=" << objectToBalance.ObjectId
+                << " imbalance=" << ObjectDistributions.GetMaxImbalance()
+                << " threshold=" << GetObjectImbalanceToBalance(),
         });
     }
 
@@ -3029,12 +3042,20 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                     {"logPrefix", GetLogPrefix()},
                     {"overloadedNodes", overloadedNodes},
                     {"maxNodeUsageToKick", GetMaxNodeUsageToKick()});
+                TStringBuilder triggerDetails;
+                triggerDetails << "segment=" << segmentId
+                    << " maxUsage=" << Sprintf("%.3f", stats.MaxUsage) << " maxUsageNode=" << stats.MaxUsageNodeId
+                    << " minUsage=" << Sprintf("%.3f", stats.MinUsage) << " minUsageNode=" << stats.MinUsageNodeId
+                    << " maxNodeUsageToKick=" << Sprintf("%.3f", GetMaxNodeUsageToKick())
+                    << " overloadedNodes=" << overloadedNodes;
                 settings.emplace(TBalancerSettings{
                     .Type = EBalancerType::Emergency,
                     .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                     .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                     .MaxInFlight = GetEmergencyBalancerInflight(),
                     .FilterNodeIds = std::move(overloadedNodes),
+                    .Trigger = "node overload",
+                    .TriggerDetails = triggerDetails,
                 });
                 if (maybeStartBalancer()) {
                     continue;
@@ -3091,6 +3112,14 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 {"scatterByResource", stats.ScatterByResource},
                 {"minScatterToBalance", GetMinScatterToBalance()},
                 {"balancerTypeName", EBalancerTypeName(balancerType)});
+            TStringBuilder triggerDetails;
+            triggerDetails << "segment=" << segmentId
+                << " scatter=" << Sprintf("%.3f", TTabletInfo::ExtractResourceUsage(stats.ScatterByResource, resource))
+                << " minScatterToBalance=" << Sprintf("%.3f", minScatter)
+                << " scatterByResource=" << stats.ScatterByResource
+                << " minUsage=" << Sprintf("%.3f", minUsage)
+                << " usageThreshold=" << Sprintf("%.3f", usageThreshold)
+                << " nodesOverThreshold=" << nodeIds.size();
             settings.emplace(TBalancerSettings{
                 .Type = balancerType,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
@@ -3098,6 +3127,8 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 .MaxInFlight = GetBalancerInflight(),
                 .FilterNodeIds = std::move(nodeIds),
                 .ResourceToBalance = *scatteredResource,
+                .Trigger = "resource scatter",
+                .TriggerDetails = triggerDetails,
             });
             if (maybeStartBalancer()) {
                 continue;
@@ -3260,7 +3291,7 @@ void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NK
 }
 
 template <ui64 TMetrics::* field>
-static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, const TString& name) {
+static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, TStringBuf name) {
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
@@ -3268,7 +3299,7 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
         YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId},
-            {"metricName", name},
+            {"metricName", TString(name)},
             {"oldValue", oldValue},
             {"delta", delta},
             {"newValue", newValue});
@@ -3781,6 +3812,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, Handle);
+        hFunc(TEvPrivate::TEvProcessPileDrains, Handle);
         hFunc(TEvPrivate::TEvPostponeProcessBootQueue, Handle);
         hFunc(TEvPrivate::TEvProcessPendingOperations, Handle);
         hFunc(TEvPrivate::TEvProcessDisconnectNode, Handle);
@@ -3902,6 +3934,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvInterconnect::TEvNodesInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvents::TEvUndelivered::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessBootQueue::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessPileDrains::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvPostponeProcessBootQueue::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessPendingOperations::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);
@@ -4861,10 +4894,23 @@ bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
                 {"logPrefix", GetLogPrefix()},
                 {"requestedBalancerType", EBalancerTypeName(balancerType)},
                 {"runningBalancerType", EBalancerTypeName(type)});
+            LogBalancerNotStarted(EBalancerTypeName(balancerType), EBalancerSuppressReason::AnotherBalancerRunning);
             return false;
         }
     }
     return true;
+}
+
+void THive::LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason) {
+    // the same suppression repeats on every balancer tick while the condition holds, so only a change
+    // of (type, reason) is worth an INFO line; a balancer actually starting resets this
+    const std::pair<TString, EBalancerSuppressReason> key(balancerType, reason);
+    const auto priority = (LastBalancerSuppression != key) ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_DEBUG;
+    LastBalancerSuppression = key;
+    YDB_LOG(priority, "Balancer not started",
+        {"logPrefix", GetLogPrefix()},
+        {"balancerType", balancerType},
+        {"reason", EBalancerSuppressReasonName(reason)});
 }
 
 } // NHive

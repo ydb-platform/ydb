@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import urllib.error
 from decimal import Decimal
 from pathlib import Path
 from unittest import mock
@@ -48,27 +47,94 @@ def save_upload(directory, kinds, attempt=1, path=CLI):
     return receipt, coverage
 
 
-def upload(name=UPLOAD, state="MERGED", flags=None, errors=0):
-    return {"name": name, "state": state, "flags": flags if flags is not None else ["cli"], "errors": {"totalCount": errors}}
-
-
-def commit(uploads=None, flags=None, lines=10, head=HEAD, cursor=None):
-    return {
-        "commitid": head,
-        "coverageAnalytics": {"flagNames": flags if flags is not None else ["cli"], "totals": {"lineCount": lines}},
-        "uploads": {
-            "edges": [{"node": item} for item in (uploads if uploads is not None else [upload()])],
-            "pageInfo": {"hasNextPage": cursor is not None, "endCursor": cursor},
-        },
-    }
-
-
-def response(value):
-    return {"data": {"owner": {"repository": {"__typename": "Repository", "commit": value}}}}
-
-
 def report(kinds):
     return {"totals": {"lineCount": len(kinds)}, "coverage": [{"line": number, "coverage": kind} for number, kind in enumerate(kinds, 1)]}
+
+
+def policy_config(target="80%", tolerance="0%"):
+    return {"flag_management": {"individual_flags": [
+        {"name": flag, "statuses": [{"type": "patch", "target": target, "threshold": tolerance}]}
+        for flag in gate.SUITES
+    ]}}
+
+
+class PatchPolicyTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "policy.json"
+
+    def read(self, data, flag="cli"):
+        self.path.write_text(json.dumps(data))
+        return gate.load_patch_policy(self.path, flag)
+
+    def test_numeric_percentages_and_tolerance_come_from_policy(self):
+        for target in (85, 85.0, "85", "85%", "85.0%"):
+            with self.subTest(target=target):
+                policy = self.read(policy_config(target, "2.5%"))
+                self.assertEqual(policy.minimum, Decimal("82.5"))
+                self.assertIn("tolerance 2.5 percentage points", policy.description())
+        self.assertEqual(self.read(policy_config("5%", "10%")).minimum, Decimal(0))
+
+    def test_each_flag_uses_its_own_resolved_policy(self):
+        config = policy_config()
+        for index, item in enumerate(config["flag_management"]["individual_flags"]):
+            item["statuses"][0]["target"] = 70 + index
+        for index, flag in enumerate(gate.SUITES):
+            self.assertEqual(self.read(config, flag).minimum, Decimal(70 + index))
+
+    def test_unknown_or_ambiguous_policies_fail_without_default(self):
+        config = policy_config()
+        flag = next(item for item in config["flag_management"]["individual_flags"] if item["name"] == "cli")
+        for data in (None, [], {}, {"flag_management": None},
+                     {"flag_management": {"individual_flags": {}}},
+                     {"flag_management": {"individual_flags": []}},
+                     {"flag_management": {"individual_flags": [None]}},
+                     {"flag_management": {"individual_flags": [flag, flag]}}):
+            with self.subTest(data=data), self.assertRaises(gate.CoverageError):
+                self.read(data)
+        for statuses in (None, {}, [], [None], [{"type": "project", "target": 80}],
+                         [flag["statuses"][0]] * 2):
+            with self.subTest(statuses=statuses), self.assertRaises(gate.CoverageError):
+                self.read({"flag_management": {"individual_flags": [{"name": "cli", "statuses": statuses}]}})
+
+    def test_missing_or_invalid_percentages_fail_without_default(self):
+        for field in ("target", "threshold"):
+            for value in (None, True, False, [], {}, "auto", "NaN", "Infinity", "-1%", "101%", "80%%"):
+                config = policy_config()
+                for item in config["flag_management"]["individual_flags"]:
+                    item["statuses"][0][field] = value
+                with self.subTest(field=field, value=value), self.assertRaises(gate.CoverageError):
+                    self.read(config)
+            config = policy_config()
+            for item in config["flag_management"]["individual_flags"]:
+                del item["statuses"][0][field]
+            with self.subTest(field=field), self.assertRaises(gate.CoverageError):
+                self.read(config)
+
+    def test_missing_malformed_or_oversized_policy_fails(self):
+        with self.assertRaises(gate.CoverageError):
+            gate.load_patch_policy(self.path, "cli")
+        self.path.write_text("not JSON")
+        with self.assertRaises(gate.CoverageError):
+            gate.load_patch_policy(self.path, "cli")
+        with mock.patch.object(gate, "MAX_POLICY_BYTES", 10), self.assertRaises(gate.CoverageError):
+            self.read(policy_config())
+
+    def test_editing_one_yaml_target_updates_all_flags_and_the_gate(self):
+        source = Path(__file__).resolve().parents[3] / "codecov.yml"
+        yaml = source.read_text()
+        self.assertEqual(yaml.count("target: 80%"), 1)
+        for text, expected in ((yaml, Decimal(80)), (yaml.replace("target: 80%", "target: 90%"), Decimal(90))):
+            parsed = subprocess.run(
+                ["ruby", "-rjson", "-ryaml", "-e",
+                 "puts JSON.generate(YAML.safe_load(STDIN.read, aliases: true))"],
+                input=text, check=True, capture_output=True, text=True,
+            )
+            for flag in gate.SUITES:
+                policy = self.read(json.loads(parsed.stdout), flag)
+                self.assertEqual(policy.minimum, expected)
+                self.assertEqual(gate.Totals(8, 2, 0).passes(policy.minimum), expected == 80)
 
 
 class PatchTotalsTest(unittest.TestCase):
@@ -225,58 +291,6 @@ class CollectTest(unittest.TestCase):
             self.assertEqual(result["files"], {f"ydb/public/lib/ydb_cli/{new_name}": [[13, 13]]})
 
 
-class UploadReadinessTest(unittest.TestCase):
-    def client(self, value):
-        client = gate.Client("ydb-platform/ydb", HEAD)
-        client.query = mock.Mock(return_value=value)
-        return client
-
-    def test_current_upload_merged_without_waiting_for_ci_notifications(self):
-        self.assertEqual(self.client(commit()).upload_ready("cli", UPLOAD), UPLOAD)
-
-    def test_wrong_name_does_not_reuse_old_report(self):
-        with self.assertRaises(gate.NotReady):
-            self.client(commit()).upload_ready("cli", "cli-456-1")
-
-    def test_missing_flag_report_or_upload_waits(self):
-        for value in (commit(flags=[]), commit(lines=0), commit(uploads=[]), commit(uploads=[upload(state="PROCESSED")]), commit(uploads=[upload(state="COMPLETE")])):
-            with self.subTest(value=value), self.assertRaises(gate.NotReady):
-                self.client(value).upload_ready("cli", UPLOAD)
-
-    def test_error_or_wrong_flag_is_never_successful(self):
-        for item in (upload(state="ERROR"), upload(errors=1), upload(flags=["cli", "cpp_sdk"])):
-            with self.subTest(item=item), self.assertRaises(gate.CoverageError):
-                self.client(commit(uploads=[item])).upload_ready("cli", UPLOAD)
-
-    def test_latest_attempt_not_older_merged_upload_is_checked(self):
-        client = self.client(commit(uploads=[upload(), upload(name="cli-123-2", state="UPLOADED")]))
-        with self.assertRaises(gate.NotReady):
-            client.upload_ready("cli", "cli-123-2")
-
-    def test_invisible_new_attempt_cannot_reuse_old_merged_report(self):
-        with self.assertRaises(gate.NotReady):
-            self.client(commit()).upload_ready("cli", "cli-123-2")
-
-    def test_other_run_and_similarly_prefixed_names_are_ignored(self):
-        items = [upload(name="cli-1234-2"), upload(name="cli-123-2-extra"), upload(name="cli-123-0")]
-        with self.assertRaises(gate.NotReady):
-            self.client(commit(uploads=items)).upload_ready("cli", "cli-123-2")
-
-    def test_only_the_receipt_attempt_matters(self):
-        value = commit(uploads=[upload(name="cli-123-9", state="ERROR"), upload(name="cli-123-10")])
-        self.assertEqual(self.client(value).upload_ready("cli", "cli-123-10"), "cli-123-10")
-
-    def test_pagination_is_fully_read_before_accepting_the_receipt_upload(self):
-        client = self.client(None)
-        client.query.side_effect = [commit(cursor="next"), commit(uploads=[upload(name="cli-123-2")])]
-        self.assertEqual(client.upload_ready("cli", "cli-123-2"), "cli-123-2")
-        self.assertEqual(client.query.call_args_list[1].args[1], {"after": "next"})
-
-    def test_repeated_pagination_cursor_is_error(self):
-        with self.assertRaises(gate.CoverageError):
-            self.client(commit(cursor="next")).upload_ready("cli", UPLOAD)
-
-
 class UploadReceiptTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -381,48 +395,37 @@ class LcovTest(unittest.TestCase):
                 gate.load_lcov(coverage, pin, "cli")
 
 
-class ApiTest(unittest.TestCase):
-    def test_wrong_sha_is_not_accepted(self):
-        with self.assertRaises(gate.CoverageError):
-            gate.commit_from_response(response(commit(head=BASE)), HEAD)
-
-    def test_missing_commit_is_not_ready(self):
-        with self.assertRaises(gate.NotReady):
-            gate.commit_from_response(response(None), HEAD)
-
-    def test_graphql_errors_reject_partial_data(self):
-        value = response(commit())
-        value["errors"] = [{"message": "some query failed"}]
-        with mock.patch.object(gate.urllib.request, "urlopen") as open_url:
-            open_url.return_value.__enter__.return_value.read.return_value = json.dumps(value).encode()
-            with self.assertRaisesRegex(gate.NotReady, "some query failed"):
-                gate.request("query", {}, 1)
-
-    def test_http_and_network_failures_are_not_a_pass(self):
-        for error in (urllib.error.URLError("network"), TimeoutError(), urllib.error.HTTPError(gate.API_URL, 429, "rate limit", {}, None), urllib.error.HTTPError(gate.API_URL, 500, "server", {}, None)):
-            with self.subTest(error=error), mock.patch.object(gate.urllib.request, "urlopen", side_effect=error), self.assertRaises(gate.NotReady):
-                gate.request("query", {}, 1)
-
-    def test_permission_and_schema_errors_are_fatal(self):
-        for status in (400, 401, 403, 404):
-            with self.subTest(status=status), mock.patch.object(gate.urllib.request, "urlopen", side_effect=urllib.error.HTTPError(gate.API_URL, status, "error", {}, None)), self.assertRaises(gate.CoverageError):
-                gate.request("query", {}, 1)
-
-    def test_polling_has_one_bounded_budget(self):
-        client = gate.Client("ydb-platform/ydb", HEAD)
-        client.deadline = 20
-        operation = mock.Mock(side_effect=gate.NotReady("processing"))
-        with mock.patch.object(gate.time, "monotonic", side_effect=[5, 20]), mock.patch.object(gate.time, "sleep") as sleep, contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(gate.CoverageError, "timed out"):
-                client.wait(operation)
-        sleep.assert_called_once_with(15)
-
-    def test_temporary_error_can_recover(self):
-        client = gate.Client("ydb-platform/ydb", HEAD)
-        with mock.patch.object(gate.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(client.wait(mock.Mock(side_effect=[gate.NotReady("processing"), 42])), 42)
-
 class CliTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.manifest = self.root / "patch.json"
+        self.policy = self.root / "policy.json"
+        self.policy.write_text(json.dumps(policy_config()))
+        self.summary = self.root / "summary.md"
+        self.manifest.write_text(json.dumps({
+            "version": 1, "base_sha": BASE, "head_sha": HEAD, "files": {CLI: [[1, 10]]},
+        }))
+
+    def args(self, kinds, attempt=1, path=CLI):
+        receipt, coverage = save_upload(self.root, kinds, attempt=attempt, path=path)
+        return [
+            "check", "--base-sha", BASE, "--head-sha", HEAD,
+            "--flag", "cli", "--run-id", "123",
+            "--upload-receipt", str(receipt), "--coverage-report", str(coverage),
+            "--changed-lines-file", str(self.manifest),
+            "--policy-file", str(self.policy),
+        ]
+
+    def invoke(self, args):
+        # Reproduce a completely unavailable remote service. A local verdict
+        # must still work, including N/A and genuine below-threshold failures.
+        with mock.patch("socket.create_connection", side_effect=AssertionError("network is forbidden")) as network, mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(self.summary)}), contextlib.redirect_stdout(io.StringIO()):
+            result = gate.main(args)
+        network.assert_not_called()
+        return result
+
     def test_invalid_percentages_and_shas_are_rejected(self):
         for value in ("nan", "Infinity", "-1", "101", "not a number"):
             with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
@@ -430,49 +433,79 @@ class CliTest(unittest.TestCase):
         with self.assertRaises(argparse.ArgumentTypeError):
             gate.sha("main")
 
-    def test_gate_exit_codes_and_absent_files_summary(self):
-        with tempfile.TemporaryDirectory() as directory:
-            manifest = Path(directory) / "patch.json"
-            summary = Path(directory) / "summary.md"
-            manifest.write_text(json.dumps({"version": 1, "base_sha": BASE, "head_sha": HEAD, "files": {CLI: [[1, 10]]}}))
-            for kinds, expected in (("HHHHHHHHMP", 0), ("HHHHHHHMPP", 1)):
-                receipt, coverage = save_upload(Path(directory), kinds)
-                args = ["check", "--repository", "ydb-platform/ydb", "--base-sha", BASE, "--head-sha", HEAD, "--flag", "cli", "--run-id", "123", "--upload-receipt", str(receipt), "--coverage-report", str(coverage), "--changed-lines-file", str(manifest)]
-                with mock.patch.object(gate.Client, "upload_ready", return_value=UPLOAD), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stdout(io.StringIO()):
-                    self.assertEqual(gate.main(args), expected)
-            save_upload(Path(directory), "H", path=CLI.replace("main", "other"))
-            with mock.patch.object(gate.Client, "upload_ready", return_value=UPLOAD), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(gate.main(args), 0)
-            self.assertIn("not applicable", summary.read_text())
-            self.assertIn("not assumed covered", summary.read_text())
-            with mock.patch.object(gate.Client, "upload_ready", side_effect=gate.CoverageError("missing report")), mock.patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(gate.main(args), 2)
-            self.assertIn("Measurement error: missing report", summary.read_text())
+    def test_offline_gate_exit_codes_and_absent_files_summary(self):
+        for kinds, expected in (("HHHHHHHHMP", 0), ("HHHHHHHMPP", 1)):
+            with self.subTest(kinds=kinds):
+                self.assertEqual(self.invoke(self.args(kinds)), expected)
+        self.assertEqual(self.invoke(self.args("H", path=CLI.replace("main", "other"))), 0)
+        summary = self.summary.read_text()
+        self.assertIn("not applicable", summary)
+        self.assertIn("not assumed covered", summary)
+        self.assertIn("Calculated offline", summary)
+
+    def test_policy_edit_alone_changes_cli_verdict_and_summary(self):
+        args = self.args("HHHHHHHHMP")
+        self.assertEqual(self.invoke(args), 0)
+        self.policy.write_text(json.dumps(policy_config("81%")))
+        self.assertEqual(self.invoke(args), 1)
+        self.assertIn("minimum 81%", self.summary.read_text())
+        self.policy.write_text(json.dumps(policy_config("85%", "5%")))
+        self.assertEqual(self.invoke(args), 0)
+        self.assertIn("target 85%, tolerance 5 percentage points; minimum 80%", self.summary.read_text())
+
+    def test_missing_policy_is_error_even_with_no_measured_changes(self):
+        args = self.args("H", path=CLI.replace("main", "other"))
+        self.policy.unlink()
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.invoke(args), 2)
+        self.assertIn("Measurement error", self.summary.read_text())
+
+    def test_command_line_cannot_override_policy(self):
+        args = self.args("M")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as result:
+            gate.main(args + ["--threshold", "0"])
+        self.assertEqual(result.exception.code, 2)
+
+    def test_missing_report_is_measurement_error_not_a_fake_pass(self):
+        args = self.args("H")
+        Path(args[args.index("--coverage-report") + 1]).unlink()
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.invoke(args), 2)
+        self.assertIn("Measurement error", self.summary.read_text())
+        self.assertIn("No coverage verdict was produced", self.summary.read_text())
+
+    def test_malformed_patch_is_a_measurement_error_even_offline(self):
+        args = self.args("H")
+        self.manifest.write_text("not JSON")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.invoke(args), 2)
+        self.assertIn("Measurement error", self.summary.read_text())
+
+    def test_pr_56580_regression_remains_below_threshold_without_api_timeout(self):
+        # That real run timed out waiting for Codecov, although the preserved
+        # CLI LCOV already gave an unambiguous 3/10 (30%) patch verdict.
+        self.assertEqual(self.invoke(self.args("HHH" + "M" * 7)), 1)
+        self.assertIn("30.00000%", self.summary.read_text())
+        self.assertIn("3/10 covered", self.summary.read_text())
 
     def test_two_uploads_same_head_and_flag_cannot_mask_current_misses(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            manifest = root / "patch.json"
-            manifest.write_text(json.dumps({"version": 1, "base_sha": BASE, "head_sha": HEAD, "files": {CLI: [[1, 10]]}}))
-            older = save_upload(root, "H" * 10, attempt=1)
-            current = save_upload(root, "M" * 10, attempt=2)
-            # The processed commit/flag report would merge these into 100%.
-            # Expose both MERGED uploads, but no coverageFile query is allowed.
-            def query(_client, text, extra=None):
-                self.assertEqual(text, gate.UPLOAD_QUERY)
-                return commit(uploads=[upload(), upload(name="cli-123-2")])
+        older = self.args("H" * 10, attempt=1)
+        current = self.args("M" * 10, attempt=2)
+        # A remote commit/flag view would merge these into 100%. Local receipts
+        # must evaluate each attempt separately regardless of remote state.
+        self.assertEqual(self.invoke(older), 0)
+        self.assertEqual(self.invoke(current), 1)
+        self.assertIn("0/10 covered", self.summary.read_text())
+        current[current.index("--coverage-report") + 1] = older[older.index("--coverage-report") + 1]
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.invoke(current), 2)
+        self.assertIn("digest", self.summary.read_text())
 
-            for (receipt, coverage), expected, fraction in ((older, 0, "10/10"), (current, 1, "0/10")):
-                args = ["check", "--repository", "ydb-platform/ydb", "--base-sha", BASE, "--head-sha", HEAD, "--flag", "cli", "--run-id", "123", "--upload-receipt", str(receipt), "--coverage-report", str(coverage), "--changed-lines-file", str(manifest)]
-                output = io.StringIO()
-                with mock.patch.object(gate.Client, "query", new=query), contextlib.redirect_stdout(output):
-                    self.assertEqual(gate.main(args), expected)
-                self.assertIn(fraction, output.getvalue())
-            # A receipt from the new attempt cannot be paired with the old LCOV.
-            args[args.index("--coverage-report") + 1] = str(older[1])
-            with mock.patch.object(gate.Client, "query") as api, contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(gate.main(args), 2)
-                api.assert_not_called()
+    def test_stale_head_cannot_use_another_attempts_local_report(self):
+        args = self.args("H" * 10)
+        args[args.index("--head-sha") + 1] = "c" * 40
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(self.invoke(args), 2)
 
 
 if __name__ == "__main__":

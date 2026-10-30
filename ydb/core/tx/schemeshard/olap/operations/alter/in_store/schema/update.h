@@ -14,6 +14,9 @@ private:
     std::optional<NKikimrSchemeOp::TColumnTableSchemaPreset> SchemaPreset;
     std::shared_ptr<TInStoreTable> TargetInStoreTable;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoRestoreImpl(
+        const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) override;
+    void InitializeSchemaPreset(const TInStoreTable& table, const TOlapStoreInfo& storeInfo);
 
     virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const override {
         return TargetInStoreTable;

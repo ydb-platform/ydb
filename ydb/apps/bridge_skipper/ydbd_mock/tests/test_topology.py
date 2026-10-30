@@ -9,6 +9,15 @@ from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Policies, Timings, To
 
 
 class DefaultsTest(unittest.TestCase):
+    def test_static_quorum_defaults_to_majority_and_can_be_overridden(self):
+        t = Topology(["a", "b"], {"a": 4, "b": 3}, static_quorum={"b": 3})
+        self.assertEqual(t.static_quorum, {"a": 3, "b": 3})
+        self.assertEqual(Topology.from_yaml(t.to_yaml()).static_quorum, t.static_quorum)
+        for quorum in ({"a": 0}, {"a": 5}, {"missing": 1}, {"a": True}, {"a": 1.5}):
+            with self.subTest(quorum=quorum):
+                with self.assertRaises(TopologyError):
+                    Topology(["a", "b"], 4, static_quorum=quorum)
+
     def test_default_layout_is_two_piles_of_three_nodes_on_loopback(self):
         t = Topology()
         self.assertEqual(t.pile_names, ["pile1", "pile2"])

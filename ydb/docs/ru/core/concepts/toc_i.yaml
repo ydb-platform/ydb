@@ -38,6 +38,8 @@ items:
   when: feature_changefeed
 - name: Time to Live (TTL) и вытеснение данных во внешнее хранилище
   href: ttl.md
+- name: Сжатие данных в таблицах
+  href: compression.md
 - name: Ограничения базы данных
   href: limits-ydb.md
 - name: Резервное копирование и восстановление

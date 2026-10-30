@@ -1,5 +1,7 @@
 #include "kqp_opt_log_json_index.h"
+#include "kqp_opt_log_impl.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -8,6 +10,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 
 #include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
@@ -1663,18 +1666,23 @@ struct TFulltextQuery {
         return Node->Content() == "FulltextMatch";
     }
 
-    TString GetModeIfAny() const {
+    bool RequiresPostfilter() const {
+        if (!IsMatchQuery()) {
+            return !IsScoreQuery();
+        }
         if (!NamedOptions)
-            return TString();
+            return false;
 
         for(auto& child : NamedOptions->Children()) {
             auto arg = TExprBase(child).Cast<TCoNameValueTuple>();
             if (arg.Name().StringValue() == "Mode") {
-                return arg.Value().Cast<TCoString>().Literal().StringValue();
+                auto mode = arg.Value().Cast<TCoString>().Literal().StringValue();
+                mode.to_lower();
+                return mode == "wildcard";
             }
         }
 
-        return TString();
+        return false;
     }
 
     bool IsValid() {
@@ -2064,9 +2072,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
             }
 
             if (match.IsMatchQuery()) {
-                auto mode = match.GetModeIfAny();
-                mode.to_lower();
-                if (isNgram && mode == "wildcard") {
+                if (isNgram && match.RequiresPostfilter()) {
                     auto postfilter = BuildPostfiltersForMatch(ctx, node.Pos(), match.Query, match.Column);
                     result.Replaces.emplace(match.Node.Get(), postfilter);
                 } else {
@@ -2240,7 +2246,98 @@ TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read,
     return seedPrefixColumns;
 }
 
-TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+TExprBase BuildFulltextFallbackScan(const TCoFlatMap& flatMap, const TReadMatch& read,
+    const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& prefixBindings,
+    const TExprNode::TPtr& noSearchTerms, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    TTypeAnnotationContext& typesCtx)
+{
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    TExprNode::TPtr prefixFilter;
+    if (!prefixBindings.empty()) {
+        // Index-key ranges cannot be reused as primary-key ranges. Restore their predicates.
+        auto row = ctx.NewArgument(flatMap.Pos(), "scanRow");
+        TExprNode::TListType predicates;
+        for (const auto& [column, value] : prefixBindings) {
+            auto member = Build<TCoMember>(ctx, flatMap.Pos()).Struct(row).Name().Build(column).Done();
+            predicates.push_back(ctx.NewCallable(flatMap.Pos(), "==", {member.Ptr(), value}));
+        }
+        auto predicate = ctx.NewCallable(flatMap.Pos(), "Coalesce", {
+            ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates)),
+            Build<TCoBool>(ctx, flatMap.Pos()).Literal().Build("false").Done().Ptr()});
+        prefixFilter = ctx.NewLambda(flatMap.Pos(), ctx.NewArguments(flatMap.Pos(), {row}),
+            ctx.NewCallable(flatMap.Pos(), "OptionalIf", {predicate, row}));
+    }
+
+    // Guard the ranges themselves so an indexable pattern never starts a table scan,
+    // even when predicate extraction is disabled.
+    TExprNode::TListType boundaryItems;
+    for (const auto& key : tableDesc.Metadata->KeyColumnNames) {
+        const auto* type = ctx.MakeType<TOptionalExprType>(tableDesc.GetColumnType(key));
+        boundaryItems.push_back(ctx.NewCallable(flatMap.Pos(), "Nothing", {ExpandType(flatMap.Pos(), *type, ctx)}));
+    }
+    boundaryItems.push_back(Build<TCoInt32>(ctx, flatMap.Pos()).Literal().Build("0").Done().Ptr());
+    auto boundary = ctx.NewList(flatMap.Pos(), std::move(boundaryItems));
+    auto fullRange = ctx.NewCallable(flatMap.Pos(), "AsRange", {ctx.NewList(flatMap.Pos(), {boundary, boundary})});
+    // These bounds also guide sort elimination and CBO, so keep them conservative.
+    TKqpReadTableExplainPrompt prompt;
+    size_t extractedRangeCount = 0;
+    if (kqpCtx.Config->GetOptPredicateExtract() != EOptionalFlag::Disabled) {
+        // Preserve primary-key bounds as well as the guard that disables the fallback.
+        const auto settings = MakeKqpExtractorSettings(kqpCtx);
+        for (const auto& filter : {flatMap.Lambda().Ptr(), prefixFilter}) {
+            if (!filter || !IsPredicateFlatMap(filter->Tail())) {
+                continue;
+            }
+            auto lambda = ctx.DeepCopyLambda(*filter);
+            YQL_ENSURE(UpdateLambdaAllArgumentsTypes(lambda, {tableDesc.SchemeNode}, ctx));
+            YQL_ENSURE(UpdateLambdaConstraints(lambda, ctx, {TConstraintNode::TListType{}}) != IGraphTransformer::TStatus::Error);
+            THashSet<TString> possibleKeys;
+            auto extractor = MakePredicateRangeExtractor(settings);
+            YQL_ENSURE(extractor->Prepare(lambda, *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx));
+            auto extracted = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+            if (extracted.ComputeNode) {
+                fullRange = ctx.NewCallable(flatMap.Pos(), "RangeIntersect", {fullRange, extracted.ComputeNode->HeadPtr()});
+                if (extracted.UsedPrefixLen > prompt.UsedKeyColumns.size()) {
+                    prompt.UsedKeyColumns.assign(tableDesc.Metadata->KeyColumnNames.begin(),
+                        tableDesc.Metadata->KeyColumnNames.begin() + extracted.UsedPrefixLen);
+                    prompt.SetPointPrefixLen(extracted.PointPrefixLen);
+                }
+                // An intersection can split ranges, so neither input's count bounds the result.
+                if (++extractedRangeCount == 1 && extracted.ExpectedMaxRanges) {
+                    prompt.SetExpectedMaxRanges(*extracted.ExpectedMaxRanges);
+                } else {
+                    prompt.ExpectedMaxRanges.Clear();
+                }
+            }
+        }
+    }
+    auto ranges = ctx.NewCallable(flatMap.Pos(), "RangeFinalize", {
+        ctx.NewCallable(flatMap.Pos(), "If", {noSearchTerms, fullRange, ctx.NewCallable(flatMap.Pos(), "RangeEmpty", {})})});
+
+    TKqpReadTableSettings scanSettings;
+    scanSettings.ForcePrimary = true;
+    scanSettings.IndexSelectionInfo[read.Index().StringValue()] = "fallback when analyzer extracts no search terms";
+    prompt.IndexSelectionInfo = scanSettings.IndexSelectionInfo;
+    auto scan = Build<TKqlReadTableRanges>(ctx, read.Pos())
+        .Table(read.Table())
+        .Columns(MergeColumns(read.Columns(), prefixColumns, ctx))
+        .Ranges(ranges)
+        .Settings(scanSettings.BuildNode(ctx, read.Pos()))
+        .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
+        .Done();
+    TExprBase scanInput = scan;
+    if (prefixFilter) {
+        scanInput = Build<TCoFlatMap>(ctx, flatMap.Pos())
+            .Input(scan)
+            .Lambda(prefixFilter)
+            .Done();
+        scanInput = Build<TCoExtractMembers>(ctx, flatMap.Pos()).Input(scanInput).Members(read.Columns()).Done();
+    }
+    return scanInput;
+}
+
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx)
 {
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
@@ -2331,7 +2428,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Add(resultColumnsVector)
         .Done();
 
-    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+    auto indexRead = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
         .Index(read.Index())
         .Columns(resultColumns.Ptr())
@@ -2340,16 +2437,43 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Settings<TCoNameValueTupleList>().Add(settings).Build()
         .Done();
 
+    // A scan can replace the index only when every predicate is checked again on each row.
+    const bool canUseScanFallback = isNgram && AllOf(result.Queries, [](const TFulltextQuery& query) {
+        return query.RequiresPostfilter();
+    });
+    TExprBase input = indexRead;
+    if (canUseScanFallback) {
+        // Use the same query and analyzer as the index source, including wildcard boundaries.
+        auto queryExpr = queryData.front().Ptr();
+        for (size_t i = 1; i < queryData.size(); ++i) {
+            queryExpr = ctx.NewCallable(node.Pos(), "Concat", {queryExpr, queryData[i].Ptr()});
+        }
+        TString analyzers;
+        YQL_ENSURE(fulltextMetadataInfo.GetSettings().columns_size() == 1);
+        const auto& column = fulltextMetadataInfo.GetSettings().columns(0);
+        YQL_ENSURE(column.column() == searchColumn.Name().Value());
+        YQL_ENSURE(column.analyzers().SerializeToString(&analyzers));
+        auto tokens = ctx.NewCallable(node.Pos(), "FulltextAnalyze", {
+            queryExpr,
+            Build<TCoString>(ctx, node.Pos()).Literal().Build(analyzers).Done().Ptr(),
+            ctx.NewAtom(node.Pos(), ToString(static_cast<ui32>(NFulltext::EIndexMode::FulltextQuery)))});
+        auto noSearchTerms = ctx.NewCallable(node.Pos(), "Not", {ctx.NewCallable(node.Pos(), "HasItems", {tokens})});
+
+        auto scanInput = BuildFulltextFallbackScan(flatMap, read, prefixColumns, result.PrefixColumns,
+            noSearchTerms, ctx, kqpCtx, typesCtx);
+        // The guards select the access path, not Extend: the index returns no rows without terms,
+        // and the scan has empty ranges with terms. Both use the same query and analyzer.
+        input = Build<TCoExtend>(ctx, node.Pos()).Add(indexRead).Add(scanInput).Done();
+    }
+
     auto newLambdaBody = TCoLambda{ctx.NewLambda(
         flatMap.Lambda().Pos(),
         std::move(flatMap.Lambda().Args().Ptr()),
         ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, result.Replaces))};
-
-    auto res = Build<TCoFlatMap>(ctx, read.Pos())
-        .Input(newInput)
+    return Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(input)
         .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), result.Replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
         .Done();
-    return res;
 }
 
 TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -2835,10 +2959,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     YQL_ENSURE(tableDesc.Metadata);
 
     const auto& pkColumns = tableDesc.Metadata->KeyColumnNames;
-    if (pkColumns.size() != 1) {
-        return addError("hybrid search currently supports only a single-column primary key");
-    }
-    const TString pkCol = pkColumns[0];
 
     TExprNode::TPtr origArg;
     TExprNode::TPtr origPred; // over origArg; null => no WHERE filter
@@ -3217,6 +3337,21 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     const TString relevanceCol{NTableIndex::NFulltext::FullTextRelevanceColumn};
     const TString rrfCol = "__ydb_hybrid_rrf";
 
+    auto pkMembers = [&](const TExprNode::TPtr& row) {
+        TVector<TExprBase> members;
+        members.reserve(pkColumns.size());
+        for (const auto& column : pkColumns) {
+            members.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(column)
+                .Value<TCoMember>()
+                    .Struct(row)
+                    .Name().Build(column)
+                    .Build()
+                .Done());
+        }
+        return members;
+    };
+
     auto uint64Node = [&](ui64 v) {
         return ctx.Builder(pos).Callable("Uint64").Atom(0, ToString(v), TNodeFlags::Default).Seal().Build();
     };
@@ -3265,6 +3400,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // (as KqpSelectJsonIndex does for JSON) as a TKqlReadTableFullTextIndex returning
             // {pk, __ydb_full_text_relevance} ranked by relevance, capped at branchN via ItemsLimit.
             b.ScoreCol = relevanceCol;
+            TVector<TString> ftColumns = pkColumns;
+            ftColumns.push_back(relevanceCol);
             auto ftSettings = BuildFulltextNamedSettings(b.FulltextNamedOptions, ctx, pos);
             for (const auto& [column, value] : b.PrefixColumns) {
                 ftSettings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -3282,7 +3419,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             b.List = Build<TKqlReadTableFullTextIndex>(ctx, pos)
                 .Table(mainTableMeta)
                 .Index().Build(b.IndexName)
-                .Columns(BuildKeyColumnsList(pos, ctx, TVector<TString>{pkCol, relevanceCol}))
+                .Columns(BuildKeyColumnsList(pos, ctx, ftColumns))
                 .Query<TExprList>().Add(TExprBase(b.FulltextQuery)).Build()
                 .QueryColumns(BuildKeyColumnsList(pos, ctx, TVector<TString>{b.ScoredColumn}))
                 .Settings<TCoNameValueTupleList>().Add(ftSettings).Build()
@@ -3298,7 +3435,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // CosineDistance ASC or CosineSimilarity DESC). Each vector branch carries a unique synthetic
             // distance column so the branches never share schema (kept internal to this TopSort regardless).
             b.ScoreCol = TStringBuilder() << "__ydb_hybrid_distance_" << b.Index;
-            TVector<TString> vecColumns{pkCol, b.ScoredColumn};
+            TVector<TString> vecColumns = pkColumns;
+            vecColumns.push_back(b.ScoredColumn);
             for (const auto& prefix : b.PrefixColumns) {
                 if (!columnInList(vecColumns, prefix.first)) {
                     vecColumns.push_back(prefix.first);
@@ -3317,20 +3455,15 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             const auto distShared = ctx.ReplaceNode(TExprNode::TPtr(b.ScoreExpr), *rowArg, vecRowArg);
             TExprNode::TPtr vecFlatMapBody;
             if (b.PrefixColumns.empty()) {
-                vecFlatMapBody = ctx.Builder(pos)
-                    .Callable("Just")
-                        .Callable(0, "AsStruct")
-                            .List(0)
-                                .Atom(0, pkCol)
-                                .Callable(1, "Member").Add(0, vecRowArg).Atom(1, pkCol).Seal()
-                            .Seal()
-                            .List(1)
-                                .Atom(0, b.ScoreCol)
-                                .Add(1, distShared)
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
+                vecFlatMapBody = Build<TCoJust>(ctx, pos)
+                    .Input<TCoAsStruct>()
+                        .Add(pkMembers(vecRowArg))
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build(b.ScoreCol)
+                            .Value(distShared)
+                            .Build()
+                        .Build()
+                    .Done().Ptr();
             } else {
                 TExprNode::TListType prefixPredicates;
                 prefixPredicates.reserve(b.PrefixColumns.size());
@@ -3351,25 +3484,23 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                         .Callable(1, "Bool").Atom(0, "false", TNodeFlags::Default).Seal()
                     .Seal()
                     .Build();
-                vecFlatMapBody = ctx.Builder(pos)
-                    .Callable("OptionalIf")
-                        .Add(0, prefixPredicate)
-                        .Callable(1, "AsStruct")
-                            .List(0)
-                                .Atom(0, pkCol)
-                                .Callable(1, "Member").Add(0, vecRowArg).Atom(1, pkCol).Seal()
-                            .Seal()
-                            .List(1)
-                                .Atom(0, b.ScoredColumn)
-                                .Callable(1, "Member").Add(0, vecRowArg).Atom(1, b.ScoredColumn).Seal()
-                            .Seal()
-                            .List(2)
-                                .Atom(0, b.ScoreCol)
-                                .Add(1, distShared)
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
+                vecFlatMapBody = Build<TCoOptionalIf>(ctx, pos)
+                    .Predicate(prefixPredicate)
+                    .Value<TCoAsStruct>()
+                        .Add(pkMembers(vecRowArg))
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build(b.ScoredColumn)
+                            .Value<TCoMember>()
+                                .Struct(vecRowArg)
+                                .Name().Build(b.ScoredColumn)
+                                .Build()
+                            .Build()
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build(b.ScoreCol)
+                            .Value(distShared)
+                            .Build()
+                        .Build()
+                    .Done().Ptr();
             }
 
             const auto vectorSortArg = ctx.NewArgument(pos, "r");
@@ -3390,18 +3521,18 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         }
     }
 
-    // ---- Cross-branch fusion: reduce the per-branch candidate lists to one { pk, __ydb_hybrid_rrf } score
+    // ---- Cross-branch fusion: reduce the per-branch candidate lists to one {pk..., __ydb_hybrid_rrf } score
     //      per distinct document (re-ranked below). A custom RankLambda/ScoreLambda assembles each document's
     //      per-branch value vector and applies the lambda to it; otherwise the built-in Mode (rrf/linear)
     //      sums an additive per-branch contribution grouped by primary key.
     TExprNode::TPtr fusedScored;
     if (const auto& customLambda = settings.CustomLambda()) {
         // Per branch, project a row carrying this branch's value in its own slot and NULL in every other slot,
-        // so all branches share one schema and can be Extend-ed and grouped by pk. A null-ignoring min per
-        // slot then collapses each document to { pk, slot_0? .. slot_{n-1}? } (a pk occurs at most once per
-        // branch, so min just picks that branch's value). Finally we turn the present values into a
-        // Dict<Int64,V> (branch index -> value; an absent branch has no entry, so $x[i] is NULL in the lambda)
-        // and apply the lambda to get the score.
+        // so all branches share one schema and can be Extend-ed and grouped by the full primary key. A
+        // null-ignoring min per slot then collapses each document to {pk..., slot_0? .. slot_{n-1}? } (a
+        // pk occurs at most once per branch, so min just picks that branch's value). Finally we turn the
+        // present values into a Dict<Int64,V> (branch index -> value; an absent branch has no entry, so
+        // $x[i] is NULL in the lambda) and apply the lambda to get the score.
         //   RankLambda:  V = Int64;  value = the 1-based rank from KqpStreamEnumerate over the ordered branch
         //                stream (pushed into the branch's single-partition stage -- no TDqPrecompute needed).
         //   ScoreLambda: V = Double; value = the raw branch score (fulltext relevance or vector distance/
@@ -3436,26 +3567,25 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             const auto slotVal = ctx.Builder(pos)
                 .Callable("SafeCast").Add(0, slotSource).Add(1, optValType).Seal()
                 .Build();
-            TExprNode::TListType members;
-            members.push_back(ctx.Builder(pos).List()
-                .Atom(0, pkCol)
-                .Callable(1, "Member").Add(0, branchRow).Atom(1, pkCol).Seal()
-                .Seal().Build());
+            auto members = pkMembers(branchRow);
             for (size_t j = 0; j < slotCols.size(); ++j) {
-                members.push_back(ctx.Builder(pos).List()
-                    .Atom(0, slotCols[j])
-                    .Add(1, j == b.Index ? slotVal : nothingVal)
-                    .Seal().Build());
+                members.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(slotCols[j])
+                    .Value(j == b.Index ? slotVal : nothingVal)
+                    .Done());
             }
-            const auto body = ctx.NewCallable(pos, "AsStruct", std::move(members));
             const auto source = isScore
                 ? b.List
                 : ctx.Builder(pos).Callable("KqpStreamEnumerate").Add(0, b.List).Seal().Build();
-            slotRows.push_back(ctx.Builder(pos)
-                .Callable("Map")
-                    .Add(0, source)
-                    .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {pArg}), TExprNode::TPtr(body)))
-                .Seal().Build());
+            slotRows.push_back(Build<TCoMap>(ctx, pos)
+                .Input(source)
+                .Lambda()
+                    .Args({pArg})
+                    .Body<TCoAsStruct>()
+                        .Add(members)
+                        .Build()
+                    .Build()
+                .Done().Ptr());
         }
 
         const auto rankInput = slotRows.size() == 1
@@ -3479,7 +3609,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         const auto aggregated = ctx.Builder(pos)
             .Callable("Aggregate")
                 .Add(0, rankInput)
-                .List(1).Atom(0, pkCol).Seal()
+                .Add(1, BuildKeyColumnsList(pos, ctx, pkColumns).Ptr())
                 .Add(2, ctx.NewList(pos, std::move(handlers)))
                 .List(3).Seal()
             .Seal().Build();
@@ -3529,238 +3659,258 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 .Seal()
                 .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
             .Seal().Build();
-        const auto scoredBody = ctx.Builder(pos)
-            .Callable("AsStruct")
-                .List(0).Atom(0, pkCol).Callable(1, "Member").Add(0, rArg).Atom(1, pkCol).Seal().Seal()
-                .List(1).Atom(0, rrfCol).Add(1, score).Seal()
-            .Seal().Build();
-        fusedScored = ctx.Builder(pos)
-            .Callable("Map").Add(0, aggregated)
-                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {rArg}), TExprNode::TPtr(scoredBody)))
-            .Seal().Build();
-    } else {
-    // ---- Built-in Mode: each branch emits a per-row weighted contribution; we then SUM the contributions
-    //      grouped by primary key. A document absent from a branch simply has no contribution row
-    //      there (so it contributes 0 -- no penalty-rank sentinel needed), and the cross-branch fusion
-    //      is a single additive group-by-pk Aggregate rather than a per-candidate dict join. Each
-    //      branch's contribution reuses the HybridSearch UDF with single-element lists:
-    //        RRF:    w / (k + rank)         = HybridSearch.RRF([rank], [w], k)
-    //        linear: w * normalize(score)   = HybridSearch.LinearFuse([score], [min], [max], [w], [isSim], norm)
-    const auto emptyStruct = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
-    const auto emptyTuple = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{});
-
-    // Linear-only normalization flag, passed to the contribution UDF as a constant.
-    const auto normConst = ctx.Builder(pos).Callable("Bool").Atom(0, settings.Normalize() ? "true" : "false", TNodeFlags::Default).Seal().Build();
-    auto doubleConst = [&](double v) {
-        return ctx.Builder(pos).Callable("Double").Atom(0, ToString(v), TNodeFlags::Default).Seal().Build();
-    };
-    auto boolConst = [&](bool v) {
-        return ctx.Builder(pos).Callable("Bool").Atom(0, v ? "true" : "false", TNodeFlags::Default).Seal().Build();
-    };
-
-    const TString contribCol = "__ydb_hybrid_contrib";
-
-    // One per-branch contribution list { pk, __ydb_hybrid_contrib }, in branch order.
-    TVector<TExprNode::TPtr> branchContribs;
-    branchContribs.reserve(branches.size());
-    auto asList1 = [&](const TExprNode::TPtr& v) {
-        return ctx.Builder(pos).Callable("AsList").Add(0, v).Seal().Build();
-    };
-    if (settings.Mode() == "linear") {
-        // A score field of a row, cast to a (non-optional) Double.
-        auto castDouble = [&](const TExprNode::TPtr& itArg, const TString& col) {
-            return ctx.Builder(pos)
-                .Callable("Coalesce")
-                    .Callable(0, "SafeCast")
-                        .Callable(0, "Member").Add(0, itArg).Atom(1, col).Seal()
-                        .Callable(1, "DataType").Atom(0, "Double", TNodeFlags::Default).Seal()
-                    .Seal()
-                    .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
-                .Seal().Build();
-        };
-        // min/max of a branch's scores across the candidate set (a scalar; loop-invariant per branch).
-        auto minMaxOf = [&](const TExprNode::TPtr& list, const TString& col, const char* op) {
-            const auto mArg = ctx.NewArgument(pos, "it");
-            const auto mapped = ctx.Builder(pos).Callable("Map").Add(0, list)
-                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {mArg}), castDouble(mArg, col)))
-                .Seal().Build();
-            return ctx.Builder(pos)
-                .Callable("Coalesce")
-                    .Callable(0, op).Add(0, mapped).Seal()
-                    .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
-                .Seal().Build();
-        };
-        // LinearFuse contribution UDF type: [List<Double> x4, List<Bool>, Bool] -> Double.
-        const auto doubleListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
-        const auto boolListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
-        const auto linUdfType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-                doubleListType, doubleListType, doubleListType, doubleListType, boolListType,
-                ctx.MakeType<TDataExprType>(EDataSlot::Bool),
-            }),
-            emptyStruct, emptyTuple,
-        });
-        const auto linUdf = Build<TCoUdf>(ctx, pos)
-            .MethodName().Build("HybridSearch.LinearFuse")
-            .RunConfigValue<TCoVoid>().Build()
-            .UserType(ExpandType(pos, *linUdfType, ctx))
+        fusedScored = Build<TCoMap>(ctx, pos)
+            .Input(aggregated)
+            .Lambda()
+                .Args({rArg})
+                .Body<TCoAsStruct>()
+                    .Add(pkMembers(rArg))
+                    .Add<TCoNameValueTuple>()
+                        .Name().Build(rrfCol)
+                        .Value(score)
+                        .Build()
+                    .Build()
+                .Build()
             .Done().Ptr();
-        // { pk, w * normalize(score) } for one branch (the UDF does the min-max + distance/similarity math;
-        // a single-element list per argument computes just this branch's contribution).
-        auto buildContribs = [&](const TExprNode::TPtr& list, const TString& scoreCol,
-                                 const TExprNode::TPtr& weight, const TExprNode::TPtr& simConst) {
-            const auto branchMin = minMaxOf(list, scoreCol, "ListMin");
-            const auto branchMax = minMaxOf(list, scoreCol, "ListMax");
-            const auto contribRowArg = ctx.NewArgument(pos, "r");
-            const auto contrib = ctx.Builder(pos)
-                .Callable("Apply")
-                    .Add(0, linUdf)
-                    .Add(1, asList1(castDouble(contribRowArg, scoreCol)))
-                    .Add(2, asList1(branchMin))
-                    .Add(3, asList1(branchMax))
-                    .Add(4, asList1(weight))
-                    .Add(5, asList1(simConst))
-                    .Add(6, normConst)
-                .Seal().Build();
-            const auto body = ctx.Builder(pos)
-                .Callable("AsStruct")
-                    .List(0).Atom(0, pkCol).Callable(1, "Member").Add(0, contribRowArg).Atom(1, pkCol).Seal().Seal()
-                    .List(1).Atom(0, contribCol).Add(1, contrib).Seal()
-                .Seal().Build();
-            return ctx.Builder(pos).Callable("Map").Add(0, list)
-                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {contribRowArg}), TExprNode::TPtr(body)))
-                .Seal().Build();
-        };
-        for (const auto& b : branches) {
-            // Linear normalization needs per-branch min/max (whole-list aggregates), so materialize each branch.
-            const auto mat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(b.List)).Done().Ptr();
-            branchContribs.push_back(buildContribs(mat, b.ScoreCol, doubleConst(b.Weight), boolConst(b.IsSimilarity)));
-        }
     } else {
-        // RRF: rank = 1-based position in the (already-sorted) branch; contribution = w / (k + rank).
-        const auto uint64ListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
-        const auto doubleListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
-        const auto rrfUdfType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-                uint64ListType,
-                doubleListType,
-                ctx.MakeType<TDataExprType>(EDataSlot::Double),
-            }),
-            emptyStruct, emptyTuple,
-        });
-        const auto rrfUdf = Build<TCoUdf>(ctx, pos)
-            .MethodName().Build("HybridSearch.RRF")
-            .RunConfigValue<TCoVoid>().Build()
-            .UserType(ExpandType(pos, *rrfUdfType, ctx))
-            .Done().Ptr();
-        // { pk, w / (k + rank) } for one branch.
-        auto buildContribs = [&](const TExprNode::TPtr& list, const TExprNode::TPtr& weight) {
-            const auto pArg = ctx.NewArgument(pos, "p");
-            const auto rankList = ctx.Builder(pos).Callable("AsList")
-                .Callable(0, "Nth").Add(0, pArg).Atom(1, 0U).Seal()
-                .Seal().Build();
-            const auto pkMember = ctx.Builder(pos).Callable("Member")
-                .Callable(0, "Nth").Add(0, pArg).Atom(1, 1U).Seal()
-                .Atom(1, pkCol)
-                .Seal().Build();
-            const auto contrib = ctx.Builder(pos)
-                .Callable("Apply")
-                    .Add(0, rrfUdf)
-                    .Add(1, rankList)
-                    .Add(2, asList1(weight))
-                    .Add(3, kConst)
-                .Seal().Build();
-            const auto body = ctx.Builder(pos)
-                .Callable("AsStruct")
-                    .List(0).Atom(0, pkCol).Add(1, pkMember).Seal()
-                    .List(1).Atom(0, contribCol).Add(1, contrib).Seal()
-                .Seal().Build();
-            // KqpStreamEnumerate assigns the 1-based rank over the ordered branch *stream*; the
-            // PushStreamEnumerateToStage physical rule later pushes it into the branch's single-partition
-            // stage, so the branch need not be materialized via TDqPrecompute first.
-            return ctx.Builder(pos)
-                .Callable("Map")
-                    .Callable(0, "KqpStreamEnumerate").Add(0, list).Seal()
-                    .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {pArg}), TExprNode::TPtr(body)))
-                .Seal().Build();
-        };
-        for (const auto& b : branches) {
-            branchContribs.push_back(buildContribs(b.List, doubleConst(b.Weight)));
-        }
-    }
+        // ---- Built-in Mode: each branch emits a per-row weighted contribution; we then SUM the contributions
+        //      grouped by primary key. A document absent from a branch simply has no contribution row
+        //      there (so it contributes 0 -- no penalty-rank sentinel needed), and the cross-branch fusion
+        //      is a single additive group-by-pk Aggregate rather than a per-candidate dict join. Each
+        //      branch's contribution reuses the HybridSearch UDF with single-element lists:
+        //        RRF:    w / (k + rank)         = HybridSearch.RRF([rank], [w], k)
+        //        linear: w * normalize(score)   = HybridSearch.LinearFuse([score], [min], [max], [w], [isSim], norm)
+        const auto emptyStruct = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+        const auto emptyTuple = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{});
 
-    // Cross-branch fusion: SUM the per-branch contributions grouped by primary key, giving
-    // { pk, __ydb_hybrid_rrf } per distinct candidate. Sum is typed Optional<Double>; coalesce it to a
-    // plain Double.
-    // The per-branch {pk, contrib} streams are simply Extend-ed together and fed straight into the
-    // Aggregate. The grouped SUM lowers to a distributed hash-combine pipeline
-    // (DqPhyHashCombine -> DqCnHashShuffle by pk -> final DqPhyHashCombine): the shuffle routes every row
-    // for a given pk to the same partition, so all of a candidate's contributions are summed together
-    // regardless of which branch (or when) they arrive.
-    const auto fusedInput = branchContribs.size() == 1
-        ? branchContribs[0]
-        : ctx.NewCallable(pos, "Extend", TExprNode::TListType(branchContribs.begin(), branchContribs.end()));
-    const auto aggregated = ctx.Builder(pos)
-        .Callable("Aggregate")
-            .Add(0, fusedInput)
-            .List(1).Atom(0, pkCol).Seal()                       // group keys
-            .List(2)                                             // handlers
-                .List(0)
-                    .Atom(0, rrfCol)
-                    .Callable(1, "AggApply")
-                        .Atom(0, "sum")
-                        .Callable(1, "ListItemType")
-                            .Callable(0, "TypeOf").Add(0, fusedInput).Seal()
+        // Linear-only normalization flag, passed to the contribution UDF as a constant.
+        const auto normConst = ctx.Builder(pos).Callable("Bool").Atom(0, settings.Normalize() ? "true" : "false", TNodeFlags::Default).Seal().Build();
+        auto doubleConst = [&](double v) {
+            return ctx.Builder(pos).Callable("Double").Atom(0, ToString(v), TNodeFlags::Default).Seal().Build();
+        };
+        auto boolConst = [&](bool v) {
+            return ctx.Builder(pos).Callable("Bool").Atom(0, v ? "true" : "false", TNodeFlags::Default).Seal().Build();
+        };
+
+        const TString contribCol = "__ydb_hybrid_contrib";
+
+        // One per-branch contribution list { pk, __ydb_hybrid_contrib }, in branch order.
+        TVector<TExprNode::TPtr> branchContribs;
+        branchContribs.reserve(branches.size());
+        auto asList1 = [&](const TExprNode::TPtr& v) {
+            return ctx.Builder(pos).Callable("AsList").Add(0, v).Seal().Build();
+        };
+        if (settings.Mode() == "linear") {
+            // A score field of a row, cast to a (non-optional) Double.
+            auto castDouble = [&](const TExprNode::TPtr& itArg, const TString& col) {
+                return ctx.Builder(pos)
+                    .Callable("Coalesce")
+                        .Callable(0, "SafeCast")
+                            .Callable(0, "Member").Add(0, itArg).Atom(1, col).Seal()
+                            .Callable(1, "DataType").Atom(0, "Double", TNodeFlags::Default).Seal()
                         .Seal()
-                        .Lambda(2).Param("row")
-                            .Callable("Member").Arg(0, "row").Atom(1, contribCol).Seal()
+                        .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
+                    .Seal().Build();
+            };
+            // min/max of a branch's scores across the candidate set (a scalar; loop-invariant per branch).
+            auto minMaxOf = [&](const TExprNode::TPtr& list, const TString& col, const char* op) {
+                const auto mArg = ctx.NewArgument(pos, "it");
+                const auto mapped = ctx.Builder(pos).Callable("Map").Add(0, list)
+                    .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {mArg}), castDouble(mArg, col)))
+                    .Seal().Build();
+                return ctx.Builder(pos)
+                    .Callable("Coalesce")
+                        .Callable(0, op).Add(0, mapped).Seal()
+                        .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
+                    .Seal().Build();
+            };
+            // LinearFuse contribution UDF type: [List<Double> x4, List<Bool>, Bool] -> Double.
+            const auto doubleListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
+            const auto boolListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+            const auto linUdfType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+                ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+                    doubleListType, doubleListType, doubleListType, doubleListType, boolListType,
+                    ctx.MakeType<TDataExprType>(EDataSlot::Bool),
+                }),
+                emptyStruct, emptyTuple,
+            });
+            const auto linUdf = Build<TCoUdf>(ctx, pos)
+                .MethodName().Build("HybridSearch.LinearFuse")
+                .RunConfigValue<TCoVoid>().Build()
+                .UserType(ExpandType(pos, *linUdfType, ctx))
+                .Done().Ptr();
+            // { pk, w * normalize(score) } for one branch (the UDF does the min-max + distance/similarity math;
+            // a single-element list per argument computes just this branch's contribution).
+            auto buildContribs = [&](const TExprNode::TPtr& list, const TString& scoreCol,
+                                     const TExprNode::TPtr& weight, const TExprNode::TPtr& simConst) {
+                const auto branchMin = minMaxOf(list, scoreCol, "ListMin");
+                const auto branchMax = minMaxOf(list, scoreCol, "ListMax");
+                const auto contribRowArg = ctx.NewArgument(pos, "r");
+                const auto contrib = ctx.Builder(pos)
+                    .Callable("Apply")
+                        .Add(0, linUdf)
+                        .Add(1, asList1(castDouble(contribRowArg, scoreCol)))
+                        .Add(2, asList1(branchMin))
+                        .Add(3, asList1(branchMax))
+                        .Add(4, asList1(weight))
+                        .Add(5, asList1(simConst))
+                        .Add(6, normConst)
+                    .Seal().Build();
+                return Build<TCoMap>(ctx, pos)
+                    .Input(list)
+                    .Lambda()
+                        .Args({contribRowArg})
+                        .Body<TCoAsStruct>()
+                            .Add(pkMembers(contribRowArg))
+                            .Add<TCoNameValueTuple>()
+                                .Name().Build(contribCol)
+                                .Value(contrib)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Done().Ptr();
+            };
+            for (const auto& b : branches) {
+                // Linear normalization needs per-branch min/max (whole-list aggregates), so materialize each branch.
+                const auto mat = Build<TDqPrecompute>(ctx, pos).Input(TExprBase(b.List)).Done().Ptr();
+                branchContribs.push_back(buildContribs(mat, b.ScoreCol, doubleConst(b.Weight), boolConst(b.IsSimilarity)));
+            }
+        } else {
+            // RRF: rank = 1-based position in the (already-sorted) branch; contribution = w / (k + rank).
+            const auto uint64ListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
+            const auto doubleListType = ctx.MakeType<TListExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
+            const auto rrfUdfType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+                ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+                    uint64ListType,
+                    doubleListType,
+                    ctx.MakeType<TDataExprType>(EDataSlot::Double),
+                }),
+                emptyStruct, emptyTuple,
+            });
+            const auto rrfUdf = Build<TCoUdf>(ctx, pos)
+                .MethodName().Build("HybridSearch.RRF")
+                .RunConfigValue<TCoVoid>().Build()
+                .UserType(ExpandType(pos, *rrfUdfType, ctx))
+                .Done().Ptr();
+            // { pk, w / (k + rank) } for one branch.
+            auto buildContribs = [&](const TExprNode::TPtr& list, const TExprNode::TPtr& weight) {
+                const auto pArg = ctx.NewArgument(pos, "p");
+                const auto rankList = ctx.Builder(pos).Callable("AsList")
+                    .Callable(0, "Nth").Add(0, pArg).Atom(1, 0U).Seal()
+                    .Seal().Build();
+                const auto contrib = ctx.Builder(pos)
+                    .Callable("Apply")
+                        .Add(0, rrfUdf)
+                        .Add(1, rankList)
+                        .Add(2, asList1(weight))
+                        .Add(3, kConst)
+                    .Seal().Build();
+                const auto branchRow = ctx.Builder(pos).Callable("Nth")
+                    .Add(0, pArg).Atom(1, 1U).Seal().Build();
+                // KqpStreamEnumerate assigns the 1-based rank over the ordered branch *stream*; the
+                // PushStreamEnumerateToStage physical rule later pushes it into the branch's single-partition
+                // stage, so the branch need not be materialized via TDqPrecompute first.
+                return Build<TCoMap>(ctx, pos)
+                    .Input<TKqpStreamEnumerate>()
+                        .Input(list)
+                        .Build()
+                    .Lambda()
+                        .Args({pArg})
+                        .Body<TCoAsStruct>()
+                            .Add(pkMembers(branchRow))
+                            .Add<TCoNameValueTuple>()
+                                .Name().Build(contribCol)
+                                .Value(contrib)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Done().Ptr();
+            };
+            for (const auto& b : branches) {
+                branchContribs.push_back(buildContribs(b.List, doubleConst(b.Weight)));
+            }
+        }
+
+        // Cross-branch fusion: SUM the per-branch contributions grouped by primary key, giving
+        // { pk, __ydb_hybrid_rrf } per distinct candidate. Sum is typed Optional<Double>; coalesce it to a
+        // plain Double.
+        // The per-branch {pk, contrib} streams are simply Extend-ed together and fed straight into the
+        // Aggregate. The grouped SUM lowers to a distributed hash-combine pipeline
+        // (DqPhyHashCombine -> DqCnHashShuffle by pk -> final DqPhyHashCombine): the shuffle routes every row
+        // for a given pk to the same partition, so all of a candidate's contributions are summed together
+        // regardless of which branch (or when) they arrive.
+        const auto fusedInput = branchContribs.size() == 1
+            ? branchContribs[0]
+            : ctx.NewCallable(pos, "Extend", TExprNode::TListType(branchContribs.begin(), branchContribs.end()));
+        const auto aggregated = ctx.Builder(pos)
+            .Callable("Aggregate")
+                .Add(0, fusedInput)
+                .Add(1, BuildKeyColumnsList(pos, ctx, pkColumns).Ptr()) // group keys
+                .List(2) // handlers
+                    .List(0)
+                        .Atom(0, rrfCol)
+                        .Callable(1, "AggApply")
+                            .Atom(0, "sum")
+                            .Callable(1, "ListItemType")
+                                .Callable(0, "TypeOf").Add(0, fusedInput).Seal()
+                            .Seal()
+                            .Lambda(2).Param("row")
+                                .Callable("Member").Arg(0, "row").Atom(1, contribCol).Seal()
+                            .Seal()
                         .Seal()
                     .Seal()
                 .Seal()
+                .List(3).Seal() // settings
             .Seal()
-            .List(3).Seal()                                      // settings
-        .Seal()
-        .Build();
-    fusedScored = ctx.Builder(pos)
-        .Callable("Map").Add(0, aggregated)
-            .Lambda(1).Param("r")
-                .Callable("AsStruct")
-                    .List(0).Atom(0, pkCol).Callable(1, "Member").Arg(0, "r").Atom(1, pkCol).Seal().Seal()
-                    .List(1).Atom(0, rrfCol)
-                        .Callable(1, "Coalesce")
-                            .Callable(0, "Member").Arg(0, "r").Atom(1, rrfCol).Seal()
-                            .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
+            .Build();
+        const auto aggRowArg = ctx.NewArgument(pos, "r");
+        fusedScored = Build<TCoMap>(ctx, pos)
+            .Input(aggregated)
+            .Lambda()
+                .Args({aggRowArg})
+                .Body<TCoAsStruct>()
+                    .Add(pkMembers(aggRowArg))
+                    .Add<TCoNameValueTuple>()
+                        .Name().Build(rrfCol)
+                        .Value<TCoCoalesce>()
+                            .Predicate<TCoMember>()
+                                .Struct(aggRowArg)
+                                .Name().Build(rrfCol)
+                                .Build()
+                            .Value<TCoDouble>()
+                                .Literal().Build("0")
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Done().Ptr();
     }
+
     // ---- Look up the main table by the fused candidate keys, carrying the RRF score through ----
-    // A LookupJoinRows stream lookup joins the {pk, rrf} stream against the main table by pk and emits a
-    // tuple (leftRow, Optional<mainRow>, _) per candidate. This carries the synthetic rrf score (a left
-    // column) through the lookup, so the score does not have to be re-joined afterwards via a dict. It also
-    // lets fusedScored feed the lookup directly -- it is consumed exactly once here, so no TDqPrecompute is
-    // needed for it. (The left input here is the aggregate's already-merged one-row-per-pk output.)
-    const auto lookupInput = ctx.Builder(pos)
-        .Callable("Map")
-            .Add(0, fusedScored)
-            .Lambda(1)
-                .Param("r")
-                .List()
-                    .Arg(0, "r")                                 // element 0: the {pk, rrf} left row
-                    .Callable(1, "Just")                         // element 1: Just({pk}) -- the join key
-                        .Callable(0, "AsStruct")
-                            .List(0).Atom(0, pkCol).Callable(1, "Member").Arg(0, "r").Atom(1, pkCol).Seal().Seal()
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
+    // A LookupJoinRows stream lookup joins the {pk, rrf} stream against the main table by its full
+    // primary key and emits a tuple (leftRow, Optional<mainRow>, _) per candidate. This carries the
+    // synthetic rrf score (a left column) through the lookup, so the score does not have to be re-joined
+    // afterwards via a dict. It also lets fusedScored feed the lookup directly -- it is consumed exactly
+    // once here, so no TDqPrecompute is needed for it. (The left input here is the aggregate's already-
+    // merged one-row-per-pk output.)
+    const auto lookupRowArg = ctx.NewArgument(pos, "r");
+    const auto lookupInput = Build<TCoMap>(ctx, pos)
+        .Input(fusedScored)
+        .Lambda()
+            .Args({lookupRowArg})
+            .Body<TExprList>()
+                .Add(lookupRowArg)
+                .Add<TCoJust>()
+                    .Input<TCoAsStruct>()
+                        .Add(pkMembers(lookupRowArg))
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Done().Ptr();
 
-    const auto mainColumns = MergeColumns(read.Columns(), TVector<TString>{pkCol}, ctx);
+    const auto mainColumns = MergeColumns(read.Columns(), pkColumns, ctx);
 
     TKqpStreamLookupSettings lookupSettings;
     lookupSettings.Strategy = EStreamLookupStrategyType::LookupJoinRows;

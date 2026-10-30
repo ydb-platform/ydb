@@ -11,15 +11,9 @@ SRCS(
 PEERDIR(
     ydb/apps/version
     # library/cpp/testing/unittest
-    ydb/core/blobstorage/backpressure
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/pdisk/mock
-    ydb/core/blobstorage/vdisk
-    ydb/core/blobstorage/vdisk/common
     ydb/core/tx/scheme_board
     # ydb/library/yql/public/udf/service/stub
     ydb/library/actors/core
-    ydb/library/actors/interconnect/mock
     ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/containers/stack_vector
@@ -30,6 +24,7 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
     ydb/core/base
+    ydb/core/tablet
     ydb/core/protos
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream

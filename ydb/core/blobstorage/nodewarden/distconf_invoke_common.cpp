@@ -134,6 +134,8 @@ namespace NKikimr::NStorage {
         if (nodeId == WaitingReplyFromNode) {
             if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                     op && op->Command.HasSwitchBridgeClusterState() &&
+                    // Matching state cannot prove that this invocation won its compare-and-set.
+                    !op->Command.GetSwitchBridgeClusterState().HasExpectedGeneration() &&
                     Self->StorageConfig && Self->StorageConfig->HasClusterState() &&
                     IsClusterStateReached(Self->StorageConfig->GetClusterState(),
                                           op->Command.GetSwitchBridgeClusterState().GetNewClusterState())) {
@@ -233,14 +235,23 @@ namespace NKikimr::NStorage {
                     case TQuery::kRemoveBridgePile:
                         return RemoveBridgePile(op.Command.GetRemoveBridgePile());
 
+                    case TQuery::kRollbackBridge:
+                        return RollbackBridge(op.Command.GetRollbackBridge());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 
                     case TQuery::kQueryWorkingRoot:
                         Y_ABORT("QueryWorkingRoot must be handled directly by the keeper");
 
+                    case TQuery::kQueryPileConnectivity:
+                        Y_ABORT("QueryPileConnectivity must be handled directly by the keeper");
+
                     case TQuery::kValidateTargetedProposition:
                         Y_ABORT("ValidateTargetedProposition must be handled directly by the keeper");
+
+                    case TQuery::kQueryBridgeRollbackStatus:
+                        Y_ABORT("QueryBridgeRollbackStatus must be handled directly by the keeper");
                 }
 
                 throw TExError() << "Unhandled request";
@@ -615,7 +626,7 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "Current config validation failed: " << *error;
         } else if (requireScepter && !Self->Scepter) {
-            throw TExError() << "No scepter";
+            throw TExRace() << "No scepter";
         }
 
         if (requireScepter) {
@@ -853,19 +864,59 @@ namespace NKikimr::NStorage {
             SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
             return;
         }
-        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
+        if (ev->Get()->Record.HasQueryBridgeRollbackStatus()) {
+            if (!IsSelfStatic && ConnectedToStaticNode && StaticNodeSessionId) {
+                // dynamic nodes have no binding of their own, the static node they are subscribed to forwards it
+                ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
+                return;
+            } else if (!IsSelfStatic) {
+                auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
+                response->Record.SetErrorReason("No static node connection for rollback status query");
+                SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                return;
+            } else if (!Halted && !Binding) {
+                // the root collects it; static nodes having binding forward it to the root as usual
+                if (Scepter && StorageConfig) {
+                    QueryBridgeRollbackStatus(std::move(ev));
+                } else {
+                    auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                    response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE);
+                    response->Record.SetErrorReason("No scepter");
+                    SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                }
+                return;
+            }
+        }
+        if (ev->Get()->Record.HasQueryPileConnectivity()) {
+            if (!IsSelfStatic && ConnectedToStaticNode && StaticNodeSessionId) {
+                // Dynamic nodes subscribe to static nodes; they have no binding subtree of their own.
+                ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
+                return;
+            }
+            if (!IsSelfStatic || !(Binding && Binding->RootNodeId)) {
+                auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                if (!IsSelfStatic) {
+                    response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
+                    response->Record.SetErrorReason("No static node connection for pile connectivity query");
+                } else {
+                    FillPileConnectivity(response->Record);
+                }
+                // A component top must answer even while binding or running a stalled proposition.
+                SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                return;
+            }
+        }
+        if (Halted) {
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+            response->Record.SetErrorReason("distconf is halted on this node");
+            SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+        } else if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer
-            const ui32 hopNodeId = Binding->NodeId;
-            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
-                .Command = ev->Get()->Record,
-                .Sender = ev->Sender,
-                .SessionId = ev->InterconnectSession,
-                .Cookie = ev->Cookie,
-            }, hopNodeId));
-            TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
-                ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+            ForwardInvokeOnRoot(std::move(ev), Binding->NodeId);
         } else {
             Invoke(TInvokeExternalOperation{
                 .Command = std::move(ev->Get()->Record),
@@ -874,6 +925,99 @@ namespace NKikimr::NStorage {
                 .Cookie = ev->Cookie,
             });
         }
+    }
+
+    // gets the reports of nodes on whether they run with BridgeConfig for the rollback status, see
+    // TDistributedConfigKeeper::QueryBridgeRollbackStatus
+    class TBridgeRollbackStatusCollector : public TActor<TBridgeRollbackStatusCollector> {
+        TDistributedConfigKeeper *const Self;
+
+    public:
+        explicit TBridgeRollbackStatusCollector(TDistributedConfigKeeper *self)
+            : TActor(&TThis::StateFunc)
+            , Self(self)
+        {}
+
+        void Handle(TEvNodeConfigGather::TPtr ev) {
+            Self->FinishBridgeRollbackStatus(ev->Get()->Record); // aborted one included
+            PassAway();
+        }
+
+        STRICT_STFUNC(StateFunc,
+            hFunc(TEvNodeConfigGather, Handle)
+            cFunc(TEvents::TSystem::Poison, PassAway)
+        )
+    };
+
+    void TDistributedConfigKeeper::QueryBridgeRollbackStatus(TEvNodeConfigInvokeOnRoot::TPtr ev) {
+        BridgeRollbackStatusWaiters.push_back({ev->Sender, ev->Cookie, ev->InterconnectSession});
+        if (BridgeRollbackStatusCollector) {
+            return; // it gets the result of the collection being done
+        }
+        // nodes report whether they run with BridgeConfig the same way they do for the conversion
+        BridgeRollbackStatusCollector = RegisterWithSameMailbox(new TBridgeRollbackStatusCollector(this));
+        TEvScatter task;
+        task.MutableCollectBridgeCapability();
+        task.SetTaskId(RandomNumber<ui64>());
+        IssueScatterTask(TActorId(*BridgeRollbackStatusCollector), std::move(task));
+    }
+
+    void TDistributedConfigKeeper::FinishBridgeRollbackStatus(const TEvGather& gather) {
+        BridgeRollbackStatusCollector.reset();
+
+        NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult record;
+        if (gather.GetAborted() || !gather.HasCollectBridgeCapability() || !StorageConfig) {
+            record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE);
+            record.SetErrorReason("Collection of node reports was aborted due to loss of quorum or other error");
+        } else {
+            const auto& response = gather.GetCollectBridgeCapability();
+            const std::set<ui32> bridgeConfigNodeIds(response.GetCapableNodeIds().begin(),
+                response.GetCapableNodeIds().end());
+            THashSet<ui32> reported(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
+            reported.insert(bridgeConfigNodeIds.begin(), bridgeConfigNodeIds.end());
+            // static nodes not reporting may still run with BridgeConfig and come back later, dynamic nodes not
+            // connected can't be enumerated
+            std::set<ui32> unreported;
+            for (const auto& node : StorageConfig->GetAllNodes()) {
+                if (!reported.contains(node.GetNodeId())) {
+                    unreported.insert(node.GetNodeId());
+                }
+            }
+
+            record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+            auto *status = record.MutableBridgeRollbackStatus();
+            status->SetHasClusterState(StorageConfig->HasClusterState());
+            const auto& details = StorageConfig->GetClusterStateDetails();
+            if (const auto& op = details.GetPendingPileOperation(); NBridge::IsRollbackPending(details)) {
+                status->SetRollbackInProgress(true);
+                if (op.HasErrorReason()) {
+                    status->SetErrorReason(op.GetErrorReason());
+                }
+            }
+            for (const ui32 nodeId : bridgeConfigNodeIds) {
+                status->AddBridgeConfigNodeIds(nodeId);
+            }
+            for (const ui32 nodeId : unreported) {
+                status->AddUnreportedStaticNodeIds(nodeId);
+            }
+        }
+
+        for (const auto& waiter : std::exchange(BridgeRollbackStatusWaiters, {})) {
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.CopyFrom(record);
+            SendInvokeResult(waiter.Sender, SelfId(), waiter.Cookie, waiter.SessionId, std::move(response));
+        }
+    }
+
+    void TDistributedConfigKeeper::ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId) {
+        const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
+            .Command = ev->Get()->Record,
+            .Sender = ev->Sender,
+            .SessionId = ev->InterconnectSession,
+            .Cookie = ev->Cookie,
+        }, hopNodeId));
+        TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
     }
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {

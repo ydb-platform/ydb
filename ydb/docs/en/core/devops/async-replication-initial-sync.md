@@ -21,7 +21,7 @@ Keep the set of replicated tables, their columns, and their indexes unchanged du
 
 {% note warning %}
 
-Records in [changefeeds](../concepts/cdc.md) have a limited retention period. Plan the export, import, and processing of accumulated changes so that replication can read the records before they are deleted. The default retention period is 24 hours; check the actual value after creating the changefeeds. The `PAUSED` state does not suspend the retention period.
+Before creating replication, choose the [availability period for unacknowledged changes](../concepts/async-replication.md#availability-period). With `AVAILABILITY_PERIOD = 'UNLIMITED'`, changes are retained until their processing is acknowledged; provide enough space for them to accumulate in the source. With a finite period, plan the export, import, and processing of accumulated changes so that replication can acknowledge their processing before this period expires. The `PAUSED` state does not stop messages from aging.
 
 {% endnote %}
 
@@ -35,13 +35,16 @@ FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://source.example.com:2135/?database=/Root/source',
     TOKEN_SECRET_PATH = 'source_token',
-    INITIAL_SCAN = FALSE
+    INITIAL_SCAN = FALSE,
+    AVAILABILITY_PERIOD = 'UNLIMITED'
 );
 ```
 
 The `source.example.com:2135` address in the example is the source endpoint. The `CONNECTION_STRING` and `TOKEN_SECRET_PATH` parameters specify the connection that the target will use to create and read changefeeds.
 
-Replication is created in the `PAUSED` state and prepares changefeeds on the source without exporting the initial data. The `replica_table` table is not created or attached to replication yet. The import operation will create it.
+The example explicitly selects the `'UNLIMITED'` availability period, which is also the default. For a finite period, specify a positive value of type `Interval`, for example, `AVAILABILITY_PERIOD = Interval('PT48H')`. This parameter cannot be changed using `ALTER ASYNC REPLICATION` after creation.
+
+Replication is created in the `PAUSED` state and prepares changefeeds in the source without exporting the initial data. The `replica_table` table is not created or attached to replication yet. The import operation will create it.
 
 ## 2. Wait for the Changefeeds to Be Ready {#wait-for-changefeeds}
 
@@ -69,7 +72,7 @@ In the `changefeeds` array, find the changefeed with the name from `source_chang
 
 For an item corresponding to a synchronous or unique index, `source_path` points to the index. Its implementation table is located at `source_path/indexImplTable`. Check the `changefeeds` array in the description of that table.
 
-Also use [`scheme describe`](../reference/ydb-cli/commands/scheme-describe.md) to check the changefeed topic settings: the `replicationConsumer` consumer must exist, and `RetentionPeriod` must have a suitable value. The changefeed path depends on the object:
+Also use [`scheme describe`](../reference/ydb-cli/commands/scheme-describe.md) to check the changefeed topic settings: the presence of the `replicationConsumer` consumer, its availability policy, and the `RetentionPeriod` value. The changefeed path depends on the object:
 
 | Object | Changefeed path |
 | --- | --- |
@@ -86,7 +89,12 @@ Where:
 
 - `<changefeed-path>`: the changefeed path, for example, `/Root/source/original_table/stream-name`. Replace `stream-name` with the name from the replication description.
 
-Repeat the checks for every object in `items`. If the retention period is too short, increase it before a lengthy transfer using [ALTER TOPIC](../yql/reference/syntax/alter-topic.md#alter-topic). Changing the retention period does not recover records that have already been deleted.
+In the consumer table, check the following for `replicationConsumer`:
+
+- With `AVAILABILITY_PERIOD = 'UNLIMITED'`, the `Important` field must be `Yes`.
+- With a finite period, the `Important` field must be `No`, and `Availability period` must match the selected interval.
+
+Repeat the checks for every object in `items`. Unacknowledged messages are protected by the consumer policy, so `RetentionPeriod` alone does not determine the availability of accumulated changes. For more information, see [Storing Changes in the Source](../concepts/async-replication.md#availability-period).
 
 {% note warning %}
 
@@ -123,7 +131,7 @@ Where:
 
 Proceed to the import only when the table output shows `ready = true`, `status = SUCCESS`, and `progress = Done`. Successfully starting the export command does not mean that the export has finished.
 
-Applications can continue changing the source data. Changefeeds retain these changes while replication is in the `PAUSED` state.
+Applications can continue changing the source data. Changefeeds retain these changes according to the selected `AVAILABILITY_PERIOD`, including while replication is in the `PAUSED` state.
 
 ## 4. Import the Data into the Target {#import}
 
@@ -167,6 +175,8 @@ ALTER ASYNC REPLICATION my_replication SET (STATE = 'STANDBY');
 
 The target checks that the restored table schemas match the source schemas and attaches the tables as replica objects. The check covers the primary key, columns, their types, column families, and indexes. Attached tables become read-only, and replication starts applying accumulated changes.
 
+Synchronous secondary indexes, including unique indexes, are supported. Restored vector indexes are deleted when tables are attached to replication. For more information, see [Restrictions](../concepts/async-replication.md#restrictions).
+
 Records are read from the changefeeds created before the export. They may include changes already reflected in the backup. Until the accumulated records have been processed, the target data may change and does not yet match the current source state.
 
 Check the state and lag:
@@ -175,7 +185,7 @@ Check the state and lag:
 {{ ydb-cli }} -p target scheme describe my_replication --stats
 ```
 
-After replication starts, the `paused` field in the description is replaced by `running`. Statistics include lag for replication and individual objects. Wait until the accumulated changes have been processed; a missing lag value does not mean zero lag.
+After replication starts, the `paused` field in the description is replaced by `running`. Statistics include lag for replication and individual objects. Wait until the accumulated changes have been processed; a missing lag value does not mean zero lag. The value may be unavailable if a consumer stops, loses its session, or does not report fresh statistics. For more information, see [Change Data Replication](../concepts/async-replication.md#replication-of-changes).
 
 Replication then continues transferring new changes. If the transfer is part of an application migration, follow the separate procedure for [completing asynchronous replication](../concepts/async-replication.md#done) before switching writes to the target.
 

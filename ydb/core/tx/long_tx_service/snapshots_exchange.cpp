@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/services/services.pb.h>
+#include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
@@ -416,6 +417,7 @@ class TSnapshotsExchangerActor : public TActorBootstrapped<TSnapshotsExchangerAc
         enum EEv {
             EvRemoteSnapshotsUpdate = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvPrefillTimeout,
+            EvRetrySubscriber,
         };
 
         struct TEvRemoteSnapshotsUpdate : public TEventLocal<TEvRemoteSnapshotsUpdate, EvRemoteSnapshotsUpdate> {
@@ -424,6 +426,10 @@ class TSnapshotsExchangerActor : public TActorBootstrapped<TSnapshotsExchangerAc
 
         struct TEvPrefillTimeout : public TEventLocal<TEvPrefillTimeout, EvPrefillTimeout> {
             TEvPrefillTimeout() = default;
+        };
+
+        struct TEvRetrySubscriber : public TEventLocal<TEvRetrySubscriber, EvRetrySubscriber> {
+            TEvRetrySubscriber() = default;
         };
     };
 
@@ -468,6 +474,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
 
             sFunc(TEvents::TEvPoison, HandlePoison);
         }
@@ -477,6 +484,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
+            hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
 
             hFunc(TEvLongTxService::TEvRemoteSnapshotsPrefillResult, Handle);
 
@@ -498,6 +506,7 @@ public:
 
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
+            hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
 
             hFunc(TEvPrivate::TEvRemoteSnapshotsUpdate, Handle);
 
@@ -570,9 +579,8 @@ private:
     }
 
     void CreateSubscriber() {
-        if (Subscriber) {
-            Send(Subscriber, new TEvents::TEvPoison);
-            Subscriber = TActorId{};
+        if (Subscriber || SubscriberRetryScheduled) {
+            return;
         }
 
         auto subscriber = CreateBoardLookupActor(
@@ -581,12 +589,45 @@ private:
         Subscriber = Register(subscriber);
     }
 
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            CreateSubscriber();
+    void ScheduleSubscriberRetry() {
+        if (SubscriberRetryScheduled) {
             return;
         }
 
+        const auto startDelay = Max(SubscriberSettings.StartDelayMs, TDuration::MilliSeconds(1));
+        const auto maxDelay = Max(SubscriberSettings.MaxDelayMs, startDelay);
+        SubscriberRetryDelay = SubscriberRetryDelay ? Min(SubscriberRetryDelay * 2, maxDelay) : startDelay;
+
+        const auto minDelay = Max(SubscriberRetryDelay / 2, TDuration::MilliSeconds(1));
+        const auto delayUs = AppData()->RandomProvider->Uniform(minDelay.MicroSeconds(), SubscriberRetryDelay.MicroSeconds() + 1);
+        SubscriberRetryScheduled = true;
+        Schedule(TDuration::MicroSeconds(delayUs), new TEvPrivate::TEvRetrySubscriber());
+    }
+
+    void Handle(TEvPrivate::TEvRetrySubscriber::TPtr&) {
+        if (!SubscriberRetryScheduled) {
+            return;
+        }
+
+        SubscriberRetryScheduled = false;
+        CreateSubscriber();
+    }
+
+    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
+        if (!Subscriber || ev->Sender != Subscriber) {
+            return;
+        }
+
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
+            Subscriber = TActorId{};
+            ScheduleSubscriberRetry();
+            return;
+        }
+        if (ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            return;
+        }
+
+        SubscriberRetryDelay = TDuration::Zero();
         UpdateNodes(ev->Get()->InfoEntries);
 
         if (CurrentStateFunc() == &TThis::StatePrepare) {
@@ -599,10 +640,20 @@ private:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
-        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
-            CreateSubscriber();
+        if (!Subscriber || ev->Sender != Subscriber) {
             return;
         }
+
+        if (ev->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable) {
+            Subscriber = TActorId{};
+            ScheduleSubscriberRetry();
+            return;
+        }
+        if (ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
+            return;
+        }
+
+        SubscriberRetryDelay = TDuration::Zero();
         UpdateNodes(ev->Get()->Updates);
     }
 
@@ -986,6 +1037,8 @@ private:
 
     TActorId Publisher;
     TActorId Subscriber;
+    TDuration SubscriberRetryDelay;
+    bool SubscriberRetryScheduled = false;
     THashMap<TActorId, TString> ExchangeActorIdToDataCenterId;
     THashMap<TActorId, TActorId> PublisherIdToExchangeActorId;
     TString SelfDataCenterId;

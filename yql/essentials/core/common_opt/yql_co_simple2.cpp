@@ -1140,8 +1140,13 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     map["PgGrouping"] = ExpandSqlGrouping;
     map["YqlGrouping"] = ExpandSqlGrouping;
 
-    map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext&) {
+    map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& optCtx) {
         TCoPruneKeysBase pruneKeys(node);
+
+        if (IsEmpty(pruneKeys.Input().Ref(), *optCtx.Types)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input";
+            return pruneKeys.Input().Ptr();
+        }
 
         if (node->Content() == pruneKeys.Input().Ref().Content()) {
             auto pruneKeysInput = pruneKeys.Input().Cast<TCoPruneKeysBase>();

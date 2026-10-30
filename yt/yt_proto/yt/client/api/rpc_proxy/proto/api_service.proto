@@ -857,6 +857,7 @@ message TRspPullQueue
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
+    optional bool response_size_limit_reached = 3;
 }
 
 message TReqPullQueueConsumer
@@ -874,6 +875,7 @@ message TRspPullQueueConsumer
 {
     optional TRowsetDescriptor rowset_descriptor = 1;
     optional int64 start_offset = 2;
+    optional bool response_size_limit_reached = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -986,6 +988,7 @@ message TReqExplainQuery
     optional int32 syntax_version = 13 [default = 1];
     optional int64 min_row_count_per_subquery = 14;
     optional int32 hyper_log_log_precision = 15;
+    optional bool merge_versioned_rows = 16;
 }
 
 message TRspExplainQuery

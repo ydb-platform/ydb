@@ -42,6 +42,9 @@ bool ValidateSingleRunningThread(const TFunc& func)
     bool ok = threadCount == 1;
     func(ok, threadCount);
     return ok;
+#else
+    Y_UNUSED(func);
+    THROW_ERROR_EXCEPTION("Single-thread validation at process startup is not supported on this platform");
 #endif // _linux_
 }
 

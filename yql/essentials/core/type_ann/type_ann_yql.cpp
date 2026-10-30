@@ -675,14 +675,59 @@ TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings
             return true;
         }
 
+        if (name == "flatten_columns" || name == "flatten_by") {
+            if (!EnsureTupleSize(setting, 2, ctx)) {
+                return false;
+            }
+            const TStringBuf callable = name == "flatten_columns" ? "YqlFlattenColumns" : "YqlFlattenBy";
+            if (!setting.Tail().IsCallable(callable)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Tail().Pos()), TStringBuilder() << "Expected " << callable));
+                return false;
+            }
+            return true;
+        }
+
         YQL_ENSURE(false, "unknown setting " << name);
     };
 
-    if (!EnsureValidSettings(*settings, {"cte", "into_values"}, validator, ctx.Expr)) {
+    if (!EnsureValidSettings(*settings, {"cte", "into_values", "flatten_columns", "flatten_by"}, validator, ctx.Expr)) {
         return Nothing();
     }
 
+    if (HasSetting(*settings, "flatten_columns") && HasSetting(*settings, "flatten_by")) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()), "FLATTEN COLUMNS and FLATTEN BY are mutually exclusive"));
+        return Nothing();
+    }
     return parsed;
+}
+
+IGraphTransformer::TStatus YqlFlattenWrapper(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
+{
+    Y_UNUSED(output);
+    const bool isFlattenBy = input->IsCallable("YqlFlattenBy");
+    const ui32 count = isFlattenBy ? 2 : 1;
+    if (!EnsureArgsCount(*input, count, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    for (const auto& child : input->Children()) {
+        if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+    }
+    for (ui32 index = 0; index < count; ++index) {
+        const auto& lambda = *input->Child(index);
+        if (isFlattenBy && index == 0 && lambda.IsCallable("Void")) {
+            continue;
+        }
+        if (!lambda.IsLambda() || !EnsureArgsCount(lambda.Head(), 1, ctx.Expr)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda.Pos()), "Expected one-argument flatten lambda"));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PromoteYqlAggOptions(
@@ -962,6 +1007,69 @@ IGraphTransformer::TStatus ValidateYqlWarnShadow(
         return IGraphTransformer::TStatus::Error;
     }
 
+    return IGraphTransformer::TStatus::Repeat;
+}
+
+TExprNode::TPtr BuildYqlColumnOrAccessRef(
+    const TExprNode::TPtr& node,
+    const THashSet<TString>& possibleAliases,
+    TExprContext& ctx)
+{
+    if (!EnsureArgsCount(*node, 4, ctx) || !EnsureAtom(*node->Child(1), ctx)) {
+        return nullptr;
+    }
+
+    const auto& source = node->ChildPtr(1);
+    if (possibleAliases.contains(TString(source->Content()))) {
+        return ctx.Builder(node->Pos())
+            .Callable("YqlColumnRef")
+            .Add(0, source)
+            .Add(1, node->ChildPtr(2))
+            .Seal()
+            .Build();
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("YqlColumnRef")
+        .Add(0, source)
+        .Seal()
+        .Build();
+}
+
+IGraphTransformer::TStatus YqlColumnRefOrAccessWrapper(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TContext& ctx)
+{
+    if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isSourceUniversal;
+    bool areOptionsUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(1), ctx.Expr, isSourceUniversal) ||
+        !EnsureTupleOfAtomsOrUniversal(input->Tail(), ctx.Expr, areOptionsUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (isSourceUniversal || areOptionsUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (input->Head().IsCallable("Void")) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!EnsureComputable(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    output = ctx.Expr.Builder(input->Pos())
+                 .Callable("SqlAccess")
+                 .Atom(0, "struct")
+                 .Add(1, input->HeadPtr())
+                 .Add(2, input->ChildPtr(2))
+                 .Add(3, input->TailPtr())
+                 .Seal()
+                 .Build();
     return IGraphTransformer::TStatus::Repeat;
 }
 

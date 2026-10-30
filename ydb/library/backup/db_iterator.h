@@ -168,8 +168,8 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Directory;
     }
 
-    bool IsSystemDir() const {
-        return NConsoleClient::IsSystemDir(*GetCurrentNode());
+    bool IsInternalDir() const {
+        return NConsoleClient::IsInternalDir(*GetCurrentNode());
     }
 
     bool IsReplication() const {
@@ -220,7 +220,7 @@ public:
     }
 
     bool IsSkipped() {
-        return IsSystemDir() && !IsMaterializedSysDir();
+        return IsInternalDir() && !IsMaterializedSysDir();
     }
 
     void Next() {

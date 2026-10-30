@@ -2,7 +2,17 @@ from unittest.mock import Mock
 
 import pytest
 
-from yql_prebuilt import _YQL_PREBUILT_FINALIZE
+from yql_prebuilt import _YQL_INTERNALIZED_SOURCE_FINALIZE, _YQL_PREBUILT_FINALIZE
+
+
+@pytest.mark.parametrize('sources,peers', [('wrapper.cpp', 'example/impl'), (None, None)])
+def test_internalized_source_dependencies(sources, peers):
+    unit = Mock()
+    unit.get.side_effect = {'_YQL_SOURCE_SRCS': sources, '_YQL_SOURCE_PEERS': peers}.get
+    _YQL_INTERNALIZED_SOURCE_FINALIZE(unit)
+    unit.onsrcs.assert_called_once_with((sources or '').split())
+    unit.onpeerdir.assert_called_once_with((peers or '').split())
+    unit.on_add_yql_udf_deps_contrib.assert_not_called()
 
 
 @pytest.mark.parametrize(

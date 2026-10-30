@@ -47,12 +47,14 @@ class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None,
                  fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None, fuzz_universal=False,
-                 patch_cfg_file=None, secure_params={}):
+                 patch_cfg_file=None, secure_params={}, udfs=None):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
             self.yqlrun_binary = binary
         self.extra_args = extra_args
+        # None loads the directory for legacy callers; an empty list loads no UDFs.
+        self.udfs = udfs
 
         try:
             self.sql2yql_binary = yql_utils.yql_binary_path(os.getenv('YQL_SQL2YQL_PATH') or 'yql/essentials/tools/sql2yql/sql2yql')
@@ -208,7 +210,11 @@ class YQLRun(object):
             cmd += '--tmp-dir=%(res_dir)s ' % locals()
 
         if self.udfs_path is not None and "--test-partial-typecheck" not in self.extra_args:
-            cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
+            if self.udfs is None:
+                cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
+            else:
+                for path in yql_utils.get_udf_paths(self.udfs_path, self.udfs):
+                    cmd += '--udf={} '.format(path)
 
         if ansi_lexer:
             cmd += '--ansi-lexer '

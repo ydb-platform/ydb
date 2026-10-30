@@ -313,13 +313,19 @@ private:
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
         LinkSettings.HasForceSortedMerge = LinkSettings.HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
 
+        const auto hasUnsupportedHints = [](const TSet<TString>& hints) {
+            return AnyOf(hints, [](const TString& hint) {
+                return hint != "any" && hint != "unessential_any";
+            });
+        };
+
         bool leftAny = op->LinkSettings.LeftHints.contains("any");
-        if (op->LinkSettings.LeftHints.size() > 1 || op->LinkSettings.LeftHints.size() == 1 && !leftAny) {
+        if (hasUnsupportedHints(op->LinkSettings.LeftHints)) {
             LinkSettings.HasCBOUnsupportedHints = true;
         }
 
         bool rightAny = op->LinkSettings.RightHints.contains("any");
-        if (op->LinkSettings.RightHints.size() > 1 || op->LinkSettings.RightHints.size() == 1 && !rightAny) {
+        if (hasUnsupportedHints(op->LinkSettings.RightHints)) {
             LinkSettings.HasCBOUnsupportedHints = true;
         }
 

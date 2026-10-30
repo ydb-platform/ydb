@@ -2,7 +2,11 @@
 
 // todo(gvit): remove
 #include <ydb/core/base/event_filter.h>
+#include <library/cpp/threading/atomic_shared_ptr/atomic_shared_ptr.h>
 #include <util/generic/hash_set.h>
+
+#include <memory>
+#include <utility>
 
 class TProgramShouldContinue;
 class IRandomProvider;
@@ -213,8 +217,19 @@ struct TAppData {
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
-    // Compiled once before actors start; configuration changes require a restart.
-    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+    using TPathNormalizerPtr = std::shared_ptr<const NPathAliasing::TPathNormalizer>;
+    // Publish immutable snapshots without changing their ownership type in consumers.
+    TTrueAtomicSharedPtr<TPathNormalizerPtr> PathNormalizer;
+
+    TPathNormalizerPtr GetPathNormalizer() const {
+        auto snapshot = PathNormalizer;
+        return snapshot ? *snapshot : nullptr;
+    }
+
+    void SetPathNormalizer(TPathNormalizerPtr normalizer) {
+        auto snapshot = MakeTrueAtomicShared<TPathNormalizerPtr>(std::move(normalizer));
+        PathNormalizer.swap(snapshot);
+    }
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 

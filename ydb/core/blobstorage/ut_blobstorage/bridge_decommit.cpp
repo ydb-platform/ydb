@@ -900,6 +900,84 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         });
     }
 
+    // Removing a group during decommission stops both the agent and its owned physical bridge proxy.
+    Y_UNIT_TEST(OwnedProxyStopsWhenGroupIsRemoved) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        SetupSchemeCacheStub(env);
+
+        TFilterChain chain(env);
+        std::optional<TActorId> bridgeProxyId;
+        CaptureBridgeProxyBehindAgent(chain, bridgeProxyId);
+        TEventHold& copyHold = chain.AddHold([&](IEventHandle& ev) {
+            if (ev.GetTypeRewrite() != TEvBlobStorage::EvPut ||
+                    ev.Get<TEvBlobStorage::TEvPut>()->WriteSource != TWriteSource::BlobDepotPut) {
+                return false;
+            }
+            auto *sender = env.Runtime->GetActor(ev.Sender);
+            return sender && TypeName(*sender).EndsWith("::TGroupAssimilator");
+        });
+        const auto response = DecommitGroup(env, groupId);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
+        copyHold.WaitForHeld();
+        UNIT_ASSERT(bridgeProxyId);
+        const TActorId proxy = *bridgeProxyId;
+
+        // Observe the agent serving this node through its public group service.
+        std::optional<TActorId> agent;
+        chain.Add([&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == proxy.NodeId() && ev->GetTypeRewrite() == TEvBlobStorage::EvGet &&
+                    ev->Recipient == MakeBlobStorageProxyID(groupId)) {
+                const TActorId recipient = ev->GetRecipientRewrite();
+                auto *actor = env.Runtime->GetActor(recipient);
+                if (actor && TypeName(*actor).EndsWith("::TBlobDepotAgent")) {
+                    agent = recipient;
+                }
+            }
+            return true;
+        });
+        checker.CheckAll(proxy.NodeId());
+        UNIT_ASSERT(agent);
+
+        const TLogoBlobID id = std::get<1>(checker.GetWritten().front());
+        const TActorId edge = env.Runtime->AllocateEdgeActor(proxy.NodeId(), __FILE__, __LINE__);
+        TEventHold& replies = chain.AddHold([=](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev.GetRecipientRewrite() == proxy;
+        });
+        env.Runtime->Send(new IEventHandle(proxy, edge, new TEvBlobStorage::TEvGet(id, 0, 0,
+            TInstant::Max(), NKikimrBlobStorage::FastRead)), proxy.NodeId());
+        replies.WaitForHeld();
+
+        // The controller's actual DESTROY update reaches NodeWarden while the read is still in flight.
+        const auto pool = ReadStoragePool(env, 1);
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableDeleteStoragePool();
+        cmd->SetBoxId(pool.GetBoxId());
+        cmd->SetStoragePoolId(pool.GetStoragePoolId());
+        cmd->SetItemConfigGeneration(pool.GetItemConfigGeneration());
+        TEventHold& completion = chain.AddHold([=](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvBlobStorage::EvGetResult && ev.GetRecipientRewrite() == edge;
+        });
+        const auto deleted = env.Invoke(request);
+        UNIT_ASSERT_C(deleted.GetSuccess(), deleted.GetErrorDescription());
+        WaitUntil(env, [&] { return !env.Runtime->GetActor(*agent); }, "removed BlobDepot agent");
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_C(!env.Runtime->GetActor(proxy), "owned bridge proxy survived removal of its agent");
+
+        completion.Release();
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->ErrorReason, "stopped");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Id, id);
+        replies.Release();
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(!env.Runtime->GetActor(proxy));
+    }
+
     // BlobDepot retries notification of decommission finish with a delay when BS_CONTROLLER fails to process it
     Y_UNIT_TEST(DecommittedNotifyRetried) {
         TEnvironmentSetup env(MakeBridgedSettings());

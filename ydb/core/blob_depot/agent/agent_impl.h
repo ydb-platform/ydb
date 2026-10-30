@@ -328,6 +328,9 @@ namespace NKikimr::NBlobDepot {
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
             ReleaseS3Wrapper();
+            if (ProxyId) {
+                Send(ProxyId, new TEvents::TEvPoison);
+            }
             TActor::PassAway();
         }
 

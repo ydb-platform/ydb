@@ -997,7 +997,5 @@ runs:
       run: |
         set +e
         set -x
-        if [ -n "${TMP_DIR:-}" ]; then
-          rm -rf "$TMP_DIR"
-        fi
+        rm -rf "$TMP_DIR"
         df -h / || true

@@ -388,11 +388,12 @@ struct TUserTable : public TThrRefBase {
     struct TReplicationConfig {
         NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
         NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConsistencyLevel;
-        NKikimrSchemeOp::TTableReplicationConfig::EImportState ImportState = NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE;
+        NKikimrSchemeOp::TTableReplicationConfig::EImportState ImportState;
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
             , ConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN)
+            , ImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE)
         {
         }
 

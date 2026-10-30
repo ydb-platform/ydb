@@ -312,7 +312,6 @@ public:
 
             if (target->GetDstState() == TReplication::EDstState::WaitingImport
                     && desiredState == TReplication::EState::Paused) {
-                target->UpdateConfig(Replication->GetConfig());
                 continue;
             }
 

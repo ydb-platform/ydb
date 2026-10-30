@@ -3,6 +3,7 @@
 
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
+#include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -126,9 +127,9 @@ public:
         return LogQueue->Pop();
     }
 
-    void MakeHeartbeatActor(const TAuditConfig& auditConfig, const TString& nodeAddress) {
+    NActors::TActorId MakeHeartbeatActor(const TAuditConfig& auditConfig, const TString& nodeAddress) {
         auto actor = CreateHeartbeatActor(auditConfig, nodeAddress);
-        Runtime.Register(actor.release());
+        return Runtime.Register(actor.release());
     }
 
 private:
@@ -250,7 +251,7 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
         logClassSettings->SetEnableLogging(true);
         TAuditConfig cfg(protoCfg);
         TTestAuditLogService test(NKikimrConfig::TAuditConfig::TXT);
-        test.MakeHeartbeatActor(cfg, nodeAddress);
+        const auto heartbeatId = test.MakeHeartbeatActor(cfg, nodeAddress);
 
         auto waitAndCheckLog = [&]() {
             const TString log = test.WaitAuditLog();
@@ -260,7 +261,7 @@ Y_UNIT_TEST_SUITE(AuditLogHeartbeatTest) {
             UNIT_ASSERT_STRING_CONTAINS(log, "sanitized_token={none}");
             UNIT_ASSERT_STRING_CONTAINS(log, "operation=HEARTBEAT");
             UNIT_ASSERT_STRING_CONTAINS(log, "status=SUCCESS");
-            UNIT_ASSERT_STRING_CONTAINS(log, "node_id=1");
+            UNIT_ASSERT_STRING_CONTAINS(log, "node_id=" + ToString(heartbeatId.NodeId()));
         };
 
         waitAndCheckLog();

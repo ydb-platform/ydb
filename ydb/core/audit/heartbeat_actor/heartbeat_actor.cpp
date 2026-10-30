@@ -1,6 +1,7 @@
 #include "heartbeat_actor.h"
 
 #include <ydb/core/audit/audit_config/audit_config.h>
+#include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

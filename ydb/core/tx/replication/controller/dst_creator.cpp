@@ -82,10 +82,6 @@ bool CheckReplicationMode(
     return table.GetReplicationConfig().GetMode() == mode;
 }
 
-bool IsReplica(const NKikimrSchemeOp::TTableDescription& table) {
-    return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-}
-
 bool NotReplica(const NKikimrSchemeOp::TTableDescription& table) {
     return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
 }
@@ -368,6 +364,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         tx.SetInternal(true);
         DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
         FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
+        tx.MutableAlterTable()->MutableReplicationConfig()->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         ExecuteSchemeTx(tx);
     }
 
@@ -534,25 +531,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        const auto importState = got.GetReplicationConfig().GetImportState();
-        // Attachment clears ImportState. The persisted path id lets us recover
-        // after that ALTER commits but before the controller records success.
-        const bool attached = (Attaching || PendingDstPathId) && IsReplica(got)
-            && importState == NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE;
-        if (!InitialScan && !CreatePlaceholder && !attached
-                && importState != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+        if (!InitialScan && !CreatePlaceholder
+                && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }
 
-        const bool needsConfig = InitialScan || CreatePlaceholder || Attaching || IsReplica(got);
-
-        if (needsConfig && !got.HasReplicationConfig()) {
+        if (!got.HasReplicationConfig()) {
             error = "Empty replication config";
             return false;
         }
 
-        if (needsConfig && !CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
+        if (!CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
             return false;
         }
 

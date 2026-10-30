@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pathId);
-        UNIT_ASSERT(!env.GetDescription("/Root/Dst").GetPathDescription().GetTable()
-            .GetReplicationConfig().HasImportState());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/Dst").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         CheckTableReplica(table, env.GetDescription("/Root/Dst").GetPathDescription().GetTable(),
             EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
@@ -259,7 +259,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         if (schemaChange == EAttachmentSchemaChange::None) {
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pendingDstPathId);
-            UNIT_ASSERT(!desc.GetPathDescription().GetTable().GetReplicationConfig().HasImportState());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+                NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
             CheckTableReplica(table, desc.GetPathDescription().GetTable(),
                 EReplicationMode::ReadOnly, EConsistencyLevel::Global);
         } else {

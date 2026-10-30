@@ -173,11 +173,7 @@ public:
 
         ActorId = ev->Sender;
         Generation = generation;
-<<<<<<< HEAD
-=======
-        SupportsIndexMetadata = ev->Get()->Record.GetSupportsIndexMetadata();
         SupportsSourceOffsets = ev->Get()->Record.GetSupportsSourceOffsets();
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 
         auto status = MakeHolder<TEvService::TEvStatus>();
         auto& record = status->Record;
@@ -206,30 +202,16 @@ public:
         }
     }
 
-<<<<<<< HEAD
-=======
-    void SetIndexBuildWorker(const TWorkerId& id) { IndexBuildWorkers.insert(id); }
-
     void Handle(const TActorContext& ctx, TEvService::TEvSourceOffsetReport::TPtr& ev) {
         if (!SupportsSourceOffsets) {
-            return; // old controller: do not authorize further source commits
+            return;
         }
         const auto id = GetWorkerId(ev->Sender);
         AFL_VERIFY_DEBUG(HasWorker(id))("worker", id);
-        auto& record = ev->Get()->Record;
-        id.Serialize(*record.MutableWorker());
+        id.Serialize(*ev->Get()->Record.MutableWorker());
         ctx.Send(ev->Forward(ActorId));
     }
 
-    void Handle(IActorOps* ops, TEvService::TEvIndexBuildProgress::TPtr& ev) {
-        const auto id = GetWorkerId(ev->Sender);
-        if (HasWorker(id) && IndexBuildWorkers.contains(id)) {
-            id.Serialize(*ev->Get()->Record.MutableWorker());
-            ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
-        }
-    }
-
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     bool HasWorker(const TWorkerId& id) const {
         return Workers.contains(id);
     }
@@ -497,11 +479,7 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
-<<<<<<< HEAD
-=======
-    bool SupportsIndexMetadata = false;
     bool SupportsSourceOffsets = false;
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
@@ -863,6 +841,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session.Handle(this, ev);
     }
 
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev) {
+        auto* session = SessionFromWorker(ev->Sender);
+        if (session && session->HasWorker(ev->Sender)) {
+            session->Handle(ActorContext(), ev);
+        }
+    }
+
     void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
@@ -884,67 +869,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session->Handle(this, ev);
     }
 
-<<<<<<< HEAD
-=======
-    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev) {
-        auto* session = SessionFromWorker(ev->Sender);
-        if (session && session->HasWorker(ev->Sender)) {
-            session->Handle(ActorContext(), ev);
-        }
-    }
-
-    void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev) {
-        auto* session = SessionFromWorker(ev->Sender);
-        if (session && session->HasWorker(ev->Sender)) {
-            session->Handle(this, ev);
-        }
-    }
-
-    void Handle(TEvService::TEvIndexBuildProgressResult::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        const auto session = Sessions.find(record.GetController().GetTabletId());
-        if (record.HasWorker() && record.HasController() && session != Sessions.end()
-            && session->second.GetGeneration() == record.GetController().GetGeneration())
-        {
-            const auto id = TWorkerId::Parse(record.GetWorker());
-            if (session->second.HasWorker(id)) {
-                Send(session->second.GetWorkerActorId(id), ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
-            }
-        }
-    }
-
-    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev) {
-        YDB_LOG_TRACE("Handle",
-            {"ev", ev->Get()->ToString()});
-
-        auto* session = SessionFromWorker(ev->Sender);
-        if (!session || !session->HasWorker(ev->Sender)) {
-            return;
-        }
-
-        session->Handle(this, ev);
-    }
-
-    void Handle(TEvService::TEvSchemaChangeResult::TPtr& ev) {
-        YDB_LOG_TRACE("Handle",
-            {"ev", ev->Get()->ToString()});
-
-        const auto& record = ev->Get()->Record;
-        if (!record.HasWorker() || !record.HasController()) {
-            return;
-        }
-
-        const auto& controller = record.GetController();
-        const auto session = Sessions.find(controller.GetTabletId());
-        if (session != Sessions.end() && session->second.GetGeneration() == controller.GetGeneration()) {
-            const auto id = TWorkerId::Parse(record.GetWorker());
-            if (session->second.HasWorker(id)) {
-                Send(session->second.GetWorkerActorId(id), ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
-            }
-        }
-    }
-
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
@@ -1105,14 +1029,7 @@ public:
             hFunc(TEvService::TEvGetTxId, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Handle);
-<<<<<<< HEAD
-=======
-            hFunc(TEvService::TEvSchemaChangeReport, Handle);
-            hFunc(TEvService::TEvIndexBuildProgress, Handle);
             hFunc(TEvService::TEvSourceOffsetReport, Handle);
-            hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
-            hFunc(TEvService::TEvSchemaChangeResult, Handle);
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
             hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvStatsWakeup, Handle)
             hFunc(TEvWorker::TEvGone, Handle);

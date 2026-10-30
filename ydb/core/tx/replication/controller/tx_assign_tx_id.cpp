@@ -161,7 +161,7 @@ public:
             }
         }
 
-        if (!Self->AllocateTxIdInFlight && Self->AllocatedTxIds.size() < MinAllocatedTxIds) {
+        if (Self->ReplicationsWithSourceOffsetMismatch.empty() && !Self->AllocateTxIdInFlight && Self->AllocatedTxIds.size() < MinAllocatedTxIds) {
             Self->AllocateTxIdInFlight = true;
             ctx.Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
         }
@@ -175,22 +175,6 @@ public:
 
 }; // TTxAssignTxId
 
-<<<<<<< HEAD
-=======
-void TController::AllocateTxIds(const TActorContext& ctx) {
-    const auto replication = GetSingle();
-    if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-        return;
-    }
-    if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
-        return;
-    }
-
-    AllocateTxIdInFlight = true;
-    ctx.Send(TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
-}
-
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 void TController::RunTxAssignTxId(const TActorContext& ctx) {
     if (!AssignTxIdInFlight) {
         AssignTxIdInFlight = true;

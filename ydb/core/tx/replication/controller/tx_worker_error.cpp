@@ -7,15 +7,10 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxWorkerError: public TTxBase {
     const TWorkerId WorkerId;
     const TString Error;
-<<<<<<< HEAD
-=======
     const bool SourceOffsetMismatch;
     const TMaybe<ui64> SourceCommittedOffset;
     TMaybe<ui32> RestartWorkerNode;
     bool StopWorkers = false;
-    bool RemoveStoppedWorker = false;
-    bool StopReplicationWorkers = false;
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 
 public:
     explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset)
@@ -60,20 +55,6 @@ public:
             return true;
         }
 
-<<<<<<< HEAD
-=======
-        if (target->GetDstState() == TReplication::EDstState::Removing) {
-            return true;
-        }
-
-        const auto build = Self->IndexBuilds.find({WorkerId.ReplicationId(), WorkerId.TargetId()});
-        if (build != Self->IndexBuilds.end() && Self->IsCancelledIndexBuild(build->second)) {
-            // Removal may not have reached RemoveQueue when this error was
-            // received. Check the durable build phase when the transaction runs.
-            RemoveStoppedWorker = true;
-            return true;
-        }
-
         if (SourceOffsetMismatch && Self->TracksSourceOffsets(WorkerId)) {
             const auto* savedOffset = Self->ProcessedSourceOffsets.FindPtr(WorkerId);
             if (!savedOffset || (SourceCommittedOffset && *SourceCommittedOffset <= savedOffset->NextOffset)) {
@@ -94,7 +75,6 @@ public:
             return true;
         }
 
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
         YDB_LOG_ERROR_CTX(ctx, "Worker error",
             {"rid", WorkerId.ReplicationId()},
             {"tid", WorkerId.TargetId()},
@@ -122,8 +102,6 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
-<<<<<<< HEAD
-=======
 
         if (RestartWorkerNode && Self->HasWorkerSession(WorkerId, *RestartWorkerNode)) {
             Self->StopQueue.emplace(WorkerId, *RestartWorkerNode);
@@ -132,50 +110,7 @@ public:
         }
         if (StopWorkers) {
             Self->StopWorkersForMismatch(WorkerId.ReplicationId(), ctx);
-            return;
         }
-        if (StopReplicationWorkers) {
-            // The error is durable before stopping the remaining partitions.
-            // IsValidWorker also rejects late/recovered starts in this state.
-            for (auto& [id, worker] : Self->Workers) {
-                if (id.ReplicationId() != WorkerId.ReplicationId()) {
-                    continue;
-                }
-                Self->BootQueue.erase(id);
-                if (!worker.HasSession()) {
-                    continue;
-                }
-                if (id == WorkerId) {
-                    // This worker has already stopped; no acknowledgement will follow.
-                    const auto session = Self->Sessions.find(worker.GetSession());
-                    if (session != Self->Sessions.end()) {
-                        session->second.DetachWorker(id);
-                    }
-                    worker.ClearSession();
-                } else {
-                    Self->StopQueue.emplace(id, worker.GetSession());
-                }
-            }
-            Self->ScheduleProcessQueues();
-        }
-
-        if (RemoveStoppedWorker) {
-            const auto worker = Self->Workers.find(WorkerId);
-            if (worker != Self->Workers.end() && worker->second.HasSession()) {
-                const auto session = Self->Sessions.find(worker->second.GetSession());
-                if (session != Self->Sessions.end()) {
-                    session->second.DetachWorker(WorkerId);
-                }
-
-                worker->second.ClearSession();
-            }
-
-            // STATUS_STOPPED already confirms that the cancelled writer has
-            // exited; do not wait for another stop acknowledgement.
-            Self->RemoveQueue.insert(WorkerId);
-            Self->RemoveWorker(WorkerId, ctx);
-        }
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     }
 
 }; // TTxWorkerError

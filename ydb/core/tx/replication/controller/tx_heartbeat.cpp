@@ -137,19 +137,6 @@ public:
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
-<<<<<<< HEAD
-=======
-        if (HadHeartbeats && Self->ReplicationsWithSourceOffsetMismatch.empty()) {
-            Self->RunTxIndexBuild(ctx);
-        }
-
-        for (const auto replicationId : Self->DeferredAlters) {
-            if (!Self->HasPendingAlter(replicationId)) {
-                ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
-            }
-        }
-
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
         if (Self->PendingHeartbeats) {
             Self->Execute(new TTxHeartbeat(Self), ctx);
         } else {
@@ -204,15 +191,11 @@ public:
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
-<<<<<<< HEAD
-            CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
-=======
             if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
+                CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
             } else {
                 Self->CommittingTxId = 0;
             }
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
             return true;
         }
 
@@ -262,49 +245,6 @@ void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, 
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
 
-<<<<<<< HEAD
-=======
-    if (auto commit = IndexCommits.find(ev->Cookie); commit != IndexCommits.end()) {
-        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
-        IndexCommits.erase(commit);
-        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            // Completion is persisted by the next index-build transaction.
-            CompletedIndexCommits.insert(ev->Cookie);
-        }
-
-        RunTxIndexBuild(ctx);
-        return;
-    }
-
-    if (auto flush = SchemaTargetFlushes.find(ev->Cookie); flush != SchemaTargetFlushes.end()) {
-        const auto key = flush->second;
-        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(
-            ev->Get()->Record.GetStatus());
-        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            SchemaTargetFlushes.erase(flush);
-            const auto barrier = SchemaBarriers.find(key);
-            if (barrier != SchemaBarriers.end()) {
-                ++barrier->second.NextTargetFlushTxId;
-                StartSchemaChangeTargetFlush(key, ctx);
-            }
-        } else {
-            const auto barrier = SchemaBarriers.find(key);
-            auto replication = Find(key.first);
-            auto* target = FindTarget(TWorkerId(key.first, key.second, 0));
-            if (barrier != SchemaBarriers.end()
-                && replication
-                && replication->GetState() != TReplication::EState::Removing
-                && !ReplicationsWithSourceOffsetMismatch.contains(key.first)
-                && target)
-            {
-                ctx.Send(MakeTxProxyID(),
-                    MakeCommitProposal(ev->Cookie, {target->GetDstPath()}).Release(), 0, ev->Cookie);
-            }
-        }
-        return;
-    }
-
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     if (ev->Cookie != CommittingTxId) {
         YDB_LOG_ERROR_CTX(ctx, "Cookie mismatch",
             {"expected", CommittingTxId},

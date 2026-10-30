@@ -45,6 +45,8 @@ struct TEvWorker {
         EvCommit,
         EvTerminateWriter,
         EvStatsWakeup,
+        EvCommitResult,
+        EvReaderStarted,
         EvEnd,
     };
 
@@ -64,6 +66,16 @@ struct TEvWorker {
 
         explicit TEvCommit(size_t offset);
         TString ToString() const override;
+    };
+
+    struct TEvCommitResult: public TEventLocal<TEvCommitResult, EvCommitResult> {
+        ui64 Offset;
+        explicit TEvCommitResult(ui64 offset) : Offset(offset) {}
+    };
+
+    struct TEvReaderStarted: public TEventLocal<TEvReaderStarted, EvReaderStarted> {
+        ui64 CommittedOffset;
+        explicit TEvReaderStarted(ui64 offset) : CommittedOffset(offset) {}
     };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {

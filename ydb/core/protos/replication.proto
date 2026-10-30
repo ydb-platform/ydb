@@ -316,12 +316,7 @@ message TWorkerIdentity {
 
 message TEvHandshake {
     optional TControllerIdentity Controller = 1;
-<<<<<<< HEAD
-=======
-    // Older controllers compare complete serialized schema reports.
-    optional bool SupportsIndexMetadata = 2 [default = false];
     optional bool SupportsSourceOffsets = 3 [default = false];
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 }
 
 message TEvStatus {

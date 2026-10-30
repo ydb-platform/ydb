@@ -114,6 +114,33 @@ DO BEGIN
 END DO
 ```
 
+### Чтение с указанием читателя {#example-consumer}
+
+Пример чтения из топика с привязкой [читателя](../../../concepts/datamodel/topic.md#consumer) через прагму `PRAGMA pq.Consumer`. Подробнее о читателях — в разделе [Использование читателя](#consumer-usage).
+
+```yql
+CREATE STREAMING QUERY my_streaming_query AS
+DO BEGIN
+
+PRAGMA pq.Consumer = "my_consumer";
+
+UPSERT INTO output_table
+SELECT
+    Id,
+    Name
+FROM
+    input_topic -- или внешний топик ext_source.input_topic
+WITH (
+    FORMAT = json_each_row,  -- Формат входных данных
+    SCHEMA = (               -- Схема входных данных
+        Id Uint64 NOT NULL,
+        Name Utf8 NOT NULL
+    )
+);
+
+END DO
+```
+
 ### Запуск в пуле ресурсов {#example-resource-pool}
 
 Запрос создаётся в указанном [пуле ресурсов](../../../concepts/glossary.md#resource-pool), но не запускается автоматически (`RUN = FALSE`). Это позволяет проверить конфигурацию перед запуском или запустить запрос позже через [ALTER STREAMING QUERY](alter-streaming-query.md).

@@ -1,3 +1,4 @@
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogUsesMemAndDiskLimits
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.SlowSession
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts
@@ -150,9 +151,18 @@ ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.Repla
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterDisconnect+SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterDisconnect-SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterStop+SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterStop-SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.ChildWorkerWaitsForSecretAfterDataEnd
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret+SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret-SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
 ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
 ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
+ydb/core/viewer/tests test.py.TestViewer.test_async_replication_describe
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions

@@ -958,6 +958,8 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     PARTITION_ENSURE(!RequestInfly);
 
     const auto& dr = DirectReadResults[DirectReadId];
+    // The tablet sets WriteTimestampMS only for a non-empty read.
+    DataDelivered |= dr.HasWriteTimestampMS();
 
     auto readResponse = MakeHolder<TEvPQProxy::TEvDirectReadResponse>(
         Partition.AssignId,
@@ -1058,6 +1060,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     if (hasData) {
         ++ReadIdToResponse;
+        DataDelivered = true;
     }
 
     LOG_D("After read state EndOffset ReadOffset ReadGuid has messages",
@@ -1766,7 +1769,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, !DataDelivered,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
         } else if (FirstRead) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));

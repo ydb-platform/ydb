@@ -100,6 +100,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWith
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.ReloadPQTabletAfterAlterConsumer
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
+ydb/core/persqueue/public/describer/ut TDescriberTests.NotTopicWithDescribeAccess
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartition

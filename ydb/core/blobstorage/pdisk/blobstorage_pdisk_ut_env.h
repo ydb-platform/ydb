@@ -43,6 +43,8 @@ public:
         bool UseRdmaAllocator = false;
         bool EnablePDiskSpaceColorOverride = false;
         bool EnableTightPDiskSpaceColors = false;
+        ui64 OverestimationSlowLimit = NPDisk::OverestimationSlowLimit;
+        ui64 OverestimationSlowDurationMs = NPDisk::OverestimationSlowDurationMs;
     };
 
 private:
@@ -118,6 +120,8 @@ public:
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
         pDiskConfig->NonceRandNum = Settings.NonceRandNum;
+        pDiskConfig->OverestimationSlowLimit = Settings.OverestimationSlowLimit;
+        pDiskConfig->OverestimationSlowDurationMs = Settings.OverestimationSlowDurationMs;
 
         return pDiskConfig;
     }

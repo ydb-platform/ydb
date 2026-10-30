@@ -74,6 +74,8 @@ namespace {
         TBridgeInfo::TPtr BridgeInfo;
         std::map<ui64, std::unique_ptr<TEvBlobStorage::TEvGetResult>> Results;
         bool RaceWithNewerPileGeneration = false;
+        bool HoldResults = false;
+        std::vector<std::unique_ptr<IEventHandle>> HeldResults;
 
         TQueuedRoutingTest() {
             Env.CreatePool();
@@ -88,15 +90,13 @@ namespace {
                         ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
                     Config = ev->Get<TEvNodeWardenStorageConfig>()->Config;
                     BridgeInfo = ev->Get<TEvNodeWardenStorageConfig>()->BridgeInfo;
+                } else if (HoldResults && ev->GetRecipientRewrite() == Proxy &&
+                        ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                    HeldResults.push_back(std::move(ev));
+                    return false;
                 } else if (RaceWithNewerPileGeneration && ev->GetRecipientRewrite() == Proxy &&
                         ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
-                    auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
-                    msg->Status = NKikimrProto::RACE;
-                    for (const auto& pile : Group.GetBridgeGroupState().GetPile()) {
-                        if (pile.GetGroupId() == msg->GroupId) {
-                            msg->RacingGeneration = pile.GetGroupGeneration() + 1;
-                        }
-                    }
+                    MakeRace(*ev->Get<TEvBlobStorage::TEvGetResult>());
                 } else if (ev->GetRecipientRewrite() == Edge && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
                     UNIT_ASSERT_C(!Results.contains(ev->Cookie), "duplicate terminal response");
                     Results.emplace(ev->Cookie, std::unique_ptr<TEvBlobStorage::TEvGetResult>(
@@ -111,6 +111,23 @@ namespace {
 
         ~TQueuedRoutingTest() {
             Env.Runtime->FilterFunction = {};
+        }
+
+        void MakeRace(TEvBlobStorage::TEvGetResult& msg) {
+            msg.Status = NKikimrProto::RACE;
+            for (const auto& pile : Group.GetBridgeGroupState().GetPile()) {
+                if (pile.GetGroupId() == msg.GroupId) {
+                    msg.RacingGeneration = pile.GetGroupGeneration() + 1;
+                }
+            }
+        }
+
+        void ReleaseResultsAsRace() {
+            HoldResults = false;
+            for (auto& ev : std::exchange(HeldResults, {})) {
+                MakeRace(*ev->Get<TEvBlobStorage::TEvGetResult>());
+                Env.Runtime->Send(ev.release(), 1);
+            }
         }
 
         void SendGet(ui64 cookie, TInstant deadline = TInstant::Max()) {
@@ -205,6 +222,26 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         UNIT_ASSERT_C(test.Results.contains(1), "group notifications renewed the routing wait");
         UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
         test.RaceWithNewerPileGeneration = false;
+        test.SendGet(2);
+        test.CheckSuccess(2);
+        test.Env.Sim(TDuration::Seconds(3));
+    }
+
+    Y_UNIT_TEST(RoutingBudgetExcludesPileExecution) {
+        TQueuedRoutingTest test;
+        test.SendGet(1);
+        test.Env.Sim(TDuration::MilliSeconds(1500));
+        test.HoldResults = true;
+        test.MakeRoutingAvailable();
+        WaitUntil(test.Env, [&] { return !test.HeldResults.empty(); }, "dispatched read", TDuration::MilliSeconds(10), 100);
+        test.Env.Sim(TDuration::Seconds(3)); // the piles take longer than the whole routing budget
+        test.ReleaseResultsAsRace();
+        test.Env.Sim(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_C(!test.Results.contains(1), "time spent in piles was charged to the routing wait");
+        test.Env.Sim(TDuration::MilliSeconds(400));
+        UNIT_ASSERT_C(test.Results.contains(1), "the routing wait was renewed by dispatch");
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(test.Results.at(1)->ErrorReason, "bridge request timed out");
         test.SendGet(2);
         test.CheckSuccess(2);
         test.Env.Sim(TDuration::Seconds(3));

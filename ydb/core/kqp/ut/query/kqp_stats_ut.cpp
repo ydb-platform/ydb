@@ -247,8 +247,9 @@ Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
 
 // A compilation that was in flight during a cache-invalidating config change
 // must not land in the cleared cache: its result is compiled with the old config.
-Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
+Y_UNIT_TEST_TWIN(InFlightCompileResultDroppedFromCacheOnConfigChange, AstCache) {
     auto settings = TKikimrSettings().SetUseRealThreads(false).SetWithSampleTables(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
     TKikimrRunner kikimr(settings);
     UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -260,11 +261,19 @@ Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
     auto context = MakeIntrusive<TUserRequestContext>("stale-generation", "/Root", "stale-generation");
     auto gucSettings = std::make_shared<TGUCSettings>();
 
-    auto send = [&](const TString& text) {
-        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
+    auto makeQuery = [&](const TString& text) {
+        return TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
             text, TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+    };
+    auto send = [&](const TString& text) {
+        TMaybe<TKqpQueryId> query = makeQuery(text);
         runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
             token, "", Nothing(), std::move(query), true, false, false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+    };
+    auto recompile = [&](const TString& uid) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(
+            token, "", uid, Nothing(), /*isQueryActionPrepare=*/false, TInstant::Max(), nullptr, gucSettings,
             Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
     };
     auto receive = [&](bool fromCache) {
@@ -274,6 +283,17 @@ Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
             response->Get()->CompileResult->Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, fromCache);
         return response;
+    };
+
+    ui64 configDelta = 0;
+    auto invalidateCache = [&] {
+        NKikimrConfig::TTableServiceConfig newConfig = settings.AppConfig.GetTableServiceConfig();
+        newConfig.MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(
+            newConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() + ++configDelta);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *notification->Record.MutableConfig()->MutableTableServiceConfig() = newConfig;
+        runtime.Send(new IEventHandle(service, edge, notification.Release()));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
     };
 
     // Baseline: a fresh compile is cached, the follow-up request is a hit.
@@ -286,8 +306,7 @@ Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
     // Hold the compile actor's response: the observer captures it (dropping it
     // from delivery) so the config change is processed deterministically while
     // the compilation is in flight, without relying on compilation speed.
-    const TString q2 = "SELECT 42 AS stale_generation;";
-    bool holdNext = true;
+    bool holdNext = false;
     TAutoPtr<IEventHandle> blockedCompile;
     const auto holdObserver = runtime.AddObserver<TEvKqp::TEvCompileResponse>(
         [&](TEvKqp::TEvCompileResponse::TPtr& ev) {
@@ -296,28 +315,22 @@ Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
                 blockedCompile = ev.Release();
             }
         });
-
-    send(q2);
-    {
+    auto holdCompile = [&] {
+        holdNext = true;
+        blockedCompile = nullptr;
         TDispatchOptions opts;
         // An observer drop never reaches FinalEvents (only PROCESSed events do),
         // so wait on a condition checked outside the event path.
         opts.CustomFinalCondition = [&] { return bool(blockedCompile); };
-        runtime.DispatchEvents(opts, TDuration::Seconds(5));
-    }
-    UNIT_ASSERT_C(blockedCompile, "Compile response should have been captured");
-
-    // Invalidate the cache while the response is held; the acknowledgement
-    // proves HandleConfig has run (cache cleared, config generation bumped).
-    NKikimrConfig::TTableServiceConfig newConfig = settings.AppConfig.GetTableServiceConfig();
-    newConfig.MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(
-        newConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() + 1);
-    auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-    *notification->Record.MutableConfig()->MutableTableServiceConfig() = newConfig;
-    runtime.Send(new IEventHandle(service, edge, notification.Release()));
-    UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+        runtime.DispatchEvents(opts, TDuration::Seconds(30));
+        UNIT_ASSERT_C(blockedCompile, "Compile response should have been captured");
+    };
 
     // The in-flight client still gets its (old-config) result ...
+    const TString q2 = "SELECT 42 AS stale_generation;";
+    send(q2);
+    holdCompile();
+    invalidateCache();
     runtime.Send(blockedCompile.Release());
     receive(false);
 
@@ -327,6 +340,21 @@ Y_UNIT_TEST(InFlightCompileResultDroppedFromCacheOnConfigChange) {
 
     // Post-change compilations are cached as usual.
     send(q2);
+    receive(true);
+
+    // A recompile in flight across the config change reuses the cached uid;
+    // its stale result must not be inserted under that uid either.
+    const TString q3 = "SELECT 43 AS stale_generation;";
+    send(q3);
+    const TString q3Uid = receive(false)->Get()->CompileResult->Uid;
+    recompile(q3Uid);
+    holdCompile();
+    invalidateCache();
+    runtime.Send(blockedCompile.Release());
+    receive(false);
+    send(q3);
+    receive(false);
+    send(q3);
     receive(true);
 }
 

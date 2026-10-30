@@ -748,23 +748,26 @@ private:
         bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
+        bool isStale = compileRequest.ConfigGeneration != ConfigGeneration;
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    if (compileRequest.ConfigGeneration == ConfigGeneration) {
-                        UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
-                    } else {
-                        YDB_LOG_INFO_CTX(ctx, "Skipped caching compile result from stale config generation",
+                    if (isStale) {
+                        YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
                             {"queryUid", compileResult->Uid},
                             {"requestGeneration", compileRequest.ConfigGeneration},
                             {"currentGeneration", ConfigGeneration});
+                    } else {
+                        UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                     }
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    if (!isStale) {
+                        QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    }
                 }
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
@@ -775,7 +778,7 @@ private:
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
-                if (!hasTempTablesNameClashes) {
+                if (!isStale && !hasTempTablesNameClashes) {
                     if (QueryCache->FindByUid(compileResult->Uid, false)) {
                         QueryCache->EraseByUid(compileResult->Uid);
                     }

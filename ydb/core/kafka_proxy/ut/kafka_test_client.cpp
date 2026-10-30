@@ -23,6 +23,10 @@ TKafkaTestClient::TKafkaTestClient(ui16 port, const TString clientName)
     , ClientName(clientName) {
 }
 
+void TKafkaTestClient::SetSocketTimeout(ui32 seconds) {
+    Socket.SetSocketTimeout(seconds, 0);
+}
+
 TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent) {
     return ApiVersionsAtVersion(2, silent);
 }

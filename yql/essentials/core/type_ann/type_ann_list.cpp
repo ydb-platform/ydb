@@ -5619,12 +5619,11 @@ namespace {
             }
 
             extractedType = tupleType->GetItems()[index];
-        }
-        else if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+        } else if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct ||
+                   itemType->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
-        }
-        else {
+        } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
                 "Expected either list of struct or list tuples, but got list of " << itemType->GetKind() << ", type: " << *input->Head().GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;

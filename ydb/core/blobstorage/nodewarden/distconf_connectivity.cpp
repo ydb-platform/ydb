@@ -490,6 +490,12 @@ namespace NKikimr::NStorage {
 
             const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
             if (peerPile == BridgeInfo->SelfNodePile) {
+                if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
+                        StorageConfig->GetFingerprint() != config.GetFingerprint()) {
+                    // nodes of the same pile have committed different configurations with the same generation, which
+                    // must not spread further
+                    return "config fingerprint mismatch";
+                }
                 if (!selfPolicyPileId || !NBridge::PileStateTraits(NBridge::GetPileState(cs, selfPolicyPileId)).AllowsConnectionWithinPile) {
                     error = "nodes of the pile not added to the cluster can't connect to each other";
                 }

@@ -33,6 +33,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/cms/console
     ydb/core/fq/libs/checkpoint_storage/events
+    ydb/core/fq/libs/ydb
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common

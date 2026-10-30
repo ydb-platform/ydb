@@ -419,7 +419,7 @@ public:
             }
             if (it->second.HasSession()) {
                 Self->StopQueue.emplace(id, it->second.GetSession());
-            } else if (it->second.HasCommand()) {
+            } else {
                 Self->BootQueue.insert(id);
             }
         }

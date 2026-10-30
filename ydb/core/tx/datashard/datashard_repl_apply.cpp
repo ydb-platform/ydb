@@ -225,8 +225,9 @@ public:
             return false;
         }
 
-        TReplicationSourceOffsetsDb rdb(txc);
-        if (!source.AdvanceMaxOffset(rdb, keyCellVec.GetCells(), sourceOffset)) {
+        auto offset = source.Offsets.upper_bound(keyCellVec.GetCells());
+        Y_ENSURE(offset != source.Offsets.begin());
+        if (sourceOffset <= (*std::prev(offset))->MaxOffset) {
             // We have already seen this offset and ignore it
             return true;
         }
@@ -267,6 +268,10 @@ public:
                 return false;
             }
         }
+
+        // Rejected records must not advance the persisted deduplication offset.
+        TReplicationSourceOffsetsDb rdb(txc);
+        source.AdvanceMaxOffset(rdb, keyCellVec.GetCells(), sourceOffset);
 
         if (writeTxId) {
             if (collector) {

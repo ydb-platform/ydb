@@ -6,21 +6,33 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
     const auto& originalTable = context.GetOriginalEntityAsVerified<TStandaloneTable>();
+    if (const auto& alterData = originalTable.GetTableInfoVerified().AlterData) {
+        UpdateSchema = alterData->AlterBody->HasAlterSchema();
+        UpdateTTL = alterData->AlterBody->HasAlterTtlSettings();
+        TargetStandalone = std::make_shared<TStandaloneTable>(originalTable.GetPathId(), alterData);
+        return TConclusionStatus::Success();
+    }
+
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {
         return alter;
     }
     auto alterCS = alter.DetachResult();
+    UpdateSchema = alterCS.HasAlterSchema();
+    UpdateTTL = alterCS.HasAlterTtlSettings();
+    std::optional<TOlapSchemaUpdate> alterSchema;
+    std::optional<TOlapTTLUpdate> alterTTL;
+    std::optional<TOlapMultiColumnStatisticsUpdate> alterMultiColumnStatistics;
     if (alterCS.HasAlterSchema()) {
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
         if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
             return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
-        AlterSchema = std::move(schemaUpdate);
+        alterSchema = std::move(schemaUpdate);
     }
     if (alterCS.HasAlterTtlSettings()) {
-        AlterTTL = alterCS.GetAlterTtlSettings();
+        alterTTL = alterCS.GetAlterTtlSettings();
     }
     if (alterCS.UpsertMultiColumnStatisticsSize() || alterCS.DropMultiColumnStatisticsSize()) {
         TOlapMultiColumnStatisticsUpdate statisticsUpdate;
@@ -28,9 +40,9 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         if (!statisticsUpdate.Parse(alterCS, statisticsCollector)) {
             return TConclusionStatus::Fail("statistics update error: " + statisticsCollector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
-        AlterMultiColumnStatistics = std::move(statisticsUpdate);
+        alterMultiColumnStatistics = std::move(statisticsUpdate);
     }
-    if (!AlterSchema && !AlterTTL && !AlterMultiColumnStatistics) {
+    if (!alterSchema && !alterTTL && !alterMultiColumnStatistics) {
         return TConclusionStatus::Fail("no data for update");
     }
 
@@ -39,15 +51,15 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
 
     TSimpleErrorCollector collector;
     TOlapSchema targetSchema = originalSchema;
-    if (AlterSchema) {
-        if (!targetSchema.Update(*AlterSchema, collector)) {
+    if (alterSchema) {
+        if (!targetSchema.Update(*alterSchema, collector)) {
             return TConclusionStatus::Fail("schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
     }
 
     TOlapMultiColumnStatisticsDescription targetMultiColumnStatistics = originalTable.GetTableMultiColumnStatisticsVerified();
-    if (AlterMultiColumnStatistics) {
-        if (!targetMultiColumnStatistics.ApplyUpdate(targetSchema, *AlterMultiColumnStatistics, collector)) {
+    if (alterMultiColumnStatistics) {
+        if (!targetMultiColumnStatistics.ApplyUpdate(targetSchema, *alterMultiColumnStatistics, collector)) {
             return TConclusionStatus::Fail("statistics update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
     }
@@ -73,8 +85,8 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     targetSchema.Serialize(*description.MutableSchema());
     targetMultiColumnStatistics.Serialize(description);
     auto ttl = originalTable.GetTableTTLOptional() ? *originalTable.GetTableTTLOptional() : TOlapTTL();
-    if (AlterTTL) {
-        auto patch = ttl.Update(*AlterTTL);
+    if (alterTTL) {
+        auto patch = ttl.Update(*alterTTL);
         if (patch.IsFail()) {
             return patch;
         }

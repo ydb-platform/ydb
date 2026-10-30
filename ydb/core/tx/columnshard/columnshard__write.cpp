@@ -100,10 +100,11 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
                 {"event", "data_write_finished"},
                 {"writingId", i.GetWriteMeta().GetId()});
             i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::SuccessWritingToLocalDB);
+            const bool isDelete = i.GetWriteMeta().GetModificationType() == NEvWrite::EModificationType::Delete;
             if (i.GetWriteMeta().IsBulk()) {
-                Counters.OnWritePutBulkBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
+                Counters.OnWritePutBulkBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount(), isDelete);
             } else {
-                Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
+                Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount(), isDelete);
             }
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
         }

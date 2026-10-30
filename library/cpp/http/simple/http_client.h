@@ -314,14 +314,16 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
         const bool couldRetry = !haveNewConnection && i == 0; // Actually old connection could be already closed by server,
                                                               // so we should try one more time in this case.
         TAtomicSharedPtr<TManualEvent> cancellationEndEvent = MakeAtomicShared<TManualEvent>();
-        auto cancelSub = cancellation.Future().Subscribe([this, cancellationEndEvent](auto&) {
-            if (cancellationEndEvent.RefCount() > 1) {
-                if (Connection && Connection->IsOk()) {
-                    Connection->Shutdown();
+        if (!cancellation.IsDefault()) {
+            cancellation.Future().Subscribe([this, cancellationEndEvent](auto&) {
+                if (cancellationEndEvent.RefCount() > 1) {
+                    if (Connection && Connection->IsOk()) {
+                        Connection->Shutdown();
+                    }
+                    cancellationEndEvent->Signal();
                 }
-                cancellationEndEvent->Signal();
-            }
-        });
+            });
+        }
 
         try {
             Connection->Write(raw);

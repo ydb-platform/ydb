@@ -5898,6 +5898,45 @@ Y_UNIT_TEST(CreateAsyncReplicationParseSecretPathsCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateAsyncReplicationAvailabilityPeriod) {
+    for (const auto& value : {"'UNLIMITED'", "'unlimited'", "Interval('PT0.000001S')", "Interval('PT10.001S')"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (AVAILABILITY_PERIOD = " << value << ");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "availability_period");
+            }
+        };
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationInvalidAvailabilityPeriod) {
+    for (const auto& value : {"'FOREVER'", "1", "TRUE", "NULL"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                                  << "WITH (AVAILABILITY_PERIOD = " << value << ");");
+        UNIT_ASSERT(!res.IsOk());
+    }
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationDuplicateAvailabilityPeriod) {
+    const auto res = SqlToYql("USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+                              "WITH (AVAILABILITY_PERIOD = 'UNLIMITED', availability_period = Interval('PT1S'));");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate replication setting");
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationAvailabilityPeriod) {
+    const auto res = SqlToYql("USE plato; ALTER ASYNC REPLICATION MyReplication SET (AVAILABILITY_PERIOD = 'UNLIMITED');");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "AVAILABILITY_PERIOD is not supported in ALTER");
+}
+
 Y_UNIT_TEST(CreateAsyncReplicationInitialScan) {
     for (const auto& value : {"TRUE", "FALSE", "true", "false"}) {
         const auto res = SqlToYql(TStringBuilder()

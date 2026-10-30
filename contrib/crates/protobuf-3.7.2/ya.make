@@ -1,0 +1,165 @@
+# Native Rust build with dependencies shared through contrib/crates.
+
+CRATE(protobuf)
+
+CRATE_VERSION(3.7.2)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    build.rs
+    src/byteorder.rs
+    src/cached_size.rs
+    src/chars.rs
+    src/coded_input_stream/buf_read_iter.rs
+    src/coded_input_stream/buf_read_or_reader.rs
+    src/coded_input_stream/input_buf.rs
+    src/coded_input_stream/input_source.rs
+    src/coded_input_stream/mod.rs
+    src/coded_output_stream/buffer.rs
+    src/coded_output_stream/mod.rs
+    src/coded_output_stream/output_target.rs
+    src/coded_output_stream/with.rs
+    src/descriptor.rs
+    src/doctest_pb.rs
+    src/enum_full.rs
+    src/enum_or_unknown.rs
+    src/enums.rs
+    src/error.rs
+    src/ext.rs
+    src/fixed.rs
+    src/lazy.rs
+    src/message.rs
+    src/message_dyn.rs
+    src/message_field.rs
+    src/message_full.rs
+    src/misc.rs
+    src/oneof.rs
+    src/oneof_full.rs
+    src/owning_ref.rs
+    src/plugin.rs
+    src/reflect/acc/mod.rs
+    src/reflect/acc/v2/map.rs
+    src/reflect/acc/v2/mod.rs
+    src/reflect/acc/v2/repeated.rs
+    src/reflect/acc/v2/singular/mod.rs
+    src/reflect/acc/v2/singular/oneof.rs
+    src/reflect/dynamic/map.rs
+    src/reflect/dynamic/mod.rs
+    src/reflect/dynamic/optional.rs
+    src/reflect/dynamic/repeated.rs
+    src/reflect/enums/generated.rs
+    src/reflect/enums/mod.rs
+    src/reflect/error.rs
+    src/reflect/field/dynamic.rs
+    src/reflect/field/index.rs
+    src/reflect/field/mod.rs
+    src/reflect/field/protobuf_field_type.rs
+    src/reflect/field/runtime_field_type.rs
+    src/reflect/file/building.rs
+    src/reflect/file/dynamic.rs
+    src/reflect/file/fds.rs
+    src/reflect/file/generated.rs
+    src/reflect/file/index.rs
+    src/reflect/file/mod.rs
+    src/reflect/file/syntax.rs
+    src/reflect/find_message_or_enum.rs
+    src/reflect/map/empty.rs
+    src/reflect/map/generated.rs
+    src/reflect/map/mod.rs
+    src/reflect/message/generated.rs
+    src/reflect/message/is_initialized_is_always_true.rs
+    src/reflect/message/message_ref.rs
+    src/reflect/message/mod.rs
+    src/reflect/mod.rs
+    src/reflect/name.rs
+    src/reflect/oneof/generated.rs
+    src/reflect/oneof/mod.rs
+    src/reflect/optional/mod.rs
+    src/reflect/protobuf_type_box.rs
+    src/reflect/reflect_eq.rs
+    src/reflect/repeated/drain_iter.rs
+    src/reflect/repeated/iter.rs
+    src/reflect/repeated/mod.rs
+    src/reflect/repeated/transmute.rs
+    src/reflect/repeated/vec_downcast.rs
+    src/reflect/rt/mod.rs
+    src/reflect/rt/v2.rs
+    src/reflect/runtime_type_box.rs
+    src/reflect/runtime_types.rs
+    src/reflect/service/index.rs
+    src/reflect/service/mod.rs
+    src/reflect/type_dynamic.rs
+    src/reflect/types.rs
+    src/reflect/value/mod.rs
+    src/reflect/value/value_box.rs
+    src/reflect/value/value_ref.rs
+    src/rt/map.rs
+    src/rt/message.rs
+    src/rt/mod.rs
+    src/rt/packed.rs
+    src/rt/repeated.rs
+    src/rt/singular.rs
+    src/rt/unknown_or_group.rs
+    src/rustproto.rs
+    src/special.rs
+    src/text_format/mod.rs
+    src/text_format/parse.rs
+    src/text_format/print.rs
+    src/timestamp.rs
+    src/unknown.rs
+    src/varint/decode.rs
+    src/varint/encode.rs
+    src/varint/generic.rs
+    src/varint/mod.rs
+    src/well_known_types/any.rs
+    src/well_known_types/api.rs
+    src/well_known_types/duration.rs
+    src/well_known_types/empty.rs
+    src/well_known_types/field_mask.rs
+    src/well_known_types/mod.rs
+    src/well_known_types/source_context.rs
+    src/well_known_types/struct_.rs
+    src/well_known_types/timestamp.rs
+    src/well_known_types/type_.rs
+    src/well_known_types/wrappers.rs
+    src/well_known_types_util/any.rs
+    src/well_known_types_util/duration.rs
+    src/well_known_types_util/mod.rs
+    src/well_known_types_util/timestamp.rs
+    src/wire_format.rs
+    src/zigzag.rs
+)
+
+CRATE_INPUTS(
+    LICENSE.txt
+    README.md
+    regenerate.sh
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    default
+)
+
+PEERDIR(
+    contrib/crates/once_cell-1.21.4
+    contrib/crates/protobuf-support-3.7.2
+    contrib/crates/thiserror-1.0.69
+)
+
+CRATE_BUILD_SCRIPT(contrib/crates/protobuf-3.7.2/build_script)
+
+LICENSE("MIT")
+VERSION(3.7.2)
+ORIGINAL_SOURCE(https://static.crates.io/crates/protobuf/protobuf-3.7.2.crate)
+
+CRATE_PROC_MACROS(
+    contrib/crates/thiserror-impl-1.0.69
+)
+
+END()
+
+RECURSE(build_script)

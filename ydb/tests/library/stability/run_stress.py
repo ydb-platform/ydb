@@ -588,19 +588,12 @@ class StressRunExecutor:
                 stderr_path = None
 
             execution_time = time_module.time() - run_start_time
-            logging.info(
-                f"{run_name} completed in {
-                    execution_time: .1f}s, success: {success}, timeout: {is_timeout}"
-            )
-            if not success:
+            if success:
+                logging.info("%s completed in %.1fs", run_name, execution_time)
+            else:
                 logging.warning(
-                    "%s logs on %s: stdout=%s (%s bytes) stderr=%s (%s bytes)",
-                    run_name,
-                    target_node.host,
-                    stdout_path,
-                    None if info.stdout_bytes is None or info.stdout_bytes < 0 else info.stdout_bytes,
-                    stderr_path,
-                    None if info.stderr_bytes is None or info.stderr_bytes < 0 else info.stderr_bytes,
+                    "%s failed in %.1fs timeout=%s stdout=%s stderr=%s",
+                    run_name, execution_time, is_timeout, stdout_path, stderr_path,
                 )
 
             return WorkloadRunOutcome(

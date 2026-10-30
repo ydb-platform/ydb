@@ -79,4 +79,4 @@ The current set of column statistics includes:
 
 ### Cost optimization levels
 
-In {{ ydb-short-name }}, you can configure the cost optimization level via the [CostBasedOptimizationLevel](../yql/reference/syntax/pragma.md#costbasedoptimizationlevel) pragma.
+In {{ ydb-short-name }}, you can configure the cost optimization level via the {% if tech %}[CostBasedOptimizationLevel](../yql/reference/syntax/pragma.md#costbasedoptimizationlevel){% else %}CostBasedOptimizationLevel{% endif %} pragma.

@@ -185,7 +185,7 @@ namespace NTable {
                             Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             ui64 txId = Iter->GetUncommittedTxId();
                             if (Iter->Row() != ERowOp::Absent && !Subset.RemovedTransactions.Contains(txId)) {
-                                op = VersionScan->Feed(Iter->Row(), txId);
+                                op = VersionScan->Feed(Iter->Row(), txId, Iter->GetUncommittedSavepointSeqNum());
                             } else {
                                 op = EScan::Feed;
                             }

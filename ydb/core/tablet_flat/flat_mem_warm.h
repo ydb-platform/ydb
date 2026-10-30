@@ -9,6 +9,7 @@
 #include "flat_page_blobs.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_committed.h"
+#include "flat_table_savepoints.h"
 #include "util_fmt_abort.h"
 #include "util_pool.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -495,7 +496,10 @@ namespace NMem {
             return
                 Pool.Used()
                 + (Tree.AllocatedPages() - Tree.DroppedPages()) * TTree::PageSize
-                + Blobs.GetBytes();
+                + Blobs.GetBytes()
+                // Slots and control bytes of the hash map plus allocated ranges
+                + RemovedOps.capacity() * (sizeof(TRemovedTxOps::value_type) + 1)
+                + RemovedOpsRangesBytes;
         }
 
         size_t GetWastedMem() const noexcept
@@ -583,6 +587,36 @@ namespace NMem {
             return Removed;
         }
 
+        /**
+         * Marks operations of txId with savepoint seq nums [fromSavepointSeqNum, toSavepointSeqNum] as removed,
+         * returns true when txId had no removed operations in this mem table
+         */
+        bool RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum) {
+            auto it = RemovedOps.find(txId);
+            const bool newRef = (it == RemovedOps.end());
+            const size_t bytesBefore = newRef ? 0 : RangesBytes(it->second);
+            if (newRef) {
+                if (RollbackState) {
+                    UndoBuffer.push_back(TUndoOpEraseRemovedOps{ txId });
+                }
+                RemovedOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
+            } else if (RollbackState) {
+                // Keep only what this Add changed, not a copy of all ranges
+                TSavepointSeqNumRanges::TAddUndo undo;
+                if (it->second.Add(fromSavepointSeqNum, toSavepointSeqNum, &undo)) {
+                    UndoBuffer.push_back(TUndoOpAddRemovedOps{ txId, std::move(undo) });
+                }
+            } else {
+                it->second.Add(fromSavepointSeqNum, toSavepointSeqNum);
+            }
+            RemovedOpsRangesBytes = RemovedOpsRangesBytes - bytesBefore + RangesBytes(RemovedOps.at(txId));
+            return newRef;
+        }
+
+        const TRemovedTxOps& GetRemovedTxOps() const {
+            return RemovedOps;
+        }
+
     private:
         NMem::TTreeKey NewKey(const TCell* src) {
             const size_t items = Scheme->Keys->Size();
@@ -632,6 +666,13 @@ namespace NMem {
         TTxIdStats TxIdStats;
         absl::flat_hash_map<ui64, TRowVersion> Committed;
         absl::flat_hash_set<ui64> Removed;
+        TRemovedTxOps RemovedOps;
+        // Memory allocated by ranges of RemovedOps, accounted in GetUsedMem()
+        size_t RemovedOpsRangesBytes = 0;
+
+        static size_t RangesBytes(const TSavepointSeqNumRanges& ranges) noexcept {
+            return ranges.GetRanges().capacity() * sizeof(TSavepointSeqNumRanges::TRange);
+        }
 
     private:
         struct TRollbackState {
@@ -666,6 +707,13 @@ namespace NMem {
         struct TUndoOpEraseTxIdStats {
             ui64 TxId;
         };
+        struct TUndoOpAddRemovedOps {
+            ui64 TxId;
+            TSavepointSeqNumRanges::TAddUndo Undo;
+        };
+        struct TUndoOpEraseRemovedOps {
+            ui64 TxId;
+        };
 
         using TUndoOp = std::variant<
             TUndoOpUpdateCommitted,
@@ -673,7 +721,9 @@ namespace NMem {
             TUndoOpInsertRemoved,
             TUndoOpEraseRemoved,
             TUndoOpUpdateTxIdStats,
-            TUndoOpEraseTxIdStats>;
+            TUndoOpEraseTxIdStats,
+            TUndoOpAddRemovedOps,
+            TUndoOpEraseRemovedOps>;
 
         // This buffer is applied in reverse on rollback
         // Memory is reused to avoid hot path allocations

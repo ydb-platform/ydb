@@ -172,6 +172,11 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
         const auto pathId = env.GetPathId("/Root/Dst");
 
+        auto observer = env.GetRuntime().AddObserver([](IEventHandle::TPtr& ev) {
+            UNIT_ASSERT_C(ev->GetTypeRewrite() != NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType,
+                "Attaching an imported table must not modify its schema");
+        });
+
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
@@ -233,7 +238,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
         } else {
-            // Restart after persisting the path ID, before SchemeShard alters the table.
+            // Restart after persisting the path ID, before reporting success.
             env.SendAsync(creator, new TEvents::TEvPoison());
         }
 

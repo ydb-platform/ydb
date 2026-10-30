@@ -321,8 +321,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
         if (CreatePlaceholder) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
-        } else if (!InitialScan) {
-            replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         }
     }
 
@@ -347,9 +345,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (Attaching) {
-            AttachDst();
-        } else if (InitialScan || CreatePlaceholder) {
+        if (InitialScan || CreatePlaceholder) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -358,15 +354,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void CreateDst() {
         ExecuteSchemeTx(TxBody);
-    }
-
-    void AttachDst() {
-        NKikimrSchemeOp::TModifyScheme tx;
-        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-        tx.SetInternal(true);
-        DstPathId.ToProto(tx.MutableAlterTable()->MutablePathId());
-        FillReplicationConfig(*tx.MutableAlterTable()->MutableReplicationConfig());
-        ExecuteSchemeTx(tx);
     }
 
     void ExecuteSchemeTx(const NKikimrSchemeOp::TModifyScheme& tx) {
@@ -408,12 +395,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case NKikimrScheme::StatusMultipleModifications:
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
-                Attaching = false;
                 return SubscribeTx(record.GetPathCreateTxId());
-            } else if (Attaching) {
-                Attaching = false;
-                Become(&TThis::StateDescribeDstPath);
-                return Retry();
             } else {
                 return Error(record.GetStatus(), record.GetReason());
             }
@@ -476,16 +458,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            if (InitialScan || CreatePlaceholder || Attaching) {
+            if (InitialScan || CreatePlaceholder || PendingDstPathId) {
                 return Success();
             }
 
-            Attaching = true;
-            NeedToCheck = true;
-            if (PendingDstPathId) {
-                return AllocateTxId();
-            }
-            // The controller must persist this path before SchemeShard may alter it.
+            // Persist the validated destination path before reporting success.
             Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
             return Become(&TThis::StateWaitForPrepareAttachDstResult);
         }
@@ -510,7 +487,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState", "StateWaitForPrepareAttachDstResult"});
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvPrivate::TEvPrepareAttachDstResult, AllocateTxId);
+            sFunc(TEvPrivate::TEvPrepareAttachDstResult, Success);
         default:
             return StateBase(ev);
         }
@@ -878,7 +855,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
-        // DONE only finishes the pending attachment so it can be detached locally.
+        // DONE only resolves the pending destination so it can be detached locally.
         if (PendingDstPathId && DesiredState == TReplication::EState::Done) {
             return AllocateTxId();
         }
@@ -932,7 +909,6 @@ private:
     NKikimrSchemeOp::TModifyScheme TxBody;
     TActorId PipeCache;
     bool NeedToCheck = false;
-    bool Attaching = false;
     TPathId DstPathId;
     const TPathId PendingDstPathId;
     TActorId Subscriber;

@@ -41,6 +41,7 @@ namespace NKikimr {
         const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCounters;
         const TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskMemCounters;
         // latency histograms
         NVDiskMon::THistograms Histograms;
@@ -87,8 +88,6 @@ namespace NKikimr {
         THugeHeapFragmentation HugeHeapFragmentation;
         friend class TDskSpaceTrackerActor;
 
-        NMonGroup::TCostGroup CostMonGroup;
-
     public:
         TLogger Logger;
 
@@ -105,7 +104,8 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
-                TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
+                TReplQuoter::TPtr replNodeResponseQuoter = nullptr,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskAsyncCounters = nullptr);
 
         // The function checks response from PDisk. Normally, it's OK.
         // Other alternatives are: 1) shutdown; 2) FAIL
@@ -158,9 +158,6 @@ namespace NKikimr {
 
         template<class TEvent>
         void CountDefragCost(const TEvent& ev) {
-            if (CostModel) {
-                CostMonGroup.DefragCostNs() += CostModel->GetCost(ev);
-            }
             if (CostTracker) {
                 CostTracker->CountDefragRequest(ev);
             }
@@ -168,9 +165,6 @@ namespace NKikimr {
 
         template<class TEvent>
         void CountScrubCost(const TEvent& ev) {
-            if (CostModel) {
-                CostMonGroup.ScrubCostNs() += CostModel->GetCost(ev);
-            }
             if (CostTracker) {
                 CostTracker->CountScrubRequest(ev);
             }
@@ -178,9 +172,6 @@ namespace NKikimr {
 
         template<class TEvent>
         void CountCompactionCost(const TEvent& ev) {
-            if (CostModel) {
-                CostMonGroup.CompactionCostNs() += CostModel->GetCost(ev);
-            }
             if (CostTracker) {
                 CostTracker->CountCompactionRequest(ev);
             }

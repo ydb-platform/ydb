@@ -205,6 +205,7 @@ protected:
         TMaybe<ui64> TxId;
         TMaybe<ui64> MetaStartOffset;
         TMaybe<ui64> MetaEndOffset;
+        TMaybe<ui64> MetaMirroredOffset;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
         THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
@@ -667,6 +668,10 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
                 UNIT_ASSERT(meta.HasEndOffset());
                 UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaEndOffset, meta.GetEndOffset());
             }
+            if (matcher.MetaMirroredOffset.Defined()) {
+                UNIT_ASSERT(meta.HasMirroredOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaMirroredOffset, meta.GetMirroredOffset());
+            }
             metaFound = true;
             break;
         }
@@ -759,7 +764,7 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
         }
     }
 
-    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined()) {
+    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined() || matcher.MetaMirroredOffset.Defined()) {
         UNIT_ASSERT(metaFound);
     }
 }
@@ -3351,6 +3356,43 @@ Y_UNIT_TEST_F(ReplicationDataRetriesAfterUnrelatedPersist, TPartitionFixture)
     WaitProxyResponse({.Cookie = 4, .Offset = 7});
     SendGetOffset(5, "second");
     WaitProxyResponse({.Cookie = 5, .Offset = 8});
+}
+
+Y_UNIT_TEST_F(ReplicationDataRetriesMirroredOffsetAfterUnrelatedPersist, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {{.Consumer = "first"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Config = initialConfig}, initialConfig);
+
+    for (bool includeCommittedConsumer : {false, true}) {
+        const ui64 oldMirroredOffset = includeCommittedConsumer ? 100 : 0;
+        const ui64 mirroredOffset = oldMirroredOffset + 100;
+        SendSetOffset(1, "first", 0, "");
+        WaitCmdWrite({.MetaEndOffset = 0, .MetaMirroredOffset = oldMirroredOffset,
+            .UserInfos = {{0, {.Consumer = "first", .Offset = 0}}}});
+
+        auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+        event->MirroredOffset = mirroredOffset;
+        if (includeCommittedConsumer) {
+            event->OffsetsByConsumers = {{"first", 0}};
+        }
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release(), 0, mirroredOffset));
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).MirroredOffset, oldMirroredOffset);
+
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitProxyResponse({.Cookie = 1});
+        auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::MilliSeconds(10));
+        UNIT_ASSERT(!ack);
+        WaitCmdWrite({.MetaEndOffset = 0, .MetaMirroredOffset = mirroredOffset});
+        ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::MilliSeconds(10));
+        UNIT_ASSERT(!ack);
+
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(ack);
+        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, mirroredOffset);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).MirroredOffset, mirroredOffset);
+    }
 }
 
 // ReplyError uses !!replyTo as IsInternal (same as TEvRead::IsInternal). Call sites must pass the

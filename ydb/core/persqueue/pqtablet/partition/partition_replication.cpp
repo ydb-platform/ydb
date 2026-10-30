@@ -42,6 +42,14 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
         return;
     }
 
+    const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
+    // MirroredOffset is not updated while a KV write is in progress, so it still
+    // reflects the completed write here, before retrying the pending payload.
+    if (mirroredOffset.Defined() && BlobEncoder.MirroredOffset < *mirroredOffset) {
+        UpdatePendingUsersFromReplicationData();
+        return; // OnHandleWriteResponse starts the next persist cycle.
+    }
+
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
 
     // Replication may replay older snapshots; acknowledge the greatest valid offset.

@@ -431,6 +431,7 @@ struct TEvBlobStorage {
         EvHugeSpaceStat,
         EvSyncLogSpaceStat,
         EvChunkKeeperSpaceStat,
+        EvReinforcementSyncDone,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

@@ -7,6 +7,12 @@
 
 namespace NKikimr {
 
+    enum class EOsirisMode {
+        Recovery,
+        Reinforcement,
+    };
+
+    constexpr TDuration OsirisRetryInterval = TDuration::Minutes(5);
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvCallOsiris
@@ -20,8 +26,10 @@ namespace NKikimr {
     struct TEvOsirisDone : public TEventLocal<TEvOsirisDone, TEvBlobStorage::EvOsirisDone>
     {
         const ui64 DbBirthLsn = 0;
-        TEvOsirisDone(ui64 dbBirthLsn)
+        const NKikimrProto::EReplyStatus Status;
+        TEvOsirisDone(ui64 dbBirthLsn, NKikimrProto::EReplyStatus status)
             : DbBirthLsn(dbBirthLsn)
+            , Status(status)
         {}
     };
 
@@ -42,6 +50,7 @@ namespace NKikimr {
             TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
             THullDsSnap &&fullSnap,
             ui64 confirmedLsn,
-            ui64 maxInFly);
+            ui64 maxInFly,
+            EOsirisMode mode);
 
 } // NKikimr

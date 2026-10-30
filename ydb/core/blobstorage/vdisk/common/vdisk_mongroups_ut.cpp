@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TVDiskMonitoring) {
                 "ScrubDiskCost", "DefragDiskCost", "InternalDiskCost"}) {
             UNIT_ASSERT_C(exported.Contains(TString(name) + "{"), name);
         }
-        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 46);
+        UNIT_ASSERT_VALUES_EQUAL(CountSeries(counters), 49);
     }
 }
 

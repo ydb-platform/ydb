@@ -144,7 +144,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         degraded.AddItem(0, 0, type);
         degraded.AddItem(1, 1, type);
         UNIT_ASSERT(!checker->CheckQuorumForLayout(degraded)); // W requires 2+2.
-        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 3), 0); // D only requires 1+1.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 3), 0); // D still requires 1+1.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToReinforce(degraded, 3), 1u); // Reinforcement targets 2+2.
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 2), 0); // F is excluded.
     }
 
@@ -162,8 +163,79 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         parts.AddItem(0, 0, type);
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 1), 1u << 1);
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 3), 0);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToReinforce(parts, 3), 1u);
         parts.AddItem(1, 1, type);
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToReinforce(parts, 4), 1u << 1);
+    }
+
+    Y_UNIT_TEST(ReinforcementFillsTwoCopiesWithoutResurrectingHandoff2) {
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        // Bits name Main, Handoff1 and Handoff2, respectively. Expectations list
+        // new placements, independently of the quorum checker's implementation.
+        const std::array<ui32, 8> expected = {0b011, 0b010, 0b001, 0, 0b001, 0, 0, 0};
+        for (ui32 localRealm = 0; localRealm < 3; ++localRealm) {
+            TStates states{R::N0, R::N0, R::N0};
+            const ui32 sourceRealm = (localRealm + 1) % 3;
+            states[(localRealm + 2) % 3] = R::F;
+            const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
+                states, L::LAYOUT_22, L::LAYOUT_11_2);
+            UNIT_ASSERT(checker);
+            for (ui32 present = 0; present < 8; ++present) {
+                TSubgroupPartLayout parts;
+                // A source remains available even when our realm is empty.
+                parts.AddItem(sourceRealm, sourceRealm, type);
+                for (ui32 replica = 0; replica < 3; ++replica) {
+                    if (present & (1u << replica)) {
+                        parts.AddItem(localRealm + replica * 3, localRealm, type);
+                    }
+                }
+                ui32 resurrected = 0;
+                for (ui32 replica = 0; replica < 3; ++replica) {
+                    if (checker->GetPartsToReinforce(parts, localRealm + replica * 3)) {
+                        resurrected |= 1u << replica;
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(resurrected, expected[present],
+                    "realm# " << localRealm << " present# " << present);
+                UNIT_ASSERT(std::popcount(present | resurrected) >= 2);
+            }
+        }
+    }
+
+#ifdef NDEBUG
+    Y_UNIT_TEST(ReinforcementWithoutExcludedRealmDoesNothing) {
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        for (const TStates& states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N0, R::N0, R::R}}) {
+            const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
+                states, L::LAYOUT_111_22, L::LAYOUT_111_22);
+            UNIT_ASSERT(checker);
+            TSubgroupPartLayout parts;
+            parts.AddItem(0, 0, type);
+            for (ui32 disk = 0; disk < 9; ++disk) {
+                UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToReinforce(parts, disk), 0);
+            }
+        }
+    }
+#endif
+
+    Y_UNIT_TEST(OrdinaryResurrectionPreservesAnExistingHandoffCopy) {
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {R::N0, R::N0, R::N0}, L::LAYOUT_111_22, L::LAYOUT_111_22);
+        UNIT_ASSERT(checker);
+        for (const ui32 handoff : {3u, 6u}) {
+            TSubgroupPartLayout parts;
+            parts.AddItem(handoff, 0, type);
+            for (const ui32 replica : {0u, 3u, 6u}) {
+                UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, replica), 0);
+            }
+        }
+        TSubgroupPartLayout parts;
+        parts.AddItem(1, 1, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 0), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 3), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 6), 0);
     }
     Y_UNIT_TEST(NormalGroupFailuresMatchLegacy) {
         const auto info = MakeInfo({R::N0, R::N0, R::N0});

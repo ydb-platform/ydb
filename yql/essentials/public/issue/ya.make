@@ -12,6 +12,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/colorizer
     library/cpp/resource
+    library/cpp/containers/cow_string
     yql/essentials/public/issue/protos
     yql/essentials/utils
 )

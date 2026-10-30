@@ -315,6 +315,11 @@ private:
     }
 
     bool ValidateAlterConfig(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const NKikimrReplication::TReplicationConfig& newConf) {
+        if (newConf.HasAvailabilityPeriod()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Availability period can only be set when creating replication");
+            return false;
+        }
+
         switch (desc.GetState().GetStateCase()) {
         using TState = NKikimrReplication::TReplicationState;
         case TState::kStandBy:

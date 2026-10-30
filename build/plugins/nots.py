@@ -1,4 +1,5 @@
 import functools
+import hashlib
 import shlex
 import re
 import os
@@ -460,11 +461,10 @@ def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit, for_mod: str, *, RELATIVE: bo
         )
         return
 
-    root = unit.path() if RELATIVE else "$S"
-    _SET_TS_FOR_VARS(unit, f"{root}/{for_mod}")
+    _SET_TS_FOR_VARS(unit, for_mod)
 
-    package_json_path = os.path.join(unit.resolve(unit.get("TS_FOR_DIR")), "package.json")
-    if not os.path.isfile(package_json_path):
+    for_mod_dir = unit.get("TS_FOR_DIR")
+    if not for_mod_dir or not os.path.isfile(os.path.join(unit.resolve(for_mod_dir), "package.json")):
         ymake.report_configure_error(
             f"NODEJS_BINARY_FOR: package.json not found in project directory '{unit.get('TS_FOR_PATH')}'."
         )
@@ -1014,9 +1014,50 @@ def _node_modules_bundle_needed(unit: ymake.Unit, arc_path: str) -> bool:
     return arc_path in nm_required_for
 
 
+def _library_for_paths(target: str, source: str) -> tuple[str, str]:
+    source = os.path.normpath(source)
+    target = os.path.normpath(target)
+    if source.startswith(("/", ".")) or not target.startswith(source + "/"):
+        raise ValueError("TS_LIBRARY_FOR expects an Arcadia-relative path to a parent project")
+    suffix = "__" + target[len(source) + 1 :].replace("/", "__")
+    target_hash = hashlib.sha256(target.encode("utf-8")).hexdigest()[:32]
+    return source, source + suffix + "." + target_hash
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_LIBRARY_FOR_ARGS(unit: ymake.Unit, source: str) -> None:
+    source, build = _library_for_paths(unit.get("MODDIR"), source)
+    _SET_TS_FOR_VARS(unit, "$S/" + source)
+    unit.set(["_FOR_MOD_PATH", "${ARCADIA_ROOT}/" + source])
+    unit.set(["_TS_LIBRARY_OUTPUT_FILE", '${output:"$B/' + build + '/output.tar"}'])
+    unit.set(["_TS_LIBRARY_FOR_BUILD_DIR", "${ARCADIA_BUILD_ROOT}/" + build])
+    unit.set(["_TS_LIBRARY_FOR", "yes"])
+    unit.set(["_TS_LIBRARY_MANIFEST_INPUT", '${hide;input:"$S/' + source + '/package.json"}'])
+    unit.set(["_TS_LIBRARY_OUTPUT_META", '${hide;output:"$B/' + build + '/output.tar.uuid"}'])
+    unit.onpeerdir([source])
+    for filename in ("package.json", "pnpm-lock.yaml"):
+        __set_append(unit, "_MAKEFILE_INCLUDE_LIKE_DEPS", "${ARCADIA_ROOT}/" + source + "/" + filename)
+    unit.set(["_TS_LIBRARY_FOR_BASE_ARGS", "--moddir " + source + " --build-suffix " + build[len(source) :]])
+    if _use_hermetic_node_modules(unit):
+        _configure_hermetic_node_modules(unit)
+    pj = _create_pm(unit).load_package_json_from_dir(unit.resolve("$S/" + source))
+    if pj.get_use_prebuilder():
+        _setup_prebuilder_resource(unit)
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    if peers:
+        unit.ondepends(peers)
+        __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS_LATE_OUTS}")
+
+
 @ymake.macro
 @_with_report_configure_error
 def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and _node_modules_bundle_needed(unit, unit.get("MODDIR")):
+        ymake.report_configure_error("TS_LIBRARY_FOR does not support WITH_NODE_MODULES or NODE_MODULES_FOR")
+        return
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and unit.get("VCS_INFO_FILE"):
+        unit.set(["_NOTS_VCS_INFO_FILE", "${BINDIR}/" + unit.get("VCS_INFO_FILE")])
     is_ts_package = unit.get("_TS_PACKAGE") == "yes"
     ts_build_script = unit.get("_TS_BUILD_SCRIPT")
     ts_outputs = _parse_list_var(unit, "_TS_OUTPUTS", " ")
@@ -1073,16 +1114,19 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         if not found:
             missing_outputs.append(output)
 
-    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes":
+    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes" and unit.get("_TS_LIBRARY_FOR") != "yes":
         ymake.report_configure_error(
             "\n"
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
             f"Following directories are missing in {COLORS.cyan}package.json#files{COLORS.reset}: {COLORS.red}{', '.join(missing_outputs)}{COLORS.reset}"
         )
 
+    build_command = unit.get("_TS_BUILD_COMMAND")
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
-        _set_ts_build_command(unit, "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command))
+        build_command = "{} && {}".format(build_command, after_build_command)
+    if after_build_command or (unit.get("_TS_LIBRARY_FOR") == "yes" and build_command):
+        _set_ts_build_command(unit, build_command)
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":
@@ -1451,29 +1495,6 @@ def _RUN_JAVASCRIPT_AFTER_BUILD_PROCESS_INPUTS(unit: ymake.Unit, js_script: str)
         processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
     unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
-
-
-@ymake.macro
-@_with_report_configure_error
-def _TS_NEXT_EXPERIMENTAL_BUILD_MODE(unit: ymake.Unit) -> None:
-    from lib.nots.package_manager import PackageManager
-    from lib.nots.semver import Version
-
-    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
-    erm_json = _create_erm_json(unit)
-    version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
-
-    var_name = "TS_NEXT_COMMAND"
-
-    if version >= Version.from_str("14.1.2"):
-        # For Next >=v14: build --experimental-build-mode=compile
-        # https://github.com/vercel/next.js/commit/47f73cd8ec79d0a6c248139088aa536453b23ae1
-        unit.set([var_name, "build --experimental-build-mode=compile"])
-    elif version >= Version.from_str("13.5.3"):
-        # For Next <v14: experimental-compile
-        unit.set([var_name, "experimental-compile"])
-    else:
-        raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")
 
 
 @ymake.macro

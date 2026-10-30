@@ -356,6 +356,145 @@ Y_UNIT_TEST(Block42ErrorWhenBlobIsLostAfterDiscover) {
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::ERROR);
 }
 
+void CheckMirror3dcSurvivingDiscovery(const TVector<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState>& states,
+        bool readBody, bool hasBlob, bool indexError = false, bool ghost = false) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    const TBlobStorageGroupType type(TErasureType::ErasureMirror3dc);
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, type, 0, 0, TBlobStorageGroupInfo::EEM_NONE,
+        DormantTimeoutDefaultControl, false, states);
+    TTestState testState(runtime, env.Info);
+    TGroupMock& group = testState.GetGroupMock();
+    const ui64 tabletId = 72075186224047637;
+    const TLogoBlobID blobId(tabletId, 1, 1, 0, testState.BlobSize, 0);
+    const TLogoBlobID ghostId(tabletId, 1, 2, 0, testState.BlobSize, 0);
+    TVDiskID sourceDisk;
+    for (ui32 idx = 0; idx < 9; ++idx) {
+        TVDiskMock& disk = group.GetVDiskInSubgroup(blobId, idx);
+        const ui32 realm = disk.GetVDiskId().FailRealm;
+        if (states[realm] != TFailRealm::F && states[realm] != TFailRealm::R) {
+            sourceDisk = disk.GetVDiskId();
+            if (hasBlob) {
+                UNIT_ASSERT_VALUES_EQUAL(disk.Put(TLogoBlobID(blobId, idx % 3 + 1), testState.BlobData), NKikimrProto::OK);
+            }
+            break;
+        }
+    }
+    ui32 rangeRequests = 0;
+    bool ghostInjected = false;
+    bool readData = false;
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (std::find(env.VDisks.begin(), env.VDisks.end(), event->Recipient) == env.VDisks.end()) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        }
+        switch (event->GetTypeRewrite()) {
+            case TEvBlobStorage::EvVGet: {
+                TEvBlobStorage::TEvVGet::TPtr request(static_cast<TEventHandle<TEvBlobStorage::TEvVGet>*>(event.Release()));
+                const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+                UNIT_ASSERT_C(!env.Info->IsFailedFailRealm(disk.FailRealm), "Discover must not query F");
+                TEvBlobStorage::TEvVGetResult::TPtr reply = testState.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
+                if (request->Get()->Record.HasRangeQuery()) {
+                    ++rangeRequests;
+                    if (ghost && !ghostInjected && disk == sourceDisk) {
+                        const ui32 part = env.Info->GetIdxInSubgroup(disk, ghostId.Hash()) % 3 + 1;
+                        const TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(
+                            &env.Info->GetTopology(), disk, TLogoBlobID(ghostId, part));
+                        UNIT_ASSERT(ingress);
+                        ui64 rawIngress = ingress->Raw();
+                        const NMatrix::TVectorType local = ingress->LocalParts(type);
+                        reply->Get()->AddResult(NKikimrProto::OK, ghostId, nullptr, &rawIngress, &local, true, false);
+                        ghostInjected = true;
+                    }
+                } else {
+                    if (states[disk.FailRealm] == TFailRealm::N0) {
+                        UNIT_ASSERT_C(!request->Get()->Record.GetIndexOnly(), "E=0 must verify bytes even without ReadBody");
+                    }
+                    readData |= !request->Get()->Record.GetIndexOnly();
+                }
+                group.OnVGet(*request->Get(), *reply->Get());
+                if (indexError && request->Get()->Record.HasRangeQuery() && disk == sourceDisk) {
+                    reply->Get()->Record.SetStatus(NKikimrProto::ERROR);
+                }
+                runtime.Send(reply.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            case TEvBlobStorage::EvVPut: {
+                TEvBlobStorage::TEvVPut::TPtr request(static_cast<TEventHandle<TEvBlobStorage::TEvVPut>*>(event.Release()));
+                const TVDiskID disk = group.GetVDiskID(*request->Get());
+                UNIT_ASSERT(!env.Info->IsFailedFailRealm(disk.FailRealm));
+                const NKikimrProto::EReplyStatus status = group.OnVPut(*request->Get());
+                TEvBlobStorage::TEvVPutResult::TPtr reply = testState.CreateEventResultPtr(request, status, disk);
+                runtime.Send(reply.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            case TEvBlobStorage::EvVGetBlock: {
+                TEvBlobStorage::TEvVGetBlock::TPtr request(static_cast<TEventHandle<TEvBlobStorage::TEvVGetBlock>*>(event.Release()));
+                const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+                UNIT_ASSERT(!env.Info->IsFailedFailRealm(disk.FailRealm));
+                TEvBlobStorage::TEvVGetBlockResult::TPtr reply = testState.CreateEventResultPtr(request, NKikimrProto::OK, tabletId);
+                reply->Get()->Record.SetGeneration(7);
+                runtime.Send(reply.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+        }
+    });
+    std::unique_ptr<TEvBlobStorage::TEvDiscover> discover = std::make_unique<TEvBlobStorage::TEvDiscover>(
+        tabletId, 1, readBody, true, TInstant::Max(), 0, true);
+    runtime.Send(new IEventHandle(env.RealProxyActorId, testState.EdgeActor, discover.release()), 0, true);
+    const TEvBlobStorage::TEvDiscoverResult::TPtr result = testState.GrabEventPtr<TEvBlobStorage::TEvDiscoverResult>();
+    const bool allFailed = std::all_of(states.begin(), states.end(), [](TFailRealm::EState state) { return state == TFailRealm::F; });
+    // With E=0, an index-only candidate may be a lost blob; Get must report ERROR.
+    const NKikimrProto::EReplyStatus expected = indexError || allFailed || ghost ? NKikimrProto::ERROR
+        : hasBlob ? NKikimrProto::OK : NKikimrProto::NODATA;
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expected);
+    if (expected != NKikimrProto::ERROR) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->BlockedGeneration, 7);
+    }
+    if (expected == NKikimrProto::OK) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id, blobId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Buffer, readBody ? testState.BlobData : TString());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rangeRequests, 3 * std::count_if(states.begin(), states.end(),
+        [](TFailRealm::EState state) { return state != TFailRealm::F; }));
+    if (!indexError && (hasBlob || ghost)) {
+        UNIT_ASSERT(readData || !readBody);
+    }
+    runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST(Mirror3dcZeroEnsuredSurvivingCopy) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    for (ui32 realm = 0; realm < 3; ++realm) {
+        TVector<TFailRealm::EState> states(3, TFailRealm::F);
+        states[realm] = TFailRealm::N0;
+        CheckMirror3dcSurvivingDiscovery(states, true, true);
+        CheckMirror3dcSurvivingDiscovery(states, false, true);
+    }
+}
+
+Y_UNIT_TEST(Mirror3dcZeroEnsuredEmptyAndFailedIndexes) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, false, false);
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, true, true, true);
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::F, TFailRealm::F, TFailRealm::F}, false, false);
+}
+
+Y_UNIT_TEST(Mirror3dcZeroEnsuredRejectsIndexOnlyCandidates) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, false, true, false, true);
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, false, false, false, true);
+}
+
+Y_UNIT_TEST(Mirror3dcSurvivingCopyWithRecoveringAndEnsuredRealms) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::N0, TFailRealm::R, TFailRealm::F}, true, true);
+    CheckMirror3dcSurvivingDiscovery({TFailRealm::N1, TFailRealm::F, TFailRealm::F}, true, true);
+}
+
 Y_UNIT_TEST(Mirror3dcSuccess) {
     TBlobStorageGroupType type(TErasureType::ErasureMirror3dc);
     TTestBasicRuntime runtime;

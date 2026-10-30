@@ -89,6 +89,10 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
+message TFailRealmStates {
+    repeated TGroupInfo.TFailRealm.EState State = 1;
+}
+
 message TVDiskLocation {
     optional uint32 NodeID = 1;
     optional uint32 PDiskID = 2;
@@ -98,16 +102,23 @@ message TVDiskLocation {
 
 message TGroupInfo {
     message TFailRealm {
-        // Internal state; N states describe minimum copies of every confirmed blob.
-        // N0 makes no per-realm copy guarantee and does not imply an empty realm.
+        // Invariant states describe minimum copies of every confirmed blob.
+        // Invariant0 makes no per-realm copy guarantee and does not imply an empty realm.
         enum EState {
+            option allow_alias = true;
+            Invariant0 = 0;
+            Invariant1 = 1;
+            Invariant2 = 2;
+            Excluded = 3;
+            Recovering = 4;
+            // Legacy aliases retained for existing code.
             N0 = 0;
             N1 = 1;
             N2 = 2;
             F = 3; // Failure.
             R = 4; // Recovery.
         }
-        optional EState State = 2 [default = N0];
+        optional EState State = 2 [default = Invariant0];
         message TFailDomain {
             repeated TVDiskLocation VDiskLocations = 1;
         }

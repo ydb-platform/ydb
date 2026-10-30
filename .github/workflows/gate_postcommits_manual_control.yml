@@ -37,12 +37,12 @@ jobs:
         
         if [[ "${{ github.event.inputs.action }}" == "close" ]]; then
           echo "Closing gate for postcommits - removing postcommit labels"
-          query='.runners[] | select(.labels[].name=="ghrun") | select( any([.labels[].name][]; .=="postcommit")) | .id'
+          query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(any(.labels[].name; .=="postcommit")) | select((any(.labels[].name; startswith("pool:") and endswith("-postcommit"))) | not) | .id'
           OPERATION="Closing"
           LABEL_ACTION="Removing"
         else
           echo "Opening gate for postcommits - adding postcommit labels"
-          query='.runners[] | select(.labels[].name=="ghrun") | select( all([.labels[].name][]; .!="postcommit")) | .id'
+          query='.runners[] | select(any(.labels[].name; .=="build-preset-relwithdebinfo" or .=="build-preset-asan" or .=="build-preset-tsan" or .=="build-preset-msan")) | select(all(.labels[].name; .!="postcommit")) | .id'
           OPERATION="Opening"
           LABEL_ACTION="Adding"
         fi

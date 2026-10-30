@@ -1,0 +1,816 @@
+{
+    "/Root/customer": {
+        "byte_size": 15816217067,
+        "n_rows": 150000000,
+        "n_attrs": 8,
+        "key_columns": [
+            "c_custkey"
+        ],
+        "columns": [
+            {
+                "name": "c_acctbal",
+                "n_unique_vals": 1088741,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 9524.03,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1088741
+            },
+            {
+                "name": "c_address",
+                "n_unique_vals": 149077954,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "uc,3bHIx84H,wdrmLOjVsiqXCq2tr",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 149077954
+            },
+            {
+                "name": "c_comment",
+                "n_unique_vals": 120917707,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "round the furiously regular p",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 120917707
+            },
+            {
+                "name": "c_custkey",
+                "n_unique_vals": 153489897,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 19,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 153489897
+            },
+            {
+                "name": "c_mktsegment",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 30003570,
+                        "value": "HOUSEHOLD",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "c_name",
+                "n_unique_vals": 149320800,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "Customer#000000019",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 149320800
+            },
+            {
+                "name": "c_nationkey",
+                "n_unique_vals": 25,
+                "most_common_value": [
+                    {
+                        "frequency": 6003717,
+                        "value": 21,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "c_phone",
+                "n_unique_vals": 149204148,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "13-871-171-8693",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 149204148
+            }
+        ]
+    },
+    "/Root/lineitem": {
+        "byte_size": 422388558725,
+        "n_rows": 5999989709,
+        "n_attrs": 16,
+        "key_columns": [
+            "l_linenumber",
+            "l_orderkey"
+        ],
+        "columns": [
+            {
+                "name": "l_comment",
+                "n_unique_vals": 154608338,
+                "most_common_value": [
+                    {
+                        "frequency": 816632,
+                        "value": " furiously",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 154608338
+            },
+            {
+                "name": "l_commitdate",
+                "n_unique_vals": 2452,
+                "most_common_value": [
+                    {
+                        "frequency": 350738,
+                        "value": "1996-12-12",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2452
+            },
+            {
+                "name": "l_discount",
+                "n_unique_vals": 11,
+                "most_common_value": [
+                    {
+                        "frequency": 545495023,
+                        "value": 0.05,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 11
+            },
+            {
+                "name": "l_extendedprice",
+                "n_unique_vals": 3754707,
+                "most_common_value": [
+                    {
+                        "frequency": 343,
+                        "value": 53037.6,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 3754707
+            },
+            {
+                "name": "l_linenumber",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 1500000000,
+                        "value": 1,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "l_linestatus",
+                "n_unique_vals": 2,
+                "most_common_value": [
+                    {
+                        "frequency": 3000013782,
+                        "value": "F",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 2
+            },
+            {
+                "name": "l_orderkey",
+                "n_unique_vals": 1459043629,
+                "most_common_value": [
+                    {
+                        "frequency": 7,
+                        "value": 29057,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1459043629
+            },
+            {
+                "name": "l_partkey",
+                "n_unique_vals": 198768852,
+                "most_common_value": [
+                    {
+                        "frequency": 11,
+                        "value": 139723909,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 198768852
+            },
+            {
+                "name": "l_quantity",
+                "n_unique_vals": 50,
+                "most_common_value": [
+                    {
+                        "frequency": 120017570,
+                        "value": 35,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 50
+            },
+            {
+                "name": "l_receiptdate",
+                "n_unique_vals": 2541,
+                "most_common_value": [
+                    {
+                        "frequency": 312207,
+                        "value": "1997-04-14",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2541
+            },
+            {
+                "name": "l_returnflag",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 3038633071,
+                        "value": "N",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "l_shipdate",
+                "n_unique_vals": 2515,
+                "most_common_value": [
+                    {
+                        "frequency": 273125,
+                        "value": "1998-06-20",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2515
+            },
+            {
+                "name": "l_shipinstruct",
+                "n_unique_vals": 4,
+                "most_common_value": [
+                    {
+                        "frequency": 1500057457,
+                        "value": "COLLECT COD",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 4
+            },
+            {
+                "name": "l_shipmode",
+                "n_unique_vals": 7,
+                "most_common_value": [
+                    {
+                        "frequency": 857160826,
+                        "value": "MAIL",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 7
+            },
+            {
+                "name": "l_suppkey",
+                "n_unique_vals": 9611944,
+                "most_common_value": [
+                    {
+                        "frequency": 34,
+                        "value": 6460023,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 9611944
+            },
+            {
+                "name": "l_tax",
+                "n_unique_vals": 9,
+                "most_common_value": [
+                    {
+                        "frequency": 666702993,
+                        "value": 0.08,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 9
+            }
+        ]
+    },
+    "/Root/nation": {
+        "byte_size": 3758,
+        "n_rows": 25,
+        "n_attrs": 4,
+        "key_columns": [
+            "n_nationkey"
+        ],
+        "columns": [
+            {
+                "name": "n_comment",
+                "n_unique_vals": 25,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": " haggle. carefully final deposits detect slyly agai",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "n_name",
+                "n_unique_vals": 25,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "ALGERIA",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "n_nationkey",
+                "n_unique_vals": 25,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "n_regionkey",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 5,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 5
+            }
+        ]
+    },
+    "/Root/orders": {
+        "byte_size": 94156420546,
+        "n_rows": 1500000000,
+        "n_attrs": 9,
+        "key_columns": [
+            "o_orderkey"
+        ],
+        "columns": [
+            {
+                "name": "o_clerk",
+                "n_unique_vals": 1011498,
+                "most_common_value": [
+                    {
+                        "frequency": 62,
+                        "value": "Clerk#000857624",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 1011498
+            },
+            {
+                "name": "o_comment",
+                "n_unique_vals": 275241740,
+                "most_common_value": [
+                    {
+                        "frequency": 1283,
+                        "value": " furiously regular ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 275241740
+            },
+            {
+                "name": "o_custkey",
+                "n_unique_vals": 102635773,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 4123741,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 102635773
+            },
+            {
+                "name": "o_orderdate",
+                "n_unique_vals": 2397,
+                "most_common_value": [
+                    {
+                        "frequency": 87948,
+                        "value": "1996-08-16",
+                        "type": "Date"
+                    }
+                ],
+                "hyperloglog": 2397
+            },
+            {
+                "name": "o_orderkey",
+                "n_unique_vals": 1459043629,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 293,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 1459043629
+            },
+            {
+                "name": "o_orderpriority",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 300005966,
+                        "value": "2-HIGH",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "o_orderstatus",
+                "n_unique_vals": 3,
+                "most_common_value": [
+                    {
+                        "frequency": 730806711,
+                        "value": "F",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 3
+            },
+            {
+                "name": "o_shippriority",
+                "n_unique_vals": 1,
+                "most_common_value": [
+                    {
+                        "frequency": 1500000000,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 1
+            },
+            {
+                "name": "o_totalprice",
+                "n_unique_vals": 41412524,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 196357.71,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 41412524
+            }
+        ]
+    },
+    "/Root/part": {
+        "byte_size": 14538464296,
+        "n_rows": 200000000,
+        "n_attrs": 9,
+        "key_columns": [
+            "p_partkey"
+        ],
+        "columns": [
+            {
+                "name": "p_brand",
+                "n_unique_vals": 25,
+                "most_common_value": [
+                    {
+                        "frequency": 8003953,
+                        "value": "Brand#43",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "p_comment",
+                "n_unique_vals": 13957166,
+                "most_common_value": [
+                    {
+                        "frequency": 74913,
+                        "value": " the ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 13957166
+            },
+            {
+                "name": "p_container",
+                "n_unique_vals": 40,
+                "most_common_value": [
+                    {
+                        "frequency": 5004960,
+                        "value": "WRAP BAG",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 40
+            },
+            {
+                "name": "p_mfgr",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 40006935,
+                        "value": "Manufacturer#5",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "p_name",
+                "n_unique_vals": 198233706,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "linen honeydew forest steel chiffon",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 198233706
+            },
+            {
+                "name": "p_partkey",
+                "n_unique_vals": 198768852,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 33,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 198768852
+            },
+            {
+                "name": "p_retailprice",
+                "n_unique_vals": 120005,
+                "most_common_value": [
+                    {
+                        "frequency": 92,
+                        "value": 1338.35,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 120005
+            },
+            {
+                "name": "p_size",
+                "n_unique_vals": 50,
+                "most_common_value": [
+                    {
+                        "frequency": 4003749,
+                        "value": 31,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 50
+            },
+            {
+                "name": "p_type",
+                "n_unique_vals": 150,
+                "most_common_value": [
+                    {
+                        "frequency": 1046216,
+                        "value": "LARGE POLISHED NICKEL",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 150
+            }
+        ]
+    },
+    "/Root/partsupp": {
+        "byte_size": 50669876674,
+        "n_rows": 800000000,
+        "n_attrs": 5,
+        "key_columns": [
+            "ps_partkey",
+            "ps_suppkey"
+        ],
+        "columns": [
+            {
+                "name": "ps_availqty",
+                "n_unique_vals": 9985,
+                "most_common_value": [
+                    {
+                        "frequency": 6211,
+                        "value": 5311,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 9985
+            },
+            {
+                "name": "ps_comment",
+                "n_unique_vals": 303587402,
+                "most_common_value": [
+                    {
+                        "frequency": 3,
+                        "value": "ly express patterns. idly bold theodolites wake blithely. deposits cajole furiously beyond the furiously regular packages. close packages cajole slyly even, final pinto beans. regular",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 303587402
+            },
+            {
+                "name": "ps_partkey",
+                "n_unique_vals": 198768852,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 194,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 198768852
+            },
+            {
+                "name": "ps_suppkey",
+                "n_unique_vals": 9611944,
+                "most_common_value": [
+                    {
+                        "frequency": 8,
+                        "value": 2501233,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 9611944
+            },
+            {
+                "name": "ps_supplycost",
+                "n_unique_vals": 100025,
+                "most_common_value": [
+                    {
+                        "frequency": 294,
+                        "value": 565.66,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 100025
+            }
+        ]
+    },
+    "/Root/region": {
+        "byte_size": 1280,
+        "n_rows": 5,
+        "n_attrs": 3,
+        "key_columns": [
+            "r_regionkey"
+        ],
+        "columns": [
+            {
+                "name": "r_comment",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "lar deposits. blithely final packages cajole. regular waters are final requests. regular accounts are according to ",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "r_name",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "AFRICA",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 5
+            },
+            {
+                "name": "r_regionkey",
+                "n_unique_vals": 5,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 0,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 5
+            }
+        ]
+    },
+    "/Root/supplier": {
+        "byte_size": 955242250,
+        "n_rows": 10000000,
+        "n_attrs": 7,
+        "key_columns": [
+            "s_suppkey"
+        ],
+        "columns": [
+            {
+                "name": "s_acctbal",
+                "n_unique_vals": 1088741,
+                "most_common_value": [
+                    {
+                        "frequency": 4,
+                        "value": 8020.21,
+                        "type": "Double"
+                    }
+                ],
+                "hyperloglog": 1088741
+            },
+            {
+                "name": "s_address",
+                "n_unique_vals": 9855093,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "iybAE,RmTymrZVYaFZva2SH,j",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 9855093
+            },
+            {
+                "name": "s_comment",
+                "n_unique_vals": 9904089,
+                "most_common_value": [
+                    {
+                        "frequency": 2,
+                        "value": "cial, ironic deposits wake along the slyly even packages. bold, unusual accounts haggl",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 9904089
+            },
+            {
+                "name": "s_name",
+                "n_unique_vals": 10028646,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "Supplier#000000020",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 10028646
+            },
+            {
+                "name": "s_nationkey",
+                "n_unique_vals": 25,
+                "most_common_value": [
+                    {
+                        "frequency": 401453,
+                        "value": 3,
+                        "type": "Int32"
+                    }
+                ],
+                "hyperloglog": 25
+            },
+            {
+                "name": "s_phone",
+                "n_unique_vals": 10002964,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": "13-715-945-6730",
+                        "type": "Utf8"
+                    }
+                ],
+                "hyperloglog": 10002964
+            },
+            {
+                "name": "s_suppkey",
+                "n_unique_vals": 9611944,
+                "most_common_value": [
+                    {
+                        "frequency": 1,
+                        "value": 20,
+                        "type": "Int64"
+                    }
+                ],
+                "hyperloglog": 9611944
+            }
+        ]
+    }
+}

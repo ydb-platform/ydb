@@ -328,6 +328,9 @@ namespace NKikimr::NBlobDepot {
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
             ReleaseS3Wrapper();
+            if (ProxyId) {
+                Send(ProxyId, new TEvents::TEvPoison);
+            }
             TActor::PassAway();
         }
 
@@ -463,6 +466,8 @@ namespace NKikimr::NBlobDepot {
             const ui64 QueryId;
             mutable TString QueryIdString;
             const TMonotonic StartTime;
+            const TInstant Deadline;
+            const TMonotonic DeadlineMonotonic;
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
@@ -480,6 +485,7 @@ namespace NKikimr::NBlobDepot {
             virtual ~TQuery();
 
             void CheckQueryExecutionTime(TMonotonic now);
+            bool CheckDeadline(TMonotonic now);
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
@@ -491,7 +497,7 @@ namespace NKikimr::NBlobDepot {
 
             virtual void OnUpdateBlock() {}
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
-            virtual void OnIdAllocated(bool /*success*/) {}
+            virtual void OnIdAllocated(bool /*success*/, const TString& /*errorReason*/) {}
             virtual void OnDestroy(bool /*success*/) {}
             virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/, bool /*slowDown*/) { Y_ABORT(); }
             virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
@@ -526,6 +532,10 @@ namespace NKikimr::NBlobDepot {
 
             void IssueCheckIntegrity(TReadArg&& arg);
             void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);
+            void HandleCheckIntegrityS3Result(TCheckContext& checkContext, const TString& key, ui32 len,
+                std::optional<TString> data, const char *error);
+            void OnCheckIntegrityPartDone(TCheckContext& checkContext);
+            void HandleCheckIntegrityResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
 
         public:
             struct TDeleter {
@@ -577,7 +587,11 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         void HandleQueryWatchdog();
 
-        void Invoke(std::function<void()> callback) { callback(); }
+        // called by helper actors through InvokeOtherActor, so no query is on the stack and the ended ones can go
+        void Invoke(std::function<void()> callback) {
+            callback();
+            DeletePendingQueries.Clear();
+        }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -608,7 +622,7 @@ namespace NKikimr::NBlobDepot {
             void RebuildHeap();
 
             void EnqueueQueryWaitingForId(TQuery *query);
-            void ProcessQueriesWaitingForId(bool success);
+            void ProcessQueriesWaitingForId(bool success, const TString& errorReason = {});
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;

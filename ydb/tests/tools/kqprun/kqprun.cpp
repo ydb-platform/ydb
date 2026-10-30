@@ -14,6 +14,7 @@
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/getopt/small/modchooser.h>
+#include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/env.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
@@ -32,6 +33,34 @@ namespace NKqpRun {
 
 namespace {
 
+struct TQueryInput {
+    TString Text;
+    TString Source;
+};
+
+void AppendQueryFile(std::vector<TQueryInput>& queries, const TString& path) {
+    queries.push_back({ LoadFile(path), path });
+}
+
+void AppendQueryDirectory(std::vector<TQueryInput>& queries, const TString& path) {
+    TVector<TFsPath> children;
+    TFsPath(path).List(children);
+    std::sort(children.begin(), children.end(), [](const TFsPath& lhs, const TFsPath& rhs) {
+        return lhs.GetName() < rhs.GetName();
+    });
+
+    const size_t initialSize = queries.size();
+    for (const auto& child : children) {
+        const auto extension = child.GetExtension();
+        if (child.IsFile() && (extension == "sql" || extension == "yql")) {
+            AppendQueryFile(queries, child.GetPath());
+        }
+    }
+    if (queries.size() == initialSize) {
+        ythrow yexception() << "No .sql or .yql files found in directory '" << path << "'";
+    }
+}
+
 struct TExecutionOptions {
     inline static constexpr char LOOP_ID_TEMPLATE[] = "${LOOP_ID}";
     inline static constexpr char QUERY_ID_TEMPLATE[] = "${QUERY_ID}";
@@ -44,8 +73,8 @@ struct TExecutionOptions {
         StreamingQuery
     };
 
-    std::vector<TString> ScriptQueries;
-    TString SchemeQuery;
+    std::vector<TQueryInput> ScriptQueries;
+    std::vector<TQueryInput> SchemeQueries;
     std::unordered_map<TString, Ydb::TypedValue> Params;
     bool UseTemplates = false;
     bool RunAsDeamon = false;
@@ -102,8 +131,8 @@ struct TExecutionOptions {
         return GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT));
     }
 
-    TRequestOptions GetSchemeQueryOptions() const {
-        TString sql = SchemeQuery;
+    TRequestOptions GetSchemeQueryOptions(size_t index) const {
+        const TString& sql = SchemeQueries.at(index).Text;
 
         return { .Query = sql, .Action = NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE, .TraceId = DefaultTraceId, .PoolId = "",
             .UserSID = BUILTIN_ACL_ROOT,
@@ -114,7 +143,7 @@ struct TExecutionOptions {
     TRequestOptions GetScriptQueryOptions(size_t index, size_t loopId, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
 
-        TString sql = ScriptQueries[index];
+        TString sql = ScriptQueries[index].Text;
         if (UseTemplates) {
             SubstGlobal(sql, LOOP_ID_TEMPLATE, ToString(loopId));
             SubstGlobal(sql, QUERY_ID_TEMPLATE, ToString(queryId));
@@ -143,8 +172,8 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled &&
-            !RunAsDeamon) {
+        if (SchemeQueries.empty() && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled &&
+            !runnerOptions.YdbSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
 
@@ -181,7 +210,7 @@ private:
     }
 
     void ValidateSchemeQueryOptions(const TRunnerOptions& runnerOptions) const {
-        if (SchemeQuery) {
+        if (!SchemeQueries.empty()) {
             return;
         }
         if (runnerOptions.SchemeQueryAstOutput) {
@@ -249,7 +278,7 @@ private:
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         switch (runnerOptions.TraceOptType) {
             case TRunnerOptions::ETraceOptType::Scheme: {
-                if (!SchemeQuery) {
+                if (SchemeQueries.empty()) {
                     ythrow yexception() << "Trace opt type scheme cannot be used without scheme query";
                 }
                 break;
@@ -260,7 +289,7 @@ private:
                 }
             }
             case TRunnerOptions::ETraceOptType::All: {
-                if (!SchemeQuery && ScriptQueries.empty()) {
+                if (SchemeQueries.empty() && ScriptQueries.empty()) {
                     ythrow yexception() << "Trace opt type all cannot be used without any queries";
                 }
             }
@@ -360,10 +389,12 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
 void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& runner, TYdbSetupSettings::EVerbosity verbosityLevel) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    if (executionOptions.SchemeQuery) {
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing scheme query..." << colors.Default() << Endl;
-        if (!runner.ExecuteSchemeQuery(executionOptions.GetSchemeQueryOptions())) {
-            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Scheme query execution failed";
+    for (size_t i = 0; i < executionOptions.SchemeQueries.size(); ++i) {
+        const auto& source = executionOptions.SchemeQueries[i].Source;
+        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing scheme query '" << source << "'..." << colors.Default()
+             << Endl;
+        if (!runner.ExecuteSchemeQuery(executionOptions.GetSchemeQueryOptions(i))) {
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Scheme query '" << source << "' execution failed";
         }
     }
 
@@ -376,6 +407,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     std::vector<double> durations;
     const size_t maxQueueSize = numberLoops ? (numberLoops * 7 + 9) / 10 : 10;
     double durationSec = 0.0;
+    size_t failedQueries = 0;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;
         if (queryId > 0) {
@@ -393,6 +425,9 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
             }
             if (numberQueries > 1) {
                 Cout << " " << id;
+            }
+            if (const auto& source = executionOptions.ScriptQueries[id].Source) {
+                Cout << " ('" << source << "')";
             }
             if (numberLoops != 1) {
                 Cout << ", loop " << loopId;
@@ -415,11 +450,19 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
                 }
                 durationSec = 0.0;
             }
-        } catch (const yexception& exception) {
+        } catch (const yexception&) {
+            const auto& source = executionOptions.ScriptQueries[id].Source;
+            TStringBuilder message;
+            message << "Query " << id;
+            if (source) {
+                message << " ('" << source << "')";
+            }
+            message << " failed: " << CurrentExceptionMessage();
             if (executionOptions.ContinueAfterFail) {
-                Cerr << colors.Red() << CurrentExceptionMessage() << colors.Default() << Endl;
+                ++failedQueries;
+                Cerr << colors.Red() << message << colors.Default() << Endl;
             } else {
-                throw exception;
+                ythrow yexception() << message;
             }
         }
     }
@@ -438,6 +481,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
         } catch (...) {
             ythrow yexception() << "Failed to print script results, reason:\n" << CurrentExceptionMessage();
         }
+    }
+
+    if (failedQueries) {
+        ythrow yexception() << failedQueries << " of " << numberQueries * numberLoops << " query requests failed";
     }
 }
 
@@ -502,16 +549,30 @@ protected:
 
         // Inputs
 
-        options.AddLongOption('s', "scheme-query", "Scheme query to execute (typically DDL/DCL query)")
+        options.AddLongOption('s', "scheme-query", "Scheme query to execute before script queries (repeatable, typically DDL/DCL query)")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                ExecutionOptions.SchemeQuery = LoadFile(option->CurVal());
+                AppendQueryFile(ExecutionOptions.SchemeQueries, option->CurVal());
+            });
+
+        options
+            .AddLongOption("scheme-query-dir", "Load .sql/.yql scheme files from a directory in lexicographic order (non-recursive, repeatable)")
+            .RequiredArgument("directory")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                AppendQueryDirectory(ExecutionOptions.SchemeQueries, option->CurVal());
             });
 
         options.AddLongOption('p', "script-query", "Script query to execute (typically DML query)")
             .RequiredArgument("file")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
+                AppendQueryFile(ExecutionOptions.ScriptQueries, option->CurVal());
+            });
+
+        options
+            .AddLongOption("script-query-dir", "Load .sql/.yql script files from a directory in lexicographic order (non-recursive, repeatable)")
+            .RequiredArgument("directory")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                AppendQueryDirectory(ExecutionOptions.ScriptQueries, option->CurVal());
             });
 
         options.AddLongOption("stats-mode", "Statistics collection mode (none, basic, debug, profile)")
@@ -534,7 +595,9 @@ protected:
 
         options.AddLongOption("sql", "Script query SQL text to execute (typically DML query)")
             .RequiredArgument("str")
-            .AppendTo(&ExecutionOptions.ScriptQueries);
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.ScriptQueries.push_back({ option->CurVal(), {} });
+            });
 
         options
             .AddLongOption('t', "template",
@@ -865,7 +928,9 @@ protected:
             .DefaultValue(0)
             .StoreMappedResultT<ui64>(&ExecutionOptions.QueryDelay, &TDuration::MilliSeconds<ui64>);
 
-        options.AddLongOption("continue-after-fail", "Don't not stop requests execution after fails")
+        options
+            .AddLongOption(
+                "continue-after-fail", "Continue after query failures and return a nonzero exit status if any synchronous request fails")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
 
@@ -901,6 +966,17 @@ protected:
             });
 
         // Cluster settings
+
+        options
+            .AddLongOption(
+                "scheme-limits", "Root domain scheme limits, also inherited by created tenants (protobuf text NKikimrSubDomains::TSchemeLimits)")
+            .RequiredArgument("file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const TString file(option->CurVal());
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.SchemeLimits.emplace())) {
+                    ythrow yexception() << "Bad format of scheme limits file '" << file << "'";
+                }
+            });
 
         options
             .AddLongOption('N', "node-count",
@@ -1050,9 +1126,11 @@ protected:
             }
         }
 
-        ReplaceTemplates(ExecutionOptions.SchemeQuery);
-        for (auto& sql : ExecutionOptions.ScriptQueries) {
-            ReplaceTemplates(sql);
+        for (auto& query : ExecutionOptions.SchemeQueries) {
+            ReplaceTemplates(query.Text);
+        }
+        for (auto& query : ExecutionOptions.ScriptQueries) {
+            ReplaceTemplates(query.Text);
         }
 
         RunnerOptions.YdbSettings.YqlToken = YqlToken;

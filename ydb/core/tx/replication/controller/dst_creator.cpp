@@ -75,6 +75,10 @@ bool CheckColumnFamilySettings(
     return false;
 }
 
+bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
+    return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
+}
+
 } // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
@@ -484,8 +488,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return false;
         }
 
-        if (!InitialScan && !CreatePlaceholder
-                && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+        if (!InitialScan && !CreatePlaceholder && !IsImported(got)) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }

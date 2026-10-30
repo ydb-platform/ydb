@@ -801,6 +801,50 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         }
     }
 
+    Y_UNIT_TEST(DynamicNodeRejectsUnknownPileName) {
+        const auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        FillTwoPileBridgedMetadata(state, config);
+        TTestActorSystem runtime(5);
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+
+        bool configPushed = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 5 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenDynamicConfigPush::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenDynamicConfigPush>()->Record.HasConfig()) {
+                configPushed = true;
+            }
+            return true;
+        };
+        // Its startup registry resolves a local name which is absent from the committed cluster registry. The stale
+        // nameservice locations still let it subscribe to a static node and receive the current configuration.
+        const auto startupConfig = MakeTwoPileBridgedConfig("pile0", "unknown-pile");
+        const auto invalid = RegisterKeeper(runtime, startupConfig, 5, state, {}, &bridge, nullptr, "unknown-pile");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return configPushed; }));
+        const auto deadline = runtime.GetClock() + TDuration::Seconds(1);
+        runtime.Sim([&] { return runtime.GetClock() < deadline; });
+        UNIT_ASSERT(runtime.GetActor(invalid));
+        UNIT_ASSERT_C(!state.NodeWardenConfigs.contains(5), "unresolvable local pile was accepted");
+        UNIT_ASSERT(FindConvergedRoot(runtime, keepers) == 1);
+
+        // Correcting the node's startup location allows a replacement keeper to accept the same cluster config.
+        runtime.Send(new IEventHandle(invalid, {}, new TEvents::TEvPoison), 5);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.GetActor(invalid); }));
+        RegisterKeeper(runtime, config, 5, state, {}, &bridge, nullptr, "pile1");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(5); }));
+        UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(5)->GetFingerprint(), config.GetFingerprint());
+    }
+
     // pile registry lists piles in the order other than local BridgeConfig does; pile ids must come from the registry
     Y_UNIT_TEST(PileRegistryDefinesPileIds) {
         const auto config = MakeTwoPileBridgedConfig("pile1", "pile0");

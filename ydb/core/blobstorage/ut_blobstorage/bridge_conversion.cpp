@@ -10,6 +10,54 @@ using namespace NBridgeTest;
 
 Y_UNIT_TEST_SUITE(BridgeConversion) {
 
+    Y_UNIT_TEST(SilentCapabilityGatherRefusesAndRecovers) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        bool hold = true;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> gathers;
+        std::unique_ptr<IEventHandle> result;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == edge) {
+                UNIT_ASSERT(!result);
+                result = std::move(ev);
+                return false;
+            }
+            if (hold && ev->InterconnectSession && ev->GetTypeRewrite() == NStorage::TEvNodeConfigGather::EventType &&
+                    ev->Get<NStorage::TEvNodeConfigGather>()->Record.HasCollectBridgeCapability()) {
+                gathers.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableConvertToBridge();
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge, request.release()), 1);
+        WaitUntil(env, [&] { return bool(result); }, "capability refusal", TDuration::Seconds(1), 30);
+        UNIT_ASSERT(!gathers.empty());
+        const auto& response = result->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+        UNIT_ASSERT_EQUAL_C(response.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            response.GetErrorReason());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), "did not report their BridgeConfig");
+        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+
+        // Bindings and their sessions remain live; delayed gathers must not complete the expired operation again.
+        hold = false;
+        for (auto& [nodeId, ev] : gathers) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        env.Sim(TDuration::Seconds(1));
+        const auto retry = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(retry.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            retry.GetErrorReason());
+        env.Runtime->FilterFunction = {};
+        checker.CheckAll();
+    }
+
     Y_UNIT_TEST(RollingRestartIntoBridgeCapable) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
         const ui32 groupId = CreatePoolAndGetGroup(env);

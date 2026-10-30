@@ -1,5 +1,6 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
+#include "flat_redo_observer.h"
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
@@ -10121,6 +10122,132 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
             Cerr << "...checking rows (expecting new)" << Endl;
             env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(false, 4) }, /* retry */ true);
         }
+    }
+
+    struct TTruncateRedoObserver : public NTable::IRedoObserver {
+        THashSet<i64> Keys;
+        TVector<i64> Events;
+        ui32 Truncates = 0;
+
+        void OnRedoUpdate(ui32 table, NTable::ERowOp op, TArrayRef<const TRawTypeValue> key,
+                TArrayRef<const NTable::TUpdateOp>, TArrayRef<const NPageCollection::TMemGlob>,
+                TRowVersion, ui64, ui32) override
+        {
+            UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
+            UNIT_ASSERT_VALUES_EQUAL(key.size(), 1);
+            const i64 value = TCell(key[0].AsRef()).AsValue<i64>();
+            Events.push_back(value);
+            if (op == NTable::ERowOp::Erase) {
+                Keys.erase(value);
+            } else {
+                Keys.insert(value);
+            }
+        }
+
+        void OnRedoCommit(ui32, ui64, TRowVersion) override {}
+        void OnRedoRemove(ui32, ui64) override {}
+
+        void OnRedoTruncate(ui32 table) override {
+            UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
+            Keys.clear();
+            Events.push_back(-1);
+            ++Truncates;
+        }
+    };
+
+    class TObservedTablet : public TTestFlatTablet {
+    public:
+        TObservedTablet(const TActorId& sender, const TActorId& tablet, TTabletStorageInfo* info,
+                TTruncateRedoObserver& observer)
+            : TTestFlatTablet(sender, tablet, info)
+            , Observer(observer)
+        {}
+
+        NTable::IRedoObserver* GetFollowerRedoObserver() override {
+            return &Observer;
+        }
+
+    private:
+        TTruncateRedoObserver& Observer;
+    };
+
+    void CheckTruncateRedoObserver(bool compact, i64 newRows) {
+        TTruncateRedoObserver observer;
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.FireFollower(env.Edge, env.Tablet, [&env, &observer](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TObservedTablet(env.Edge, tablet, info, observer);
+        }, /* followerId */ 1);
+        env.WaitForWakeUp();
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(rows.MakeRows(100, 0, 100));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), 100);
+
+        if (compact) {
+            env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+            env.WaitFor<NFake::TEvCompacted>();
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(true, 0) });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 0);
+
+        observer.Events.clear();
+        env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(newRows) });
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, newRows) });
+
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Events.size(), 1 + newRows);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Events[0], -1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), newRows);
+        for (i64 i = 0; i < newRows; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events[i + 1], 101 + i);
+            UNIT_ASSERT(observer.Keys.contains(101 + i));
+        }
+
+        // Ordinary writes must not clear the observer again.
+        env.SendSync(rows.RowTo(101 + newRows).MakeRows(1));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, newRows + 1) });
+        UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, 1);
+        UNIT_ASSERT_VALUES_EQUAL(observer.Keys.size(), newRows + 1);
+
+        // Repeated truncates must be reported, including an already empty table.
+        for (ui32 expected = 2; expected <= 3; ++expected) {
+            observer.Events.clear();
+            env.SendSync(new NFake::TEvExecute{ new TTxTruncateAndWrite(0) });
+            env->SimulateSleep(TDuration::MilliSeconds(1));
+            env.SendFollowerSync(new NFake::TEvExecute{ new TTxCheckRows(false, 0) });
+            UNIT_ASSERT_VALUES_EQUAL(observer.Truncates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(observer.Events[0], -1);
+            UNIT_ASSERT(observer.Keys.empty());
+        }
+    }
+
+    Y_UNIT_TEST(TruncateRedoObserver) {
+        CheckTruncateRedoObserver(false, 0);
+    }
+
+    Y_UNIT_TEST(TruncateAndWriteRedoObserver) {
+        CheckTruncateRedoObserver(false, 4);
+    }
+
+    Y_UNIT_TEST(TruncateCompactedRedoObserver) {
+        CheckTruncateRedoObserver(true, 0);
+    }
+
+    Y_UNIT_TEST(TruncateCompactedAndWriteRedoObserver) {
+        CheckTruncateRedoObserver(true, 4);
     }
 
     Y_UNIT_TEST(TruncateAtFollower) {

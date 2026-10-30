@@ -287,7 +287,8 @@ public:
     // executor interface
     void Begin(TTxStamp, IPages& env);
     TProd Commit(TTxStamp, bool commit, TCookieAllocator* = nullptr);
-    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex, IRedoObserver* observer = nullptr);
+    TGarbage RollUp(TTxStamp, TArrayRef<const char> delta, TArrayRef<const char> redo, TMemGlobs annex,
+        IRedoObserver* observer = nullptr, TArrayRef<const ui32> truncatedTables = {});
 
     void RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper);
 

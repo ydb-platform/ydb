@@ -203,6 +203,7 @@ message TTablePartSwitch {
 
     repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16;
     optional TLogTxStatusSnap IntroducedTxStatus = 17;
+    optional bool Truncated = 18;
 }
 
 message TExternalGcEntry {

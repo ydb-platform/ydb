@@ -2,7 +2,7 @@
 
 ## Version 25.2 {#25-2}
 
-### Version 25.2.1.ent.4 {#24-2-1-ent-4}
+### Version 25.2.1.ent.4 {#25-2-1-ent-4}
 
 Release date: February 12, 2026.
 
@@ -46,7 +46,7 @@ Release date: February 12, 2026.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.ent.8 {#24-1-4-ent-8}
+### Version 25.1.4.ent.8 {#25-1-4-ent-8}
 
 Release date: February 12, 2026.
 
@@ -55,7 +55,7 @@ Release date: February 12, 2026.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/29940) an [issue](https://github.com/ydb-platform/ydb/issues/29903) where named expression containing another named expression caused incorrect `VIEW` backup
 * [Fixed](https://github.com/ydb-platform/ydb/commit/c3b025603a6ba71d27ef0f1f66b9f643407643b3) descending sorting not working in queries to system views.
 
-### Version 25.1.4.ent.3 {#24-1-4-ent-3}
+### Version 25.1.4.ent.3 {#25-1-4-ent-3}
 
 Release date: November 25, 2025.
 
@@ -290,11 +290,11 @@ Release date: December 24, 2024.
 * Added support for backup/restore of ACL for tables from/to S3-compatible storage.
 * Included paths and decompression methods in query plans for reading from S3.
 * Added new parsing options for timestamp/datetime fields when reading data from S3.
-* Added support for the `Decimal` type in [partitioning keys](./dev/primary-key/column-oriented#klyuch-particionirovaniya).
+* Added support for the `Decimal` type in [partitioning keys](./dev/primary-key/column-oriented#partitioning-key).
 * Improved diagnostics for storage issues in HealthCheck.
 * **_(Experimental)_** Added a [cost-based optimizer](./concepts/optimizer#cost-based-query-optimizer) for complex queries, involving [column-oriented tables](./concepts/glossary#column-oriented-table). The cost-based optimizer considers a large number of alternative execution plans for each query and selects the best one based on the cost estimate for each option.  Currently, this optimizer only works with plans that contain [JOIN](./yql/reference/syntax/join) operations.
 * **_(Experimental)_** Initial version of the workload manager was implemented. It allows to create resource pools with CPU, memory and active queries count limits. Resource classifiers were implemented to assign queries to specific resource pool.
-* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
+* **_(Experimental)_** Implemented [automatic index selection](./dev/secondary-indexes#automatic-use) for queries, which can be enabled via the `index_auto_choose_mode setting` in `table_service_config` in [dynamic configuration](./devops/configuration-management/configuration-v1/dynamic-config#updating-dynamic-configuration).
 
 #### YDB UI
 
@@ -357,7 +357,7 @@ Release date: August 20, 2024.
 * Added the ability to set [maintenance task priorities](./devops/concepts/maintenance-without-downtime.md#priority) in the [cluster management system](./concepts/glossary.md#cms).
 * Added a setting to enable [stable names](./reference/configuration/#node-broker-config) for cluster nodes within a tenant.
 * Enabled retrieval of nested groups from the [LDAP server](./concepts/auth#ldap-auth-provider), improved host parsing in the [LDAP-configuration](./reference/configuration/#ldap-auth-config), and added an option to disable built-in authentication via login and password.
-* Added support for authenticating [dynamic nodes](./concepts/glossary#dynamic) using SSL-certificates.
+* Added support for authenticating [dynamic nodes](./concepts/glossary.md#dynamic-node) using SSL-certificates.
 * Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without a restart.
 * Improved management of inflight pings during Hive restarts in large clusters.
 * Changed the order of establishing connections with nodes during Hive restarts.
@@ -461,7 +461,7 @@ Release date: October 12, 2023.
 ### New Features
 
 * Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This New Features also allows multiple modifying operations in one transaction on a table with secondary indexes.
-* Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
+* Added support for [column tables](concepts/datamodel/table.md#column-oriented-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
 * Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
 * Added the ability to [write to a topic without deduplication](concepts/datamodel/topic.md#no-dedup). This is important in cases where message processing order is not critical.
 * YQL has added the capabilities to [create](yql/reference/syntax/create-topic.md), [modify](yql/reference/syntax/alter-topic.md), and [delete](yql/reference/syntax/delete.md) topics.

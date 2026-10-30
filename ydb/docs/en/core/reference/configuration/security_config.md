@@ -34,11 +34,11 @@ security_config:
 || Parameter | Description ||
 || `enforce_user_token_requirement` | Selects user [authentication](../../security/authentication.md) mode.
 
-- `enforce_user_token_requirement: true` — User authentication is mandatory. Requests to {{ ydb-short-name }} must include an [auth token](../../concepts/glossary.md#auth-token).
+- `enforce_user_token_requirement: true` — User authentication is mandatory. Requests to {{ ydb-short-name }} must include an [auth token](../../security/authentication.md).
 
     Requests to {{ ydb-short-name }} undergo authentication and authorization.
 
-- `enforce_user_token_requirement: false` — User authentication is optional. Requests to {{ ydb-short-name }} are not required to include an [auth token](../../concepts/glossary.md#auth-token).
+- `enforce_user_token_requirement: false` — User authentication is optional. Requests to {{ ydb-short-name }} are not required to include an [auth token](../../security/authentication.md).
 
     Requests without an auth token are processed in [anonymous mode](../../security/authentication.md#anonymous) without authorization.
 
@@ -56,7 +56,7 @@ Default value: `false`.
 
 Default value: `false`.
     ||
-|| `default_user_sids` | Specifies a list of [SIDs](../../concepts/glossary.md#access-sid) for authenticating incoming requests without an [auth token](../../concepts/glossary.md#auth-token).
+|| `default_user_sids` | Specifies a list of [SIDs](../../concepts/glossary.md#access-sid) for authenticating incoming requests without an [auth token](../../security/authentication.md).
 
 `default_user_sids` acts as an auth token for anonymous requests. The first element in the list must be a user SID. The following elements must be the SIDs of groups to which the user belongs.
 
@@ -71,7 +71,7 @@ You can use this group to grant [access rights](../../concepts/glossary.md#acces
 
 {% note tip %}
 
-You can get information about access rights on scheme objects in the system views. For more information see, [{#T}](../../dev/system-views#informaciya-o-pravah-dostupa).
+You can get information about access rights on scheme objects in the system views. For more information see, [Users, groups, and access rights](../../dev/system-views.md#auth).
 
 {% endnote %}
 
@@ -193,7 +193,7 @@ Errors in access right entries are logged but do not affect {{ ydb-short-name }}
 Access control in {{ ydb-short-name }} is divided into two segments:
 
 - [Access control lists](../../concepts/glossary.md#access-control-list) for [scheme objects](../../concepts/glossary.md#scheme-object)
-- [Access level lists](../../concepts/glossary.md#access-level-list) to define additional privileges or restrictions
+- [Access level lists](#security-access-levels) to define additional privileges or restrictions
 
 Both segments are used in combination: a [subject](../../concepts/glossary.md#access-subject) is granted the privilege to perform an action only if both segments allow it. The action is not allowed if either segment denies it.
 
@@ -252,7 +252,7 @@ For example:
 
 {% endnote %}
 
-## Built-in Security Configuration
+## Built-in Security Configuration {#disable-builtin-security}
 
 The `disable_builtin_security`, `disable_builtin_groups`, and `disable_builtin_access` flags affect the built-in security configuration that occurs when {{ ydb-short-name }} starts for the first time.
 

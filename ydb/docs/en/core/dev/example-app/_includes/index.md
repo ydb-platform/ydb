@@ -40,7 +40,7 @@ A test app performs the following steps:
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-{% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C# (.NET)](../example-dotnet.md#param-queries) | [Go](../go/index.md#param-queries) | [Java](../java/index.md#param-queries) | JavaScript | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries)
+{% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C# (.NET)](../example-dotnet.md) | [Go](../go/index.md) | [Java](../java/index.md#param-queries) | JavaScript | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries)
 
 {% include [multistep_transactions.md](steps/09_multistep_transactions.md) %}
 

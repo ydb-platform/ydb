@@ -10,7 +10,7 @@ ALTER TOPIC topic_path action1, action2, ..., actionN;
 
 `action` is one of the alter actions described below.
 
-## Updating a set of consumers
+## Updating a set of consumers {#add-consumer}
 
 `ADD CONSUMER`: Adds a [consumer](../../../concepts/datamodel/topic#consumer) to a topic.
 

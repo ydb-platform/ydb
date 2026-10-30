@@ -1,4 +1,4 @@
-# auth_config
+# auth_config {#auth-config}
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
@@ -9,7 +9,7 @@ For more information about the authentication of [local {{ ydb-short-name }} use
 #|
 || Parameter | Description ||
 || use_login_provider
-| Indicates whether to allow the authentication of local users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
+| Indicates whether to allow the authentication of local users with an [authentication token](../../security/authentication.md) that is obtained after entering a username and password.
 
 Default value: `true`
     ||

@@ -28,15 +28,15 @@ admin cluster bootstrap | Инициализация подготовленно�
 [admin cluster config replace](../commands/configuration/cluster/replace.md) | Замена динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
 admin cluster config resolve | Вычисление итоговой динамической конфигурации [кластера](../../../concepts/glossary.md#cluster) на основе базовой конфигурации и селекторов переопределения
 admin cluster config version | Отображение версии конфигурации [кластера](../../../concepts/glossary.md#cluster) на узлах
-[admin cluster dump](../export-import/tools-dump.md#cluster) | Выгрузка метаданных кластера в файловую систему
-[admin cluster restore](../export-import/tools-restore.md#cluster) | Восстановление метаданных кластера из файловой системы
+[admin cluster dump](../export-import/tools-dump.md) | Выгрузка метаданных кластера в файловую систему
+[admin cluster restore](../export-import/tools-restore.md) | Восстановление метаданных кластера из файловой системы
 admin database config fetch | Получение текущей динамической конфигурации [базы данных](../../../concepts/glossary.md#database)
 admin database config generate | Генерация динамической конфигурации [базы данных](../../../concepts/glossary.md#database) из статической конфигурации запуска
 admin database config replace | Замена динамической конфигурации [базы данных](../../../concepts/glossary.md#database)
 admin database config resolve | Вычисление итоговой динамической конфигурации [базы данных](../../../concepts/glossary.md#database) на основе базовой конфигурации и селекторов переопределения
 admin database config version | Отображение версии конфигурации [базы данных](../../../concepts/glossary.md#database)
 [admin database dump](../export-import/tools-dump.md#db) | Выгрузка метаданных и данных базы данных в файловую систему
-[admin database restore](../export-import/tools-restore.md#db) | Восстановление метаданных и данных базы данных из файловой системы
+[admin database restore](../export-import/tools-restore.md) | Восстановление метаданных и данных базы данных из файловой системы
 [admin node config init](../commands/configuration/node/init.md) | Инициализация конфигурации [узла](../../../concepts/glossary.md#node)
 auth get-token | Получение [аутентификационного токена](../../../concepts/glossary.md#auth-token) из параметров аутентификации
 [config info](../commands/config-info.md) | Просмотр [параметров соединения](../connect.md)
@@ -91,12 +91,12 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 [table ttl set](../table-ttl-set.md) | Установка параметров [TTL](../../../concepts/glossary.md#ttl) для строковых и колоночных [таблиц](../../../concepts/glossary.md#table)
 [table ttl reset](../table-ttl-reset.md) | Сброс параметров [TTL](../../../concepts/glossary.md#ttl) для строковых и колоночных [таблиц](../../../concepts/glossary.md#table)
 [tools copy](../tools-copy.md) | Копирование [таблиц](../../../concepts/glossary.md#table)
-[tools dump](../export-import/tools-dump.md#schema-objects) | Выгрузка отдельных схемных объектов в файловую систему
+[tools dump](../export-import/tools-dump.md) | Выгрузка отдельных схемных объектов в файловую систему
 {% if ydb-cli == "ydb" %}
 [tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}
 [tools rename](../commands/tools/rename.md) | Переименование строковых [таблиц](../../../concepts/glossary.md#row-oriented-table)
-[tools restore](../export-import/tools-restore.md#schema-objects) | Восстановление отдельных схемных объектов из файловой системы
+[tools restore](../export-import/tools-restore.md) | Восстановление отдельных схемных объектов из файловой системы
 [topic create](../topic-create.md) | Создание [топика](../../../concepts/glossary.md#topic)
 [topic alter](../topic-alter.md) | Модификация параметров [топика](../../../concepts/glossary.md#topic) и перечня [читателей](../../../concepts/glossary.md#consumer)
 [topic drop](../topic-drop.md) | Удаление [топика](../../../concepts/glossary.md#topic)
@@ -145,7 +145,7 @@ workload mixed clean | Удаление [таблиц](../../../concepts/glossar
 [workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Отправка заказов с одинаковыми продуктами в `Stock` нагрузке
 [workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Выборка заказов случайного клиента в `Stock` нагрузке
 [workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Выборка заказов 10000-го клиента в `Stock` нагрузке
-[workload stock clean](../commands/workload/stock.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
+[workload stock clean](../commands/workload/stock.md) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
 [workload topic init](../workload-topic.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) для `Topic` нагрузки
 [workload topic run full](../workload-topic.md#run-full) | Выполнение полной нагрузки на [топик](../../../concepts/glossary.md#topic) с одновременным чтением и записью сообщений в `Topic` нагрузке
 [workload topic run read](../workload-topic.md#run-read) | Выполнение нагрузки на чтение сообщений из [топика](../../../concepts/glossary.md#topic) в `Topic` нагрузке

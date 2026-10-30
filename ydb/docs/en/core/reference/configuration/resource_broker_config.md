@@ -1,5 +1,7 @@
 # resource_broker_config
 
+## Overview {#resource-broker-config}
+
 The resource broker is an [actor service](../../concepts/glossary.md#actor-service) that controls resource consumption on {{ ydb-short-name }} [nodes](../../concepts/glossary.md#node), such as:
 
 - `CPU` — number of threads

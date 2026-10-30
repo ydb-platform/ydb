@@ -75,7 +75,7 @@ During the scanning process, depending on the table update frequency, you might 
 
 {% note warning %}
 
-[Automatic partitioning](datamodel/table.md#partitioning) processes are suspended in the table and [barriers](#barriers) are not emitted to the changefeed during the initial scan.
+[Automatic partitioning](datamodel/table.md#partitioning_row_table) processes are suspended in the table and [barriers](#barriers) are not emitted to the changefeed during the initial scan.
 
 {% endnote %}
 

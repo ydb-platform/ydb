@@ -103,7 +103,7 @@ auth_config:
   scheme: "ldaps"
 ```
 
-Подробнее этот механизм описан в [{#T}](../../devops/configuration-management/configuration-v1/#ldap-auth-config).
+Подробнее этот механизм описан в [конфигурации LDAP-аутентификации](../../reference/configuration/auth_config.md#ldap-auth-config).
 
 ### Федеративные запросы
 

@@ -1651,6 +1651,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_aggregate-group_by_session_extended_tuple_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-group_by_where_alias_collision]": [
+        {
+            "checksum": "11690a63e7b1c8ab456cff34fb4e5319",
+            "size": 2688,
+            "uri": "https://{canondata_backend}/1809005/f337d82d1e36b51298393cc1fc534c8bd60b0072/resource.tar.gz#test_sql2yql.test_aggregate-group_by_where_alias_collision_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-hopping]": [
         {
             "checksum": "30358e3f5e6932f57c0460700ba32278",
@@ -14701,6 +14708,11 @@
     "test_sql_format.test[aggregate-group_by_session_extended_tuple]": [
         {
             "uri": "file://test_sql_format.test_aggregate-group_by_session_extended_tuple_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-group_by_where_alias_collision]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-group_by_where_alias_collision_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-hopping]": [

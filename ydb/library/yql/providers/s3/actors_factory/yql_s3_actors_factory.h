@@ -16,6 +16,7 @@ class TS3GatewayConfig;
 
 namespace NDq {
 
+<<<<<<< HEAD
     struct TS3ReadActorFactoryConfig {
         ui64 RowsInBatch = 1000;
         ui64 MaxInflight = 20;
@@ -25,6 +26,19 @@ namespace NDq {
         std::unordered_map<std::string, ui64> FormatSizeLimits;
         bool EnableScheduling = false;
     };
+=======
+struct TS3ReadActorFactoryConfig {
+    ui64 RowsInBatch = 1000;
+    ui64 MaxInflight = 20;
+    ui64 DataInflight = 200_MB;
+    ui64 FileSizeLimit = 100_GB;
+    ui64 BlockFileSizeLimit = 50_GB;
+    std::unordered_map<std::string, ui64> FormatSizeLimits;
+    bool EnableScheduling = false;
+    bool BatchedRowGroupDecode = true;
+    ui64 BatchDecodeTargetBytes = 16_MB;
+};
+>>>>>>> 05eae7a6218 (S3: decode parquet row groups in batches (#57263))
 
     class IS3ActorsFactory {
     public:

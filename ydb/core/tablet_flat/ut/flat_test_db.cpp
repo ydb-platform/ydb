@@ -338,3 +338,4 @@ TAutoPtr<ITestDb> CreateFakeDb() {
 
 } // namspace NTable
 } // namespace NKikimr
+// ci: widen increment graph, 2026-10-05

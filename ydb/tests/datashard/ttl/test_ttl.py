@@ -416,3 +416,4 @@ class TestPgTTL(TestPgBase, TestTTLBase):
         sync: str,
     ):
         self.do_test_ttl(table_name, pk_types, all_types, index, ttl, unique, sync)
+# ci: widen increment graph, 2026-10-05

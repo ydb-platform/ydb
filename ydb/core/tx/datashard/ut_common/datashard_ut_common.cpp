@@ -3116,3 +3116,4 @@ NKikimrDataEvents::TEvWriteResult CommitLock(
 }
 
 }
+// ci: widen increment graph, 2026-10-05

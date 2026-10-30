@@ -116,6 +116,7 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
         const auto description = env.GetDescription(path);
         const auto& config = description.GetPathDescription().GetTable().GetReplicationConfig();
         return config.GetMode() == TReplicationConfig::REPLICATION_MODE_READ_ONLY
+            && config.GetConsistencyLevel() == TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
             && config.GetImportState() == state;
     };
     WaitFor([&] {
@@ -152,9 +153,14 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
     UNIT_ASSERT(env.GetPathId("/Root/replica") != placeholderId);
     UNIT_ASSERT(checkConfig("/Root/replica", TReplicationConfig::IMPORTED));
     UNIT_ASSERT_VALUES_EQUAL(read("`/Root/replica`"), snapshot);
-    const auto checkRestoredObjects = [&] {
+    const auto checkRestoredObjects = [&](TStringBuf phase) {
         if (withIndex) {
-            UNIT_ASSERT(checkConfig("/Root/replica/by_value/indexImplTable", TReplicationConfig::IMPORTED));
+            const auto description = env.GetDescription("/Root/replica/by_value/indexImplTable");
+            const auto& config = description.GetPathDescription().GetTable().GetReplicationConfig();
+            UNIT_ASSERT_C(config.GetMode() == TReplicationConfig::REPLICATION_MODE_READ_ONLY
+                && config.GetConsistencyLevel() == TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+                && config.GetImportState() == TReplicationConfig::IMPORTED,
+                phase << ": index replication config: " << config.DebugString());
             // Read only covered columns so a lookup into the base table cannot hide stale index entries.
             UNIT_ASSERT_VALUES_EQUAL(read("`/Root/replica` VIEW by_value", "key, value"),
                 read("`/Root/replica`", "key, value"));
@@ -177,7 +183,7 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
             UNIT_ASSERT_VALUES_EQUAL(consumers.front().GetConsumerName(), "consumer");
         }
     };
-    checkRestoredObjects();
+    checkRestoredObjects("after import");
 
     // Import completion is persisted in SchemeShard without a final table ALTER.
     // Attachment must observe IMPORTED even after SchemeShard restarts.
@@ -189,7 +195,7 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
         return ResolveTablet(runtime, schemeShardId) != previousSchemeShard;
     }, "SchemeShard restart after import");
     UNIT_ASSERT(checkConfig("/Root/replica", TReplicationConfig::IMPORTED));
-    checkRestoredObjects();
+    checkRestoredObjects("after SchemeShard restart");
 
     const auto replicationId = env.GetPathId("/Root/replication");
     const auto controllerId = env.GetDescription("/Root/replication").GetPathDescription()
@@ -205,7 +211,7 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
             UNIT_ASSERT_C(!record.GetState().HasError(), record.DebugString());
             return record.GetState().HasStandBy() && read("`/Root/replica`") == expected;
         }, "replication to apply source changes");
-        checkRestoredObjects();
+        checkRestoredObjects("after replication");
     };
     waitForData();
 

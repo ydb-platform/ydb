@@ -4191,7 +4191,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     void CheckReplicaImportRecovery(bool rebootBeforeCreate, bool enableDataShardDirectPartImport,
-            bool rebootDuringFinalize = false) {
+            bool rebootBeforeCompletion = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -4212,12 +4212,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3.Start());
 
         bool createBlocked = false;
-        bool finalizeBlocked = false;
-        ui64 finalizeTxId = 0;
+        bool completionBlocked = false;
+        ui64 restoreTxId = 0;
         auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
             for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() == TTableReplicationConfig::IMPORTED) {
-                    finalizeTxId = ev->Get()->Record.GetTxId();
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    restoreTxId = ev->Get()->Record.GetTxId();
                 }
                 if (rebootBeforeCreate && !createBlocked && tx.GetCreateIndexedTable().GetTableDescription().GetReplicationConfig().GetImportState()
                         == TTableReplicationConfig::IMPORTING) {
@@ -4227,11 +4227,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 }
             }
         });
-        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
-            if (rebootDuringFinalize && !finalizeBlocked && finalizeTxId
-                    && ev->Get()->Record.GetTxId() == finalizeTxId
-                    && ev->Get()->Record.GetStatus() == NKikimrScheme::StatusAccepted) {
-                finalizeBlocked = true;
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (rebootBeforeCompletion && !completionBlocked && restoreTxId
+                    && ev->Get()->Record.GetTxId() == restoreTxId) {
+                completionBlocked = true;
                 ev.Reset();
             }
         });
@@ -4241,8 +4240,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetStatus(), NKikimrScheme::StatusPathDoesNotExist);
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         }
-        if (rebootDuringFinalize) {
-            runtime.WaitFor("final import ALTER accepted", [&] { return finalizeBlocked; });
+        if (rebootBeforeCompletion) {
+            runtime.WaitFor("restore completion before finishing import", [&] { return completionBlocked; });
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription()
+                .GetTable().GetReplicationConfig().GetImportState(), TTableReplicationConfig::IMPORTING);
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         }
         env.TestWaitNotification(runtime, 20);
@@ -4265,7 +4266,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         CheckReplicaImportRecovery(RebootBeforeCreate, EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_FLAG(ReplicaImportResumesFinalization, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_FLAG(ReplicaImportResumesCompletion, EnableDataShardDirectPartImport) {
         CheckReplicaImportRecovery(false, EnableDataShardDirectPartImport, true);
     }
 

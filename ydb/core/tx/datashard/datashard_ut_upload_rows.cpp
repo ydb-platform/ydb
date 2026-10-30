@@ -681,6 +681,15 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
 
         DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
+
+        // The index builder may populate a replica, even without a physical shadow table.
+        DoUploadRows(runtime, "/Root", "/Root/table-1", {{1, 10}}, NTxProxy::EUploadRowsMode::WriteToTableShadow);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 10\n");
+
+        // Ordinary uploads must still neither overwrite existing rows nor insert new ones.
+        DoUploadRows(runtime, "/Root", "/Root/table-1", {{1, 20}, {2, 30}},
+            NTxProxy::EUploadRowsMode::Normal, Ydb::StatusIds::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 10\n");
     }
 
     Y_UNIT_TEST(RetryUploadRowsToShard) {

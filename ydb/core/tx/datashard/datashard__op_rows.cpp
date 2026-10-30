@@ -204,6 +204,10 @@ static bool AllowExecuteAtReplicated(TEvRequest&) {
     return false;
 }
 
+static bool AllowExecuteAtReplicated(TEvDataShard::TEvUploadRowsRequest::TPtr& ev) {
+    return ev->Get()->Record.GetWriteToTableShadow();
+}
+
 static bool AllowExecuteAtReplicated(TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
     return true;
 }

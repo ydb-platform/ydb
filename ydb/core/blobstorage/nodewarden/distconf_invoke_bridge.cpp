@@ -28,6 +28,21 @@ namespace NKikimr::NStorage {
 
         RunCommonChecks(/*requireScepter=*/ false);
 
+        // Compare-and-set. It goes before the checks of the new state: a command built from another generation
+        // may fail them (for example, the pile count has changed), and it must still be reported as a mismatch.
+        if (cmd.HasExpectedGeneration()) {
+            const ui64 expected = cmd.GetExpectedGeneration();
+            const auto& storageConfig = *Self->StorageConfig;
+            if (!storageConfig.HasClusterState()) {
+                throw TExGenerationMismatch() << "No cluster state, expected generation# " << expected;
+            } else if (const ui64 current = storageConfig.GetClusterState().GetGeneration(); current != expected) {
+                throw TExGenerationMismatch() << "Cluster state generation# " << current << " expected# " << expected;
+            } else if (cmd.GetNewClusterState().GetGeneration() != expected + 1) {
+                throw TExError() << "New cluster state generation# " << cmd.GetNewClusterState().GetGeneration()
+                    << " must follow expected generation# " << expected;
+            }
+        }
+
         const auto& newClusterState = cmd.GetNewClusterState();
 
         // check new config alone

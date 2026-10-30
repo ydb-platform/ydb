@@ -1,4 +1,5 @@
 IF (NOT WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
     UNITTEST_FOR(ydb/core/tx/schemeshard)
 
     FORK_SUBTESTS()

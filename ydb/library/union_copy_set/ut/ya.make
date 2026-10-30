@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/library/union_copy_set)
 
 SIZE(MEDIUM)

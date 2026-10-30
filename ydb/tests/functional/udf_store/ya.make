@@ -2,6 +2,7 @@ RECURSE(
     upload_udf
 )
 
+REQUIREMENTS(cpu:2)
 PY3TEST()
 
 STYLE_PYTHON()

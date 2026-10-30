@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/services/persqueue_v1)
 
 ADDINCL(

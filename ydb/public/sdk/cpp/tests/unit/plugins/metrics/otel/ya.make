@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 GTEST()
 
 IF (SANITIZER_TYPE == "thread")

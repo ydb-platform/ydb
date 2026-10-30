@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/health_check)
 
 FORK_SUBTESTS()

@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/tablet_flat)
 
 SIZE(MEDIUM)

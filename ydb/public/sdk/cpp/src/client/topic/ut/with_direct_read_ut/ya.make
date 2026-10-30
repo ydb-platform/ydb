@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:4)
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
 IF (SANITIZER_TYPE == "thread")

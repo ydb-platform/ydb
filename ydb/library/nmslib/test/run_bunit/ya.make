@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 EXECTEST()
 
 # Runs the bunit unit-test driver (built in ydb/library/nmslib/test/bunit) as a

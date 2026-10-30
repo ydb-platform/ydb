@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:4)
 EXECTEST()
 
 # Runs the test_integr integration driver (built in

@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/fq/libs/row_dispatcher/format_handler)
 
 SRCS(

@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:4)
 GTEST()
 
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")

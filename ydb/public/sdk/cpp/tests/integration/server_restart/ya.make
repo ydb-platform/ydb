@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 GTEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)

@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:4)
 UNITTEST_FOR(ydb/core/mind/hive)
 
 FORK_SUBTESTS()

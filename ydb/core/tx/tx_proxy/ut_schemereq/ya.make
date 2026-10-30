@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()

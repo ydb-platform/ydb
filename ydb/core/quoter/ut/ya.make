@@ -1,5 +1,6 @@
 # Disable test on windows until DEVTOOLS-5591 and DEVTOOLS-5388 will be fixed.
 IF (NOT OS_WINDOWS)
+REQUIREMENTS(cpu:2)
     UNITTEST_FOR(ydb/core/quoter)
 
     PEERDIR(

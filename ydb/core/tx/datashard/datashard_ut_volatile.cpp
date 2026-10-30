@@ -2,6 +2,8 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_ut_common_pq.h"
 #include "datashard_active_transaction.h"
+#include "datashard_direct_erase.h"
+#include "datashard_direct_upload.h"
 #include "datashard_impl.h"
 #include "datashard_locks_db.h"
 #include "datashard_user_db.h"
@@ -1971,7 +1973,145 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         });
     }
 
+    void TestDirectWriteDependency(bool erase, bool cached) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134));
+        settings.SetDomainName("Root").SetUseRealThreads(false)
+            .SetEnableDataShardVolatileTransactions(true);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1");
+        auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shards.at(0))));
+        UNIT_ASSERT(shard);
+        auto* executor = dynamic_cast<NTabletFlatExecutor::NFlatExecutorSetup::IExecutor*>(
+            runtime.FindActor(shard->ExecutorID()));
+        UNIT_ASSERT(executor);
+        auto runTx = [&](TLockDependencyTx::TCallback callback) {
+            bool done = false;
+            runtime.Register(new TSubmitLockDependencyTx(executor,
+                new TLockDependencyTx(shard, std::move(callback), done)));
+            runtime.WaitFor("direct write dependency transaction", [&] { return done; });
+        };
+
+        constexpr ui64 commitId = 100001, firstTxId = 100002, secondTxId = 100003;
+        const TRowVersion v1(100, firstTxId), v2(101, secondTxId);
+        const ui64 participant = shards.at(0) + 1;
+        const ui32 key = 1, value = 11;
+        const TVector<TCell> cells{TCell::Make(key)};
+        const TVector<TRawTypeValue> rawKey{TRawTypeValue(&key, sizeof(key), NScheme::NTypeIds::Uint32)};
+        const TVector<NIceDb::TUpdateOp> ops{
+            NIceDb::TUpdateOp(2, NTable::ECellOp::Set,
+                TRawTypeValue(&value, sizeof(value), NScheme::NTypeIds::Uint32))};
+        const auto tid = shard->GetLocalTableId(tableId);
+        auto& manager = shard->GetVolatileTxManager();
+
+        runTx([&](auto& txc) {
+            txc.DB.UpdateTx(tid, NTable::ERowOp::Upsert, rawKey, ops, commitId);
+            manager.PersistAddVolatileTx(firstTxId, v1, TVector<ui64>{commitId}, {},
+                TVector<ui64>{participant}, {}, false, false, true, txc);
+            auto& cache = shard->GetConflictsCache().GetTableCache(tid);
+            if (cached) {
+                UNIT_ASSERT(cache.RegisterDistributedWrite(secondTxId, TOwnedCellVec(cells), txc.DB));
+                const auto* writes = cache.FindUncommittedWrites(cells);
+                UNIT_ASSERT(writes && writes->contains(commitId));
+            } else {
+                UNIT_ASSERT(!cache.FindUncommittedWrites(cells));
+            }
+        });
+        UNIT_ASSERT(manager.FindByCommitTxId(commitId) == manager.FindByTxId(firstTxId));
+        UNIT_ASSERT(!manager.FindByTxId(commitId));
+
+        // Invoke the real direct executors with a fixed version/global id so
+        // pipeline read barriers cannot hide the uncommitted write conflict.
+        std::unique_ptr<IDirectTx> direct;
+        if (erase) {
+            auto request = MakeHolder<TEvDataShard::TEvEraseRowsRequest>();
+            request->Record.SetTableId(tableId.PathId.LocalPathId);
+            request->Record.AddKeyColumnIds(1);
+            request->Record.AddKeyColumns(TSerializedCellVec::Serialize(cells));
+            runtime.Send(new IEventHandle(sender, sender, request.Release()));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvEraseRowsRequest>(sender);
+            direct = std::make_unique<TDirectTxErase>(ev);
+        } else {
+            auto request = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+            request->Record.SetTableId(tableId.PathId.LocalPathId);
+            request->Record.SetDisableChangeCollection(true);
+            request->Record.MutableRowScheme()->AddKeyColumnIds(1);
+            request->Record.MutableRowScheme()->AddValueColumnIds(2);
+            auto* row = request->Record.AddRows();
+            row->SetKeyColumns(TSerializedCellVec::Serialize(cells));
+            row->SetValueColumns(TSerializedCellVec::Serialize(TVector<TCell>{TCell::Make(value)}));
+            runtime.Send(new IEventHandle(sender, sender, request.Release()));
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsRequest>(sender);
+            direct = std::make_unique<TDirectTxUpload>(ev);
+        }
+        runTx([&](auto& txc) {
+            TDataShardLocksDb locksDb(*shard, txc);
+            TSetupSysLocks setup(0, 0, *shard, &locksDb);
+            absl::flat_hash_set<ui64> readDependencies;
+            UNIT_ASSERT(direct->Execute(shard, txc, v2, secondTxId, readDependencies));
+            UNIT_ASSERT(readDependencies.empty());
+            shard->SysLocksTable().ApplyLocks();
+        });
+        const auto result = direct->GetResult(shard);
+        if (erase) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<TEvDataShard::TEvEraseRowsResponse*>(result.Event.Get())->Record.GetStatus(),
+                NKikimrTxDataShard::TEvEraseRowsResponse::OK);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<TEvDataShard::TEvUploadRowsResponse*>(result.Event.Get())->Record.GetStatus(),
+                NKikimrTxDataShard::TError::OK);
+        }
+
+        runTx([&](auto& txc) {
+            auto* first = manager.FindByTxId(firstTxId);
+            auto* second = manager.FindByTxId(secondTxId);
+            UNIT_ASSERT(first && second);
+            UNIT_ASSERT(first->State == EVolatileTxState::Waiting);
+            UNIT_ASSERT(second->State == EVolatileTxState::Committed);
+            UNIT_ASSERT_VALUES_EQUAL(second->Dependencies.size(), 1u);
+            UNIT_ASSERT(second->Dependencies.contains(firstTxId));
+            UNIT_ASSERT(!second->Dependencies.contains(commitId));
+            UNIT_ASSERT(first->Dependents.contains(secondTxId));
+            UNIT_ASSERT(txc.DB.HasOpenTx(tid, commitId));
+            UNIT_ASSERT(txc.DB.HasOpenTx(tid, secondTxId));
+            UNIT_ASSERT(!txc.DB.HasCommittedTx(tid, secondTxId));
+
+            TEvTxProcessing::TEvReadSet rs;
+            rs.Record.SetTxId(firstTxId);
+            rs.Record.SetStep(v1.Step);
+            rs.Record.SetTabletSource(participant);
+            rs.Record.SetTabletDest(shards.at(0));
+            NKikimrTx::TReadSetData data;
+            data.SetDecision(NKikimrTx::TReadSetData::DECISION_COMMIT);
+            rs.Record.SetReadSet(data.SerializeAsString());
+            auto ack = MakeHolder<IEventHandle>(sender, shard->SelfId(), new TEvents::TEvWakeup());
+            manager.ProcessReadSet(rs, std::move(ack), txc);
+        });
+        runtime.WaitFor("direct write physical commit", [&] {
+            return !manager.FindByTxId(firstTxId) && !manager.FindByTxId(secondTxId);
+        });
+        runTx([&](auto& txc) {
+            UNIT_ASSERT(!txc.DB.HasOpenTx(tid, commitId));
+            UNIT_ASSERT(!txc.DB.HasOpenTx(tid, secondTxId));
+            UNIT_ASSERT(txc.DB.HasCommittedTx(tid, commitId));
+            UNIT_ASSERT(txc.DB.HasCommittedTx(tid, secondTxId));
+            if (cached) {
+                shard->GetConflictsCache().GetTableCache(tid).UnregisterDistributedWrites(secondTxId);
+            }
+        });
+    }
+
     } // namespace
+
+    Y_UNIT_TEST_TWIN(DirectEraseVolatileDependencyCommitOrder, Cached) {
+        TestDirectWriteDependency(true, Cached);
+    }
+
+    Y_UNIT_TEST_TWIN(DirectUploadVolatileDependencyCommitOrder, Cached) {
+        TestDirectWriteDependency(false, Cached);
+    }
 
     Y_UNIT_TEST(LockDependencyWriteCommitOrder) {
         TestLockDependency(ELockDependencySource::Write);

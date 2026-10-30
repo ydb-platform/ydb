@@ -5008,7 +5008,7 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
 void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies) {
     if (auto* info = GetVolatileTxManager().FindByCommitTxId(txId)) {
         if (info->State != EVolatileTxState::Aborting) {
-            volatileDependencies.insert(txId);
+            volatileDependencies.insert(info->TxId);
         }
     } else if (auto* entry = GetMultiTxIdManager().FindMultiTxId(txId)) {
         GetMultiTxIdManager().BreakMultiTxId(entry);

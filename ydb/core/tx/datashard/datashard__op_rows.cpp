@@ -199,6 +199,20 @@ static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvEraseRowsRequest:
     return false;
 }
 
+template <typename TEvRequest>
+static bool AllowExecuteAtReplicated(TDataShard*, TEvRequest&) {
+    return false;
+}
+
+static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
+    for (const auto& [_, info] : self->GetUserTables()) {
+        if (info->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
+            return true;
+        }
+    }
+    return false;
+}
+
 template <typename TEvResponse>
 using TSetStatusFunc = void(*)(TEvResponse&);
 
@@ -228,11 +242,11 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
 }
 
 template <typename TEvResponse, bool IsWrite, typename TEvRequest>
-static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType, bool allowImport = false) {
+static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType) {
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated() && !allowImport) {
+    if (self->IsReplicated() && !AllowExecuteAtReplicated(self, ev)) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);
@@ -295,7 +309,7 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
         return;
     }
 
-    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject, IsActiveDirectImport())) {
+    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject)) {
         Executor()->Execute(new TTxS3UploadRows(this, ev), ctx);
     }
 }

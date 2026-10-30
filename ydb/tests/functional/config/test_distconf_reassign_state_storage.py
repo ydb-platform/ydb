@@ -266,17 +266,17 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} invalid ring group selection")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}},
-                          f"{storageName} too deep nested ring declaration")
+                          f"New {storageName} has too deep nested ring declaration")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}},
                           "New introduced ring group should be WriteOnly")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} invalid ring group selection")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Node": [4], "Ring": [{"Node": [4]}]}]}}},
-                          f"{storageName} Ring and Node are defined, use the one of them")
+                          f"New {storageName} Ring and Node are defined, use one of them")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}, defaultRingGroup]}}},
                           f"New {storageName} configuration first RingGroup is writeOnly")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Ring": [{"RingGroupActorIdOffset": 2, "Node": [4]}]}]}}},
-                          f"{storageName} RingGroupActorIdOffset should be used in ring group level, not ring")
+                          f"New {storageName} RingGroupActorIdOffset should be used in ring group level, not ring")
         node = defaultRingGroup["Node"][0] if "Node" in defaultRingGroup else defaultRingGroup["Ring"][0]["Node"][0]
         cmd = {"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [
             defaultRingGroup,

@@ -2549,6 +2549,90 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_GT(evTableReads.load(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(evTableReadsWithLocks.load(), 0u);
     }
+
+    Y_UNIT_TEST_TWIN_F(ReadLargeTopicMessage, Compressed, TStreamingTestFixture) {
+        constexpr ui64 maxMessageSize = 136314880;
+        constexpr ui64 partitionWriteSpeed = 50 * 1024 * 1024;
+        constexpr size_t inputMessageSize = Compressed ? 200000000 : 130000000;
+        constexpr size_t outputMessageSize = Compressed ? 70000000 : inputMessageSize;
+
+        auto& config = SetupAppConfig();
+        config.MutableGRpcConfig()->SetMaxMessageSize(maxMessageSize);
+        config.MutablePQConfig()->SetMaxMessageSizeBytes(maxMessageSize);
+
+        constexpr char inputTopicName[] = "largeMessageInputTopic";
+        constexpr char outputTopicName[] = "largeMessageOutputTopic";
+        constexpr char sourceName[] = "largeMessageSource";
+        const auto inputTopicSettings = NTopic::TCreateTopicSettings()
+            .PartitioningSettings(1, 1)
+            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
+            .PartitionWriteBurstBytes(partitionWriteSpeed);
+        CreateTopic(inputTopicName, inputTopicSettings, /* local */ true);
+        const auto outputTopicSettings = NTopic::TCreateTopicSettings()
+            .PartitioningSettings(1, 1)
+            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
+            .PartitionWriteBurstBytes(partitionWriteSpeed);
+        CreateTopic(outputTopicName, outputTopicSettings, /* local */ true);
+        Y_DEFER {
+            DropTopic(inputTopicName, /* local */ true);
+            DropTopic(outputTopicName, /* local */ true);
+        };
+
+        ExecQuery(fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{location}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE"
+            );
+        )sql", "source"_a = sourceName, "location"_a = GetKikimrRunner()->GetEndpoint(), "database"_a = TEST_DATABASE));
+
+        const auto outputExpression = Compressed ? fmt::format("SUBSTRING(Data, 0, {})", outputMessageSize) : "Data";
+        const auto operation = ExecScript(fmt::format(R"sql(
+            INSERT INTO `{source}`.`{output_topic}`
+            SELECT {output_expression} AS Data
+            FROM `{source}`.`{input_topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "raw",
+                SCHEMA = (Data String NOT NULL)
+            )
+            LIMIT 1;
+        )sql", "source"_a = sourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName,
+            "output_expression"_a = outputExpression));
+
+        NYdb::TDriver topicDriver(NYdb::TDriverConfig()
+            .SetEndpoint(GetKikimrRunner()->GetEndpoint())
+            .SetDatabase(TEST_DATABASE)
+            .SetMaxMessageSize(maxMessageSize));
+        NYdb::NTopic::TTopicClient topicClient(topicDriver);
+
+        const std::string inputMessage(inputMessageSize, 'x');
+        const auto counters = MakeIntrusive<NYdb::NTopic::TWriterCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto writeSession = topicClient.CreateSimpleBlockingWriteSession(
+            NYdb::NTopic::TWriteSessionSettings()
+                .Path(inputTopicName)
+                .PartitionId(0)
+                .Counters(counters)
+                .Codec(Compressed ? NYdb::NTopic::ECodec::GZIP : NYdb::NTopic::ECodec::RAW));
+        UNIT_ASSERT(writeSession->Write(NYdb::NTopic::TWriteMessage(inputMessage), nullptr, TDuration::Seconds(30)));
+        UNIT_ASSERT(writeSession->Close(TDuration::Seconds(30)));
+        EnsureTopicEndOffset(inputTopicName, 1, topicClient);
+
+        if constexpr (Compressed) {
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesWritten->Val(), inputMessageSize);
+            UNIT_ASSERT_GT(counters->BytesWrittenCompressed->Val(), 0);
+            UNIT_ASSERT_LT(counters->BytesWrittenCompressed->Val(), static_cast<i64>(maxMessageSize));
+        }
+
+        // Avoid logging the full expected payload while polling; compare the data after reading.
+        const auto messages = ReadTopicMessages(
+            outputTopicName, { "" }, topicClient, TInstant::Zero(), /* sort */ false, /* checkResult */ false);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages.front().first.size(), outputMessageSize);
+        UNIT_ASSERT_C(inputMessage.compare(0, outputMessageSize, messages.front().first) == 0, "Large topic message contents differ");
+        WaitScriptExecution(operation);
+        topicDriver.Stop(true);
+    }
 }
 
 }   // namespace NKikimr::NKqp

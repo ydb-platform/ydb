@@ -598,6 +598,102 @@ Y_UNIT_TEST(WriteSeqNumsAncestorOpsBeforeCurrentShardOps) {
         "{ items { uint32_value: 4 } items { int32_value: 400 } }");
 }
 
+// A successfully applied mixed request may be retried as is. The duplicate INSERT
+// operations must not be executed again: they would conflict with the rows the
+// first delivery inserted.
+Y_UNIT_TEST(WriteSeqNumsAncestorOpsBeforeCurrentShardOpsInsertReplay) {
+    TTestEnv env({});
+    auto [server, runtime, sender, tableId, initialShards] = env.GetAll();
+    UNIT_ASSERT_VALUES_EQUAL(initialShards.size(), 1u);
+
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+
+    // Apply position 1 of the writer chain on the shard.
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(tableId, env.Shards.at(0), {1}), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.Write(tableId, env.Shards.at(0), TWriteOperation::Insert(1, 100)),
+        "OK");
+
+    // Split the shard: the lock with its WriteSeqNum chain (at 1) transfers to
+    // the new covering shards as an ancestor state.
+    const ui64 oldShard = env.Shards.at(0);
+    env.Split(0, 5);
+    auto shards = env.Shards;
+    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+    tx.MapAncestorShard(shards.at(0), oldShard);
+
+    auto sendWrite = [&]() {
+        auto req = tx.CreateWrite(tableId, oldShard, shards.at(0),
+            TWriteOperation::Insert(1, 999), TWriteOperation::Insert(3, 300), TWriteOperation::Insert(4, 400));
+        // The first op is the already applied position 1 of the transferred
+        // chain: a duplicate whose row must be skipped. The second op continues
+        // the transferred chain. The third op is re-labeled as a fresh position
+        // of the current shard's own chain and comes last.
+        req->Record.MutableOperations(2)->SetOriginalShard(0);
+        req->Record.MutableOperations(2)->MutableWriteSeqNum()->SetWriteSeqNum(1);
+
+        auto reqSender = runtime.AllocateEdgeActor();
+        ui32 nodeIndex = reqSender.NodeId() - runtime.GetNodeId(0);
+        runtime.SendToPipe(shards.at(0), reqSender, req.release(), nodeIndex);
+
+        return TTransactionState::TWritePromise{tx, reqSender};
+    };
+
+    auto checkChains = [](const NKikimrDataEvents::TEvWriteResult& result) {
+        bool chain1 = false;
+        bool chain2 = false;
+        for (const auto& lock : result.GetTxLocks()) {
+            for (const auto& seqNum : lock.GetWriteSeqNums()) {
+                if (seqNum.GetWriterIndex() == 123u) {
+                    chain1 |= (seqNum.GetWriteSeqNum() == 1u);
+                    chain2 |= (seqNum.GetWriteSeqNum() == 2u);
+                }
+            }
+        }
+        UNIT_ASSERT_C(chain1, "the current shard's chain did not advance to position 1");
+        UNIT_ASSERT_C(chain2, "the transferred chain did not advance to position 2");
+    };
+
+    tx.Shard2SeqNum[oldShard] = 0;
+    {
+        auto first = sendWrite();
+        auto result = first.NextResult();
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result->Record.GetStatus(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        checkChains(result->Record);
+    }
+
+    // The successful reply advanced the test's write seq num bookkeeping; reset it
+    // so the retry rebuilds the identical positions.
+    tx.Shard2SeqNum[oldShard] = 0;
+    {
+        auto replay = sendWrite();
+        auto result = replay.NextResult();
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result->Record.GetStatus(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        checkChains(result->Record);
+    }
+
+    // Commit the transaction and check that the duplicate INSERT was not executed:
+    // key 1 keeps its original value and no insert conflict was reported.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.WriteCommit(tableId, shards.at(0)),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/table` WHERE key = 1 OR key = 3 OR key = 4 ORDER BY key;
+        )"),
+        "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+        "{ items { uint32_value: 3 } items { int32_value: 300 } }, "
+        "{ items { uint32_value: 4 } items { int32_value: 400 } }");
+}
+
 // A merge re-route mixes the chains of several removed shards in one EvWrite,
 // and the order of operations depends on the re-route's map iteration.
 // Duplicates must form a prefix of their own shard's operations, which holds

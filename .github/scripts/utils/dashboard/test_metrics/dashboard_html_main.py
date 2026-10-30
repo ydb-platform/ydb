@@ -63,6 +63,9 @@ def build_html_dashboard(
     out_data = out_html.with_name(out_html.stem + "_data.json")
     write_dashboard_data_json(out_data, payload)
     data_url_js = js_script_json(out_data.name)
+    suggestions_name = out_html.stem + "_suggestions.json"
+    suggestions_href = html_lib.escape(suggestions_name, quote=True)
+    suggestions_label = html_lib.escape(suggestions_name)
     suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
 
     html = f"""<!doctype html>
@@ -311,6 +314,7 @@ def build_html_dashboard(
       </ul>
     </div>
     <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
+    <p style="font-size:12px;color:#64748b;margin:4px 0 8px 0;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
     <details id="heavyTestsDetails" style="margin: 8px 0 12px 0;">
       <summary><b>Long/heavy tests near timeout</b></summary>
@@ -2346,6 +2350,8 @@ def build_html_dashboard(
     window.clearAllMarkers = clearAllMarkers;
     window.applyTimezoneToAllCharts = applyTimezoneToAllCharts;
     window.applyMarkersToCharts = applyMarkersToCharts;
+    window.toggleSuiteMarkers = toggleSuiteMarkers;
+    window.applyLayerToggles = applyLayerToggles;
     }})();
   </script>
 </body>

@@ -96,7 +96,8 @@ EVLOG_AUX_OUTPUT_RE = re.compile(
 )
 
 _COMPILE_PREFIXES = ("Preprocess", "Compile")
-_LINK_PREFIXES = ("CompileAndLink", "SharedLibrary", "Link", "Archive")
+_ARCHIVE_PREFIXES = ("Archive",)
+_LINK_PREFIXES = ("CompileAndLink", "SharedLibrary", "Link")
 _CACHE_PREFIXES = ("FromDistCache", "PutInDistCache", "PutInCache", "WriteThroughCaches")
 _LINK_OUTPUT_SUFFIXES = (".a", ".so", ".dylib")
 
@@ -107,6 +108,9 @@ def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
     for prefix in _CACHE_PREFIXES:
         if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
             return "cache"
+    for prefix in _ARCHIVE_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "archive"
     for prefix in _LINK_PREFIXES:
         if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
             return "link"
@@ -146,9 +150,16 @@ def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
     return "build"
 
 
-def parse_evlog_activity(evlog_path: Path) -> list[dict[str, Any]]:
+def parse_evlog_activity(
+    evlog_path: Optional[Path] = None,
+    *,
+    events: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
     """Return compile/link/test worker intervals from the complete ya make evlog."""
-    events = load_json_or_jsonl(evlog_path)
+    if events is None:
+        if evlog_path is None:
+            raise ValueError("parse_evlog_activity requires evlog_path or events")
+        events = load_json_or_jsonl(evlog_path)
     activity: list[dict[str, Any]] = []
     stacks: dict[tuple[int, int], list[tuple[float, str]]] = defaultdict(list)
     for ev in events:
@@ -184,9 +195,10 @@ def parse_evlog_activity(evlog_path: Path) -> list[dict[str, Any]]:
         ts = float(ev.get("ts", 0.0) or 0.0)
         if ph == "B":
             args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
+            # Chrome-trace worker type lives in event name (CC/LD/AR/TM), not args.tag.
             kind = _evlog_activity_kind(
                 str(args.get("name") or ""),
-                str(args.get("tag") or ev.get("tag") or ""),
+                str(args.get("tag") or ev.get("tag") or ev.get("name") or ""),
             )
             stacks[key].append((ts, kind or ""))
             continue
@@ -870,9 +882,17 @@ def build_test_event_times_direct(
     }
 
 
-def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict[str, Any]]:
+def parse_evlog_runs(
+    evlog_path: Optional[Path],
+    suite_filter: Optional[str],
+    *,
+    events: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
     suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
-    events = load_json_or_jsonl(evlog_path)
+    if events is None:
+        if evlog_path is None:
+            raise ValueError("parse_evlog_runs requires evlog_path or events")
+        events = load_json_or_jsonl(evlog_path)
     stacks: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     runs: list[dict[str, Any]] = []
     run_by_uid: dict[str, dict[str, Any]] = {}
@@ -1153,6 +1173,10 @@ def _build_resources_overlay(
     disk_write_mb: list[float] = []
     for r in records:
         ts = float(r.get("ts", 0) or 0)
+        # Missing/zero timestamps produce a nonsense negative timeline that
+        # force-expands every chart x-range; skip them.
+        if ts <= 0:
+            continue
         evlog_sec = ref_start_ev + (ts - ref_report_ts)
         xs_evlog.append(evlog_sec)
         cpu_total_cores.append(float(r.get("cpu_total_pct", 0) or 0) / 100.0 * cpu_cores)
@@ -1518,8 +1542,9 @@ def main() -> None:
         for rr in report_runs
         if not _is_dependency_sole_chunk_run(rr, suites_with_indexed)
     ]
-    evlog_runs = parse_evlog_runs(args.evlog, args.suite_path)
-    evlog_activity = parse_evlog_activity(args.evlog)
+    evlog_events = load_json_or_jsonl(args.evlog)
+    evlog_runs = parse_evlog_runs(args.evlog, args.suite_path, events=evlog_events)
+    evlog_activity = parse_evlog_activity(args.evlog, events=evlog_events)
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
@@ -1544,15 +1569,20 @@ def main() -> None:
             )
         runs.append(out)
     activity_offset_us = float(median(activity_offsets_us)) if activity_offsets_us else 0.0
-    if activity_offset_us:
-        evlog_activity = [
-            {
-                **row,
-                "start_us": float(row.get("start_us", 0) or 0) + activity_offset_us,
-                "end_us": float(row.get("end_us", 0) or 0) + activity_offset_us,
-            }
-            for row in evlog_activity
-        ]
+    if activity_offsets_us:
+        if activity_offset_us:
+            evlog_activity = [
+                {
+                    **row,
+                    "start_us": float(row.get("start_us", 0) or 0) + activity_offset_us,
+                    "end_us": float(row.get("end_us", 0) or 0) + activity_offset_us,
+                }
+                for row in evlog_activity
+            ]
+    else:
+        # Without matched report↔evlog runs we cannot align ya-make clock to
+        # report epoch; keep only report-backed spans to avoid a mixed axis.
+        evlog_activity = []
     # Keep raw TM worker spans and add report-backed chunk spans as a separate
     # series so the dashboard can compare scheduler occupancy with suite times.
     evlog_activity = [

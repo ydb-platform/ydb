@@ -110,6 +110,11 @@ def test_evlog_activity_covers_compile_link_and_test_jobs():
         {
             "namespace": "worker_threads",
             "event": "node-finished",
+            "value": {"name": "Archive(lib.a)", "time": [12, 18]},
+        },
+        {
+            "namespace": "worker_threads",
+            "event": "node-finished",
             "value": {"name": "Link(lib.a)", "time": [15, 30]},
         },
         {
@@ -150,11 +155,41 @@ def test_evlog_activity_covers_compile_link_and_test_jobs():
     kinds = [row["kind"] for row in activity]
     assert kinds.count("cache") == 1
     assert kinds.count("build") == 1
-    assert kinds.count("archive") == 1
+    assert kinds.count("archive") == 2
     assert kinds.count("link") == 2
     assert kinds.count("test_tm") == 1
     assert activity[0]["start_us"] == 5_000_000.0
     assert activity[-1]["end_us"] == 40_000_000.0
+
+
+def test_evlog_activity_chrome_trace_uses_event_name_as_tag():
+    events = [
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 1,
+            "ts": 100.0,
+            "name": "TM",
+            "args": {
+                "name": "Run(rnd$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/testing_out_stuff/chunk1/run)"
+            },
+        },
+        {"ph": "E", "pid": 1, "tid": 1, "ts": 250.0},
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 2,
+            "ts": 110.0,
+            "name": "AR",
+            "args": {"name": "Run(hash$(BUILD_ROOT)/lib/x.a)"},
+        },
+        {"ph": "E", "pid": 1, "tid": 2, "ts": 200.0},
+    ]
+    activity = parse_evlog_activity(events=events)
+    kinds = [row["kind"] for row in activity]
+    assert kinds == ["test_tm", "archive"]
+    assert activity[0]["start_us"] == 100.0
+    assert activity[0]["end_us"] == 250.0
 
 
 def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
@@ -166,6 +201,7 @@ def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
         }
     ]
     records = [
+        {"ts": 0.0, "cpu_total_pct": 99, "cpu_cores": 8, "ram_used_kb": 999},
         {"ts": 900.0, "cpu_total_pct": 10, "cpu_cores": 8, "ram_used_kb": 1024},
         {"ts": 1100.0, "cpu_total_pct": 20, "cpu_cores": 8, "ram_used_kb": 2048},
     ]
@@ -195,6 +231,7 @@ def load_tests(loader, tests, pattern):
         test_report_chunk_key_and_evlog_run_match,
         test_suite_rows_are_not_tests_and_later_chunk_finish_wins,
         test_evlog_activity_covers_compile_link_and_test_jobs,
+        test_evlog_activity_chrome_trace_uses_event_name_as_tag,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
         test_active_series_downsampling_preserves_short_peak,
     ):
@@ -205,4 +242,8 @@ def load_tests(loader, tests, pattern):
 if __name__ == "__main__":
     test_report_chunk_key_and_evlog_run_match()
     test_suite_rows_are_not_tests_and_later_chunk_finish_wins()
+    test_evlog_activity_covers_compile_link_and_test_jobs()
+    test_evlog_activity_chrome_trace_uses_event_name_as_tag()
+    test_resources_overlay_keeps_samples_before_and_after_test_chunks()
+    test_active_series_downsampling_preserves_short_peak()
     print("OK")

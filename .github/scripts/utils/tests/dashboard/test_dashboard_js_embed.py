@@ -76,6 +76,20 @@ class JsScriptJsonTest(unittest.TestCase):
                         bad.append((name, part.lineno, snippet))
             self.assertEqual(bad, [], msg=f"backslash in f-string expression: {bad}")
 
+    def test_dashboard_html_exports_inline_handler_globals(self):
+        source = (_DIR / "dashboard_html_main.py").read_text(encoding="utf-8")
+        required = (
+            "window.toggleSuiteMarkers",
+            "window.showTab",
+            "window.clearSuiteSearch",
+            "window.clearAllMarkers",
+            "window.applyTimezoneToAllCharts",
+            "window.applyMarkersToCharts",
+            "window.applyLayerToggles",
+        )
+        missing = [name for name in required if name not in source]
+        self.assertEqual(missing, [], msg=f"missing window exports: {missing}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -226,7 +226,7 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
     bool ready = true;
     for (const auto& part : subset.Flatten) {
         LOG_BUILD_STATS("adding part " << part->Label.ToString() << " data size (" << HumanReadableSize(part->DataSize(), SF_BYTES) << " in total)");
-        stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        AddIndexSize(stats.IndexSize, *part);
         for (const auto& [_, bloom] : part->ByKeyPrefixes) {
             if (bloom) stats.ByKeyFilterSize += bloom->Raw.size();
         }

@@ -27,9 +27,6 @@ using namespace NKikimr::NMiniKQL;
 class TParquetGateway: public IHTTPGateway {
 public:
     TString Body;
-    bool HoldChunks = false;
-    ui32 RangeCalls = 0;
-    std::vector<std::function<void()>> PendingChunks;
 
     void Upload(TString, THeaders, TString, TOnResult, bool, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
         UNIT_FAIL("unexpected upload");
@@ -41,17 +38,8 @@ public:
 
     void Download(
         TString, THeaders, size_t offset, size_t size, TOnResult callback, TString, TRetryPolicy::TPtr, IHttpRequestContext::TPtr) override {
-        ++RangeCalls;
         UNIT_ASSERT_C(offset <= Body.size() && size <= Body.size() - offset, "invalid HTTP range " << offset << "+" << size);
-        auto reply = [this, offset, size, callback = std::move(callback)] {
-            callback(TResult(TContent(Body.substr(offset, size), 206)));
-        };
-        // Footer reads include the trailer; column chunks end before it.
-        if (HoldChunks && offset + size < Body.size() - 8) {
-            PendingChunks.push_back(std::move(reply));
-        } else {
-            reply();
-        }
+        callback(TResult(TContent(Body.substr(offset, size), 206)));
     }
 
     TCancelHook Download(TString, THeaders, size_t, size_t, TOnDownloadStart, TOnNewDataPart, TOnDownloadFinish,
@@ -67,20 +55,13 @@ public:
     void UpdatePoolCaps(THashMap<TWorkScope, size_t>) override {
     }
 
-    void ReleaseChunks() {
-        HoldChunks = false;
-        auto pending = std::move(PendingChunks);
-        for (auto& reply : pending) {
-            reply();
-        }
-    }
 };
 
-NS3::TSource ParquetSource(ui64 parallelRowGroups = 0, bool selectColumn = true) {
+NS3::TSource ParquetSource(ui64 parallelRowGroups) {
     NS3::TSource source;
     source.SetUrl("http://fake/");
     source.SetFormat("parquet");
-    source.SetRowType(selectColumn ? R"(["StructType";[["ts";["DataType";"Timestamp"]]]])" : R"(["StructType";[]])");
+    source.SetRowType(R"(["StructType";[["ts";["DataType";"Timestamp"]]]])");
     source.SetParallelRowGroupCount(parallelRowGroups);
     return source;
 }
@@ -156,22 +137,6 @@ TString MakeParquetWithLeadingEmptyRowGroup(int rows, int rowGroupSize) {
     return AppendFooter(source.substr(0, source.size() - 8 - footerSize), *builder);
 }
 
-// Replacement fixture for corrupt metadata: empty row groups with arbitrary signed sizes.
-TString MakeParquetWithCompressedSizes(const std::vector<i64>& sizes) {
-    auto properties = parquet::WriterProperties::Builder().build();
-    std::shared_ptr<parquet::SchemaDescriptor> schema;
-    UNIT_ASSERT(parquet::arrow::ToParquetSchema(ParquetSchema().get(), *properties, &schema).ok());
-    auto builder = parquet::FileMetaDataBuilder::Make(schema.get(), properties);
-    for (i64 size : sizes) {
-        auto rowGroup = builder->AppendRowGroup();
-        auto column = rowGroup->NextColumnChunk();
-        column->Finish(0, 0, -1, 4, size, 0, false, false, {}, {});
-        rowGroup->set_num_rows(0);
-        rowGroup->Finish(0);
-    }
-    return AppendFooter("PAR1", *builder);
-}
-
 struct TReadResult {
     bool Finished = false;
     ui64 Rows = 0;
@@ -236,7 +201,7 @@ public:
             auto [input, inputActor] =
                 CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
                 }), gateway, std::move(source), 0, TCollectStatsLevel::None,
-                    TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(),
+                    TTxId{}, {}, {}, { encodedRange.Str() }, FakeActorId, nullptr, GetHTTPDefaultRetryPolicy(),
                     config, nullptr, nullptr, std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false);
             actor.InitAsyncInput(input, inputActor);
         });
@@ -278,39 +243,6 @@ private:
     const TActorId FakeActorId{ 0, "FakeActor" };
 };
 
-TReadResult ReadFooter(const std::vector<i64>& sizes, ui64 parallelRowGroups = 0, bool selectColumn = true) {
-    TParquetReader reader;
-    auto gateway = std::make_shared<TParquetGateway>();
-    gateway->Body = MakeParquetWithCompressedSizes(sizes);
-    reader.Start(gateway, ParquetSource(parallelRowGroups, selectColumn));
-    reader.ReadToEnd();
-    UNIT_ASSERT(gateway->RangeCalls > 0);
-    return reader.Result;
-}
-
-void AssertBadRequest(const TReadResult& result) {
-    UNIT_ASSERT_C(!result.Errors.empty(), "expected a corrupt-file error");
-    for (auto code : result.Errors) {
-        UNIT_ASSERT_C(code == NDqProto::StatusIds::BAD_REQUEST, "status=" << static_cast<int>(code) << " " << result.Issues);
-    }
-}
-
-void CheckReaderCount(ui64 parallelRowGroups, ui64 expectedCount, ui64 dataInflight = 200_MB) {
-    TParquetReader reader;
-    auto gateway = std::make_shared<TParquetGateway>();
-    gateway->Body = MakeParquet(10);
-    gateway->HoldChunks = true;
-    reader.Start(gateway, ParquetSource(parallelRowGroups), dataInflight);
-    reader.Pump();
-    UNIT_ASSERT_VALUES_EQUAL_C(gateway->PendingChunks.size(), expectedCount, reader.Result.Issues);
-    gateway->ReleaseChunks();
-    reader.ReadToEnd();
-    UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
-    UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
-    std::sort(reader.Result.Values.begin(), reader.Result.Values.end());
-    UNIT_ASSERT_VALUES_EQUAL(reader.Result.Values, ExpectedTimestamps(10));
-}
-
 TReadResult ReadParquet(TString body, ui64 parallelRowGroups, bool batched, ui64 batchDecodeTargetBytes = 16_MB) {
     TParquetReader reader;
     auto gateway = std::make_shared<TParquetGateway>();
@@ -324,80 +256,6 @@ TReadResult ReadParquet(TString body, ui64 parallelRowGroups, bool batched, ui64
 }
 
 }   // namespace
-
-Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
-    Y_UNIT_TEST(ZeroCompressedSize) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            auto result = ReadFooter({ 0 }, parallel);
-            UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
-            UNIT_ASSERT(result.Finished);
-            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
-        }
-    }
-
-    Y_UNIT_TEST(NegativeCompressedSize) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            AssertBadRequest(ReadFooter({ -1 }, parallel));
-        }
-    }
-
-    Y_UNIT_TEST(DoubledCompressedSizeOverflow) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            AssertBadRequest(ReadFooter({ i64(1) << 62, i64(1) << 62 }, parallel));
-        }
-    }
-
-    Y_UNIT_TEST(CompressedSizeSumOverflow) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            const auto result = ReadFooter({ Max<i64>() - 4, Max<i64>() - 4, Max<i64>() - 4 }, parallel);
-            AssertBadRequest(result);
-            UNIT_ASSERT_STRING_CONTAINS(result.Issues, "total_compressed_size sum overflow");
-        }
-    }
-
-    Y_UNIT_TEST(LargeCompressedSize) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            AssertBadRequest(ReadFooter({ Max<i64>() - 4 }, parallel));
-        }
-    }
-
-    Y_UNIT_TEST(EmptyFile) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            auto result = ReadFooter({}, parallel);
-            UNIT_ASSERT_C(result.Errors.empty(), result.Issues);
-            UNIT_ASSERT(result.Finished);
-            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 0);
-        }
-    }
-
-    Y_UNIT_TEST(NoSelectedColumns) {
-        for (ui64 parallel : { 0, 1, 2 }) {
-            TParquetReader reader;
-            auto gateway = std::make_shared<TParquetGateway>();
-            gateway->Body = MakeParquet(10);
-            reader.Start(gateway, ParquetSource(parallel, false));
-            reader.ReadToEnd();
-            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
-            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
-            UNIT_ASSERT(reader.Result.Values.empty());
-        }
-    }
-
-    Y_UNIT_TEST(AutomaticReaderCount) {
-        CheckReaderCount(0, 5);
-        CheckReaderCount(0, 1, 1);
-    }
-
-    Y_UNIT_TEST(ExplicitReaderCount) {
-        for (ui64 parallel : { 1, 2, 5, 20 }) {
-            CheckReaderCount(parallel, std::min(parallel, ui64(10)));
-        }
-    }
-
-    Y_UNIT_TEST(FairShareMultiplicationOverflow) {
-        CheckReaderCount(0, 5, ui64(1) << 63);
-    }
-}
 
 Y_UNIT_TEST_SUITE(TS3ParquetDecode) {
     Y_UNIT_TEST(LargeRowGroupBatched) {

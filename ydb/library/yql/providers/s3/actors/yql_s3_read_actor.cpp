@@ -960,47 +960,17 @@ public:
                 RowGroupReaderIndex.erase(readyGroupIndex);
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-<<<<<<< HEAD
-                // TODO:
-                // Current unit takes <=100ms typically, which is fine; only large groups can overrun.
-                // Consider to split DecodeRowGroups for large row groups (arrow async / column streaming).
-                {
-                    StartUnit();
-                    Y_DEFER { StopUnit(); };
-                    ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
-                }
-=======
                 const int rowGroup = hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex);
                 const auto result = ReadActorFactoryCfg.BatchedRowGroupDecode
                                         ? DecodeRowGroupBatched(*readers[readyReaderIndex], rowGroup, decodeContext)
                                         : DecodeRowGroupWhole(*readers[readyReaderIndex], rowGroup, decodeContext);
->>>>>>> 05eae7a6218 (S3: decode parquet row groups in batches (#57263))
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
                 ReadInflightSize.erase(readyGroupIndex);
 
                 bool isCancelled = false;
-<<<<<<< HEAD
-                ui64 numRows = 0;
-                while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                    StartUnit();
-                    Y_DEFER { StopUnit(); };
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
-                    auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
-                    decodedBytes += size;
-                    if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
-                        SetDownstreamPause(true);
-                    }
-                    Send(ParentActorId, new TEvS3Provider::TEvNextRecordBatch(
-                        convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
-                    ));
-                    numRows += convertedBatch->num_rows();
-                }
-                if (StopIfConsumedEnough(numRows)) {
-=======
                 if (StopIfConsumedEnough(result.NumRows)) {
->>>>>>> 05eae7a6218 (S3: decode parquet row groups in batches (#57263))
                     isCancelled = true;
                 }
                 SourceContext->UpdateProgress(downloadedBytes, result.DecodedBytes, result.NumRows);

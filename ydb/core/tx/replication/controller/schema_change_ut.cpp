@@ -2279,6 +2279,8 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         BeforeDrop,
         DuringDrop,
         LegacyAdmission,
+        Escalation,
+        EscalationReplay,
     };
 
     void CheckForceDropAfterDone(EForceDropDestination destinationMode,
@@ -2286,8 +2288,9 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 EForceDropRecovery::None, EForceDropRecovery::BeforeDrop, EForceDropRecovery::DuringDrop})
     {
         for (const auto recovery : recoveries) {
-            const bool legacyAdmission = recovery == EForceDropRecovery::LegacyAdmission;
-            const bool replay = legacyAdmission || recovery == EForceDropRecovery::DuringDrop;
+            const bool escalation = recovery == EForceDropRecovery::Escalation || recovery == EForceDropRecovery::EscalationReplay;
+            const bool legacyAdmission = recovery == EForceDropRecovery::LegacyAdmission || escalation;
+            const bool replay = recovery == EForceDropRecovery::LegacyAdmission || recovery == EForceDropRecovery::DuringDrop || recovery == EForceDropRecovery::EscalationReplay;
             TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
             auto& runtime = env.GetRuntime();
             const auto info = StartReplication(env);
@@ -2357,7 +2360,13 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
             auto completionObserver = runtime.AddObserver<TEvController::TEvDropReplicationResult>([&](auto& ev) {
                 controllerCompletion.Reset(ev.Release());
             });
-            bool holdRequest = replay;
+            NKikimrReplication::TEvDropReplication ordinaryRequest;
+            auto admissionObserver = runtime.AddObserver<TEvController::TEvDropReplication>([&](auto& ev) {
+                if (ev->Get()->Record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
+                    ordinaryRequest.CopyFrom(ev->Get()->Record);
+                }
+            });
+            bool holdRequest = replay || escalation;
             auto replayObserver = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
                 if (holdRequest && ev->GetTypeRewrite() == TEvController::TEvDropReplication::EventType
                     && ev->Get<TEvController::TEvDropReplication>()->Record.GetSourceCleanup()
@@ -2373,14 +2382,86 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
             });
             const auto query = TStringBuilder() << "DROP ASYNC REPLICATION `/Root/replication`"
                 << (destinationMode == EForceDropDestination::Cascade ? " CASCADE" : "") << " FORCE;";
+            auto ordinarySession = escalation ? CreateTableSession(env, client) : session;
+            auto duplicateSession = escalation ? CreateTableSession(env, client) : session;
+            auto mismatchSession = escalation ? CreateTableSession(env, client) : session;
+            auto repeatedSession = escalation ? CreateTableSession(env, client) : session;
+            decltype(session.ExecuteSchemeQuery(query)) ordinaryDrop;
+            decltype(session.ExecuteSchemeQuery(query)) repeatedForce;
+            if (escalation) {
+                const auto ordinaryQuery = TStringBuilder() << "DROP ASYNC REPLICATION `/Root/replication`"
+                                                            << (destinationMode == EForceDropDestination::Cascade ? " CASCADE" : "") << ";";
+                ordinaryDrop = ordinarySession.ExecuteSchemeQuery(ordinaryQuery,
+                                                                  NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)));
+                runtime.WaitFor("ordinary DROP blocked on source removal", [&] { return bool(streamRemover); }, TDuration::Seconds(30));
+                UNIT_ASSERT(!ordinaryDrop.HasValue());
+                UNIT_ASSERT(ordinaryRequest.HasOperationId());
+                const auto duplicate = env.RunCall([&] {
+                    return duplicateSession.ExecuteSchemeQuery(ordinaryQuery,
+                                                               NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)))
+                        .GetValueSync();
+                });
+                UNIT_ASSERT_C(!duplicate.IsSuccess() && duplicate.GetIssues().ToString().find("path is being deleted right now") != std::string::npos,
+                              duplicate.GetIssues().ToString());
+                const auto mismatch = env.RunCall([&] {
+                    return mismatchSession.ExecuteSchemeQuery(TStringBuilder() << "DROP ASYNC REPLICATION `/Root/replication`"
+                                                                               << (destinationMode == EForceDropDestination::Cascade ? "" : " CASCADE") << " FORCE;",
+                                                              NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)))
+                        .GetValueSync();
+                });
+                const auto mismatchIssues = mismatch.GetIssues().ToString();
+                UNIT_ASSERT_C(!mismatch.IsSuccess() && (mismatchIssues.find("path is being deleted right now") != std::string::npos || mismatchIssues.find("CASCADE") != std::string::npos || mismatchIssues.find("cascade") != std::string::npos), mismatchIssues);
+                UNIT_ASSERT(!ordinaryDrop.HasValue());
+                if (replay) {
+                    // A later failed part must undo both accepted escalations.
+                    // Otherwise the real FORCE below sees ABANDON in memory,
+                    // omits persistence, and reboots back to ordinary DROP.
+                    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+                    request->Record.SetTxId(900001);
+                    for (ui32 i = 0; i < 3; ++i) {
+                        auto* tx = request->Record.AddTransaction();
+                        tx->SetWorkingDir("/Root");
+                        const bool cascade = destinationMode == EForceDropDestination::Cascade;
+                        tx->SetOperationType((i < 2 ? cascade : !cascade)
+                                                 ? NKikimrSchemeOp::ESchemeOpDropReplicationCascade
+                                                 : NKikimrSchemeOp::ESchemeOpDropReplication);
+                        tx->MutableDrop()->SetName("replication");
+                        tx->MutableDrop()->SetReplicationSourceCleanup(NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON);
+                    }
+                    const auto rejected = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                        info.PathId.OwnerId, request.Release());
+                    UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(), NKikimrScheme::StatusPreconditionFailed);
+                    UNIT_ASSERT_C(rejected->Get()->Record.GetReason().Contains("CASCADE"), rejected->Get()->Record.GetReason());
+                    UNIT_ASSERT(!schemaRequest);
+                    UNIT_ASSERT(!ordinaryDrop.HasValue());
+                }
+            }
             auto drop = session.ExecuteSchemeQuery(query,
                 NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)));
+            if (escalation) {
+                runtime.WaitFor("public FORCE upgrades pending DROP", [&] {
+                    return bool(schemaRequest) || drop.HasValue();
+                }, TDuration::Seconds(30));
+                UNIT_ASSERT_C(schemaRequest, "public FORCE rejected before controller escalation: "
+                                                 << (drop.HasValue() ? drop.GetValueSync().GetIssues().ToString() : std::string("no reply")));
+                UNIT_ASSERT_VALUES_EQUAL(schemaRequest->Get<TEvController::TEvDropReplication>()->Record.GetOperationId().SerializeAsString(),
+                                         ordinaryRequest.GetOperationId().SerializeAsString());
+                UNIT_ASSERT(!drop.HasValue());
+                repeatedForce = repeatedSession.ExecuteSchemeQuery(query,
+                                                                   NYdb::NTable::TExecSchemeQuerySettings().ClientTimeout(TDuration::Seconds(15)));
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                UNIT_ASSERT(!repeatedForce.HasValue());
+                if (!replay) {
+                    holdRequest = false;
+                    runtime.Send(schemaRequest.Release());
+                }
+            }
             if (replay) {
                 runtime.WaitFor("DROP before controller admission", [&] { return bool(schemaRequest); }, TDuration::Seconds(30));
                 const auto oldSender = schemaRequest->Sender;
                 const auto original = schemaRequest->Get<TEvController::TEvDropReplication>()->Record;
                 const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
-                if (legacyAdmission) {
+                if (legacyAdmission && !escalation) {
                     // Model an old receiver's admission without changing the
                     // original FORCE request durably owned by SchemeShard.
                     auto legacy = MakeHolder<TEvController::TEvDropReplication>();
@@ -2415,6 +2496,9 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 RestartController(env, info.ControllerId);
             }
             runtime.WaitFor("DROP controller completion", [&] { return bool(controllerCompletion); }, TDuration::Seconds(30));
+            if (escalation) {
+                UNIT_ASSERT(streamRemoverStopped);
+            }
             UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
                 == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             NTestSuiteTargetDiscoveryResults::AssertPersistedCounts(env, info, 0);
@@ -2429,6 +2513,11 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
             RebootTablet(runtime, info.ControllerId, env.GetSender());
             UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
                 == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
+            if (escalation && !replay) {
+                UNIT_ASSERT(!ordinaryDrop.HasValue());
+                UNIT_ASSERT(!drop.HasValue());
+                UNIT_ASSERT(!repeatedForce.HasValue());
+            }
             completionObserver.Remove();
             runtime.Send(controllerCompletion.Release());
             const auto dropped = env.RunCall([&] { return drop.GetValueSync(); });
@@ -2436,6 +2525,13 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 && dropped.GetStatus() == NYdb::EStatus::UNAVAILABLE
                 && dropped.GetIssues().ToString().find("Connection to tablet was lost") != std::string::npos),
                 dropped.GetIssues().ToString());
+            if (escalation) {
+                for (auto* pending : {&ordinaryDrop, &repeatedForce}) {
+                    const auto result = env.RunCall([&] { return pending->GetValueSync(); });
+                    UNIT_ASSERT_C(result.IsSuccess() || (replay && result.GetStatus() == NYdb::EStatus::UNAVAILABLE && result.GetIssues().ToString().find("Connection to tablet was lost") != std::string::npos),
+                                  result.GetIssues().ToString());
+                }
+            }
             UNIT_ASSERT_C(WaitFor([&] {
                 runtime.SimulateSleep(TDuration::MilliSeconds(100));
                 return env.GetDescription("/Root/replication").GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist;
@@ -2466,6 +2562,16 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
 
     Y_UNIT_TEST(ForceDropCascadeAfterDoneWithoutSourceDeletesOwnedDestination) {
         CheckForceDropAfterDone(EForceDropDestination::Cascade);
+    }
+
+    Y_UNIT_TEST_TWIN(PublicForceEscalatesPendingDrop, Cascade) {
+        CheckForceDropAfterDone(Cascade ? EForceDropDestination::Cascade : EForceDropDestination::Retain,
+                                {EForceDropRecovery::Escalation});
+    }
+
+    Y_UNIT_TEST_TWIN(PublicForceEscalationReplayedAfterRestart, Cascade) {
+        CheckForceDropAfterDone(Cascade ? EForceDropDestination::Cascade : EForceDropDestination::Retain,
+                                {EForceDropRecovery::EscalationReplay});
     }
 
     Y_UNIT_TEST_TWIN(ForceDropReplayedAfterLegacyAdmission, Cascade) {

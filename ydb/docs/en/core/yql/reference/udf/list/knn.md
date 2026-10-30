@@ -55,8 +55,6 @@ Currently {{ ydb-short-name }} does not support storing `Tagged`, so before stor
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
 Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
 Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
-Knn::ToBinaryStringUint4(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint4Vector">
-Knn::ToBinaryStringInt4(List<Int8>{Flags:AutoMap})->Tagged<String, "Int4Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -65,8 +63,6 @@ Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
-
-`ToBinaryStringUint4` saturates coordinates to [0, 15]; `ToBinaryStringInt4` saturates to [-8, 7]. The signed format uses two’s complement. Two coordinates occupy one byte, with the first in the low nibble. A padding byte (0 for an even dimension, 1 for an odd dimension) precedes the format byte: 8 for `Uint4`, 9 for `Int4`. The unused high nibble must be zero. Empty vectors have two trailer bytes and no payload. Use `vector_type=uint4` or `vector_type=int4` for indexes with these formats.
 
 #### Convert format {#functions-convert-format}
 
@@ -79,8 +75,6 @@ Conversion functions for vector data convert an array of elements into a byte st
   - `3` — `Int8` (1 byte per element)
   - `4` — `Float16` (2 bytes per element, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format))
   - `5` — `BFloat16` (2 bytes per element, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format))
-  - `8` — `Uint4` (two coordinates per byte, range [0, 15])
-  - `9` — `Int4` (two coordinates per byte, range [-8, 7])
   - `10` — `Bit` (1 bit per element)
 
 For example, a vector of 5 elements of type `Float` will be serialized into a 21-byte string:
@@ -129,7 +123,7 @@ In case of mismatched lengths or formats, these functions return `NULL`.
 
 {% note info %}
 
-All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint4Vector">`, `Tagged<String, "Int4Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+All distance and similarity functions support overloads when first or second arguments are `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 If both arguments are `Tagged`, tag values should match, or the query will raise an error.
 

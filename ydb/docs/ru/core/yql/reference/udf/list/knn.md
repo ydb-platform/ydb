@@ -54,8 +54,6 @@
 Knn::ToBinaryStringFloat(List<Float>{Flags:AutoMap})->Tagged<String, "FloatVector">
 Knn::ToBinaryStringFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "Float16Vector">
 Knn::ToBinaryStringBFloat16(List<Float>{Flags:AutoMap})->Tagged<String, "BFloat16Vector">
-Knn::ToBinaryStringUint4(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint4Vector">
-Knn::ToBinaryStringInt4(List<Int8>{Flags:AutoMap})->Tagged<String, "Int4Vector">
 Knn::ToBinaryStringUint8(List<Uint8>{Flags:AutoMap})->Tagged<String, "Uint8Vector">
 Knn::ToBinaryStringInt8(List<Int8>{Flags:AutoMap})->Tagged<String, "Int8Vector">
 Knn::ToBinaryStringBit(List<Double>{Flags:AutoMap})->Tagged<String, "BitVector">
@@ -64,8 +62,6 @@ Knn::ToBinaryStringBit(List<Uint8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::ToBinaryStringBit(List<Int8>{Flags:AutoMap})->Tagged<String, "BitVector">
 Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
 ```
-
-`ToBinaryStringUint4` ограничивает координаты диапазоном [0, 15], а `ToBinaryStringInt4` — диапазоном [-8, 7]. Знаковые значения хранятся в дополнительном коде. В одном байте упакованы две координаты: первая занимает младшие четыре бита. Перед байтом формата (8 для `Uint4`, 9 для `Int4`) хранится байт заполнения: 0 для чётной размерности, 1 для нечётной. Неиспользуемые старшие четыре бита должны быть нулевыми. Пустой вектор состоит из двух служебных байтов. Для индексов с такими форматами укажите `vector_type=uint4` или `vector_type=int4`.
 
 #### Формат сериализации {#functions-convert-format}
 
@@ -78,8 +74,6 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
   - `3` — `Int8` (1 байт на элемент);
   - `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
   - `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
-  - `8` — `Uint4` (две координаты на байт, диапазон [0, 15]);
-  - `9` — `Int4` (две координаты на байт, диапазон [-8, 7]);
   - `10` — `Bit` (1 бит на элемент).
 
 Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.
@@ -127,7 +121,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 {% note info %}
 
-Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint4Vector">`, `Tagged<String, "Int4Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
+Все функции расстояния и сходства поддерживают перегрузки с аргументами одного из типов `Tagged<String, "FloatVector">`, `Tagged<String, "Float16Vector">`, `Tagged<String, "BFloat16Vector">`, `Tagged<String, "Uint8Vector">`, `Tagged<String, "Int8Vector">`, `Tagged<String, "BitVector">`.
 
 Если оба аргумента `Tagged`, то значение тега должно совпадать, иначе запрос завершится с ошибкой.
 

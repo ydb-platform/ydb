@@ -8,6 +8,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/stream.h>
 #include <util/generic/set.h>
 #include <util/stream/null.h>
 #include <util/string/join.h>
@@ -596,17 +597,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
         ENodeListStorageCache Cache = ENodeListStorageCache::None;
         bool MissingCachedPool = false;
         bool Redirect = false;
+        std::optional<ui32> DisconnectBscAfterResponses;
         std::optional<std::array<ui32, 3>> ExpectedStorageResponses;
     };
 
     void CheckNodeListStorage(const TNodeListStorageOptions& options) {
         TPortManager ports;
+        TStringStream viewerLog;
         auto settings = TServerSettings(ports.GetPort(2134))
                 .SetNodeCount(1)
                 .SetUseRealThreads(false)
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .InitKikimrRunConfig();
+        if (options.FailBscPipe || options.DisconnectBscAfterResponses) {
+            settings.SetLogBackend(new TStreamLogBackend(&viewerLog));
+        }
         auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
         security->AddAdministrationAllowedSIDs("viewer-user");
         security->AddMonitoringAllowedSIDs("viewer-user");
@@ -614,6 +620,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         security->AddDatabaseAllowedSIDs("database-user");
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::VIEWER, NLog::PRI_ERROR);
 
         const TPathId databaseKey(options.RootDatabase
             ? TPathId(runtime.GetAppData().DomainsInfo->GetDomain()->SchemeRoot, 1)
@@ -624,6 +631,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         std::array<ui32, 3> storageResponses = {};
         bool resolvedSharedDatabase = false;
         bool bscPipeFailureInjected = false;
+        TActorId bscClientId;
+        TActorId bscServerId;
         auto makePools = [](bool missingPool) {
             auto response = std::make_shared<NSysView::TEvSysView::TEvGetStoragePoolsResponse>();
             for (auto [boxId, poolId] : {std::pair<ui64, ui64>{1, 7}, {1, 8}, {2, 7}}) {
@@ -684,18 +693,34 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (!isNodeListActor(event->GetRecipientRewrite())) {
                 return;
             }
+            const bool storageResponse =
+                event->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse ||
+                event->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse ||
+                event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse;
             // A failed connection cannot deliver controller data, including responses already in flight.
-            if (options.FailBscPipe && (
-                    event->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse ||
-                    event->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse ||
-                    event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse)) {
+            if (storageResponse && (options.FailBscPipe || bscPipeFailureInjected)) {
                 event.Reset();
                 return;
+            }
+            if (storageResponse && options.DisconnectBscAfterResponses
+                    && storageResponses[0] + storageResponses[1] + storageResponses[2] == *options.DisconnectBscAfterResponses) {
+                UNIT_ASSERT(bscClientId);
+                bscPipeFailureInjected = true;
+                auto response = MakeHolder<TEvTabletPipe::TEvClientDestroyed>(
+                    MakeBSControllerID(), bscClientId, bscServerId);
+                IEventHandle::TPtr replacement(new IEventHandle(event->Recipient, bscClientId,
+                    response.Release(), event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+                event.Swap(replacement);
             }
             switch (event->GetTypeRewrite()) {
                 case TEvTabletPipe::EvClientConnected: {
                     const auto* previous = event->Get<TEvTabletPipe::TEvClientConnected>();
-                    if (options.FailBscPipe && previous->TabletId == MakeBSControllerID()) {
+                    if (previous->TabletId != MakeBSControllerID()) {
+                        break;
+                    }
+                    bscClientId = previous->ClientId;
+                    bscServerId = previous->ServerId;
+                    if (options.FailBscPipe) {
                         bscPipeFailureInjected = true;
                         auto response = MakeHolder<TEvTabletPipe::TEvClientConnected>(
                             previous->TabletId, NKikimrProto::ERROR, previous->ClientId,
@@ -845,10 +870,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
             return;
         }
-        if (options.FailBscPipe) {
+        if (options.FailBscPipe || options.DisconnectBscAfterResponses) {
             UNIT_ASSERT(bscPipeFailureInjected);
             UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 500"), response->Answer);
             UNIT_ASSERT_C(response->Answer.Contains("Failed to resolve database storage nodes"), response->Answer);
+            // Flush preceding log events before checking that no completed requests were failed twice.
+            const TString marker = "nodelist-pipe-log-drained";
+            runtime.Send(new IEventHandle(runtime.GetLogSettings(0)->LoggerActorId, sender,
+                new NLog::TEvLog(NLog::PRI_ERROR, NKikimrServices::VIEWER, marker)));
+            TDispatchOptions logOptions;
+            logOptions.CustomFinalCondition = [&] { return viewerLog.Str().Contains(marker); };
+            logOptions.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime.DispatchEvents(logOptions, TDuration::Seconds(1));
+            UNIT_ASSERT_C(viewerLog.Str().Contains(marker), viewerLog.Str());
+            UNIT_ASSERT_C(!viewerLog.Str().Contains("Request count mismatch"), viewerLog.Str());
             return;
         }
         std::array<ui32, 3> expectedResponses = {};
@@ -1011,6 +1046,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodeListStoragePipeConnectionFailure) {
         CheckNodeListStorage({.IncludeStorage = true, .FailBscPipe = true});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePipeFailureAfterPartialResponse) {
+        CheckNodeListStorage({.IncludeStorage = true, .DisconnectBscAfterResponses = 1});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePipeFailureDuringRefresh) {
+        // The first round reads Groups and VSlots; fail before or after one response in the refresh round.
+        for (ui32 responses : {2, 3}) {
+            CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+                .Cache = ENodeListStorageCache::PoolsOnly, .MissingCachedPool = true,
+                .DisconnectBscAfterResponses = responses});
+        }
     }
 
     Y_UNIT_TEST(NodeListStorageRequiresViewerAccess) {

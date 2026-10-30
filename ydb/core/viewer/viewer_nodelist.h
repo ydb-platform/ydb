@@ -26,6 +26,16 @@ class TJsonNodeList : public TViewerPipeClient {
         Error,
     };
 
+    template<typename TResponse>
+    void HandleStorageResponse(typename TResponse::TPtr& ev, TRequestResponse<TResponse>& response) {
+        auto pipe = PipeInfo.find(GetBSControllerId());
+        // Ignore late responses from a pipe whose pending requests have already failed.
+        if (pipe != PipeInfo.end() && response.Set(std::move(ev))) {
+            --pipe->second.Requests;
+            RequestDone();
+        }
+    }
+
     void RequestStorageData() {
         if (!StoragePoolNames.empty()) {
             StoragePools = MakeCachedRequestBSControllerPools();
@@ -151,21 +161,15 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
-        if (StoragePools.Set(std::move(ev))) {
-            RequestDone();
-        }
+        HandleStorageResponse(ev, StoragePools);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
-        if (Groups.Set(std::move(ev))) {
-            RequestDone();
-        }
+        HandleStorageResponse(ev, Groups);
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        if (VSlots.Set(std::move(ev))) {
-            RequestDone();
-        }
+        HandleStorageResponse(ev, VSlots);
     }
 
     void ReplyAndPassAway() override {

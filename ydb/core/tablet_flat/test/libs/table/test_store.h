@@ -472,6 +472,10 @@ namespace NTest {
             return nullptr;
         }
 
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
+        }
+
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
             return Store->GetPageLocation(Room, pageId);
         }

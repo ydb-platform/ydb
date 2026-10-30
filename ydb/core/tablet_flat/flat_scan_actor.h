@@ -165,10 +165,10 @@ namespace NOps {
                 ui64 slot = ev->Cookie;
                 Y_ENSURE(slot < Components.size());
                 Y_ENSURE(slot < PageCollectionLoaders.size());
-                Y_ENSURE(!Components[slot].RawMeta);
+                Y_ENSURE(!Components[slot].SharedMeta);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    Components[slot].RawMeta = loader.ExtractSharedData();
+                    Components[slot].SetMeta(loader.ExtractSharedData());
                     Y_ENSURE(ComponentsLeft > 0);
                     if (0 == --ComponentsLeft) {
                         PageCollectionLoaders.clear();
@@ -194,7 +194,7 @@ namespace NOps {
 
             void RunLoader() {
                 if (auto fetch = Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages)));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages), 0, fetch.MetaOnly));
                     ++ReadsLeft;
                 }
 
@@ -223,7 +223,7 @@ namespace NOps {
 
                 Y_ENSURE(Loader);
                 Y_ENSURE(msg->Cookie == 0);
-                Loader->Save(std::move(msg->Pages));
+                Loader->Save(std::move(msg->Pages), std::move(msg->SharedMeta));
 
                 if (ReadsLeft == 0) {
                     RunLoader();

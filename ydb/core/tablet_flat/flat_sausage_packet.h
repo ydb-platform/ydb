@@ -11,15 +11,23 @@ namespace NKikimr {
 namespace NPageCollection {
 
     class TPageCollection: public IPageCollection {
+        const TAtomicSharedPtr<const TMeta> MetaOwner;
+
     public:
         TPageCollection() = delete;
 
         TPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
-            : LargeGlobId(largeGlobId)
-            , Meta(std::move(raw), LargeGlobId.Group)
+            : TPageCollection(largeGlobId, MakeAtomicShared<TMeta>(std::move(raw), largeGlobId.Group))
+        {}
+
+        TPageCollection(TLargeGlobId largeGlobId, TAtomicSharedPtr<const TMeta> sharedMeta)
+            : MetaOwner(std::move(sharedMeta))
+            , LargeGlobId(largeGlobId)
+            , Meta(*MetaOwner)
             , SkippedInMeta(Meta.SkippedPages())
         {
-            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) {
+            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup ||
+                Meta.Group != LargeGlobId.Group) {
                 Y_TABLET_ERROR("Invalid TLargeGlobId of page collection meta blob");
             }
         }
@@ -85,11 +93,15 @@ namespace NPageCollection {
         }
 
         i64 GetMetadataMemoryUsage() const noexcept override {
-            return sizeof(TPageCollection) - sizeof(TMeta) + Meta.GetMemoryUsage();
+            return sizeof(TPageCollection) + Meta.GetMemoryUsage();
         }
 
         const TSharedData* GetMetadataBuffer() const noexcept override {
             return &Meta.Raw;
+        }
+
+        TAtomicSharedPtr<const TMeta> GetSharedMeta() const noexcept override {
+            return MetaOwner;
         }
 
         bool SkipBTreeIndexV1Shadow() const noexcept override
@@ -114,7 +126,7 @@ namespace NPageCollection {
         }
 
         const TLargeGlobId LargeGlobId;
-        const TMeta Meta;
+        const TMeta& Meta;
         const ui32 SkippedInMeta;
         // Set before the collection is handed to the shared cache; read afterwards by cache actors
         mutable std::atomic<bool> SkipBTreeIndexV1Shadow_ = false;
@@ -125,6 +137,10 @@ namespace NPageCollection {
     public:
         TOuterPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
             : TPageCollection(std::move(largeGlobId), std::move(raw))
+        {}
+
+        TOuterPageCollection(TLargeGlobId largeGlobId, TAtomicSharedPtr<const TMeta> sharedMeta)
+            : TPageCollection(std::move(largeGlobId), std::move(sharedMeta))
         {}
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override

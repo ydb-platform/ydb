@@ -6,14 +6,11 @@ This table will be used by SQL queries to join muted test data with GitHub issue
 
 area_override logic
 -------------------
-Each muted-test issue is created with an ``Owner:`` line from TESTOWNERS at mute time
-(that line can go stale). A human can add an ``area/...`` label (e.g. ``area/blobstorage``).
-If the team behind that area (via ``area_to_owner_mapping``) **differs** from the test's
-**current** TESTOWNERS owner (``test_results/analytics/testowners``), we store the **area
-path string** in ``area_override``. When TESTOWNERS has no row yet, we fall back to the
-``Owner:`` line in the issue body. ``tests_monitor.py`` reads this table (plus
-``area_to_owner_mapping``) and fills ``effective_area`` / ``effective_owner_team`` on each
-row; downstream marts use those columns.
+A human can add an ``area/...`` label on a mute issue. If that area's team (via
+``area_to_owner_mapping``) differs from the test's current TESTOWNERS owner (first
+``;;`` token; fallback: ``Owner:`` in the issue body), we store the area path in
+``area_override``. ``tests_monitor.py`` uses it for ``effective_area`` /
+``effective_owner_team``.
 
 Edge cases:
   * No ``area`` in issue ``info`` → area_override = NULL
@@ -21,14 +18,9 @@ Edge cases:
   * Closed **COMPLETED** with ``manual-fast-unmute`` label → override can apply (fast-track window)
   * Closed **COMPLETED** without that label: override cleared **only** when **project Status** is
     ``Unmuted`` (do not infer from closer — avoids clearing during the gap before fast-unmute label).
-  * Area resolves to the same team as the current TESTOWNERS owner (or body ``Owner:`` fallback)
-    → area_override = NULL
-  * Multi-owner TESTOWNERS (``a;;b``): baseline is the **first** team token — same as
-    ``tests_monitor.compute_owner``
+  * Area resolves to the same team as the TESTOWNERS / body baseline → area_override = NULL
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
-  * Issue-level fields (``area/...``, body ``Owner:``, closed-state gates) are parsed **once
-    per issue**; only the TESTOWNERS baseline differs per test
 
 ``github_issue_state_reason`` / ``info`` (Json): GitHub close reason and a snapshot (assignees,
 labels, project fields, …). For existing deployments run ``ALTER TABLE``; ``CREATE TABLE`` below
@@ -314,10 +306,7 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
 
 
 def _first_owner_team_slug(owners) -> str:
-    """Lowercase team slug from TESTOWNERS ``owners``, first ``;;`` token (tests_monitor rule).
-
-    Mirrors ``tests_monitor.compute_owner`` then strips ``TEAM:@ydb-platform/``.
-    """
+    """First ``;;`` TESTOWNERS token as lowercase team slug (same as tests_monitor.compute_owner)."""
     if not owners:
         return ""
     raw = str(owners)
@@ -336,11 +325,7 @@ def prepare_issue_area_override(
     labels_raw=None,
     project_status=None,
 ):
-    """Parse issue-level area_override inputs once.
-
-    Returns ``None`` if this issue cannot carry an override (closed gates / no area / unmapped).
-    Otherwise ``{area_label, resolved_team, body_owner}`` for per-test baseline comparison.
-    """
+    """Issue-level area context, or None if override cannot apply."""
     st = (issue_state or "").strip().upper()
     sr = (state_reason or "").strip().upper()
     labels_lo = issue_label_names_lower(labels_raw)
@@ -375,7 +360,7 @@ def prepare_issue_area_override(
 
 
 def area_override_for_baseline(issue_area_ctx, baseline_owner_team=None):
-    """Apply per-test baseline to a prepared issue area context → area path or ``None``."""
+    """area path if baseline team differs from issue area team, else None."""
     if not issue_area_ctx:
         return None
     baseline = _first_owner_team_slug(baseline_owner_team)
@@ -396,24 +381,7 @@ def resolve_area_override(
     project_status=None,
     baseline_owner_team=None,
 ):
-    """If GitHub ``area/...`` implies a different team than the baseline owner, return that area path.
-
-    Baseline owner is the test's **current** TESTOWNERS first-team slug when known; otherwise the
-    ``Owner:`` line from the issue body (may be stale after TESTOWNERS reassignment).
-
-    Prefer :func:`prepare_issue_area_override` + :func:`area_override_for_baseline` when resolving
-    many tests for one issue (parse issue once).
-
-    **Closed issues**
-
-    * ``NOT_PLANNED`` / ``DUPLICATE``: no override.
-    * ``COMPLETED`` (or empty ``state_reason`` on **CLOSED**) + label ``manual-fast-unmute``: override stays (fast-track active).
-    * ``COMPLETED`` (or empty ``state_reason``) without that label: override cleared **only** when **project Status** is ``Unmuted``.
-
-    Open issues: unchanged area logic.
-
-    Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
-    """
+    """Return area path when ``area/...`` team differs from TESTOWNERS / body Owner baseline."""
     ctx = prepare_issue_area_override(
         body,
         info_raw,
@@ -557,7 +525,6 @@ def main():
             testowners_by_name = get_testowners_by_full_name(ydb_wrapper)
 
             url_to_updated_at = {}
-            # Issue-level area context once per URL (label/body/closed gates are shared by all tests).
             url_to_area_ctx = {}
             for issue in issues_data:
                 url = issue.get('url', '')
@@ -579,12 +546,8 @@ def main():
             print(f"Created mapping for {len(test_to_issue)} unique test names")
 
             matched = sum(1 for t in test_to_issue if t in testowners_by_name)
-            print(
-                f"TESTOWNERS baseline match: {matched}/{len(test_to_issue)} "
-                f"tests (misses fall back to issue Owner:)"
-            )
+            print(f"TESTOWNERS baseline match: {matched}/{len(test_to_issue)}")
 
-            # Per-test: only baseline differs; reuse prepared issue area context.
             override_count = 0
             for test_name, issue_list in test_to_issue.items():
                 baseline = testowners_by_name.get(test_name)

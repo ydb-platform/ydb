@@ -88,6 +88,10 @@ public:
         Channel->Finish();
     }
 
+    ui64 Drop() override {
+        return Channel->Drop();
+    }
+
 private:
     void UpdateOutputChannelStats()
     {

@@ -405,6 +405,8 @@ private:
                 auto channel = taskRunner->GetOutputChannel(channelId);
                 if (wasFinished) {
                     channel->Finish();
+                    // The peer no longer consumes buffered data.
+                    channel->Drop();
                 }
                 TOutputChannelReader reader(channel, toPop, wasFinished);
                 TOutputChannelReadResult result = reader.Read();

@@ -1114,6 +1114,19 @@ public:
         header.Save(&Output);
     }
 
+    ui64 Drop() override {
+        NDqProto::TCommandHeader header;
+        header.SetVersion(3);
+        header.SetCommand(NDqProto::TCommandHeader::DROP_OUTPUT);
+        header.SetTaskId(TaskId);
+        header.SetChannelId(ChannelId);
+        header.Save(&Output);
+
+        NDqProto::TDropOutputResponse response;
+        response.Load(&Input);
+        return response.GetResult();
+    }
+
 private:
     mutable bool Finished = false;
     ui64 TaskId;
@@ -1251,17 +1264,7 @@ public:
 
     ui64 Drop() override {
         try {
-            NDqProto::TCommandHeader header;
-            header.SetVersion(3);
-            header.SetCommand(NDqProto::TCommandHeader::DROP_OUTPUT);
-            header.SetTaskId(TaskId);
-            header.SetChannelId(PopStats.ChannelId);
-            header.Save(&Output);
-
-            NDqProto::TDropOutputResponse response;
-            response.Load(&Input);
-
-            return response.GetResult();
+            return Delegate->Drop();
         } catch (...) {
             TaskRunner->RaiseException();
         }

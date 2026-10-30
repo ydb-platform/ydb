@@ -6237,11 +6237,26 @@ Y_UNIT_TEST(ForceRemainsAnUnquotedIdentifier) {
              "USE plato; DROP ASYNC REPLICATION fOrCe;",
              "USE plato; DROP ASYNC REPLICATION fOrCe FORCE;",
              "USE plato; CREATE TOPIC fOrCe (CONSUMER fOrCe);",
-             "USE plato; ALTER TOPIC fOrCe ADD CONSUMER fOrCe;",
-             "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (fOrCe) DEFINE fOrCe AS fOrCe);"}) {
+             "USE plato; ALTER TOPIC fOrCe ADD CONSUMER fOrCe;"}) {
         const auto res = SqlToYql(query);
         UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
     }
+}
+
+Y_UNIT_TEST(ForceConsumerReferencesRequireQuoting) {
+    const auto res = SqlToYql("USE plato; ALTER TOPIC t DROP CONSUMER `fOrCe`;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    ExpectFailWithFuzzyError(
+        "USE plato; ALTER TOPIC t DROP CONSUMER fOrCe;",
+        "Error: (mismatched input|extraneous input|no viable alternative at input).*fOrCe");
+}
+
+Y_UNIT_TEST(ForceRowPatternVariablesRequireQuoting) {
+    const auto res = SqlToYql("USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (`fOrCe`) DEFINE `fOrCe` AS true);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    ExpectFailWithFuzzyError(
+        "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (fOrCe) DEFINE fOrCe AS true);",
+        "Error: (mismatched input|extraneous input|no viable alternative at input).*fOrCe");
 }
 
 Y_UNIT_TEST(PragmaCompactGroupBy) {

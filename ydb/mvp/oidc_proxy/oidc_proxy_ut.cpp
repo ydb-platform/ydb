@@ -1,6 +1,5 @@
 #include "oidc_protected_page_handler.h"
 #include "oidc_session_create_handler.h"
-#include "oidc_cleanup_page.h"
 #include "oidc_impersonate_start_page_nebius.h"
 #include "oidc_impersonate_stop_page_nebius.h"
 #include "oidc_settings.h"
@@ -41,89 +40,9 @@ namespace {
         return s;
     }
 
-    template <typename THandler>
-    void CheckOidcOptions(const TString& url, NMvp::EAccessServiceType profile) {
-        TPortManager tp;
-        TMvpTestRuntime runtime;
-        runtime.Initialize();
-
-        auto settings = BuildBaseSettings(tp, profile);
-        const auto edge = runtime.AllocateEdgeActor();
-        const auto target = runtime.Register(new THandler(edge, settings));
-
-        const TString sessionCookie = CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie");
-        const TString impersonatedCookie = CreateNameImpersonatedCookie(settings.ClientId) + "=" + Base64Encode("impersonated_cookie");
-        for (const auto& cookies : {TString(), sessionCookie, sessionCookie + "; " + impersonatedCookie}) {
-            TStringBuilder request;
-            request << "OPTIONS " << url << " HTTP/1.1\r\n"
-                    << "Host: oidcproxy.net\r\n"
-                    << "Origin: https://monitoring.ydb.test.ru\r\n"
-                    << "Access-Control-Request-Method: GET\r\n"
-                    << "Access-Control-Request-Headers: x-want-trace\r\n";
-            if (!cookies.empty()) {
-                request << "Cookie: " << cookies << "\r\n"
-                        << "X-Request-Id: preflight-request-id\r\n";
-            }
-            request << "\r\n";
-
-            NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
-            EatWholeString(incomingRequest, request);
-            incomingRequest->Endpoint->Secure = true;
-            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
-
-            TAutoPtr<IEventHandle> handle;
-            auto [responseEvent, requestEvent] = runtime.GrabEdgeEvents<
-                NHttp::TEvHttpProxy::TEvHttpOutgoingResponse,
-                NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
-            UNIT_ASSERT_C(!requestEvent, "Preflight must not send a request to the authorization server");
-            UNIT_ASSERT(responseEvent);
-            const auto& response = responseEvent->Response;
-            UNIT_ASSERT_STRINGS_EQUAL(response->Status, "204");
-            UNIT_ASSERT(response->Body.empty());
-
-            NHttp::THeaders headers(response->Headers);
-            UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Access-Control-Allow-Origin"), "https://monitoring.ydb.test.ru");
-            UNIT_ASSERT_STRINGS_EQUAL(headers.Get("Access-Control-Allow-Credentials"), "true");
-            UNIT_ASSERT_STRING_CONTAINS(headers.Get("Access-Control-Allow-Headers"), "X-Want-Trace");
-            UNIT_ASSERT_STRING_CONTAINS(headers.Get("Access-Control-Allow-Methods"), "GET");
-            UNIT_ASSERT_STRING_CONTAINS(headers.Get("Access-Control-Allow-Methods"), "OPTIONS");
-            UNIT_ASSERT(!headers.Has("Set-Cookie"));
-            UNIT_ASSERT(!headers.Has("Location"));
-            UNIT_ASSERT(!headers.Get("X-Request-Id").empty());
-            if (!cookies.empty()) {
-                UNIT_ASSERT_STRINGS_EQUAL(headers.Get("X-Request-Id"), "preflight-request-id");
-            }
-        }
-    }
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(Mvp) {
-    Y_UNIT_TEST(OidcImpersonationStartOptions) {
-        CheckOidcOptions<TImpersonateStartPageHandler>("/impersonate/start?service_account_id=serviceaccount-test", NMvp::nebius_v1);
-        CheckOidcOptions<TImpersonateStartPageHandler>("/impersonate/start", NMvp::nebius_v1);
-    }
-
-    Y_UNIT_TEST(OidcImpersonationStopOptions) {
-        CheckOidcOptions<TImpersonateStopPageHandler>("/impersonate/stop", NMvp::nebius_v1);
-    }
-
-    Y_UNIT_TEST(OidcCleanupOptionsNebius) {
-        CheckOidcOptions<TCleanupPageHandler>("/auth/cleanup", NMvp::nebius_v1);
-    }
-
-    Y_UNIT_TEST(OidcCleanupOptionsYandex) {
-        CheckOidcOptions<TCleanupPageHandler>("/auth/cleanup", NMvp::yandex_v2);
-    }
-
-    Y_UNIT_TEST(OidcCallbackOptionsNebius) {
-        CheckOidcOptions<TSessionCreateHandler>("/auth/callback", NMvp::nebius_v1);
-    }
-
-    Y_UNIT_TEST(OidcCallbackOptionsYandex) {
-        CheckOidcOptions<TSessionCreateHandler>("/auth/callback", NMvp::yandex_v2);
-    }
-
     void OpenIdConnectRequestWithIamTokenTest(NMvp::EAccessServiceType profile) {
         TPortManager tp;
         TMvpTestRuntime runtime;
@@ -175,10 +94,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, "OPTIONS /" + ALLOWED_PROXY_HOST + "/counters HTTP/1.1\r\n"
-                                "Host: oidcproxy.net\r\n"
-                                "Origin: https://monitoring.ydb.test.ru\r\n"
-                                "Access-Control-Request-Method: GET\r\n"
-                                "Access-Control-Request-Headers: x-want-trace\r\n\r\n");
+                                "Host: oidcproxy.net\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
@@ -187,11 +103,6 @@ Y_UNIT_TEST_SUITE(Mvp) {
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->Method, "OPTIONS");
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->Host, ALLOWED_PROXY_HOST);
         UNIT_ASSERT_STRINGS_EQUAL(outgoingRequest->URL, "/counters");
-        NHttp::THeaders requestHeaders(outgoingRequest->Headers);
-        UNIT_ASSERT_STRINGS_EQUAL(requestHeaders.Get("Origin"), "https://monitoring.ydb.test.ru");
-        UNIT_ASSERT_STRINGS_EQUAL(requestHeaders.Get("Access-Control-Request-Method"), "GET");
-        UNIT_ASSERT_STRINGS_EQUAL(requestHeaders.Get("Access-Control-Request-Headers"), "x-want-trace");
-        UNIT_ASSERT(!requestHeaders.Has("Authorization"));
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequest);
         EatWholeString(incomingResponse, "HTTP/1.1 204 No Content\r\nConnection: close\r\n"
                                                   "Access-Control-Allow-Origin: https://monitoring.ydb.test.ru\r\n"

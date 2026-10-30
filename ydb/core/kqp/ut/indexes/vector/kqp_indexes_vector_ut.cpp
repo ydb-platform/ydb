@@ -1654,7 +1654,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         // Check that the index has a stub cluster hierarchy but the posting table is empty
         const TString level = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplLevelTable");
-        UNIT_ASSERT_VALUES_EQUAL(level, "[[[0u];[1u];[\"  \\2\"]];[[1u];[9223372036854775810u];[\"  \\2\"]]]");
+        UNIT_ASSERT_VALUES_EQUAL(level, "[[[0u];[1u];[\"\\0\\0\\2\"]];[[1u];[9223372036854775810u];[\"\\0\\0\\2\"]]]");
         const TString posting = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         UNIT_ASSERT_VALUES_EQUAL(posting, "[]");
 

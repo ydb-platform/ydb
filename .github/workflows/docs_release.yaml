@@ -1,5 +1,6 @@
 name: Release documentation
 
+# Keep push and manual triggers in each supported branch; execute from main.
 on:
   push:
     branches:
@@ -7,15 +8,22 @@ on:
       - 'stable-**'
     paths:
       - 'ydb/docs/**'
+<<<<<<< HEAD
+=======
+      - 'ydb/**/*.proto'
+      - 'yql/**/*.proto'
+      - 'library/**/*.proto'
+      - 'contrib/libs/protobuf/**/*.proto'
+      - 'ydb/library/actors/core/executor_pool_basic_feature_flags.h'
+      - '.github/workflows/docs_release.yaml'
+      - '.github/workflows/docs_release_core.yaml'
+>>>>>>> dc6ac233b69 (docs-ci: call shared documentation workflows from main (#57576))
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    concurrency:
-      group: release-documentation-${{ github.ref }}
-      cancel-in-progress: true
+  release-docs:
     permissions: write-all
+<<<<<<< HEAD
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -86,3 +94,7 @@ jobs:
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
           update-only-version: "${{ env.update_only_version }}"
+=======
+    uses: ydb-platform/ydb/.github/workflows/docs_release_core.yaml@main
+    secrets: inherit
+>>>>>>> dc6ac233b69 (docs-ci: call shared documentation workflows from main (#57576))

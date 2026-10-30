@@ -894,8 +894,7 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex, co
                     continue;
                 }
                 found = true;
-                runtime.Send(MakeServiceId(nodeId), edgeActor,
-                    new TEvSubscribeOnPoolChanges(databaseId, poolId), nodeIndex);
+                runtime.Send(MakeServiceId(nodeId), edgeActor, new TEvSubscribeOnPoolChanges(databaseId, poolId), nodeIndex);
                 const auto pool = runtime.GrabEdgeEvent<TEvUpdatePoolInfo>(edgeActor, FUTURE_WAIT_TIMEOUT);
                 UNIT_ASSERT_C(pool && pool->Get()->Config, "Failed to load resource pool " << poolId);
                 runtime.Send(MakeWorkloadManagerStateActorId(nodeId), edgeActor,

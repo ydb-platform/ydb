@@ -167,7 +167,8 @@ public:
     // Query client SDK
 
     std::vector<NYdb::TResultSet> ExecQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS,
-        const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr, TDuration timeout = TDuration::Zero());
+        const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr,
+        TDuration timeout = TDuration::Zero());
 
     void CreatePqSource(const std::string& pqSourceName);
 

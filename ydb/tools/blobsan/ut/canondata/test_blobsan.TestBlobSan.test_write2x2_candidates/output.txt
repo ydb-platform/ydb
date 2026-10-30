@@ -35,6 +35,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           000000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 
 ===== testcase =====
 keep above barriers
@@ -73,6 +75,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 
 ===== testcase =====
 missing DC inferred from ingress
@@ -111,6 +115,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -187,6 +193,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -445,6 +455,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 7 [1:1:1:0:0:100:1]
+	RestorePartInv2#    1 8 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -515,6 +529,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -639,6 +655,7 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -684,6 +701,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          true
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -755,6 +774,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           100000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv2#    1 8 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)
 	Barrier[1]#         soft[2:1=>1:1](collect)
 	Barrier[2]#         soft[2:1=>1:1](collect)
@@ -843,6 +865,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           100000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv2#    1 8 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)
 	Barrier[1]#         soft[2:1=>1:1](collect)
 	Barrier[2]#         soft[2:1=>1:1](collect)
@@ -990,6 +1015,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -1087,6 +1116,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           000000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:0]
 	Barrier[1]#         soft[2:1=>1:0]
 	Barrier[2]#         soft[2:1=>1:0]
@@ -1131,6 +1162,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           000000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>0:100]
 	Barrier[1]#         soft[2:1=>0:100]
 	Barrier[2]#         soft[2:1=>0:100]
@@ -1193,6 +1226,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           000000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 
 ===== testcase =====
 barrier for another channel
@@ -1231,6 +1266,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           000000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 
 ===== testcase =====
 hard barrier on one disk
@@ -1287,6 +1324,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]

@@ -8,8 +8,8 @@ namespace NKikimrSchemeOp {
     class TExportMetadata;
 }
 
-namespace NBackup {
-    class TEncryptionIV;
+namespace NKikimr::NBackup {
+    struct TEncryptionIV;
 }
 
 namespace Ydb::Export {

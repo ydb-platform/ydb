@@ -87,9 +87,9 @@ message UpdateClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // List of desired pile states to update
     repeated PileState updates = 2 [(size).ge = 1];
-    // List of piles that are required to form a quorum for this update to succeed.
-    // These piles act as "witnesses" for the operation.
-    // If empty, all piles in the cluster will be used for the quorum check.
+    // Deprecated and ignored. The update is committed by the quorum of every pile that takes part in the
+    // configuration quorum in the new cluster state, that is, every pile not DISCONNECTED, SUSPENDED or INACTIVE
+    // there; to go on without an unavailable pile, set it DISCONNECTED in the same update.
     repeated string quorum_piles = 3;
 }
 

@@ -1,0 +1,31 @@
+from .message_pb2 import (
+    CancelActivityCommand,
+    CancelActivityResult,
+    EnvironmentInfo,
+    PluginInfo,
+    StorageDriverInfo,
+    WorkerCommand,
+    WorkerCommandResult,
+    WorkerHeartbeat,
+    WorkerHostInfo,
+    WorkerInfo,
+    WorkerListInfo,
+    WorkerPollerInfo,
+    WorkerSlotsInfo,
+)
+
+__all__ = [
+    "CancelActivityCommand",
+    "CancelActivityResult",
+    "EnvironmentInfo",
+    "PluginInfo",
+    "StorageDriverInfo",
+    "WorkerCommand",
+    "WorkerCommandResult",
+    "WorkerHeartbeat",
+    "WorkerHostInfo",
+    "WorkerInfo",
+    "WorkerListInfo",
+    "WorkerPollerInfo",
+    "WorkerSlotsInfo",
+]

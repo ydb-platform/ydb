@@ -9,6 +9,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
         bridge_add_pile.cpp
         bridge_pile_overrides_ut.cpp
         bridge_assimilation.cpp
+        bridge_block_quorum.cpp
         bridge_conversion.cpp
         bridge_data_kind.cpp
         bridge_decommit.cpp
@@ -29,6 +30,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     )
 
     PEERDIR(
+        ydb/core/blobstorage/bridge/syncer
         ydb/core/blobstorage/ut_blobstorage/lib
     )
 

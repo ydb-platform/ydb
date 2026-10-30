@@ -30,7 +30,7 @@ public:
         TBlobStorageGroupInfo::EBlobState altruisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         EvaluateCurrentLayout(logCtx, state, info, &pessimisticState, &optimisticState, &altruisticState, false);
 
-        if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state)) {
+        if (auto res = SetAbsentForUnrecoverableAltruistic(altruisticState, state, info)) {
             return *res;
         } else if (auto res = ProcessOptimistic(logCtx, altruisticState, optimisticState, false, state, info, blackboard.GroupQueues)) {
             return *res;

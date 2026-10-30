@@ -58,7 +58,7 @@ public:
     TTestEnv()
         : Controller(std::make_shared<TController>())
     {
-        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
         Actualizer.emplace(TestPathId, VersionedIndex, Storages);
     }
 
@@ -132,8 +132,8 @@ private:
 
 public:
     TSchemeTestEnv() {
-        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
-        VersionedIndex.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true)));
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
+        VersionedIndex.AddIndex(TSnapshot(2, 1), Cache->GetOrInsertIndexInfo(MakeTestIndexInfo(Cache, 2, true)));
         Actualizer.emplace(TestPathId, VersionedIndex);
     }
 

@@ -486,7 +486,7 @@ namespace NKikimr {
                     if (batch.empty()) {
                         continue;
                     }
-                    auto data = MakeIntrusive<TCachedLevelTableData>();
+                    auto data = MakeIntrusive<TEvKqp::TCachedLevelTableData>();
                     data->BatchRows = std::move(batch);
                     LevelsCache->Put(LevelTablePathId, SerializeParentKey(parent), data);
                 }

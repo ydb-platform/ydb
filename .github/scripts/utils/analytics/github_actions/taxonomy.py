@@ -9,7 +9,7 @@ GITHUB_JOB_NAMES = ("job", "queue")
 # github_step names are the GitHub step names, so they cannot be enumerated.
 DYNAMIC_NAME_SOURCES = ("github_step",)
 
-# Written inside a job by test_ya.
+# Written inside a job by build_and_test_ya.
 YA_PHASE_SOURCE = "ya_phase"
 YA_PHASE_NAMES = (
     "init",

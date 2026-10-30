@@ -9,7 +9,7 @@
 #include "probes.h"
 #include "util_fmt_abort.h"
 #include "util_string.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {

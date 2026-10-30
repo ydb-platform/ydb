@@ -8,6 +8,7 @@
 #include "schema.h"
 #include "session_info.h"
 #include "sys_params.h"
+#include "worker_lag_expiry_queue.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -201,6 +202,9 @@ private:
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void InvalidateLag(const TWorkerId& id);
+    void ScheduleLagExpiry(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
@@ -332,6 +336,10 @@ private:
     };
     THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
     THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
+    TWorkerLagExpiryQueue LagExpiryQueue;
+    bool LagExpiryScheduled = false;
+    THashSet<TWorkerId> StoppingWorkers;
+    static constexpr TDuration WorkerLagTimeout = TDuration::Seconds(60);
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
     THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;

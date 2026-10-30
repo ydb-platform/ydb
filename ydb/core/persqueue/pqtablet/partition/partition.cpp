@@ -3913,15 +3913,14 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             {"newHead", BlobEncoder.NewHead}
         );
 
-        const auto oldHeadOffset = Max(BlobEncoder.NewHead.Offset, BlobEncoder.MirroredOffset);
+        const auto oldHeadOffset = BlobEncoder.NewHead.Offset;
 
         if (!t.WriteInfo->BodyKeys.empty()) {
-            BlobEncoder.NewHead.Offset = oldHeadOffset;
             bool needCompactHead =
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
             BlobEncoder.NewPartitionedBlob(Partition,
-                                           oldHeadOffset,
+                                    BlobEncoder.NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
                                            0,  // TotalParts
@@ -3930,7 +3929,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            needCompactHead,          // needCompactHead
                                            MaxBlobSize);
 
-            Parameters->CurOffset = Max(Parameters->CurOffset, oldHeadOffset);
             for (auto& k : t.WriteInfo->BodyKeys) {
                 LOG_D("add key " << k.Key.ToString());
                 auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);

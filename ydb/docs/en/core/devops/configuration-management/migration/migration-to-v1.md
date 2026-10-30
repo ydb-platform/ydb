@@ -29,7 +29,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V1, you need to per
 
     {% cut "More details" %}
 
-    The `--v2-internal-state` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/index.md#domains-state) and [static group](../../../reference/configuration/index.md#blob_storage_config) configuration parameters.
+    The `--v2-internal-state` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/index.md#domains-state) and [static group](../../../reference/configuration/index.md#blob-storage-config) configuration parameters.
 
     {% endcut %}
 
@@ -42,7 +42,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V1, you need to per
 
     {% cut "More details" %}
 
-    This section is responsible for managing the [distributed configuration](../../../concepts/glossary.md#distributed-configuration) mechanism. Setting `enabled: false` disables this mechanism. Further management of State Storage and static group configuration will be performed manually through the `domains_config` and `blob_storage_config` sections respectively in the configuration file (these sections were obtained in the previous step when using the `--full` flag).
+    This section is responsible for managing the [distributed configuration](../configuration-v2/config-overview.md) mechanism. Setting `enabled: false` disables this mechanism. Further management of State Storage and static group configuration will be performed manually through the `domains_config` and `blob_storage_config` sections respectively in the configuration file (these sections were obtained in the previous step when using the `--full` flag).
 
     {% endcut %}
 

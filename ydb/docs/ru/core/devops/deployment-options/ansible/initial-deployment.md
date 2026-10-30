@@ -358,8 +358,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 Существует несколько вариантов указания того, какие именно исполняемые файлы {{ ydb-short-name }} вы хотите использовать для кластера:
 
-* `ydb_version`: автоматически загрузить один из [официальных релизов {{ ydb-short-name }}](../../../downloads/index.md#ydb-server) по номеру версии. Например, `23.4.11`.
-* `ydb_archive`: локальный путь файловой системы к архиву дистрибутива {{ ydb-short-name }}, [загруженному](../../../downloads/index.md#ydb-server) или иным образом подготовленному заранее.
+* `ydb_version`: автоматически загрузить один из [официальных релизов {{ ydb-short-name }}](../../../downloads/ydb-open-source-database.md) по номеру версии. Например, `23.4.11`.
+* `ydb_archive`: локальный путь файловой системы к архиву дистрибутива {{ ydb-short-name }}, [загруженному](../../../downloads/ydb-open-source-database.md) или иным образом подготовленному заранее.
 
 Для использования [федеративных запросов](../../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../../concepts/federated_query/architecture.md#connectors). Плейбук может развернуть [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими узлами. Используйте следующие настройки:
 
@@ -1063,7 +1063,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `database`) и начального [пользователя](../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
+В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать домен с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `database`) и начального [пользователя](../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
 
 ## Дополнительные шаги
 

@@ -66,7 +66,7 @@ By default, a user is given 4 attempts to enter the correct password. Otherwise,
 
 If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) the user prematurely.
 
-Information about the user's lockout status and the number of incorrect password attempts can be found in the user's [system view](../dev/system-views.md#auth-users-users).
+Information about the user's lockout status and the number of incorrect password attempts can be found in the user's [system view](../dev/system-views.md#users).
 
 ### Forced lock/unlock of a user
 

@@ -153,7 +153,7 @@ selector_config:
       cpu_count: 14
 ```
 
-## Updating Dynamic Configuration
+## Updating Dynamic Configuration {#updating-dynamic-configuration}
 
 ```bash
 # Get cluster configuration
@@ -174,14 +174,14 @@ All commands for working with configuration are described in the [{#T}](../../..
 1. The configuration file is loaded by the user using a [grpc call](https://github.com/ydb-platform/ydb/blob/5251c9ace0a7617c25d50f1aa4d0f13e3d56f985/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto#L22) or [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md) into the cluster.
 2. The file is checked for validity, basic constraints are checked, version correctness, cluster name correctness, correctness of configurations obtained after DSL transformation.
 3. The configuration version in the file is increased by one.
-4. The file is reliably stored in the cluster by the [Console tablet](../../../concepts/glossary.md#console).
+4. The file is reliably stored in the cluster by the Console tablet.
 5. File updates are distributed across cluster nodes.
 
 ### Configuration Update from Cluster Node Perspective
 
 1. Each node requests full configuration at startup.
 2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#selectors-intro).
-3. The node subscribes to configuration updates by registering with the [Console tablet](../../../concepts/glossary.md#console).
+3. The node subscribes to configuration updates by registering with the Console tablet.
 4. In case of configuration update, the local service receives it and transforms it for the node's labels.
 5. All local services subscribed to updates receive the updated configuration.
 

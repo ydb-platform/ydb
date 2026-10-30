@@ -21,7 +21,6 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         const TDuration DskTrackerInterval;
         NMonGroup::TDskOutOfSpaceGroup MonGroup;
-        NMonGroup::TCostGroup CostGroup;
         // how many 'wait intervals' we spent in 'bad' zones
         ui64 YellowZonePeriods = 0;
         ui64 OrangeZonePeriods = 0;
@@ -119,12 +118,8 @@ namespace NKikimr {
             MonGroup.CapacityAlertRed() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::RED) ? 1 : 0;
             MonGroup.CapacityAlertBlack() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) ? 1 : 0;
 
-            if (msg->NumOwners > 0) {
-                ui32 timeAvailable = 1'000'000'000 / msg->NumOwners;
-                CostGroup.DiskTimeAvailableNs() = timeAvailable;
-                if (VCtx->CostTracker) {
-                    VCtx->CostTracker->UpdatePDiskParameters(msg->NumOwners, msg->ExpectedSlotCount);
-                }
+            if (msg->NumOwners > 0 && VCtx->CostTracker) {
+                VCtx->CostTracker->UpdatePDiskParameters(msg->NumOwners, msg->ExpectedSlotCount);
             }
 
             Become(&TThis::WaitFunc);
@@ -244,7 +239,6 @@ namespace NKikimr {
             , PDiskCtx(pdiskCtx)
             , DskTrackerInterval(dskTrackerInterval)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
-            , CostGroup(VCtx->VDiskCounters, "subsystem", "cost")
         {}
     };
 

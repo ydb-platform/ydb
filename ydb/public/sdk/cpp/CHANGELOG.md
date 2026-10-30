@@ -1,3 +1,5 @@
+* Added availability-period reporting to draft async replication descriptions, including finite, unlimited, unknown, and invalid policies.
+
 * Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
 
 * Fixed a thread leak in topic and PersQueue write sessions: asynchronous compression no longer keeps the client thread pool alive until process exit.

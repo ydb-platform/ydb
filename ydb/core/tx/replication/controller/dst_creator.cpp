@@ -82,6 +82,10 @@ bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
 } // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
+    bool IsStandby() const {
+        return DesiredState == TReplication::EState::Ready;
+    }
+
     void Resolve(const TPathId& pathId) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
@@ -488,7 +492,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return false;
         }
 
-        if (!InitialScan && !CreatePlaceholder && !IsImported(got)) {
+        if (!InitialScan && IsStandby() && !IsImported(got)) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }
@@ -814,6 +818,7 @@ public:
         , Consistency(consistency)
         , InitialScan(initialScan)
         , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
+        , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
@@ -860,6 +865,7 @@ private:
     const EConsistencyLevel Consistency;
     const bool InitialScan;
     const bool CreatePlaceholder;
+    const TReplication::EState DesiredState;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;

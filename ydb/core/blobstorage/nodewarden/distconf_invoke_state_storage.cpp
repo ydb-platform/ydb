@@ -191,6 +191,12 @@ namespace NKikimr::NStorage {
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
             auto targetSS = *(targetConfig.*ssMutableFunc)();
+            if (!targetSS.RingGroupsSize() && (!targetSS.HasRing() || (!targetSS.GetRing().RingSize() &&
+                    !targetSS.GetRing().NodeSize()))) {
+                // the generator could place no rings at all (e.g. no allowed node is left), which forcing the heal
+                // can't help; the configuration of faulty nodes, which it can, has rings
+                throw TExError() << "No recommended configuration could be made";
+            }
             const auto clearActorIdOffsets = [](auto& config) {
                 if (config.RingGroupsSize() == 0) {
                     config.MutableRing()->ClearRingGroupActorIdOffset();
@@ -246,7 +252,8 @@ namespace NKikimr::NStorage {
                 return noReconfig(); // Current config is optimal and all nodes are good
             }
 
-            // Check can be node replacement applyed
+            // Check can be node replacement applyed; the replacements of this subsystem only decide how it changes
+            std::unordered_map<ui32, std::tuple<ui32, ui32, ui32>> localNodesToReplace;
             for (ui32 ringGroupIdx : xrange(oldSSInfo->RingGroups.size())) {
                 auto& oldRg = oldSSInfo->RingGroups[ringGroupIdx];
                 auto& newRg = newSSInfo->RingGroups[ringGroupIdx];
@@ -294,22 +301,38 @@ namespace NKikimr::NStorage {
                             continue;
                         }
                         std::tuple<ui32, ui32, ui32> placement{ ringGroupIdx, ringIdx, newRep };
-                        if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                        if (auto it = localNodesToReplace.find(oldRep); it != localNodesToReplace.end() && it->second != placement) {
                             return ReconfigType::FULL;
                         }
-                        nodesToReplace[oldRep] = placement;
+                        localNodesToReplace[oldRep] = placement;
                     }
                 }
             }
-            if (nodesToReplace.size() == 1) {
-                auto placement = nodesToReplace.begin();
+            if (localNodesToReplace.empty()) {
+                return noReconfig(); // the rings only got reordered
+            }
+            // all the subsystems replacing a node have to replace it the same way
+            for (const auto& [oldRep, placement] : localNodesToReplace) {
+                if (auto it = nodesToReplace.find(oldRep); it != nodesToReplace.end() && it->second != placement) {
+                    return ReconfigType::FULL;
+                }
+                nodesToReplace[oldRep] = placement;
+            }
+            if (localNodesToReplace.size() == 1) {
+                auto placement = localNodesToReplace.begin();
                 auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
+                // the rings unavailable while the node is replaced: the ring of the node itself, as its first step
+                // disables it, and the disabled rings, as well as rings with nodes not known to be good
                 std::unordered_set<ui32> badRings;
                 for (ui32 ringIdx : xrange(oldRg.Rings.size())) {
                     auto& oldRing = oldRg.Rings[ringIdx];
+                    if (oldRing.IsDisabled) {
+                        badRings.insert(ringIdx);
+                    }
                     for (auto& rep : oldRing.Replicas) {
                         auto oldRep = rep.NodeId();
-                        if (Self->SelfHealNodesState[oldRep]) {
+                        const auto it = Self->SelfHealNodesState.find(oldRep);
+                        if (oldRep == placement->first || it == Self->SelfHealNodesState.end() || it->second) {
                             badRings.insert(ringIdx);
                         }
                     }
@@ -317,7 +340,7 @@ namespace NKikimr::NStorage {
                 ui32 majority = oldRg.NToSelect / 2 + 1;
                 return badRings.size() <= oldRg.NToSelect - majority ? ReconfigType::ONE_NODE : ReconfigType::FULL;
             }
-            return nodesToReplace.empty() ? noReconfig() : ReconfigType::FULL;
+            return ReconfigType::FULL;
         };
         #define NEED_RECONFIG(NAME) needReconfig( \
             !Self->Cfg->SelfManagementConfig || Self->Cfg->SelfManagementConfig->GetAutomatic##NAME##Management(), \
@@ -342,8 +365,11 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(op);
             Self->StateStorageSelfHealActor = Register(new TStateStorageReassignNodeSelfhealActor(op->Sender, op->Cookie
                 , TDuration::Seconds(waitForConfigStep), nodesToReplace.begin()->first, std::get<2>(nodesToReplace.begin()->second)
-                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE));
-            Finish(TResult::OK, std::nullopt);
+                , needReconfigSS == ReconfigType::ONE_NODE, needReconfigSSB == ReconfigType::ONE_NODE, needReconfigSB == ReconfigType::ONE_NODE
+                , op->SessionId));
+            // the self-heal actor replies when it is done; the reply here would be a second one, and it would end the
+            // forwarding of the request before the real result comes
+            Finish(TResult::OK, std::nullopt, {}, /*sendResult=*/ false);
             return;
         }
 
@@ -407,8 +433,9 @@ namespace NKikimr::NStorage {
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
-            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig));
-        Finish(TResult::OK, std::nullopt);
+            TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), prepareCurrentConfig,
+            op->SessionId));
+        Finish(TResult::OK, std::nullopt, {}, /*sendResult=*/ false); // the self-heal actor replies when it is done
     }
 
     void TInvokeRequestHandlerActor::ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd) {

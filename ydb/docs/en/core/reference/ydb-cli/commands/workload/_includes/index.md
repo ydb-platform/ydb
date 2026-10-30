@@ -32,6 +32,7 @@ The following types of load tests are supported at the moment:
 * [Query](../../../workload-query.md): Query load test.
 * [Fulltext](../../../workload-fulltext.md): Fulltext load test.
 * [Vector](../../../workload-vector.md): Vector search load test.
+* [Split/merge](../../../workload-splitmerge.md): Split/merge pressure load test.
 
 ## Global parameters for all workloads {#global_workload_options}
 

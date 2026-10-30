@@ -1075,26 +1075,43 @@ def build_html_dashboard(
         ticktext: tickText || undefined,
         hoverformat: '',
       }};
-      // Full ya-make range is only for the top yaActivity chart. Suite/chunk
-      // tiles share one test-window range (see syncChartGroupXRange) so axes
-      // line up when charts sit side by side.
+      // Prefer the full evlog / ya-make window so suite tiles line up with
+      // the top concurrency chart (build starts before tests).
       if (useFullMakeRange) {{
-        const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
-        if (Array.isArray(fullRange) && fullRange.length >= 2) {{
-          layout.range = [xToDisplay(Number(fullRange[0])), xToDisplay(Number(fullRange[1]))];
+        const full = fullEvlogRangeMs();
+        if (full) {{
+          layout.range = [new Date(full[0]).toISOString(), new Date(full[1]).toISOString()];
         }}
       }}
       return layout;
+    }}
+    function fullEvlogRangeMs() {{
+      const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
+      if (Array.isArray(fullRange) && fullRange.length >= 2) {{
+        const a = _toMs(xToDisplay(Number(fullRange[0])));
+        const b = _toMs(xToDisplay(Number(fullRange[1])));
+        if (a != null && b != null && a < b) return [a, b];
+      }}
+      // Fallback: union of ya_activity series (same wall clock as evlog).
+      const activity = data.ya_activity || {{}};
+      let minMs = Number.POSITIVE_INFINITY;
+      let maxMs = Number.NEGATIVE_INFINITY;
+      for (const kind of Object.keys(activity)) {{
+        for (const x of (activity[kind] && activity[kind].xs) || []) {{
+          const n = _toMs(xToDisplay(Number(x)));
+          if (n == null) continue;
+          if (n < minMs) minMs = n;
+          if (n > maxMs) maxMs = n;
+        }}
+      }}
+      if (minMs < maxMs) return [minMs, maxMs];
+      return null;
     }}
     function _collectPlotMs(el) {{
       const xs = [];
       if (!el || !el.data) return xs;
       for (const tr of el.data) {{
         if (!tr || !Array.isArray(tr.x)) continue;
-        // Monitor / limit overlays span the whole ya-make window; do not let
-        // them widen suite/chunk tile axes past the test tracks.
-        const name = (tr.name == null) ? '' : String(tr.name);
-        if (/monitor|provisioned|cgroup/i.test(name)) continue;
         for (const v of tr.x) {{
           const n = _toMs(v);
           if (n != null) xs.push(n);
@@ -1102,24 +1119,25 @@ def build_html_dashboard(
       }}
       return xs;
     }}
-    function syncChartGroupXRange(ids, sourceIds) {{
-      // Align tile charts to one x-window. sourceIds (default: ids) decide the
-      // span; monitor/disk overlays are omitted from the source so they cannot
-      // pull the window back to the full ya-make range.
+    function syncChartGroupXRange(ids) {{
+      // All time-series tiles share the evlog window (build → tests), matching
+      // the top ya make concurrency chart.
       if (!window.Plotly) return;
-      let minMs = Number.POSITIVE_INFINITY;
-      let maxMs = Number.NEGATIVE_INFINITY;
-      const sources = sourceIds && sourceIds.length ? sourceIds : ids;
-      for (const id of sources) {{
-        const el = document.getElementById(id);
-        for (const n of _collectPlotMs(el)) {{
-          if (n < minMs) minMs = n;
-          if (n > maxMs) maxMs = n;
+      let span = fullEvlogRangeMs();
+      if (!span) {{
+        let minMs = Number.POSITIVE_INFINITY;
+        let maxMs = Number.NEGATIVE_INFINITY;
+        for (const id of ids) {{
+          for (const n of _collectPlotMs(document.getElementById(id))) {{
+            if (n < minMs) minMs = n;
+            if (n > maxMs) maxMs = n;
+          }}
         }}
+        if (!(minMs < maxMs)) return;
+        span = [minMs, maxMs];
       }}
-      if (!(minMs < maxMs)) return;
-      const range = [new Date(minMs).toISOString(), new Date(maxMs).toISOString()];
-      const ticks = _buildTickVals(minMs, maxMs, 8);
+      const range = [new Date(span[0]).toISOString(), new Date(span[1]).toISOString()];
+      const ticks = _buildTickVals(span[0], span[1], 8);
       const tickVals = ticks.map(ms => new Date(ms).toISOString());
       const tickText = ticks.map(ms => _formatTick(ms));
       for (const id of ids) {{
@@ -1133,14 +1151,13 @@ def build_html_dashboard(
         }});
       }}
     }}
+    const ALL_TIME_CHART_IDS = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
     function applyTimezoneToAllCharts() {{
-      const ids = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
-      for (const id of ids) {{
+      for (const id of ALL_TIME_CHART_IDS) {{
         const el = document.getElementById(id);
         if (!el || !el.data || !el.layout || !window.Plotly) continue;
         const xs = _collectPlotMs(el);
-        // yaActivity keeps the full make window; tile groups are re-synced below.
-        const ax = axisLayout(xs.map(ms => new Date(ms).toISOString()), id === 'yaActivity');
+        const ax = axisLayout(xs.map(ms => new Date(ms).toISOString()), true);
         const patch = {{
           'xaxis.title': ax.title,
           'xaxis.type': 'date',
@@ -1154,15 +1171,8 @@ def build_html_dashboard(
         if (ax.range) patch['xaxis.range'] = ax.range;
         Plotly.relayout(el, patch);
       }}
-      syncChartGroupXRange(
-        ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer'],
-        ['activeLayerChunk', 'cpuLayer', 'ramLayer']
-      );
-      syncChartGroupXRange(
-        ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite'],
-        ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
-      );
-      for (const id of ids) {{
+      syncChartGroupXRange(ALL_TIME_CHART_IDS);
+      for (const id of ALL_TIME_CHART_IDS) {{
         const el = document.getElementById(id);
         if (el && el.data && window.Plotly) Plotly.Plots.resize(el);
       }}
@@ -2119,7 +2129,8 @@ def build_html_dashboard(
         }};
       }});
       // Tile header names the chart; skip Plotly title to avoid double headings.
-      const ax = axisLayout(xDisp);
+      // Full evlog window so suite/chunk tiles match the yaActivity build chart.
+      const ax = axisLayout(xDisp, true);
       Plotly.newPlot(divId, traces, {{
         title: false,
         xaxis: Object.assign(ax, {{
@@ -2477,7 +2488,7 @@ def build_html_dashboard(
         if (diskEl) {{
           if (diskTile) diskTile.style.display = '';
           diskEl.style.display = '';
-          const diskAx = axisLayout(xDisp);
+          const diskAx = axisLayout(xDisp, true);
           Plotly.newPlot('diskLayer', [
             {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
             {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
@@ -2511,10 +2522,6 @@ def build_html_dashboard(
       attachSortedHover('ramLayer', 'ramHover', 'GB');
       attachSortedClick('cpuLayer', 'cpuClick', 'cores');
       attachSortedClick('ramLayer', 'ramClick', 'GB');
-      syncChartGroupXRange(
-        ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer'],
-        ['activeLayerChunk', 'cpuLayer', 'ramLayer']
-      );
     }}
 
     stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
@@ -2546,7 +2553,7 @@ def build_html_dashboard(
       if (diskEl) {{
         if (diskTile) diskTile.style.display = '';
         diskEl.style.display = '';
-        const diskAx = axisLayout(xDisp);
+        const diskAx = axisLayout(xDisp, true);
         Plotly.newPlot('diskLayerSuite', [
           {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
           {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
@@ -2580,10 +2587,7 @@ def build_html_dashboard(
     attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
     attachSortedClick('cpuLayerSuite', 'cpuClickSuite', 'cores');
     attachSortedClick('ramLayerSuite', 'ramClickSuite', 'GB');
-    syncChartGroupXRange(
-      ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite'],
-      ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
-    );
+    syncChartGroupXRange(ALL_TIME_CHART_IDS);
 
     if (data.by_chunk && data.pie_cpu_labels && data.pie_cpu_labels.length > 0) {{
       Plotly.newPlot('cpuPie', [{{

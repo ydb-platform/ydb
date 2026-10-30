@@ -112,7 +112,8 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn('class="chart-grid"', source)
         self.assertIn('class="chart-tile"', source)
         self.assertIn("function toggleChartTile(btn)", source)
-        self.assertIn("function syncChartGroupXRange(ids, sourceIds)", source)
+        self.assertIn("function syncChartGroupXRange(ids)", source)
+        self.assertIn("function fullEvlogRangeMs()", source)
         self.assertIn('id="testsBySuiteDetails"', source)
         self.assertIn("Tests in parallel by suite", source)
         # Expand grows to full row width, not a tall half-column (f-string doubles braces).

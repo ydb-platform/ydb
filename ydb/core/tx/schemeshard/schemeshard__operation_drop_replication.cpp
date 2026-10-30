@@ -71,6 +71,9 @@ public:
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
+            if (txState->ReplicationSourceCleanup != NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
+                ev->Record.SetSourceCleanup(txState->ReplicationSourceCleanup);
+            }
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvDropReplication to controller",
                 {"tabletId", tabletId},
@@ -306,6 +309,11 @@ public:
             }
         }
 
+        if (op.GetReplicationSourceCleanup() != NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP && !path->IsReplication()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Source cleanup can only be skipped for an async replication");
+            return result;
+        }
+
         const auto parentPath = path.Parent();
         {
             const auto checks = parentPath.Check();
@@ -341,6 +349,7 @@ public:
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, path->PathId);
+        txState.ReplicationSourceCleanup = op.GetReplicationSourceCleanup();
         txState.State = TTxState::DropParts;
         txState.MinStep = TStepId(1);
 

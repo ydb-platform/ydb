@@ -555,7 +555,7 @@ row_pattern_definition_search_condition: search_condition;
 search_condition: expr;
 
 //TODO allow use tokens as vars https://st.yandex-team.ru/YQL-16223
-row_pattern_variable_name: identifier;
+row_pattern_variable_name: (ID_PLAIN | ID_QUOTED | FORCE);
 
 order_by_clause: ORDER BY sort_specification_list;
 
@@ -1086,7 +1086,7 @@ alter_replication_action:
 
 alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
-drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
+drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE? FORCE?;
 
 lambda_or_parameter:
     lambda
@@ -1385,7 +1385,7 @@ an_id_window: id_window | STRING_VALUE;
 an_id_table: id_table | STRING_VALUE;
 an_id_without: id_without | STRING_VALUE;
 an_id_hint: id_hint | STRING_VALUE;
-an_id_pure: identifier | STRING_VALUE;
+an_id_pure: identifier | STRING_VALUE | FORCE;
 an_id_as_compat: id_as_compat | STRING_VALUE;
 
 view_name: an_id | PRIMARY KEY;
@@ -1563,6 +1563,7 @@ keyword_as_compat:
   | FOLLOWING
   | FOR
   | FOREIGN
+  | FORCE
   | FUNCTION
   | GENERATED
   | GLOB
@@ -1811,6 +1812,7 @@ keyword_compat: (
   | FOLLOWING
   | FOR
   | FOREIGN
+  | FORCE
   | FUNCTION
   | GENERATED
   | GLOB
@@ -2183,6 +2185,7 @@ FLOW: F L O W;
 FOLLOWING: F O L L O W I N G;
 FOR: F O R;
 FOREIGN: F O R E I G N;
+FORCE: F O R C E;
 FROM: F R O M;
 FULL: F U L L;
 FUNCTION: F U N C T I O N;

@@ -3785,6 +3785,11 @@ public:
             TDropReplicationSettings settings;
             settings.Name = TString(dropReplication.Replication());
             settings.Cascade = (dropReplication.Cascade().Value() == "1");
+            if (const auto cleanup = dropReplication.SourceCleanup()) {
+                settings.SourceCleanup = cleanup.Cast().Value() == "abandon"
+                    ? NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                    : NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
+            }
 
             auto cluster = TString(dropReplication.DataSink().Cluster());
             auto future = Gateway->DropReplication(cluster, settings);

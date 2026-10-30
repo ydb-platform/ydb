@@ -552,12 +552,14 @@ TString Id(const TRule_an_id_hint& node, TTranslation& ctx) {
 }
 
 TString Id(const TRule_an_id_pure& node, TTranslation& ctx) {
-    // an_id_pure: identifier | STRING_VALUE;
+    // an_id_pure: identifier | STRING_VALUE | FORCE;
     switch (node.Alt_case()) {
         case TRule_an_id_pure::kAltAnIdPure1:
             return Id(node.GetAlt_an_id_pure1().GetRule_identifier1(), ctx);
         case TRule_an_id_pure::kAltAnIdPure2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_pure2().GetToken1()));
+        case TRule_an_id_pure::kAltAnIdPure3:
+            return ctx.Identifier(node.GetAlt_an_id_pure3().GetToken1());
         case TRule_an_id_pure::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }

@@ -63,21 +63,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Targets>().Key(rid, tid).Delete();
-        db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
-        for (const auto wid : target->GetWorkers()) {
-            db.Table<Schema::Workers>().Key(rid, tid, wid).Delete();
-        }
-        Self->IndexBuilds.erase({rid, tid});
-        for (auto it = Self->IndexBuildProgress.begin(); it != Self->IndexBuildProgress.end();) {
-            if (it->first.ReplicationId() == rid && it->first.TargetId() == tid) {
-                db.Table<Schema::IndexBuildWorkers>().Key(rid, tid, it->first.WorkerId()).Delete();
-                Self->IndexBuildProgress.erase(it++);
-            } else {
-                ++it;
-            }
-        }
-        Replication->RemoveTarget(tid);
+        Self->RemoveTarget(db, *Replication, tid);
 
         return true;
     }
@@ -95,6 +81,25 @@ public:
 
 void TController::RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxDropDstResult(this, ev), ctx);
+}
+
+void TController::RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId) {
+    const auto rid = replication.GetId();
+    db.Table<Schema::Targets>().Key(rid, targetId).Delete();
+    db.Table<Schema::SrcStreams>().Key(rid, targetId).Delete();
+    for (const auto wid : replication.FindTarget(targetId)->GetWorkers()) {
+        db.Table<Schema::Workers>().Key(rid, targetId, wid).Delete();
+    }
+    IndexBuilds.erase({rid, targetId});
+    for (auto it = IndexBuildProgress.begin(); it != IndexBuildProgress.end();) {
+        if (it->first.ReplicationId() == rid && it->first.TargetId() == targetId) {
+            db.Table<Schema::IndexBuildWorkers>().Key(rid, targetId, it->first.WorkerId()).Delete();
+            IndexBuildProgress.erase(it++);
+        } else {
+            ++it;
+        }
+    }
+    replication.RemoveTarget(targetId);
 }
 
 }

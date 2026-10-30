@@ -5027,7 +5027,7 @@ void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
     ReadResourceProfile();
 }
 
-ui32 TExecutor::GetFollowerSnapshotCheckpoint() {
+ui32 TExecutor::CreateFollowerSnapshotCheckpoint() {
     Y_ENSURE(Stats->IsActive && !Stats->IsFollower());
     // A detached batch may keep accepting writes at Step() - 1. Seal it
     // before exporting; otherwise a later write could fall inside the

@@ -690,9 +690,10 @@ namespace NFlatExecutorSetup {
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }
-        // Leader-only boundary for exporting state with a follower redo
-        // journal. Future mutations must have strictly greater log steps.
-        virtual ui32 GetFollowerSnapshotCheckpoint() = 0;
+        // Flushes the batched log and returns a leader-only boundary for exporting
+        // state with a follower redo journal. Future mutations must have strictly
+        // greater log steps.
+        virtual ui32 CreateFollowerSnapshotCheckpoint() = 0;
     protected:
         //
         IExecutor()

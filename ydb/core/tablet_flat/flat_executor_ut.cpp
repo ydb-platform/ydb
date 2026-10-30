@@ -3506,13 +3506,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         ui32 step = 0, checkpoint = 0, nextCheckpoint = 0;
         env.SendSync(new NFake::TEvExecute{new TTxWriteRow(1, step)});
         env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
-            checkpoint = executor->GetFollowerSnapshotCheckpoint();
+            checkpoint = executor->CreateFollowerSnapshotCheckpoint();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }});
         UNIT_ASSERT_GE(checkpoint, step);
         env.SendSync(new NFake::TEvExecute{new TTxWriteRow(2, step)});
         env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
-            nextCheckpoint = executor->GetFollowerSnapshotCheckpoint();
+            nextCheckpoint = executor->CreateFollowerSnapshotCheckpoint();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         }});
         UNIT_ASSERT_GT(nextCheckpoint, checkpoint);

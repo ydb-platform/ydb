@@ -246,17 +246,11 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
-        TEST_RETRY_COUNT: ${{ inputs.test_retry_count }}
       run: |
         set -ex
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
         trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
-
-        if [[ -n "$TEST_RETRY_COUNT" && ! "$TEST_RETRY_COUNT" =~ ^[1-9][0-9]*$ ]]; then
-          echo "::error::test_retry_count must be a positive integer (total attempts including the initial run)"
-          exit 1
-        fi
 
         if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           # Bounded loop volume so a flaky suite cannot fill the runner root FS.
@@ -323,6 +317,7 @@ runs:
           --cleanup-child-processes
         )
 
+        TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
         DASHBOARD_SANITIZER=""
 

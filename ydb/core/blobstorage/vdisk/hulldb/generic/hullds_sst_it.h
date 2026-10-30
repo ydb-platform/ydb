@@ -164,7 +164,7 @@ namespace NKikimr {
         void Next() {
             Y_DEBUG_ABORT_UNLESS(Valid());
             ++Low;
-            if (Y_UNLIKELY(Low == Segment->IndexLow.begin() + High->GetLowRangeEndIndex())) {
+            if (Y_UNLIKELY(Low == Segment->IndexLow.begin() + High->LowRangeEndIndex)) {
                 ++High;
                 LowRangeBegin = Low;
             }
@@ -177,16 +177,14 @@ namespace NKikimr {
             if (Y_UNLIKELY(Low == LowRangeBegin)) {
                 --High;
                 LowRangeBegin = Segment->IndexLow.begin() +
-                        (High <= Segment->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+                        (High <= Segment->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
             }
             --Low;
         }
 
         TKeyLogoBlob GetCurKey() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            const auto high = High->GetKey();
-            const auto low = Low->GetKey();
-            return TKeyLogoBlob(TLogoBlobID(high.Raw.X[0], high.Raw.X[1], low.Raw.X));
+            return TKeyLogoBlob(TLevelSegment::MakeLogoBlobId(*High, *Low));
         }
 
         TMemRecLogoBlob GetMemRec() const {
@@ -206,8 +204,8 @@ namespace NKikimr {
         }
 
         void Seek(const TKeyLogoBlob& key) {
-            TLevelSegment::TLogoBlobIdHigh keyHigh(key.LogoBlobID());
-            TLevelSegment::TLogoBlobIdLow keyLow(key.LogoBlobID());
+            const TLevelSegment::TRecHigh keyHigh(key.LogoBlobID());
+            const TLevelSegment::TRecLow keyLow(key.LogoBlobID());
 
             High = std::lower_bound(Segment->IndexHigh.begin(), Segment->IndexHigh.end(), keyHigh);
 
@@ -217,14 +215,14 @@ namespace NKikimr {
             }
 
             auto rangeBegin = Segment->IndexLow.begin() +
-                    (High == Segment->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+                    (High == Segment->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
 
-            if (High->GetKey() != keyHigh) {
+            if (!High->SameKey(keyHigh)) {
                 Low = LowRangeBegin = rangeBegin;
                 return;
             }
 
-            auto rangeEnd = Segment->IndexLow.begin() + High->GetLowRangeEndIndex();
+            auto rangeEnd = Segment->IndexLow.begin() + High->LowRangeEndIndex;
 
             Low = std::lower_bound(rangeBegin, rangeEnd, keyLow);
 

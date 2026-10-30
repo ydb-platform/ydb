@@ -650,8 +650,6 @@ private:
             db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
         }
-
-        Self->ClearDescribePathCaches(Self->PathsById.at(pathId));
     }
 
     void FinishImportItem(TItem& item, NIceDb::TNiceDb& db) {

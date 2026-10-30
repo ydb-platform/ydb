@@ -13,9 +13,6 @@ from ydb_wrapper import YDBWrapper
 
 ORG_NAME = 'ydb-platform'
 REPO_NAME = 'ydb'
-# GitHub org Project V2 number for Mute and Un-mute (Status / Owner / Priority → YDB).
-# Must stay enabled: github_issue_mapping clears area_override for CLOSED+COMPLETED only when
-# project_status == "Unmuted". With PROJECT_ID=None that column stays NULL and overrides stick.
 PROJECT_ID = '45'
 ISSUES_PAGE_SIZE = 50  # smaller pages → smaller GraphQL payloads (avoids truncated JSON)
 
@@ -356,12 +353,7 @@ def fetch_repository_issues(org_name: str = ORG_NAME, repo_name: str = REPO_NAME
     return issues
 
 def get_project_fields_for_issues(org_name: str, project_id: str, issue_numbers: List[int]) -> Dict[int, Dict[str, Any]]:
-    """Get Mute-and-Unmute project fields (Status/Owner/…) for issues via issue.projectItems.
-
-    Same approach as ``mute.fast_unmute_github.fetch_issue_project_statuses``: query each
-    issue's project cards instead of scanning the whole Project V2 item list (which missed
-    Status when ``PROJECT_ID`` was disabled / board scans were incomplete).
-    """
+    """Fetch Status/Owner/… from org project cards for the given issues."""
     if not project_id:
         return {}
 
@@ -449,7 +441,6 @@ def get_project_fields_for_issues(org_name: str, project_id: str, issue_numbers:
                         continue
                     key = field_name.lower()
                     if "name" in fv and fv.get("name") is not None and "text" not in fv:
-                        # SingleSelect option name (Status, Priority, …)
                         fields[key] = fv.get("name")
                     elif "text" in fv:
                         fields[key] = fv.get("text")

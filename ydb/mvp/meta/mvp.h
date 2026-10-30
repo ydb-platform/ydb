@@ -66,6 +66,8 @@ public:
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
+    NActors::TActorId HealthQueryServiceId;
+    NActors::TActorId HealthMonitorId;
 
     static NMvp::TTokensConfig TokensConfig;
 };

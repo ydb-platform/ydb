@@ -4,6 +4,8 @@ SRCS(
     meta_cluster_info.cpp
     meta.cpp
     meta_cache.cpp
+    meta_database_statuses.cpp
+    meta_health.cpp
     meta_settings.cpp
     meta_versions.cpp
     mvp.cpp
@@ -22,6 +24,7 @@ PEERDIR(
     ydb/library/aclib/protos
     library/cpp/protobuf/json
     library/cpp/getopt
+    library/cpp/string_utils/quote
 )
 
 YQL_LAST_ABI_VERSION()

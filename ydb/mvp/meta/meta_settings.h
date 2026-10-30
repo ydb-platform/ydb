@@ -5,6 +5,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/datetime/base.h>
 
 namespace NMVP {
 
@@ -22,8 +23,17 @@ struct TSupportLinksSettings {
 struct TMetaSettings {
     TString MetaApiEndpoint;
     TString MetaDatabase;
+    TString ServiceEndpoint;
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TSupportLinksSettings SupportLinks;
+    struct THealthcheckSettings {
+        bool Enabled = false;
+        bool Collect = true;
+        TDuration CheckPeriod = TDuration::Seconds(15);
+        TDuration DiscoveryPeriod = TDuration::Seconds(60);
+        TDuration StatusTtl = TDuration::Seconds(120);
+        TDuration RequestTimeout = TDuration::Seconds(30);
+    } Healthcheck;
 };
 
 TMetaSettings BuildMetaSettings(const NMvp::NMeta::TMetaConfig& config, NMvp::EAccessServiceType accessServiceType);

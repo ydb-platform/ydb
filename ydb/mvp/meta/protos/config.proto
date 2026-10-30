@@ -5,6 +5,18 @@ package NMvp.NMeta;
 import "ydb/mvp/core/protos/mvp.proto";
 
 message TMetaConfig {
+    message THealthcheckConfig {
+        optional bool Enabled = 1 [default = false];
+        // Replicas coordinate collection through cluster leases in the Meta DB.
+        optional bool Collect = 2 [default = true];
+        optional uint32 CheckPeriodSeconds = 3 [default = 15];
+        optional uint32 DiscoveryPeriodSeconds = 4 [default = 60];
+        optional uint32 StatusTtlSeconds = 5 [default = 120];
+        optional uint32 RequestTimeoutSeconds = 6 [default = 30];
+        reserved 7, 8;
+        reserved "MaxRequestsInFlight", "MaxRequestsPerCluster";
+    }
+
     message TGrafanaConfig {
         // Grafana base URL used to resolve relative Grafana links.
         optional string Endpoint = 1;
@@ -60,6 +72,10 @@ message TMetaConfig {
     optional TGrafanaConfig Grafana = 6;
     // Shared support links config reused across all supported entities.
     optional TSupportLinksConfig SupportLinks = 7;
+    optional THealthcheckConfig Healthcheck = 8;
+    // Stable HTTP(S) endpoint shared by all replicas of a regional Meta service.
+    // Distinct from the Meta database endpoint and the per-instance LocalEndpoint.
+    optional string ServiceEndpoint = 9;
 }
 
 message TMetaAppConfig {

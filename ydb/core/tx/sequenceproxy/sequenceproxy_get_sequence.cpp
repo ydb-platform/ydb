@@ -61,6 +61,13 @@ namespace NSequenceProxy {
                 case NKikimrTxSequenceShard::TEvGetSequenceResult::SUCCESS:
                     break;
 
+                case NKikimrTxSequenceShard::TEvGetSequenceResult::PIPE_OUTDATED:
+                    return ReplyAndDie(Ydb::StatusIds::UNAVAILABLE,
+                        NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
+                        TStringBuilder()
+                            << "pipe to sequence shard " << TabletId
+                            << " is outdated");
+
                 case NKikimrTxSequenceShard::TEvGetSequenceResult::SEQUENCE_NOT_FOUND:
                     return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR,
                         NKikimrIssues::TIssuesIds::PATH_NOT_EXIST,

@@ -8,6 +8,51 @@ using namespace NYT;
 using namespace NYT::NDetail;
 using namespace NYT::NDetail::NRawClient;
 
+TEST(TOperationsApiParsingTest, PreferJobStatisticsV2)
+{
+    auto response = NodeFromYsonString(R"""({progress={
+        job_statistics={data={input={data_weight={"$"={completed={map={sum=100;count=1;min=100;max=100}}}}}}};
+        job_statistics_v2={data={input={data_weight=[
+            {tags={job_state=completed;job_type=map;pool_tree=physical};summary={sum=100;count=1;min=100;max=100}};
+            {tags={job_state=running;job_type=map;pool_tree=physical};summary={sum=20;count=1;min=20;max=20}};
+        ]}}};
+    }})""");
+
+    auto attrs = ParseOperationAttributes(response);
+    ASSERT_TRUE(attrs.Progress);
+    const auto& statistics = attrs.Progress->JobStatistics;
+    EXPECT_EQ(statistics.GetStatistics("data/input/data_weight").Sum(), 100);
+    EXPECT_EQ(statistics.JobState({EJobState::Running, EJobState::Completed}).GetStatistics("data/input/data_weight").Sum(), 120);
+
+    // A controller-side merge failure can leave v2 empty while legacy is intact.
+    response["progress"]["job_statistics_v2"] = TNode::CreateMap();
+    EXPECT_EQ(ParseOperationAttributes(response).Progress->JobStatistics.GetStatistics("data/input/data_weight").Sum(), 100);
+    response["progress"].AsMap().erase("job_statistics_v2");
+    EXPECT_EQ(ParseOperationAttributes(response).Progress->JobStatistics.GetStatistics("data/input/data_weight").Sum(), 100);
+
+    response["progress"]["job_statistics_v2"] = TNode::CreateMap();
+    response["progress"]["job_statistics"] = TNode::CreateMap();
+    EXPECT_TRUE(ParseOperationAttributes(response).Progress->JobStatistics.GetStatisticsNames().empty());
+    response["progress"].AsMap().erase("job_statistics");
+    EXPECT_TRUE(ParseOperationAttributes(response).Progress->JobStatistics.GetStatisticsNames().empty());
+}
+
+TEST(TOperationsApiParsingTest, RunningOnlyV2DoesNotFallBackToLegacy)
+{
+    const auto response = NodeFromYsonString(R"""({progress={
+        job_statistics={data={input={data_weight={"$"={completed={map={sum=100;count=1;min=100;max=100}}}}}}};
+        job_statistics_v2={data={input={data_weight=[
+            {tags={job_state=running;job_type=map;pool_tree=physical};summary={sum=20;count=1;min=20;max=20}};
+        ]}}};
+    }})""");
+
+    const auto attrs = ParseOperationAttributes(response);
+    ASSERT_TRUE(attrs.Progress);
+    const auto& statistics = attrs.Progress->JobStatistics;
+    EXPECT_EQ(statistics.GetStatistics("data/input/data_weight").Sum(), TMaybe<i64>());
+    EXPECT_EQ(statistics.JobState({EJobState::Running, EJobState::Completed}).GetStatistics("data/input/data_weight").Sum(), 20);
+}
+
 TEST(TOperationsApiParsingTest, ParseOperationAttributes)
 {
     auto response = TStringBuf(R"""({

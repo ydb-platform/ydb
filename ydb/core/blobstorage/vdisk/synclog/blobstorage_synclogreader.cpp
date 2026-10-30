@@ -36,15 +36,9 @@ namespace NKikimr {
                                     ui64 dbBirthLsn,
                                     const NSyncLog::TLogEssence *e,
                                     std::function<TString()> reportInternals) {
-            // NOTE: we use dbBirthLsn to handle read requests, below I describe why.
-            //       After lost data recovery, we would like syncer to start with DbBirthLsn,
-            //       because there is no need to sync previous records (they are obtained during
-            //       full sync and other VDisks already have them). Unfortunately internal
-            //       SyncLog structures start from 0 (because there were no puts). We can update
-            //       these internal structure by committing a new entry point for SyncLog,
-            //       but we decided to use DbBirthLsn that we got from Syncer only for calculating
-            //       reply to read message. It seems simpler, no changes to db local recovery
-            //       process, no new records, just calculations.
+            // Recovery establishes DbBirthLsn as the logical SyncLog base and persists it
+            // through the keeper's entry point. Keep the explicit lower bound for older
+            // entry points and snapshots taken before the keeper applies the recovered base.
             ui64 logStartLsn = Max(e->LogStartLsn, dbBirthLsn + 1);
 
             // check that syncedLsn is enough to sync from log

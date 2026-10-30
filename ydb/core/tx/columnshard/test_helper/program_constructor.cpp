@@ -84,14 +84,14 @@ void TProgramProtoBuilder::AddProjection(const std::vector<ui32>& arguments) {
 }
 
 const NKikimrSSA::TProgram& TProgramProtoBuilder::FinishProto() {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     Finished = true;
     Proto.SetKernels(Kernels.Serialize());
     return Proto;
 }
 
 const NKikimrSSA::TProgram& TProgramProtoBuilder::GetProto() const {
-    AFL_VERIFY(Finished || KernelOperations.empty());
+    YDB_LOG_VERIFY(Finished || KernelOperations.empty());
     return Proto;
 }
 

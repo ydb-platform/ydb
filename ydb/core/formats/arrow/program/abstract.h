@@ -7,6 +7,8 @@
 
 #include <util/generic/string.h>
 
+#include <optional>
+
 namespace NKikimr::NArrow::NAccessor {
 class TAccessorsCollection;
 }
@@ -175,6 +177,12 @@ public:
         return result;
     }
     virtual TColumnInfo GetDefaultColumn() const = 0;
+
+    // Smallest bloom-ngram size on this column that accepts the case mode.
+    // Empty when no such index exists. A Contains shorter than this size is not a probe.
+    virtual std::optional<ui32> GetBloomNgramSize(const ui32 /*columnId*/, const bool /*caseSensitive*/) const {
+        return std::nullopt;
+    }
 };
 
 class TSchemaColumnResolver: public IColumnResolver {

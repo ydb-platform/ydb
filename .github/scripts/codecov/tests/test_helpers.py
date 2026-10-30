@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -655,7 +656,7 @@ class WorkflowContractTest(unittest.TestCase):
                 "-rjson",
                 "-ryaml",
                 "-e",
-                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true))",
                 str(path),
             ],
             check=True,
@@ -825,33 +826,102 @@ class WorkflowContractTest(unittest.TestCase):
         # The stale base is still the correct boundary for the PR's three-dot diff.
         self.assertIn('"$PR_BASE_SHA...$PR_HEAD_SHA"', workflow)
 
-    def test_relevant_pr_base_requires_a_successful_full_main_run(self) -> None:
-        workflow = (
-            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
-        ).read_text(encoding="utf-8")
-        self.assertIn("actions: read", workflow)
-        self.assertIn("Classify PR base commit", workflow)
-        self.assertIn('"${PR_BASE_SHA}^1"', workflow)
-        self.assertIn(
-            '"$base_parent" "$PR_BASE_SHA"',
-            workflow,
+    def test_main_baseline_never_gates_detection_or_the_patch_verdict(self) -> None:
+        path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        proc = subprocess.run(
+            ["ruby", "-rjson", "-ryaml", "-e",
+             "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+             str(path)], check=True, text=True, capture_output=True,
         )
-        self.assertIn(
-            "BASE_CHANGE_RELEVANT: ${{ steps.base_change.outputs.should_run }}",
-            workflow,
+        jobs = json.loads(proc.stdout)["jobs"]
+        detection = json.dumps(jobs["detect"])
+        self.assertNotIn("Validate PR base coverage state", detection)
+        self.assertNotIn("Classify PR base commit", detection)
+        self.assertNotIn("listWorkflowRuns", detection)
+        self.assertNotIn("base_change", detection)
+        observer = next(step for step in jobs["patch"]["steps"]
+                        if step.get("name") == "Explain main baseline availability")
+        self.assertIs(observer["continue-on-error"], True)
+        self.assertIn("!cancelled()", observer["if"])
+        self.assertEqual(observer["timeout-minutes"], 1)
+        self.assertIn("request: { timeout: 10000 }", observer["with"]["script"])
+        self.assertNotIn("core.setFailed", observer["with"]["script"])
+        self.assertNotIn("setTimeout", observer["with"]["script"])
+        self.assertNotIn("sleep", observer["with"]["script"])
+        self.assertIn("informational", observer["with"]["script"])
+        check = next(step for step in jobs["patch"]["steps"] if "run" in step)
+        self.assertNotIn("--repository", check["run"])
+        self.assertNotIn("--timeout", check["run"])
+        self.assertLess(jobs["patch"]["steps"].index(check),
+                        jobs["patch"]["steps"].index(observer))
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is needed to exercise github-script")
+    def test_main_baseline_summary_handles_pending_failed_missing_and_api_errors(self) -> None:
+        path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        proc = subprocess.run(
+            ["ruby", "-rjson", "-ryaml", "-e",
+             "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+             str(path)], check=True, text=True, capture_output=True,
         )
-        self.assertIn("github.rest.actions.listWorkflowRuns", workflow)
-        self.assertIn("workflow_id: 'cpp_codecov.yml'", workflow)
-        self.assertIn("head_sha: baseSha", workflow)
-        self.assertIn("run.head_branch === 'main'", workflow)
-        self.assertIn("run.event === 'push'", workflow)
-        self.assertIn("run.status === 'completed' && run.conclusion === 'success'", workflow)
-        self.assertIn(
-            "process.env.BASE_CHANGE_RELEVANT === 'true' || runs.length > 0",
-            workflow,
-        )
-        self.assertIn("Wait for or rerun the main coverage workflow", workflow)
-        self.assertIn("then rerun this PR coverage workflow", workflow)
+        jobs = json.loads(proc.stdout)["jobs"]
+        observer = next(step for step in jobs["patch"]["steps"]
+                        if step.get("name") == "Explain main baseline availability")
+        script = observer["with"]["script"]
+        base = "a" * 40
+        run = {"id": 123, "head_sha": base, "head_branch": "main", "event": "push"}
+        cases = [
+            ([], False, "No main coverage run"),
+            ([{**run, "status": "queued", "conclusion": None}], False, "still pending or running"),
+            ([{**run, "status": "in_progress", "conclusion": None}], False, "still pending or running"),
+            ([{**run, "status": "completed", "conclusion": "failure"}], False, "did not complete successfully"),
+            ([{**run, "status": "completed", "conclusion": "cancelled"}], False, "did not complete successfully"),
+            ([{**run, "status": "completed", "conclusion": "success"}], False, "completed successfully"),
+            ([{**run, "head_sha": "b" * 40}], False, "No main coverage run"),
+            ([{**run, "head_branch": "feature"}], False, "No main coverage run"),
+            ([{**run, "event": "pull_request_target"}], False, "No main coverage run"),
+            ([], True, "could not be checked"),
+        ]
+        # Execute the actual workflow script, not a Python reimplementation.
+        runner = r"""
+const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const calls = [];
+const messages = [];
+const summary = {
+  text: '', written: false,
+  addHeading(value) { this.text += value; return this; },
+  addRaw(value) { this.text += value; return this; },
+  addLink(label, url) { this.text += label + ': ' + url; return this; },
+  async write() { this.written = true; }
+};
+const core = { summary, info(value) { messages.push(value); },
+  setFailed() { throw new Error('baseline must not fail CI'); } };
+const github = { rest: { actions: { async listWorkflowRuns(args) {
+  calls.push(args);
+  if (input.fail) throw new Error('simulated API outage');
+  return { data: { workflow_runs: input.runs } };
+} } } };
+process.env.PR_BASE_SHA = input.base;
+process.env.GITHUB_SERVER_URL = 'https://github.com';
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+new AsyncFunction('github', 'context', 'core', input.script)(
+  github, { repo: { owner: 'ydb-platform', repo: 'ydb' } }, core
+).then(() => process.stdout.write(JSON.stringify({ calls, messages, summary })))
+ .catch(error => { process.stderr.write(String(error)); process.exitCode = 1; });
+"""
+        for runs, fail, expected in cases:
+            with self.subTest(expected=expected, runs=runs, fail=fail):
+                execution = subprocess.run(
+                    ["node", "-e", runner],
+                    input=json.dumps({"script": script, "runs": runs, "fail": fail, "base": base}),
+                    check=True, capture_output=True, text=True, timeout=10,
+                )
+                result = json.loads(execution.stdout)
+                self.assertTrue(result["summary"]["written"])
+                self.assertIn(expected, result["summary"]["text"])
+                self.assertIn("local patch verdict uses the configured policy", result["summary"]["text"])
+                self.assertEqual(len(result["calls"]), 1)
+                self.assertEqual(result["calls"][0]["head_sha"], base)
+                self.assertEqual(result["calls"][0]["request"]["timeout"], 10000)
 
     def test_patch_job_is_pr_only_and_independent_of_report_publication(self) -> None:
         path = GITHUB_DIR / "workflows" / "cpp_codecov.yml"
@@ -862,6 +932,7 @@ class WorkflowContractTest(unittest.TestCase):
         )
         jobs = json.loads(proc.stdout)["jobs"]
         patch = jobs["patch"]
+        self.assertEqual(patch["name"], "Check if patch coverage is sufficient")
         self.assertEqual(patch["needs"], ["detect", "coverage"])
         self.assertIn("github.event_name == 'pull_request_target'", patch["if"])
         self.assertIn("needs.coverage.result == 'success'", patch["if"])
@@ -871,8 +942,14 @@ class WorkflowContractTest(unittest.TestCase):
         checkout = patch["steps"][0]["with"]
         self.assertEqual(checkout["ref"], "${{ github.workflow_sha }}")
         self.assertIs(checkout["persist-credentials"], False)
+        self.assertIn(".github/codecov.yml", checkout["sparse-checkout"])
+        self.assertIs(checkout["sparse-checkout-cone-mode"], False)
         check = next(step for step in patch["steps"] if "run" in step)
-        self.assertIn("--threshold 80", check["run"])
+        self.assertNotIn("--threshold", check["run"])
+        self.assertNotIn("80", check["run"])
+        self.assertIn('YAML.safe_load(File.read(ARGV.fetch(0)), aliases: true)', check["run"])
+        self.assertIn('.github/codecov.yml > "$RUNNER_TEMP/codecov-policy.json"', check["run"])
+        self.assertIn('--policy-file "$RUNNER_TEMP/codecov-policy.json"', check["run"])
         self.assertIn('--run-id "$GITHUB_RUN_ID"', check["run"])
         self.assertIn('--upload-receipt "$RUNNER_TEMP/codecov-uploads/codecov-upload-${suite}.json"',
                       check["run"])
@@ -899,13 +976,50 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("_trusted_coverage_ci/.github/config/muted_ya.txt",
                       run_suite["with"]["muted_tests_file"])
 
+    def test_actual_workflow_reads_the_single_shared_policy(self) -> None:
+        workflow = subprocess.run(
+            ["ruby", "-rjson", "-ryaml", "-e",
+             "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
+             str(GITHUB_DIR / "workflows" / "cpp_codecov.yml")],
+            check=True, text=True, capture_output=True,
+        )
+        check = next(step for step in json.loads(workflow.stdout)["jobs"]["patch"]["steps"]
+                     if step.get("name") == "Check every affected component")
+        # Execute the actual YAML loader. The remaining Bash loop needs Bash 4+
+        # on Linux, while helper tests also run on macOS with Bash 3.
+        loader = check["run"].split("mapfile -t suites", 1)[0]
+        source = (GITHUB_DIR / "codecov.yml").read_text()
+        for text, expected in ((source, "80%"), (source.replace("target: 80%", "target: 90%"), "90%")):
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / ".github").mkdir()
+                (root / ".github/codecov.yml").write_text(text)
+                subprocess.run(["bash", "-c", loader], cwd=root,
+                               env={**os.environ, "RUNNER_TEMP": directory},
+                               check=True, capture_output=True, text=True)
+                policy = json.loads((root / "codecov-policy.json").read_text())
+                targets = [status["target"]
+                           for flag in policy["flag_management"]["individual_flags"]
+                           for status in flag["statuses"] if status["type"] == "patch"]
+                self.assertEqual(targets, [expected] * len(SUITES))
+        # Allowing aliases must not enable construction of Ruby objects.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".github").mkdir()
+            (root / ".github/codecov.yml").write_text("--- !ruby/object:Object {}\n")
+            result = subprocess.run(["bash", "-c", loader], cwd=root,
+                                    env={**os.environ, "RUNNER_TEMP": directory},
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("DisallowedClass", result.stderr)
+
     def test_untrusted_yaml_is_loaded_safely(self) -> None:
         checks = (
             GITHUB_DIR / "workflows" / "cpp_codecov_checks.yml"
         ).read_text(encoding="utf-8")
         tests = Path(__file__).read_text(encoding="utf-8")
         self.assertIn(
-            'YAML.safe_load(File.read(path), aliases: false)',
+            'YAML.safe_load(File.read(path), aliases: path == ".github/codecov.yml")',
             checks,
         )
         self.assertIn(
@@ -935,8 +1049,10 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("parent_sha", action)
         self.assertNotIn("PARENT_SHA", action)
         self.assertNotIn("--parent-sha", action)
-        self.assertIn("--disable-search", action)
-        self.assertIn("--plugin noop", action)
+        uploader = (CODECOV_DIR / "upload_coverage.py").read_text(encoding="utf-8")
+        self.assertIn("upload_coverage.py", action)
+        self.assertIn('"--disable-search"', uploader)
+        self.assertIn('"--plugin", "noop"', uploader)
         self.assertIn('--name "${SUITE}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"', action)
         self.assertIn('--mute-file "${MUTED_TESTS_FILE}"', action)
         self.assertNotIn("--test-blacklist-path", action)
@@ -963,7 +1079,7 @@ class WorkflowContractTest(unittest.TestCase):
         upload = next(step for step in steps if step.get("name") == "Upload to Codecov")
         receipt = next(step for step in steps if step.get("name") == "Save Codecov upload receipt")
         self.assertGreater(steps.index(receipt), steps.index(upload))
-        self.assertLess(upload["run"].index("codecovcli upload-coverage"),
+        self.assertLess(upload["run"].index("upload_coverage.py"),
                         upload["run"].index("path.write_text"))
         self.assertEqual(receipt["if"], "inputs.pr_number != ''")
         self.assertEqual(receipt["with"]["name"], "codecov-upload-${{ inputs.suite }}-${{ github.run_id }}")
@@ -982,8 +1098,12 @@ class WorkflowContractTest(unittest.TestCase):
             for upload_result in (0, 7):
                 with self.subTest(suite=suite, upload_result=upload_result), tempfile.TemporaryDirectory() as tmp:
                     arguments = Path(tmp) / "arguments.txt"
-                    source = SUITES[suite]["lcov_prefixes"][0] + "example.cpp"
-                    (Path(tmp) / "coverage.lcov").write_text(f"TN:\nSF:{Path.cwd()}/{source}\nDA:1,1\nLF:1\nend_of_record\n")
+                    source = {
+                        "cli": "ydb/apps/ydb/main.cpp",
+                        "cpp_sdk": "ydb/public/sdk/cpp/src/client/driver/driver.cpp",
+                        "cli_workload": "ydb/library/workload/tpc_base/tpc_base.cpp",
+                    }[suite]
+                    (Path(tmp) / "coverage.lcov").write_text(f"TN:\nSF:{GITHUB_DIR.parent}/{source}\nDA:1,1\nLF:1\nend_of_record\n")
                     env = {**os.environ, "SUITE": suite, "FLAG": suite,
                            "CODECOV_TOKEN": "test-token", "COMMIT_SHA": "a" * 40,
                            "BRANCH": "test-branch", "PR_NUMBER": "123",
@@ -991,9 +1111,22 @@ class WorkflowContractTest(unittest.TestCase):
                            "GITHUB_RUN_ID": "456", "GITHUB_RUN_ATTEMPT": "2",
                            "RUNNER_TEMP": tmp, "UPLOAD_ARGUMENTS": str(arguments),
                            "UPLOAD_RESULT": str(upload_result)}
-                    script = ('codecovcli() { printf "%s\\n" "$@" > "$UPLOAD_ARGUMENTS"; '
-                              'return "$UPLOAD_RESULT"; }\n' + upload["run"])
-                    result = subprocess.run(["bash", "-c", script], env=env,
+                    fake_cli = Path(tmp) / "fake-codecovcli"
+                    fake_cli.write_text(
+                        f"#!{sys.executable}\n"
+                        "import os, sys\nfrom pathlib import Path\n"
+                        "Path(os.environ['UPLOAD_ARGUMENTS']).write_text('\\n'.join(sys.argv[1:]))\n"
+                        "sys.exit(int(os.environ['UPLOAD_RESULT']))\n",
+                        encoding="utf-8",
+                    )
+                    fake_cli.chmod(0o755)
+                    # Replace only the network client; exercise the actual
+                    # staging helper, YAML shell and receipt writer together.
+                    script = upload["run"].replace(
+                        "python3 .github/scripts/codecov/upload_coverage.py",
+                        f"python3 .github/scripts/codecov/upload_coverage.py --cli {fake_cli}",
+                    )
+                    result = subprocess.run(["bash", "-c", script], env=env, cwd=GITHUB_DIR.parent,
                                             text=True, capture_output=True)
                     self.assertEqual(result.returncode, upload_result, result.stderr)
                     receipt_path = Path(tmp) / f"codecov-upload-{suite}.json"
@@ -1004,7 +1137,7 @@ class WorkflowContractTest(unittest.TestCase):
                         uploaded = arguments.read_text().splitlines()
                         self.assertEqual(uploaded[uploaded.index("--name") + 1], pin.name)
                         report_path = Path(tmp) / f"codecov-upload-{suite}.lcov"
-                        self.assertEqual(uploaded[uploaded.index("--file") + 1], str(report_path))
+                        self.assertEqual(Path(uploaded[uploaded.index("--file") + 1]).resolve(), report_path.resolve())
                         self.assertEqual(set(load_lcov(report_path, pin, suite)), {source})
 
     def test_landing_revalidates_pr_head_before_s3_upload(self) -> None:

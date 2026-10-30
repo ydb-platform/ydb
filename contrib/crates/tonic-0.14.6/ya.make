@@ -1,0 +1,202 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(tonic)
+
+CRATE_VERSION(0.14.6)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/body.rs
+    src/client/grpc.rs
+    src/client/mod.rs
+    src/client/service.rs
+    src/codec/buffer.rs
+    src/codec/compression.rs
+    src/codec/decode.rs
+    src/codec/encode.rs
+    src/codec/mod.rs
+    src/codegen.rs
+    src/extensions.rs
+    src/macros.rs
+    src/metadata/encoding.rs
+    src/metadata/key.rs
+    src/metadata/map.rs
+    src/metadata/mod.rs
+    src/metadata/value.rs
+    src/request.rs
+    src/response.rs
+    src/server/grpc.rs
+    src/server/mod.rs
+    src/server/service.rs
+    src/service/interceptor.rs
+    src/service/layered.rs
+    src/service/mod.rs
+    src/service/recover_error.rs
+    src/service/router.rs
+    src/status.rs
+    src/transport/channel/endpoint.rs
+    src/transport/channel/mod.rs
+    src/transport/channel/service/add_origin.rs
+    src/transport/channel/service/connection.rs
+    src/transport/channel/service/connector.rs
+    src/transport/channel/service/discover.rs
+    src/transport/channel/service/executor.rs
+    src/transport/channel/service/io.rs
+    src/transport/channel/service/mod.rs
+    src/transport/channel/service/reconnect.rs
+    src/transport/channel/service/tls.rs
+    src/transport/channel/service/user_agent.rs
+    src/transport/channel/tls.rs
+    src/transport/channel/uds_connector.rs
+    src/transport/error.rs
+    src/transport/mod.rs
+    src/transport/server/conn.rs
+    src/transport/server/display_error_stack.rs
+    src/transport/server/incoming.rs
+    src/transport/server/io_stream.rs
+    src/transport/server/mod.rs
+    src/transport/server/service/io.rs
+    src/transport/server/service/mod.rs
+    src/transport/server/service/tls.rs
+    src/transport/server/tls.rs
+    src/transport/server/unix.rs
+    src/transport/service/grpc_timeout.rs
+    src/transport/service/mod.rs
+    src/transport/service/tls.rs
+    src/transport/tls.rs
+    src/util.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    _tls-any
+    channel
+    codegen
+    default
+    gzip
+    router
+    server
+    tls-connect-info
+    tls-native-roots
+    tls-ring
+    transport
+)
+
+PEERDIR(
+    contrib/crates/axum-0.8.9
+    contrib/crates/base64-0.22.1
+    contrib/crates/bytes-1.12.1
+    contrib/crates/flate2-1.1.10
+    contrib/crates/h2-0.4.20
+    contrib/crates/http-1.5.0
+    contrib/crates/http-body-1.1.0
+    contrib/crates/http-body-util-0.1.5
+    contrib/crates/hyper-1.12.0
+    contrib/crates/hyper-timeout-0.5.2
+    contrib/crates/hyper-util-0.1.21
+    contrib/crates/percent-encoding-2.3.2
+    contrib/crates/pin-project-1.1.13
+    contrib/crates/rustls-native-certs-0.8.5
+    contrib/crates/socket2-0.6.5
+    contrib/crates/sync_wrapper-1.0.2
+    contrib/crates/tokio-1.54.1
+    contrib/crates/tokio-rustls-0.26.6
+    contrib/crates/tokio-stream-0.1.19
+    contrib/crates/tower-0.5.3
+    contrib/crates/tower-layer-0.3.3
+    contrib/crates/tower-service-0.3.3
+    contrib/crates/tracing-0.1.44
+)
+
+LICENSE("MIT")
+VERSION(0.14.6)
+ORIGINAL_SOURCE(https://static.crates.io/crates/tonic/tonic-0.14.6.crate)
+
+CRATE_SOURCES(
+    src/body.rs
+    src/client/grpc.rs
+    src/client/mod.rs
+    src/client/service.rs
+    src/codec/buffer.rs
+    src/codec/compression.rs
+    src/codec/decode.rs
+    src/codec/encode.rs
+    src/codec/mod.rs
+    src/codegen.rs
+    src/extensions.rs
+    src/lib.rs
+    src/macros.rs
+    src/metadata/encoding.rs
+    src/metadata/key.rs
+    src/metadata/map.rs
+    src/metadata/mod.rs
+    src/metadata/value.rs
+    src/request.rs
+    src/response.rs
+    src/server/grpc.rs
+    src/server/mod.rs
+    src/server/service.rs
+    src/service/interceptor.rs
+    src/service/layered.rs
+    src/service/mod.rs
+    src/service/recover_error.rs
+    src/service/router.rs
+    src/status.rs
+    src/transport/channel/endpoint.rs
+    src/transport/channel/mod.rs
+    src/transport/channel/service/add_origin.rs
+    src/transport/channel/service/connection.rs
+    src/transport/channel/service/connector.rs
+    src/transport/channel/service/discover.rs
+    src/transport/channel/service/executor.rs
+    src/transport/channel/service/io.rs
+    src/transport/channel/service/mod.rs
+    src/transport/channel/service/reconnect.rs
+    src/transport/channel/service/tls.rs
+    src/transport/channel/service/user_agent.rs
+    src/transport/channel/tls.rs
+    src/transport/channel/uds_connector.rs
+    src/transport/error.rs
+    src/transport/mod.rs
+    src/transport/server/conn.rs
+    src/transport/server/display_error_stack.rs
+    src/transport/server/incoming.rs
+    src/transport/server/io_stream.rs
+    src/transport/server/mod.rs
+    src/transport/server/service/io.rs
+    src/transport/server/service/mod.rs
+    src/transport/server/service/tls.rs
+    src/transport/server/tls.rs
+    src/transport/server/unix.rs
+    src/transport/service/grpc_timeout.rs
+    src/transport/service/mod.rs
+    src/transport/service/tls.rs
+    src/transport/tls.rs
+    src/util.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/async-trait-0.1.92
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/pin-project-internal-1.1.13
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/zerocopy-derive-0.8.63
+)
+
+END()

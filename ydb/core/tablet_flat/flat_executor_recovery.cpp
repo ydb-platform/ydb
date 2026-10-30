@@ -232,6 +232,7 @@ class TDryRunExecutor
         TResult Locate(const NTable::TMemTable*, ui64, ui32) override { Y_TABLET_ERROR("Not supported"); }
         TResult Locate(const NTable::TPart*, ui64, NTable::ELargeObj) override { Y_TABLET_ERROR("Not supported"); }
         const TSharedData* TryGetPage(const NTable::TPart*, const TPageLocation&, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
+        const TSharedData* TryGetIndexPage(const NTable::TPart*, const TPageLocation&, TGroupId) override { Y_TABLET_ERROR("Not supported"); }
     };
 
     struct TDryRunStats : public TExecutorStats {};
@@ -292,6 +293,7 @@ public:
 
     ui64 Enqueue(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    bool TryExecuteReadyTransaction() override { return false; }
     bool CancelTransaction(ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmReadOnlyLease(TMonotonic) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmReadOnlyLease(TMonotonic, std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
@@ -312,6 +314,7 @@ public:
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
     void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    ui32 CreateFollowerSnapshotCheckpoint() override { Y_TABLET_ERROR("Not supported"); }
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override { Y_TABLET_ERROR("Not supported"); }
     bool HasLoanedParts() const override { Y_TABLET_ERROR("Not supported"); }
     bool HasBorrowed(ui32, ui64) const override { Y_TABLET_ERROR("Not supported"); }

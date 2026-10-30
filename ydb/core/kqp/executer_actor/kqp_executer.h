@@ -134,13 +134,6 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
-    struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
-        TKqpExecuterEvents::EvPqTopicResolveStatus>
-    {
-        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
-        NYql::TIssues Issues;
-    };
-
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
         TKqpExecuterEvents::EvDelayedExecution>
     {
@@ -193,7 +186,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, TVector<NKikimr::TTableId> tableIdsForSnapshot, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
@@ -208,6 +201,11 @@ IActor* CreateKqpSchemeExecuter(
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
     const TActorId& kqpTempTablesAgentActor = TActorId(), NWilson::TTraceId traceId = {},
     TInstant deadline = TInstant::Max());
+
+IActor* CreateKqpUnsafeTruncateExecuter(
+    TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, ui64 userLockTxId,
+    const TString& traceId, TTxAllocatorState::TPtr txAlloc);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

@@ -35,6 +35,8 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -129,6 +131,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -179,6 +185,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
@@ -258,6 +268,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[3:1=>1:2](collect)(keep)
 	Barrier[1]#         soft[3:1=>1:2](collect)(keep)
 	Barrier[2]#         soft[3:1=>1:2](collect)(keep)
@@ -337,6 +351,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[3:1=>1:2](collect)(keep)
 	Barrier[1]#         soft[3:1=>1:2](collect)(keep)
 	Barrier[2]#         soft[3:1=>1:2](collect)(keep)
@@ -416,6 +434,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           111111111
 	DoNotKeepMask#      000000000
 	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
 	Barrier[0]#         soft[2:2=>1:2](collect)(keep)
 	Barrier[1]#         soft[2:2=>1:2](collect)(keep)
 	Barrier[2]#         soft[2:2=>1:2](collect)(keep)

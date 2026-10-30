@@ -678,7 +678,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 auto joinNode = FindPlanNodeByKv(plan.GetMapSafe().at("SimplifiedPlan"), "Node Type", joinKind);
                 UNIT_ASSERT(joinNode.IsDefined());
                 auto op = joinNode.GetMapSafe().at("Operators").GetArraySafe()[0];
-                auto eRows = op.GetMapSafe().at("E-Rows").GetStringSafe();
+                auto eRows = op.GetMapSafe().at("E-Rows").GetStringRobust();
                 UNIT_ASSERT_EQUAL(std::stod(eRows), card);
             }
         }
@@ -1145,7 +1145,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         const std::string& queryPathTemplate,
         const std::string& tablePrefix
     ) {
-        TString qPath = TStringBuilder{} << ArcadiaSourceRoot() << queryPathTemplate << queryType << "/" << "q" << queryId << ".sql";
+        TString qPath = TStringBuilder{} << ArcadiaFromCurrentLocation(__SOURCE_FILE__, queryPathTemplate) << "/" << queryType << "/" << "q" << queryId << ".sql";
 
         TIFStream s(qPath);
         std::string q = s.ReadAll();
@@ -1266,10 +1266,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         RunBenchmarkQueries(
             session,
             "TPCH",
-            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../../../../library/benchmarks/gen_queries/consts.yql"),
             {"yql", "nice", "ydb"},
             22,
-            "/ydb/library/benchmarks/queries/tpch/",
+            "../../../../library/benchmarks/queries/tpch/",
             "/Root/"
         );
     }
@@ -1286,10 +1286,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExplainBenchmarkQueriesAndAssertCBO(
             session,
             "TPCH",
-            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../../../../library/benchmarks/gen_queries/consts.yql"),
             {"yql", "nice", "ydb"},
             22,
-            "/ydb/library/benchmarks/queries/tpch/",
+            "../../../../library/benchmarks/queries/tpch/",
             "/Root/"
         );
     }
@@ -1306,10 +1306,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         RunBenchmarkQueries(
             session,
             "TPCDS",
-            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../../../../library/benchmarks/gen_queries/consts.yql"),
             {"yql"},
             99,
-            "/ydb/library/benchmarks/queries/tpcds/",
+            "../../../../library/benchmarks/queries/tpcds/",
             "/Root/test/ds/"
         );
     }
@@ -1326,10 +1326,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExplainBenchmarkQueriesAndAssertCBO(
             session,
             "TPCDS",
-            ArcadiaSourceRoot() + "/ydb/library/benchmarks/gen_queries/consts.yql",
+            ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../../../../library/benchmarks/gen_queries/consts.yql"),
             {"yql"},
             99,
-            "/ydb/library/benchmarks/queries/tpcds/",
+            "../../../../library/benchmarks/queries/tpcds/",
             "/Root/test/ds/",
             // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
             {15, 31, 58, 64, 72, 78, 85}

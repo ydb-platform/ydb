@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
@@ -14,7 +16,8 @@ namespace NKikimr::NPathAliasing {
     class TPathNormalizer {
     public:
         TPathNormalizer() noexcept = default;
-        explicit TPathNormalizer(const NKikimrConfig::TPathRewriteConfig& config);
+        explicit TPathNormalizer(const NKikimrConfig::TPathRewriteConfig& config,
+            const NMonitoring::TDynamicCounterPtr& counters = {});
 
         bool HasRules() const noexcept { return bool(Impl); }
         TString NormalizePath(TStringBuf path) const;

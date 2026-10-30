@@ -35,7 +35,7 @@ public:
 
     const IBlobGroupSelector& GetDsGroupSelectorVerified() const {
         const auto* result = GetDsGroupSelector();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 

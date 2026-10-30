@@ -123,6 +123,20 @@ NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilde
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
 }
 
+NJson::TJsonValue TLogicPatternMatch::DoDebugJson() const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("class", GetClassName());
+    auto& hints = result.InsertValue("hints", NJson::JSON_ARRAY);
+    for (const auto& hint : Hints) {
+        NJson::TJsonValue item = NJson::JSON_MAP;
+        item.InsertValue("input", hint.InputIndex);
+        item.InsertValue("operation", hint.Operation.DebugString());
+        item.InsertValue("value", hint.Value);
+        hints.AppendValue(std::move(item));
+    }
+    return result;
+}
+
 TString TSimpleKernelLogic::SignalDescription() const {
     if (GetYqlOperationId()) {
         return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*GetYqlOperationId());

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 

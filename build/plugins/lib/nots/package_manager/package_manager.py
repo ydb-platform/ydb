@@ -72,28 +72,18 @@ class PackageManager(object):
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
-    def get_local_peers_from_package_json(self):
+    def get_local_peers_from_package_json(self, pj=None, settings=None):
         """
         Returns paths of direct workspace dependencies (source root related).
         :rtype: list of str
         """
-        from .common_config import (
-            load_common_config,
-            workspace_settings_paths,
-            rebase_pnpm_settings,
-            join_pnpm_settings,
-            select_pnpm_settings,
-        )
+        from .common_config import load_effective_pnpm_config, workspace_settings_paths
 
-        pj = self.load_package_json_from_dir(self.sources_path)
-        local_settings = select_pnpm_settings(pj.data.get("pnpm"))
+        if pj is None:
+            pj = self.load_package_json_from_dir(self.sources_path)
+        if settings is None:
+            _, _, settings = load_effective_pnpm_config(pj, self.sources_root, self.sources_path)
         peers = pj.get_workspace_dep_paths(base_path=self.module_path)
-        config_path, _, settings = load_common_config(pj, self.sources_root, include_settings=True)
-        if config_path:
-            settings = rebase_pnpm_settings(
-                settings, os.path.join(self.sources_root, os.path.dirname(config_path)), self.sources_path
-            )
-        settings = join_pnpm_settings(settings, local_settings)
         candidates = workspace_settings_paths(settings)
         candidates.extend(spec[len("file:") :] for _, spec in pj.dependencies_iter() if spec.startswith("file:"))
         for relative in candidates:
@@ -114,6 +104,8 @@ class PackageManager(object):
         store_path: str,
         has_deps: bool,
         local_cli: bool,
+        platform=None,
+        supported_architectures=None,
     ) -> tuple[list[str], list[str], list[str]]:
         ins = [s_rooted(build_pj_path(self.module_path))]
         if has_deps or os.path.exists(build_lockfile_path(self.sources_path)):
@@ -122,7 +114,11 @@ class PackageManager(object):
         resources = []
 
         if has_deps and not local_cli:
-            for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
+            for pkg in self.extract_packages_meta_from_lockfiles(
+                [build_lockfile_path(self.sources_path)],
+                platform=platform,
+                supported_architectures=supported_architectures,
+            ):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
 
@@ -149,9 +145,9 @@ class PackageManager(object):
         return ins, outs
 
     @timeit
-    def extract_packages_meta_from_lockfiles(self, lf_paths):
+    def extract_packages_meta_from_lockfiles(self, lf_paths, platform=None, supported_architectures=None):
         """
-        :type lf_paths: iterable of BaseLockfile
+        :type lf_paths: iterable of paths or already loaded Lockfile objects
         :rtype: iterable of LockfilePackageMeta
         """
         tarballs = set()
@@ -159,7 +155,8 @@ class PackageManager(object):
 
         for lf_path in lf_paths:
             try:
-                for pkg in self.load_lockfile(lf_path).get_packages_meta():
+                lockfile = lf_path if isinstance(lf_path, Lockfile) else self.load_lockfile(lf_path)
+                for pkg in lockfile.get_packages_meta(platform, supported_architectures):
                     if pkg.tarball_path not in tarballs:
                         tarballs.add(pkg.tarball_path)
                         yield pkg

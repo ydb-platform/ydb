@@ -35,6 +35,8 @@ SRCS(
     topic_service_ut.cpp
     topic_deferred_publish_ut.cpp
     persqueue_v1_gaps_ut.cpp
+    read_session_multi_topic_ut.cpp
+    read_init_auth_actor_ut.cpp
     demo_tx.cpp
 
     fill_batched_data_offset_ut.cpp
@@ -47,6 +49,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/aclib
     ydb/core/persqueue/deferred_publish
+    ydb/core/persqueue/ut/common
     ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
@@ -55,6 +58,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/proto

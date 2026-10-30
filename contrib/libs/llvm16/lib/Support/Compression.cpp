@@ -21,7 +21,7 @@
 #include <zlib.h>
 #endif
 #if LLVM_ENABLE_ZSTD
-#error #include <zstd.h>
+#include <zstd.h>
 #endif
 
 using namespace llvm;

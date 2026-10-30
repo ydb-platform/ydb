@@ -177,7 +177,8 @@ public:
                 Sleep(TDuration::Seconds(1));
             }
         }
-        AFL_VERIFY(false)("reason", "condition not reached");
+        YDB_LOG_VERIFY(false,
+            {"reason", "condition not reached"});
     }
 
     void WaitActualization(const TDuration d, const bool waitWrites = false) const {
@@ -206,9 +207,9 @@ public:
             }
             Sleep(TDuration::Seconds(1));
         }
-        AFL_VERIFY(!NeedActualizationCount.Val());
+        YDB_LOG_VERIFY(!NeedActualizationCount.Val());
         if (waitWrites) {
-            AFL_VERIFY(GetTTLStartedCounter().Val() == GetTTLFinishedCounter().Val());
+            YDB_LOG_VERIFY(GetTTLStartedCounter().Val() == GetTTLFinishedCounter().Val());
         }
     }
 

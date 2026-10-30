@@ -194,7 +194,7 @@ vector                YDB vector workload.
 | `--query-table <имя>` | Имя таблицы с тестовой выборкой векторов. Если не задано, используются случайные строки из основной таблицы. | |
 | `--targets <значение>` | Размер тестовой выборки. | `100` |
 | `--limit <значение>` | Максимальное число записей в результатах одного запроса. | `5` |
-| `--kmeans-tree-clusters <значение>` | Максимальное число кластеров, проверяемых во время поиска ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize)). | `1` |
+| `--kmeans-tree-clusters <значение>` | Максимальное число кластеров, проверяемых во время поиска ([KMeansTreeSearchTopSize](../../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize)). | `1` |
 | `--recall` | Включить замер [полноты](https://ru.wikipedia.org/wiki/Полнота_и_точность) приближённого поиска относительно точного. | |
 | `--recall-threads <значение>` | Число параллельных запросов при оценке полноты. | `10` |
 | `--non-indexed` | Использовать настройки поиска из индекса, но искать без индекса, полным перебором. | |

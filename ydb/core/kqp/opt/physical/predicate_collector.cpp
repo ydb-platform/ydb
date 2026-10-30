@@ -491,6 +491,10 @@ bool CanBePushedAsOlapJsonValue(const TCoJsonValue& jsonValue, const TExprNode* 
     return variablesType && variablesType->GetKind() == ETypeAnnotationKind::EmptyDict;
 }
 
+bool CanBePushedAsOlapJsonExists(const TCoJsonExists& jsonExists, const TExprNode* lambdaArg) {
+    return JsonExistsCanBePushed(jsonExists, lambdaArg);
+}
+
 void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
                        const TPushdownOptions& options) {
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {

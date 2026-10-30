@@ -15,6 +15,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
+#include <util/generic/algorithm.h>
 #include <util/string/escape.h>
 #include <util/charset/utf8.h>
 
@@ -160,6 +161,8 @@ void TKeyValueState::Clear() {
     NextLogoBlobCookie = 1;
     Index.clear();
     RefCounts.clear();
+    ReadBlobsByRequest.clear();
+    ReadBlobRefCounts.clear();
     StateBytes = {};
     CompletedVacuumGeneration = 0;
     CompletedVacuumTrashGeneration = 0;
@@ -1548,7 +1551,11 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
         response.SetStatus(NKikimrProto::OK);
         ui32 numItems = 0;
         ui32 numUntrimmed = 0;
-        for (const TLogoBlobID& id : intermediate->TrimLeakedBlobs->FoundBlobs) {
+        auto& foundBlobs = intermediate->TrimLeakedBlobs->FoundBlobs;
+        // A group can occur more than once in channel history (A -> B -> A),
+        // so range replies may contain the same blob more than once.
+        SortUnique(foundBlobs);
+        for (const TLogoBlobID& id : foundBlobs) {
             auto it = RefCounts.find(id);
             if (it != RefCounts.end()) {
                 Y_ABORT_UNLESS(it->second != 0);
@@ -1563,6 +1570,12 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
                     }
                 }
                 if (!found) { // we found a candidate for trash
+                    // MoveData registers the new copy in RefCounts only after PUT.
+                    // Do not classify an in-flight copy as leaked while awaiting its result.
+                    if (id.Generation() == ExecutorGeneration && InFlightForStep.contains(id.Step())) {
+                        ++numUntrimmed;
+                        continue;
+                    }
                     if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
                         YDB_LOG_WARN("Trimming",
                             {"keyValue", TabletId},
@@ -2054,6 +2067,68 @@ void TKeyValueState::OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev
     WeightManager = std::move(ev->Get()->WeightManager);
 }
 
+void TKeyValueState::AcquireReadBlobs(const TIntermediate& intermediate) {
+    TVector<TLogoBlobID> blobs;
+    auto addRead = [&](const TIntermediate::TRead& read) {
+        for (const auto& item : read.ReadItems) {
+            blobs.push_back(item.LogoBlobId);
+        }
+    };
+    auto addRange = [&](const TIntermediate::TRangeRead& range) {
+        for (const auto& read : range.Reads) {
+            addRead(read);
+        }
+    };
+    for (const auto& read : intermediate.Reads) {
+        addRead(read);
+    }
+    for (const auto& range : intermediate.RangeReads) {
+        addRange(range);
+    }
+    for (const auto& patch : intermediate.Patches) {
+        blobs.push_back(patch.OriginalBlobId);
+    }
+    for (const auto& command : intermediate.Commands) {
+        if (const auto* patch = std::get_if<TIntermediate::TPatch>(&command)) {
+            blobs.push_back(patch->OriginalBlobId);
+        }
+    }
+    if (intermediate.ReadCommand) {
+        std::visit([&](const auto& command) {
+            using TCommand = std::decay_t<decltype(command)>;
+            if constexpr (std::is_same_v<TCommand, TIntermediate::TRead>) {
+                addRead(command);
+            } else if constexpr (std::is_same_v<TCommand, TIntermediate::TRangeRead>) {
+                addRange(command);
+            }
+        }, *intermediate.ReadCommand);
+    }
+    if (blobs.empty()) {
+        return;
+    }
+    SortUnique(blobs);
+    auto [it, inserted] = ReadBlobsByRequest.emplace(intermediate.RequestUid, std::move(blobs));
+    Y_ABORT_UNLESS(inserted);
+    for (const auto& id : it->second) {
+        ++ReadBlobRefCounts[id];
+    }
+}
+
+void TKeyValueState::ReleaseReadBlobs(ui64 requestUid) {
+    auto request = ReadBlobsByRequest.find(requestUid);
+    if (request == ReadBlobsByRequest.end()) {
+        return;
+    }
+    for (const auto& id : request->second) {
+        auto it = ReadBlobRefCounts.find(id);
+        Y_ABORT_UNLESS(it != ReadBlobRefCounts.end() && it->second);
+        if (--it->second == 0) {
+            ReadBlobRefCounts.erase(it);
+        }
+    }
+    ReadBlobsByRequest.erase(request);
+}
+
 TVector<ui32> TKeyValueState::GetAcquiredChannels(const TIntermediate &intermediate) const {
     std::bitset<256> acquiredChannels;
 
@@ -2252,6 +2327,7 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
 
     CountLatencyBsOps(stat);
 
+    ReleaseReadBlobs(requestUid);
     RequestInputTime.erase(requestUid);
     DataRequestsInFlight.erase(requestUid);
 
@@ -3700,6 +3776,8 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
     CountRequestIncoming(requestType);
 
     if (PrepareReadRequest(ctx, ev, intermediate, &requestType)) {
+        // Prepared blob IDs must stay readable even while this request is queued.
+        AcquireReadBlobs(*intermediate);
         if (requestType == TRequestType::ReadOnlyInline) {
             YDB_LOG_DEBUG("Create storage inline read request,",
                 {"keyValue", TabletId},
@@ -3740,6 +3818,8 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
     CountRequestIncoming(requestType);
 
     if (PrepareReadRangeRequest(ctx, ev, intermediate, &requestType)) {
+        // Prepared blob IDs must stay readable even while this request is queued.
+        AcquireReadBlobs(*intermediate);
         if (requestType == TRequestType::ReadOnlyInline) {
             YDB_LOG_DEBUG("Create storage inline read range request,",
                 {"keyValue", TabletId},
@@ -3780,6 +3860,7 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
     CountRequestIncoming(requestType);
 
     if (PrepareExecuteTransactionRequest(ctx, ev, intermediate, info)) {
+        AcquireReadBlobs(*intermediate);
         YDB_LOG_DEBUG("Create storage request for WO,",
             {"keyValue", TabletId},
             {"marker", "KV67"});
@@ -3878,6 +3959,8 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
 
     if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) {
+        // Prepared blob IDs must stay readable even while this request is queued.
+        AcquireReadBlobs(*intermediate);
         // Spawn KeyValueStorageRequest actor on the same thread
         if (hasTrim && IsCollectEventSent) {
             CmdTrimLeakedBlobsPostponed.push_back(std::move(intermediate));

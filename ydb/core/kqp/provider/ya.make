@@ -28,6 +28,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/resource
     ydb/core/base
     ydb/core/docapi
     ydb/core/external_sources
@@ -35,11 +36,14 @@ PEERDIR(
     ydb/core/kqp/opt/cbo
     ydb/core/local_indexes/bloom
     ydb/core/kqp/query_data
+    ydb/core/kqp/tracing
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
+    ydb/core/util
     ydb/library/aclib
     ydb/library/aclib/protos
+    ydb/library/table_digest
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/constraints
@@ -122,6 +126,10 @@ ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_provider.h)
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_gateway.h)
+
+RESOURCE(
+    ydb/library/yql/udfs/digest/aggregate.sql /lib/ydb/digest.sql
+)
 
 END()
 

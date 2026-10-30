@@ -27,6 +27,9 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <util/random/random.h>
 
+#include <algorithm>
+#include <iterator>
+
 namespace NKikimr {
 
 using namespace NColumnShard;
@@ -67,6 +70,31 @@ Y_UNIT_TEST_SUITE(ExportSessionStateMachine) {
 
         session->Abort("second abort");
         UNIT_ASSERT(session->IsAborted());
+    }
+
+    Y_UNIT_TEST(AbortErrorMessageSurvivesStateReload) {
+        auto session = MakeExportSession();
+        session->Confirm();
+        session->Abort("Scan error: blob read failed");
+        const TString state = session->SerializeStateToString();
+
+        auto reloaded = MakeExportSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(state).IsSuccess());
+        UNIT_ASSERT(reloaded->IsAborted());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_VALUES_EQUAL(status.ErrorMessage, "Scan error: blob read failed");
+    }
+
+    Y_UNIT_TEST(AbortedStateWithoutErrorMessageReportsStatus) {
+        NKikimrColumnShardExportProto::TExportSessionState proto;
+        proto.SetStatus(::ToString(NOlap::NExport::TSession::EStatus::Aborted));
+
+        auto reloaded = MakeExportSession();
+        UNIT_ASSERT(reloaded->DeserializeStateFromString(proto.SerializeAsString()).IsSuccess());
+        const auto status = reloaded->GetStatus();
+        UNIT_ASSERT(!status.Success);
+        UNIT_ASSERT_STRING_CONTAINS(status.ErrorMessage, "aborted");
     }
 }
 
@@ -233,6 +261,122 @@ void WriteAndCommitToMain(TTestBasicRuntime& runtime, TActorId& sender, ui64& tx
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
+    Y_UNIT_TEST(RetriesExportAfterS3ThrottlingMidUpload) {
+        auto s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        // S3 replies arrive on real HTTP threads while actor timers use simulated time.
+        runtime.SetFastSimulatedTime(false);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        auto sender = runtime.AllocateEdgeActor();
+
+        // Enough data for three S3 parts and several scan batches, so the cursor
+        // has advanced by the time the second part fails.
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME);
+        UNIT_ASSERT(batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(schema)).ok());
+        const TString value(1024, 'x');
+        TString expectedCsv;
+        for (ui64 key = 0; key < 15000; ++key) {
+            const TCell cells[] = { TCell::Make(key), TCell::Make(key), TCell(value.data(), value.size()) };
+            batchBuilder.AddRow(cells);
+            expectedCsv += TStringBuilder() << key << ',' << key << ",\"" << value << "\"\n";
+        }
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, 1, tableId, batchBuilder.Finish(), schema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        ui32 scanAcks = 0;
+        auto ackObserver = runtime.AddObserver<NKqp::TEvKqpCompute::TEvScanDataAck>([&](auto&) {
+            ++scanAcks;
+        });
+        ui32 successfulParts = 0;
+        auto partResponseObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvUploadPartResponse>([&](auto& ev) {
+            if (ev->Get()->Result.IsSuccess()) {
+                ++successfulParts;
+            }
+        });
+        std::vector<int> uploadedParts;
+        TActorId s3Uploader;
+        auto storageObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvUploadPartRequest>([&](auto& ev) {
+            const auto& request = ev->Get()->Request;
+            uploadedParts.push_back(request.GetPartNumber());
+            if (uploadedParts.size() != 2) {
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(request.GetPartNumber(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(successfulParts, 1);
+            // The first ACK starts the scan; subsequent ACKs follow cursor saves.
+            UNIT_ASSERT_GT(scanAcks, 1u);
+            s3Uploader = ev->Sender;
+            Aws::S3::S3Error error(
+                Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::UNKNOWN, "TooManyRequests", "Reduce request rate.", false));
+            error.SetResponseCode(Aws::Http::HttpResponseCode::TOO_MANY_REQUESTS);
+            using TResponse = NWrappers::TEvExternalStorage::TEvUploadPartResponse;
+            runtime.Send(
+                new IEventHandle(ev->Sender, ev->Recipient, new TResponse(TString(request.GetKey()), TResponse::TOutcome(error))), 0, true);
+            ev.Reset();
+        });
+
+        ui32 retrySchedules = 0;
+        auto previousScheduledFilter = runtime.SetScheduledEventFilter(&NActors::TTestActorRuntimeBase::NopFilterFunc);
+        runtime.SetScheduledEventFilter(
+            [&, previousScheduledFilter](NActors::TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+                if (s3Uploader && ev->GetRecipientRewrite() == s3Uploader && ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                    // Run the uploader's retry without waiting for its backoff.
+                    ++retrySchedules;
+                    r.Send(ev.Release(), 0, true);
+                    return true;
+                }
+                return previousScheduledFilter(r, ev, delay, deadline);
+            });
+
+        ui32 scans = 0;
+        auto scanObserver = runtime.AddObserver<TEvDataShard::TEvKqpScan>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetCSScanPolicy() == "EXPORT") {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetGeneration(), scans++);
+                UNIT_ASSERT_VALUES_EQUAL(record.RangesSize(), 0);
+            }
+        });
+
+        auto body = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId));
+        body.MutableBackupTask()->SetNumberOfRetries(1);
+        body.MutableBackupTask()->MutableScanSettings()->SetBytesBatchSize(5 << 20);
+        const auto backupTxId = ++txId;
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, body.SerializeAsString(), backupTxId);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), true);
+        TestWaitCondition(runtime, "export completed after S3 throttling", [&]() {
+            return controller->GetFinishedExportsCount() == 1 && GetExportActorsAliveCounter(runtime) == 0;
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(uploadedParts, (std::vector<int>{ 1, 2, 1, 2, 3 }));
+        UNIT_ASSERT_VALUES_EQUAL(successfulParts, 4);
+        UNIT_ASSERT_VALUES_EQUAL(retrySchedules, 1);
+        UNIT_ASSERT_VALUES_EQUAL(scans, 2);
+        Aws::S3::Model::GetObjectRequest request;
+        auto response = s3Client.GetObject(request.WithBucket("test").WithKey("data_00.csv"));
+        UNIT_ASSERT_C(response.IsSuccess(), response.GetError().GetMessage());
+        const std::string actualCsv((std::istreambuf_iterator<char>(response.GetResult().GetBody())), std::istreambuf_iterator<char>());
+        UNIT_ASSERT_VALUES_EQUAL(actualCsv.size(), expectedCsv.size());
+        UNIT_ASSERT_C(TStringBuf(actualCsv.data(), actualCsv.size()) == expectedCsv, "Exported CSV differs from the input rows");
+        UNIT_ASSERT_VALUES_EQUAL(NTestUtils::GetUncommittedUploadsCount("test", s3Client), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportReadInflight(runtime), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportAckInflight(runtime), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/Write/Inflight")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight")->Val(), 0);
+    }
+
     void TestScanPings(bool allowPings, bool savingCursor, bool failDuringSave = false) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -724,6 +868,120 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
     }
 
+    Y_UNIT_TEST(CancelDuringInFlightCursorSaveDoesNotAbort) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        std::vector<ui64> writeIds;
+        ui64 writeId = 1;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        const NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
+        const auto txBody = MakeBackupTxBody(tableId, backupSnapshot);
+        const ui64 backupTxId = ++txId;
+
+        TActorId exportActor;
+        auto initObserver = runtime.AddObserver<NKqp::TEvKqpCompute::TEvScanInitActor>([&](auto& ev) {
+            if (!exportActor) {
+                exportActor = ev->Recipient;
+            }
+        });
+        NActors::TBlockEvents<NOlap::NBackground::TEvLocalTransactionCompleted> blocked(runtime, [&](const auto& ev) {
+            return exportActor && ev->Recipient == exportActor;
+        });
+        // Hold the pill from the first FinishActor so the second completion is
+        // handled while that actor is still alive.
+        NActors::TBlockEvents<TEvents::TEvPoisonPill> blockedPoison(runtime, [&](const auto& ev) {
+            return exportActor && ev->Recipient == exportActor;
+        });
+
+        const auto txIdOf = [](const auto& ev) {
+            return ev->Get()->GetInternalTxId();
+        };
+        const auto dump = [&]() {
+            TStringBuilder out;
+            for (const auto& ev : blocked) {
+                out << txIdOf(ev) << " ";
+            }
+            return TString(out);
+        };
+        std::vector<ui64> known;
+        const auto isKnown = [&](ui64 id) {
+            return std::find(known.begin(), known.end(), id) != known.end();
+        };
+        const auto waitNew = [&](const char* title) {
+            ui64 found = 0;
+            TestWaitCondition(runtime, title, [&]() {
+                for (const auto& ev : blocked) {
+                    if (!isKnown(txIdOf(ev))) {
+                        found = txIdOf(ev);
+                        return true;
+                    }
+                }
+                return false;
+            }, TDuration::Seconds(30));
+            known.push_back(found);
+            return found;
+        };
+        const auto deliver = [&](ui64 id) {
+            auto it = std::find_if(blocked.begin(), blocked.end(), [&](const auto& ev) {
+                return txIdOf(ev) == id;
+            });
+            UNIT_ASSERT_C(it != blocked.end(), "missing completion " << id << " queue=[" << dump() << "]");
+            std::iter_swap(blocked.begin(), it);
+            blocked.Unblock(1);
+            runtime.SimulateSleep(TDuration::MilliSeconds(200));
+        };
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
+
+        const ui64 progressId = waitNew("cursor save completion");
+        UNIT_ASSERT_VALUES_EQUAL_C(blocked.size(), 1, dump());
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight")->Val(), 1);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
+
+        const ui64 stateId = waitNew("cancel state save completion");
+        deliver(stateId);
+        const ui64 finish1 = waitNew("first propose-finish completion");
+        deliver(progressId);
+        const ui64 state2 = waitNew("second state save completion");
+        deliver(state2);
+        const ui64 finish2 = waitNew("second propose-finish completion");
+        UNIT_ASSERT_VALUES_EQUAL_C(blocked.size(), 2, dump());
+
+        deliver(finish1);
+        UNIT_ASSERT_VALUES_EQUAL(blockedPoison.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 1);
+
+        deliver(finish2);
+        UNIT_ASSERT_C(blocked.empty(), dump());
+        UNIT_ASSERT_VALUES_EQUAL(blockedPoison.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 1);
+
+        blockedPoison.Stop().Unblock();
+        TestWaitCondition(runtime, "export actor stopped after cancel", [&]() {
+            return GetExportActorsAliveCounter(runtime) == 0;
+        });
+        Y_UNUSED(csControllerGuard);
+        Y_UNUSED(initObserver);
+    }
+
     Y_UNIT_TEST(PlanAfterDuplicateProposeDoesNotCrash) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test", s3Client);
@@ -760,15 +1018,22 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
             new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
-        const TPlanStep dupPlanStep{ ev->Get()->Record.GetMinStep() };
+        // A propose for a completed backup is ignored without a reply or a new operator.
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
-        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(dupPlanStep, backupTxId), false);
+        // Replay the original plan step: the duplicate propose does not return a new one.
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), false);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a duplicate propose and plan");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
         VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
@@ -808,14 +1073,22 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
             new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        // A propose for a completed backup is ignored without a reply or a new operator.
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a duplicate propose and cancel");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(InflightCountersLeakAfterRebootDuringWaitData) {

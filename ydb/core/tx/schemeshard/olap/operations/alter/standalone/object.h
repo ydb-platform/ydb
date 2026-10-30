@@ -12,7 +12,7 @@ private:
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
     std::optional<TOlapMultiColumnStatisticsDescription> TableMultiColumnStatistics;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoBuildUpdate(const NKikimrSchemeOp::TModifyScheme& modification) const override;
     virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
     TConclusionStatus InitializeFromTableInfo();
 public:

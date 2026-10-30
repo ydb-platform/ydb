@@ -20,6 +20,9 @@ private:
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SCHEMA;
     }
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
+    virtual TConclusionStatus DoRestore(const TUpdateRestoreContext& context) override final;
+    virtual TConclusionStatus DoRestoreImpl(
+        const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) = 0;
 
     bool IsAlterCompression(const TUpdateInitializationContext& context) const {
         for (const auto& alterColumn : context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {

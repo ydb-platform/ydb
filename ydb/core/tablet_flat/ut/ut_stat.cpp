@@ -22,15 +22,28 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto page = NTest::TTestEnv::TryGetPage(part, location, groupId);
+            auto type = location.Type;
+            if (type == EPage::Undef && location.Offset.IsPageIndex()) {
+                type = part->GetPageType(location.Offset.AsPageIndex(), groupId);
+            }
+            return Touch(part, location, groupId, type, NTest::TTestEnv::TryGetPage(part, location, groupId));
+        }
 
+        const TSharedData* TryGetIndexPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            auto type = location.Type;
+            if (type == EPage::Undef && location.Offset.IsPageIndex()) {
+                type = part->GetIndexPageType(location.Offset.AsPageIndex(), groupId);
+            }
+            // index pages are tracked as pages of their page collection
+            return Touch(part, location, TGroupId(part->IndexSlot(groupId)), type, NTest::TTestEnv::TryGetIndexPage(part, location, groupId));
+        }
+
+        const TSharedData* Touch(const TPart *part, const TPageLocation& location, TGroupId groupId, EPage type, const TSharedData* page)
+        {
             bool newTouch = Touched[{part, groupId}].insert(location.Offset).second;
 
             if (newTouch) {
-                auto type = location.Type;
-                if (type == EPage::Undef && location.Offset.IsPageIndex()) {
-                    type = part->GetPageType(location.Offset.AsPageIndex(), groupId);
-                }
                 if (type == EPage::DataPage) {
                     auto dataPage = NPage::TDataPage(page);
 
@@ -39,7 +52,7 @@ namespace {
                         TouchedRows += dataPage->Count;
                     }
                 }
-                if (type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2) {
+                if (NPage::IsIndexPage(type)) {
                     TouchedIndexPages++;
                     TouchedIndexBytes += page->size();
                 }

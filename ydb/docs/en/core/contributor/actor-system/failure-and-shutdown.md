@@ -35,15 +35,16 @@ PassAway();
 co_return;
 ```
 
-A task parked on an awaiter that does not support cancellation can keep the
-actor registered indefinitely. Actor-system/mailbox teardown is the emergency
+A task parked on an awaiter that does not support cancellation, such as a
+TFuture, can keep the actor registered indefinitely. Actor-system/mailbox teardown is the emergency
 path: DestroyActorTasks force-destroys remaining coroutine frames and then the
 actor. It does not run user code after an await, but C++ destruction of live
 frame parameters and locals still occurs, so RAII destructors run.
 
 PassAway only requests cancellation; it does not jump out of the calling
-handler. A normal completion already in flight may win the race, so make late
-post-await work harmless. TActorSystem::Stop is hard teardown: it does not
+handler, so do no shutdown-sensitive work after it. A normal completion already
+in flight may win the race, so make late post-await work check a dying flag or
+generation and remain harmless. TActorSystem::Stop is hard teardown: it does not
 gracefully Poison every actor. Children and scheduled events also do not
 automatically die when a parent calls PassAway.
 
@@ -55,7 +56,7 @@ Mailbox aliases created with IActor::RegisterAlias are removed when the actor
 detaches. TActorSystem service-map entries are separate and are not removed
 with the actor; clear or replace them explicitly.
 
-## Cancellation, PassAway, and death
+## Cancellation protocol
 
 Cancellation is an alternate coroutine-unwind protocol implemented with
 await_cancel and await_cancelled hooks. It is not throw/catch.
@@ -80,30 +81,6 @@ Important consequences:
 - an awaiter with no cancellation support may still suspend and later resume
   normally;
 - completion already scheduled before cancellation often wins.
-
-### PassAway
-
-PassAway marks the actor dying and calls Cancel on every root TActorTask. It
-detaches the ActorId only after the last root unregisters. Until then normal
-StateFunc events can still arrive, including another Poison. Since PassAway is
-one-shot, switch to a dying state before calling it.
-
-PassAway does not jump out of the current coroutine. Use:
-
-```cpp
-Become(&TThis::StateDying);
-PassAway();
-co_return;
-```
-
-Do not perform more shutdown-sensitive work after PassAway. A cancellation
-request can lose to a normal resume, so make already-scheduled post-await work
-check a dying flag/generation and remain harmless.
-
-A task parked on a generic TFuture or custom awaiter without cancellation may
-keep the actor registered indefinitely. TActorSystem shutdown is harder:
-mailbox cleanup force-destroys all remaining root frames before deleting the
-actor.
 
 ## RAII: what runs and when
 

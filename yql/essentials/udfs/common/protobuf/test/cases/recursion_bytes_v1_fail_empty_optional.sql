@@ -1,3 +1,7 @@
+$input = [
+    <|TestField: Just(@@{"inner": {"i": {"a": "hello"}}, "number": 5, "repeated": [], "select": {"name": ""}}@@)|>,
+];
+
 /*
 syntax='proto2';
 
@@ -47,5 +51,4 @@ $udfSer = Udf(Protobuf::Serialize, $config as TypeConfig);
 
 
 SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField))
-FROM plato.Input;
-
+FROM AS_TABLE($input);

@@ -21,6 +21,8 @@ namespace {
         {"STOP_SCHEMAS_CLEANUP", []() { return std::make_shared<TStopSchemasCleanupCommand>(); }},
         {"ONE_SCHEMAS_CLEANUP", []() { return std::make_shared<TOneSchemasCleanupCommand>(); }},
         {"FAST_PORTIONS_CLEANUP", []() { return std::make_shared<TFastPortionsCleanupCommand>(); }},
+        {"STOP_PORTIONS_CLEANUP", []() { return std::make_shared<TStopPortionsCleanupCommand>(); }},
+        {"ONE_PORTIONS_CLEANUP", []() { return std::make_shared<TOnePortionsCleanupCommand>(); }},
         {"ONE_COMPACTION", []() { return std::make_shared<TOneCompactionCommand>(); }},
         {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }},
         {"CHECK_COUNTER", []() { return std::make_shared<TCheckCounterCommand>(); }},
@@ -45,7 +47,9 @@ std::shared_ptr<ICommand> BuildCommand(const TString& command) {
 
     auto it = CommandFactories.find(commandName);
     if (it == CommandFactories.end()) {
-        AFL_VERIFY(false)("Unknown command", command)("commandName", commandName);
+        YDB_LOG_VERIFY(false,
+            {"unknownCommand", command},
+            {"commandName", commandName});
         return nullptr;
     }
 

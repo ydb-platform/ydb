@@ -24,7 +24,7 @@ public:
         : TBase(self)
         , Ev(ev)
     {
-        AFL_VERIFY(!!Ev);
+        YDB_LOG_VERIFY(!!Ev);
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& /* ctx */) override {
@@ -52,7 +52,7 @@ public:
                 Self->CurrentSchemeShardId = record.GetSchemeShardId();
                 Schema::SaveSpecialValue(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
             } else {
-                AFL_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
+                YDB_LOG_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
             if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
                 if (record.HasSubDomainPathId()) {
@@ -86,8 +86,8 @@ public:
 
     virtual void Complete(const TActorContext& ctx) override {
         auto& record = Proto(Ev->Get());
-        AFL_VERIFY(!!TxOperator);
-        AFL_VERIFY(!!TxInfo);
+        YDB_LOG_VERIFY(!!TxOperator);
+        YDB_LOG_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
         YDB_LOG_CREATE_CONTEXT(
             {"tabletId", Self->TabletID()},
@@ -134,6 +134,25 @@ private:
 };
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto txKind = record.GetTxKind();
+    if (txKind == NKikimrTxColumnShard::TX_KIND_BACKUP || txKind == NKikimrTxColumnShard::TX_KIND_RESTORE) {
+        // The completion result of a backup/restore is persisted per table (LastCompletedBackupTransaction) and the tx
+        // operator is removed when the operation finishes. So a propose for such tx is a stale duplicate: SchemeShard has
+        // already received PREPARED and planned the tx, it ignores TEvProposeTransactionResult at that stage and asks for
+        // the result with TEvNotifyTxCompletion. Registering a new operator here would never be planned again and would
+        // hide the persisted result from TEvNotifyTxCompletion, so the message is dropped.
+        if (const auto* completedTx = LastCompletedBackupTransactionsByTxId.FindPtr(record.GetTxId())) {
+            YDB_LOG_WARN("",
+                {"event", "ignore_propose_of_completed_backup_restore"},
+                {"tabletId", TabletID()},
+                {"txId", record.GetTxId()},
+                {"txKind", NKikimrTxColumnShard::ETransactionKind_Name(txKind)},
+                {"success", completedTx->GetOpResult().GetSuccess()},
+                {"explain", completedTx->GetOpResult().GetExplain()});
+            return;
+        }
+    }
     Execute(new TTxProposeTransaction(this, ev), ctx);
 }
 

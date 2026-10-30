@@ -1,5 +1,6 @@
 #include "kqp_olap_compiler.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
@@ -692,6 +693,24 @@ TTypedColumn CompileYqlKernelUdf(const TKqpOlapUdf& udf, TKqpOlapCompileContext&
     return {command->GetColumn().GetId(), resultType};
 }
 
+void CopyLikeHint(const TKqpOlapApply& apply, TProgram::TAssignment::TFunction* function) {
+    const auto hint = apply.LikeHint();
+    if (!hint) {
+        return;
+    }
+    const auto& list = hint.Cast().Ref();
+    if (list.ChildrenSize() != 4) {
+        return;
+    }
+    auto* proto = function->MutablePatternHint();
+    proto->SetArgumentIndex(FromString<ui32>(list.Child(0)->Content()));
+    proto->MutableLike()->SetPattern(TString(list.Child(1)->Content()));
+    if (const auto escape = list.Child(2)->Content(); !escape.empty()) {
+        proto->MutableLike()->SetEscape(TString(escape));
+    }
+    proto->SetCaseSensitive(list.Child(3)->Content() == "true");
+}
+
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
@@ -715,6 +734,7 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
     function->SetKernelName(apply.KernelName().StringValue());
+    CopyLikeHint(apply, function);
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
     return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
 }
@@ -1236,16 +1256,21 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
 
 void CompileOlapProgram(const TCoLambda& lambda, const TKikimrTableMetadata& tableMeta,
     NKqpProto::TKqpPhyOpReadOlapRanges& readProto, const std::vector<std::string>& resultColNames,
-    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx)
+    TExprContext &exprCtx, TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
 {
     YQL_ENSURE(lambda.Args().Size() == 1);
 
     TKqpOlapCompileContext ctx(lambda.Args().Arg(0), tableMeta, readProto, resultColNames, exprCtx, typesCtx);
 
-    CompileOlapProgramImpl(lambda.Body(), ctx);
-    CompileFinalProjection(ctx);
-
-    ctx.SerializeToProto();
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Build OLAP program");
+        CompileOlapProgramImpl(lambda.Body(), ctx);
+        CompileFinalProjection(ctx);
+    }
+    {
+        TCompileTraceScope scope(trace, TCompileTraceLevels::Detail, "Serialize OLAP program");
+        ctx.SerializeToProto();
+    }
 }
 
 } // namespace NKqp

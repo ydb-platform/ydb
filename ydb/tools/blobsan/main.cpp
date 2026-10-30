@@ -122,6 +122,32 @@ struct TGroupState {
 
 std::unordered_map<ui32, TGroupState> Groups;
 
+using TOutputLogoBlob = TLevelIndexStreamActor::TOutputLogoBlob;
+using TOutputLogoBlobFull = TLevelIndexStreamActor::TOutputLogoBlobFull;
+
+TIngress GetIngress(const TOutputLogoBlob& record) {
+    return TIngress(record.Ingress);
+}
+
+TIngress GetIngress(const TOutputLogoBlobFull& record) {
+    return record.MemRec.GetIngress();
+}
+
+void OutputMemRec(IOutputStream& /*out*/, const TOutputLogoBlob& /*record*/)
+{}
+
+void OutputMemRec(IOutputStream& out, const TOutputLogoBlobFull& record) {
+    const TBlobType::EType type = record.MemRec.GetType();
+    out << " Type# " << TBlobType::TypeToStr(type);
+    if (type == TBlobType::DiskBlob || type == TBlobType::HugeBlob) {
+        TDiskDataExtractor extr;
+        out << " Data# " << record.MemRec.GetDiskData(&extr, nullptr)->ToString();
+    } else {
+        // the outbound array of ManyHugeBlobs is not streamed
+        out << " Size# " << record.MemRec.DataSize();
+    }
+}
+
 void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& info) {
     TBufferInput stream(buffer);
     TRecordHeader header;
@@ -186,11 +212,12 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
             }
         }
 
-        auto processLogoBlob = [&](const TLevelIndexStreamActor::TOutputLogoBlob& record) {
+        auto processLogoBlob = [&](const auto& record) {
             const TLogoBlobID& blobId = record.Key.LogoBlobID();
-            const TIngress ingress(record.Ingress);
+            const TIngress ingress = GetIngress(record);
             if (OutputCout) {
                 lines << "Key# " << blobId << " Ingress# " << ingress.ToString(&topology, vdiskId, blobId);
+                OutputMemRec(lines, record);
             }
 
             EKeepMode keepMode;
@@ -295,7 +322,11 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
 
         switch (blockHeader.Database) {
             case static_cast<ui32>(TLevelIndexStreamActor::EDatabase::LOGOBLOBS):
-                processRecordArray(TLevelIndexStreamActor::TOutputLogoBlob(), processLogoBlob);
+                if (blockHeader.FullMemRec) {
+                    processRecordArray(TLevelIndexStreamActor::TOutputLogoBlobFull(), processLogoBlob);
+                } else {
+                    processRecordArray(TLevelIndexStreamActor::TOutputLogoBlob(), processLogoBlob);
+                }
                 break;
 
             case static_cast<ui32>(TLevelIndexStreamActor::EDatabase::BLOCKS):
@@ -401,7 +432,9 @@ int main(int argc, char **argv) {
         " In write2x2 mode this estimate may include blobs still being written"
         " above GC barriers; it does not establish that these parts can be deleted."
         " FULL marks a write2x2 candidate whose merged ingress layout is full"
-        " while its local-part layout from captured VDisks is incomplete.");
+        " while its local-part layout from captured VDisks is incomplete."
+        " Write2x2 mode also emits RestorePartInv1#/RestorePartInv2# <GroupId> <OrderNum> <BlobId>"
+        " to reach two copies per failrealm on captured VDisks, counting existing local copies.");
     opts.AddSection("Exit status",
         "0: analysis completed, including when findings are reported."
         " Nonzero: argument or input error.");
@@ -649,6 +682,21 @@ int main(int argc, char **argv) {
                 << "\n\tKeepMask#           " << FormatBitMask(blob.KeepMask, BlobSubgroupSize)
                 << "\n\tDoNotKeepMask#      " << FormatBitMask(blob.DoNotKeepMask, BlobSubgroupSize)
                 << "\n\tMisplaced#          " << (misplacedParts ? "true" : "false");
+
+            if (Write2x2Candidates) {
+                for (ui32 partIdx = 0; partIdx < TotalPartCount; ++partIdx) {
+                    const ui32 localDisks = originalLocalLayout.GetDisksWithPart(partIdx);
+                    ui32 copies = std::popcount(localDisks & (0b001001001 << partIdx));
+                    for (ui32 i = partIdx; i < BlobSubgroupSize && copies < 2; i += TotalPartCount) {
+                        const bool captured = seenDisks & (1u << i);
+                        const bool hasPart = localDisks & (1u << i);
+                        if (captured && !hasPart) {
+                            err << "\n\tRestorePartInv" << ++copies << "#    "
+                                << groupId << " " << nums[i] << " " << TLogoBlobID(blobId, partIdx + 1);
+                        }
+                    }
+                }
+            }
 
             for (const ui32 index : indexes) {
                 const auto& vdisk = group.States.at(index);

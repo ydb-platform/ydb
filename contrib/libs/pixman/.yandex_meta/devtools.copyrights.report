@@ -1,0 +1,659 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 016d12eb981725018bad19cd8b9bafec
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06108b44659a1e08d5231a8b92e075c9
+BELONGS ya.make
+    License text:
+         * Copyright © 2004, 2005 Red Hat, Inc.
+         * Copyright © 2004 Nicholas Miell
+         * Copyright © 2005 Trolltech AS
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-mmx.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d4d06b1308b4455299fc422100419bb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12a655072d895d5e5cb1133c57f51933
+BELONGS ya.make
+    License text:
+         * Copyright 2009, 2010 Nokia Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [22:22]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20a1afb13316121eae6b7ea5e49639fa
+BELONGS ya.make
+    License text:
+         * Copyright © 2008 Rodrigo Kumpera
+         * Copyright © 2008 André Tupinambá
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-sse2.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20ccdb872d15d1edd45f0e666601479e
+BELONGS ya.make
+    License text:
+         * Copyright © 2004 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-edge-imp.h [2:2]
+        pixman/pixman-edge.c [2:2]
+        pixman/pixman-trap.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 217297e15de37ec606c863a677d4981d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2294e1b5158950e2785c641510562094
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+        pixman/pixman-region.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22abf03ccc33b26dcbd776d798a13b50
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-general.c [2:7]
+        pixman/pixman-implementation.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26b4dfe272f073c1479d5f05bb99ecc6
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 SuSE, Inc.
+         * Copyright © 2007, 2009 Red Hat, Inc.
+         * Copyright © 2009 Soren Sandmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-solid-fill.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 296089cb7a05594f2df822767620f072
+BELONGS ya.make
+    License text:
+         * Copyright © 2002 Keith Packard, member of The XFree86 Project, Inc.
+         * Copyright © 2004 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-trap.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d273e605d51f4b3cac12733c84f490e
+BELONGS ya.make
+    License text:
+         * Copyright © 2013 Soren Sandmann Pedersen
+         * Copyright © 2013 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-ssse3.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2f1cc5105a99add103bcb3c88386176b
+BELONGS ya.make
+    License text:
+         * Copyright © 2008 Rodrigo Kumpera
+         * Copyright © 2008 André Tupinambá
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-sse2.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 36286528ea62ff5881193fda820d2edc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37948aeaedc00d24647f82b2b568b88e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 37fab787ae76e741d96e736b93ad8839
+BELONGS ya.make
+    License text:
+         * Copyright © 2010, 2012 Soren Sandmann Pedersen
+         * Copyright © 2010, 2012 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-combine-float.c [3:4]
+        pixman/pixman-combine-float.h [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e4b38960dabd6f1e06c9e7b4092d50e
+BELONGS ya.make
+    License text:
+         * Copyright © 2008 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-region16.c [2:2]
+        pixman/pixman-region32.c [2:2]
+        pixman/pixman-region64f.c [2:2]
+        pixman/pixman-version.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 458b555b6f3dbb4d4fdfddaa45c1d404
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48f782001125c091230bb5f46b34810e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50b75c56158aa4a51812e9106357a6d8
+BELONGS ya.make
+    License text:
+         * Copyright © 1998, 2004 Keith Packard
+         * Copyright   2007 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman.h [47:48]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 530bd58d205c3a4cbe74f6ba4e57e987
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55520fe7cba7df83bac397fbe6b343f0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55d35f18ee6b3f3a3d8902c207ede3a5
+BELONGS ya.make
+    License text:
+         * Copyright © 2010, 2012 Soren Sandmann Pedersen
+         * Copyright © 2010, 2012 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-combine-float.c [3:4]
+        pixman/pixman-combine-float.h [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 57c0fce0bba77922a3c06f7f0db0c516
+BELONGS ya.make
+    License text:
+         * Copyright 1987, 1988, 1989 by
+         * Digital Equipment Corporation, Maynard, Massachusetts.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-region.c [24:25]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5f1e7a2eea6f89b27ec29aa1b47e9d81
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 Keith Packard, member of The XFree86 Project, Inc.
+         *             2005 Lars Knoll & Zack Rusin, Trolltech
+         *             2008 Aaron Plattner, NVIDIA Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-access.c [3:5]
+        pixman/pixman-bits-image.c [2:7]
+        pixman/pixman-combine32.c [2:3]
+        pixman/pixman-conical-gradient.c [2:5]
+        pixman/pixman-general.c [2:7]
+        pixman/pixman-gradient-walker.c [3:4]
+        pixman/pixman-linear-gradient.c [3:6]
+        pixman/pixman-radial-gradient.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 627184a26d00f55a536cdcfea8a836e7
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 Keith Packard, member of The XFree86 Project, Inc.
+         * Copyright © 2000 SuSE, Inc.
+         *             2005 Lars Knoll & Zack Rusin, Trolltech
+         * Copyright © 2007 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-radial-gradient.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 62dceb2fda4698ef52632a3604b2c822
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 701b5e4f5cae0540e7401ca781b2968b
+BELONGS ya.make
+    License text:
+        Copyright 1987 by Digital Equipment Corporation, Maynard, Massachusetts.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman.h [25:25]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 76097823d293cfd7391c73a20a0f7d10
+BELONGS ya.make
+    License text:
+         * Copyright © 2004, 2005 Red Hat, Inc.
+         * Copyright © 2004 Nicholas Miell
+         * Copyright © 2005 Trolltech AS
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-mmx.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7616109141e93eb0066e6758522a6a98
+BELONGS ya.make
+    License text:
+        Copyright 1987, 1998  The Open Group
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82dfa5db16b1e50cecb614edf69f5033
+BELONGS ya.make
+    License text:
+         * Copyright © 2011 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-noop.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 88de879b87311196c54827d4e5bdd6a4
+BELONGS ya.make
+    License text:
+         * Copyright © 1998 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-region.c [45:45]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 89b474bb2b1085c22c8d1dc2ba75be0c
+BELONGS ya.make
+    License text:
+         * Copyright 2012, Red Hat, Inc.
+         * Copyright 2012, Soren Sandmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-filter.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9899b2dbc0f9cf76a126fc8f5244f314
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-bits-image.c [2:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6973075a644cc874da873adeb938870
+BELONGS ya.make
+    License text:
+         * Copyright 2010, 2012, Soren Sandmann <sandmann@cs.au.dk>
+         * Copyright 2010, 2011, 2012, Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-glyph.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8297527c7e3234dd5cb1bb18842a89b
+BELONGS ya.make
+    License text:
+         * Copyright © 1998, 2004 Keith Packard
+         * Copyright   2007 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman.h [47:48]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a8453e830da24a2380495c7fe63cc3a6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-bits-image.c [2:7]
+        pixman/pixman-solid-fill.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b008fa904f2fb047d8253f10d2713a4c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bf13c06e4b19d709f1bdd59bed5246bb
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 SuSE, Inc.
+         * Copyright © 1999 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-utils.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c11517e570978745766c972aaaac4f21
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce757934652c55ffed78e5c8b5310d65
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 SuSE, Inc.
+         * Copyright © 2007 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-arm.c [2:3]
+        pixman/pixman-conical-gradient.c [2:5]
+        pixman/pixman-fast-path.c [3:4]
+        pixman/pixman-general.c [2:7]
+        pixman/pixman-image.c [2:3]
+        pixman/pixman-inlines.h [3:4]
+        pixman/pixman-linear-gradient.c [3:6]
+        pixman/pixman-mips.c [2:3]
+        pixman/pixman-ppc.c [2:3]
+        pixman/pixman-radial-gradient.c [4:7]
+        pixman/pixman-timer.c [2:2]
+        pixman/pixman-x86.c [2:3]
+        pixman/pixman.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d61fe1a02b86bbc94b9556cfca868367
+BELONGS ya.make
+    License text:
+         * Copyright 2012, Red Hat, Inc.
+         * Copyright 2012, Soren Sandmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-filter.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d8d7f31bf781bae7db7001d8d7873aa3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dae9d76e33ee204e47b1d3b79f2a5fb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dd32d432ce24072f6365426ed2469c87
+BELONGS ya.make
+    License text:
+         * Copyright © 2010, 2012 Soren Sandmann Pedersen
+         * Copyright © 2010, 2012 Red Hat, Inc.
+         * Copyright © 2024 Filip Wasil, Samsung Electronics
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-combine-float.h [3:5]
+        pixman/pixman-riscv.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL de3e3bc7192a86606be8201ee740b078
+BELONGS ya.make
+    License text:
+         * Copyright © 2008 Keith Packard
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-matrix.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e41948bb30091ec9984337b7c51e02a4
+BELONGS ya.make
+    License text:
+        Copyright (C) 1994, 1995, 1996, 1999, 2000, 2001, 2002, 2004, 2005,
+        2006 Free Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7b1f34dd822c885d82ee8719ca029c2
+BELONGS ya.make
+    License text:
+         * Copyright © 2000 SuSE, Inc.
+         * Copyright © 2007 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-arm.c [2:3]
+        pixman/pixman-bits-image.c [2:7]
+        pixman/pixman-conical-gradient.c [2:5]
+        pixman/pixman-fast-path.c [3:4]
+        pixman/pixman-general.c [2:7]
+        pixman/pixman-image.c [2:3]
+        pixman/pixman-inlines.h [3:4]
+        pixman/pixman-linear-gradient.c [3:6]
+        pixman/pixman-mips.c [2:3]
+        pixman/pixman-ppc.c [2:3]
+        pixman/pixman-solid-fill.c [2:4]
+        pixman/pixman-utils.c [2:3]
+        pixman/pixman-x86.c [2:3]
+        pixman/pixman.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec5302cae0540bf947635397ae34f0b9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [6:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL efa048c830c389bf5c2f862cc28a4da7
+BELONGS ya.make
+    License text:
+         * Copyright 2010, 2012, Soren Sandmann <sandmann@cs.au.dk>
+         * Copyright 2010, 2011, 2012, Red Hat, Inc
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-glyph.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f58d7e14fe826d202fc0fa05c61578d5
+BELONGS ya.make
+    License text:
+         * Copyright © 2013 Soren Sandmann Pedersen
+         * Copyright © 2013 Red Hat, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-ssse3.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fce8b8367b247055926fca67f1c4886d
+BELONGS ya.make
+    License text:
+         * Copyright © 2004, 2005 Red Hat, Inc.
+         * Copyright © 2004 Nicholas Miell
+         * Copyright © 2005 Trolltech AS
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pixman/pixman-mmx.c [2:4]

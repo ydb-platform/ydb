@@ -30,25 +30,10 @@
                                 "Plans": [
                                     {
                                         "CTE Name": "precompute",
-                                        "Node Type": "Limit-CrossJoin-InnerJoin (Map)-ConstantExpr-Filter-ConstantExpr",
+                                        "Node Type": "Limit-Filter-InnerJoin (Map)-ConstantExpr-Filter-InnerJoin (Map)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
                                                     {
                                                         "InternalOperatorId": 1
                                                     },
@@ -69,15 +54,13 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
-                                                "Name": "CrossJoin"
+                                                "Name": "Filter",
+                                                "Predicate": "item.a._yql_join_key0 + item.b.Sum0 + 999 == item.t.tenthous"
                                             },
                                             {
-                                                "Condition": "t.thousand = b.Sum0",
+                                                "Condition": "b.Sum0 = a._yql_join_key0",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 4
@@ -90,8 +73,29 @@
                                             },
                                             {
                                                 "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute"
+                                                "Member": "precompute",
+                                                "Name": "Member"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 5
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.b.Sum0)"
+                                            },
+                                            {
+                                                "Condition": "t.thousand = b.Sum0",
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 6
+                                                    },
+                                                    {
+                                                        "Other": "ConstantExpression"
+                                                    }
+                                                ],
+                                                "Name": "InnerJoin (Map)"
                                             },
                                             {
                                                 "Inputs": [
@@ -101,11 +105,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.thousand)"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute"
                                             }
                                         ],
                                         "PlanNodeId": 8,

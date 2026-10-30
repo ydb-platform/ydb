@@ -83,6 +83,8 @@ public:
     void Shutdown(const TActorContext& ctx) override;
     bool IsExpectedStreamCreator(const TActorId& actorId) const override;
 
+    TString GetStreamPath() const override;
+
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
 
@@ -93,6 +95,7 @@ public:
     void SetLocation();
 
 protected:
+    virtual TString BuildStreamPath() const = 0;
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;
     virtual TTargetWithStreamStats* GetStatsImpl();
     virtual TTargetWithStreamCounters* GetCountersImpl();

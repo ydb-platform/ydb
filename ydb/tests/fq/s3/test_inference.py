@@ -4,18 +4,12 @@
 import boto3
 import logging
 import pytest
-import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from ydb.tests.tools.fq_runner.kikimr_utils import yq_v2
-from google.protobuf.struct_pb2 import NullValue
 
 import ydb.tests.fq.s3.s3_helpers as s3_helpers
 
 
-class TestS3Inference(TestYdsBase):
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+class TestS3Inference:
     def test_inference(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -34,9 +28,8 @@ Banana,3,100,2024-01-02
 Apple,2,22,2024-03-04
 Pear,15,33,2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -44,11 +37,11 @@ Pear,15,33,2024-05-06'''
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
         assert result_set.columns[0].name == "Date"
@@ -60,22 +53,19 @@ Pear,15,33,2024-05-06'''
         assert result_set.columns[3].name == "Weight"
         assert result_set.columns[3].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].uint32_value == 19724
-        assert result_set.rows[0].items[1].text_value == "Banana"
-        assert result_set.rows[0].items[2].int64_value == 3
-        assert result_set.rows[0].items[3].int64_value == 100
-        assert result_set.rows[1].items[0].uint32_value == 19786
-        assert result_set.rows[1].items[1].text_value == "Apple"
-        assert result_set.rows[1].items[2].int64_value == 2
-        assert result_set.rows[1].items[3].int64_value == 22
-        assert result_set.rows[2].items[0].uint32_value == 19849
-        assert result_set.rows[2].items[1].text_value == "Pear"
-        assert result_set.rows[2].items[2].int64_value == 15
-        assert result_set.rows[2].items[3].int64_value == 33
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
+        assert result_set.rows[0][0] == 19724
+        assert result_set.rows[0][1] == "Banana"
+        assert result_set.rows[0][2] == 3
+        assert result_set.rows[0][3] == 100
+        assert result_set.rows[1][0] == 19786
+        assert result_set.rows[1][1] == "Apple"
+        assert result_set.rows[1][2] == 2
+        assert result_set.rows[1][3] == 22
+        assert result_set.rows[2][0] == 19849
+        assert result_set.rows[2][1] == "Pear"
+        assert result_set.rows[2][2] == 15
+        assert result_set.rows[2][3] == 33
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_csv_no_header(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -94,9 +84,8 @@ Pear,15,33,2024-05-06'''
 Apple,2,22,2024-03-04
 Pear,15,33,2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits_noheader.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -104,11 +93,11 @@ Pear,15,33,2024-05-06'''
             WITH (format=csv, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
         # Columns are inferred with synthetic names column0..column3, ordered alphabetically by name.
@@ -122,8 +111,6 @@ Pear,15,33,2024-05-06'''
         assert result_set.columns[3].type.optional_type.item.type_id == ydb.Type.DATE
         assert len(result_set.rows) == 3
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_parquet_all_types(self, kikimr, s3, client, unique_prefix):
         # Generate a parquet file in-memory with one column per primitive arrow
         # type from kPrimitiveTypeTable (arrow_inferencinator.cpp) that survives
@@ -201,9 +188,8 @@ Pear,15,33,2024-05-06'''
             ContentType='application/octet-stream',
         )
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -211,11 +197,11 @@ Pear,15,33,2024-05-06'''
             WITH (format=parquet, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
 
         assert len(result_set.columns) == len(columns)
@@ -230,8 +216,6 @@ Pear,15,33,2024-05-06'''
                     actual.type.type_id == expected_type
                 ), f"column {name}: got {actual.type}, want {expected_type} (non-Optional)"
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     @pytest.mark.parametrize("kikimr_settings", [{"enable_schema_inference": False}], indirect=True)
     def test_inference_disabled_by_feature_flag(self, kikimr, s3, client, unique_prefix):
         # When the EnableExternalSourceSchemaInference feature flag is disabled,
@@ -255,9 +239,8 @@ Pear,15,33,2024-05-06'''
             ContentType='text/plain',
         )
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "infer_disabled_bucket"
-        client.create_storage_connection(storage_connection_name, "ibucket")
+        storage_connection_name = client.path(unique_prefix + "infer_disabled_bucket")
+        client.create_external_data_source(storage_connection_name, "ibucket")
 
         sql = f'''
             SELECT *
@@ -265,15 +248,13 @@ Pear,15,33,2024-05-06'''
             WITH (format="csv_with_names", with_infer="true");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        issues = str(client.describe_query(query_id).result.query.issue)
+        query = client.execute(sql)
+        query.check(False)
+        issues = str(query.error)
         assert (
             "Schema inference" in issues and "with_infer" in issues
         ), f"expected a clear schema-inference-disabled error in issues, got: {issues}"
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_error_propagates_to_user(self, kikimr, s3, client, unique_prefix):
         # When inference cannot produce any usable columns (here every JSON
         # field has an unsupported nested-array/object type), the inference
@@ -297,9 +278,8 @@ Pear,15,33,2024-05-06'''
 { "a" : [10, 20, 30] , "b" : { "key" : "value" } }
 { "a" : [10, 20, 30] , "b" : { "key" : "value" } }'''
         s3_client.put_object(Body=data, Bucket='fbucket', Key='unsupported.json', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "unsupported_bucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "unsupported_bucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -307,15 +287,13 @@ Pear,15,33,2024-05-06'''
             WITH (format=json_each_row, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        issues = str(client.describe_query(query_id).result.query.issue)
+        query = client.execute(sql)
+        query.check(False)
+        issues = str(query.error)
         assert (
             "couldn't infer schema" in issues or "no usable columns" in issues
         ), f"expected a clear inference-failure error in issues, got: {issues}"
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_null_column(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -334,9 +312,8 @@ Banana,3,
 Apple,2,
 Pear,15,'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -344,11 +321,11 @@ Pear,15,'''
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "Fruit"
@@ -358,19 +335,16 @@ Pear,15,'''
         assert result_set.columns[2].name == "Price"
         assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].text_value == "Banana"
-        assert result_set.rows[0].items[1].text_value == ""
-        assert result_set.rows[0].items[2].int64_value == 3
-        assert result_set.rows[1].items[0].text_value == "Apple"
-        assert result_set.rows[1].items[1].text_value == ""
-        assert result_set.rows[1].items[2].int64_value == 2
-        assert result_set.rows[2].items[0].text_value == "Pear"
-        assert result_set.rows[2].items[1].text_value == ""
-        assert result_set.rows[2].items[2].int64_value == 15
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
+        assert result_set.rows[0][0] == "Banana"
+        assert result_set.rows[0][1] == ""
+        assert result_set.rows[0][2] == 3
+        assert result_set.rows[1][0] == "Apple"
+        assert result_set.rows[1][1] == ""
+        assert result_set.rows[1][2] == 2
+        assert result_set.rows[2][0] == "Pear"
+        assert result_set.rows[2][1] == ""
+        assert result_set.rows[2][2] == 15
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_optional_types(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -389,9 +363,8 @@ Banana,,,2024-01-02
 Apple,2,22,
 ,15,33,2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -399,11 +372,11 @@ Apple,2,22,
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
         assert result_set.columns[0].name == "Date"
@@ -415,21 +388,19 @@ Apple,2,22,
         assert result_set.columns[3].name == "Weight"
         assert result_set.columns[3].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].uint32_value == 19724
-        assert result_set.rows[0].items[1].text_value == "Banana"
-        assert result_set.rows[0].items[2].null_flag_value == NullValue.NULL_VALUE
-        assert result_set.rows[0].items[3].null_flag_value == NullValue.NULL_VALUE
-        assert result_set.rows[1].items[0].null_flag_value == NullValue.NULL_VALUE
-        assert result_set.rows[1].items[1].text_value == "Apple"
-        assert result_set.rows[1].items[2].int64_value == 2
-        assert result_set.rows[1].items[3].int64_value == 22
-        assert result_set.rows[2].items[0].uint32_value == 19849
-        assert result_set.rows[2].items[1].text_value == ""
-        assert result_set.rows[2].items[2].int64_value == 15
-        assert result_set.rows[2].items[3].int64_value == 33
+        assert result_set.rows[0][0] == 19724
+        assert result_set.rows[0][1] == "Banana"
+        assert result_set.rows[0][2] is None
+        assert result_set.rows[0][3] is None
+        assert result_set.rows[1][0] is None
+        assert result_set.rows[1][1] == "Apple"
+        assert result_set.rows[1][2] == 2
+        assert result_set.rows[1][3] == 22
+        assert result_set.rows[2][0] == 19849
+        assert result_set.rows[2][1] == ""
+        assert result_set.rows[2][2] == 15
+        assert result_set.rows[2][3] == 33
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_multiple_files(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -451,9 +422,8 @@ Apple,2,22,
 
         s3_client.put_object(Body=read_data_1, Bucket='fbucket', Key='test/sub dir/1.csv', ContentType='text/plain')
         s3_client.put_object(Body=read_data_2, Bucket='fbucket', Key='test/sub dir/2.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "multiple_files_bucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "multiple_files_bucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -461,11 +431,11 @@ Apple,2,22,
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "a"
@@ -475,19 +445,16 @@ Apple,2,22,
         assert result_set.columns[2].name == "c"
         assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].int64_value == 1
-        assert result_set.rows[0].items[1].int64_value == 2
-        assert result_set.rows[0].items[2].int64_value == 3
-        assert result_set.rows[1].items[0].int64_value == 1
-        assert result_set.rows[1].items[1].int64_value == 2
-        assert result_set.rows[1].items[2].int64_value == 3
-        assert result_set.rows[2].items[0].int64_value == 1
-        assert result_set.rows[2].items[1].int64_value == 2
-        assert result_set.rows[2].items[2].int64_value == 3
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
+        assert result_set.rows[0][0] == 1
+        assert result_set.rows[0][1] == 2
+        assert result_set.rows[0][2] == 3
+        assert result_set.rows[1][0] == 1
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 3
+        assert result_set.rows[2][0] == 1
+        assert result_set.rows[2][1] == 2
+        assert result_set.rows[2][2] == 3
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_file_error(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -503,9 +470,8 @@ Apple,2,22,
 
         read_data = '''{"a" : [10, 20, 30]}'''
         s3_client.put_object(Body=read_data, Bucket='fbucket', Key='data.json', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "json_bucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "json_bucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -513,14 +479,10 @@ Apple,2,22,
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "couldn\\'t open csv/tsv file, check format and compression parameters:" in str(
-            client.describe_query(query_id).result
-        )
+        query = client.execute(sql)
+        query.check(False)
+        assert "couldn't open csv/tsv file, check format and compression parameters:" in str(query)
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_parameters(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -541,9 +503,8 @@ Pear|15|33|2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test1.csv', ContentType='text/plain')
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test2.csv', ContentType='text/plain')
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test3.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -556,11 +517,11 @@ Pear|15|33|2024-05-06'''
             limit 3;
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 6
         assert result_set.columns[0].name == "Date"
@@ -576,28 +537,25 @@ Pear|15|33|2024-05-06'''
         assert result_set.columns[5].name == "year"
         assert result_set.columns[5].type.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].uint32_value == 19724
-        assert result_set.rows[0].items[1].text_value == "Banana"
-        assert result_set.rows[0].items[2].int64_value == 3
-        assert result_set.rows[0].items[3].int64_value == 100
-        assert result_set.rows[0].items[4].int64_value == 5
-        assert result_set.rows[0].items[5].int64_value == 10
-        assert result_set.rows[1].items[0].uint32_value == 19786
-        assert result_set.rows[1].items[1].text_value == "Apple"
-        assert result_set.rows[1].items[2].int64_value == 2
-        assert result_set.rows[1].items[3].int64_value == 22
-        assert result_set.rows[1].items[4].int64_value == 5
-        assert result_set.rows[1].items[5].int64_value == 10
-        assert result_set.rows[2].items[0].uint32_value == 19849
-        assert result_set.rows[2].items[1].text_value == "Pear"
-        assert result_set.rows[2].items[2].int64_value == 15
-        assert result_set.rows[2].items[3].int64_value == 33
-        assert result_set.rows[2].items[4].int64_value == 5
-        assert result_set.rows[2].items[5].int64_value == 10
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
+        assert result_set.rows[0][0] == 19724
+        assert result_set.rows[0][1] == "Banana"
+        assert result_set.rows[0][2] == 3
+        assert result_set.rows[0][3] == 100
+        assert result_set.rows[0][4] == 5
+        assert result_set.rows[0][5] == 10
+        assert result_set.rows[1][0] == 19786
+        assert result_set.rows[1][1] == "Apple"
+        assert result_set.rows[1][2] == 2
+        assert result_set.rows[1][3] == 22
+        assert result_set.rows[1][4] == 5
+        assert result_set.rows[1][5] == 10
+        assert result_set.rows[2][0] == 19849
+        assert result_set.rows[2][1] == "Pear"
+        assert result_set.rows[2][2] == 15
+        assert result_set.rows[2][3] == 33
+        assert result_set.rows[2][4] == 5
+        assert result_set.rows[2][5] == 10
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_timestamp(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -620,9 +578,8 @@ Pear|15|33|2024-05-06'''
 { "a" : "2024-08-29", "b" : "2024-08-29 10:20:30", "c" : "2024-08-29T10:20:30.01" }'''
         s3_client.put_object(Body=csv_data, Bucket='fbucket', Key='timestamp.csv', ContentType='text/plain')
         s3_client.put_object(Body=json_data, Bucket='fbucket', Key='timestamp.json', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -630,11 +587,11 @@ Pear|15|33|2024-05-06'''
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "a"
@@ -650,11 +607,11 @@ Pear|15|33|2024-05-06'''
             WITH (format=json_each_row, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 3
         assert result_set.columns[0].name == "a"
@@ -670,12 +627,10 @@ Pear|15|33|2024-05-06'''
             WITH (format=csv_with_names, with_infer='true', `data.timestamp.formatname`='ISO');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "parameter is not supported with type inference" in str(client.describe_query(query_id).result)
+        query = client.execute(sql)
+        query.check(False)
+        assert "parameter is not supported with type inference" in str(query)
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_projection(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -695,9 +650,8 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=2023/fruits.csv', ContentType='text/plain')
 
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = (
             '''$projection = @@ {
@@ -721,11 +675,11 @@ Pear,15,33'''
             '''
         )
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 4
         assert result_set.columns[0].name == "Fruit"
@@ -737,22 +691,19 @@ Pear,15,33'''
         assert result_set.columns[3].name == "date"
         assert result_set.columns[3].type.type_id == ydb.Type.DATE
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].text_value == "Banana"
-        assert result_set.rows[0].items[1].int64_value == 3
-        assert result_set.rows[0].items[2].int64_value == 100
-        assert result_set.rows[0].items[3].uint32_value == 19663
-        assert result_set.rows[1].items[0].text_value == "Apple"
-        assert result_set.rows[1].items[1].int64_value == 2
-        assert result_set.rows[1].items[2].int64_value == 22
-        assert result_set.rows[1].items[3].uint32_value == 19663
-        assert result_set.rows[2].items[0].text_value == "Pear"
-        assert result_set.rows[2].items[1].int64_value == 15
-        assert result_set.rows[2].items[2].int64_value == 33
-        assert result_set.rows[2].items[3].uint32_value == 19663
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
+        assert result_set.rows[0][0] == "Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 100
+        assert result_set.rows[0][3] == 19663
+        assert result_set.rows[1][0] == "Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 22
+        assert result_set.rows[1][3] == 19663
+        assert result_set.rows[2][0] == "Pear"
+        assert result_set.rows[2][1] == 15
+        assert result_set.rows[2][2] == 33
+        assert result_set.rows[2][3] == 19663
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_null_column_name(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -771,9 +722,8 @@ Pear,15,33'''
 2,Apple,2
 3,Pear,15'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -781,11 +731,11 @@ Pear,15,33'''
             WITH (format=csv_with_names, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 2
         assert result_set.columns[0].name == "Fruit"
@@ -793,16 +743,13 @@ Pear,15,33'''
         assert result_set.columns[1].name == "Price"
         assert result_set.columns[1].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].text_value == "Banana"
-        assert result_set.rows[0].items[1].int64_value == 3
-        assert result_set.rows[1].items[0].text_value == "Apple"
-        assert result_set.rows[1].items[1].int64_value == 2
-        assert result_set.rows[2].items[0].text_value == "Pear"
-        assert result_set.rows[2].items[1].int64_value == 15
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
+        assert result_set.rows[0][0] == "Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[1][0] == "Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[2][0] == "Pear"
+        assert result_set.rows[2][1] == 15
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_inference_unsupported_types(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -820,9 +767,8 @@ Pear,15,33'''
 { "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 20 }
 { "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 30 }'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.json', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -830,29 +776,27 @@ Pear,15,33'''
             WITH (format=json_each_row, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         logging.debug(str(result_set))
         assert len(result_set.columns) == 1
         assert result_set.columns[0].name == "c"
         assert result_set.columns[0].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].int64_value == 10
-        assert result_set.rows[1].items[0].int64_value == 20
-        assert result_set.rows[2].items[0].int64_value == 30
+        assert result_set.rows[0][0] == 10
+        assert result_set.rows[1][0] == 20
+        assert result_set.rows[2][0] == 30
 
     def _create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data")
-        kikimr.control_plane.wait_bootstrap(1)
 
     def _create_bucket_and_upload_file_body(
         self, body, object_key, s3, kikimr, content_type="text/plain", bucket_name="fbucket"
     ):
         s3_helpers.create_bucket_and_put_object(s3.s3_url, bucket_name, object_key, body, content_type)
-        kikimr.control_plane.wait_bootstrap(1)
 
     def _validate_result_inference(self, result_set, fruit_nullable=False):
         logging.debug(str(result_set))
@@ -867,17 +811,16 @@ Pear,15,33'''
         assert result_set.columns[2].name == "Weight"
         assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.INT64
         assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].text_value == "Banana"
-        assert result_set.rows[0].items[1].int64_value == 3
-        assert result_set.rows[0].items[2].int64_value == 100
-        assert result_set.rows[1].items[0].text_value == "Apple"
-        assert result_set.rows[1].items[1].int64_value == 2
-        assert result_set.rows[1].items[2].int64_value == 22
-        assert result_set.rows[2].items[0].text_value == "Pear"
-        assert result_set.rows[2].items[1].int64_value == 15
-        assert result_set.rows[2].items[2].int64_value == 33
+        assert result_set.rows[0][0] == "Banana"
+        assert result_set.rows[0][1] == 3
+        assert result_set.rows[0][2] == 100
+        assert result_set.rows[1][0] == "Apple"
+        assert result_set.rows[1][1] == 2
+        assert result_set.rows[1][2] == 22
+        assert result_set.rows[2][0] == "Pear"
+        assert result_set.rows[2][1] == 15
+        assert result_set.rows[2][2] == 33
 
-    @yq_v2
     @pytest.mark.parametrize(
         "filename, type_format",
         [
@@ -890,8 +833,8 @@ Pear,15,33'''
     )
     def test_format_inference(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self._create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
             SELECT *
@@ -899,15 +842,13 @@ Pear,15,33'''
             WITH (format=`{type_format}`, with_infer='true');
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        query = client.execute(sql)
+        query.check()
 
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
+        data = query.result_set()
+        result_set = data
         self._validate_result_inference(result_set, fruit_nullable=(type_format == "parquet"))
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_with_infer_and_unsupported_option(self, kikimr, s3, client, unique_prefix):
         fruits = '''Fruit,Price,Weight
 Banana,3,100
@@ -915,8 +856,8 @@ Apple,2,22
 Pear,15,33'''
         self._create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
+        client.create_external_data_source(storage_connection_name, "fbucket")
 
         # XXX replace with other unsupported parameter when/if this one become supported
         sql = f'''
@@ -925,12 +866,12 @@ Pear,15,33'''
             WITH (format="csv_with_names", with_infer="true", `data.datetime.format`="%Y-%m-%dT%H-%M");
             '''
 
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        describe_result = client.describe_query(query_id).result
+        query = client.execute(sql)
+        query.check(False)
+        describe_result = query
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
         assert (
-            "couldn\\'t load table metadata: parameter is not supported with type inference: data.datetime.format"
+            "couldn't load table metadata: parameter is not supported with type inference: data.datetime.format"
             in describe_string
         )

@@ -566,6 +566,83 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         CheckSelfHealStatePull(false);
     }
 
+    Y_UNIT_TEST(SelfHealStatePullPreservesPendingPush) {
+        const auto relaxTime = TDuration::Seconds(30);
+        NKikimrCms::TCmsConfig config;
+        auto* selfheal = config.MutableSentinelConfig()->MutableStateStorageSelfHealConfig();
+        selfheal->SetEnable(true);
+        selfheal->SetNodeGoodStateLimit(3);
+        selfheal->SetNodePrettyGoodStateLimit(2);
+        selfheal->SetNodeBadStateLimit(3);
+        selfheal->SetRelaxTime(relaxTime.GetValue());
+        TTestEnv env(8, 4, config);
+        const auto edge = env.AllocateEdgeActor();
+        const auto nodeId = env.GetFirstNodeId();
+        TVector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot> pushes;
+        auto prevObserver = env.SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                    && ev->Sender == env.GetSentinelActor()
+                    && ev->Recipient == MakeBlobStorageNodeWardenID(nodeId)) {
+                pushes.push_back(ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return prevObserver(ev);
+        });
+        auto checkNodeState = [&](ui32 expected) {
+            env.Send(new IEventHandle(env.GetSentinelActor(), edge, new TEvCms::TEvGetSentinelStateRequest));
+            auto response = env.GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(edge);
+            const auto& states = response->Get()->Record.GetNodesState();
+            UNIT_ASSERT_VALUES_EQUAL(states.size(), 8);
+            for (const auto& node : states) {
+                UNIT_ASSERT_VALUES_EQUAL(node.GetState(), node.GetNodeId() == nodeId ? expected : ui32(ENodeState::GOOD));
+            }
+        };
+        auto sample = [&] {
+            env.SetPDiskState({}, NKikimrBlobStorage::TPDiskState::Normal);
+        };
+
+        for (ui32 i = 0; i < 3; ++i) {
+            sample();
+        }
+        checkNodeState(ENodeState::GOOD);
+        env.AdvanceCurrentTime(relaxTime + TDuration::Seconds(1));
+        sample();
+        checkNodeState(ENodeState::GOOD);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.size(), 1);
+        pushes.clear();
+
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            MockNodes.at(nodeId).Connected = false;
+        }
+        for (ui32 i : xrange(3)) {
+            sample();
+            checkNodeState(i == 2 ? ENodeState::BAD : ENodeState::MAY_BE_BAD);
+        }
+        UNIT_ASSERT(pushes.empty());
+
+        env.Send(new IEventHandle(env.GetSentinelActor(), edge, new NStorage::TEvNodeConfigGetSelfHealState));
+        checkNodeState(ENodeState::BAD);
+        auto response = env.GrabEdgeEventRethrow<NStorage::TEvNodeConfigInvokeOnRoot>(edge);
+        const auto pulled = response->Get()->Record.SerializeAsString();
+        response.Reset();
+        env.AdvanceCurrentTime(relaxTime - TDuration::Seconds(1));
+        sample();
+        checkNodeState(ENodeState::BAD);
+        UNIT_ASSERT(pushes.empty());
+        env.AdvanceCurrentTime(TDuration::Seconds(2));
+        sample();
+        checkNodeState(ENodeState::BAD);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.front().SerializeAsString(), pulled);
+        env.AdvanceCurrentTime(relaxTime + TDuration::Seconds(1));
+        sample();
+        checkNodeState(ENodeState::BAD);
+        UNIT_ASSERT_VALUES_EQUAL(pushes.size(), 1);
+        env.SetObserverFunc(prevObserver);
+    }
+
     Y_UNIT_TEST(Smoke) {
         TTestEnv env(8, 4);
     }

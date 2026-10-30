@@ -34,6 +34,8 @@ struct TControllerSchema: NIceDb::Schema {
         struct CommittedStep: Column<11, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct CommittedTxId: Column<12, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
+        struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -47,7 +49,8 @@ struct TControllerSchema: NIceDb::Schema {
             Database,
             DeferredAlter,
             CommittedStep,
-            CommittedTxId
+            CommittedTxId,
+            SourceOffsetMismatch
         >;
     };
 
@@ -88,15 +91,14 @@ struct TControllerSchema: NIceDb::Schema {
         // Ordered target-only flush snapshot; retain it until ordinary global
         // commits retire the captured write transaction IDs.
         struct SchemaBarrierFlushTxIds: Column<17, NScheme::NTypeIds::String> {};
-        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> {
+        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TOwnerId;
             static constexpr Type Default = InvalidOwnerId;
         };
-        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> {
+        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TLocalPathId;
             static constexpr Type Default = InvalidLocalPathId;
         };
-
         struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ReplicationId, Id>;
@@ -183,6 +185,17 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Progress>;
     };
 
+    // Unlike Workers, these positions survive pause/resume.
+    // An absent row means progress is unknown.
+    struct ProcessedSourceOffsets: Table<10> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct NextOffset: Column<4, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, NextOffset>;
+    };
+
     using TTables = SchemaTables<
         SysParams,
         Replications,
@@ -191,7 +204,8 @@ struct TControllerSchema: NIceDb::Schema {
         TxIds,
         Workers,
         SchemaBarrierWorkers,
-        IndexBuildWorkers
+        IndexBuildWorkers,
+        ProcessedSourceOffsets
     >;
 
 }; // TControllerSchema

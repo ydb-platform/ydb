@@ -117,24 +117,22 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        Send(
-            Source,
-            new TEvStateStorage::TEvInfo(
-                status,
-                TabletID,
-                Cookie,
-                ReplyLeader,
-                ReplyLeaderTablet,
-                ReplyGeneration,
-                ReplyStep,
-                ReplyLocked,
-                ReplyLockedFor,
-                Signature,
-                GetFollowersAsVector(Followers)
-            ),
-            0,
-            SourceCookie
+        auto* msg = new TEvStateStorage::TEvInfo(
+            status,
+            TabletID,
+            Cookie,
+            ReplyLeader,
+            ReplyLeaderTablet,
+            ReplyGeneration,
+            ReplyStep,
+            ReplyLocked,
+            ReplyLockedFor,
+            Signature,
+            GetFollowersAsVector(Followers)
         );
+        msg->ClusterStateGeneration = Info->ClusterStateGeneration;
+        msg->ClusterStateGuid = Info->ClusterStateGuid;
+        Send(Source, msg, 0, SourceCookie);
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -956,6 +954,9 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             GetFollowersAsVector(Followers)
         );
 
+        msg->ClusterStateGeneration = Info->ClusterStateGeneration;
+        msg->ClusterStateGuid = Info->ClusterStateGuid;
+
         YDB_LOG_DEBUG("RingGroupProxyRequest::Reply TEvInfo",
             {"ev", msg->ToString()});
         Send(Source, msg, 0, SourceCookie);
@@ -1276,11 +1277,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         ui64 fakeTabletId;
         switch (msg->KeyType) {
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePath:
-            fakeTabletId = CityHash64(msg->Path);
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->Path);
             break;
 
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePathId:
-            fakeTabletId = msg->PathId.Hash();
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->PathId);
             break;
 
         default:

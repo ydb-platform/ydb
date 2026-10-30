@@ -163,6 +163,40 @@ def test_viewer_config_access_controls(mon_base_url_with_extra_sids_control):
         _assert_status(mon_base_url_with_extra_sids_control, ep, 'root@builtin', 200)
 
 
+def test_empty_monitoring_sids_only_allows_administrators(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    security = configurator.yaml_config['domains_config']['security_config']
+    security['database_allowed_sids'] = ['database@builtin']
+    security['viewer_allowed_sids'] = ['viewer@builtin']
+    security['monitoring_allowed_sids'] = []
+    security['administration_allowed_sids'] = ['root@builtin']
+
+    cluster = KiKiMR(configurator)
+    try:
+        cluster.start()
+        base_url = mon_base_url(cluster)
+        wait_for_viewer_ready(base_url)
+
+        viewer_path = '/viewer/cluster'
+        _assert_status(base_url, viewer_path, None, 401)
+        _assert_status(base_url, viewer_path, 'database@builtin', 403)
+        _assert_status(base_url, viewer_path, 'viewer@builtin', 200)
+        _assert_status(base_url, viewer_path, 'root@builtin', 200)
+
+        monitoring_path = '/tablets'
+        # Empty monitoring_allowed_sids list doesn't provide access to any valid token for monitoring endpoints.
+        # Endpoints requiring monitoring-level access are accessible only to administrators in this case.
+        _assert_status(base_url, monitoring_path, None, 401)
+        _assert_status(base_url, monitoring_path, 'database@builtin', 403)
+        _assert_status(base_url, monitoring_path, 'viewer@builtin', 403)
+        _assert_status(base_url, monitoring_path, 'root@builtin', 200)
+    finally:
+        cluster.stop()
+
+
 def test_viewer_v2_aliases_access_controls(mon_base_url_with_extra_sids_control, describe_schema_grants):
     config_v2_endpoint = '/viewer/v2/json/config'
 

@@ -12,7 +12,7 @@ IF (SANITIZER_TYPE == "thread")
     REQUIREMENTS(ram:32 cpu:1)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 DEPENDS(
@@ -28,12 +28,12 @@ PEERDIR(
 )
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(20)
 
 # SQS tests are not CPU or disk intensive,
 # but they use sleeping for some events,
 # so it would be secure to increase split factor.
 # This increasing of split factor reduces test time
 # to 15-20 seconds.
-SPLIT_FACTOR(60)
 
 END()

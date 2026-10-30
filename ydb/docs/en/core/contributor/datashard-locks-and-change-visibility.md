@@ -32,6 +32,8 @@ When the lock is added for the first time, it is assigned a monotonically increa
 
 In the successful scenario, the lock exists and is not broken, `Generation` and `Counter` fields do not change.
 
+### Broken locks {#broken-locks}
+
 In the unsuccessful scenarios, previously acquired locks are broken. For example, when changing the `Generation` of the lock (disabling the lock on restart) or the `Counter` (on an explicit error status, or when disabling and recreating the lock in the same generation).
 
 The first `Generation` and `Counter` for each shard are remembered by QP, and changes during transaction lifetime are indicative of possible inconsistencies and serializable isolation violations. Read-Write transactions, or transactions that did not use global MVCC snapshots for efficiency reasons, perform the final commit that validates `Generation`/`Counter` values and commit only succeeds when all of them match.
@@ -109,5 +111,7 @@ When YQL transaction needs to rollback it runs an empty transactions with the [R
 Currently, uncommitted changes have a downside that all new writes have to search for conflicts. A single uncommitted write is enough to cause all new writes at a specific DataShard to switch to become non-blind, i.e. every write will have to perform a read first, which makes them more expensive, increases latency and decreases throughput. For maximum performance it is recommended to execute transactions where all reads are performed first, and a small amount of blind writes are performed last. This way uncommitted writes will not be used and DataShard performance will be optimal.
 
 Due to LocalDB limitations DataShard also needs to ensure it doesn't accumulate too many open transactions, and the locks table is already limited to ~10k locks, which includes write locks. DataShard also has to count the number of uncommitted changes before each uncommitted write, which is implemented by counting skips in the transaction observer, and throwing [TLockedWriteLimitException](https://github.com/ydb-platform/ydb/blob/d31477e5ed13679dd3b409b100623cc81a5e0964/ydb/core/tx/datashard/datashard__engine_host.cpp#L867) when the limit is exceeded.
+
+### Whole-shard locks {#whole-shard-locks}
 
 Persistent locks survive DataShard reboots and restore the last state. Even though it is possible to persist specific ranges, this is not used in practice (DataShard would need to persist ranges during reads, which is expensive), and read locks are restored in the worst case "whole shard" as their range.

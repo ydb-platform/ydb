@@ -9,6 +9,8 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 
+#include <optional>
+
 namespace NKikimrReplication {
     class TStaticCredentials;
     class TIamCredentials;
@@ -56,6 +58,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(CommitOffset),
         EvEndTopicPartition,
         EvStartTopicReadingSession,
+        EvTopicReaderStatus,
 
         EvEnd,
     };
@@ -128,7 +131,18 @@ struct TEvYdbProxy {
     };
 
     struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        enum class EFailureKind {
+            Unspecified,
+            DataError,
+        };
+
         using TBase::TBase;
+        EFailureKind FailureKind = EFailureKind::Unspecified;
+
+        TEvTopicReaderGone(NYdb::TStatus status, EFailureKind kind)
+            : TBase(std::move(status))
+            , FailureKind(kind)
+        {}
     };
 
     struct TTopicReaderSettings: private NYdb::NTopic::TReadSessionSettings {
@@ -148,6 +162,8 @@ struct TEvYdbProxy {
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
         FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
         FLUENT_SETTING_DEFAULT(bool, RetryOnSchemeError, false);
+        FLUENT_SETTING_DEFAULT(bool, FailOnDataLoss, false);
+        FLUENT_SETTING_DEFAULT(bool, CheckStatusForDataLoss, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \
@@ -229,12 +245,16 @@ struct TEvYdbProxy {
         explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
             : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
             , CommittedOffset(event.GetCommittedOffset())
+            , ReadOffset(event.GetReadOffset())
+            , RetainedStartOffset(event.GetRetainedStartOffset())
         {
         }
 
-        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset)
+        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset, std::optional<ui64> retainedStartOffset)
             : ReadSessionId(readSessionId)
             , CommittedOffset(committedOffset)
+            , ReadOffset(committedOffset)
+            , RetainedStartOffset(retainedStartOffset)
         {
         }
 
@@ -242,9 +262,20 @@ struct TEvYdbProxy {
 
         TString ReadSessionId;
         ui64 CommittedOffset;
+        ui64 ReadOffset;
+        std::optional<ui64> RetainedStartOffset;
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {
+        using TBase::TBase;
+    };
+
+    struct TTopicReaderStatusResult {
+        TString ReadSessionId;
+        ui64 ReadOffset;
+    };
+
+    struct TEvTopicReaderStatus: public TGenericResponse<TEvTopicReaderStatus, EvTopicReaderStatus, TTopicReaderStatusResult> {
         using TBase::TBase;
     };
 

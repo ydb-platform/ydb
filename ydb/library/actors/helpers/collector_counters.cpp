@@ -10,36 +10,6 @@
 
 namespace NActors {
 
-// THistogramCounters
-
-void THistogramCounters::Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal) {
-    for (size_t i = 0; (1ull<<i) <= maxVal; ++i) {
-        TString bucketName = ToString(1ull<<i) + " " + unit;
-        Buckets.push_back(group->GetSubgroup("sensor", baseName)->GetNamedCounter("range", bucketName, true));
-    }
-    Buckets.push_back(group->GetSubgroup("sensor", baseName)->GetNamedCounter("range", "INF", true));
-}
-
-void THistogramCounters::Set(const TLogHistogram& data) {
-    ui32 i = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets) && i < Buckets.size()-1; ++i)
-        *Buckets[i] = data.Buckets[i];
-    ui64 last = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets); ++i)
-        last += data.Buckets[i];
-    *Buckets.back() = last;
-}
-
-void THistogramCounters::Set(const TLogHistogram& data, double factor) {
-    ui32 i = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets) && i < Buckets.size()-1; ++i)
-        *Buckets[i] = data.Buckets[i]*factor;
-    ui64 last = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets); ++i)
-        last += data.Buckets[i];
-    *Buckets.back() = last*factor;
-}
-
 // TActivityStats
 
 void TActivityStats::Init(NMonitoring::TDynamicCounterPtr group) {
@@ -177,16 +147,12 @@ void TExecutorPoolCounters::Init(NMonitoring::TDynamicCounters* group, const TSt
     SpinThresholdUs = PoolGroup->GetCounter("SpinThresholdUs", false);
 
 
-    LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
     ActivationTimeHistogram = PoolGroup->GetHistogram(
         "ActivationTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1));
-    LegacyEventDeliveryTimeHistogram.Init(PoolGroup.Get(), "EventDeliveryTime", "usec", 5*1000*1000);
     EventDeliveryTimeHistogram = PoolGroup->GetHistogram(
         "EventDeliveryTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1));
-    LegacyEventProcessingCountHistogram.Init(PoolGroup.Get(), "EventProcessingCount", "usec", 5*1000*1000);
     EventProcessingCountHistogram = PoolGroup->GetHistogram(
         "EventProcessingCountUs", NMonitoring::ExponentialHistogram(24, 2, 1));
-    LegacyEventProcessingTimeHistogram.Init(PoolGroup.Get(), "EventProcessingTime", "usec", 5*1000*1000);
     EventProcessingTimeHistogram = PoolGroup->GetHistogram(
         "EventProcessingTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1));
 
@@ -242,20 +208,16 @@ void TExecutorPoolCounters::Set(const TExecutorPoolStats& poolStats, const TExec
     *SpinningTimeUs = poolStats.SpinningTimeUs;
     *SpinThresholdUs = poolStats.SpinThresholdUs;
 
-    LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
     ActivationTimeHistogram->Reset();
     ActivationTimeHistogram->Collect(stats.ActivationTimeHistogram);
 
-    LegacyEventDeliveryTimeHistogram.Set(stats.EventDeliveryTimeHistogram);
     EventDeliveryTimeHistogram->Reset();
     EventDeliveryTimeHistogram->Collect(stats.EventDeliveryTimeHistogram);
 
-    LegacyEventProcessingCountHistogram.Set(stats.EventProcessingCountHistogram);
     EventProcessingCountHistogram->Reset();
     EventProcessingCountHistogram->Collect(stats.EventProcessingCountHistogram);
 
     double toMicrosec = 1000000 / NHPTimer::GetClockRate();
-    LegacyEventProcessingTimeHistogram.Set(stats.EventProcessingTimeHistogram, toMicrosec);
     EventProcessingTimeHistogram->Reset();
     for (ui32 i = 0; i < stats.EventProcessingTimeHistogram.Count(); ++i) {
         EventProcessingTimeHistogram->Collect(

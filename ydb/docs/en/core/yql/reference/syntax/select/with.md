@@ -4,15 +4,15 @@ Specified after the data source in `FROM` and used to provide additional hints f
 
 The following values are supported:
 
-* `INFER_SCHEMA` — sets the flag for inferring the table schema. The behavior is similar to setting the [yt.InferSchema pragma](../pragma.md#inferschema), but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
-* `FORCE_INFER_SCHEMA` — sets the flag for forcing schema inference of the table. The behavior is similar to setting the [yt.ForceInferSchema pragma](../pragma.md#inferschema), but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
-* `DIRECT_READ` — suppresses the operation of some optimizers and forces the table contents to be used as is. The behavior is similar to setting the debug [DirectRead pragma](../pragma.md#debug), but only for a specific data source.
+* `INFER_SCHEMA` — sets the flag for inferring the table schema. The behavior is similar to setting the yt.InferSchema pragma, but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
+* `FORCE_INFER_SCHEMA` — sets the flag for forcing schema inference of the table. The behavior is similar to setting the yt.ForceInferSchema pragma, but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
+* `DIRECT_READ` — suppresses the operation of some optimizers and forces the table contents to be used as is. The behavior is similar to setting the debug {% if tech and feature_webui %}[DirectRead pragma](../pragma.md#debug){% else %}DirectRead pragma{% endif %}, but only for a specific data source.
 * `INLINE` — indicates that the table contents are small and should be processed using an in-memory representation. The actual table size is not checked, and if it is large, the query may fail due to memory exhaustion.
 * `UNORDERED` — suppresses the use of the table's original sorting.
 * `XLOCK` — indicates that an exclusive lock should be taken on the table. Useful when the table is read during the [query metaprogram](../action.md) processing stage and then its contents are updated in the main query. It helps avoid data loss if an external process modifies the table between the execution of the metaprogram phase and the main part of the query.
 * `SCHEMA` type — indicates that the specified table schema should be used entirely, ignoring the schema in the metadata.
 * `COLUMNS` type — indicates that the specified types should be used for columns whose names match the column names in the table metadata, as well as which additional columns are present in the table.
-* `IGNORETYPEV3`, `IGNORE_TYPE_V3` — sets the flag to ignore type_v3 types in the table. The behavior is similar to setting the [yt.IgnoreTypeV3 pragma](../pragma.md#ignoretypev3), but only for a specific data source.
+* `IGNORETYPEV3`, `IGNORE_TYPE_V3` — sets the flag to ignore type_v3 types in the table. The behavior is similar to setting the yt.IgnoreTypeV3 pragma, but only for a specific data source.
 
 {% if feature_federated_queries %}
 

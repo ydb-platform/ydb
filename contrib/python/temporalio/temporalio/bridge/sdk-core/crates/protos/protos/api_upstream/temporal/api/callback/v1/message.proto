@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package temporal.api.callback.v1;
+
+option go_package = "go.temporal.io/api/callback/v1;callback";
+option java_package = "io.temporal.api.callback.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Callback::V1";
+option csharp_namespace = "Temporalio.Api.Callback.V1";
+
+import "google/protobuf/timestamp.proto";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/common.proto";
+import "temporal/api/failure/v1/message.proto";
+
+// Common callback information. Specific CallbackInfo messages should embed this and may include additional fields.
+message CallbackInfo {
+    // Information on how this callback should be invoked (e.g. its URL and type).
+    temporal.api.common.v1.Callback callback = 1;
+    // The time when the callback was registered.
+    google.protobuf.Timestamp registration_time = 2;
+    // The current state of the callback.
+    temporal.api.enums.v1.CallbackState state = 3;
+    // The number of attempts made to deliver the callback.
+    // This number represents a minimum bound since the attempt is incremented after the callback request completes.
+    int32 attempt = 4;
+    // The time when the last attempt completed.
+    google.protobuf.Timestamp last_attempt_complete_time = 5;
+    // The last attempt's failure, if any.
+    temporal.api.failure.v1.Failure last_attempt_failure = 6;
+    // The time when the next attempt is scheduled.
+    google.protobuf.Timestamp next_attempt_schedule_time = 7;
+    // If the state is BLOCKED, blocked reason provides additional information.
+    string blocked_reason = 8;
+}

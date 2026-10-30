@@ -1,7 +1,7 @@
 PY3TEST()
 
 SIZE(MEDIUM)
-TIMEOUT(240)
+TIMEOUT(600)
 
 TEST_SRCS(
     test.py

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/vector_distance/float16.h>
+#include <ydb/library/vector_distance/float8.h>
+#include <ydb/library/vector_distance/int4.h>
 
 #include "util/system/types.h"
 
@@ -10,6 +12,10 @@ enum EFormat: ui8 {
     Int8Vector = 3,     // 1-byte per element
     Float16Vector = 4,   // 2-byte per element, IEEE-754 binary16
     BFloat16Vector = 5,  // 2-byte per element, bfloat16
+    Float8E4M3Vector = 6, // 1-byte per element, E4M3FN
+    Float8E5M2Vector = 7, // 1-byte per element, E5M2
+    Uint4Vector = 8,    // 2 elements per byte, low nibble first; padding-nibble count before format
+    Int4Vector = 9,     // signed two's complement, same packed layout as Uint4Vector
     BitVector = 10,      // 1-bit  per element
 };
 
@@ -32,6 +38,16 @@ struct TTypeToFormat<TBFloat16> {
 };
 
 template <>
+struct TTypeToFormat<TFloat8E4M3> {
+    static constexpr auto Format = EFormat::Float8E4M3Vector;
+};
+
+template <>
+struct TTypeToFormat<TFloat8E5M2> {
+    static constexpr auto Format = EFormat::Float8E5M2Vector;
+};
+
+template <>
 struct TTypeToFormat<i8> {
     static constexpr auto Format = EFormat::Int8Vector;
 };
@@ -39,6 +55,16 @@ struct TTypeToFormat<i8> {
 template <>
 struct TTypeToFormat<ui8> {
     static constexpr auto Format = EFormat::Uint8Vector;
+};
+
+template <>
+struct TTypeToFormat<TUint4> {
+    static constexpr auto Format = EFormat::Uint4Vector;
+};
+
+template <>
+struct TTypeToFormat<TInt4> {
+    static constexpr auto Format = EFormat::Int4Vector;
 };
 
 template <>

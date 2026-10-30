@@ -2,6 +2,7 @@
 
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 #include <ydb/core/tx/datashard/import_s3_engine.h>
@@ -14,6 +15,7 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -35,6 +37,7 @@
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
 #include <util/stream/null.h>
+#include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
@@ -42,9 +45,12 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cmath>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 namespace NKikimr::NDataShard {
@@ -951,6 +957,71 @@ TMaybe<TString> RunImport(IImportS3Engine& engine, const TString& source, const 
     return Nothing();
 }
 
+template <typename T>
+void CheckCsvFloatingPointRoundTrip(NScheme::TTypeId typeId) {
+    using TBits = std::conditional_t<sizeof(T) == sizeof(ui32), ui32, ui64>;
+    auto scheme = MakeUtf8TableScheme();
+    scheme.MutableColumns(1)->SetTypeId(typeId);
+    const TEngineFixture fixture(std::move(scheme));
+    TYdbDumpExportSettings settings;
+    settings.WithColumns(fixture.UserTable->Columns);
+    const auto format = CreateExportDataFormat(std::move(settings));
+    UNIT_ASSERT_C(format->ColumnsOrder({1, 2}), format->GetError());
+
+    const TVector<TMaybe<T>> values = {
+        std::nextafter(T(1), T(2)),
+        T(0.30000000000000004),
+        T(1.2345678901234567),
+        std::numeric_limits<T>::min(),
+        std::numeric_limits<T>::denorm_min(),
+        std::numeric_limits<T>::max(),
+        std::numeric_limits<T>::lowest(),
+        T(0), T(-0.0),
+        std::numeric_limits<T>::infinity(),
+        -std::numeric_limits<T>::infinity(),
+        std::numeric_limits<T>::quiet_NaN(),
+        Nothing(),
+    };
+    TStringStream csv;
+    for (size_t i = 0; i < values.size(); ++i) {
+        const TString key = ToString(i);
+        NTable::IScan::TRow row;
+        row.Init(2);
+        row.Set(0, NTable::ECellOp::Set, TCell(key.data(), key.size()));
+        if (values[i]) {
+            row.Set(1, NTable::ECellOp::Set, TCell::Make(*values[i]));
+        } else {
+            row.Set(1, NTable::ECellOp::Null, TCell());
+        }
+        UNIT_ASSERT_C(format->Collect(row, csv), format->GetError());
+    }
+
+    const TString source = csv.Str();
+    auto engine = fixture.MakeEngine(EDataFormat::YdbDump, source, /*readBatchSize=*/8_KB);
+    size_t restored = 0;
+    const auto error = RunImport(*engine, source,
+        [&](const TVector<TCell>& keys, const TVector<TCell>& cells) -> std::expected<void, TString> {
+            UNIT_ASSERT(restored < values.size());
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(keys.front().AsBuf(), ToString(restored));
+            UNIT_ASSERT_VALUES_EQUAL(cells.size(), 1);
+            const auto& expected = values[restored];
+            UNIT_ASSERT_VALUES_EQUAL(cells.front().IsNull(), !expected);
+            if (expected) {
+                const T actual = cells.front().AsValue<T>();
+                if (std::isnan(*expected)) {
+                    UNIT_ASSERT(std::isnan(actual));
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(std::bit_cast<TBits>(actual), std::bit_cast<TBits>(*expected), "row " << restored);
+                }
+            }
+            ++restored;
+            return {};
+        });
+    UNIT_ASSERT_C(!error, error.GetOrElse(""));
+    UNIT_ASSERT_VALUES_EQUAL(restored, values.size());
+}
+
 // Takes the rows up to the one with the key, which it rejects.
 IImportS3Engine::TAddRowFn RejectRow(TStringBuf key, TVector<TString>& taken) {
     return [key, &taken](const TVector<TCell>& keys, const TVector<TCell>&) -> std::expected<void, TString> {
@@ -1453,6 +1524,162 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
     }
 
+    Y_UNIT_TEST(EncryptedCsvAcceptsBlocksInsideRowsAndFrames) {
+        const TString largeValue = MakePseudoRandomAscii(256_KB);
+        // Both frames must exceed a 128 KiB zstd block: smaller frames may emit
+        // all rows only at frame completion, leaving no intermediate batch to restart from.
+        const TString lastValue = MakePseudoRandomAscii(192_KB);
+        const TString batches[] = {
+            TStringBuilder() << "\"k0\",\"v0\"\n\"k1\",\"" << largeValue << "\"\n",
+            TStringBuilder() << "\"k2\",\"v2\"\n\"k3\",\"" << lastValue << "\"\n",
+        };
+        const TString csv = batches[0] + batches[1];
+        const NBackup::TEncryptionKey key(TString(32, 'k'));
+        const auto iv = NBackup::TEncryptionIV::Generate();
+        const TEngineFixture fixture;
+
+        for (const auto codec : {ECompressionCodec::None, ECompressionCodec::Zstd}) {
+            NBackup::TEncryptedFileSerializer serializer("AES-256-GCM", key, iv);
+            TString source;
+            ui64 firstBatchEnd = 0;
+            for (const TString& batch : batches) {
+                const TString payload = codec == ECompressionCodec::Zstd ? ZstdCompress(batch) : batch;
+                // Use small encryption blocks to exercise the same boundaries as
+                // AddData() splitting a large batch, without a 50 MiB test fixture.
+                UNIT_ASSERT_GT(payload.size(), 4_KB);
+                TStringBuf remaining = payload;
+                while (remaining) {
+                    const size_t size = Min(remaining.size(), 4_KB);
+                    const auto block = serializer.AddBlock(remaining.Head(size), false);
+                    source.append(block.Data(), block.Size());
+                    remaining.Skip(size);
+                }
+                if (!firstBatchEnd) {
+                    firstBatchEnd = source.size();
+                }
+            }
+            const auto terminator = serializer.AddBlock(TStringBuf(), true);
+            source.append(terminator.Data(), terminator.Size());
+
+            TImportS3EngineSettings settings;
+            settings.DataFormat = EDataFormat::YdbDump;
+            settings.CompressionCodec = codec;
+            settings.ContentLength = source.size();
+            settings.ReadBatchSize = 1_KB;
+            settings.BufferSizeLimit = 1_MB;
+            settings.ValidateChecksum = true;
+            settings.EncryptionKey = key;
+            settings.EncryptionIV = iv;
+            const auto makeEngine = [&]() {
+                return ExtractValue(CreateImportS3Engine(settings, fixture.TableInfo, fixture.Scheme));
+            };
+
+            enum class ERestart {
+                None,
+                AtCheckpoint,
+                InsideBatch,
+            };
+            for (const auto restart : {ERestart::None, ERestart::AtCheckpoint, ERestart::InsideBatch}) {
+                auto engine = makeEngine();
+                TMemoryPool pool(256);
+                TVector<TDecodedRow> rows;
+                const auto addRow = CaptureRows(rows);
+                TString checksumInput;
+                NBackup::IChecksum::TPtr checksum(NBackup::CreateChecksum());
+                auto checkpointChecksum = checksum->GetState();
+                size_t checkpointCsvSize = 0;
+                const auto addChecksum = [&](TStringBuf data) {
+                    checksumInput.append(data.data(), data.size());
+                    checksum->AddData(data);
+                };
+                ui64 processedBytes = 0;
+                ui64 committedRows = 0;
+                ui64 committedDataBytes = 0;
+                TMaybe<ui64> lastRestartedOffset;
+                ui32 deferredRestarts = 0;
+                bool sawDeferredBatch = false;
+                bool sawBatchCheckpoint = false;
+                bool finished = false;
+                for (ui32 step = 0; step < 4096 && !finished; ++step) {
+                    const auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
+                    switch (data.Status) {
+                    case IImportS3Engine::EDataStatus::NeedInput: {
+                        const auto range = ExtractValue(engine->NextRange());
+                        UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                        AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+                        break;
+                    }
+                    case IImportS3Engine::EDataStatus::Ready: {
+                        committedRows += data.Batch.Rows;
+                        committedDataBytes += data.Batch.DataBytes;
+                        if (!data.Batch.Checkpoint) {
+                            sawDeferredBatch = true;
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.DataBytes, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, processedBytes);
+                        } else {
+                            checkpointChecksum = checksum->GetState();
+                            checkpointCsvSize = checksumInput.size();
+                            if (data.Batch.ProcessedBytesAfter == firstBatchEnd) {
+                                sawBatchCheckpoint = true;
+                                UNIT_ASSERT_VALUES_EQUAL(committedRows, 2);
+                            }
+                        }
+                        processedBytes = data.Batch.ProcessedBytesAfter;
+                        AssertSuccess(engine->Commit(data.Batch.Id));
+                        const bool restartInsideBatch = restart == ERestart::InsideBatch
+                            && !data.Batch.Checkpoint
+                            && (!lastRestartedOffset || *lastRestartedOffset != processedBytes);
+                        if (restartInsideBatch
+                            || (restart == ERestart::AtCheckpoint && data.Batch.Checkpoint && processedBytes < source.size())) {
+                            if (restartInsideBatch) {
+                                UNIT_ASSERT_VALUES_EQUAL(processedBytes, deferredRestarts == 0 ? 0 : firstBatchEnd);
+                                ++deferredRestarts;
+                                lastRestartedOffset = processedBytes;
+                                UNIT_ASSERT_GT(rows.size(), committedRows);
+                            }
+                            // Callbacks beyond the durable checkpoint are replayed after a restart.
+                            rows.resize(committedRows);
+                            checksumInput.resize(checkpointCsvSize);
+                            checksum->SetState(checkpointChecksum);
+                            engine = makeEngine();
+                            // Use the state returned by this batch, including a non-checkpoint batch:
+                            // this is what the downloader persists together with ProcessedBytesAfter.
+                            AssertSuccess(engine->RestoreFromState(processedBytes, data.Batch.DownloadStateAfter));
+                        }
+                        break;
+                    }
+                    case IImportS3Engine::EDataStatus::Finished:
+                        finished = true;
+                        break;
+                    case IImportS3Engine::EDataStatus::WaitingForCommit:
+                        UNIT_FAIL("unexpected batch waiting for commit");
+                    }
+                }
+
+                UNIT_ASSERT_C(finished, "import did not finish with split encryption blocks");
+                UNIT_ASSERT(sawDeferredBatch);
+                UNIT_ASSERT(sawBatchCheckpoint);
+                UNIT_ASSERT_VALUES_EQUAL(processedBytes, source.size());
+                UNIT_ASSERT_VALUES_EQUAL(committedRows, 4);
+                UNIT_ASSERT_VALUES_EQUAL(committedDataBytes, largeValue.size() + lastValue.size() + 12);
+                UNIT_ASSERT_VALUES_EQUAL(checksumInput, csv);
+                UNIT_ASSERT_VALUES_EQUAL(checksum->Finalize(), NBackup::ComputeChecksum(csv));
+                UNIT_ASSERT_VALUES_EQUAL_C(deferredRestarts, restart == ERestart::InsideBatch ? 2 : 0,
+                    "codec: " << (codec == ECompressionCodec::Zstd ? "zstd" : "none"));
+                UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(rows[0].Key, "k0");
+                UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "v0");
+                UNIT_ASSERT_VALUES_EQUAL(rows[1].Key, "k1");
+                UNIT_ASSERT_VALUES_EQUAL(rows[1].Value, largeValue);
+                UNIT_ASSERT_VALUES_EQUAL(rows[2].Key, "k2");
+                UNIT_ASSERT_VALUES_EQUAL(rows[2].Value, "v2");
+                UNIT_ASSERT_VALUES_EQUAL(rows[3].Key, "k3");
+                UNIT_ASSERT_VALUES_EQUAL(rows[3].Value, lastValue);
+            }
+        }
+    }
+
     Y_UNIT_TEST(EncryptedCsvRejectsInvalidSeparateTerminator) {
         const TString csv = "\"k1\",\"v1\"\n";
         const NBackup::TEncryptionKey key(TString(32, 'k'));
@@ -1798,6 +2025,97 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         UNIT_FAIL("the incompatible Parquet schema was not rejected");
+    }
+
+    Y_UNIT_TEST(CsvRoundTripsFloatPrecision) {
+        CheckCsvFloatingPointRoundTrip<float>(NScheme::NTypeIds::Float);
+    }
+
+    Y_UNIT_TEST(CsvRoundTripsDoublePrecision) {
+        CheckCsvFloatingPointRoundTrip<double>(NScheme::NTypeIds::Double);
+    }
+
+    Y_UNIT_TEST(CsvPreservesJsonDocumentInfinityStringification) {
+        TYdbDumpExportSettings settings;
+        settings.Columns.emplace(1, TUserTable::TUserColumn(
+            NScheme::TTypeInfo(NScheme::NTypeIds::JsonDocument), "", "doc", false));
+        const auto format = CreateExportDataFormat(std::move(settings));
+        UNIT_ASSERT_C(format->ColumnsOrder({1}), format->GetError());
+
+        for (TStringBuf text : {"1e100000000", R"([1e100000000,{"nested":-1e100000000}])"}) {
+            const auto document = std::get<NBinaryJson::TBinaryJson>(
+                NBinaryJson::SerializeToBinaryJson(text, /*allowInf=*/true));
+            NTable::IScan::TRow row;
+            row.Init(1);
+            row.Set(0, NTable::ECellOp::Set, TCell(document.Data(), document.Size()));
+            TStringStream csv;
+            UNIT_ASSERT_C(format->Collect(row, csv), format->GetError());
+            UNIT_ASSERT_VALUES_EQUAL(csv.Str(),
+                TStringBuilder() << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(document)) << "\"\n");
+        }
+    }
+
+    Y_UNIT_TEST(CsvRoundTripsJsonDocumentPrecision) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(1)->SetTypeId(NScheme::NTypeIds::JsonDocument);
+        const TEngineFixture fixture(std::move(scheme));
+        TYdbDumpExportSettings settings;
+        settings.WithColumns(fixture.UserTable->Columns);
+        const auto format = CreateExportDataFormat(std::move(settings));
+        UNIT_ASSERT_C(format->ColumnsOrder({1, 2}), format->GetError());
+
+        const TVector<TMaybe<TString>> documents = {
+            StoredJsonDocument("0.30000000000000004"),
+            StoredJsonDocument("1.0000000000000002"),
+            StoredJsonDocument(R"([{"value":0.30000000000000004}])"),
+            StoredJsonDocument("-0.0"),
+            Nothing(),
+        };
+        TStringStream csv;
+        for (size_t i = 0; i < documents.size(); ++i) {
+            const TString key = ToString(i);
+            NTable::IScan::TRow row;
+            row.Init(2);
+            row.Set(0, NTable::ECellOp::Set, TCell(key.data(), key.size()));
+            if (documents[i]) {
+                row.Set(1, NTable::ECellOp::Set, TCell(documents[i]->data(), documents[i]->size()));
+            } else {
+                row.Set(1, NTable::ECellOp::Null, TCell());
+            }
+            UNIT_ASSERT_C(format->Collect(row, csv), format->GetError());
+        }
+
+        const TString source = csv.Str();
+        UNIT_ASSERT_STRING_CONTAINS(source, "\"3\",\"0\"\n");
+        auto engine = fixture.MakeEngine(EDataFormat::YdbDump, source, /*readBatchSize=*/8_KB);
+        TVector<TMaybe<TString>> restored;
+        const auto error = RunImport(*engine, source,
+            [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
+                UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(keys.front().AsBuf(), ToString(restored.size()));
+                UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+                restored.push_back(values.front().IsNull() ? Nothing() : MakeMaybe(TString(values.front().AsBuf())));
+                return {};
+            });
+        UNIT_ASSERT_C(!error, error.GetOrElse(""));
+        UNIT_ASSERT_VALUES_EQUAL(restored.size(), documents.size());
+        UNIT_ASSERT(!restored.back());
+
+        const auto numberBits = [](TStringBuf document) {
+            const auto root = NBinaryJson::TBinaryJsonReader::Make(document)->GetRootCursor();
+            const double number = root.GetType() == NBinaryJson::EContainerType::TopLevelScalar
+                ? root.GetElement(0).GetNumber()
+                : root.GetElement(0).GetContainer().Lookup("value")->GetNumber();
+            return std::bit_cast<ui64>(number);
+        };
+        for (size_t i = 0; i + 1 < documents.size(); ++i) {
+            UNIT_ASSERT_C(restored[i], "row " << i);
+            const ui64 originalBits = numberBits(*documents[i]);
+            const ui64 expectedBits = originalBits == 0x8000000000000000ULL ? 0 : originalBits;
+            UNIT_ASSERT_VALUES_EQUAL_C(numberBits(*restored[i]), expectedBits, "row " << i);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numberBits(*documents[3]), 0x8000000000000000ULL);
+        UNIT_ASSERT_VALUES_EQUAL(numberBits(*restored[3]), 0);
     }
 
     Y_UNIT_TEST(ParquetRoundTripsDyNumberAndJsonDocument) {

@@ -4,6 +4,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/types/binary_json
     yql/essentials/minikql
+    yql/essentials/minikql/computation
     yql/essentials/utils
     yql/essentials/utils/log
     library/cpp/digest/crc32c

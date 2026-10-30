@@ -18,7 +18,7 @@ bool TClustersList::TCluster::operator==(const TCluster& rhs) const {
 }
 
 bool TClustersList::operator==(const TClustersList& rhs) const {
-    return Clusters == rhs.Clusters && Balancers == rhs.Balancers && Version == rhs.Version;
+    return Clusters == rhs.Clusters && Balancers == rhs.Balancers && Accounts == rhs.Accounts && Version == rhs.Version;
 }
 
 TString TClustersList::DebugString() const {
@@ -61,6 +61,25 @@ TString NormalizeDiscoveryHost(TStringBuf authority) {
     return host;
 }
 
+TString AccountNameFromDatabase(TStringBuf database) {
+    while (database.ChopSuffix("/")) {
+    }
+    if (database.empty() || database == "/Root" || database == "Root") {
+        return {};
+    }
+    const auto slash = database.rfind('/');
+    const TStringBuf account = slash == TStringBuf::npos ? database : database.substr(slash + 1);
+    if (account.empty()) {
+        return {};
+    }
+    TString name(account);
+    name.to_lower();
+    if (name == "root") {
+        return {};
+    }
+    return name;
+}
+
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv) {
     TVector<TString> names;
     StringSplitter(csv).SplitBySet(",;").SkipEmpty().Collect(&names);
@@ -81,12 +100,12 @@ const TVector<TClustersList::TCluster>& TClustersList::GetClusters(TStringBuf au
     return DefaultVisibleClusters;
 }
 
-TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath) {
+TString SiblingTablePath(TStringBuf clusterTablePath, TStringBuf tableName) {
     static constexpr TStringBuf suffix = "/Cluster";
     if (clusterTablePath.EndsWith(suffix)) {
-        return TString(clusterTablePath.substr(0, clusterTablePath.size() - suffix.size())) + "/Balancer";
+        return TString(clusterTablePath.substr(0, clusterTablePath.size() - suffix.size() + 1)) + tableName;
     }
-    return TString(clusterTablePath) + "Balancer";
+    return TString(clusterTablePath) + tableName;
 }
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath) {
@@ -98,6 +117,19 @@ TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTab
                CROSS JOIN
                (SELECT version FROM `%s` WHERE name == 'Cluster') AS V;
             )", TString(clusterTablePath).c_str(), TString(versionTablePath).c_str());
+}
+
+TString MakeListAccountsQuery(TStringBuf accountTablePath) {
+    // Version is per account row. Pages are ordered by name so a truncated result can continue
+    // from $from instead of being published as the full table.
+    return Sprintf(
+        R"(
+               --!syntax_v1
+               DECLARE $from AS Utf8;
+               SELECT A.name, A.readClusters, A.writeClusters, A.version FROM `%s` AS A
+               WHERE A.name > $from
+               ORDER BY A.name;
+            )", TString(accountTablePath).c_str());
 }
 
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath) {
@@ -113,7 +145,7 @@ TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionT
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
     // Match federation_recipe / CM Cluster schema, including kikimrHost.
     // Do not add extra columns (fnx): DestPrepare CREATE TABLE then fails with
-    // "Table name conflict". FNX is taken from Balancer.clusters.
+    // "Table name conflict". FNX comes from the CM fnx column. Balancer.clusters does not set it.
     return Sprintf(
         R"(
                --!syntax_v1

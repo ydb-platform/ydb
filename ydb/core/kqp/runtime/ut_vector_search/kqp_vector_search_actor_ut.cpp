@@ -136,8 +136,8 @@ namespace NKikimr::NKqp {
         }
 
         // Cached level rows have their own layout, narrower than the read row: [id, centroid].
-        TCachedLevelTableDataPtr CachedChildren(const TVector<std::pair<TClusterId, TString>>& children) {
-            auto data = MakeIntrusive<TCachedLevelTableData>();
+        TEvKqp::TCachedLevelTableDataPtr CachedChildren(const TVector<std::pair<TClusterId, TString>>& children) {
+            auto data = MakeIntrusive<TEvKqp::TCachedLevelTableData>();
             for (const auto& [child, centroid] : children) {
                 TCell cells[2] = {
                     TCell::Make(child),
@@ -1363,6 +1363,27 @@ namespace NKikimr::NKqp {
             for (const auto& key : env.RowKeys()) {
                 UNIT_ASSERT_C(key == "2" || key == "4", "unexpected row " << key);
             }
+        }
+
+        Y_UNIT_TEST(HnswIdentityIsForwardedOnlyToPostingRead) {
+            auto settings = TSettingsBuilder().PostingEmbedding().Build();
+            settings.MutableHnswIndexId()->SetOwnerId(42);
+            settings.MutableHnswIndexId()->SetLocalId(99);
+            TSearchEnv env(std::move(settings));
+            RunSingleLevel(env);
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Level)->Settings.GetVectorTopK().HasHnswIndexId());
+            const auto& postingTop = env.ObservedRead(EReadKind::Posting)->Settings.GetVectorTopK();
+            UNIT_ASSERT(postingTop.HasHnswIndexId());
+            UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswIndexId().GetOwnerId(), 42u);
+            UNIT_ASSERT_VALUES_EQUAL(postingTop.GetHnswIndexId().GetLocalId(), 99u);
+            auto& posting = env.Read(EReadKind::Posting);
+            posting.Push({{ui64(7), NearVec}}, true);
+            env.Wake(posting);
+            UNIT_ASSERT(!env.ObservedRead(EReadKind::Main)->Settings.GetVectorTopK().HasHnswIndexId());
+            auto& main = env.Read(EReadKind::Main);
+            main.Push({{ui64(7), NearVec}}, true);
+            env.Wake(main);
+            UNIT_ASSERT(env.Finished());
         }
 
         Y_UNIT_TEST(PostingTopKIsPushedDownWhenPostingHasEmbedding) {

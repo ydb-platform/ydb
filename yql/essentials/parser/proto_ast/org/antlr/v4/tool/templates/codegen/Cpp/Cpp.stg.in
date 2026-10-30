@@ -303,6 +303,7 @@ public:
   <parser.name>(antlr4::TokenStream *input, const antlr4::atn::ParserATNSimulatorOptions &options);
   <parser.name>(antlr4::TokenStream *input, google::protobuf::Arena* arena);
   RuleReturnType Parse(NProtoAST::IErrorCollector* errors = 0);
+  antlr4::Token* consume() override;
 
   ~<parser.name>() override;
 
@@ -337,6 +338,7 @@ public:
 
 private:
   google::protobuf::Arena* Arena = nullptr;
+  int64_t LastConsumedTokenIndex = -1;
   <namedActions.declarations>
 };
 >>
@@ -346,6 +348,41 @@ Parser(parser, funcs, atn, sempredFuncs, superClass = {Parser}) ::= <<
 using namespace antlr4;
 
 namespace {
+
+template \<typename TNode>
+class TTokenIndexGuard final {
+public:
+  TTokenIndexGuard(TNode* node, size_t start, const int64_t& lastConsumedTokenIndex)
+      : Node(node), Start(static_cast\<uint32_t>(start)), LastConsumedTokenIndex(lastConsumedTokenIndex) {
+    Y_ABORT_UNLESS(start \< std::numeric_limits\<uint32_t>::max());
+    Node->SetStartTokenIndex(Start);
+    // The predecessor wraps to UINT32_MAX for an empty production at index zero.
+    Node->SetEndTokenIndex(Start - 1);
+  }
+
+  TTokenIndexGuard(const TTokenIndexGuard&) = delete;
+  TTokenIndexGuard& operator=(const TTokenIndexGuard&) = delete;
+
+  ~TTokenIndexGuard() {
+    Finish();
+  }
+
+  void Cancel() {
+    Node = nullptr;
+  }
+
+private:
+  void Finish() {
+    if (Node) {
+      Node->SetEndTokenIndex(LastConsumedTokenIndex \< static_cast\<int64_t>(Start)
+          ? Start - 1 : static_cast\<uint32_t>(LastConsumedTokenIndex));
+    }
+  }
+
+  TNode* Node;
+  uint32_t Start;
+  const int64_t& LastConsumedTokenIndex;
+};
 
 struct <parser.name; format = "cap">StaticData final {
   <parser.name; format = "cap">StaticData(std::vector\<std::string> ruleNames,
@@ -405,11 +442,15 @@ void <parser.grammarName; format = "lower">ParserInitialize() {
 
 <parser.name>::RuleReturnType <parser.name>::Parse(NProtoAST::IErrorCollector* errors) {
   try {
+    LastConsumedTokenIndex = -1;
     RuleReturnType root(<parser.name>::<first(parser.funcs).name>());
     if (!error && root) {
       auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::@ANTLR_AST_NAME@>(Arena);
       Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
-      ast->unsafe_arena_set_allocated_rule_<first(parser.funcs).name>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
+      auto* rule = static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root);
+      ast->SetStartTokenIndex(rule->GetStartTokenIndex());
+      ast->SetEndTokenIndex(rule->GetEndTokenIndex());
+      ast->unsafe_arena_set_allocated_rule_<first(parser.funcs).name>(rule);
       return ast;
     \}
     return nullptr;
@@ -417,6 +458,13 @@ void <parser.grammarName; format = "lower">ParserInitialize() {
     return nullptr;
   \}
   return nullptr;
+}
+
+antlr4::Token* <parser.name>::consume() {
+  auto* token = <superClass>::consume();
+  Y_ABORT_UNLESS(token->getTokenIndex() \< std::numeric_limits\<uint32_t>::max());
+  LastConsumedTokenIndex = static_cast\<int64_t>(token->getTokenIndex());
+  return token;
 }
 
 <parser.name>::~<parser.name>() {
@@ -503,6 +551,7 @@ RuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs, namedAction
   std::string invoked_stmt;
   // proto end
   enterRule(_localctx, <currentRule.startState>, <parser.name>::Rule<currentRule.name; format = "cap">);
+  TTokenIndexGuard rangeGuard(retval, _input->index(), LastConsumedTokenIndex);
   <namedActions.init>
   <locals; separator = "\n">
 
@@ -581,6 +630,7 @@ LeftRecursiveRuleFunction(currentRule, args, code, locals, ruleCtx, altLabelCtxs
   (void)previousContext; // Silence compiler, in case the context is not used by generated code.
   size_t startState = <currentRule.startState>;
   enterRecursionRule(_localctx, <currentRule.startState>, <parser.name>::Rule<currentRule.name; format = "cap">, precedence);
+  TTokenIndexGuard rangeGuard(retval, _input->index(), LastConsumedTokenIndex);
 
     <namedActions.init>
 <! TODO: untested !>    <locals; separator = "\n">
@@ -724,7 +774,9 @@ LL1AltBlock(choice, preamble, alts, error) ::= <<
     <if(alt)>
     // LL1AltBlock protobuf stuff
     auto &global_parent = parent;
+    <if(elemId)><if(rest(alts))>TTokenIndexGuard blockRange(global_parent->MutableBlock<elemId>(), _input->index(), LastConsumedTokenIndex);<endif><endif>
     auto parent = global_parent-><if(elemId)>MutableBlock<elemId>()-><endif><if(rest(alts))>MutableAlt<if(!elemId)>_<currentRule.name><endif><i>()<endif>;
+    TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
     <if(elemId)><if(!rest(alts))>
     global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
     <endif><endif>
@@ -737,6 +789,8 @@ LL1AltBlock(choice, preamble, alts, error) ::= <<
     <if(elemId)>
     // LL1AltBlock protobuf stuff
     if (!parent) {
+      rangeGuard.Cancel();
+      <if(rest(alts))>blockRange.Cancel();<endif>
       global_parent->ClearBlock<elemId>();
       global_parent = nullptr;
     \}
@@ -761,7 +815,9 @@ LL1OptionalBlock(choice, alts, error) ::= <<
     <if(alt)>
     // LL1OptionalBlock protobuf stuff
     auto &global_parent = parent;
+    <if(rest(alts))>TTokenIndexGuard blockRange(global_parent->MutableBlock<elemId>(), _input->index(), LastConsumedTokenIndex);<endif>
     auto parent = global_parent->MutableBlock<elemId>()<if(rest(alts))>->MutableAlt<i>()<endif>;
+    TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
     <if(!rest(alts))>
     global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
     <endif>
@@ -771,6 +827,8 @@ LL1OptionalBlock(choice, alts, error) ::= <<
     <if(alt)>
     // LL1OptionalBlock protobuf stuff
     if (!parent) {
+      rangeGuard.Cancel();
+      <if(rest(alts))>blockRange.Cancel();<endif>
       global_parent->ClearBlock<elemId>();
       global_parent = nullptr;
     \}
@@ -795,11 +853,13 @@ if (<expr>) {
   // LL1OptionalBlockSingleAlt protobuf stuff
   auto &global_parent = parent;
   auto parent = global_parent->MutableBlock<elemId>();
+  TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
   global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
   // protobuf end
   <alts; separator = "\n">
   // LL1OptionalBlockSingleAlt protobuf stuff
   if (!parent) {
+    rangeGuard.Cancel();
     global_parent->ClearBlock<elemId>();
     global_parent = nullptr;
   \}
@@ -819,10 +879,12 @@ LL1StarBlockSingleAlt(choice, loopExpr, alts, preamble, iteration) ::= <<
   while (<loopExpr>) {
     // LL1StarBlockSingleAlt protobuf stuff
     auto parent = global_parent->AddBlock<elemId>();
+    TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
     // protobuf end
     <alts; separator="\n">
     // LL1StarBlockSingleAlt protobuf stuff
     if (!parent) {
+      rangeGuard.Cancel();
       global_parent->MutableBlock<elemId>()->RemoveLast();
     \}
     // protobuf end
@@ -845,10 +907,12 @@ LL1PlusBlockSingleAlt(choice, loopExpr, alts, preamble, iteration) ::= <<
   do {
     // LL1StarBlockSingleAlt protobuf stuff
     auto parent = global_parent->AddBlock<elemId>();
+    TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
     // protobuf end
     <alts; separator="\n">
     // LL1StarBlockSingleAlt protobuf stuff
     if (!parent) {
+      rangeGuard.Cancel();
       global_parent->MutableBlock<elemId>()->RemoveLast();
     \}
     // protobuf end
@@ -877,7 +941,9 @@ AltBlock(choice, preamble, alts, error) ::= <<
     <if(alt)>
     // AltBlock protobuf stuff
     auto &global_parent = parent;
+    <if(elemId)><if(rest(alts))>TTokenIndexGuard blockRange(global_parent->MutableBlock<elemId>(), _input->index(), LastConsumedTokenIndex);<endif><endif>
     auto parent = global_parent-><if(elemId)>MutableBlock<elemId>()-><endif><if(rest(alts))>MutableAlt<if(!elemId)>_<currentRule.name><endif><i>()<endif>;
+    TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
     <if(elemId)><if(!rest(alts))>
     global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
     <endif><endif>
@@ -890,6 +956,8 @@ AltBlock(choice, preamble, alts, error) ::= <<
     <if(elemId)>
     // AltBlock protobuf stuff
     if (!parent) {
+      rangeGuard.Cancel();
+      <if(rest(alts))>blockRange.Cancel();<endif>
       global_parent->ClearBlock<elemId>();
       global_parent = nullptr;
     \}
@@ -914,7 +982,9 @@ OptionalBlock(choice, alts, error) ::= <<
     <if(alt)>
     // OptionalBlock protobuf stuff
     auto &global_parent = parent;
+    <if(rest(alts))>TTokenIndexGuard blockRange(global_parent->MutableBlock<elemId>(), _input->index(), LastConsumedTokenIndex);<endif>
     auto parent = global_parent->MutableBlock<elemId>()<if(rest(alts))>->MutableAlt<i>()<endif>;
+    TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
     <if(!rest(alts))>
     global_parent->MutableBlock<elemId>()->SetDescr("<currentRule.name>");
     <endif>
@@ -924,6 +994,8 @@ OptionalBlock(choice, alts, error) ::= <<
     <if(alt)>
     // LL1OptionalBlock protobuf stuff
     if (!parent) {
+      rangeGuard.Cancel();
+      <if(rest(alts))>blockRange.Cancel();<endif>
       global_parent->ClearBlock<elemId>();
       global_parent = nullptr;
     \}
@@ -952,10 +1024,12 @@ StarBlock(choice, alts, sync, iteration) ::= <<
       <iteration>
       // StarBlock protobuf stuff
       auto parent = global_parent->AddBlock<elemId>();
+      TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
       // protobuf end
       <alts> <! should only be one !>
       // StarBlock protobuf stuff
       if (!parent) {
+        rangeGuard.Cancel();
         global_parent->MutableBlock<elemId>()->RemoveLast();
       }
       // protobuf end
@@ -981,13 +1055,18 @@ PlusBlock(choice, alts, error) ::= <<
       <alts: {alt | case <i><if (!choice.ast.greedy)> + 1<endif>: {
         <if(rest(alts))>
         // OptionalBlock protobuf stuff
-        auto parent = global_parent->AddBlock<elemId>()->MutableAlt<i>();
+        auto block = global_parent->AddBlock<elemId>();
+        TTokenIndexGuard blockRange(block, _input->index(), LastConsumedTokenIndex);
+        auto parent = block->MutableAlt<i>();
         // protobuf end
         <else>
         auto parent = global_parent->AddBlock<elemId>();
         <endif>
+        TTokenIndexGuard rangeGuard(parent, _input->index(), LastConsumedTokenIndex);
         <alt>
         if (!parent) {
+          rangeGuard.Cancel();
+          <if(rest(alts))>blockRange.Cancel();<endif>
           global_parent->MutableBlock<elemId>()->RemoveLast();
         \}
         break;
@@ -1067,11 +1146,12 @@ MatchToken(m) ::= <<
   auto token = <if (m.labels)><m.labels: {l | <labelref(l)> = }><endif>match(<parser.name>::TOKEN_<m.escapedName>);
   if (parent && token && token->getType() > 0) {
     Y_ABORT_UNLESS(parent, "Parent is null");
-    parent->MutableToken<elemId>()->SetId(token->getType());
-    parent->MutableToken<elemId>()->SetLine(token->getLine());
-    parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
-    parent->MutableToken<elemId>()->SetElement(<elemId>);
-    parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+    auto* astToken = parent->MutableToken<elemId>();
+    astToken->SetId(token->getType());
+    astToken->SetLine(token->getLine());
+    astToken->SetColumn(token->getCharPositionInLine());
+    astToken->SetElement(<elemId>);
+    astToken->SetValue(token->getText().c_str());
   \} else {
     parent = nullptr;
   }
@@ -1095,11 +1175,12 @@ else {
   auto token = _input->LT(1);
   if (token && token->getType() > 0) {
     Y_ABORT_UNLESS(parent, "Parent is null");
-    parent->MutableToken<elemId>()->SetId(token->getType());
-    parent->MutableToken<elemId>()->SetLine(token->getLine());
-    parent->MutableToken<elemId>()->SetColumn(token->getCharPositionInLine());
-    parent->MutableToken<elemId>()->SetElement(<elemId>);
-    parent->MutableToken<elemId>()->SetValue(token->getText().c_str());
+    auto* astToken = parent->MutableToken<elemId>();
+    astToken->SetId(token->getType());
+    astToken->SetLine(token->getLine());
+    astToken->SetColumn(token->getCharPositionInLine());
+    astToken->SetElement(<elemId>);
+    astToken->SetValue(token->getText().c_str());
   }
   _errHandler->reportMatch(this);
   consume();

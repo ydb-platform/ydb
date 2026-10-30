@@ -1,0 +1,32 @@
+@startuml
+Created -[#blue]-> ScheduleCommandCreated: Schedule
+ScheduleCommandCreated -[#blue]-> ScheduleCommandCreated: CommandScheduleActivityTask
+ScheduleCommandCreated -[#blue]-> ScheduledEventRecorded: ActivityTaskScheduled
+ScheduleCommandCreated -[#blue]-> Canceled: Cancel
+ScheduleCommandCreated -[#blue]-> Canceled: Abandon
+ScheduledEventRecorded -[#blue]-> Started: ActivityTaskStarted
+ScheduledEventRecorded -[#blue]-> TimedOut: ActivityTaskTimedOut
+ScheduledEventRecorded -[#blue]-> ScheduledActivityCancelCommandCreated: Cancel
+ScheduledEventRecorded -[#blue]-> Canceled: Abandon
+Started -[#blue]-> Completed: ActivityTaskCompleted
+Started -[#blue]-> Failed: ActivityTaskFailed
+Started -[#blue]-> TimedOut: ActivityTaskTimedOut
+Started -[#blue]-> StartedActivityCancelCommandCreated: Cancel
+Started -[#blue]-> Canceled: Abandon
+ScheduledActivityCancelCommandCreated -[#blue]-> ScheduledActivityCancelCommandCreated: CommandRequestCancelActivityTask
+ScheduledActivityCancelCommandCreated -[#blue]-> ScheduledActivityCancelEventRecorded: ActivityTaskCancelRequested
+ScheduledActivityCancelEventRecorded -[#blue]-> Canceled: ActivityTaskCanceled
+ScheduledActivityCancelEventRecorded -[#blue]-> StartedActivityCancelEventRecorded: ActivityTaskStarted
+ScheduledActivityCancelEventRecorded -[#blue]-> TimedOut: ActivityTaskTimedOut
+StartedActivityCancelCommandCreated -[#blue]-> StartedActivityCancelCommandCreated: CommandRequestCancelActivityTask
+StartedActivityCancelCommandCreated -[#blue]-> StartedActivityCancelEventRecorded: ActivityTaskCancelRequested
+StartedActivityCancelEventRecorded --> Failed: ActivityTaskFailed
+StartedActivityCancelEventRecorded -[#blue]-> Completed: ActivityTaskCompleted
+StartedActivityCancelEventRecorded -[#blue]-> TimedOut: ActivityTaskTimedOut
+StartedActivityCancelEventRecorded -[#blue]-> Canceled: ActivityTaskCanceled
+Canceled -[#blue]-> Canceled: ActivityTaskStarted
+Canceled -[#blue]-> Canceled: ActivityTaskCompleted
+TimedOut --> [*]
+Completed --> [*]
+Failed --> [*]
+@enduml

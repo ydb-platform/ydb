@@ -25,6 +25,7 @@ ui64 TopicPartitionReserveSize(const NKikimrPQ::TPQTabletConfig& config);
 ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 
 bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
+bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);
@@ -34,6 +35,8 @@ ui64 PutUnitsSize(const ui64 size);
 TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
+
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database);
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);

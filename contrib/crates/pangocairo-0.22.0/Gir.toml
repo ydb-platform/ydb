@@ -1,0 +1,131 @@
+[options]
+girs_directories = ["../gir-files"]
+library = "PangoCairo"
+version = "1.0"
+use_gi_docgen = true
+target_path = "."
+work_mode = "normal"
+generate_safety_asserts = false
+min_cfg_version = "1.40"
+single_version_file = true
+deprecate_by_min_version = true
+trust_return_value_nullability = true
+
+generate = []
+
+manual = [
+    "cairo.Context",
+    "cairo.FontOptions",
+    "cairo.FontType",
+    "cairo.ScaledFont",
+    "GLib.Error",
+    "Pango.Context",
+    "Pango.Font",
+    "Pango.FontMap",
+    "Pango.GlyphItem",
+    "Pango.GlyphString",
+    "Pango.Layout",
+    "Pango.LayoutLine",
+]
+
+[[object]]
+name = "PangoCairo.*"
+status = "generate"
+    [[object.function]]
+    name = "context_get_font_options"
+    ignore = true
+    [[object.function]]
+    name = "create_context"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "create_layout"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "error_underline_path"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "glyph_string_path"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "layout_line_path"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "layout_path"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "show_error_underline"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "show_glyph_item"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "show_glyph_string"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "show_layout"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "show_layout_line"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "update_context"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+    [[object.function]]
+    name = "update_layout"
+        [[object.function.parameter]]
+    name = "cr"
+    const = true
+
+[[object]]
+name = "PangoCairo.Font"
+status = "generate"
+trait_name = "PangoCairoFontExt"
+
+[[object]]
+name = "PangoCairo.FontMap"
+status = "generate"
+trait_name = "PangoCairoFontMapExt"
+manual_traits = ["PangoCairoFontMapExtManual"]
+    [[object.function]]
+    # Needed because cairo types don't implement `.into_glib()`.
+    name = "get_font_type"
+    manual = true
+    doc_trait_name = "PangoCairoFontMapExtManual"
+    [[object.function]]
+    # Needed because cairo types don't implement `.into_glib()`.
+    name = "new_for_font_type"
+    manual = true
+    [[object.function]]
+    # Needed because GIR generates `pango::FontMap` as return type
+    # and not `pangocairo::FontMap`.
+    name = "new"
+    manual = true
+    [[object.function]]
+    # Needed because it must remain an associated method because
+    # "self" is a `Option<&Self>`.
+    name = "set_default"
+    manual = true

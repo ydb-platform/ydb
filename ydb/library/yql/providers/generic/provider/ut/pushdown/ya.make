@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     library/cpp/random_provider
+    ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/generic/expr_nodes
@@ -14,9 +15,10 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/services
     yql/essentials/minikql
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/providers/result/provider
-    yql/essentials/public/udf/service/stub
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql
     yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/re2

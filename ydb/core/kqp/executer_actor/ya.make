@@ -10,13 +10,13 @@ SRCS(
     kqp_partitioned_executer.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
-    kqp_pq_topic_resolver.cpp
     kqp_scan_executer.cpp
     kqp_scheme_executer.cpp
     kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
     kqp_tasks_graph.cpp
     kqp_tasks_validate.cpp
+    kqp_unsafe_truncate_executer.cpp
     max_tasks_graph.cpp
     shard_key_ranges.cpp
 )
@@ -29,13 +29,12 @@ PEERDIR(
     ydb/core/base
     ydb/core/client/minikql_compile
     ydb/core/formats
-    ydb/core/fq/libs/checkpointing
-    ydb/core/fq/libs/state
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
     ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/local_rpc
+    ydb/core/kqp/predictor
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics
@@ -55,7 +54,6 @@ PEERDIR(
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/pq/common
-    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
     ydb/services/udf_store/wasm

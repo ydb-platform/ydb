@@ -63,9 +63,6 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             target->SetDstState(NextState(Replication->GetDesiredState()));
-            if (Replication->GetDesiredState() == TReplication::EState::Done) {
-                target->SetPendingDstPathId({});
-            }
             target->UpdateConfig(Replication->GetConfig());
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst altered",
@@ -84,8 +81,7 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            Self->SetReplicationError(*Replication, *target);
 
             YDB_LOG_ERROR_CTX(ctx, "Alter dst error",
                 {"rid", rid},
@@ -100,8 +96,6 @@ public:
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
-            NIceDb::TUpdate<Schema::Targets::PendingDstPathOwnerId>(target->GetPendingDstPathId().OwnerId),
-            NIceDb::TUpdate<Schema::Targets::PendingDstPathLocalId>(target->GetPendingDstPathId().LocalPathId),
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );

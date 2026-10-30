@@ -104,7 +104,7 @@ namespace NMonitoring {
         }
 
         TValueBase operator=(TValueBase rhs) {
-            AtomicSwap(&Value, rhs);
+            Set(rhs);
             return rhs;
         }
 

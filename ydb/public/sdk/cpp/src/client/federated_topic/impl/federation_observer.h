@@ -90,6 +90,9 @@ private:
     NTopic::IRetryPolicy::TPtr FederationDiscoveryRetryPolicy;
     NTopic::IRetryPolicy::IRetryState::TPtr FederationDiscoveryRetryState;
     NYdbGrpc::IQueueClientContextPtr FederationDiscoveryDelayContext;
+    TDuration DiscoveryInterval;
+    // Set after the first successful ListFederationDatabases response.
+    bool Federated = false;
 
     bool Stopping = false;
 };

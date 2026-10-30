@@ -10,6 +10,7 @@ bool CheckLayoutByGroupDefinition(const TGroupMapper::TGroupDefinition& group,
     std::unordered_map<ui32, std::vector<TVDiskIdShort>> pRealmOccupants;
     std::unordered_map<ui32, TVDiskIdShort> usedPDomains;
     std::unordered_map<TPDiskId, TVDiskIdShort> usedPDisks;
+    std::optional<NLayoutChecker::TEntityId> realmGroup;
 
     if (group.size() != geom.GetNumFailRealms()) {
         error = "Wrong fail realms number";
@@ -33,7 +34,16 @@ bool CheckLayoutByGroupDefinition(const TGroupMapper::TGroupDefinition& group,
                     return false;
                 }
 
-                ui32 pRealm = pdisks[pdiskId].Realm.Index();
+                const auto it = pdisks.find(pdiskId);
+                Y_ABORT_UNLESS(it != pdisks.end());
+                const NLayoutChecker::TPDiskLayoutPosition& position = it->second;
+                if (realmGroup && *realmGroup != position.RealmGroup) {
+                    error = "VDisks occupy different RealmGroups";
+                    return false;
+                }
+                realmGroup = position.RealmGroup;
+
+                const ui32 pRealm = position.Realm.Index();
                 auto& occupants = pRealmOccupants[pRealm];
                 for (auto occupant : occupants) {
                     if (occupant.FailRealm != failRealm) {
@@ -44,15 +54,13 @@ bool CheckLayoutByGroupDefinition(const TGroupMapper::TGroupDefinition& group,
                 }
                 occupants.push_back(vdiskId);
 
-                ui32 pDomain = pdisks[pdiskId].Domain.Index();
+                const ui32 pDomain = position.Domain.Index();
                 if (const auto it = usedPDomains.find(pDomain); it != usedPDomains.end()) {
                     error = TStringBuilder() << "Disks from different fail domains occupy the same Domain, "
                             "first VDisk Id# " << it->second.ToString() << " second VDisk Id# " << vdiskId.ToString();
                     return false;
                 }
                 usedPDomains[pDomain] = vdiskId;
-
-                Y_ABORT_UNLESS(pdisks.find(pdiskId) != pdisks.end());
 
                 if (const auto it = usedPDisks.find(pdiskId); it != usedPDisks.end()) {
                     error = TStringBuilder() << "Two VDisks occupy the same PDisk, PDiskId# " << pdiskId.ToString() <<
@@ -66,6 +74,7 @@ bool CheckLayoutByGroupDefinition(const TGroupMapper::TGroupDefinition& group,
 
     if (!allowMultipleRealmsOccupation && pRealmOccupants.size() > geom.GetNumFailRealms()) {
         error = TStringBuilder() << "VDisks from one fail realm occupy different Realms";
+        return false;
     }
 
     return true;

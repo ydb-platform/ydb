@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Dict
 
 
+_TEST_YDB_ROOT = "ydb"
+
 HERE = Path(__file__).resolve().parent
 # Make the package importable when run from a source checkout via
 # `python3 -m unittest discover -s ydb/tools/include_sanitizer/tests`
@@ -191,7 +193,7 @@ class ClassifyTest(unittest.TestCase):
         (which would not resolve from the subdir)."""
         from ydb.tools.include_sanitizer.aggregate.graph import VERDICT_MOVE_TO_CPP
         files: Dict[str, dict] = {
-            "ydb/a/synclog/h.h": {
+            f'{_TEST_YDB_ROOT}/a/synclog/h.h': {
                 "kind": "header",
                 "includes": [
                     {"line": 3, "spelled": "ctx.h", "angled": False,
@@ -199,40 +201,40 @@ class ClassifyTest(unittest.TestCase):
                 ],
                 "unused_includes": ["ctx.h"],
                 "suggested_inserts": [],
-                "include_tree": {"ydb/a/synclog/h.h": ["ydb/a/synclog/ctx.h"],
-                                 "ydb/a/synclog/ctx.h": []},
+                "include_tree": {f'{_TEST_YDB_ROOT}/a/synclog/h.h': [f'{_TEST_YDB_ROOT}/a/synclog/ctx.h'],
+                                 f'{_TEST_YDB_ROOT}/a/synclog/ctx.h': []},
             },
-            "ydb/a/synclog/ctx.h": {
+            f'{_TEST_YDB_ROOT}/a/synclog/ctx.h': {
                 "kind": "header", "includes": [], "unused_includes": [],
-                "suggested_inserts": [], "include_tree": {"ydb/a/synclog/ctx.h": []},
+                "suggested_inserts": [], "include_tree": {f'{_TEST_YDB_ROOT}/a/synclog/ctx.h': []},
             },
-            "ydb/a/synclog/sub/tu.cpp": {
+            f'{_TEST_YDB_ROOT}/a/synclog/sub/tu.cpp': {
                 "kind": "tu",
                 "includes": [
-                    {"line": 1, "spelled": "ydb/a/synclog/h.h", "angled": True,
+                    {"line": 1, "spelled": f'{_TEST_YDB_ROOT}/a/synclog/h.h', "angled": True,
                      "has_iwyu_keep": False, "has_iwyu_export": False},
                 ],
                 "unused_includes": [],
                 # cleaner spells the needed insert from source root:
-                "suggested_inserts": ["ydb/a/synclog/ctx.h"],
-                "include_tree": {"ydb/a/synclog/sub/tu.cpp": ["ydb/a/synclog/h.h"],
-                                 "ydb/a/synclog/h.h": ["ydb/a/synclog/ctx.h"],
-                                 "ydb/a/synclog/ctx.h": []},
+                "suggested_inserts": [f'{_TEST_YDB_ROOT}/a/synclog/ctx.h'],
+                "include_tree": {f'{_TEST_YDB_ROOT}/a/synclog/sub/tu.cpp': [f'{_TEST_YDB_ROOT}/a/synclog/h.h'],
+                                 f'{_TEST_YDB_ROOT}/a/synclog/h.h': [f'{_TEST_YDB_ROOT}/a/synclog/ctx.h'],
+                                 f'{_TEST_YDB_ROOT}/a/synclog/ctx.h': []},
             },
         }
         graph = build_graph(files)
         verdicts = classify(files, graph)
         v = next(x for x in verdicts
-                 if x.in_file == "ydb/a/synclog/h.h" and x.spelled == "ctx.h")
+                 if x.in_file == f'{_TEST_YDB_ROOT}/a/synclog/h.h' and x.spelled == "ctx.h")
         self.assertEqual(v.verdict, VERDICT_MOVE_TO_CPP)
         # The add-target must be the source-root path, not "ctx.h".
-        self.assertEqual(v.resolved, "ydb/a/synclog/ctx.h")
+        self.assertEqual(v.resolved, f'{_TEST_YDB_ROOT}/a/synclog/ctx.h')
 
     def test_move_to_cpp_with_spelling_mismatch(self) -> None:
         """Header spells the include relative; TU's suggested insert is
         source-root spelled. Path resolution must still match them."""
         files: Dict[str, dict] = {
-            "ydb/x/h1.h": {
+            f'{_TEST_YDB_ROOT}/x/h1.h': {
                 "kind": "header",
                 "includes": [
                     {"line": 3, "spelled": "h2.h", "angled": False,
@@ -240,34 +242,34 @@ class ClassifyTest(unittest.TestCase):
                 ],
                 "unused_includes": ["h2.h"],
                 "suggested_inserts": [],
-                "include_tree": {"ydb/x/h1.h": ["ydb/x/h2.h"], "ydb/x/h2.h": []},
+                "include_tree": {f'{_TEST_YDB_ROOT}/x/h1.h': [f'{_TEST_YDB_ROOT}/x/h2.h'], f'{_TEST_YDB_ROOT}/x/h2.h': []},
             },
-            "ydb/x/h2.h": {
+            f'{_TEST_YDB_ROOT}/x/h2.h': {
                 "kind": "header",
                 "includes": [],
                 "unused_includes": [],
                 "suggested_inserts": [],
-                "include_tree": {"ydb/x/h2.h": []},
+                "include_tree": {f'{_TEST_YDB_ROOT}/x/h2.h': []},
             },
-            "ydb/x/tu.cpp": {
+            f'{_TEST_YDB_ROOT}/x/tu.cpp': {
                 "kind": "tu",
                 "includes": [
-                    {"line": 1, "spelled": "ydb/x/h1.h", "angled": False,
+                    {"line": 1, "spelled": f'{_TEST_YDB_ROOT}/x/h1.h', "angled": False,
                      "has_iwyu_keep": False, "has_iwyu_export": False},
                 ],
                 "unused_includes": [],
                 # cleaner spells the insert from source root, not relative:
-                "suggested_inserts": ["ydb/x/h2.h"],
-                "include_tree": {"ydb/x/tu.cpp": ["ydb/x/h1.h"],
-                                 "ydb/x/h1.h": ["ydb/x/h2.h"], "ydb/x/h2.h": []},
+                "suggested_inserts": [f'{_TEST_YDB_ROOT}/x/h2.h'],
+                "include_tree": {f'{_TEST_YDB_ROOT}/x/tu.cpp': [f'{_TEST_YDB_ROOT}/x/h1.h'],
+                                 f'{_TEST_YDB_ROOT}/x/h1.h': [f'{_TEST_YDB_ROOT}/x/h2.h'], f'{_TEST_YDB_ROOT}/x/h2.h': []},
             },
         }
         graph = build_graph(files)
         verdicts = classify(files, graph)
-        v = next(v for v in verdicts if v.in_file == "ydb/x/h1.h" and v.spelled == "h2.h")
+        v = next(v for v in verdicts if v.in_file == f'{_TEST_YDB_ROOT}/x/h1.h' and v.spelled == "h2.h")
         self.assertEqual(v.verdict, VERDICT_MOVE_TO_CPP,
                          msg=f"expected move-to-cpp, got {v.verdict} ({v.reason})")
-        self.assertIn("ydb/x/tu.cpp", v.consumers_needing)
+        self.assertIn(f'{_TEST_YDB_ROOT}/x/tu.cpp', v.consumers_needing)
 
     def test_keep_pragma(self) -> None:
         files: Dict[str, dict] = {
@@ -419,7 +421,7 @@ class DiffPreviewTest(unittest.TestCase):
         from ydb.tools.include_sanitizer.report.selfcontain import render_file_edit
         f = self.tmp / "H.h"
         f.write_text(
-            '#include <ydb/core/protos/foo.pb.h>\n'
+            f'#include <{_TEST_YDB_ROOT}/core/protos/foo.pb.h>\n'
             '#include <util/generic/string.h>\n'
             "struct X {};\n",
             encoding="utf-8",
@@ -427,13 +429,13 @@ class DiffPreviewTest(unittest.TestCase):
         fa = {
             "kind": "header",
             "includes": [
-                {"line": 1, "spelled": "ydb/core/protos/foo.pb.h", "angled": True,
+                {"line": 1, "spelled": f'{_TEST_YDB_ROOT}/core/protos/foo.pb.h', "angled": True,
                  "has_iwyu_keep": False, "has_iwyu_export": False},
                 {"line": 2, "spelled": "util/generic/string.h", "angled": True,
                  "has_iwyu_keep": False, "has_iwyu_export": False},
             ],
             # both flagged unused, but the filter must only touch the .pb.h
-            "unused_includes": ["ydb/core/protos/foo.pb.h", "util/generic/string.h"],
+            "unused_includes": [f'{_TEST_YDB_ROOT}/core/protos/foo.pb.h', "util/generic/string.h"],
             "suggested_inserts": [],
         }
         rx = _re.compile(r"\.(grpc\.)?pb\.h$")
@@ -441,7 +443,7 @@ class DiffPreviewTest(unittest.TestCase):
             "H.h", fa, self.tmp, do_removals=True,
             include_filter=lambda p: bool(rx.search(p)))
         self.assertEqual(n_rm, 1)
-        self.assertIn('-#include <ydb/core/protos/foo.pb.h>', diff)
+        self.assertIn(f'-#include <{_TEST_YDB_ROOT}/core/protos/foo.pb.h>', diff)
         self.assertNotIn('-#include <util/generic/string.h>', diff)
 
     def test_tu_diff_adds_after_last_include(self) -> None:
@@ -452,8 +454,8 @@ class DiffPreviewTest(unittest.TestCase):
             "int main() {}\n",
             encoding="utf-8",
         )
-        diff = render_tu_addition_diff("T.cpp", self.tmp, ["ydb/x/new.h"])
-        self.assertIn('+#include <ydb/x/new.h>', diff)
+        diff = render_tu_addition_diff("T.cpp", self.tmp, [f'{_TEST_YDB_ROOT}/x/new.h'])
+        self.assertIn(f'+#include <{_TEST_YDB_ROOT}/x/new.h>', diff)
 
 
 class HeaderProbePreambleTest(unittest.TestCase):
@@ -463,25 +465,25 @@ class HeaderProbePreambleTest(unittest.TestCase):
     def test_synthesize_probe_with_preamble_writes_preceding_includes(self) -> None:
         from ydb.tools.include_sanitizer.analyze.header_probe import synthesize_probe
         probe = synthesize_probe(
-            "ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_utils.h",
+            f'{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_utils.h',
             self.tmp / "fake_repo",
             self.tmp / "probes",
             preamble_includes=[
-                "ydb/core/blobstorage/vdisk/hulldb/base/hullds_sst_it_all.h",
-                "ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h",
+                f'{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/base/hullds_sst_it_all.h',
+                f'{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h',
             ],
         )
         text = probe.probe_path.read_text(encoding="utf-8")
-        self.assertIn('#include "ydb/core/blobstorage/vdisk/hulldb/base/hullds_sst_it_all.h"', text)
-        self.assertIn('#include "ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h"', text)
+        self.assertIn(f'#include "{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/base/hullds_sst_it_all.h"', text)
+        self.assertIn(f'#include "{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h"', text)
         # The preamble must precede the target #include directive
         # specifically (not the comment header, which also mentions
         # the target path).
         preamble_idx = text.index(
-            '#include "ydb/core/blobstorage/vdisk/hulldb/base/hullds_sst_it_all.h"'
+            f'#include "{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/base/hullds_sst_it_all.h"'
         )
         target_idx = text.index(
-            '#include "ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_utils.h"'
+            f'#include "{_TEST_YDB_ROOT}/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_utils.h"'
         )
         self.assertLess(preamble_idx, target_idx,
                         msg=f"preamble must precede target include:\n{text}")
@@ -489,43 +491,43 @@ class HeaderProbePreambleTest(unittest.TestCase):
     def test_synthesize_probe_without_preamble_unchanged(self) -> None:
         from ydb.tools.include_sanitizer.analyze.header_probe import synthesize_probe
         probe = synthesize_probe(
-            "ydb/example.h",
+            f'{_TEST_YDB_ROOT}/example.h',
             self.tmp / "fake_repo",
             self.tmp / "probes",
         )
         text = probe.probe_path.read_text(encoding="utf-8")
         self.assertEqual(
             text,
-            "// Auto-generated probe TU for ydb/example.h\n"
-            '#include "ydb/example.h"\n',
+            f'// Auto-generated probe TU for {_TEST_YDB_ROOT}/example.h\n'
+            f'#include "{_TEST_YDB_ROOT}/example.h"\n',
         )
 
     def test_tu_preamble_returns_includes_before_target(self) -> None:
         from ydb.tools.include_sanitizer.analyze.per_tu import _tu_preamble_for_header
         repo = self.tmp / "repo"
-        (repo / "ydb/core").mkdir(parents=True)
-        tu = repo / "ydb/core/x.cpp"
+        (repo / f'{_TEST_YDB_ROOT}/core').mkdir(parents=True)
+        tu = repo / f'{_TEST_YDB_ROOT}/core/x.cpp'
         tu.write_text(
-            "#include \"ydb/core/base/defs.h\"\n"
-            "#include \"ydb/core/base/blobstorage.h\"\n"
-            "#include \"ydb/core/x.h\"\n"
+            f'#include "{_TEST_YDB_ROOT}/core/base/defs.h"\n'
+            f'#include "{_TEST_YDB_ROOT}/core/base/blobstorage.h"\n'
+            f'#include "{_TEST_YDB_ROOT}/core/x.h"\n'
             "// rest of TU\n",
             encoding="utf-8",
         )
         preamble = _tu_preamble_for_header(
-            str(tu), "ydb/core/x.h", repo,
+            str(tu), f'{_TEST_YDB_ROOT}/core/x.h', repo,
         )
         self.assertEqual(
             preamble,
-            ["ydb/core/base/defs.h", "ydb/core/base/blobstorage.h"],
+            [f'{_TEST_YDB_ROOT}/core/base/defs.h', f'{_TEST_YDB_ROOT}/core/base/blobstorage.h'],
         )
 
     def test_tu_preamble_missing_tu_returns_none(self) -> None:
         from ydb.tools.include_sanitizer.analyze.per_tu import _tu_preamble_for_header
         self.assertIsNone(_tu_preamble_for_header(
-            "/nonexistent/path.cpp", "ydb/x.h", self.tmp,
+            "/nonexistent/path.cpp", f'{_TEST_YDB_ROOT}/x.h', self.tmp,
         ))
-        self.assertIsNone(_tu_preamble_for_header("", "ydb/x.h", self.tmp))
+        self.assertIsNone(_tu_preamble_for_header("", f'{_TEST_YDB_ROOT}/x.h', self.tmp))
 
 
 if __name__ == "__main__":

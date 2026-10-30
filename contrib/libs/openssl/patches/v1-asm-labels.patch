@@ -1,0 +1,69 @@
+Bind the functions whose v1_ macros are disabled in redef.h to their v1_ symbols with an asm label.
+
+--- a/include/openssl/hmac.h
++++ b/include/openssl/hmac.h
+@@ -39,7 +39,7 @@
+                           unsigned int *len);
+ unsigned char *HMAC(const EVP_MD *evp_md, const void *key, int key_len,
+                     const unsigned char *d, size_t n, unsigned char *md,
+-                    unsigned int *md_len);
++                    unsigned int *md_len) OPENSSL_V1_ASM(HMAC);
+ __owur int HMAC_CTX_copy(HMAC_CTX *dctx, HMAC_CTX *sctx);
+ 
+ void HMAC_CTX_set_flags(HMAC_CTX *ctx, unsigned long flags);
+--- a/include/openssl/md5.h
++++ b/include/openssl/md5.h
+@@ -41,7 +41,7 @@
+ int MD5_Init(MD5_CTX *c);
+ int MD5_Update(MD5_CTX *c, const void *data, size_t len);
+ int MD5_Final(unsigned char *md, MD5_CTX *c);
+-unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md);
++unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md) OPENSSL_V1_ASM(MD5);
+ void MD5_Transform(MD5_CTX *c, const unsigned char *b);
+ # ifdef  __cplusplus
+ }
+--- a/include/openssl/rc4.h
++++ b/include/openssl/rc4.h
+@@ -27,7 +27,7 @@
+ const char *RC4_options(void);
+ void RC4_set_key(RC4_KEY *key, int len, const unsigned char *data);
+ void RC4(RC4_KEY *key, size_t len, const unsigned char *indata,
+-         unsigned char *outdata);
++         unsigned char *outdata) OPENSSL_V1_ASM(RC4);
+ 
+ # ifdef  __cplusplus
+ }
+--- a/include/openssl/sha.h
++++ b/include/openssl/sha.h
+@@ -42,7 +42,7 @@
+ int SHA1_Init(SHA_CTX *c);
+ int SHA1_Update(SHA_CTX *c, const void *data, size_t len);
+ int SHA1_Final(unsigned char *md, SHA_CTX *c);
+-unsigned char *SHA1(const unsigned char *d, size_t n, unsigned char *md);
++unsigned char *SHA1(const unsigned char *d, size_t n, unsigned char *md) OPENSSL_V1_ASM(SHA1);
+ void SHA1_Transform(SHA_CTX *c, const unsigned char *data);
+ 
+ # define SHA256_CBLOCK   (SHA_LBLOCK*4)/* SHA-256 treats input data as a
+@@ -63,7 +63,7 @@
+ int SHA256_Init(SHA256_CTX *c);
+ int SHA256_Update(SHA256_CTX *c, const void *data, size_t len);
+ int SHA256_Final(unsigned char *md, SHA256_CTX *c);
+-unsigned char *SHA256(const unsigned char *d, size_t n, unsigned char *md);
++unsigned char *SHA256(const unsigned char *d, size_t n, unsigned char *md) OPENSSL_V1_ASM(SHA256);
+ void SHA256_Transform(SHA256_CTX *c, const unsigned char *data);
+ 
+ # define SHA224_DIGEST_LENGTH    28
+@@ -106,11 +106,11 @@
+ int SHA384_Init(SHA512_CTX *c);
+ int SHA384_Update(SHA512_CTX *c, const void *data, size_t len);
+ int SHA384_Final(unsigned char *md, SHA512_CTX *c);
+-unsigned char *SHA384(const unsigned char *d, size_t n, unsigned char *md);
++unsigned char *SHA384(const unsigned char *d, size_t n, unsigned char *md) OPENSSL_V1_ASM(SHA384);
+ int SHA512_Init(SHA512_CTX *c);
+ int SHA512_Update(SHA512_CTX *c, const void *data, size_t len);
+ int SHA512_Final(unsigned char *md, SHA512_CTX *c);
+-unsigned char *SHA512(const unsigned char *d, size_t n, unsigned char *md);
++unsigned char *SHA512(const unsigned char *d, size_t n, unsigned char *md) OPENSSL_V1_ASM(SHA512);
+ void SHA512_Transform(SHA512_CTX *c, const unsigned char *data);
+ 
+ #ifdef  __cplusplus

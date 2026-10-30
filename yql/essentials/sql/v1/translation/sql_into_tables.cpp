@@ -242,7 +242,6 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     const bool isMapReduce = serviceName == YtProviderName;
     const bool isKikimr = serviceName == KikimrProviderName || serviceName == YdbProviderName;
-    const bool isRtmr = serviceName == RtmrProviderName;
     const bool isStat = serviceName == StatProviderName;
 
     if (!isKikimr) {
@@ -266,12 +265,6 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     } else if (isKikimr) {
         if (mode == ESQLWriteColumnMode::InsertIntoWithTruncate) {
             Ctx_.Error(pos) << "INSERT INTO WITH TRUNCATE is not supported for " << serviceName << " tables";
-            Ctx_.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr_ << "UnsupportedFor" << serviceName);
-            return false;
-        }
-    } else if (isRtmr) {
-        if (mode != ESQLWriteColumnMode::InsertInto) {
-            Ctx_.Error(pos) << SqlIntoUserModeStr_ << " is unsupported for " << serviceName;
             Ctx_.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr_ << "UnsupportedFor" << serviceName);
             return false;
         }

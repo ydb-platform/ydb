@@ -29,6 +29,8 @@ public:
         const bool localChanged = node.Local != Local;
         const TActorId previousLocal = node.Local;
         const auto previousState = node.GetVolatileState();
+        // An absent field from an old Local clears capabilities from its predecessor.
+        node.Capabilities.CopyFrom(Record.GetCapabilities());
         if (localChanged) {
             Self->RemoveNodeFromSegments(&node);
 
@@ -82,7 +84,15 @@ public:
             node.LastSeenServicedDomains = node.ServicedDomains;
             node.Name = name;
             TBridgePileId bridgePileId;
-            if (Record.HasBridgePileId()) {
+            if (!IsBridgeMode(TActivationContext::AsActorContext())) {
+                // piles are not used without bridge mode; the node may still report the one it had while the cluster
+                // was prepared for bridge mode (it is being restarted without bridge config), and the pile it had
+                // then must go away, as balancing compares nodes of the same pile only
+                if (node.BridgePileId) {
+                    node.BridgePileId = {};
+                    db.Table<Schema::Node>().Key(nodeId).UpdateToNull<Schema::Node::BridgePileId>();
+                }
+            } else if (Record.HasBridgePileId()) {
                 bridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
             } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get())) {
                 // node is not bridge-capable yet (it is being restarted while converting the cluster into bridged
@@ -93,7 +103,6 @@ public:
             }
             if (bridgePileId) {
                 node.BridgePileId = bridgePileId;
-                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
             }
 
@@ -143,7 +152,7 @@ public:
         TNodeInfo* node = Self->FindNode(Local.NodeId());
         if (node != nullptr && node->Local) { // we send ping on every RegisterNode because we want to re-sync tablets upon every reconnection
             Self->NodePingsInProgress.erase(node->Id);
-            node->Ping();
+            node->Ping(true, true);
             Self->ProcessNodePingQueue();
         }
     }

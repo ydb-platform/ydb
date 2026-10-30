@@ -717,13 +717,17 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
             }
             AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
             (*CurrentMessage->MutableData()) += res.GetData();
-            CurrentMessage->SetPartitionKey(res.GetPartitionKey());
             CurrentMessage->SetPartNo(res.GetPartNo());
             CurrentMessage->SetUncompressedSize(CurrentMessage->GetUncompressedSize() + res.GetUncompressedSize());
             CurrentMessage->SetLogicalMessageCount(res.GetLogicalMessageCount());
             CurrentMessage->SetIsBatch(res.GetIsBatch());
 
         }
+
+        CurrentMessage->SetPartitionKey(blob.PartitionKey);
+        CurrentMessage->SetSourceId(blob.SourceId);
+        CurrentMessage->SetExplicitHash(blob.ExplicitHashKey);
+
         currentMessageBlobs.push_back(std::move(blob));
 
         if (isLastPart) {

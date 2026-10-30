@@ -18,7 +18,8 @@ documents otherwise. A common request/reply convention is to copy ev->Cookie
 to the reply, but this is part of that protocol, not automatic behavior. Send's
 cookie argument defaults to 0. Treat 0 as colliding whenever several inflight
 waits can share a type: ActorWaitForEvent and TrackDelivery notifications key
-on cookie, so generate a unique non-zero value per live wait.
+on cookie, so use a fresh non-zero value for each request attempt and do not
+reuse it while an earlier reply or notification could still arrive.
 
 Event type numbers are partitioned into 65,536-value spaces. Allocate a unique
 range in the appropriate assigned event space for a component protocol.

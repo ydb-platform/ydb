@@ -252,7 +252,8 @@ protected:
                 }
             } else {
                 NYql::NUdf::TUnboxedValue fetchResult;
-                switch (const auto status = Stream_.Fetch(fetchResult)) {
+                const auto status = Stream_.Fetch(fetchResult);
+                switch (status) {
                     case NUdf::EFetchStatus::Yield:
                         return status;
 
@@ -268,11 +269,12 @@ protected:
 
                 FilterWorkFinished_ = true;
                 if constexpr (Inclusive) {
-                    result = Item_->GetValue(CompCtx_);
-                    return NUdf::EFetchStatus::Ok;
-                } else {
-                    return NUdf::EFetchStatus::Finish;
+                    if (status == NUdf::EFetchStatus::Ok) {
+                        result = Item_->GetValue(CompCtx_);
+                        return status;
+                    }
                 }
+                return NUdf::EFetchStatus::Finish;
             }
         }
 

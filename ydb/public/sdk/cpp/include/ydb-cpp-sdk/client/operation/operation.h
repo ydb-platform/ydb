@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 namespace NYdb::inline Dev {
 namespace NOperation {
@@ -43,6 +44,11 @@ private:
     std::string NextPageToken_;
 };
 
+// ClientTimeout and Deadline limit the status request without cancelling the operation.
+// Both are unlimited by default.
+struct TGetOperationSettings : public TSimpleRequestSettings<TGetOperationSettings> {
+};
+
 class TOperationClient {
     class TImpl;
 
@@ -51,6 +57,9 @@ public:
 
     template <typename TOp>
     NThreading::TFuture<TOp> Get(const TOperation::TOperationId& id);
+
+    template <typename TOp>
+    NThreading::TFuture<TOp> Get(const TOperation::TOperationId& id, const TGetOperationSettings& settings);
 
     TAsyncStatus Cancel(const TOperation::TOperationId& id);
     TAsyncStatus Forget(const TOperation::TOperationId& id);

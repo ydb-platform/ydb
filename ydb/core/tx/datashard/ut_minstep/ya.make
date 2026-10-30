@@ -1,9 +1,5 @@
 UNITTEST_FOR(ydb/core/tx/datashard)
 
-FORK_SUBTESTS()
-
-SPLIT_FACTOR(2)
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

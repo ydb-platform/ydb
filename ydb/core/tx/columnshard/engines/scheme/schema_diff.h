@@ -28,15 +28,11 @@ public:
     TSchemaDiffView() = default;
 
     TString DebugString() const {
-        AFL_VERIFY(OriginalProto);
+        YDB_LOG_VERIFY(OriginalProto);
         return OriginalProto->DebugString();
     }
 
     bool IsCorrectToIgnorePreviouse(const TIndexInfo& indexInfo) const;
-
-    void ApplyForColumns(const std::vector<ui32>& originalColumnIds, const std::function<void(const ui32 originalIndex)>& addFromOriginal,
-        const std::function<void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>& addFromDiff)
-        const;
 
     static NKikimrTxColumnShard::TSchemaPresetVersionInfo Merge(const std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>& schemas);
 

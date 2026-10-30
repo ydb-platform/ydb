@@ -50,6 +50,43 @@ DEFINE_REFCOUNTED_TYPE(TMemoryLimits)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TMemoryLimitRange
+    : public NYTree::TYsonStructLite
+{
+    std::optional<i64> Min;
+    std::optional<i64> Max;
+
+    REGISTER_YSON_STRUCT_LITE(TMemoryLimitRange);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMemoryLimitBounds
+    : public NYTree::TYsonStruct
+{
+    TMemoryLimitRange CompressedBlockCache;
+    TMemoryLimitRange KeyFilterBlockCache;
+    TMemoryLimitRange LookupRowCache;
+    TMemoryLimitRange TabletDynamic;
+    TMemoryLimitRange TabletStatic;
+    TMemoryLimitRange UncompressedBlockCache;
+    TMemoryLimitRange VersionedChunkMeta;
+    TMemoryLimitRange Reserved;
+    TMemoryLimitRange Query;
+
+    void ValidateMemoryLimits(const TMemoryLimitsPtr& memoryLimits) const;
+
+    REGISTER_YSON_STRUCT(TMemoryLimitBounds);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMemoryLimitBounds)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TInstanceResources
     : public NYTree::TYsonStruct
 {
@@ -99,6 +136,7 @@ struct TInstanceSize
 {
     TInstanceResourcesPtr ResourceGuarantee;
     TDefaultInstanceConfigPtr DefaultConfig;
+    TMemoryLimitBoundsPtr MemoryLimitBounds;
 
     std::optional<std::string> HostTagFilter;
 

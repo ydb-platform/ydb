@@ -8,7 +8,7 @@ namespace NKikimr::NOlap {
 
 void TCompactedPortionInfo::DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
     auto metaProto = GetMeta().SerializeToProto(blobIds, NPortion::EProduced::SPLIT_COMPACTED);
-    AFL_VERIFY(AppearanceSnapshot.Valid());
+    YDB_LOG_VERIFY(AppearanceSnapshot.Valid());
     auto* compactedProto = metaProto.MutableCompactedPortion();
     AppearanceSnapshot.SerializeToProto(*compactedProto->MutableAppearanceSnapshot());
     using IndexPortions = NColumnShard::Schema::IndexPortions;

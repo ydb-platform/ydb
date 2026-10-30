@@ -599,9 +599,9 @@ namespace NTable {
             }
         }
 
-        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain)
+        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain, IRedoObserver* observer = nullptr)
         {
-            return Redo.Replay(plain), *this;
+            return Redo.Replay(plain, Annex, observer), *this;
         }
 
         TVector<ui32> GrabAffects() noexcept

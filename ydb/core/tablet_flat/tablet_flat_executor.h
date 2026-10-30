@@ -19,6 +19,7 @@ class TTabletCountersBase;
 
 namespace NTable {
     class TDatabase;
+    struct IRedoObserver;
     class TScheme;
     class TBackupExclusion;
 }
@@ -529,6 +530,8 @@ namespace NFlatExecutorSetup {
 
         virtual void OnFollowerSchemaUpdated();
         virtual void OnFollowerDataUpdated();
+        virtual NTable::IRedoObserver* GetFollowerRedoObserver() { return nullptr; }
+        virtual void OnFollowerPartsReplaced(ui32) {}
 
         virtual bool NeedBackup() const;
         virtual TIntrusiveConstPtr<NTable::TBackupExclusion> BackupExclusion() const;
@@ -592,6 +595,11 @@ namespace NFlatExecutorSetup {
          * Returns the unique id that may be used for cancellation.
          */
         virtual ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) = 0;
+
+        // Attempt one ready transaction inline, preferring normal-priority work.
+        // Low-priority work may execute before queued cancellation events.
+        // Returns whether execution was attempted, not whether it completed.
+        virtual bool TryExecuteReadyTransaction() = 0;
 
         /**
          * Cancel a previously enqueued transaction with the specified id.
@@ -682,6 +690,10 @@ namespace NFlatExecutorSetup {
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }
+        // Flushes the batched log and returns a leader-only boundary for exporting
+        // state with a follower redo journal. Future mutations must have strictly
+        // greater log steps.
+        virtual ui32 CreateFollowerSnapshotCheckpoint() = 0;
     protected:
         //
         IExecutor()

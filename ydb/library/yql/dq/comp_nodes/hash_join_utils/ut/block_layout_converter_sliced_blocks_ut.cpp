@@ -247,14 +247,15 @@ using TBoolTag = TFixedTag<bool>;
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest) {
-
 #define DECL_TEST(NAME, SLOT, TAG)    \
     Y_UNIT_TEST(Test_##NAME##_Full) { \
         RunCase<TAG>(SLOT);           \
     }
 
+Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest) {
+
 ALL_CASES(DECL_TEST)
-#undef DECL_TEST
 
 } // Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest)
+
+#undef DECL_TEST

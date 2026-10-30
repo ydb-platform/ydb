@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package temporal.api.operatorservice.v1;
+
+option go_package = "go.temporal.io/api/operatorservice/v1;operatorservice";
+option java_package = "io.temporal.api.operatorservice.v1";
+option java_multiple_files = true;
+option java_outer_classname = "ServiceProto";
+option ruby_package = "Temporalio::Api::OperatorService::V1";
+option csharp_namespace = "Temporalio.Api.OperatorService.V1";
+
+
+import "temporal/api/operatorservice/v1/request_response.proto";
+import "google/api/annotations.proto";
+
+// OperatorService API defines how Temporal SDKs and other clients interact with the Temporal server
+// to perform administrative functions like registering a search attribute or a namespace.
+// APIs in this file could be not compatible with Temporal Cloud, hence it's usage in SDKs should be limited by
+// designated APIs that clearly state that they shouldn't be used by the main Application (Workflows & Activities) framework.
+service OperatorService {
+    // (-- Search Attribute --)
+
+    // AddSearchAttributes add custom search attributes.
+    //
+    // Returns ALREADY_EXISTS status code if a Search Attribute with any of the specified names already exists
+    // Returns INTERNAL status code with temporal.api.errordetails.v1.SystemWorkflowFailure in Error Details if registration process fails,
+    rpc AddSearchAttributes (AddSearchAttributesRequest) returns (AddSearchAttributesResponse) {
+    }
+
+    // RemoveSearchAttributes removes custom search attributes.
+    //
+    // Returns NOT_FOUND status code if a Search Attribute with any of the specified names is not registered
+    rpc RemoveSearchAttributes (RemoveSearchAttributesRequest) returns (RemoveSearchAttributesResponse) {
+    }
+
+    // ListSearchAttributes returns comprehensive information about search attributes.
+    rpc ListSearchAttributes (ListSearchAttributesRequest) returns (ListSearchAttributesResponse) {
+        option (google.api.http) = {
+            get: "/cluster/namespaces/{namespace}/search-attributes"
+            additional_bindings {
+                get: "/api/v1/namespaces/{namespace}/search-attributes"
+            }
+        };
+    }
+
+    // DeleteNamespace synchronously deletes a namespace and asynchronously reclaims all namespace resources.
+    rpc DeleteNamespace (DeleteNamespaceRequest) returns (DeleteNamespaceResponse) {
+    }
+
+    // AddOrUpdateRemoteCluster adds or updates remote cluster.
+    rpc AddOrUpdateRemoteCluster(AddOrUpdateRemoteClusterRequest) returns (AddOrUpdateRemoteClusterResponse) {
+    }
+
+    // RemoveRemoteCluster removes remote cluster.
+    rpc RemoveRemoteCluster(RemoveRemoteClusterRequest) returns (RemoveRemoteClusterResponse) {
+    }
+
+    // ListClusters returns information about Temporal clusters.
+    rpc ListClusters(ListClustersRequest) returns (ListClustersResponse) {
+    }
+
+    // Get a registered Nexus endpoint by ID. The returned version can be used for optimistic updates.
+    rpc GetNexusEndpoint(GetNexusEndpointRequest) returns (GetNexusEndpointResponse) {
+        option (google.api.http) = {
+            get: "/cluster/nexus/endpoints/{id}"
+            additional_bindings {
+                get: "/api/v1/nexus/endpoints/{id}"
+            }
+        };
+    }
+
+    // Create a Nexus endpoint. This will fail if an endpoint with the same name is already registered with a status of
+    // ALREADY_EXISTS.
+    // Returns the created endpoint with its initial version. You may use this version for subsequent updates.
+    rpc CreateNexusEndpoint(CreateNexusEndpointRequest) returns (CreateNexusEndpointResponse) {
+        option (google.api.http) = {
+            post: "/cluster/nexus/endpoints"
+            body: "*"
+            additional_bindings {
+                post: "/api/v1/nexus/endpoints"
+                body: "*"
+            }
+        };
+    }
+
+    // Optimistically update a Nexus endpoint based on provided version as obtained via the `GetNexusEndpoint` or
+    // `ListNexusEndpointResponse` APIs. This will fail with a status of FAILED_PRECONDITION if the version does not
+    // match.
+    // Returns the updated endpoint with its updated version. You may use this version for subsequent updates. You don't
+    // need to increment the version yourself. The server will increment the version for you after each update.
+    rpc UpdateNexusEndpoint(UpdateNexusEndpointRequest) returns (UpdateNexusEndpointResponse) {
+        option (google.api.http) = {
+            post: "/cluster/nexus/endpoints/{id}/update"
+            body: "*"
+            additional_bindings {
+                post: "/api/v1/nexus/endpoints/{id}/update"
+                body: "*"
+            }
+        };
+    }
+
+    // Delete an incoming Nexus service by ID.
+    rpc DeleteNexusEndpoint(DeleteNexusEndpointRequest) returns (DeleteNexusEndpointResponse) {
+        option (google.api.http) = {
+            delete: "/cluster/nexus/endpoints/{id}"
+            additional_bindings {
+                delete: "/api/v1/nexus/endpoints/{id}"
+            }
+        };
+    }
+
+    // List all Nexus endpoints for the cluster, sorted by ID in ascending order. Set page_token in the request to the
+    // next_page_token field of the previous response to get the next page of results. An empty next_page_token
+    // indicates that there are no more results. During pagination, a newly added service with an ID lexicographically
+    // earlier than the previous page's last endpoint's ID may be missed.
+    rpc ListNexusEndpoints(ListNexusEndpointsRequest) returns (ListNexusEndpointsResponse) {
+        option (google.api.http) = {
+            get: "/cluster/nexus/endpoints"
+            additional_bindings {
+                get: "/api/v1/nexus/endpoints"
+            }
+        };
+    }
+}

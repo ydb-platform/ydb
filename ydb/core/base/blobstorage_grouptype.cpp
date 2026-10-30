@@ -3,8 +3,6 @@
 #include <library/cpp/digest/old_crc/crc.h>
 #include <util/generic/yexception.h>
 
-#define MAX_TOTAL_PARTS 8
-
 #define IS_VERBOSE 0
 
 #if IS_VERBOSE
@@ -40,12 +38,29 @@ ui32 GetHandoff(TErasureType::EErasureSpecies species) {
             blobStorageGroupErasureSpeciesParameters{{
         {TErasureType::EErasureSpecies::ErasureNone,          {0}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {2}}
+        ,{TErasureType::EErasureSpecies::Erasure8Plus2Block,  {2}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {6}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {3}}
         ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {3}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3of4,   {5}}
     }};
     return blobStorageGroupErasureSpeciesParameters.at(species).Handoff;
+}
+
+TBlobStorageGroupType::TBlobStorageGroupType(TErasureType::EErasureSpecies s)
+    : TErasureType(s)
+{
+    const ui32 totalParts = TotalPartCount();
+    const ui32 handoff = Handoff();
+    Y_ABORT_UNLESS(totalParts && totalParts <= MaxTotalParts);
+    Y_ABORT_UNLESS(BlobSubgroupSize() <= MaxSubgroupSize);
+    Y_ABORT_UNLESS(handoff <= MaxHandoffNodes);
+    if (s != ErasureMirror3of4) {
+        // Generic ingress stores keep flags, main/local parts and two bits per handoff part in ui64.
+        Y_ABORT_UNLESS(2 + 2 * totalParts * (1 + handoff) <= 64,
+            "generic ingress does not fit its persistent 64-bit representation: parts# %u handoff# %u",
+            totalParts, handoff);
+    }
 }
 
 ui32 TBlobStorageGroupType::BlobSubgroupSize() const {

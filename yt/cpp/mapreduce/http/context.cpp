@@ -8,6 +8,7 @@ bool operator==(const TClientContext& lhs, const TClientContext& rhs)
 {
     return lhs.ServerName == rhs.ServerName &&
            lhs.Token == rhs.Token &&
+           lhs.UserTicket == rhs.UserTicket &&
            lhs.ImpersonationUser == rhs.ImpersonationUser &&
            lhs.ServiceTicketAuth == rhs.ServiceTicketAuth &&
            lhs.HttpClient == rhs.HttpClient &&

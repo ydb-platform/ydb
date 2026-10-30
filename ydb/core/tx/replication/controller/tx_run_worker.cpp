@@ -49,13 +49,7 @@ public:
             return;
         }
 
-        auto& record = Event->Get()->Record;
-        auto* cmd = record.MutableCommand();
-        auto* worker = Self->GetOrCreateWorker(Id, cmd);
-
-        if (!worker->HasCommand()) {
-            worker->SetCommand(cmd);
-        }
+        auto* worker = Self->GetOrCreateWorker(Id);
 
         if (!worker->HasSession()) {
             Self->BootQueue.insert(Id);
@@ -135,6 +129,8 @@ public:
             }
         }
 
+        Self->LagExpiryQueue.Remove(Id);
+        Self->StoppingWorkers.erase(Id);
         Self->Workers.erase(Id);
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
@@ -162,6 +158,7 @@ void TController::RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ct
 
 class TController::TTxCompleteWorkerSet: public TTxBase {
     TEvPrivate::TEvCompleteWorkerSet::TPtr Event;
+    bool Accepted = false;
 
 public:
     TTxCompleteWorkerSet(TController* self, TEvPrivate::TEvCompleteWorkerSet::TPtr& ev)
@@ -175,14 +172,23 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto key = std::make_pair(Event->Get()->ReplicationId, Event->Get()->TargetId);
+        const auto replication = Self->Find(key.first);
+        if (!replication || !replication->FindTarget(key.second)) {
+            // A late registrar completion must not recreate a removed target.
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Targets>().Key(key.first, key.second).Update(
             NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(true));
+        Accepted = true;
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        Self->CompleteWorkerSets.insert({Event->Get()->ReplicationId, Event->Get()->TargetId});
+        if (Accepted) {
+            Self->CompleteWorkerSets.insert({Event->Get()->ReplicationId, Event->Get()->TargetId});
+        }
     }
 };
 

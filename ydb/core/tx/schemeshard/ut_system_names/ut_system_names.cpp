@@ -857,25 +857,41 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysNames) {
         auto unique = [&counter](const TString& name) {
             return name + ToString(counter++);
         };
+        TString rejectedWorkingDir;
         auto test = [&](const TCreatePathOp& op, const TString& path, const TVector<TExpectedResult>& expected) {
             const auto& [type, _, setupObjects, createEvent] = op;
 
-            // make unique directory for each test to avoid conflicts
-            const TString uniqueName = unique(NKikimrSchemeOp::EOperationType_Name(type));
-            TestMkDir(runtime, ++txId, rootDir, uniqueName, resultSuccess);
-            env.TestWaitNotification(runtime, txId);
+            // Rejected creates can share an empty directory. Keep successful creates
+            // and operations with prerequisites isolated to avoid conflicts.
+            const bool reuseWorkingDir = expected != resultSuccess && !setupObjects;
+            TString workingDir = reuseWorkingDir ? rejectedWorkingDir : TString{};
+            if (!workingDir) {
+                const TString uniqueName = unique(NKikimrSchemeOp::EOperationType_Name(type));
+                TestMkDir(runtime, ++txId, rootDir, uniqueName, resultSuccess);
+                env.TestWaitNotification(runtime, txId);
 
-            const TString uniqueWD = JoinPath({rootDir, uniqueName});
+                workingDir = JoinPath({rootDir, uniqueName});
+                if (reuseWorkingDir) {
+                    rejectedWorkingDir = workingDir;
+                }
+            }
+
             if (setupObjects) {
-                setupObjects(runtime, ++txId, uniqueWD);
+                setupObjects(runtime, ++txId, workingDir);
                 env.TestWaitNotification(runtime, txId);
             }
-            auto* ev = createEvent(uniqueWD, path);
+            auto* ev = createEvent(workingDir, path);
             UpdateCreateOp(ev, ++txId, subjectSid);
             TestCreateOp(runtime, txId, ev, expected);
 
             if (expected == resultSuccess) {
                 env.TestWaitNotification(runtime, txId);
+            } else if (reuseWorkingDir) {
+                // A failed composite create must not leave paths for the next case.
+                TestDescribeResult(DescribePrivatePath(runtime, workingDir), {
+                    NLs::PathExist,
+                    NLs::ChildrenCount(0),
+                });
             }
         };
 

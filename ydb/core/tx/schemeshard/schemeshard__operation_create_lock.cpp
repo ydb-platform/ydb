@@ -140,7 +140,7 @@ public:
                 .NotUnderDeleting()
                 .NotUnderOperation()
                 .IsTable()
-                .NotAsyncReplicaTable();
+                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, Transaction.GetInternal());
 
             if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();

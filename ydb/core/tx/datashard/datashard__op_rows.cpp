@@ -228,11 +228,14 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
 }
 
 template <typename TEvResponse, bool IsWrite, typename TEvRequest>
-static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType) {
+static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType, bool allowImport = false) {
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated()) {
+    const auto& tables = self->GetUserTables();
+    const bool importing = allowImport && tables.size() == 1
+        && tables.begin()->second->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+    if (self->IsReplicated() && !importing) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);
@@ -295,7 +298,7 @@ void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TA
         return;
     }
 
-    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject)) {
+    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject, true)) {
         Executor()->Execute(new TTxS3UploadRows(this, ev), ctx);
     }
 }

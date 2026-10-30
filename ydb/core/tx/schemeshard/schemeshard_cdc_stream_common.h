@@ -32,6 +32,7 @@ void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex);
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
     bool isInsideTableIndexPath,
-    TTxId op = InvalidTxId);
+    TTxId op = InvalidTxId,
+    bool allowImport = false);
 
 } // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

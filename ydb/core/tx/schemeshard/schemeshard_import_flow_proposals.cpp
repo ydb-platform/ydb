@@ -222,6 +222,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             }
         }
 
+        if (item.ReplicationConfig) {
+            auto config = *item.ReplicationConfig;
+            config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+            *tableDesc.MutableReplicationConfig() = config;
+            for (auto& index : *indexedTable.MutableIndexDescription()) {
+                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
+                        || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;
+                }
+            }
+        }
+
         if (!FillDefaultValues(item, indexedTable, error)) {
             return nullptr;
         }

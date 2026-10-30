@@ -169,6 +169,8 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
         switch (GetMinState(importInfo)) {
         case TImportInfo::EState::GetScheme:
         case TImportInfo::EState::CreateSchemeObject:
+        case TImportInfo::EState::DropPlaceholder:
+        case TImportInfo::EState::FinalizeImport:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
@@ -348,6 +350,11 @@ void TSchemeShard::PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo&
 void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
+
+    if (item.ReplicationConfig) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::ReplicationConfig>(item.ReplicationConfig->SerializeAsString()));
+    }
 
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),

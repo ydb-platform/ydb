@@ -323,6 +323,15 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
+        if (!InitialScan) {
+            replicationConfig.SetImportState(PreparingImport()
+                ? NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT
+                : NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        }
+    }
+
+    bool PreparingImport() const {
+        return !InitialScan && DesiredState == TReplication::EState::Paused;
     }
 
     void AllocateTxId() {
@@ -348,7 +357,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (Attaching) {
             AttachDst();
-        } else if (InitialScan) {
+        } else if (InitialScan || PreparingImport()) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -475,7 +484,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            if (InitialScan || Attaching || IsReplica(desc.GetTable())) {
+            if (InitialScan || PreparingImport() || Attaching) {
                 return Success();
             }
 
@@ -531,7 +540,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        const bool needsConfig = InitialScan || Attaching || IsReplica(got);
+        if (!InitialScan && !PreparingImport()
+                && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+            error = "Destination table import is not complete (expected IMPORTED)";
+            return false;
+        }
+
+        const bool needsConfig = InitialScan || PreparingImport() || Attaching || IsReplica(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
@@ -803,7 +818,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_INFO("Success",
             {"dstPathId", DstPathId});
 
-        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
+        auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId);
+        result->WaitingImport = PreparingImport();
+        Send(Parent, result.Release());
         PassAway();
     }
 
@@ -878,7 +895,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
-            if (!InitialScan) {
+            if (!InitialScan && !PreparingImport()) {
                 return Resolve(PathId);
             }
             [[fallthrough]];

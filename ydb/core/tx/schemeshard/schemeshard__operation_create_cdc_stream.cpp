@@ -130,7 +130,7 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotBackupTable()
-                .NotAsyncReplicaTable()
+                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, Transaction.GetInternal())
                 .NotUnderDeleting();
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
@@ -552,7 +552,8 @@ public:
             NCdcStreamAtTable::CheckSrcDirOnPropose(
                 checks,
                 tablePath.IsInsideTableIndexPath(false),
-                InitialScan ? OperationId.GetTxId() : InvalidTxId);
+                InitialScan ? OperationId.GetTxId() : InvalidTxId,
+                Transaction.GetInternal());
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

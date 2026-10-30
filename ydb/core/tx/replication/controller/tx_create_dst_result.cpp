@@ -153,7 +153,9 @@ public:
                 || dstState == TReplication::EDstState::Attaching;
             target->SetDstPathId(Ev->Get()->DstPathId);
             target->SetPendingDstPathId({});
-            if (Replication->GetDesiredState() == TReplication::EState::Done) {
+            if (Ev->Get()->WaitingImport) {
+                target->SetDstState(TReplication::EDstState::Paused);
+            } else if (Replication->GetDesiredState() == TReplication::EState::Done) {
                 target->SetDstState(TReplication::EDstState::Alter);
             } else {
                 target->SetDstState(TReplication::EDstState::Ready);

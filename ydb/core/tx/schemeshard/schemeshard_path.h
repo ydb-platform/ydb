@@ -73,7 +73,7 @@ public:
         const TChecker& IsTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& NotBackupTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& NotReadOnlyColumnTable(EStatus status = EStatus::StatusSchemeError) const;
-        const TChecker& NotAsyncReplicaTable(EStatus status = EStatus::StatusSchemeError) const;
+        const TChecker& NotAsyncReplicaTable(EStatus status = EStatus::StatusSchemeError, bool allowImport = false) const;
         const TChecker& IsBlockStoreVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsFileStore(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsKesus(EStatus status = EStatus::StatusNameConflict) const;

@@ -310,6 +310,16 @@ public:
                 continue;
             }
 
+            if (!Replication->GetConfig().GetInitialScan()
+                    && target->GetDstState() == TReplication::EDstState::Paused
+                    && desiredState == TReplication::EState::Ready) {
+                // Import replaces the placeholder, so resolve its new path id on attachment.
+                target->SetDstPathId({});
+                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                    NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
+                    NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
+            }
+
             // An attachment may already be submitted to SchemeShard; let it finish before DONE.
             if (target->GetDstState() != TReplication::EDstState::Attaching) {
                 target->Shutdown(ctx);

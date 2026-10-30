@@ -86,7 +86,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable()
+                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError,
+                    Request->Sender == Self->SelfId() && Self->TxIdToImport.contains(TTxId(request.GetTxId())))
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
 

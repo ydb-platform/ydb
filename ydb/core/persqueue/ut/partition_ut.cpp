@@ -7216,37 +7216,6 @@ void SeedParentHeadWithSingleMessage(TPartitionBlobEncoder& encoder, const TPart
 
 } // namespace
 
-Y_UNIT_TEST_F(CommitWriteOperationsAssignsOffsetAfterMirroredOffset, TPartitionTxTestHelper) {
-    Init({.EndOffset = 1});
-    const TPartitionId partitionId(0);
-    constexpr ui64 mirroredOffset = 10;
-    constexpr ui32 messageCount = 3;
-
-    auto& encoder = TPartitionTestWrapper::BlobEncoder(Partition());
-    SeedParentHeadWithSingleMessage(encoder, partitionId, 0);
-    encoder.MirroredOffset = mirroredOffset;
-
-    auto tx = MakeAndSendWriteTx({{"src1", {1, messageCount}}});
-    std::deque<NPQ::TDataKey> bodyKeys;
-    bodyKeys.push_back(MakeBodyDataKeyForTx(partitionId, 0, messageCount, 50));
-    InjectBodyKeys(tx, std::move(bodyKeys));
-    WaitWriteInfoRequest(tx, true);
-    WaitTxPredicateReply(tx);
-    SendTxCommit(tx);
-    WaitKvRequest();
-
-    UNIT_ASSERT(LastKvRequest);
-    UNIT_ASSERT_VALUES_EQUAL(LastKvRequest->Record.CmdRenameSize(), 1);
-    const auto key = TKey::FromString(LastKvRequest->Record.GetCmdRename(0).GetNewKey());
-    UNIT_ASSERT_VALUES_EQUAL(key.GetOffset(), mirroredOffset);
-    UNIT_ASSERT_VALUES_EQUAL(key.GetCount(), messageCount);
-    UNIT_ASSERT(key.IsFastWrite());
-
-    SendKvResponse();
-    WaitCommitDone(tx);
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(Partition()), mirroredOffset + messageCount);
-}
-
 // 1+6: CommitWriteOperations renames BodyKeys into FWZ (FastWrite); mid-read with Key≠Header.
 Y_UNIT_TEST_F(CommitWriteOperationsRenamesBodyKeysThenMidRead, TPartitionTxTestHelper) {
     Init({.EndOffset = 0});

@@ -265,6 +265,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
         switch (item.PredicateType) {
             case TUsedMember::EEquality:
                 CMColumnsByTableName[tableName].insert(colName);
+                SimpleColumnsByTableName[tableName].insert(colName);
                 break;
             case TUsedMember::EInequality:
                 HistColumnsByTableName[tableName].insert(colName);
@@ -290,6 +291,8 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
         HistColumnsByTableName[lhsTable].insert(lhsEntry->ColumnName);
         HistColumnsByTableName[rhsTable].insert(rhsEntry->ColumnName);
+        SimpleColumnsByTableName[lhsTable].insert(lhsEntry->ColumnName);
+        SimpleColumnsByTableName[rhsTable].insert(rhsEntry->ColumnName);
 
         auto& keys = keysByTablePair[TStringBuilder() << lhsTable << '\0' << rhsTable];
         keys.first.push_back(lhsEntry);
@@ -316,6 +319,7 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(TOpJoin* join, const TColumnL
         const auto& tableName = entry->TableName;
         const auto& colName = entry->ColumnName;
         HistColumnsByTableName[tableName].insert(colName);
+        SimpleColumnsByTableName[tableName].insert(colName);
     };
 
     TVector<const TColumnLineageEntry*> lhsKeys;
@@ -409,6 +413,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                    [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
                    [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::SIMPLE_COLUMN, SimpleColumnsByTableName,
+                   [](const NYql::TColumnStatistics& stats) { return stats.HyperLogLog.has_value(); });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
                    [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
 

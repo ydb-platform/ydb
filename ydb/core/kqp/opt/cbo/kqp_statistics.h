@@ -55,6 +55,9 @@ struct TColumnStatistics {
         , EqWidthHistogramEstimator(yqlStats.EqWidthHistogramEstimator)
         , Type(yqlStats.Type)
     {}
+    std::optional<double> GetDistinctCount() const {
+        return HyperLogLog ? HyperLogLog : NumUniqueVals;
+    }
 };
 
 struct TMultiColumnStatistics {

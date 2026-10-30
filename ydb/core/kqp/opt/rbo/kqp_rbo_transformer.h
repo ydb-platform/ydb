@@ -103,6 +103,7 @@ private:
     NThreading::TFuture<void> ColumnStatisticsReadiness;
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
+    THashMap<TString, THashSet<TString>> SimpleColumnsByTableName;
     THashMap<TString, THashMap<TString, TVector<TString>>> EqHeightHistTuplesByTableName;
 
     // Flag to reset the check of original type for multiple statement queries

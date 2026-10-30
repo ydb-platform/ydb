@@ -654,7 +654,10 @@ def build_html_dashboard(
           const metric = row[1];
           const stats = row[2];
           const limit = row[3];
-          return '<tr><td>' + label + '</td>' +
+          const hint = row[4];
+          return '<tr><td' +
+            (hint ? ' title="' + escapeHtml(hint) + '" style="cursor:help;text-decoration:underline dotted;text-underline-offset:2px;"' : '') +
+            '>' + label + '</td>' +
             (withLimit ? ('<td>' + (limit == null || limit === '' ? '—' : limit) + '</td>') : '') +
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +
@@ -710,18 +713,27 @@ def build_html_dashboard(
       }}
       const telemetryRows = [];
       [
-          ['CPU iowait, %', 'pct', hs.cpu_iowait_pct],
-          ['CPU PSI some, %', 'pct', hs.pressure_cpu_some_pct],
-          ['CPU PSI full, %', 'pct', hs.pressure_cpu_full_pct],
-          ['Memory PSI some, %', 'pct', hs.pressure_memory_some_pct],
-          ['Memory PSI full, %', 'pct', hs.pressure_memory_full_pct],
-          ['I/O PSI some, %', 'pct', hs.pressure_io_some_pct],
-          ['I/O PSI full, %', 'pct', hs.pressure_io_full_pct],
-          ['Disk busy, %', 'pct', hs.disk_busy_pct],
-          ['Disk queue, requests', 'queue', hs.disk_io_in_progress],
+          ['CPU iowait, %', 'pct', hs.cpu_iowait_pct, null,
+            'Доля времени CPU, проведённая в ожидании завершения I/O. Устойчиво высокое значение означает, что вычисления простаивают из-за диска или другого блочного устройства.'],
+          ['CPU PSI some, %', 'pct', hs.pressure_cpu_some_pct, null,
+            'Доля времени, когда хотя бы одна задача была готова исполняться, но ждала CPU. Высокое значение означает конкуренцию за процессор.'],
+          ['CPU PSI full, %', 'pct', hs.pressure_cpu_full_pct, null,
+            'Доля времени полного CPU-стопа: все исполняемые задачи одновременно ждали CPU. Для CPU на Linux обычно отсутствует или равна нулю.'],
+          ['Memory PSI some, %', 'pct', hs.pressure_memory_some_pct, null,
+            'Доля времени, когда хотя бы одна задача тормозила из-за нехватки памяти, reclaim или swap. Рост указывает на давление по RAM.'],
+          ['Memory PSI full, %', 'pct', hs.pressure_memory_full_pct, null,
+            'Доля времени, когда все активные задачи одновременно были заблокированы из-за памяти. Ненулевое устойчивое значение означает сильное давление по RAM.'],
+          ['I/O PSI some, %', 'pct', hs.pressure_io_some_pct, null,
+            'Доля времени, когда хотя бы одна задача была заблокирована на I/O. Показывает влияние медленного диска даже при неполной загрузке всего раннера.'],
+          ['I/O PSI full, %', 'pct', hs.pressure_io_full_pct, null,
+            'Доля времени, когда все активные задачи одновременно ждали I/O. Высокое значение означает общий I/O-затор раннера.'],
+          ['Disk busy, %', 'pct', hs.disk_busy_pct, null,
+            'Доля интервала, когда диск обслуживал хотя бы один запрос. Значения около 100% длительное время означают насыщение устройства.'],
+          ['Disk queue, requests', 'queue', hs.disk_io_in_progress, null,
+            'Число I/O-запросов в работе на момент замера. Устойчивая растущая очередь вместе с высоким Disk busy и I/O PSI указывает на перегрузку диска.'],
       ].forEach(row => {{ if (row[2]) telemetryRows.push(row); }});
       const telemetryBlock = telemetryRows.length
-        ? '<div class="headline-block"><h4>Host · telemetry</h4>' +
+        ? '<div class="headline-block"><h4 title="Метрики давления на ресурсы всего раннера. Наведите на название строки для объяснения." style="cursor:help;">Host · telemetry</h4>' +
           statTable(telemetryRows, false) +
           '</div>'
         : '';

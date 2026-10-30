@@ -1,3 +1,4 @@
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogUsesMemAndDiskLimits
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.SlowSession
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts
@@ -7,6 +8,8 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
+ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefix-Nullable+Covered
+ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
@@ -16,23 +19,25 @@ ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
+ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
-ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL_CBO4_ColumnLineageMapping
 ydb/core/kqp/ut/rbo KqpRboYql.WholePartitionWindowAsAggregateJoin+WindowFunctionsV2
 ydb/core/kqp/ut/rbo KqpRboYql.WholePartitionWindowAsAggregateJoin-WindowFunctionsV2
 ydb/core/kqp/ut/rbo KqpRboYql.WindowAggregates-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.WindowSortWithoutBlocksUnderWindowFunctionsV2-WindowFunctionsV2
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
+ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsNonKeySerialDependency
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.DropGeneratedUnlocksDependencyAlterAndDrop
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionPrimaryKeyConflictIsAtomic
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionRollbackRestoresGeneratedState
 ydb/core/kqp/ut/scheme GeneratedStored.MultipleDmlStatementsCommitAndAbortAtomically
 ydb/core/kqp/ut/scheme GeneratedStored.MultipleIndexesStayConsistentWithOneGeneratedColumn
+ydb/core/kqp/ut/scheme GeneratedStored.StreamWriteModesMaterializeStoredColumn-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedStored.UniqueIndexOnGeneratedColumnRejectsCollisionsAtomically
 ydb/core/kqp/ut/scheme GeneratedStored.UniqueIndexOnNullableGeneratedColumnTracksNullTransitions
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateExpressionsUseOldValuesAndRecomputeStoredColumn
@@ -40,6 +45,7 @@ ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShar
 ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstraint
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnFromMultiUseNamedExpression
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnThroughSecondaryIndex
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnsWithParameterizedAndPgTypes
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningNoMatchDoesNotSynthesizeVirtualRows
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
@@ -52,9 +58,14 @@ ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultCancellation
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalSyncUniqueIndex-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace+IsInsert
+ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace-IsInsert
+ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
@@ -62,9 +73,11 @@ ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
+ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit
 ydb/core/kqp/ut/tli KqpTli.MultipleKeys
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
 ydb/core/kqp/ut/tracing TKqpQueryTrace.TransactionTracePropagation-TableService
+ydb/core/kqp/ut/tx KqpReadYourWrites.InsertThenUpdateThenDeleteAfterCommit_Serializable+IsOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationReadCommittedRW
@@ -90,6 +103,8 @@ ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartition
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterRetentionStorageMb
+ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuotas
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedDlqSetDeleteAndEmptyMoveRejected
 ydb/core/persqueue/public/schema/ut SchemaOps.ConsumerReadQuotaAndAvailabilityPeriod
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
@@ -136,9 +151,18 @@ ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.Repla
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterDisconnect+SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterDisconnect-SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterStop+SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterStop-SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.ChildWorkerWaitsForSecretAfterDataEnd
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret+SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret-SecretFirst
+ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
 ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
 ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
+ydb/core/viewer/tests test.py.TestViewer.test_async_replication_describe
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
@@ -169,7 +193,6 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[61]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[62]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[10]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[11]

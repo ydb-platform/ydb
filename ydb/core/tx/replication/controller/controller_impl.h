@@ -8,6 +8,7 @@
 #include "schema.h"
 #include "session_info.h"
 #include "sys_params.h"
+#include "worker_lag_expiry_queue.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
@@ -181,7 +182,7 @@ private:
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
     bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
-    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id, NKikimrReplication::TRunWorkerCommand* cmd = nullptr);
+    TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id);
     void SendSchemaChangeResult(const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,
@@ -196,6 +197,9 @@ private:
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void InvalidateLag(const TWorkerId& id);
+    void ScheduleLagExpiry(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
@@ -320,6 +324,10 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    TWorkerLagExpiryQueue LagExpiryQueue;
+    bool LagExpiryScheduled = false;
+    THashSet<TWorkerId> StoppingWorkers;
+    static constexpr TDuration WorkerLagTimeout = TDuration::Seconds(60);
     THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     TMap<std::pair<ui64, ui64>, TSchemaBarrier> SchemaBarriers;
     THashMap<std::pair<ui64, ui64>, TActorId> SchemaChangeDstAlterers;

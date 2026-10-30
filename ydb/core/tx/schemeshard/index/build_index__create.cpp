@@ -86,9 +86,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, request.GetInternal())
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
+
+            if (checks && !request.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());

@@ -65,7 +65,7 @@ void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
     bool isInsideTableIndexPath,
     TTxId op,
-    bool allowImport)
+    bool internal)
 {
     checks
         .NotEmpty()
@@ -74,8 +74,11 @@ void CheckSrcDirOnPropose(
         .IsResolved()
         .NotDeleted()
         .IsTable()
-        .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, allowImport)
         .NotUnderDeleting();
+
+    if (checks && !internal) {
+        checks.NotAsyncReplicaTable();
+    }
 
     if (checks) {
         if (!isInsideTableIndexPath) {

@@ -139,8 +139,11 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation()
-                .IsTable()
-                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, Transaction.GetInternal());
+                .IsTable();
+
+            if (checks && !Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();

@@ -22,7 +22,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& streamName,
     bool acceptExisted,
     bool restore = false,
-    bool allowImport = false);
+    bool internal = false);
 
 void DoCreateStreamImpl(
     TVector<ISubOperation::TPtr>& result,

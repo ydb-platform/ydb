@@ -703,8 +703,11 @@ public:
                 .IsResolved()
                 .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable)
                 .NotDeleted()
-                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, internal && Transaction.HasRestore())
                 .NotUnderOperation();
+
+            if (checks && (!internal || !Transaction.HasRestore())) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!internal) {
                 checks

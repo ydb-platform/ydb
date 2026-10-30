@@ -130,8 +130,11 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotBackupTable()
-                .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, Transaction.GetInternal())
                 .NotUnderDeleting();
+
+            if (checks && !Transaction.GetInternal()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -875,7 +878,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationContext& context, const TO
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore, bool allowImport) {
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore, bool internal) {
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -887,9 +890,8 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .NotUnderDeleting()
         .NotUnderOperation();
 
-    if (!restore) {
-        checks
-            .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, allowImport);
+    if (checks && !restore && !internal) {
+        checks.NotAsyncReplicaTable();
     }
 
     if (checks) {
@@ -954,10 +956,10 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& streamName,
     bool acceptExisted,
     bool restore,
-    bool allowImport)
+    bool internal)
 {
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore, allowImport)) {
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore, internal)) {
         return reject;
     }
 

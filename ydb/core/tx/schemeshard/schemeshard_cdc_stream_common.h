@@ -33,6 +33,6 @@ void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
     bool isInsideTableIndexPath,
     TTxId op = InvalidTxId,
-    bool allowImport = false);
+    bool internal = false);
 
 } // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

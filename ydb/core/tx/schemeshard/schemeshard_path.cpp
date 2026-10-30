@@ -423,7 +423,7 @@ const TPath::TChecker& TPath::TChecker::NotReadOnlyColumnTable(EStatus status) c
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status, bool allowImport) const {
+const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
     if (Failed) {
         return *this;
     }
@@ -433,11 +433,6 @@ const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status, boo
     }
 
     if (!Path.IsAsyncReplicaTable()) {
-        return *this;
-    }
-
-    if (allowImport && Path.SS->Tables.at(Path.Base()->PathId)->ReplicationConfig().GetImportState()
-            == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
         return *this;
     }
 

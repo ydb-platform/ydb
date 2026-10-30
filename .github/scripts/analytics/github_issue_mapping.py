@@ -23,9 +23,12 @@ Edge cases:
     ``Unmuted`` (do not infer from closer — avoids clearing during the gap before fast-unmute label).
   * Area resolves to the same team as the current TESTOWNERS owner (or body ``Owner:`` fallback)
     → area_override = NULL
+  * Multi-owner TESTOWNERS (``a;;b``): baseline is the **first** team token — same as
+    ``tests_monitor.compute_owner``
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
-  * Override is resolved **per test** (same issue can override for one suite path and not another)
+  * Issue-level fields (``area/...``, body ``Owner:``, closed-state gates) are parsed **once
+    per issue**; only the TESTOWNERS baseline differs per test
 
 ``github_issue_state_reason`` / ``info`` (Json): GitHub close reason and a snapshot (assignees,
 labels, project fields, …). For existing deployments run ``ALTER TABLE``; ``CREATE TABLE`` below
@@ -310,7 +313,21 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     return best_team
 
 
-def resolve_area_override(
+def _first_owner_team_slug(owners) -> str:
+    """Lowercase team slug from TESTOWNERS ``owners``, first ``;;`` token (tests_monitor rule).
+
+    Mirrors ``tests_monitor.compute_owner`` then strips ``TEAM:@ydb-platform/``.
+    """
+    if not owners:
+        return ""
+    raw = str(owners)
+    if ";;" in raw:
+        parts = raw.split(";;", 1)
+        raw = parts[0] if "TEAM" in parts[0] else parts[1]
+    return team_slug_from_monitor_owner(raw)
+
+
+def prepare_issue_area_override(
     body: str,
     info_raw,
     area_to_owner: dict,
@@ -318,22 +335,11 @@ def resolve_area_override(
     state_reason=None,
     labels_raw=None,
     project_status=None,
-    baseline_owner_team=None,
 ):
-    """If GitHub ``area/...`` implies a different team than the baseline owner, return that area path.
+    """Parse issue-level area_override inputs once.
 
-    Baseline owner is the test's **current** TESTOWNERS slug when known; otherwise the
-    ``Owner:`` line from the issue body (may be stale after TESTOWNERS reassignment).
-
-    **Closed issues**
-
-    * ``NOT_PLANNED`` / ``DUPLICATE``: no override.
-    * ``COMPLETED`` (or empty ``state_reason`` on **CLOSED**) + label ``manual-fast-unmute``: override stays (fast-track active).
-    * ``COMPLETED`` (or empty ``state_reason``) without that label: override cleared **only** when **project Status** is ``Unmuted``.
-
-    Open issues: unchanged area logic.
-
-    Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
+    Returns ``None`` if this issue cannot carry an override (closed gates / no area / unmapped).
+    Otherwise ``{area_label, resolved_team, body_owner}`` for per-test baseline comparison.
     """
     st = (issue_state or "").strip().upper()
     sr = (state_reason or "").strip().upper()
@@ -361,14 +367,63 @@ def resolve_area_override(
     if not resolved_team:
         return None
 
-    baseline = team_slug_from_monitor_owner(baseline_owner_team)
-    if not baseline:
-        baseline = _extract_default_owner(body)
+    return {
+        "area_label": area_label,
+        "resolved_team": resolved_team.lower(),
+        "body_owner": _extract_default_owner(body),
+    }
 
-    if resolved_team.lower() == (baseline or "").lower():
+
+def area_override_for_baseline(issue_area_ctx, baseline_owner_team=None):
+    """Apply per-test baseline to a prepared issue area context → area path or ``None``."""
+    if not issue_area_ctx:
         return None
+    baseline = _first_owner_team_slug(baseline_owner_team)
+    if not baseline:
+        baseline = (issue_area_ctx.get("body_owner") or "").lower()
+    if issue_area_ctx["resolved_team"] == (baseline or "").lower():
+        return None
+    return issue_area_ctx["area_label"]
 
-    return area_label
+
+def resolve_area_override(
+    body: str,
+    info_raw,
+    area_to_owner: dict,
+    issue_state=None,
+    state_reason=None,
+    labels_raw=None,
+    project_status=None,
+    baseline_owner_team=None,
+):
+    """If GitHub ``area/...`` implies a different team than the baseline owner, return that area path.
+
+    Baseline owner is the test's **current** TESTOWNERS first-team slug when known; otherwise the
+    ``Owner:`` line from the issue body (may be stale after TESTOWNERS reassignment).
+
+    Prefer :func:`prepare_issue_area_override` + :func:`area_override_for_baseline` when resolving
+    many tests for one issue (parse issue once).
+
+    **Closed issues**
+
+    * ``NOT_PLANNED`` / ``DUPLICATE``: no override.
+    * ``COMPLETED`` (or empty ``state_reason`` on **CLOSED**) + label ``manual-fast-unmute``: override stays (fast-track active).
+    * ``COMPLETED`` (or empty ``state_reason``) without that label: override cleared **only** when **project Status** is ``Unmuted``.
+
+    Open issues: unchanged area logic.
+
+    Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
+    """
+    ctx = prepare_issue_area_override(
+        body,
+        info_raw,
+        area_to_owner,
+        issue_state=issue_state,
+        state_reason=state_reason,
+        labels_raw=labels_raw,
+        project_status=project_status,
+    )
+    return area_override_for_baseline(ctx, baseline_owner_team=baseline_owner_team)
 
 
 def get_testowners_by_full_name(ydb_wrapper) -> dict:
@@ -501,32 +556,41 @@ def main():
             area_to_owner = get_area_to_owner_mapping(ydb_wrapper)
             testowners_by_name = get_testowners_by_full_name(ydb_wrapper)
 
-            url_to_issue = {}
             url_to_updated_at = {}
+            # Issue-level area context once per URL (label/body/closed gates are shared by all tests).
+            url_to_area_ctx = {}
             for issue in issues_data:
                 url = issue.get('url', '')
-                if url:
-                    url_to_issue[url] = issue
-                    url_to_updated_at[url] = issue.get("updated_at") or issue.get("created_at")
+                if not url:
+                    continue
+                url_to_updated_at[url] = issue.get("updated_at") or issue.get("created_at")
+                url_to_area_ctx[url] = prepare_issue_area_override(
+                    issue.get('body', ''),
+                    issue.get('info'),
+                    area_to_owner,
+                    issue.get('state'),
+                    issue.get('state_reason'),
+                    issue.get('labels'),
+                    issue.get('project_status'),
+                )
 
             print("Creating test-to-issue mapping...")
             test_to_issue = create_test_issue_mapping(issues_data)
             print(f"Created mapping for {len(test_to_issue)} unique test names")
 
-            # Per-test override: compare area team to current TESTOWNERS, not stale Owner: body.
+            matched = sum(1 for t in test_to_issue if t in testowners_by_name)
+            print(
+                f"TESTOWNERS baseline match: {matched}/{len(test_to_issue)} "
+                f"tests (misses fall back to issue Owner:)"
+            )
+
+            # Per-test: only baseline differs; reuse prepared issue area context.
             override_count = 0
             for test_name, issue_list in test_to_issue.items():
                 baseline = testowners_by_name.get(test_name)
                 for issue_info in issue_list:
-                    src = url_to_issue.get(issue_info['url'], {})
-                    ao = resolve_area_override(
-                        src.get('body', ''),
-                        src.get('info'),
-                        area_to_owner,
-                        src.get('state'),
-                        src.get('state_reason'),
-                        src.get('labels'),
-                        src.get('project_status'),
+                    ao = area_override_for_baseline(
+                        url_to_area_ctx.get(issue_info['url']),
                         baseline_owner_team=baseline,
                     )
                     issue_info['area_override'] = ao

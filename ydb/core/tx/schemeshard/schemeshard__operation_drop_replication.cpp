@@ -286,6 +286,8 @@ public:
         const auto path = op.HasId()
             ? TPath::Init(context.SS->MakeLocalId(op.GetId()), context.SS)
             : TPath::Resolve(workingDir, context.SS).Dive(name);
+        TOperationId pendingOperationId;
+        TTxState* pendingDrop = nullptr;
         {
             const auto checks = path.Check();
             checks
@@ -293,10 +295,27 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .NotUnderOperation();
+                .NotDeleted();
             Strategy->Check(checks);
+
+            if (checks && path->IsReplication() && path->PlannedToDrop() && op.GetReplicationSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON)
+            {
+                const auto it = context.SS->Operations.find(path->DropTxId);
+                if (it != context.SS->Operations.end()) {
+                    for (const auto& part : it->second->Parts) {
+                        auto* txState = context.SS->FindTx(part->GetId());
+                        if (txState && IsDropReplication(txState->TxType) && txState->TargetPathId == path->PathId) {
+                            pendingOperationId = part->GetId();
+                            pendingDrop = txState;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!pendingDrop) {
+                checks.NotUnderDeleting().NotUnderOperation();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -336,6 +355,27 @@ public:
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
+        if (pendingDrop) {
+            if (Cascade != (pendingDrop->TxType == TTxState::TxDropReplicationCascade)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot change CASCADE for a pending replication drop");
+                return result;
+            }
+
+            if (pendingDrop->ReplicationSourceCleanup != NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON) {
+                context.MemChanges.GrabReplicationSourceCleanup(context.SS, pendingOperationId);
+                pendingDrop->ReplicationSourceCleanup = NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON;
+                context.DbChanges.PersistTxState(pendingOperationId);
+            }
+            if (pendingDrop->State == TTxState::DropParts) {
+                context.OnComplete.ActivateTx(pendingOperationId);
+            }
+
+            // Retire this proposal, but subscribe its caller to the original drop.
+            result->Record.SetTxId(ui64(pendingOperationId.GetTxId()));
+            result->SetError(NKikimrScheme::StatusAccepted, "Escalated the pending replication drop");
             return result;
         }
 
@@ -383,8 +423,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TProposeContext&) override {
-        Y_ABORT("no AbortPropose for TDropReplication");
+    void AbortPropose(TProposeContext& context) override {
+        // Escalations use the existing transaction and are reverted by MemChanges.
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

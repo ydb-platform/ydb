@@ -20,6 +20,12 @@ void TMemoryChanges::GrabNewTxState(TSchemeShard* ss, const TOperationId& opId) 
     GrabNew(opId, ss->TxInFlight, TxStates);
 }
 
+void TMemoryChanges::GrabReplicationSourceCleanup(TSchemeShard* ss, const TOperationId& opId) {
+    const auto* txState = ss->FindTx(opId);
+    Y_ABORT_UNLESS(txState);
+    ReplicationSourceCleanups.emplace(opId, txState->ReplicationSourceCleanup);
+}
+
 void TMemoryChanges::GrabNewPath(TSchemeShard* ss, const TPathId& pathId) {
     GrabNew(pathId, ss->PathsById, Paths);
 }
@@ -329,6 +335,14 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         }
     }
     SubDomains.clear();
+
+    while (ReplicationSourceCleanups) {
+        const auto& [id, policy] = ReplicationSourceCleanups.top();
+        auto* txState = ss->FindTx(id);
+        Y_ABORT_UNLESS(txState);
+        txState->ReplicationSourceCleanup = policy;
+        ReplicationSourceCleanups.pop();
+    }
 
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import requests
@@ -187,7 +188,22 @@ class TestReplicationForceDropRolling(compatibility.RollingDowngradeAndUpgradeFi
             self.scheme(f"ALTER ASYNC REPLICATION replication_{mode} SET (STATE = 'DONE', FAILOVER_MODE = 'FORCE');")
             self.wait_state(f"replication_{mode}", "done")
             cascade = " CASCADE" if mode == "cascade" else ""
-            self.scheme(f"DROP ASYNC REPLICATION replication_{mode}{cascade} FORCE;")
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                ordinary_drop = executor.submit(self.scheme, f"DROP ASYNC REPLICATION replication_{mode}{cascade};")
+                deadline = time.monotonic() + 20
+                drop_description = {}
+                path_state = None
+                while time.monotonic() < deadline:
+                    assert not ordinary_drop.done()
+                    drop_description = self.describe(f"replication_{mode}")
+                    path_state = drop_description.get("PathDescription", {}).get("Self", {}).get("PathState")
+                    if path_state == "EPathStateDrop":
+                        break
+                    time.sleep(0.2)
+                assert path_state == "EPathStateDrop", drop_description
+                assert not ordinary_drop.done()
+                self.scheme(f"DROP ASYNC REPLICATION replication_{mode}{cascade} FORCE;")
+                ordinary_drop.result(timeout=30)
 
         stages = 0
         for stage, _ in enumerate(self.roll()):

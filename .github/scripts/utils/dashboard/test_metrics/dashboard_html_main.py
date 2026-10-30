@@ -253,6 +253,32 @@ def build_html_dashboard(
       color: #64748b;
       font-weight: 600;
     }}
+    .headline-hint {{
+      position: relative;
+      cursor: help;
+      text-decoration: underline dotted;
+      text-underline-offset: 2px;
+      outline: none;
+    }}
+    .headline-hint:hover::after, .headline-hint:focus::after {{
+      content: attr(data-tooltip);
+      position: absolute;
+      z-index: 10000;
+      left: 0;
+      top: calc(100% + 6px);
+      width: 360px;
+      padding: 8px 10px;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+      white-space: normal;
+      font-weight: 400;
+      line-height: 1.35;
+      text-align: left;
+      pointer-events: none;
+    }}
     .headline-card {{
       border: 1px solid #e2e8f0;
       border-radius: 8px;
@@ -655,9 +681,10 @@ def build_html_dashboard(
           const stats = row[2];
           const limit = row[3];
           const hint = row[4];
-          return '<tr><td' +
-            (hint ? ' title="' + escapeHtml(hint) + '" style="cursor:help;text-decoration:underline dotted;text-underline-offset:2px;"' : '') +
-            '>' + label + '</td>' +
+          const labelHtml = hint
+            ? '<span class="headline-hint" tabindex="0" data-tooltip="' + escapeHtml(hint) + '">' + label + '</span>'
+            : label;
+          return '<tr><td>' + labelHtml + '</td>' +
             (withLimit ? ('<td>' + (limit == null || limit === '' ? '—' : limit) + '</td>') : '') +
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +

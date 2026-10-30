@@ -6,10 +6,6 @@ inputs:
     description: "limit build and test to specific target"
   build_preset:
     type: string
-  run_build:
-    type: boolean
-    default: true
-    description: "run build"
   run_tests:
     type: boolean
     default: true
@@ -33,9 +29,6 @@ inputs:
     type: boolean
     required: true
     description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
-  folder_prefix:
-    type: string
-    default: "ya-"
   put_build_results_to_cache:
     type: boolean
     default: true
@@ -44,7 +37,7 @@ inputs:
     default: ""
   test_retry_count:
     default: ""
-    description: "how many times to retry failed tests"
+    description: "Maximum attempts including the initial run (positive integer). Default: 3, or 1 for TSAN/MSAN."
   secs:
     type: string
     default: ""
@@ -349,7 +342,7 @@ runs:
               --build "release" --sanitize="thread"
             )
             DASHBOARD_SANITIZER="thread"
-            if [ -z $TEST_RETRY_COUNT ]; then
+            if [ -z "$TEST_RETRY_COUNT" ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -359,7 +352,7 @@ runs:
               --build "release" --sanitize="memory"
             )
             DASHBOARD_SANITIZER="memory"
-            if [ -z $TEST_RETRY_COUNT ]; then
+            if [ -z "$TEST_RETRY_COUNT" ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -372,8 +365,8 @@ runs:
 
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
-        if [ -z $TEST_RETRY_COUNT ]; then
-          # default is 3 for ordinary build and 1 for sanitizer builds
+        if [ -z "$TEST_RETRY_COUNT" ]; then
+          # Default: 3 attempts; TSAN/MSAN select 1 above.
           TEST_RETRY_COUNT=3
         fi
 
@@ -382,7 +375,7 @@ runs:
         fi
 
         params+=(
-          --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          -DCONSISTENT_DEBUG --no-dir-outputs
           # Keep chunk archives separate to avoid merging and repacking them.
           --dont-merge-split-tests
           --test-failure-code 0 --build-all
@@ -483,7 +476,6 @@ runs:
         analytics flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
           params+=(--retest)
         fi
 
@@ -518,7 +510,6 @@ runs:
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           if [ $IS_RETRY = 0 ]; then
-            CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"

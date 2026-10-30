@@ -572,8 +572,11 @@ void TStreamingTestFixture::ExecSchemeQuery(const std::string& query, NYdb::ESta
 // Query client SDK
 
 std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& query, NYdb::EStatus expectedStatus,
-    const std::string& expectedError, std::function<void(const std::string&)> astValidator) {
+    const std::string& expectedError, std::function<void(const std::string&)> astValidator, TDuration timeout) {
     auto settings = TExecuteQuerySettings();
+    if (timeout > TDuration::Zero()) {
+        settings.ClientTimeout(timeout);
+    }
     if (astValidator) {
         settings.StatsMode(EStatsMode::Full);
     }
@@ -1376,8 +1379,8 @@ void TTabletKiller::KillTablet() const {
     Schedule(KillerInterval, new TEvents::TEvWakeup());
 }
 
-void TStreamingTestFixture::WaitForClassifierPropagation() {
-    NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
+void TStreamingTestFixture::WaitForClassifierPropagation(const TString& poolId) {
+    NWorkloadManager::WaitForClassifierPropagation(GetRuntime(), 0, poolId);
 }
 
 }   // namespace NKikimr::NKqp

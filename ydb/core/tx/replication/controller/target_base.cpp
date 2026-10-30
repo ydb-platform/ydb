@@ -83,7 +83,6 @@ void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
     case EDstState::Alter:
-    case EDstState::Attaching:
         Replication->AddPendingAlterTarget(Id);
         break;
     default:
@@ -91,7 +90,7 @@ void TTargetBase::SetDstState(const EDstState value) {
         break;
     }
 
-    if (DstState != EDstState::Creating && DstState != EDstState::Attaching) {
+    if (DstState != EDstState::Creating) {
         Reset(DstCreator);
     }
     if (DstState != EDstState::Ready) {
@@ -114,14 +113,6 @@ const TPathId& TTargetBase::GetDstPathId() const {
 
 void TTargetBase::SetDstPathId(const TPathId& value) {
     DstPathId = value;
-}
-
-const TPathId& TTargetBase::GetPendingDstPathId() const {
-    return PendingDstPathId;
-}
-
-void TTargetBase::SetPendingDstPathId(const TPathId& value) {
-    PendingDstPathId = value;
 }
 
 const TString& TTargetBase::GetStreamName() const {
@@ -221,11 +212,6 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
-        if (!DstCreator) {
-            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        }
-        break;
-    case EDstState::Attaching:
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }

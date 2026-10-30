@@ -248,13 +248,8 @@ private:
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    // Attachment validation can fail after the table has become read-only.
-    // DONE must detach that persisted path even without a confirmed destination.
-    const auto& dstPathId = target->GetDstPathId()
-        ? target->GetDstPathId()
-        : target->GetPendingDstPathId();
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,

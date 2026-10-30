@@ -36,12 +36,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
     }
 
-    void PrepareAttachDst(TEnv<>& env) {
-        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        UNIT_ASSERT(ev->Get()->DstPathId);
-        env.GetRuntime().Send(ev->Sender, env.GetSender(), new TEvPrivate::TEvPrepareAttachDstResult());
-    }
-
     void CheckTableReplica(
             const TTestTableDescription& tableDesc,
             const NKikimrSchemeOp::TTableDescription& replicatedDesc,
@@ -118,7 +112,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
                 "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
                 "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
-                false, {}, TReplication::EState::Paused));
+                false, TReplication::EState::Paused));
             auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
             UNIT_ASSERT(result->Get()->WaitingImport);
@@ -182,7 +176,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
             "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
 
-        PrepareAttachDst(env);
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
@@ -199,7 +192,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Destination,
     };
 
-    void RecoverAttachment(bool attached, EAttachmentSchemaChange schemaChange, bool doneWithoutSource = false) {
+    void RecoverAttachment(EAttachmentSchemaChange schemaChange) {
         TEnv env;
         const auto table = TTestTableDescription{
             .Name = "Source",
@@ -217,31 +210,19 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
 
-        auto createDstCreator = [&](const TPathId& pendingDstPathId) {
-            const bool finishWithoutSource = pendingDstPathId && doneWithoutSource;
+        auto createDstCreator = [&] {
             return env.GetRuntime().Register(CreateDstCreator(
-                env.GetSender(), env.GetSchemeshardId("/Root/Source"),
-                finishWithoutSource ? TActorId{} : env.GetYdbProxy(),
+                env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
                 "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
-                false /* initialScan */, pendingDstPathId,
-                finishWithoutSource ? TReplication::EState::Done : TReplication::EState::Ready));
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
         };
 
-        const auto creator = createDstCreator({});
-        auto prepare = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        const auto pendingDstPathId = prepare->Get()->DstPathId;
-        UNIT_ASSERT_VALUES_EQUAL(pendingDstPathId, env.GetPathId("/Root/Dst"));
+        createDstCreator();
+        const auto first = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL_C(first->Get()->Status, NKikimrScheme::StatusSuccess, first->Get()->Error);
+        const auto dstPathId = first->Get()->DstPathId;
 
-        if (attached) {
-            env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-            auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
-        } else {
-            // Restart after persisting the path ID, before reporting success.
-            env.SendAsync(creator, new TEvents::TEvPoison());
-        }
-
+        // Retry as if the controller restarted before persisting the first result.
         if (schemaChange != EAttachmentSchemaChange::None) {
             const auto path = schemaChange == EAttachmentSchemaChange::Source ? "/Root/Source" : "/Root/Dst";
             const auto ssId = env.GetSchemeshardId(path);
@@ -257,13 +238,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(200500));
         }
 
-        createDstCreator(pendingDstPathId);
+        createDstCreator();
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         const auto desc = env.GetDescription("/Root/Dst");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), pendingDstPathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/Dst"), dstPathId);
         if (schemaChange == EAttachmentSchemaChange::None) {
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, pendingDstPathId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->DstPathId, dstPathId);
             UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
                 NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
             CheckTableReplica(table, desc.GetPathDescription().GetTable(),
@@ -277,31 +258,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(RecoverAttachment) {
-        RecoverAttachment(false, EAttachmentSchemaChange::None);
-    }
-
-    Y_UNIT_TEST(RecoverAttachedTable) {
-        RecoverAttachment(true, EAttachmentSchemaChange::None);
+        RecoverAttachment(EAttachmentSchemaChange::None);
     }
 
     Y_UNIT_TEST(RecoverAttachmentWithSourceSchemaDrift) {
-        RecoverAttachment(false, EAttachmentSchemaChange::Source);
+        RecoverAttachment(EAttachmentSchemaChange::Source);
     }
 
     Y_UNIT_TEST(RecoverAttachmentWithDestinationSchemaDrift) {
-        RecoverAttachment(false, EAttachmentSchemaChange::Destination);
-    }
-
-    Y_UNIT_TEST(RecoverAttachedTableWithSourceSchemaDrift) {
-        RecoverAttachment(true, EAttachmentSchemaChange::Source);
-    }
-
-    Y_UNIT_TEST(RecoverAttachmentForDoneWithoutSource) {
-        RecoverAttachment(false, EAttachmentSchemaChange::None, true);
-    }
-
-    Y_UNIT_TEST(RecoverAttachedTableForDoneWithoutSource) {
-        RecoverAttachment(true, EAttachmentSchemaChange::None, true);
+        RecoverAttachment(EAttachmentSchemaChange::Destination);
     }
 
     Y_UNIT_TEST(MissingAttachmentTable) {
@@ -374,7 +339,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
             "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
-        PrepareAttachDst(env);
         UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
 
         env.GetRuntime().Register(CreateDstCreator(
@@ -382,7 +346,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
             "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
             EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
-        PrepareAttachDst(env);
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
         const auto desc = env.GetDescription("/Root/Dst/by_value/indexImplTable");

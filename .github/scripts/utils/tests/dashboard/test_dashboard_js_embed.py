@@ -124,6 +124,15 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("grid-column: 1 / -1;", source)
         self.assertIn("height: 520px;", source)
         self.assertIn("Expand to full width (same as ya make concurrency)", source)
+        # Hover/click panels must remain visible in compact tile mode.
+        self.assertIn(
+            "Hover/click detail panels stay visible in tile mode too",
+            source,
+        )
+        self.assertNotIn(
+            ".chart-tile-meta {{\n      display: none;",
+            source,
+        )
         # Tests chart stays under a closed <details>, not in the main suite grid.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')

@@ -166,19 +166,21 @@ def build_html_dashboard(
     .chart-tile.expanded .chart-pane {{
       height: 520px;
     }}
+    /* Hover/click detail panels stay visible in tile mode too — expand only
+       changes chart width/height, not whether drill-down UI exists. */
     .chart-tile-meta {{
-      display: none;
-      margin-top: 8px;
-    }}
-    .chart-tile.expanded .chart-tile-meta {{
       display: block;
+      margin-top: 8px;
     }}
     .chart-tile-meta .hoverbox,
     .chart-tile-meta .clickbox {{
       margin: 6px 0 12px 0;
-      max-height: 220px;
+      max-height: 180px;
       border-color: #eaeef2;
       background: #fafbfc;
+    }}
+    .chart-tile.expanded .chart-tile-meta .hoverbox {{
+      max-height: 220px;
     }}
     .chart-tile.expanded .chart-tile-meta .clickbox {{
       max-height: 320px;
@@ -653,7 +655,7 @@ def build_html_dashboard(
             <span class="chart-tile-title">Tests running by suite<span class="chart-tile-sub">how many individual tests are in flight at each moment</span></span>
           </div>
           <div id="testsLayerSuite" class="chart-pane"></div>
-          <div class="chart-tile-meta" style="display:block;">
+          <div class="chart-tile-meta">
             <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
             <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
           </div>

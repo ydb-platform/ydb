@@ -284,6 +284,80 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         CheckAssimilateWithSuspendedSource(reverse, true);
     }
 
+    Y_UNIT_TEST(ResyncRestartsWhenItsSourceIsSuspended) {
+        TEnvironmentSetup env({
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        });
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto groups = GetPileGroups(env, groupId);
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+
+        TBscConfigHold bscHold(env);
+        enum { WAIT_BARRIER_SCAN, WAIT_BLOB_SCAN, HELD, RELEASED } scan = WAIT_BARRIER_SCAN;
+        TActorId syncer;
+        std::unique_ptr<IEventHandle> heldScan;
+        ui32 scanNode = 0;
+        bool sourceScanned = false;
+        env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (!bscHold.Filter(node, ev)) {
+                return false;
+            }
+            if (scan == HELD && ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilateResult &&
+                    ev->GetRecipientRewrite() == syncer) {
+                sourceScanned = true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate &&
+                    ev->Recipient == MakeBlobStorageProxyID(groups[1])) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvAssimilate>();
+                if (scan == WAIT_BARRIER_SCAN && msg->SkipBlocksUpTo && !msg->SkipBarriersUpTo && msg->SkipBlobsUpTo) {
+                    scan = WAIT_BLOB_SCAN;
+                } else if (scan == WAIT_BLOB_SCAN && msg->SkipBlocksUpTo && msg->SkipBarriersUpTo && !msg->SkipBlobsUpTo) {
+                    syncer = ev->Sender;
+                    heldScan = std::move(ev);
+                    scanNode = node;
+                    scan = HELD;
+                    return false;
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return sourceScanned; }, "old source metadata scanned", TDuration::Seconds(1), 600);
+        bscHold.Start();
+        auto state = QueryStorageConfig(env).GetClusterState();
+        TBridgePileId::FromPileIndex(2).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(2).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
+        state.SetGeneration(state.GetGeneration() + 1);
+        const auto promoted = InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(state);
+        });
+        UNIT_ASSERT_EQUAL_C(promoted.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            promoted.GetErrorReason());
+        SwitchPileState(env, 0, NKikimrBridge::TClusterState::SUSPENDED);
+        env.Sim(TDuration::Seconds(10));
+
+        // The pre-DATA target and the suspended source both miss this acknowledged write. No Keep is issued.
+        TDataChecker checker(env);
+        checker.Write(groupId, 17);
+        CheckPileData(env, checker, 2, 17);
+        scan = RELEASED;
+        env.Runtime->Send(heldScan.release(), scanNode);
+        WaitUntil(env, [&] { return GetPart(env, groupId, 1).GetStage() == NKikimrBridge::TGroupState::SYNCED; },
+            "target completion using the old source");
+        UNIT_ASSERT(GetPileState(env, 1) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        bscHold.Release();
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        env.Runtime->FilterFunction = {};
+        CheckPileData(env, checker, 1, 9);
+    }
+
     // the pile gets back while BSC doesn't know it has been out: the part of the pile is SYNCED by its previous sync, but
     // lacks the data written meanwhile; the bridge proxy must not take its reply as the answer
     Y_UNIT_TEST(StaleSyncedPartNotTrusted) {

@@ -129,14 +129,16 @@ namespace NKikimr::NStorage {
             state->SetUnsyncedBSC(true);
         };
 
-        std::vector<size_t> disconnectedPileIndices;
+        std::vector<size_t> resetPileIndices;
+        bool sourceLost = false;
         for (const auto& [changedPileIndex, prevState] : changedPiles) {
             switch (clusterState->GetPerPileState(changedPileIndex)) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                 case NKikimrBridge::TClusterState::SUSPENDED:
                     // This pile no longer participates in replication.
                     markPileUnsynced(changedPileIndex);
-                    disconnectedPileIndices.push_back(changedPileIndex);
+                    resetPileIndices.push_back(changedPileIndex);
+                    sourceLost |= prevState == NKikimrBridge::TClusterState::SYNCHRONIZED;
                     break;
 
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
@@ -161,9 +163,22 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (!disconnectedPileIndices.empty()) {
+        if (sourceLost) {
+            // BSC may finish a target from the old source before learning that the source stopped receiving writes.
+            // Restart every unfinished pile's sync epoch, including groups BSC has already reported as synced.
+            for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
+                const auto state = clusterState->GetPerPileState(i);
+                if (state == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 ||
+                        state == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2) {
+                    markPileUnsynced(i);
+                    resetPileIndices.push_back(i);
+                }
+            }
+        }
+
+        if (!resetPileIndices.empty()) {
             std::vector<TBridgePileId> pileIds;
-            for (size_t pileIndex : disconnectedPileIndices) {
+            for (size_t pileIndex : resetPileIndices) {
                 pileIds.push_back(TBridgePileId::FromPileIndex(pileIndex));
             }
             ResetStaticGroupPileParts(&config, pileIds, clusterState->GetGeneration());

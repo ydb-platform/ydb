@@ -436,6 +436,70 @@ Y_UNIT_TEST(WriteSeqNumsAncestorAfterCurrentShardRejected) {
         "");
 }
 
+// Already applied ancestor positions may be replayed after the current shard
+// chain has started, but a new ancestor position must still be rejected: the
+// writer sends the re-routed ancestor chain before its fresh current-shard writes.
+Y_UNIT_TEST(WriteSeqNumsAncestorContinuationAfterCurrentShardRejected) {
+    TTestEnv env({});
+    auto [server, runtime, sender, tableId, initialShards] = env.GetAll();
+    UNIT_ASSERT_VALUES_EQUAL(initialShards.size(), 1u);
+
+    TTransactionState tx(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx.WriterIndex = 123;
+
+    // Apply position 1 of the writer chain on the shard.
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(tableId, env.Shards.at(0), {1}), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.Write(tableId, env.Shards.at(0), TWriteOperation::Insert(1, 100)),
+        "OK");
+
+    // Split the shard: the lock with its WriteSeqNum chain (at 1) transfers to
+    // the new covering shards as an ancestor state.
+    const ui64 oldShard = env.Shards.at(0);
+    env.Split(0, 5);
+    auto shards = env.Shards;
+    UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+    tx.MapAncestorShard(shards.at(0), oldShard);
+
+    // Start the current shard's own chain at position 1.
+    UNIT_ASSERT_VALUES_EQUAL(tx.LockRows(tableId, shards.at(0), {3}), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.Write(tableId, shards.at(0), TWriteOperation::Insert(3, 300)),
+        "OK");
+
+    // Position 2 is a fresh continuation of the transferred ancestor chain and is
+    // not allowed after the current shard chain has started.
+    {
+        auto req = tx.CreateWrite(tableId, oldShard, shards.at(0),
+            TWriteOperation::Insert(6, 600));
+
+        auto reqSender = runtime.AllocateEdgeActor();
+        ui32 nodeIndex = reqSender.NodeId() - runtime.GetNodeId(0);
+        runtime.SendToPipe(shards.at(0), reqSender, req.release(), nodeIndex);
+
+        TTransactionState::TWritePromise promise{tx, reqSender};
+        auto result = promise.NextResult();
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result->Record.GetStatus(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        UNIT_ASSERT(result->Record.GetIssues(0).message().Contains(
+            "not allowed after current shard writes"));
+    }
+
+    // Commit the current shard's write and check that the rejected ancestor row
+    // was not applied.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx.WriteCommit(tableId, shards.at(0)),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/table` WHERE key = 3 OR key = 6 ORDER BY key;
+        )"),
+        "{ items { uint32_value: 3 } items { int32_value: 300 } }");
+}
+
 // The legitimate shape of a merged request: the re-routed operations of the
 // removed shard's chain come first (unacknowledged batches are re-sent before
 // fresh writes), the fresh operations of the current shard's own chain come
@@ -465,27 +529,46 @@ Y_UNIT_TEST(WriteSeqNumsAncestorOpsBeforeCurrentShardOps) {
 
     tx.Shard2SeqNum[oldShard] = 0;
     {
-        auto req = tx.CreateWrite(tableId, oldShard, shards.at(0),
-            TWriteOperation::Upsert(1, 999), TWriteOperation::Upsert(3, 300), TWriteOperation::Upsert(4, 400));
-        // The first op is the already applied position 1 of the transferred
-        // chain: a duplicate whose row must be skipped. The second op continues
-        // the transferred chain. The third op is re-labeled as a fresh position
-        // of the current shard's own chain and comes last.
-        req->Record.MutableOperations(2)->SetOriginalShard(0);
-        req->Record.MutableOperations(2)->MutableWriteSeqNum()->SetWriteSeqNum(1);
+        auto sendWrite = [&]() {
+            auto req = tx.CreateWrite(tableId, oldShard, shards.at(0),
+                TWriteOperation::Upsert(1, 999), TWriteOperation::Upsert(3, 300), TWriteOperation::Upsert(4, 400));
+            // The first op is the already applied position 1 of the transferred
+            // chain: a duplicate whose row must be skipped. The second op continues
+            // the transferred chain. The third op is re-labeled as a fresh position
+            // of the current shard's own chain and comes last.
+            req->Record.MutableOperations(2)->SetOriginalShard(0);
+            req->Record.MutableOperations(2)->MutableWriteSeqNum()->SetWriteSeqNum(1);
 
-        auto reqSender = runtime.AllocateEdgeActor();
-        ui32 nodeIndex = reqSender.NodeId() - runtime.GetNodeId(0);
-        runtime.SendToPipe(shards.at(0), reqSender, req.release(), nodeIndex);
+            auto reqSender = runtime.AllocateEdgeActor();
+            ui32 nodeIndex = reqSender.NodeId() - runtime.GetNodeId(0);
+            runtime.SendToPipe(shards.at(0), reqSender, req.release(), nodeIndex);
 
-        TTransactionState::TWritePromise promise{tx, reqSender};
-        auto result = promise.NextResult();
+            return TTransactionState::TWritePromise{tx, reqSender};
+        };
+
+        // Hold the first reply to simulate a lost response, then replay the exact
+        // same request: the already applied ancestor positions must be accepted as
+        // duplicates instead of being rejected after the current shard chain started.
+        auto shardActor = ResolveTablet(runtime, shards.at(0));
+        TBlockEvents<NEvents::TDataEvents::TEvWriteResult> blockWriteResToShard(runtime, [&](auto& ev) {
+            return ev->Sender == shardActor;
+        });
+
+        auto lostReply = sendWrite();
+        UNIT_ASSERT_VALUES_EQUAL(lostReply.NextString(TDuration::Seconds(1)), "<timeout>");
+        runtime.WaitFor("Blocked write result", [&] {
+            return !blockWriteResToShard.empty();
+        });
+        blockWriteResToShard.Stop();
+
+        auto replay = sendWrite();
+        auto result = replay.NextResult();
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(
             result->Record.GetStatus(),
             NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        // Both chains advanced: the transferred one to position 2, the current
-        // shard's own one to position 1.
+        // Both chains stay advanced: the transferred one at position 2, the current
+        // shard's own one at position 1.
         bool chain1 = false;
         bool chain2 = false;
         for (const auto& lock : result->Record.GetTxLocks()) {

@@ -348,13 +348,6 @@ public:
                 current = lock->GetWriteSeqNum(writerIndex);
             } else {
                 // Ancestor shard
-                if (lock->GetWriteSeqNum(writerIndex) != 0) {
-                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-                        TStringBuilder() << "Ancestor shard " << shardKey
-                        << " write " << writerIndex << ":" << seqnums.MaxRequested
-                        << " not allowed after current shard writes");
-                    return EExecutionStatus::Executed;
-                }
                 auto ancestorIt = lock->GetAncestorLocks().find(shardKey);
                 if (ancestorIt == lock->GetAncestorLocks().end()) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
@@ -372,6 +365,15 @@ public:
                             << " (requested write: " << writerIndex << ":" << seqnums.MaxRequested << ")");
                         return EExecutionStatus::Executed;
                     }
+                }
+                // Reject a new ancestor position once the current shard chain has
+                // started; already applied positions may still be replayed.
+                if (lock->GetWriteSeqNum(writerIndex) != 0 && seqnums.MaxRequested > current) {
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                        TStringBuilder() << "Ancestor shard " << shardKey
+                        << " write " << writerIndex << ":" << seqnums.MaxRequested
+                        << " not allowed after current shard writes");
+                    return EExecutionStatus::Executed;
                 }
             }
 

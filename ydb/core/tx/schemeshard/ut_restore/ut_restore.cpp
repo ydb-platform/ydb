@@ -11188,7 +11188,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             primary_key: "key"
         )", {{"", 1}});
         THashMap<TString, TTestDataWithScheme> backup{{"/Table", table}};
-        backup.emplace(TImportTests::GenChangefeed().Changefeed);
+        backup.emplace(NTestSuiteTImportTests::GenChangefeed().Changefeed);
         if (materialized) {
             backup.emplace("/Table/by_value/indexImplTable", index);
         }
@@ -11201,7 +11201,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
                 runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directParts);
-                TImportTests::CreateImportPlaceholder(runtime, *t.TestEnv, t.TxId, "/MyRoot/Table", true);
+                NTestSuiteTImportTests::CreateImportPlaceholder(runtime, *t.TestEnv, t.TxId, "/MyRoot/Table", true);
             }
             const auto importId = ++t.TxId;
             AsyncImport(runtime, importId, "/MyRoot", env.Request);

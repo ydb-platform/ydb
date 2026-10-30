@@ -240,14 +240,6 @@ bool TTargetWithStream::CanDetachWithoutStream() const {
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
-    if (GetPendingDstPathId() && GetDstPathId()
-        && replication->GetDesiredState() == TReplication::EState::Done) {
-        // Detaching an unattached RESTORE destination needs no source access.
-        Reset(StreamCreator);
-        TTargetBase::Progress(ctx);
-        return;
-    }
-
     if (CanDetachWithoutStream()) {
         Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose

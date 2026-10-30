@@ -248,9 +248,6 @@ const std::optional<TDuration> TTargetBase::GetLag() const {
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
     case EDstState::Creating:
-        // PAUSED + INITIAL_SCAN=false still creates an empty replica for import.
-        // DstCreator reports no attached PathId for that placeholder; attachment
-        // remains deferred until STANDBY, after import has prepared the table.
         if (!DstCreator) {
             DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
         }
@@ -280,8 +277,6 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         break;
     case EDstState::Alter: {
         const bool needsCreator = !DstCreator && !DstPathId;
-        // A target prepared for import has no final DstPathId yet. Resolve it
-        // when leaving PAUSED; DONE uses the cleanup path instead of attachment.
         const bool canAttach = !ShouldWaitForAttachment(Replication)
             && Replication->GetDesiredState() != TReplication::EState::Done;
         if (Workers) {

@@ -35,6 +35,6 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
     const TPathId& pendingDstPathId = {},
     bool cleanup = false,
-    bool createImportPlaceholder = false);
+    bool createPlaceholder = false);
 
 }

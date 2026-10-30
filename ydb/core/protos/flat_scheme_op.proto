@@ -294,13 +294,12 @@ message TTTLSettings {
     reserved 3;
 }
 
-// Retained after attachment and detachment to identify the bootstrap origin.
 message TBootstrapInfo {
     enum EStatus {
         UNKNOWN = 0;
         WAITING_IMPORT = 1;
-        IMPORTED = 2;
-        IMPORTING = 3;
+        IMPORTING = 2;
+        IMPORTED = 3;
     }
 
     optional EStatus Status = 3;
@@ -321,7 +320,7 @@ message TTableReplicationConfig {
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
 
-    optional TBootstrapInfo BootstrapInfo = 6;
+    optional TBootstrapInfo BootstrapInfo = 3;
 }
 
 message TTableIncrementalBackupConfig {

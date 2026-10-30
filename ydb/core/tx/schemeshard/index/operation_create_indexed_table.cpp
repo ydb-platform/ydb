@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
-#include <ydb/core/tx/schemeshard/schemeshard_replication_bootstrap.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
@@ -160,10 +159,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
-    if (baseTableDescription.GetReplicationConfig().HasBootstrapInfo() && !tx.GetInternal()) {
-        return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
-            "Replication bootstrap config requires an internal operation")};
-    }
     {
         TString msg = "invalid table name: ";
         if(!baseTablePath.IsValidLeafName(context.UserToken.Get(), msg)) {

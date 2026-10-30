@@ -874,6 +874,9 @@ message TEvKqpScanCursor {
     }
     optional ESourcesSorting SourcesSorting = 2;
 
+    // Backwards compatibility - unmarked legacy (<= 26-3) cursors may index dictionary entries instead of portion rows.
+    optional bool IndexMaybeInDictionaryCoordinates = 3 [default = true];
+
     message TColumnShardScanPlain {
     }
     message TDeprecatedColumnShardScanSimple {

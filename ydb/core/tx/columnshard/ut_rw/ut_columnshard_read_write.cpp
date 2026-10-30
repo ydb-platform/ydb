@@ -1841,6 +1841,7 @@ void TestDictionaryDistinctResumedByCursor(const TString& readerClassName) {
             const auto& cursor = interrupted.GetLastCursor();
             UNIT_ASSERT_C(cursor.HasColumnShardSimple(), cursor.ShortDebugString());
             UNIT_ASSERT_VALUES_EQUAL(cursor.GetColumnShardSimple().GetStartRecordIndex(), rowsPerPortion);
+            UNIT_ASSERT(!cursor.GetIndexMaybeInDictionaryCoordinates());
 
             TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
             resumed.SetReverse(std::nullopt);
@@ -1865,6 +1866,52 @@ void TestDictionaryDistinctResumedByCursor(const TString& readerClassName) {
             UNIT_ASSERT(resumedWithoutOptimization.IsCorrectlyFinished());
             UNIT_ASSERT_VALUES_EQUAL(resumedWithoutOptimization.GetRecordsCount(), 0);
             UNIT_ASSERT_VALUES_EQUAL(GetDictionaryOnlyOptimizationCount(runtime), dictionaryOnlyCountBeforeResume);
+        });
+}
+
+void TestDictionaryDistinctResumedFromLegacyCursor(const TString& readerClassName) {
+    constexpr ui64 rowsPerPortion = 60;
+    TTestBlobOptions blobOptions;
+    blobOptions.SameValueColumns.emplace("message");
+    WithDictionaryDistinctPortion(readerClassName, rowsPerPortion, blobOptions,
+        [&](TTestBasicRuntime& runtime, const TestTableDescription& table, const ui64 tableId, const NOlap::TSnapshot& snapshot) {
+            const ui32 messageId = table.GetColumnIds({ "message" }).front();
+            NKikimrSSA::TProgram program;
+            program.AddCommand()->MutableProjection()->AddColumns()->SetId(messageId);
+            program.AddCommand()->MutableDistinct()->MutableKeyColumn()->SetId(messageId);
+
+            TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            interrupted.SetReverse(std::nullopt);
+            interrupted.SetProgram(program);
+            interrupted.SetReplyColumnIds({ messageId });
+            UNIT_ASSERT(interrupted.InitializeScanner());
+            interrupted.Ack();
+            UNIT_ASSERT_C(interrupted.Receive(), "scan finished before the cursor could be resumed");
+            UNIT_ASSERT_VALUES_EQUAL(interrupted.GetReceivedBatches().front()->num_rows(), 1);
+            UNIT_ASSERT_C(GetDictionaryOnlyOptimizationCount(runtime) > 0, "dictionary-only optimization was not used");
+            const auto& cursor = interrupted.GetLastCursor();
+            UNIT_ASSERT_C(cursor.HasColumnShardSimple(), cursor.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(cursor.GetColumnShardSimple().GetStartRecordIndex(), rowsPerPortion);
+
+            NKikimrKqp::TEvKqpScanCursor legacyCursor;
+            legacyCursor.SetTabletId(cursor.GetTabletId());
+            legacyCursor.SetSourcesSorting(cursor.GetSourcesSorting());
+            *legacyCursor.MutableColumnShardSimple() = cursor.GetColumnShardSimple();
+            legacyCursor.MutableColumnShardSimple()->SetStartRecordIndex(1);
+            UNIT_ASSERT(!legacyCursor.HasIndexMaybeInDictionaryCoordinates());
+            UNIT_ASSERT(legacyCursor.GetIndexMaybeInDictionaryCoordinates());
+
+            const auto dictionaryOnlyCountBeforeResume = GetDictionaryOnlyOptimizationCount(runtime);
+            TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+            resumed.SetReverse(std::nullopt);
+            resumed.SetProgram(program);
+            resumed.SetReplyColumnIds({ messageId });
+            resumed.SetScanCursor(legacyCursor);
+            resumed.ReadAll();
+            UNIT_ASSERT(resumed.IsCorrectlyFinished());
+            UNIT_ASSERT_VALUES_EQUAL(resumed.GetRecordsCount(), 0);
+            UNIT_ASSERT_C(GetDictionaryOnlyOptimizationCount(runtime) > dictionaryOnlyCountBeforeResume,
+                "legacy cursor did not use dictionary-only fetching");
         });
 }
 
@@ -2863,6 +2910,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(DictionaryDistinctResumedInsidePortionSimpleReader) {
         TestDictionaryDistinctResumedInsidePortion("SIMPLE");
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedFromLegacyCursor) {
+        TestDictionaryDistinctResumedFromLegacyCursor("TRIVIAL");
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedFromLegacyCursorSimpleReader) {
+        TestDictionaryDistinctResumedFromLegacyCursor("SIMPLE");
     }
 
     Y_UNIT_TEST(SysViewLimitDrainsEqualPrefixes) {

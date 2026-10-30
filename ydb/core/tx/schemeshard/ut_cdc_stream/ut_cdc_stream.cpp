@@ -1839,6 +1839,52 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", {NKikimrScheme::StatusPreconditionFailed});
     }
 
+    Y_UNIT_TEST(CreateCdcStreamInFederationWhenEnabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().FeatureFlags.SetEnableCdcForFederation(true);
+        runtime.GetAppData().ClusterName = "sas";
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              UserAttributes { Key: "_federation_account" Value: "account" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        const auto& config = describe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT(config.GetLocalDC());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetDC(), "sas");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetFederationAccount(), "account");
+        UNIT_ASSERT(!config.HasProducer());
+        UNIT_ASSERT(!config.HasTopic());
+    }
+
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {

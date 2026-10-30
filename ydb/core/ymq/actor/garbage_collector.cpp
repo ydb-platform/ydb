@@ -608,7 +608,7 @@ public:
                     str << "Minimum item age param is missing";
                 }
             }
-            str << "<br></br>" << "<a href=\"/actors/sqsgc\">Back</a>";
+            str << "<br></br>" << "<a href=\"" << NActors::GetRelativeRoot(ev->Get()->Request.GetPath()) << "actors/sqsgc\">Back</a>";
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
@@ -639,7 +639,7 @@ public:
             } else {
                 str << "Path to clean is missing";
             }
-            str << "<br></br>" << "<a href=\"/actors/sqsgc\">Back</a>";
+            str << "<br></br>" << "<a href=\"" << NActors::GetRelativeRoot(ev->Get()->Request.GetPath()) << "actors/sqsgc\">Back</a>";
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
@@ -652,21 +652,21 @@ public:
 
         HTML(str) {
             str << "Cleaning history was reset";
-            str << "<br></br>" << "<a href=\"/actors/sqsgc\">Back</a>";
+            str << "<br></br>" << "<a href=\"" << NActors::GetRelativeRoot(ev->Get()->Request.GetPath()) << "actors/sqsgc\">Back</a>";
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
 
-    static void AddCleanGarbageLink(TStringStream& str, const TString& pathToClean) {
+    static void AddCleanGarbageLink(TStringStream& str, const TString& pathToClean, TStringBuf root) {
         TCgiParameters params;
         params.InsertUnescaped(PATH_TO_CLEAN, pathToClean);
 
-        str << "<a href=\"/actors/sqsgc/clean?" << params() << "\">" << "Clean" << "</a>";
+        str << "<a href=\"" << root << "actors/sqsgc/clean?" << params() << "\">" << "Clean" << "</a>";
     }
 
-    static void AddRescanForm(TStringStream& str) {
-        str << "<form method=\"GET\" action=\"/actors/sqsgc/rescan\" id=\"tblMonSQSGCfrm\" name=\"tblMonSQSGCfrm\">" << Endl;
+    static void AddRescanForm(TStringStream& str, TStringBuf root) {
+        str << "<form method=\"GET\" action=\"" << root << "actors/sqsgc/rescan\" id=\"tblMonSQSGCfrm\" name=\"tblMonSQSGCfrm\">" << Endl;
         str << "<legend> Rescan structure and filter by item age: </legend>";
         str << "<label> " << "Minimum item age (seconds): " << " <input type=\"number\" id=\"" << "lblRescan";
         str << "\" name=\"" << MINIMUM_ITEM_AGE_SECONDS << "\"" << " value=\"" << Cfg().GetMinimumGarbageAgeSeconds() << "\"";
@@ -675,7 +675,7 @@ public:
         str << "</form>" << Endl;
     }
 
-    void RenderGarbageHints(TStringStream& str) const {
+    void RenderGarbageHints(TStringStream& str, TStringBuf root) const {
         if (CurrentGarbageHints.empty()) {
             return;
         }
@@ -700,14 +700,14 @@ public:
                         TABLED() { str << pathToClean; }
                         TABLED() { str << hint.SchemeNode.CreationTs.ToRfc822String(); }
                         TABLED() { str << hint.Reason; }
-                        TABLED() { AddCleanGarbageLink(str, pathToClean); }
+                        TABLED() { AddCleanGarbageLink(str, pathToClean, root); }
                     }
                 }
             }
         }
     }
 
-    void RenderCleaningResults(TStringStream& str) const {
+    void RenderCleaningResults(TStringStream& str, TStringBuf root) const {
         if (CleaningHistory.empty()) {
             return;
         }
@@ -741,16 +741,17 @@ public:
                 }
             }
         }
-        str << "<a href=\"/actors/sqsgc/clear_history\">" << "Reset local cleaning history" << "</a>";
+        str << "<a href=\"" << root << "actors/sqsgc/clear_history\">" << "Reset local cleaning history" << "</a>";
     }
 
     void RenderMainControlPage(NMon::TEvHttpInfo::TPtr& ev) {
         TStringStream str;
+        const TString root = NActors::GetRelativeRoot(ev->Get()->Request.GetPath());
 
         HTML(str) {
-            AddRescanForm(str);
-            RenderGarbageHints(str);
-            RenderCleaningResults(str);
+            AddRescanForm(str, root);
+            RenderGarbageHints(str, root);
+            RenderCleaningResults(str, root);
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

@@ -219,6 +219,18 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     }
 }
 
+TString GetRelativeRoot(TStringBuf path) {
+    path = path.Before('?').Before('#');
+    path.SkipPrefix("/");
+    TString root;
+    for (char c : path) {
+        if (c == '/') {
+            root += "../";
+        }
+    }
+    return root;
+}
+
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
     MakeJsonErrorReply(jsonResponse, message, NYdb::NAdapters::ToYqlIssues(status.GetIssues()), status.GetStatus());
 }

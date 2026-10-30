@@ -18,6 +18,7 @@ include/unwind.h
 include/use_ansi.h
 src/support/win32/atomic_win32.cpp
 src/support/win32/new_win32.cpp
+ut/
 {% endblock %}
 
 {% block current_url %}
@@ -320,6 +321,8 @@ IF (OS_LINUX)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(ut)
 EOF
 {% endblock %}
 

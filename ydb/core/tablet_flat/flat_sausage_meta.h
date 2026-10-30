@@ -34,6 +34,10 @@ namespace NPageCollection {
         }
 
         size_t BackingSize() const noexcept;
+
+        i64 GetMemoryUsage() const noexcept {
+            return sizeof(TMeta) + Steps.capacity() * sizeof(ui64) + Raw.GetAllocationSize();
+        }
         TBorder Bounds(ui32 begin, ui32 end) const;
         TInfo Page(ui32 page) const;
         ui32 GetPageType(ui32 pageId) const;
@@ -57,7 +61,7 @@ namespace NPageCollection {
         const TEntry *Index = nullptr;
         const TExtra *Extra = nullptr;
         const char *InboundData = nullptr;
-        TVector<ui64> Steps;    /* Pages boundaries vector  */
+        TVector<ui64> Steps; /* Cumulative blob end offsets */
         ui32 SkippedPages_ = 0;
     };
 

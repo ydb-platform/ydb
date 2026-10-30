@@ -118,6 +118,14 @@ namespace NPage {
             return Raw.size();
         }
 
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            return sizeof(TExtBlobs) + Raw.GetAllocationSize();
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return &Raw;
+        }
+
     public:
         const TSharedData Raw;
 

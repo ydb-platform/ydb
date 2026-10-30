@@ -731,7 +731,7 @@ public:
         }
         RefreshMemoryUsage();
         //        AFL_VERIFY(MemoryUsage == 0,
-                      {"usage", MemoryUsage});
+//                      {"usage", MemoryUsage});
         AllocationScopes.clear();
         WaitingScopes.clear();
     }

@@ -16,6 +16,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -302,6 +303,12 @@ static bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask&
         if (!sourcePath.IsResolved() || sourcePath.IsDeleted()) {
             error = "Source table is not available and the table scheme snapshot is missing";
             return false;
+        }
+        if (!allowMissingSource) {
+            YDB_LOG_WARN("TExport: table scheme snapshot is missing, using live source scheme as legacy fallback",
+                {"sourcePath", sourcePath.PathString()},
+                {"exportItemPath", exportItemPath.PathString()},
+            );
         }
         if (!MakeTableSchemeSnapshot(ss, TlsActivationContext->AsActorContext(),
                 sourcePath.Base()->PathId, legacySnapshot, error)) {
@@ -615,3 +622,5 @@ void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb&
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

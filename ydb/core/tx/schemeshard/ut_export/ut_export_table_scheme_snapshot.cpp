@@ -465,6 +465,45 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportTableSchemeSnapshotTests) {
         t.Forget(exportId);
     }
 
+    Y_UNIT_TEST_TWIN(MissingChangefeedTopicsCancelsWholeExport, IsFs) {
+        TExportEnv t(IsFs);
+        t.CreateTable();
+        t.CreateChangefeed();
+
+        TDelayedCopy copy(t);
+        const ui64 exportId = t.Export();
+        copy.WaitForCopy();
+        UNIT_ASSERT_VALUES_EQUAL(t.SnapshotCount(), 1);
+        const auto pathId = DescribePrivatePath(t.Runtime, Sprintf("/MyRoot/export-%lu/0", exportId)).GetPathId();
+
+        // Keep the captured CDC stream, but remove its underlying topic from the snapshot.
+        LocalMiniKQL(t.Runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '(
+                    '('OwnerPathId (Uint64 '%lu))
+                    '('LocalPathId (Uint64 '%lu))
+                ))
+                (let topics '('ChangefeedUnderlyingTopics (String '"")))
+                (return (AsList (UpdateRow 'TableSchemeSnapshots key '(topics))))
+            )
+        )", TTestTxConfig::SchemeShard, pathId));
+        copy.Resume(true);
+        t.Env.TestWaitNotification(t.Runtime, exportId);
+
+        auto result = TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = result.GetResponse().GetEntry();
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "changefeed topics");
+        UNIT_ASSERT(!t.HasFile("scheme.pb"));
+        UNIT_ASSERT(!t.HasFile("export_complete.json"));
+
+        RebootTablet(t.Runtime, TTestTxConfig::SchemeShard, t.Runtime.AllocateEdgeActor());
+
+        TestGetExport(t.Runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        t.Forget(exportId);
+    }
+
     Y_UNIT_TEST_TWIN(DroppedSourceBeforeCaptureCancelsExport, IsFs) {
         TExportEnv t(IsFs);
         t.CreateTable();

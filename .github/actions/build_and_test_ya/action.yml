@@ -693,6 +693,10 @@ runs:
           TESTS_RESULT=0
           analytics start fail_checker
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          if [ "$TESTS_RESULT" -eq 2 ]; then
+            analytics end fail_checker --rc "$TESTS_RESULT" --error "invalid test report"
+            exit "$TESTS_RESULT"
+          fi
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
           analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
           if [ $TESTS_RESULT = 0 ]; then

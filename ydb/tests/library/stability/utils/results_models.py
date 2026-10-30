@@ -32,8 +32,10 @@ class StressUtilRunResult:
         is_success: Whether run succeeded
         is_timeout: Whether run timed out
         iteration_number: Iteration number
-        stdout: Standard output
-        stderr: Standard error
+        stdout_path: Path of the stdout file on the host that ran the workload, if kept
+        stderr_path: Path of the stderr file on the host that ran the workload, if kept
+        stdout_bytes: Size of the workload stdout file
+        stderr_bytes: Size of the workload stderr file
         start_time: Run start timestamp
         end_time: Run end timestamp
         execution_time: Run duration in seconds
@@ -42,21 +44,29 @@ class StressUtilRunResult:
     is_success: Optional[bool] = None
     is_timeout: Optional[bool] = None
     iteration_number: Optional[int] = None
-    stdout: Optional[str] = None
-    stderr: Optional[str] = None
+    stdout_path: Optional[str] = None
+    stderr_path: Optional[str] = None
+    stdout_bytes: Optional[int] = None
+    stderr_bytes: Optional[int] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
     execution_time: Optional[float] = None
 
     def to_dict(self):
-        """Convert object to dictionary for JSON serialization."""
+        """Convert object to dictionary for JSON serialization.
+
+        Log text is not included. Failed and timed-out runs leave the files
+        at stdout_path and stderr_path on the host that ran the workload.
+        """
         return {
             "run_config": str(self.run_config),
             "is_success": self.is_success,
             "is_timeout": self.is_timeout,
             "iteration_number": self.iteration_number,
-            "stdout": self.stdout,
-            "stderr": self.stderr,
+            "stdout_path": self.stdout_path,
+            "stderr_path": self.stderr_path,
+            "stdout_bytes": self.stdout_bytes,
+            "stderr_bytes": self.stderr_bytes,
             "start_time": self.start_time,
             "end_time": self.end_time,
             "execution_time": self.execution_time

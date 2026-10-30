@@ -33,17 +33,16 @@ _PRE_POST_COMMAND_TIMEOUT_SECONDS = 300
 
 
 class WorkloadRunOutcome(NamedTuple):
-    """One workload iteration. Log bodies are tails, not the full output."""
+    """One workload iteration. Log text stays in files on the executing host."""
 
     success: bool
     execution_time: float
-    stdout_tail: str
-    stderr_tail: str
     is_timeout: bool
     stdout_path: Optional[str] = None
     stderr_path: Optional[str] = None
     stdout_bytes: Optional[int] = None
     stderr_bytes: Optional[int] = None
+    error: Optional[str] = None
 
 
 class StressRunExecutor:
@@ -249,8 +248,6 @@ class StressRunExecutor:
                             run_result.execution_time = outcome.execution_time
                             run_result.start_time = start_time
                             run_result.end_time = time_module.time()
-                            run_result.stdout = outcome.stdout_tail
-                            run_result.stderr = outcome.stderr_tail
                             run_result.stdout_path = outcome.stdout_path
                             run_result.stderr_path = outcome.stderr_path
                             run_result.stdout_bytes = outcome.stdout_bytes
@@ -398,7 +395,6 @@ class StressRunExecutor:
                     "success": outcome.success, "execution_time": round(outcome.execution_time, 2),
                     "is_timeout": outcome.is_timeout,
                     "command": run_config.get("run_command", ""),
-                    "stdout": outcome.stdout_tail, "stderr": outcome.stderr_tail,
                     "stdout_path": outcome.stdout_path, "stderr_path": outcome.stderr_path,
                 }
                 allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
@@ -406,7 +402,7 @@ class StressRunExecutor:
                 if not outcome.success:
                     raise RuntimeError(
                         f"Pre-nemesis command for {name} on {node_host} failed "
-                        f"(timeout={outcome.is_timeout}): {outcome.stderr_tail[:200]}"
+                        f"(timeout={outcome.is_timeout}): {outcome.error or outcome.stderr_path}"
                     )
                 else:
                     logging.info(f"Pre-nemesis command for {name} on {node_host} succeeded")
@@ -471,7 +467,6 @@ class StressRunExecutor:
                     "success": outcome.success, "execution_time": round(outcome.execution_time, 2),
                     "is_timeout": outcome.is_timeout,
                     "command": run_config.get("run_command", ""),
-                    "stdout": outcome.stdout_tail, "stderr": outcome.stderr_tail,
                     "stdout_path": outcome.stdout_path, "stderr_path": outcome.stderr_path,
                 }
                 allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
@@ -479,7 +474,7 @@ class StressRunExecutor:
                 if not outcome.success:
                     raise RuntimeError(
                         f"Post-nemesis command for {name} on {node_host} failed "
-                        f"(timeout={outcome.is_timeout}): {outcome.stderr_tail[:200]}"
+                        f"(timeout={outcome.is_timeout}): {outcome.error or outcome.stderr_path}"
                     )
                 else:
                     logging.info(f"Post-nemesis command for {name} on {node_host} succeeded")
@@ -508,8 +503,8 @@ class StressRunExecutor:
         Executes a single workload run with detailed logging and timeout handling.
 
         Workload stdout and stderr are redirected to files on ``target_node``.
-        The test process receives only a short trailer (sizes and, on failure,
-        the last few kilobytes). A clean success deletes those files.
+        The test process receives only a short trailer (paths and sizes).
+        A clean success deletes those files.
 
         Args:
             deployed_binary_path: Path to workload binary on target node
@@ -525,9 +520,8 @@ class StressRunExecutor:
                 - thread_id: Worker thread identifier
 
         Returns:
-            WorkloadRunOutcome. ``stdout_tail`` and ``stderr_tail`` are bounded.
-            ``stdout_path`` and ``stderr_path`` are set only when the full logs
-            were kept on the node (failed or timed out run).
+            WorkloadRunOutcome. ``stdout_path`` and ``stderr_path`` are set only
+            when the log files were kept on the node (failed or timed out run).
         """
         # Substitute variables in command_args_template for unique paths
         command_args = self.__substitute_variables_in_template(
@@ -600,21 +594,18 @@ class StressRunExecutor:
             )
             if not success:
                 logging.warning(
-                    "%s logs on %s: stdout=%s (%s bytes) stderr=%s (%s bytes) stderr_tail=%s",
+                    "%s logs on %s: stdout=%s (%s bytes) stderr=%s (%s bytes)",
                     run_name,
                     target_node.host,
                     stdout_path,
                     None if info.stdout_bytes is None or info.stdout_bytes < 0 else info.stdout_bytes,
                     stderr_path,
                     None if info.stderr_bytes is None or info.stderr_bytes < 0 else info.stderr_bytes,
-                    (info.stderr_tail or "")[:400],
                 )
 
             return WorkloadRunOutcome(
                 success=success,
                 execution_time=execution_time,
-                stdout_tail=info.stdout_tail,
-                stderr_tail=info.stderr_tail,
                 is_timeout=is_timeout,
                 stdout_path=stdout_path,
                 stderr_path=stderr_path,
@@ -628,9 +619,8 @@ class StressRunExecutor:
             return WorkloadRunOutcome(
                 success=False,
                 execution_time=execution_time,
-                stdout_tail="",
-                stderr_tail=error_msg,
                 is_timeout=False,
                 stdout_path=stdout_path,
                 stderr_path=stderr_path,
+                error=error_msg,
             )

@@ -7,20 +7,16 @@ exhausted the test machine RAM.
 
 The wrapper below redirects the workload to files on the host that runs it,
 under ``$HOME/tmp``. CI removes that directory between tests. The SSH session
-prints only a short trailer: sizes, a nonempty flag, and (for a failed run) a
-base64 tail. A clean success deletes the files.
+prints only a short trailer: exit code, paths, sizes, and whether stderr has
+text. The log bodies stay in those files. A clean success deletes them.
 """
 from __future__ import annotations
 
-import base64
 import re
 import shlex
 import uuid
 from typing import NamedTuple, Optional
 
-
-# Last bytes of a failed run kept in the test process and in the Allure JSON.
-TAIL_BYTES = 8192
 
 # Relative to $HOME on the host that executes the workload. CI wipes ~/tmp
 # between tests, so failed-run logs do not have to be removed by hand.
@@ -58,10 +54,6 @@ fi
 echo "STABILITY_STDERR_NONEMPTY=$nonempty"
 if [ "$rc" -ne 0 ] || [ "$nonempty" -eq 1 ]; then
 echo STABILITY_LOGS_KEPT=1
-stdout_tail_b64=$(tail -c __TAIL__ "$out" | base64 | tr -d '\n')
-stderr_tail_b64=$(tail -c __TAIL__ "$err" | base64 | tr -d '\n')
-echo "STABILITY_STDOUT_TAIL_B64=$stdout_tail_b64"
-echo "STABILITY_STDERR_TAIL_B64=$stderr_tail_b64"
 else
 echo STABILITY_LOGS_KEPT=0
 rm -f "$out" "$err"
@@ -81,8 +73,6 @@ class WorkloadLogInfo(NamedTuple):
     stderr_bytes: Optional[int]
     stderr_nonempty: bool
     logs_kept: bool
-    stdout_tail: str
-    stderr_tail: str
 
 
 def _ignored_grep_args() -> str:
@@ -110,7 +100,7 @@ def _shell_log_paths(log_id: str, log_dir: Optional[str]) -> tuple[str, str, str
     tests can point at a temp dir. Returned paths are not shell-quoted.
     """
     if log_dir is None:
-        directory = "$HOME/tmp/stability_workload_logs"
+        directory = WORKLOAD_LOG_DIR
         stdout_path = f"{directory}/{log_id}.out"
         stderr_path = f"{directory}/{log_id}.err"
         return f'"{directory}"', f'"{stdout_path}"', f'"{stderr_path}"', stdout_path, stderr_path
@@ -148,25 +138,10 @@ def build_redirected_workload_command(
         .replace("__LOG_DIR__", directory)
         .replace("__STDOUT__", stdout_shell)
         .replace("__STDERR__", stderr_shell)
-        .replace("__TAIL__", str(TAIL_BYTES))
         .replace("__GREP_ARGS__", _ignored_grep_args())
         .replace("__COMMAND__", command)
     )
     return script, stdout_path, stderr_path
-
-
-def _decode_tail(value: str) -> str:
-    if not value:
-        return ""
-    # Reject a trailer that somehow grew past one tail. 4/3 expansion + padding.
-    max_b64 = ((TAIL_BYTES + 2) // 3) * 4 + 8
-    try:
-        raw = base64.b64decode(value[:max_b64])
-    except Exception:
-        return ""
-    if len(raw) > TAIL_BYTES:
-        raw = raw[-TAIL_BYTES:]
-    return raw.decode("utf-8", errors="replace")
 
 
 def _parse_int(value: Optional[str]) -> Optional[int]:
@@ -199,6 +174,4 @@ def parse_workload_trailer(stdout: str) -> WorkloadLogInfo:
         stderr_bytes=_parse_int(fields.get("STABILITY_STDERR_BYTES")),
         stderr_nonempty=fields.get("STABILITY_STDERR_NONEMPTY") == "1",
         logs_kept=logs_kept,
-        stdout_tail=_decode_tail(fields.get("STABILITY_STDOUT_TAIL_B64", "")),
-        stderr_tail=_decode_tail(fields.get("STABILITY_STDERR_TAIL_B64", "")),
     )

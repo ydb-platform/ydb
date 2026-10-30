@@ -12,7 +12,7 @@
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
-    void CheckDeliveryRetry(bool alter, bool detach = false) {
+    void CheckDeliveryRetry(bool alter) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto parent = runtime.AllocateEdgeActor();
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
             ? CreateDstAlterer(parent, pathId.OwnerId, 1, 1,
                 TReplication::ETargetKind::Table, pathId, TReplication::EState::Done)
             : CreateDstRemover(parent, pathId.OwnerId, {}, 1, 1,
-                TReplication::ETargetKind::Table, pathId, detach ? pathId : TPathId()));
+                TReplication::ETargetKind::Table, pathId));
 
         NTxProxy::TTxProxyServices services;
         services.LeaderPipeCache = pipeCache;
@@ -72,9 +72,6 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
         CheckDeliveryRetry(false);
     }
 
-    Y_UNIT_TEST(DetachRetriesOwnSchemeShard) {
-        CheckDeliveryRetry(false, true);
-    }
 }
 
 }

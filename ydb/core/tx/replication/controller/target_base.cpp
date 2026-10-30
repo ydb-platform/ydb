@@ -244,6 +244,7 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Paused:
+    case EDstState::WaitingImport:
         break;
     case EDstState::Error:
         break;

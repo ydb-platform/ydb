@@ -4144,17 +4144,40 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )";
     }
 
-    void CreateReplicaPlaceholder(TTestBasicRuntime& runtime, TTestEnv& env, ui64 txId, const TString& name = "Table") {
-        TestCreateTable(runtime, txId, "/MyRoot", Sprintf(R"(
+    void CreateReplicaPlaceholder(TTestBasicRuntime& runtime, TTestEnv& env, ui64 txId,
+            const TString& name = "Table", bool withIndex = false) {
+        const auto table = Sprintf(R"(
             Name: "%s"
             Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
             ReplicationConfig {
                 Mode: REPLICATION_MODE_READ_ONLY
                 ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
                 ImportState: WAITING_IMPORT
             }
-        )", name.c_str()));
+        )", name.c_str());
+        if (withIndex) {
+            auto* request = InternalTransaction(CreateIndexedTableRequest(txId, "/MyRoot", TStringBuilder()
+                << "TableDescription { " << table << " }" << R"(
+                    IndexDescription {
+                        Name: "by_value"
+                        Type: EIndexTypeGlobal
+                        KeyColumnNames: ["value"]
+                        IndexImplTableDescriptions {
+                            ReplicationConfig {
+                                Mode: REPLICATION_MODE_READ_ONLY
+                                ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
+                                ImportState: WAITING_IMPORT
+                            }
+                        }
+                    }
+                )"));
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResult(runtime, txId);
+        } else {
+            TestCreateTable(runtime, txId, "/MyRoot", table);
+        }
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -4167,10 +4190,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(config.GetImportState(), TTableReplicationConfig::IMPORTED);
     }
 
-    Y_UNIT_TEST_QUAD(ReplicaImportPreservesTtlRows, RebootBeforeCreate, EnableDataShardDirectPartImport) {
+    void CheckReplicaImportRecovery(bool rebootBeforeCreate, bool enableDataShardDirectPartImport,
+            bool rebootDuringFinalize = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         CreateReplicaPlaceholder(runtime, env, 10);
         const auto placeholder = DescribePath(runtime, "/MyRoot/Table").GetPathId();
         const auto data = GenerateTestData("", 3);
@@ -4188,12 +4212,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3.Start());
 
         bool createBlocked = false;
+        bool finalizeBlocked = false;
+        ui64 finalizeTxId = 0;
         auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
-            if (!RebootBeforeCreate || createBlocked) {
-                return;
-            }
             for (const auto& tx : ev->Get()->Record.GetTransaction()) {
-                if (tx.GetCreateIndexedTable().GetTableDescription().GetReplicationConfig().GetImportState()
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() == TTableReplicationConfig::IMPORTED) {
+                    finalizeTxId = ev->Get()->Record.GetTxId();
+                }
+                if (rebootBeforeCreate && !createBlocked && tx.GetCreateIndexedTable().GetTableDescription().GetReplicationConfig().GetImportState()
                         == TTableReplicationConfig::IMPORTING) {
                     createBlocked = true;
                     ev.Reset();
@@ -4201,10 +4227,22 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 }
             }
         });
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            if (rebootDuringFinalize && !finalizeBlocked && finalizeTxId
+                    && ev->Get()->Record.GetTxId() == finalizeTxId
+                    && ev->Get()->Record.GetStatus() == NKikimrScheme::StatusAccepted) {
+                finalizeBlocked = true;
+                ev.Reset();
+            }
+        });
         TestImport(runtime, 20, "/MyRoot", Sprintf(ImportTableRequest().c_str(), port));
-        if (RebootBeforeCreate) {
+        if (rebootBeforeCreate) {
             runtime.WaitFor("recreating replica after DROP", [&] { return createBlocked; });
             UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetStatus(), NKikimrScheme::StatusPathDoesNotExist);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        if (rebootDuringFinalize) {
+            runtime.WaitFor("final import ALTER accepted", [&] { return finalizeBlocked; });
             RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         }
         env.TestWaitNotification(runtime, 20);
@@ -4221,6 +4259,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.SimulateSleep(runtime, TDuration::Seconds(10));
         CheckImportedReplica(runtime, "/MyRoot/Table");
         NKqp::CompareYson(data.YsonStr, ReadTable(runtime, shardId, "Table", {"key"}, {"key", "value"}));
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportPreservesTtlRows, RebootBeforeCreate, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(RebootBeforeCreate, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportResumesFinalization, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(false, EnableDataShardDirectPartImport, true);
     }
 
     Y_UNIT_TEST(ReplicaImportFailureDoesNotMarkImported) {
@@ -8344,7 +8390,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         if (replica) {
-            CreateReplicaPlaceholder(runtime, env, 10);
+            CreateReplicaPlaceholder(runtime, env, 10, "Table", true);
         }
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
 
@@ -8365,18 +8411,19 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", {{"a", 1}}, "", metadata);
 
-        const auto b = GenerateTestData(R"(
+        auto b = GenerateTestData(R"(
             columns {
-              name: "key"
+              name: "value"
               type { optional_type { item { type_id: UTF8 } } }
             }
             columns {
-              name: "value"
+              name: "key"
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "value"
             primary_key: "key"
         )", {{"b", 1}}, "", metadata);
+        b.Data[0] = TTestData("\"value1\",\"b1\"\n", GenerateTestData("b", 1).YsonStr);
 
         Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
             ImportFromS3Settings {
@@ -8398,6 +8445,15 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             CheckImportedReplica(runtime, "/MyRoot/Table");
             CheckImportedReplica(runtime, "/MyRoot/Table/by_value/indexImplTable");
         }
+        const auto table = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/by_value/indexImplTable", true, true);
+        NKqp::CompareYson(a.Data[0].YsonStr, ReadTable(runtime,
+            table.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "Table", {"key"}, {"key", "value"}));
+        const bool importedIndex = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})");
+        NKqp::CompareYson((importedIndex ? b : a).Data[0].YsonStr, ReadTable(runtime,
+            index.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "indexImplTable",
+            {"value", "key"}, {"key", "value"}));
     }
 
     Y_UNIT_TEST_QUAD(ReplicaImportIndexes, Materialized, EnableDataShardDirectPartImport) {

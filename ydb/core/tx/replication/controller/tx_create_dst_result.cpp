@@ -56,10 +56,16 @@ public:
         if (Ev->Get()->IsSuccess()) {
             const bool wasAltering = dstState == TReplication::EDstState::Alter;
             target->SetDstPathId(Ev->Get()->DstPathId);
-            if (Ev->Get()->WaitingImport) {
-                target->SetDstState(TReplication::EDstState::Paused);
-            } else if (Replication->GetDesiredState() == TReplication::EState::Done) {
+            if (Replication->GetDesiredState() == TReplication::EState::Done) {
                 target->SetDstState(TReplication::EDstState::Alter);
+            } else if (Ev->Get()->WaitingImport) {
+                if (Replication->GetDesiredState() == TReplication::EState::Paused) {
+                    target->SetDstState(TReplication::EDstState::WaitingImport);
+                } else {
+                    // STANDBY may arrive before placeholder creation completes.
+                    target->SetDstPathId({});
+                    target->SetDstState(TReplication::EDstState::Alter);
+                }
             } else {
                 target->SetDstState(TReplication::EDstState::Ready);
                 if (wasAltering && Replication->CheckAlterDone()) {

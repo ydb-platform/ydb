@@ -310,8 +310,13 @@ public:
                 continue;
             }
 
-            if (!Replication->GetConfig().GetInitialScan()
-                    && target->GetDstState() == TReplication::EDstState::Paused
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
+                    && desiredState == TReplication::EState::Paused) {
+                target->UpdateConfig(Replication->GetConfig());
+                continue;
+            }
+
+            if (target->GetDstState() == TReplication::EDstState::WaitingImport
                     && desiredState == TReplication::EState::Ready) {
                 // Import replaces the placeholder, so resolve its new path id on attachment.
                 target->SetDstPathId({});

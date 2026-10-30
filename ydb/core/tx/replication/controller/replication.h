@@ -46,6 +46,7 @@ public:
         Done,
         Removing,
         Paused,
+        WaitingImport = 7,
         Error = Max<ui8>()
     };
 

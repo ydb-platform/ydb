@@ -847,6 +847,76 @@ struct TSchemaAltererTestEnv {
     }
 };
 
+struct TImportedReplicationInfo {
+    TReplicationTestInfo Info;
+    ui64 TargetId = 0;
+    TPathId DstPathId;
+};
+
+void CompleteDestinationImport(TTestEnv& env, const TReplicationTestInfo& info, ui64 targetId) {
+    UNIT_ASSERT(WaitFor([&] {
+        NKikimrMiniKQL::TResult result;
+        const auto status = LocalQuery(env.GetRuntime(), info.ControllerId, Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+            (return (AsList (SetResult 'State (SelectRow 'Targets key '('DstState)))))
+        ))", targetId), result);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        const auto& row = result.GetValue().GetStruct(0).GetOptional();
+        return row.HasOptional() && row.GetOptional().GetStruct(0).GetOptional().GetUint32()
+            == static_cast<ui32>(TReplication::EDstState::WaitingImport);
+    }));
+    const auto description = env.GetDescription("/Root/replica1");
+    UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+        NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+
+    const ui64 txId = 100500;
+    const auto schemeShardId = env.GetSchemeshardId("/Root/replica1");
+    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+    auto& tx = *request->Record.AddTransaction();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+    tx.SetInternal(true);
+    env.GetPathId("/Root/replica1").ToProto(tx.MutableAlterTable()->MutablePathId());
+    auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+    config = description.GetPathDescription().GetTable().GetReplicationConfig();
+    config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    const auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+        schemeShardId, std::move(request));
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+        result->Get()->Record.GetReason());
+    env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+        new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
+}
+
+TImportedReplicationInfo StartImportedReplication(TTestEnv& env) {
+    env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
+    const auto info = StartReplication(env);
+    UNIT_ASSERT(!info.Config.GetInitialScan());
+
+    ui64 targetId = 0;
+    bool foundTarget = false;
+    for (ui32 attempt = 0; attempt < 50; ++attempt) {
+        const auto result = DescribeReplication(env, info);
+        if (result->Get()->Record.TargetsSize()) {
+            targetId = result->Get()->Record.GetTargets(0).GetId();
+            foundTarget = true;
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(foundTarget);
+
+    // Destination creation follows source stream creation. Wait for both so
+    // workers can resolve the real topic when the replication is resumed.
+    CompleteDestinationImport(env, info, targetId);
+
+    auto resume = MakeAlterReplicationRequest(info, 99);
+    resume->Record.MutableSwitchState()->MutableStandBy();
+    const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
+    UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(),
+        NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+    return {info, targetId, env.GetPathId("/Root/replica1")};
+}
+
 void AssertEventuallyDone(TTestEnv& env, const TReplicationTestInfo& info) {
     UNIT_ASSERT_C(WaitFor([&] {
         return DescribeReplication(env, info)->Get()->Record.GetState().HasDone();
@@ -872,7 +942,7 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
-    Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
+    Y_UNIT_TEST(InitialScanDisabledCreatesWaitingImportDestination) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         const TString destination = "/Root/replica1";
@@ -920,16 +990,23 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         const auto targetId = state->Get()->Record.GetTargets(0).GetId();
         // The committed stream capability proves source setup has completed.
         UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
-        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+        UNIT_ASSERT(WaitFor([&] {
+            return env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetImportState()
+                == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+        }));
+        UNIT_ASSERT(destinationCreators > 0);
+        const auto placeholderId = env.GetPathId(destination);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
 
         // Reloading the ready source stream also exercises target progress during startup.
         RestartController(env, info.ControllerId);
         const auto restarted = DescribeReplication(env, info);
         UNIT_ASSERT_C(restarted->Get()->Record.GetState().HasPaused(), restarted->Get()->Record.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(restarted->Get()->Record.TargetsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId(destination), placeholderId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
     }
 
     Y_UNIT_TEST_TWIN(InitialScan, ConfigInitialScan) {
@@ -937,10 +1014,6 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
             TTestEnv env;
             env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(ConfigInitialScan);
             const bool expectedInitialScan = initialScan.GetOrElse(ConfigInitialScan);
-            if (!expectedInitialScan) {
-                CreateSourceTable(env, "replica1");
-            }
-
             const auto info = StartReplication(env, 1, "root@builtin", false, false,
                 NKikimrSchemeOp::EIndexTypeGlobal, true, initialScan);
             UNIT_ASSERT_VALUES_EQUAL(info.Config.GetInitialScan(), expectedInitialScan);
@@ -953,6 +1026,38 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
 }
 
 Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
+    Y_UNIT_TEST_TWIN(ImportedReplicaResumesAfterPause, RestartBeforeResume) {
+        TTestEnv env;
+        const auto pending = StartImportedReplication(env);
+        const auto& info = pending.Info;
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+
+        RequestPause(env, info, 106);
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        SendWorkerStopped(env, info.ControllerId, worker);
+        WaitForPaused(env, info);
+        if (RestartBeforeResume) {
+            RestartController(env, info.ControllerId);
+            env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+        }
+
+        auto resume = MakeAlterReplicationRequest(info, 107);
+        resume->Record.MutableSwitchState()->MutableStandBy();
+        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
+        UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy();
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), pending.DstPathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    }
+
     Y_UNIT_TEST(DoneAfterDestinationNameConflict) {
         for (const auto status : {NKikimrScheme::StatusPathDoesNotExist,
                 NKikimrScheme::StatusSuccess, NKikimrScheme::StatusSchemeError}) {

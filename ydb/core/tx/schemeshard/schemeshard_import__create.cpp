@@ -184,7 +184,7 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .FailOnRestrictedCreateInTempZone();
 
     if (path.IsResolved()) {
-        if (path->IsTable() && !path.IsDeleted()
+        if (checks && path->IsTable() && !path.IsDeleted()
                 && ss->Tables.at(path.Base()->PathId)->ReplicationConfig().GetImportState()
                     == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT) {
             checks.NotDeleted().NotUnderDeleting().NotUnderOperation();
@@ -635,23 +635,14 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void FinalizeImport(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
-        auto& item = importInfo.Items.at(itemIdx);
-        Y_ABORT_UNLESS(item.ReplicationConfig);
-        auto config = *item.ReplicationConfig;
-        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-        auto propose = MakeModifySchemeTransaction(Self, txId, importInfo);
-        auto addTable = [&](const TPathId& pathId) {
-            auto& tx = *propose->Record.AddTransaction();
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            tx.SetInternal(true);
-            pathId.ToProto(tx.MutableAlterTable()->MutablePathId());
-            *tx.MutableAlterTable()->MutableReplicationConfig() = config;
-        };
-        addTable(item.DstPathId);
+    TVector<TPathId> GetImportTablePaths(const TItem& item) const {
+        TVector<TPathId> result{item.DstPathId};
+        const auto path = TPath::Init(item.DstPathId, Self);
+        if (!path.IsResolved() || path.IsDeleted()) {
+            return result;
+        }
         // Synchronous index tables are independent replication targets. This also
         // covers indexes built from data rather than materialized from the backup.
-        const auto path = TPath::Init(item.DstPathId, Self);
         for (const auto& [name, indexId] : path.Base()->GetChildren()) {
             const auto index = TPath::Init(indexId, Self);
             if (index.IsDeleted() || (!index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
@@ -661,9 +652,25 @@ private:
             for (const auto& [implName, implId] : index.Base()->GetChildren()) {
                 const auto impl = TPath::Init(implId, Self);
                 if (!impl.IsDeleted() && impl->IsTable()) {
-                    addTable(implId);
+                    result.push_back(implId);
                 }
             }
+        }
+        return result;
+    }
+
+    void FinalizeImport(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
+        auto& item = importInfo.Items.at(itemIdx);
+        Y_ABORT_UNLESS(item.ReplicationConfig);
+        auto config = *item.ReplicationConfig;
+        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        auto propose = MakeModifySchemeTransaction(Self, txId, importInfo);
+        for (const auto& pathId : GetImportTablePaths(item)) {
+            auto& tx = *propose->Record.AddTransaction();
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            tx.SetInternal(true);
+            pathId.ToProto(tx.MutableAlterTable()->MutablePathId());
+            *tx.MutableAlterTable()->MutableReplicationConfig() = config;
         }
         item.SubState = ESubState::Proposed;
         Send(Self->SelfId(), std::move(propose));
@@ -1909,6 +1916,12 @@ private:
             }
         }
 
+        if (record.GetStatus() == NKikimrScheme::StatusSuccess
+                && (item.State == EState::DropPlaceholder || item.State == EState::FinalizeImport)) {
+            CompletedTxId = txId;
+            return OnNotifyResult(txc, ctx);
+        }
+
         if (record.GetStatus() == NKikimrScheme::StatusSuccess) {
             Self->TxIdToImport.erase(txId);
             txId = InvalidTxId;
@@ -1920,7 +1933,16 @@ private:
             if (IsIn({ NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists },
                 record.GetStatus()
             )) {
-                if (item.State == EState::DropPlaceholder && record.GetPathDropTxId()) {
+                if (item.State == EState::FinalizeImport) {
+                    // Recover a final ALTER whose acceptance reply was lost.
+                    for (const auto& pathId : GetImportTablePaths(item)) {
+                        const auto path = TPath::Init(pathId, Self);
+                        if (path.IsResolved() && path.IsUnderOperation()) {
+                            txId = path.Base()->LastTxId;
+                            break;
+                        }
+                    }
+                } else if (item.State == EState::DropPlaceholder && record.GetPathDropTxId()) {
                     txId = TTxId(record.GetPathDropTxId());
                 } else if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
@@ -1940,16 +1962,11 @@ private:
 
             if (txId == InvalidTxId) {
                 if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists && item.State == EState::CreateChangefeed) {
-                    if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
-                        item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
-                        AllocateTxId(*importInfo, itemIdx);
-                    } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
-                        item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
-                        AllocateTxId(*importInfo, itemIdx);
-                    } else {
-                        item.State = EState::Done;
-                    }
-                    return;
+                    // Reuse normal completion so progress and the final IMPORTED
+                    // transition are persisted even when a reply was lost.
+                    CompletedTxId = TTxId(record.GetTxId());
+                    Self->TxIdToImport[CompletedTxId] = {importInfo->Id, itemIdx};
+                    return OnNotifyResult(txc, ctx);
                 }
 
                 return CancelAndPersist(db, importInfo, itemIdx, record.GetReason(), "unhappy propose");
@@ -2127,10 +2144,20 @@ private:
             AllocateTxId(*importInfo, itemIdx);
             break;
 
-        case EState::FinalizeImport:
-            item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-            item.State = EState::Done;
+        case EState::FinalizeImport: {
+            const bool imported = AllOf(GetImportTablePaths(item), [&](const TPathId& pathId) {
+                const auto table = Self->Tables.FindPtr(pathId);
+                return table && (*table)->ReplicationConfig().GetImportState()
+                    == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
+            });
+            if (imported) {
+                item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+                item.State = EState::Done;
+            } else {
+                AllocateTxId(*importInfo, itemIdx);
+            }
             break;
+        }
 
         case EState::CreateSchemeObject:
             if (IsCreatedByQuery(item)) {

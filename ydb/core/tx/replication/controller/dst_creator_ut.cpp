@@ -1,6 +1,7 @@
 #include "dst_creator.h"
 #include "private_events.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>

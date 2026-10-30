@@ -814,10 +814,12 @@ void DoCreateStreamImpl(
         const TOperationId& opId,
         const TPath& tablePath,
         const bool acceptExisted,
-        const bool initialScan)
+        const bool initialScan,
+        const bool internal)
 {
     auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
     FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+    outTx.SetInternal(internal);
     result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
 }
 
@@ -828,13 +830,15 @@ void DoCreateStream(
         const TPath& workingDirPath,
         const TPath& tablePath,
         const bool acceptExisted,
-        const bool initialScan)
+        const bool initialScan,
+        const bool internal)
 {
-    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan);
+    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan, internal);
 
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
+        outTx.SetInternal(internal);
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
     }
 }
@@ -871,7 +875,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationContext& context, const TO
     return nullptr;
 }
 
-ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore) {
+ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore, bool allowImport) {
     const auto checks = tablePath.Check();
     checks
         .NotEmpty()
@@ -885,7 +889,7 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
 
     if (!restore) {
         checks
-            .NotAsyncReplicaTable();
+            .NotAsyncReplicaTable(NKikimrScheme::StatusSchemeError, allowImport);
     }
 
     if (checks) {
@@ -949,10 +953,11 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool restore)
+    bool restore,
+    bool allowImport)
 {
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
-    if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
+    if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore, allowImport)) {
         return reject;
     }
 
@@ -1005,7 +1010,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamName = streamDesc.GetName();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
-    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);
+    const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted, false, tx.GetInternal());
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
@@ -1079,7 +1084,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, errStr)};
     }
 
-    DoCreateStream(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan);
+    DoCreateStream(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan, tx.GetInternal());
     DoCreatePqPart(result, op, opId, streamPath, streamName, table, boundaries, acceptExisted);
 
     return result;

@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 PRIMARY = PileState.PRIMARY
 SYNC = PileState.SYNCHRONIZED
 DISCONNECTED = PileState.DISCONNECTED
-UNSYNC = PileState.NOT_SYNCHRONIZED
 INACTIVE = PileState.INACTIVE
 
 ORIGINAL_PILE = "r1"
@@ -228,10 +227,11 @@ class TestBridgePileOps(BridgeKiKiMRTest):
 
         # the pile gets parts of every storage group and becomes DISCONNECTED, then it is rejoined and synchronized
         # admin commands ask for confirmation, -y skips it
-        code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'add-pile', '--pile', ADDED_PILE])
+        code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'provision-pile', '--pile', ADDED_PILE])
         assert_that(code, is_(0), output)
         assert_that(self.states(), is_({ORIGINAL_PILE: PRIMARY, ADDED_PILE: DISCONNECTED}))
-        self.update([(ADDED_PILE, UNSYNC)])
+        code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'join-pile', '--pile', ADDED_PILE])
+        assert_that(code, is_(0), output)
         self.wait_for_cluster_state(self.bridge_client, {ORIGINAL_PILE: PRIMARY, ADDED_PILE: SYNC},
                                     self.synchronization_timeout)
         self.wait_kv_works("synchronized")
@@ -247,12 +247,12 @@ class TestBridgePileOps(BridgeKiKiMRTest):
         self.wait_kv_works("disconnected")
 
         # removal deletes all the data of the pile, so the command asks for confirmation; nothing happens without it
-        code, output = self.ydb_cli(['admin', 'cluster', 'bridge', 'remove-pile', '--pile', ORIGINAL_PILE], stdin=b"n\n")
+        code, output = self.ydb_cli(['admin', 'cluster', 'bridge', 'destroy-pile', '--pile', ORIGINAL_PILE], stdin=b"n\n")
         assert_that(code != 0, output)
         assert_that("will be deleted along with all the data" in output, output)
         assert_that(self.states(), is_({ORIGINAL_PILE: DISCONNECTED, ADDED_PILE: PRIMARY}))
 
-        code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'remove-pile', '--pile', ORIGINAL_PILE])
+        code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'destroy-pile', '--pile', ORIGINAL_PILE])
         assert_that(code, is_(0), output)
         assert_that(self.states(), is_({ORIGINAL_PILE: INACTIVE, ADDED_PILE: PRIMARY}))
 

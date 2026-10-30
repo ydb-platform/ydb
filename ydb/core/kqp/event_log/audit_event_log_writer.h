@@ -6,7 +6,34 @@
 
 namespace NKikimr::NKqp::NEventLog::NAudit {
 
-class TBaseAuditEventLogWriter : public TColumnShardLogWriter {
+class TAuditEventLogFilter {
+public:
+    explicit TAuditEventLogFilter(TString componentName)
+        : ComponentName(std::move(componentName))
+    {
+    }
+
+    bool operator()(const NActors::NStructuredLog::TLogMessage& message) const {
+        if (message.Component != NKikimrServices::AUDIT_LOG_WRITER ||
+            message.TextMessage != "Audit event") {
+            return false;
+        }
+
+        if (ComponentName.empty()) {
+            return true;
+        }
+
+        TStringValueExtractor extractor;
+        const auto& component = extractor.ExtractValue(
+            message.StructuredMessage, std::vector<TKeyName>{"component"});
+        return component.has_value() && component.value() == ComponentName;
+    }
+
+private:
+    TString ComponentName;
+};
+
+class TAuditEventLogCommon {
 public:
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
@@ -32,45 +59,12 @@ public:
             std::make_shared<TDBLogMessageStringValueColumn>("resource_id", dict),
         };
     }
-
-    bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
-        if (message.Component != NKikimrServices::AUDIT_LOG_WRITER ||
-            message.TextMessage != "Audit event") {
-            return false;
-        }
-
-        if (ComponentName.empty()) {
-            return true;
-        }
-
-        TStringValueExtractor extractor;
-        const auto& component = extractor.ExtractValue(
-            message.StructuredMessage, std::vector<TKeyName>{"component"});
-        return component.has_value() && component.value() == ComponentName;
-    }
-
-protected:
-    TBaseAuditEventLogWriter(
-        const TDatabaseSettings& settings,
-        TString componentName,
-        TVector<std::shared_ptr<TEventLogColumn>> columns)
-        :TColumnShardLogWriter(settings, std::move(columns))
-        ,ComponentName(std::move(componentName))
-    {
-    }
-
-    const TString ComponentName;
 };
 
-class TSchemeShardEventLogWriter : public TBaseAuditEventLogWriter {
+class TSchemeShardEventLog {
 public:
-    TSchemeShardEventLogWriter(const TDatabaseSettings& settings)
-        :TBaseAuditEventLogWriter(settings, "schemeshard", GetColumns())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
 
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
@@ -103,19 +97,18 @@ public:
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("schemeshard");
+    }
 };
 
-class TGrpcProxyEventLogWriter : public TBaseAuditEventLogWriter {
+class TGrpcProxyEventLog {
 public:
-    TGrpcProxyEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "grpc-proxy", GetColumns())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
 
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("grpc_method", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("request"),
@@ -135,49 +128,45 @@ public:
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("grpc-proxy");
+    }
 };
 
-class TGrpcConnEventLogWriter : public TBaseAuditEventLogWriter {
+class TGrpcConnEventLog {
 public:
-    TGrpcConnEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "grpc-conn", GetColumns())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
-        return result;
+        return TAuditEventLogCommon::GetColumns();
+    }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("grpc-conn");
     }
 };
 
-class TGrpcLoginEventLogWriter : public TBaseAuditEventLogWriter {
+class TGrpcLoginEventLog {
 public:
-    TGrpcLoginEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "grpc-login", GetColumns())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("login_user", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("login_user_level", dict)};
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("grpc-login");
+    }
 };
 
-class TMonitoringEventLogWriter : public TBaseAuditEventLogWriter {
+class TMonitoringEventLog {
 public:
-    TMonitoringEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "monitoring", GetColumns())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("method", dict),
             std::make_shared<TDBLogMessageStringValueColumn>("url", dict),
@@ -187,30 +176,27 @@ public:
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
-};
 
-class TAuditServiceEventLogWriter : public TBaseAuditEventLogWriter {
-public:
-    TAuditServiceEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "audit-service", GetColumns())
-    {
-    }
-
-    static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
-        return result;
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("monitoring");
     }
 };
 
-class TBscEventLogWriter : public TBaseAuditEventLogWriter {
+class TAuditServiceEventLog {
 public:
-    TBscEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "bsc", GetColumns())
-    {
+    static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
+        return TAuditEventLogCommon::GetColumns();
     }
 
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("audit-service");
+    }
+};
+
+class TBscEventLog {
+public:
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("old_config"),
             std::make_shared<TDBLogMessageStringValueColumn>("new_config"),
@@ -218,17 +204,16 @@ public:
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("bsc");
+    }
 };
 
-class TDistconfEventLogWriter : public TBaseAuditEventLogWriter {
+class TDistconfEventLog {
 public:
-    TDistconfEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "distconf", GetColumns())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("old_config"),
             std::make_shared<TDBLogMessageStringValueColumn>("new_config"),
@@ -236,30 +221,27 @@ public:
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
-};
 
-class TWebLoginEventLogWriter : public TBaseAuditEventLogWriter {
-public:
-    TWebLoginEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "web-login", GetColumns())
-    {
-    }
-
-    static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
-        return result;
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("distconf");
     }
 };
 
-class TConsoleEventLogWriter : public TBaseAuditEventLogWriter {
+class TWebLoginEventLog {
 public:
-    TConsoleEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseAuditEventLogWriter(settings, "console", GetColumns())
-    {
+    static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
+        return TAuditEventLogCommon::GetColumns();
     }
 
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("web-login");
+    }
+};
+
+class TConsoleEventLog {
+public:
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
-        auto result = TBaseAuditEventLogWriter::GetColumns();
+        auto result = TAuditEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("old_config"),
             std::make_shared<TDBLogMessageStringValueColumn>("new_config"),
@@ -267,6 +249,25 @@ public:
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
     }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TAuditEventLogFilter("console");
+    }
 };
+
+namespace NToColumnShard {
+
+using TSchemeShardEventLogWriter = TColumnShardLogWriter<TSchemeShardEventLog>;
+using TGrpcProxyEventLogWriter = TColumnShardLogWriter<TGrpcProxyEventLog>;
+using TGrpcConnEventLogWriter = TColumnShardLogWriter<TGrpcConnEventLog>;
+using TGrpcLoginEventLogWriter = TColumnShardLogWriter<TGrpcLoginEventLog>;
+using TMonitoringEventLogWriter = TColumnShardLogWriter<TMonitoringEventLog>;
+using TAuditServiceEventLogWriter = TColumnShardLogWriter<TAuditServiceEventLog>;
+using TBscEventLogWriter = TColumnShardLogWriter<TBscEventLog>;
+using TDistconfEventLogWriter = TColumnShardLogWriter<TDistconfEventLog>;
+using TWebLoginEventLogWriter = TColumnShardLogWriter<TWebLoginEventLog>;
+using TConsoleEventLogWriter = TColumnShardLogWriter<TConsoleEventLog>;
+
+} // namespace NToColumnShard
 
 } // namespace NKikimr::NKqp::NEventLog::NAudit

@@ -6,9 +6,13 @@
 
 namespace NKikimr::NKqp::NEventLog {
 
-class TKqpEventLogWriter : public TColumnShardLogWriter {
+class TKqpEventLog {
 public:
-    TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
+    static TString GetMessageText() {
+        return "KQP request processed";
+    }
+
+    static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto notNull = TEventLogColumn::TDatabaseSettings::NotNull();
         auto notNullDict = TEventLogColumn::TDatabaseSettings::NotNull().SetDictionary(true);
         auto dict = TEventLogColumn::TDatabaseSettings::Dictionary();
@@ -42,17 +46,18 @@ public:
         };
     }
 
-    TKqpEventLogWriter(const TDatabaseSettings& settings):
-        TColumnShardLogWriter(settings, GetColumns()) {}
-
-    static TString GetMessageText() {
-        return "KQP request processed";
-    }
-
-    bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
-        return (message.Component == NKikimrServices::KQP_REQUEST) &&
-            (message.TextMessage == GetMessageText());
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return [](const NActors::NStructuredLog::TLogMessage& message) {
+            return message.Component == NKikimrServices::KQP_REQUEST &&
+                message.TextMessage == GetMessageText();
+        };
     }
 };
 
-}
+namespace NToColumnShard {
+
+using TKqpEventLogWriter = TColumnShardLogWriter<TKqpEventLog>;
+
+} // namespace NToColumnShard
+
+} // namespace NKikimr::NKqp::NEventLog

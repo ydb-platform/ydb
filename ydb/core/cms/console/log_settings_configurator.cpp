@@ -50,7 +50,7 @@ public:
 
     static std::pair<TString, TString> GetDefaultStoreTableName(const TString& eventSource);
 
-    static NKikimr::NKqp::NEventLog::TColumnShardLogWriter::TDatabaseSettings
+    static NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
     GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
 
     NStructuredLog::ILogSinkSPtr CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
@@ -252,11 +252,11 @@ std::pair<TString, TString> TLogSettingsConfigurator::GetDefaultStoreTableName(c
     return it->second;
 }
 
-NKikimr::NKqp::NEventLog::TColumnShardLogWriter::TDatabaseSettings
+NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
 TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink,
     const NKikimrConfig::TLogConfig_TSink* defaultSink) {
 
-    NKikimr::NKqp::NEventLog::TColumnShardLogWriter::TDatabaseSettings settings;
+    NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings settings;
 
 #define SET_PROPERTY(X)                                             \
     if (!sink.Has##X()) {                                           \
@@ -310,43 +310,43 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateColumnShardLogSink(
 
     using namespace NKqp::NEventLog;
     if (eventSource == "kqp-requests") {
-        return std::make_shared<TKqpEventLogWriter>(databaseSettings);
+        return std::make_shared<NToColumnShard::TKqpEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "tli-datashard") {
-        return std::make_shared<TDataShardTliEventLogWriter>(databaseSettings);
+        return std::make_shared<NToColumnShard::TDataShardTliEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "tli-session") {
-        return std::make_shared<TSessionTliEventLogWriter>(databaseSettings);
+        return std::make_shared<NToColumnShard::TSessionTliEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-schemeshard") {
-        return std::make_shared<NAudit::TSchemeShardEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TSchemeShardEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-grpc-proxy") {
-        return std::make_shared<NAudit::TGrpcProxyEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TGrpcProxyEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-grpc-conn") {
-        return std::make_shared<NAudit::TGrpcConnEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TGrpcConnEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-grpc-login") {
-        return std::make_shared<NAudit::TGrpcLoginEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TGrpcLoginEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-monitoring") {
-        return std::make_shared<NAudit::TMonitoringEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TMonitoringEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-heartbeat") {
-        return std::make_shared<NAudit::TAuditServiceEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TAuditServiceEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-bsc") {
-        return std::make_shared<NAudit::TBscEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TBscEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-distconf") {
-        return std::make_shared<NAudit::TDistconfEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TDistconfEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-web-login") {
-        return std::make_shared<NAudit::TWebLoginEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TWebLoginEventLogWriter>(databaseSettings);
     }
     else if (eventSource == "audit-console") {
-        return std::make_shared<NAudit::TConsoleEventLogWriter>(databaseSettings);
+        return std::make_shared<NAudit::NToColumnShard::TConsoleEventLogWriter>(databaseSettings);
     }
 
     return nullptr;

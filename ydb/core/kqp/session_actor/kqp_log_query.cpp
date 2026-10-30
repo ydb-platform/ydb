@@ -280,7 +280,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             {"compileTimeUs", fields.CompileTimeUs});
     }
 
-    YDB_LOG((prio), NKikimr::NKqp::NEventLog::TKqpEventLogWriter::GetMessageText(), message);
+    YDB_LOG((prio), NKikimr::NKqp::NEventLog::TKqpEventLog::GetMessageText(), message);
 }
 
 TString GetRequestId(const TKqpQueryState& state) {

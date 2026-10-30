@@ -19,15 +19,16 @@ namespace NKikimr::NKqp::NEventLog {
 class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink,
     public std::enable_shared_from_this<TBaseEventLogWriter>   {
 public:
+    using TFilterFunction = std::function<bool(const NActors::NStructuredLog::TLogMessage&)>;
+
     TBaseEventLogWriter(TVector<std::shared_ptr<TEventLogColumn>> columns,
         ui32 maxBatchSize,
-        const TDuration& flushInterval);
+        const TDuration& flushInterval,
+        TFilterFunction filter);
 
     const TVector<std::shared_ptr<TEventLogColumn>>& GetColumns() const {
         return Columns;
     }
-
-    virtual bool Filter(const NActors::NStructuredLog::TLogMessage&) = 0;
 
     bool Write(const NActors::NStructuredLog::TLogMessage&) override;
 
@@ -68,6 +69,7 @@ protected:
     const TVector<std::shared_ptr<TEventLogColumn>> Columns;
     const ui32 MaxBatchSize;
     const TDuration FlushInterval;
+    TFilterFunction Filter;
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
 

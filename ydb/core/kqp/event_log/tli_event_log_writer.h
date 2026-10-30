@@ -3,13 +3,46 @@
 #include "column_shard_log_writer.h"
 
 #include <ydb/library/services/services.pb.h>
+
 #include <set>
 
 namespace NKikimr::NKqp::NEventLog {
 
-class TBaseTliEventLogWriter : public TColumnShardLogWriter {
+class TTliEventLogFilter {
 public:
+    TTliEventLogFilter(int component, TString componentName, std::set<std::string> messages)
+        : Component(component)
+        , ComponentName(std::move(componentName))
+        , Messages(std::move(messages))
+    {
+    }
 
+    bool operator()(const NActors::NStructuredLog::TLogMessage& message) const {
+        if (message.Component != Component) {
+            return false;
+        }
+
+        TStringValueExtractor extractor;
+        const auto extractedComponentName = extractor.ExtractValue(
+            message.StructuredMessage, std::vector<TKeyName>{"component"});
+        const auto messageText = extractor.ExtractValue(
+            message.StructuredMessage, std::vector<TKeyName>{"message"});
+        if (!messageText.has_value()) {
+            return false;
+        }
+
+        return extractedComponentName.has_value() && extractedComponentName.value() == ComponentName
+            && Messages.find(messageText.value()) != Messages.end();
+    }
+
+private:
+    const int Component;
+    const TString ComponentName;
+    const std::set<std::string> Messages;
+};
+
+class TTliEventLogCommon {
+public:
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         return TVector<std::shared_ptr<TEventLogColumn>>{
             std::make_shared<TDBLogMessageIdColumn>(1),
@@ -18,55 +51,15 @@ public:
             std::make_shared<TDBLogMessageNodeIdColumn>(),
             std::make_shared<TDBLogMessageErrorColumn>()};
     }
-
-    bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
-        if (message.Component != Component) {
-            return false;
-        }
-
-        TStringValueExtractor extractor;
-        const auto componentName = extractor.ExtractValue(
-            message.StructuredMessage, std::vector<TKeyName>{"component"});
-        const auto messageText = extractor.ExtractValue(
-            message.StructuredMessage, std::vector<TKeyName>{"message"});
-        if (!messageText.has_value()) {
-            return false;
-        }
-
-        return componentName.has_value() && componentName.value() == ComponentName && Messages.find(messageText.value()) != end(Messages);
-    }
-
-protected:
-    TBaseTliEventLogWriter(
-        const TDatabaseSettings& settings,
-        int component,
-        const TString& componentName,
-        TVector<std::shared_ptr<TEventLogColumn>> columns,
-        const std::set<std::string>& messages)
-        :TColumnShardLogWriter(settings, std::move(columns))
-        ,Component(std::move(component))
-        ,ComponentName(std::move(componentName))
-        ,Messages(messages)
-    {
-    }
-
-    const int Component;
-    const TString ComponentName;
-    const std::set<std::string> Messages;
 };
 
-class TDataShardTliEventLogWriter: public TBaseTliEventLogWriter {
+class TDataShardTliEventLog {
 public:
-    TDataShardTliEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseTliEventLogWriter(settings, NKikimrServices::TLI, "DataShard", GetColumns(), GetMessages())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto notNull = TEventLogColumn::TDatabaseSettings::NotNull();
         auto notNullDict = TEventLogColumn::TDatabaseSettings::NotNull().SetDictionary(true);
 
-        auto result = TBaseTliEventLogWriter::GetColumns();
+        auto result = TTliEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogColumnUint64>("tablet_id", std::vector<TKeyName>{"tabletId"}, notNull),
             std::make_shared<TDBLogMessageStringValueColumn>("message", std::vector<TKeyName>{"message"}, notNullDict),
@@ -75,6 +68,10 @@ public:
         };
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
+    }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TTliEventLogFilter(NKikimrServices::TLI, "DataShard", GetMessages());
     }
 
     static std::set<std::string> GetMessages() {
@@ -90,17 +87,12 @@ public:
     }
 };
 
-class TSessionTliEventLogWriter: public TBaseTliEventLogWriter {
+class TSessionTliEventLog {
 public:
-    TSessionTliEventLogWriter(const TDatabaseSettings& settings)
-        : TBaseTliEventLogWriter(settings, NKikimrServices::TLI, "SessionActor", GetColumns(), GetMessages())
-    {
-    }
-
     static TVector<std::shared_ptr<TEventLogColumn>> GetColumns() {
         auto notNullDict = TEventLogColumn::TDatabaseSettings::NotNull().SetDictionary(true);
 
-        auto result = TBaseTliEventLogWriter::GetColumns();
+        auto result = TTliEventLogCommon::GetColumns();
         TVector<std::shared_ptr<TEventLogColumn>> ownColumns{
             std::make_shared<TDBLogMessageStringValueColumn>("message", std::vector<TKeyName>{"message"}, notNullDict),
             std::make_shared<TDBLogMessageStringValueColumn>("trace_id", std::vector<TKeyName>{"traceId"}),
@@ -111,6 +103,10 @@ public:
         };
         std::copy(ownColumns.begin(), ownColumns.end(), std::back_inserter(result));
         return result;
+    }
+
+    static TBaseEventLogWriter::TFilterFunction CreateFilter() {
+        return TTliEventLogFilter(NKikimrServices::TLI, "SessionActor", GetMessages());
     }
 
     static std::set<std::string> GetMessages() {
@@ -124,4 +120,11 @@ public:
     }
 };
 
-}
+namespace NToColumnShard {
+
+using TDataShardTliEventLogWriter = TColumnShardLogWriter<TDataShardTliEventLog>;
+using TSessionTliEventLogWriter = TColumnShardLogWriter<TSessionTliEventLog>;
+
+} // namespace NToColumnShard
+
+} // namespace NKikimr::NKqp::NEventLog

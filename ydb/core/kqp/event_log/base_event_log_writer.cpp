@@ -11,10 +11,14 @@
 namespace NKikimr::NKqp::NEventLog {
 
 TBaseEventLogWriter::TBaseEventLogWriter(
-    TVector<std::shared_ptr<TEventLogColumn>> columns, ui32 maxBatchSize, const TDuration& flushInterval)
+    TVector<std::shared_ptr<TEventLogColumn>> columns,
+    ui32 maxBatchSize,
+    const TDuration& flushInterval,
+    TFilterFunction filter)
     : Columns(std::move(columns)),
     MaxBatchSize(maxBatchSize),
-    FlushInterval(flushInterval)
+    FlushInterval(flushInterval),
+    Filter(std::move(filter))
 {
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         ErrorColumn = std::dynamic_pointer_cast<TDBLogMessageErrorColumn>(Columns[i]);

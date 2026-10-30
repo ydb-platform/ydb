@@ -39,15 +39,16 @@ using TEvDescribeTableRequest = NGRpcService::TGrpcRequestOperationCall<
 
 } // namespace
 
-TColumnShardLogWriter::TColumnShardLogWriter(
+TBaseColumnShardLogWriter::TBaseColumnShardLogWriter(
     TDatabaseSettings settings,
-    TVector<std::shared_ptr<TEventLogColumn>> columns)
-    : TBaseEventLogWriter(std::move(columns), settings.MaxBatchSize, settings.FlushTimeout)
+    TVector<std::shared_ptr<TEventLogColumn>> columns,
+    TFilterFunction filter)
+    : TBaseEventLogWriter(std::move(columns), settings.MaxBatchSize, settings.FlushTimeout, std::move(filter))
     , Settings(std::move(settings))
 {
 }
 
-bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+bool TBaseColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
     if (!TBaseEventLogWriter::Write(message)) {
         return false;
     }
@@ -58,7 +59,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
     return true;
 }
 
-TString TColumnShardLogWriter::GetCreateStoreQuery() {
+TString TBaseColumnShardLogWriter::GetCreateStoreQuery() {
     TStringBuilder sb;
     sb << " CREATE TABLESTORE IF NOT EXISTS `" << Settings.DatabasePath << "/" << Settings.StoreName << "` (";
 
@@ -90,7 +91,7 @@ TString TColumnShardLogWriter::GetCreateStoreQuery() {
     return sb;
 }
 
-TString TColumnShardLogWriter::GetCreateTableQuery() {
+TString TBaseColumnShardLogWriter::GetCreateTableQuery() {
 
     TStringBuilder sb;
 
@@ -123,23 +124,23 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
     return sb;
 }
 
-TString TColumnShardLogWriter::GetStorePath() const {
+TString TBaseColumnShardLogWriter::GetStorePath() const {
     return TStringBuilder() << Settings.DatabasePath << "/" << Settings.StoreName;
 }
 
-TString TColumnShardLogWriter::GetTablePath() const {
+TString TBaseColumnShardLogWriter::GetTablePath() const {
     return TStringBuilder() << Settings.DatabasePath << "/" << Settings.StoreName << "/" << Settings.TableName;
 }
 
-void TColumnShardLogWriter::CreateSession() {
-    YDB_LOG_DEBUG("TColumnShardLogWriter: Create session");
+void TBaseColumnShardLogWriter::CreateSession() {
+    YDB_LOG_DEBUG("TBaseColumnShardLogWriter: Create session");
     Ydb::Table::CreateSessionRequest request;
 
-    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    auto pThis = std::dynamic_pointer_cast<TBaseColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
         std::move(request), Settings.DatabasePath, "", TActivationContext::ActorSystem());
     future.Subscribe([pThis](const NThreading::TFuture<Ydb::Table::CreateSessionResponse> f) {
-        YDB_LOG_DEBUG("TColumnShardLogWriter: Create session response");
+        YDB_LOG_DEBUG("TBaseColumnShardLogWriter: Create session response");
 
         if (pThis->State.load().Kind == TStateKind::Stop) {
             return ;
@@ -147,7 +148,7 @@ void TColumnShardLogWriter::CreateSession() {
 
         const auto response = f.GetValueSync();
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Can't create session",
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Can't create session",
                 {"storeName", pThis->Settings.StoreName},
                 {"tableName", pThis->Settings.TableName});
             pThis->SetCreateErrorState();
@@ -156,7 +157,7 @@ void TColumnShardLogWriter::CreateSession() {
 
         Ydb::Table::CreateSessionResult result;
         if (!response.operation().result().UnpackTo(&result)) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Can't unpack session description",
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Can't unpack session description",
                 {"storeName", pThis->Settings.StoreName},
                 {"tableName", pThis->Settings.TableName});
             pThis->SetCreateErrorState();
@@ -165,25 +166,25 @@ void TColumnShardLogWriter::CreateSession() {
 
         const TString sessionId = result.session_id();
         if (sessionId.empty()) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Received empty session id",
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Received empty session id",
                 {"storeName", pThis->Settings.StoreName},
                 {"tableName", pThis->Settings.TableName});
             pThis->SetCreateErrorState();
             return;
         }
 
-        YDB_LOG_DEBUG("TColumnShardLogWriter: Session is created",
+        YDB_LOG_DEBUG("TBaseColumnShardLogWriter: Session is created",
             {"sessionId", sessionId});
         pThis->CreateStorage(sessionId);
     });
 }
 
-void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query, std::function<void()> handle) {
+void TBaseColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query, std::function<void()> handle) {
     Ydb::Table::ExecuteSchemeQueryRequest request;
     request.set_session_id(sessionId);
     request.set_yql_text(query);
 
-    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    auto pThis = std::dynamic_pointer_cast<TBaseColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
         std::move(request), Settings.DatabasePath, "", TActivationContext::ActorSystem());
     future.Subscribe([pThis, query, handle, sessionId](const NThreading::TFuture<Ydb::Table::ExecuteSchemeQueryResponse> f) {
@@ -193,7 +194,7 @@ void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
 
         const auto response = f.GetValueSync();
         if (response.operation().status() == Ydb::StatusIds::UNAVAILABLE) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Received UNAVAILABLE status, try later",
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Received UNAVAILABLE status, try later",
                 {"sessionId", sessionId},
                 {"storeName", pThis->Settings.StoreName},
                 {"tableName", pThis->Settings.TableName},
@@ -204,7 +205,7 @@ void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
         }
 
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Failed to execute query",
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Failed to execute query",
                 {"sessionId", sessionId},
                 {"storeName", pThis->Settings.StoreName},
                 {"tableName", pThis->Settings.TableName},
@@ -215,7 +216,7 @@ void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
             return;
         }
 
-        YDB_LOG_NOTICE("TColumnShardLogWriter: Success query execution",
+        YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Success query execution",
             {"sessionId", sessionId},
             {"storeName", pThis->Settings.StoreName},
             {"tableName", pThis->Settings.TableName},
@@ -224,14 +225,14 @@ void TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
     });
 }
 
-void TColumnShardLogWriter::CreateStorage(const TString& sessionId) {
-    YDB_LOG_NOTICE("TColumnShardLogWriter: Try to create storage",
+void TBaseColumnShardLogWriter::CreateStorage(const TString& sessionId) {
+    YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Try to create storage",
         {"sessionId", sessionId},
         {"storeName", Settings.StoreName},
         {"tableName", Settings.TableName});
 
     const auto storeQuery = GetCreateStoreQuery();
-    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    auto pThis = std::dynamic_pointer_cast<TBaseColumnShardLogWriter>(shared_from_this());
     ExecuteSchemeQuery(sessionId, storeQuery,
         [pThis, sessionId]() {
             if (pThis->State.load().Kind == TStateKind::Stop) {
@@ -241,21 +242,21 @@ void TColumnShardLogWriter::CreateStorage(const TString& sessionId) {
         });
 }
 
-void TColumnShardLogWriter::CreateTable(const TString& sessionId) {
-    YDB_LOG_NOTICE("TColumnShardLogWriter: Try to create table",
+void TBaseColumnShardLogWriter::CreateTable(const TString& sessionId) {
+    YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Try to create table",
         {"sessionId", sessionId},
         {"storeName", Settings.StoreName},
         {"tableName", Settings.TableName});
 
     const auto tableQuery = GetCreateTableQuery();
-    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    auto pThis = std::dynamic_pointer_cast<TBaseColumnShardLogWriter>(shared_from_this());
     ExecuteSchemeQuery(sessionId, tableQuery,
         [pThis, sessionId]() {
             if (pThis->State.load().Kind == TStateKind::Stop) {
                 return ;
             }
 
-            YDB_LOG_NOTICE("TColumnShardLogWriter: Table created. Start to write log messages",
+            YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Table created. Start to write log messages",
                 {"sessionId", sessionId},
                 {"storeName", pThis->Settings.StoreName},
                 {"tableName", pThis->Settings.TableName});
@@ -264,14 +265,14 @@ void TColumnShardLogWriter::CreateTable(const TString& sessionId) {
         });
 }
 
-void TColumnShardLogWriter::CreateOrUpdateStorage() {
-    YDB_LOG_NOTICE("TColumnShardLogWriter: Check storage and table are exists",
+void TBaseColumnShardLogWriter::CreateOrUpdateStorage() {
+    YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Check storage and table are exists",
         {"storeName", Settings.StoreName},
         {"tableName", Settings.TableName});
     Ydb::Table::DescribeTableRequest request;
     request.set_path(GetTablePath());
 
-    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    auto pThis = std::dynamic_pointer_cast<TBaseColumnShardLogWriter>(shared_from_this());
     auto future = NRpcService::DoLocalRpc<TEvDescribeTableRequest>(
         std::move(request), Settings.DatabasePath, "", TActivationContext::ActorSystem());
     future.Subscribe([pThis](const NThreading::TFuture<Ydb::Table::DescribeTableResponse> f) {
@@ -284,31 +285,31 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
 
         const auto response = f.GetValueSync();
         if (response.operation().status() == Ydb::StatusIds::UNAVAILABLE) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Received UNAVAILABLE status, try later");
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Received UNAVAILABLE status, try later");
             pThis->SetTryCreateAgainState();
             return ;
         }
 
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_NOTICE("TColumnShardLogWriter: Storage and table seem to be absent. Try create it",
+            YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Storage and table seem to be absent. Try create it",
                 {"issues", response.operation().issues()},
                 {"status", response.operation().status()});
             pThis->CreateSession();
             return;
         }
-        YDB_LOG_NOTICE("TColumnShardLogWriter: Storage and table seem to be existed.");
+        YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Storage and table seem to be existed.");
 
         Ydb::Table::DescribeTableResult tableDescription;
         if (!response.operation().result().UnpackTo(&tableDescription)) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Can't unpack table description");
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Can't unpack table description");
             pThis->SetTryCreateAgainState();
         }
 
         if (tableDescription.columns().empty()) {
-            YDB_LOG_NOTICE("TColumnShardLogWriter: There are no table columns. Try create it");
+            YDB_LOG_NOTICE("TBaseColumnShardLogWriter: There are no table columns. Try create it");
             pThis->CreateSession();
         } else {
-            YDB_LOG_NOTICE("TColumnShardLogWriter: Check columns");
+            YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Check columns");
 
             std::set<std::string> existedNames;
             for(auto& column: tableDescription.columns()) {
@@ -321,7 +322,7 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
             }
 
             if (existedNames != requiredNames) {
-                YDB_LOG_ERROR("TColumnShardLogWriter: Table structure is changed");
+                YDB_LOG_ERROR("TBaseColumnShardLogWriter: Table structure is changed");
                 pThis->State.store(TStateKind::StorageStructureChanged);
                 return;
             }
@@ -332,16 +333,16 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
     });
 }
 
-void TColumnShardLogWriter::SetTryCreateAgainState() {
+void TBaseColumnShardLogWriter::SetTryCreateAgainState() {
     State.store(TState{TStateKind::Started});
     if (Settings.TryCreateTimeout) {
-        YDB_LOG_NOTICE("TColumnShardLogWriter: Schedule retry create store and table");
+        YDB_LOG_NOTICE("TBaseColumnShardLogWriter: Schedule retry create store and table");
         NActors::TActivationContext::Register(
             new TBaseEventLogAutoFlushActor(shared_from_this(), Settings.TryCreateTimeout, true));
     }
 }
 
-void TColumnShardLogWriter::SetCreateErrorState() {
+void TBaseColumnShardLogWriter::SetCreateErrorState() {
     auto oldState = State.load();
     auto newState = oldState;
     if (newState.CreateAttempCount != 0) {
@@ -353,19 +354,19 @@ void TColumnShardLogWriter::SetCreateErrorState() {
     State.compare_exchange_strong(oldState, newState);
 }
 
-void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch)  {
+void TBaseColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch)  {
     TWriteBatch writeBatch;
     writeBatch.Data = batch;
 
     ProcessWriteBatch(writeBatch);
 }
 
-void TColumnShardLogWriter::ProcessWriteBatch(const TWriteBatch& writeBatch) {
+void TBaseColumnShardLogWriter::ProcessWriteBatch(const TWriteBatch& writeBatch) {
     unsigned activeCount;
     do {
         activeCount = ActiveWriteCount.load();
         if (activeCount > Settings.MaxActiveWrites) {
-            YDB_LOG_ERROR("TColumnShardLogWriter: Max active writes reached, chunk cancelled",
+            YDB_LOG_ERROR("TBaseColumnShardLogWriter: Max active writes reached, chunk cancelled",
                 {"maxActiveWriteCount", Settings.MaxActiveWrites});
             return ;
         }
@@ -379,7 +380,7 @@ void TColumnShardLogWriter::ProcessWriteBatch(const TWriteBatch& writeBatch) {
     request.set_data(data);
     request.set_table(Sprintf("%s/%s/%s", Settings.DatabasePath.c_str(), Settings.StoreName.c_str(), Settings.TableName.c_str()));
 
-    auto pThis = std::dynamic_pointer_cast<TColumnShardLogWriter>(shared_from_this());
+    auto pThis = std::dynamic_pointer_cast<TBaseColumnShardLogWriter>(shared_from_this());
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
     auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", TActivationContext::ActorSystem());
     future.Subscribe([pThis, writeBatch](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) {
@@ -396,7 +397,7 @@ void TColumnShardLogWriter::ProcessWriteBatch(const TWriteBatch& writeBatch) {
             if (newWriteBatch.AttemptNum < pThis->Settings.MaxWriteAttempts) {
                 pThis->ProcessWriteBatch(newWriteBatch);
             } else {
-                YDB_LOG_ERROR("TColumnShardLogWriter: Max write attempts reached, chunk cancelled",
+                YDB_LOG_ERROR("TBaseColumnShardLogWriter: Max write attempts reached, chunk cancelled",
                     {"maxActiveWriteCount", pThis->Settings.MaxWriteAttempts});
             }
         }

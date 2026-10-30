@@ -14,7 +14,7 @@ class TKikimrRunner;
 
 namespace NEventLog {
 
-class TColumnShardLogWriter : public TBaseEventLogWriter {
+class TBaseColumnShardLogWriter : public TBaseEventLogWriter {
 public:
     struct TDatabaseSettings {
         TString DatabasePath;
@@ -34,9 +34,10 @@ public:
             NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64;
     };
 
-    TColumnShardLogWriter(
+    TBaseColumnShardLogWriter(
         TDatabaseSettings settings,
-        TVector<std::shared_ptr<TEventLogColumn>> columns);
+        TVector<std::shared_ptr<TEventLogColumn>> columns,
+        TFilterFunction filter);
 
     const TDatabaseSettings& GetDatabaseSettings() const {
         return Settings;
@@ -70,6 +71,14 @@ protected:
     void ProcessWriteBatch(const TWriteBatch& batch);
 
     const TDatabaseSettings Settings;
+};
+
+template <typename TLogClass>
+class TColumnShardLogWriter : public TBaseColumnShardLogWriter {
+public:
+    TColumnShardLogWriter(TDatabaseSettings settings) :
+        TBaseColumnShardLogWriter(settings, TLogClass::GetColumns(), TLogClass::CreateFilter()) 
+    {}
 };
 
 } // namespace NEventLog

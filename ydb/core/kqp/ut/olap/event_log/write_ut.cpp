@@ -146,7 +146,7 @@ namespace {
     }
 }
 
-class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
+class TBaseTestExampleLogWriter : public TBaseColumnShardLogWriter {
 public:
     TKikimrRunner& Runner;
     NLog::EComponent Component;
@@ -154,24 +154,25 @@ public:
 
     TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TEventLogColumn>> columns,
             std::optional<ui32> flushBatchSize = {}, TDuration flushTimeout = {})
-        : TColumnShardLogWriter(TColumnShardLogWriter::TDatabaseSettings {
-            .DatabasePath = "/Root",
-            .StoreName = "olapStore",
-            .TableName = "olapTable",
-            .FlushTimeout = flushTimeout,
-            .FlushBatchSize = flushBatchSize
-        }, columns),
+        : TBaseColumnShardLogWriter(
+            TBaseColumnShardLogWriter::TDatabaseSettings {
+                .DatabasePath = "/Root",
+                .StoreName = "olapStore",
+                .TableName = "olapTable",
+                .FlushTimeout = flushTimeout,
+                .FlushBatchSize = flushBatchSize
+            },
+            columns,
+            [component](const NActors::NStructuredLog::TLogMessage& message) {
+                return component == message.Component;
+            }),
         Runner(runner),
         Component(component)
     {
     }
 
-    bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
-        return Component == message.Component;
-    }
-
     bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        if (!TColumnShardLogWriter::Write(message)) {
+        if (!TBaseColumnShardLogWriter::Write(message)) {
             return false;
         }
         WrittenCount++;
@@ -353,10 +354,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:346")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:348")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:350")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:351")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:347")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:349")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:351")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:352")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -643,13 +644,15 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"2u", "2u"},
             {"3u", "3u"}});
     }
+}
 
+Y_UNIT_TEST_SUITE(KqpOlapWriteLogUsage) {
     Y_UNIT_TEST(RequestLog) {
         TEnvironment env;
 
-        TKqpEventLogWriter::TDatabaseSettings settings;
-        env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>(
-            TKqpEventLogWriter::TDatabaseSettings{
+        NToColumnShard::TKqpEventLogWriter::TDatabaseSettings settings;
+        env.AddSinks.push_back(std::make_shared<NToColumnShard::TKqpEventLogWriter>(
+            NToColumnShard::TKqpEventLogWriter::TDatabaseSettings{
                 .DatabasePath = "/Root",
                 .StoreName = "kqp_requests",
                 .TableName = "kqp_requests",
@@ -688,14 +691,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         using namespace NYdb::NQuery;
 
         TEnvironment env;
-        env.AddSinks.push_back(std::make_shared<TDataShardTliEventLogWriter>(
-            TKqpEventLogWriter::TDatabaseSettings{
+        env.AddSinks.push_back(std::make_shared<NToColumnShard::TDataShardTliEventLogWriter>(
+            NToColumnShard::TDataShardTliEventLogWriter::TDatabaseSettings{
                 .DatabasePath = "/Root",
                 .StoreName = "tli_datashard",
                 .TableName = "tli_datashard",
                 .FlushBatchSize = 0}));
-        env.AddSinks.push_back(std::make_shared<TSessionTliEventLogWriter>(
-            TKqpEventLogWriter::TDatabaseSettings{
+        env.AddSinks.push_back(std::make_shared<NToColumnShard::TSessionTliEventLogWriter>(
+            NToColumnShard::TSessionTliEventLogWriter::TDatabaseSettings{
                 .DatabasePath = "/Root",
                 .StoreName = "tli_session",
                 .TableName = "tli_session",
@@ -779,14 +782,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         using namespace NYdb::NQuery;
 
         TEnvironment env;
-        env.AddSinks.push_back(std::make_shared<NAudit::TSchemeShardEventLogWriter>(
-            TColumnShardLogWriter::TDatabaseSettings{
+        env.AddSinks.push_back(std::make_shared<NAudit::NToColumnShard::TSchemeShardEventLogWriter>(
+            TBaseColumnShardLogWriter::TDatabaseSettings{
                 .DatabasePath = "/Root",
                 .StoreName = "audit_schemeshard",
                 .TableName = "audit_schemeshard",
                 .FlushBatchSize = 0}));
-        env.AddSinks.push_back(std::make_shared<NAudit::TGrpcLoginEventLogWriter>(
-            TColumnShardLogWriter::TDatabaseSettings{
+        env.AddSinks.push_back(std::make_shared<NAudit::NToColumnShard::TGrpcLoginEventLogWriter>(
+            TBaseColumnShardLogWriter::TDatabaseSettings{
                 .DatabasePath = "/Root",
                 .StoreName = "audit_grpc_login",
                 .TableName = "audit_grpc_login",

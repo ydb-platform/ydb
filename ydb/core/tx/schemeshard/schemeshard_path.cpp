@@ -1885,8 +1885,7 @@ bool TPath::IsImportingReplica() const {
     }
 
     const auto& tableInfo = SS->Tables.at(Base()->PathId);
-    return tableInfo->IsAsyncReplica()
-        && tableInfo->ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+    return tableInfo->IsImportingReplica();
 }
 
 bool TPath::IsCdcStream() const {

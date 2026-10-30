@@ -1017,6 +1017,10 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         }
     }
 
+    bool IsImportingReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+    }
+
     bool HasIncrementalBackupConfig() const { return TableDescription.HasIncrementalBackupConfig(); }
     const NKikimrSchemeOp::TTableIncrementalBackupConfig& IncrementalBackupConfig() const { return TableDescription.GetIncrementalBackupConfig(); }
     NKikimrSchemeOp::TTableIncrementalBackupConfig& MutableIncrementalBackupConfig() { return *TableDescription.MutableIncrementalBackupConfig(); }

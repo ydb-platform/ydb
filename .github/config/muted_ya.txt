@@ -27,6 +27,7 @@ ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut THiveTest.TestResetServerlessComputeResourcesMode
 ydb/core/tx/replication/controller/ut_dst_creator DstCreator.AttachmentAlterRejectsDroppedIndexAfterRestart
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
+ydb/core/viewer/tests test.py.TestViewer.test_async_replication_describe
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
@@ -63,3 +64,4 @@ ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkl
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
 ydb/tools/stress_tool/ut unittest.sole chunk
+yql/essentials/sql/v1 sql_ut_common.h.clang_format

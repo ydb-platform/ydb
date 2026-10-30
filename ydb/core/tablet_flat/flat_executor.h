@@ -755,7 +755,7 @@ public:
     void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) override;
 
     void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) override;
-    ui32 GetFollowerSnapshotCheckpoint() override;
+    ui32 CreateFollowerSnapshotCheckpoint() override;
 
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override;
     bool HasLoanedParts() const override;

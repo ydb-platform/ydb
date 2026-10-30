@@ -7,7 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/formats/arrow/helpers/array.h>
+#include <ydb/library/arrow_kernels/ut_common.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>

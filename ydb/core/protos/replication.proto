@@ -36,6 +36,7 @@ message TReplicationDefaults {
     // Uncommitted messages are protected only for this finite window.
     optional uint32 ConsumerAvailabilityPeriodSeconds = 6 [default = 86400]; // 1d
     optional uint32 SourceOffsetCommitIntervalMilliSeconds = 7 [default = 1000];
+    optional bool EnableDataLossDetection = 8 [default = true];
 }
 
 message TStaticCredentials {

@@ -589,6 +589,15 @@ message StreamReadMessage {
     // This command is a hint to the client to commit offsets, after which the child partitions will be balanced independently in different reading sessions.
     // Unlike StopPartitionSessionRequest, the client does not have to close the reading session.
     // Client should not send a response to the command.
+    //
+    // The same message is also sent when the client's read window is exhausted:
+    // i.e. the client set max_offset in StartPartitionSessionResponse::confirm
+    // and the read offset has reached max_offset + 1. In this case the partition
+    // is NOT finished: it is still alive and accepts writes, child_partition_ids
+    // and adjacent_partition_ids are empty, the read balancer is not notified,
+    // and the partition stays assigned to this reading session until the
+    // session is closed. No further messages will arrive to the client for
+    // this partition though, because the whole allowed window has been read.
     message EndPartitionSession {
         // Partition session identifier.
         int64 partition_session_id = 1;

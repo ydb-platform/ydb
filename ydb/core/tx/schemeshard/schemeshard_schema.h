@@ -1816,8 +1816,8 @@ struct Schema : NIceDb::Schema {
             SrcPath,
             Topic,
             ParentIndex,
-            ReplicationConfig,
-            SysView
+            SysView,
+            ReplicationConfig
         >;
     };
 

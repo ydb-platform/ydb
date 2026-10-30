@@ -238,9 +238,9 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
     }
     if (IsReplicationBootstrapTable(path, ss)) {
         const auto& actual = ss->Tables.at(path.Base()->PathId)->ReplicationConfig();
-        if (!replicationConfig.HasBootstrapReplication()
-            || TPathId::FromProto(actual.GetBootstrapReplication())
-                != TPathId::FromProto(replicationConfig.GetBootstrapReplication())) {
+        if (!replicationConfig.HasBootstrapInfo()
+            || TPathId::FromProto(actual.GetBootstrapInfo().GetReplicationId())
+                != TPathId::FromProto(replicationConfig.GetBootstrapInfo().GetReplicationId())) {
             explain = "Replication bootstrap owner changed: " + dstPath;
             return false;
         }
@@ -659,6 +659,72 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    bool IsTableCreatedByImport(const TPath& path, const TImportInfo& importInfo, ui32 itemIdx) const {
+        if (!IsReplicationBootstrapTable(path, Self)) {
+            return false;
+        }
+        const auto& info = Self->Tables.at(path.Base()->PathId)->ReplicationConfig().GetBootstrapInfo();
+        return info.GetImportId() == importInfo.Id
+            && TPathId::FromProto(info.GetReplicationId())
+                == TPathId::FromProto(importInfo.Items.at(itemIdx).ReplicationConfig.GetBootstrapInfo().GetReplicationId());
+    }
+
+    // Reconcile the destination inside CreateSchemeObject. DstPathId identifies
+    // the old placeholder until DROP completes; ImportId identifies our replacement.
+    bool PrepareReplicaTable(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        auto& item = importInfo->Items.at(itemIdx);
+        NIceDb::TNiceDb db(txc.DB);
+        TString error;
+        if (!ValidateImportReplicationConfig(item.ReplicationConfig, Self, error)) {
+            CancelAndPersist(db, importInfo, itemIdx, error, "invalid replication");
+            return false;
+        }
+
+        const auto subscribe = [&](TTxId waitTxId) {
+            item.WaitTxId = waitTxId;
+            Self->TxIdToImport[waitTxId] = {importInfo->Id, itemIdx};
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+            SubscribeTx(*importInfo, itemIdx);
+        };
+
+        if (item.DstPathId) {
+            const auto previous = TPath::Init(item.DstPathId, Self);
+            // Recover a DROP whose propose response was lost, including a
+            // completed DROP. Its notification returns us to reconciliation.
+            if (previous.IsResolved() && previous.Base()->DropTxId != InvalidTxId) {
+                subscribe(previous.Base()->DropTxId);
+                return false;
+            }
+        }
+
+        const auto path = TPath::Resolve(item.DstPathName, Self);
+        if (path.IsResolved() && !path.IsDeleted()) {
+            if (IsTableCreatedByImport(path, *importInfo, itemIdx)) {
+                item.DstPathId = path.Base()->PathId;
+                Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+                // CREATE may have succeeded before the import persisted its reply.
+                // Wait for the whole scheme operation, including index tables.
+                subscribe(path.Base()->CreateTxId);
+                return false;
+            }
+            if (item.DstPathId && item.DstPathId != path.Base()->PathId) {
+                CancelAndPersist(db, importInfo, itemIdx, "Import destination was replaced", "destination changed");
+                return false;
+            }
+            item.DstPathId = path.Base()->PathId;
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+            if (!DropReplicaPlaceholder(*importInfo, itemIdx, txId, error)) {
+                CancelAndPersist(db, importInfo, itemIdx, error, "placeholder changed");
+                return false;
+            }
+        } else {
+            item.DstPathId = {};
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+            CreateTable(*importInfo, itemIdx, txId);
+        }
+        return true;
+    }
+
     bool DropReplicaPlaceholder(TImportInfo& importInfo, ui32 itemIdx, TTxId txId, TString& error) {
         auto& item = importInfo.Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
@@ -668,8 +734,8 @@ private:
         tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
         const auto path = TPath::Init(item.DstPathId, Self);
         if (!IsReplicationBootstrapTable(path, Self)
-            || TPathId::FromProto(Self->Tables.at(item.DstPathId)->ReplicationConfig().GetBootstrapReplication())
-                != TPathId::FromProto(item.ReplicationConfig.GetBootstrapReplication())) {
+            || TPathId::FromProto(Self->Tables.at(item.DstPathId)->ReplicationConfig().GetBootstrapInfo().GetReplicationId())
+                != TPathId::FromProto(item.ReplicationConfig.GetBootstrapInfo().GetReplicationId())) {
             error = "Import placeholder was changed";
             return false;
         }
@@ -1194,9 +1260,9 @@ private:
         // Include owned implementation tables of materialized indexes.
         for (const auto& [pathId, table] : Self->Tables) {
             const auto& config = table->ReplicationConfig();
-            if (config.HasBootstrapReplication() && config.GetBootstrapImportId() == importInfo.Id
-                && config.GetAwaitingImport()) {
-                table->MutableReplicationConfig().ClearAwaitingImport();
+            if (config.HasBootstrapInfo() && config.GetBootstrapInfo().GetImportId() == importInfo.Id
+                && config.GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT) {
+                table->MutableReplicationConfig().MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTED);
                 Self->PersistTable(db, pathId);
                 Self->ClearDescribePathCaches(Self->PathsById.at(pathId));
             }
@@ -1341,7 +1407,6 @@ private:
                     }
                     break;
 
-                case EState::DropReplicaPlaceholder:
                 case EState::CreateSchemeObject:
                 case EState::Transferring:
                 case EState::BuildIndexes:
@@ -1484,7 +1549,7 @@ private:
                 item.ReplicationConfig = Self->Tables.at(path.Base()->PathId)->ReplicationConfig();
                 item.DstPathId = path.Base()->PathId;
                 Self->PersistImportItemDstPathId(db, *importInfo, msg.ItemIdx);
-            } else if (!item.ReplicationConfig.HasBootstrapReplication()
+            } else if (!item.ReplicationConfig.HasBootstrapInfo()
                 && !GetImportReplicationConfig(item.DstPathName, Self, item.ReplicationConfig, error)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid replication");
             }
@@ -1493,7 +1558,6 @@ private:
             }
             // Existing imported data may be partial. A new import replaces the
             // whole unattached destination using the backup's complete schema.
-            item.ReplicationConfig.SetAwaitingImport(IsReplicationBootstrapTable(path, Self));
             TVector<TString> indexesToBuild;
             if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error, indexesToBuild)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
@@ -1534,8 +1598,7 @@ private:
         Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
 
         if (item.State != EState::Done) {
-            item.State = item.ReplicationConfig.GetAwaitingImport()
-                ? EState::DropReplicaPlaceholder : EState::CreateSchemeObject;
+            item.State = EState::CreateSchemeObject;
         }
 
         Self->PersistImportItemState(db, *importInfo, msg.ItemIdx);
@@ -1778,39 +1841,16 @@ private:
                 if (!Self->TableProfilesLoaded) {
                     Self->WaitForTableProfiles(id, i);
                 } else if (item.Table) {
-                    CreateTable(*importInfo, i, txId);
+                    if (item.ReplicationConfig.HasBootstrapInfo()) {
+                        if (!PrepareReplicaTable(txc, importInfo, i, txId)) {
+                            return;
+                        }
+                    } else {
+                        CreateTable(*importInfo, i, txId);
+                    }
                     itemIdx = i;
                 }
                 break;
-
-            case EState::DropReplicaPlaceholder: {
-                const auto path = TPath::Init(item.DstPathId, Self);
-                NIceDb::TNiceDb db(txc.DB);
-                // The previous DROP may have committed before its reply was persisted.
-                if (path.IsResolved() && path.Base()->DropTxId != InvalidTxId) {
-                    item.WaitTxId = path.Base()->DropTxId;
-                    Self->TxIdToImport[item.WaitTxId] = {importInfo->Id, i};
-                    Self->PersistImportItemState(db, *importInfo, i);
-                    SubscribeTx(*importInfo, i);
-                    return;
-                }
-                if (!path.IsResolved() || path.IsDeleted()) {
-                    item.ReplicationConfig.ClearAwaitingImport();
-                    item.DstPathId = {};
-                    item.State = EState::CreateSchemeObject;
-                    Self->PersistImportItemDstPathId(db, *importInfo, i);
-                    Self->PersistImportItemState(db, *importInfo, i);
-                    AllocateTxId(*importInfo, i);
-                    return;
-                }
-                TString error;
-                if (!DropReplicaPlaceholder(*importInfo, i, txId, error)) {
-                    CancelAndPersist(db, importInfo, i, error, "placeholder changed");
-                    return;
-                }
-                itemIdx = i;
-                break;
-            }
 
             case EState::Transferring:
                 TransferData(*importInfo, i, txId);
@@ -1905,13 +1945,23 @@ private:
         }
 
         if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists
-            && item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapReplication()) {
+            && item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()) {
             const auto path = TPath::Resolve(item.DstPathName, Self);
-            if (!IsReplicationBootstrapTable(path, Self)
-                || Self->Tables.at(path.Base()->PathId)->ReplicationConfig().GetBootstrapImportId() != importInfo->Id) {
+            if (!IsTableCreatedByImport(path, *importInfo, itemIdx)) {
                 Self->TxIdToImport.erase(txId);
                 return CancelAndPersist(db, importInfo, itemIdx, "Import destination was replaced", "destination changed");
             }
+        }
+
+        if (record.GetStatus() == NKikimrScheme::StatusSuccess
+            && item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()) {
+            Self->TxIdToImport.erase(txId);
+            item.WaitTxId = InvalidTxId;
+            item.DstPathId = {};
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+            AllocateTxId(*importInfo, itemIdx);
+            return;
         }
 
         if (record.GetStatus() == NKikimrScheme::StatusSuccess) {
@@ -1925,7 +1975,10 @@ private:
             if (IsIn({ NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists },
                 record.GetStatus()
             )) {
-                if (record.GetPathCreateTxId()) {
+                if (item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()
+                    && record.GetPathDropTxId()) {
+                    txId = TTxId(record.GetPathDropTxId());
+                } else if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::CreateSchemeObject) {
                     // In case dependency object is being created
@@ -1969,7 +2022,9 @@ private:
             return;
         }
 
-        if (item.State == EState::Done || item.State == EState::CreateSchemeObject) {
+        if (item.State == EState::Done || (item.State == EState::CreateSchemeObject
+            && (!item.ReplicationConfig.HasBootstrapInfo()
+                || IsTableCreatedByImport(TPath::Resolve(item.DstPathName, Self), *importInfo, itemIdx)))) {
             UpdateItemDstPathId(db, *importInfo, itemIdx);
             for (auto childIdx : item.ChildItems) {
                 UpdateItemDstPathId(db, *importInfo, childIdx);
@@ -2124,15 +2179,22 @@ private:
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         switch (item.State) {
-        case EState::DropReplicaPlaceholder:
-            item.ReplicationConfig.ClearAwaitingImport();
-            item.DstPathId = {};
-            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
-            item.State = EState::CreateSchemeObject;
-            AllocateTxId(*importInfo, itemIdx);
-            break;
-
         case EState::CreateSchemeObject:
+            if (item.ReplicationConfig.HasBootstrapInfo()) {
+                const auto path = TPath::Resolve(item.DstPathName, Self);
+                if (!IsTableCreatedByImport(path, *importInfo, itemIdx) || path.Base()->CreateTxId != txId) {
+                    // DROP completed (or another scheme operation we waited for).
+                    // Reconcile again instead of starting data transfer.
+                    item.DstPathId = {};
+                    Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+                    AllocateTxId(*importInfo, itemIdx);
+                    break;
+                }
+                UpdateItemDstPathId(db, *importInfo, itemIdx);
+                for (auto childIdx : item.ChildItems) {
+                    UpdateItemDstPathId(db, *importInfo, childIdx);
+                }
+            }
             if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
                 break;

@@ -55,10 +55,10 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         case TImportInfo::EState::Done:
         case TImportInfo::EState::Cancelled:
             for (const auto& item : importInfo->Items) {
-                if (!item.ReplicationConfig.HasBootstrapReplication()) {
+                if (!item.ReplicationConfig.HasBootstrapInfo()) {
                     continue;
                 }
-                const auto owner = TPath::Init(TPathId::FromProto(item.ReplicationConfig.GetBootstrapReplication()), Self);
+                const auto owner = TPath::Init(TPathId::FromProto(item.ReplicationConfig.GetBootstrapInfo().GetReplicationId()), Self);
                 const auto destination = TPath::Resolve(item.DstPathName, Self);
                 if (owner.IsResolved() && !owner.IsDeleted()
                     && (!destination.IsResolved() || destination.IsDeleted())) {

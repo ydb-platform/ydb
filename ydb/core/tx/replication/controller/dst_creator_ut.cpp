@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void AttachBootstrappedTable(bool wrongOwner) {
+    void AttachBootstrappedTable(bool wrongOwner, bool detached = false) {
         TEnv env;
         auto table = TTestTableDescription{
             .Name = "Source",
@@ -191,22 +191,34 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         auto& config = *dst->MutableReplicationConfig();
         FillReplicationConfig(config, EReplicationMode::ReadOnly, EConsistencyLevel::Global);
         const auto owner = env.GetPathId(wrongOwner ? "/Root/Source" : "/Root");
-        owner.ToProto(config.MutableBootstrapReplication());
+        owner.ToProto(config.MutableBootstrapInfo()->MutableReplicationId());
+        config.MutableBootstrapInfo()->SetImportId(123);
+        config.MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTED);
+        if (detached) {
+            config.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            config.ClearConsistencyLevel();
+            config.MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::DETACHED);
+        }
         env.CreateTable("/Root", *dst);
 
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
             "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
-        if (!wrongOwner) {
+        const bool reject = wrongOwner && !detached;
+        if (!reject) {
             PrepareAttachDst(env);
         }
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status,
-            wrongOwner ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess);
+            reject ? NKikimrScheme::StatusSchemeError : NKikimrScheme::StatusSuccess);
         const auto desc = env.GetDescription("/Root/Dst");
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().HasBootstrapReplication(), wrongOwner);
-        if (wrongOwner) {
+        const auto& bootstrap = desc.GetPathDescription().GetTable().GetReplicationConfig().GetBootstrapInfo();
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(bootstrap.GetReplicationId()), owner);
+        UNIT_ASSERT_VALUES_EQUAL(bootstrap.GetImportId(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(bootstrap.GetStatus(), reject
+            ? NKikimrSchemeOp::TBootstrapInfo::IMPORTED : NKikimrSchemeOp::TBootstrapInfo::ATTACHED);
+        if (reject) {
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, "another replication");
         }
     }
@@ -217,6 +229,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
     Y_UNIT_TEST(RejectBootstrappedTableOwnedByAnotherReplication) {
         AttachBootstrappedTable(true);
+    }
+
+    Y_UNIT_TEST(AttachTableWithDetachedBootstrapHistory) {
+        AttachBootstrappedTable(true, true);
     }
 
     void CreateTableWithVectorIndexes(TEnv<>& env, const TString& path, bool withSyncIndex = false) {
@@ -429,14 +445,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto replicationId = env.GetPathId("/Root/replication");
         const auto desc = env.GetDescription("/Root/Dst");
         const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
-        UNIT_ASSERT(config.GetAwaitingImport());
+        UNIT_ASSERT(config.GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
         if (global) {
             const auto index = env.GetDescription("/Root/Dst/by_value/indexImplTable");
             const auto& indexConfig = index.GetPathDescription().GetTable().GetReplicationConfig();
-            UNIT_ASSERT(indexConfig.GetAwaitingImport());
-            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(indexConfig.GetBootstrapReplication()), replicationId);
+            UNIT_ASSERT(indexConfig.GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
+            UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(indexConfig.GetBootstrapInfo().GetReplicationId()), replicationId);
         }
-        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetBootstrapReplication()), replicationId);
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetBootstrapInfo().GetReplicationId()), replicationId);
         CheckTableReplica(source, desc.GetPathDescription().GetTable(), EReplicationMode::ReadOnly,
             global ? EConsistencyLevel::Global : EConsistencyLevel::Row);
         UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription().GetState().HasPaused());

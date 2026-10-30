@@ -1437,7 +1437,7 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
         runtime.WaitFor("empty replica creation", [&] { return destinationCreated; }, TDuration::Seconds(60));
         UNIT_ASSERT(env.GetDescription(destination).GetPathDescription().GetTable()
-            .GetReplicationConfig().GetAwaitingImport());
+            .GetReplicationConfig().GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
         UNIT_ASSERT(destinationCreators >= 1);
 
         // Reloading the ready source stream also exercises target progress during startup.
@@ -1447,7 +1447,7 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         UNIT_ASSERT_VALUES_EQUAL(restarted->Get()->Record.TargetsSize(), 1);
         runtime.WaitFor("empty replica creation", [&] { return destinationCreated; }, TDuration::Seconds(60));
         UNIT_ASSERT(env.GetDescription(destination).GetPathDescription().GetTable()
-            .GetReplicationConfig().GetAwaitingImport());
+            .GetReplicationConfig().GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
         UNIT_ASSERT(destinationCreators >= 1);
     }
 
@@ -2535,7 +2535,7 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
             UNIT_ASSERT(destinationCreators >= 1);
             UNIT_ASSERT_VALUES_EQUAL(workerStarts, 0);
             UNIT_ASSERT(env.GetDescription("/Root/replica1").GetPathDescription().GetTable()
-                .GetReplicationConfig().GetAwaitingImport());
+                .GetReplicationConfig().GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
             UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription()
                 .GetReplicationDescription().GetState().HasPaused());
         };

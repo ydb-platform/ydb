@@ -160,7 +160,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
-    if (baseTableDescription.GetReplicationConfig().HasBootstrapReplication()) {
+    if (baseTableDescription.GetReplicationConfig().HasBootstrapInfo()) {
         const auto& config = baseTableDescription.GetReplicationConfig();
         TString error;
         if (!tx.GetInternal()
@@ -168,8 +168,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                 error.empty() ? TString("Replication bootstrap config requires an internal operation") : error)};
         }
-        if (config.HasBootstrapImportId()) {
-            const auto import = context.SS->Imports.find(config.GetBootstrapImportId());
+        if (config.GetBootstrapInfo().HasImportId()) {
+            const auto import = context.SS->Imports.find(config.GetBootstrapInfo().GetImportId());
             if (import == context.SS->Imports.end() || import->second->IsFinished()) {
                 return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Bootstrap import is no longer active")};
             }
@@ -437,7 +437,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
-            if (baseTableDescription.GetReplicationConfig().HasBootstrapReplication()
+            if (baseTableDescription.GetReplicationConfig().HasBootstrapInfo()
                 && GetIndexType(indexDescription) != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
                 implTableDesc.MutableReplicationConfig()->CopyFrom(baseTableDescription.GetReplicationConfig());
             }

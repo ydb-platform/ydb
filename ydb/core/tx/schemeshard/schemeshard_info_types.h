@@ -3963,7 +3963,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
-        DropReplicaPlaceholder = 8,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,

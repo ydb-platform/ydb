@@ -4,6 +4,7 @@
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_types.h"
+#include "schemeshard_replication_bootstrap.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
@@ -708,7 +709,7 @@ public:
             bool bootstrapRestore = false;
             if (checks && internal && TxType == TTxState::TxRestore && path->IsTable()) {
                 const auto& table = context.SS->Tables.at(path.Base()->PathId);
-                bootstrapRestore = table->IsRestore && table->ReplicationConfig().HasBootstrapReplication();
+                bootstrapRestore = table->IsRestore && IsReplicationBootstrapConfig(table->ReplicationConfig());
             }
             if (!bootstrapRestore) {
                 checks.NotAsyncReplicaTable();

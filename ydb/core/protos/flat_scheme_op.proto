@@ -294,6 +294,21 @@ message TTTLSettings {
     reserved 3;
 }
 
+// Retained after attachment and detachment to identify the bootstrap origin.
+message TBootstrapInfo {
+    enum EStatus {
+        UNKNOWN = 0;
+        WAITING_IMPORT = 1; // Empty destination or an incomplete import.
+        IMPORTED = 2; // The whole import has completed; attachment is allowed.
+        ATTACHED = 3;
+        DETACHED = 4;
+    }
+
+    optional NKikimrProto.TPathID ReplicationId = 1;
+    optional uint64 ImportId = 2;
+    optional EStatus Status = 3;
+}
+
 message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
@@ -309,12 +324,8 @@ message TTableReplicationConfig {
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
 
-    // Replication owns this destination before attachment. Cleared on attachment.
-    optional NKikimrProto.TPathID BootstrapReplication = 3;
-    // Destination is not ready for attachment: it is empty or an import has
-    // not completed. Cleared in SchemeShard when the whole import succeeds.
-    optional bool AwaitingImport = 4 [default = false];
-    optional uint64 BootstrapImportId = 5;
+    reserved 3, 4, 5; // Fields used by the earlier bootstrap prototype.
+    optional TBootstrapInfo BootstrapInfo = 6;
 }
 
 message TTableIncrementalBackupConfig {

@@ -7,12 +7,20 @@
 
 namespace NKikimr::NSchemeShard {
 
+inline bool IsReplicationBootstrapConfig(const NKikimrSchemeOp::TTableReplicationConfig& config) {
+    const auto& info = config.GetBootstrapInfo();
+    return config.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+        && info.HasReplicationId()
+        && (info.GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT
+            || info.GetStatus() == NKikimrSchemeOp::TBootstrapInfo::IMPORTED);
+}
+
 inline bool ValidateImportReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config,
         TSchemeShard* ss, TString& error) {
-    if (!config.HasBootstrapReplication()) {
+    if (!config.HasBootstrapInfo()) {
         return true;
     }
-    const auto owner = TPathId::FromProto(config.GetBootstrapReplication());
+    const auto owner = TPathId::FromProto(config.GetBootstrapInfo().GetReplicationId());
     const auto ownerPath = TPath::Init(owner, ss);
     const auto checks = ownerPath.Check();
     checks.IsResolved().NotDeleted().NotUnderOperation();
@@ -21,8 +29,7 @@ inline bool ValidateImportReplicationConfig(const NKikimrSchemeOp::TTableReplica
         return false;
     }
     const auto it = ss->Replications.find(owner);
-    if (it == ss->Replications.end()
-        || config.GetMode() != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY) {
+    if (it == ss->Replications.end() || !IsReplicationBootstrapConfig(config)) {
         error = "Import destination is not a read-only replication bootstrap table";
         return false;
     }
@@ -52,7 +59,7 @@ inline bool GetImportReplicationConfig(const TString& destination, TSchemeShard*
                 continue;
             }
             for (const auto& item : import->Items) {
-                if (item.ReplicationConfig.HasBootstrapReplication()
+                if (item.ReplicationConfig.HasBootstrapInfo()
                     && CanonizePath(item.DstPathName) == CanonizePath(destination)) {
                     config = item.ReplicationConfig;
                     previousImport = id;
@@ -68,15 +75,15 @@ inline bool IsReplicationBootstrapTable(const TPath& path, TSchemeShard* ss) {
         return false;
     }
     const auto table = ss->Tables.find(path.Base()->PathId);
-    return table != ss->Tables.end() && table->second->ReplicationConfig().HasBootstrapReplication();
+    return table != ss->Tables.end() && IsReplicationBootstrapConfig(table->second->ReplicationConfig());
 }
 
 inline TVector<TPath> GetReplicationBootstrapTables(const TPathId& replicationId, TSchemeShard* ss) {
     TVector<TPath> result;
     for (const auto& [pathId, table] : ss->Tables) {
         const auto& config = table->ReplicationConfig();
-        if (config.HasBootstrapReplication()
-            && TPathId::FromProto(config.GetBootstrapReplication()) == replicationId) {
+        if (IsReplicationBootstrapConfig(config)
+            && TPathId::FromProto(config.GetBootstrapInfo().GetReplicationId()) == replicationId) {
             auto path = TPath::Init(pathId, ss);
             if (!path.IsDeleted()) {
                 result.push_back(std::move(path));
@@ -91,8 +98,8 @@ inline bool CheckReplicationBootstrapTables(const TPathId& replicationId, TPropo
         if (import->IsFinished()) {
             if (requireImported) {
                 for (const auto& item : import->Items) {
-                    if (!item.ReplicationConfig.HasBootstrapReplication()
-                        || TPathId::FromProto(item.ReplicationConfig.GetBootstrapReplication()) != replicationId) {
+                    if (!item.ReplicationConfig.HasBootstrapInfo()
+                        || TPathId::FromProto(item.ReplicationConfig.GetBootstrapInfo().GetReplicationId()) != replicationId) {
                         continue;
                     }
                     const auto path = TPath::Resolve(item.DstPathName, ss);
@@ -107,14 +114,14 @@ inline bool CheckReplicationBootstrapTables(const TPathId& replicationId, TPropo
         }
         for (const auto& item : import->Items) {
             auto config = item.ReplicationConfig;
-            if (!config.HasBootstrapReplication()) {
+            if (!config.HasBootstrapInfo()) {
                 const auto path = TPath::Resolve(item.DstPathName, ss);
                 if (IsReplicationBootstrapTable(path, ss)) {
                     config = ss->Tables.at(path.Base()->PathId)->ReplicationConfig();
                 }
             }
-            if (config.HasBootstrapReplication()
-                && TPathId::FromProto(config.GetBootstrapReplication()) == replicationId) {
+            if (config.HasBootstrapInfo()
+                && TPathId::FromProto(config.GetBootstrapInfo().GetReplicationId()) == replicationId) {
                 result.SetError(NKikimrScheme::StatusMultipleModifications, "Import is using a replication destination");
                 return false;
             }
@@ -123,7 +130,7 @@ inline bool CheckReplicationBootstrapTables(const TPathId& replicationId, TPropo
     for (const auto& path : GetReplicationBootstrapTables(replicationId, ss)) {
         if (requireImported) {
             const auto& config = ss->Tables.at(path.Base()->PathId)->ReplicationConfig();
-            if (config.GetAwaitingImport() || !config.HasBootstrapImportId()) {
+            if (config.GetBootstrapInfo().GetStatus() != NKikimrSchemeOp::TBootstrapInfo::IMPORTED || !config.GetBootstrapInfo().HasImportId()) {
                 result.SetError(NKikimrScheme::StatusPreconditionFailed,
                     TStringBuilder() << "Complete or retry S3 import before starting replication: " << path.PathString());
                 return false;

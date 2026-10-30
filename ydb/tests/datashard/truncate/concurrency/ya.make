@@ -1,5 +1,5 @@
-REQUIREMENTS(cpu:2)
 PY3TEST()
+REQUIREMENTS(cpu:2)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(

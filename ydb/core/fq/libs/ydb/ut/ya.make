@@ -1,5 +1,5 @@
-REQUIREMENTS(cpu:2)
 UNITTEST_FOR(ydb/core/fq/libs/ydb)
+REQUIREMENTS(cpu:2)
 
 FORK_SUBTESTS()
 

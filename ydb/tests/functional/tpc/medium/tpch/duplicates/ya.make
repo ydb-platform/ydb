@@ -1,5 +1,5 @@
-REQUIREMENTS(cpu:4)
 PY3TEST()
+REQUIREMENTS(cpu:4)
 
 TEST_SRCS(
     test_duplicates.py

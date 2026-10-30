@@ -196,7 +196,7 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .FailOnRestrictedCreateInTempZone();
 
     if (path.IsResolved()) {
-        if (IsReplicationBootstrapTable(path, ss)) {
+        if (IsWaitingImportTable(path, ss)) {
             checks.NotDeleted().NotUnderOperation();
         } else if (path->IsSysView()) {
             checks
@@ -231,19 +231,6 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
     if (!checks) {
         explain = checks.GetError();
         return false;
-    }
-    NKikimrSchemeOp::TTableReplicationConfig replicationConfig;
-    if (!GetImportReplicationConfig(dstPath, ss, replicationConfig, explain)) {
-        return false;
-    }
-    if (IsReplicationBootstrapTable(path, ss)) {
-        const auto& actual = ss->Tables.at(path.Base()->PathId)->ReplicationConfig();
-        if (!replicationConfig.HasBootstrapInfo()
-            || TPathId::FromProto(actual.GetBootstrapInfo().GetReplicationId())
-                != TPathId::FromProto(replicationConfig.GetBootstrapInfo().GetReplicationId())) {
-            explain = "Replication bootstrap owner changed: " + dstPath;
-            return false;
-        }
     }
     return true;
 }
@@ -499,9 +486,6 @@ private:
 
             if (!importInfo.IsExcludedFromImport(dstPath)) {
                 auto& item = importInfo.Items.emplace_back(dstPath);
-                if (!GetImportReplicationConfig(dstPath, Self, item.ReplicationConfig, explain)) {
-                    return false;
-                }
                 item.SrcPrefix = NBackup::NormalizeExportPrefix(GetItemSource(settings, itemIdx));
                 item.SrcPath = NBackup::NormalizeItemPath(GetItemSourcePathDb(settings, itemIdx));
             }
@@ -659,26 +643,16 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    bool IsTableCreatedByImport(const TPath& path, const TImportInfo& importInfo, ui32 itemIdx) const {
-        if (!IsReplicationBootstrapTable(path, Self)) {
-            return false;
-        }
-        const auto& info = Self->Tables.at(path.Base()->PathId)->ReplicationConfig().GetBootstrapInfo();
-        return info.GetImportId() == importInfo.Id
-            && TPathId::FromProto(info.GetReplicationId())
-                == TPathId::FromProto(importInfo.Items.at(itemIdx).ReplicationConfig.GetBootstrapInfo().GetReplicationId());
+    bool IsImportingTable(const TPath& path) const {
+        return IsReplicationBootstrapTable(path, Self);
     }
 
     // Reconcile the destination inside CreateSchemeObject. DstPathId identifies
-    // the old placeholder until DROP completes; ImportId identifies our replacement.
+    // the old placeholder until DROP completes. New imports cannot accept IMPORTING tables.
     bool PrepareReplicaTable(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         auto& item = importInfo->Items.at(itemIdx);
         NIceDb::TNiceDb db(txc.DB);
         TString error;
-        if (!ValidateImportReplicationConfig(item.ReplicationConfig, Self, error)) {
-            CancelAndPersist(db, importInfo, itemIdx, error, "invalid replication");
-            return false;
-        }
 
         const auto subscribe = [&](TTxId waitTxId) {
             item.WaitTxId = waitTxId;
@@ -699,7 +673,7 @@ private:
 
         const auto path = TPath::Resolve(item.DstPathName, Self);
         if (path.IsResolved() && !path.IsDeleted()) {
-            if (IsTableCreatedByImport(path, *importInfo, itemIdx)) {
+            if (IsImportingTable(path)) {
                 item.DstPathId = path.Base()->PathId;
                 Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
                 // CREATE may have succeeded before the import persisted its reply.
@@ -733,9 +707,7 @@ private:
         tx->SetInternal(true);
         tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
         const auto path = TPath::Init(item.DstPathId, Self);
-        if (!IsReplicationBootstrapTable(path, Self)
-            || TPathId::FromProto(Self->Tables.at(item.DstPathId)->ReplicationConfig().GetBootstrapInfo().GetReplicationId())
-                != TPathId::FromProto(item.ReplicationConfig.GetBootstrapInfo().GetReplicationId())) {
+        if (!IsWaitingImportTable(path, Self)) {
             error = "Import placeholder was changed";
             return false;
         }
@@ -1252,20 +1224,36 @@ private:
         }
     }
 
-    void CompleteImport(NIceDb::TNiceDb& db, TImportInfo& importInfo) {
+    void CompleteImport(TImportInfo& importInfo) {
         importInfo.State = EState::Done;
         importInfo.EndTime = TAppData::TimeProvider->Now();
-        // Completion changes only SchemeShard ownership metadata. DataShard's
-        // replication mode stays READ_ONLY during import and attachment.
-        // Include owned implementation tables of materialized indexes.
-        for (const auto& [pathId, table] : Self->Tables) {
-            const auto& config = table->ReplicationConfig();
-            if (config.HasBootstrapInfo() && config.GetBootstrapInfo().GetImportId() == importInfo.Id
-                && config.GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT) {
-                table->MutableReplicationConfig().MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTED);
+    }
+
+    void CompleteReplicaItem(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 itemIdx) {
+        const auto& completed = importInfo.Items.at(itemIdx);
+        const auto& item = completed.ParentIdx == Max<ui32>()
+            ? completed : importInfo.Items.at(completed.ParentIdx);
+        if (!item.ReplicationConfig.HasBootstrapInfo() || item.State != EState::Done) {
+            return;
+        }
+        for (const auto childIdx : item.ChildItems) {
+            if (importInfo.Items.at(childIdx).State != EState::Done) {
+                return;
+            }
+        }
+        // A materialized index must not attach before its base table or siblings
+        // finish importing. Update the whole group in the item completion transaction.
+        const auto complete = [&](const TPathId& pathId) {
+            const auto it = Self->Tables.find(pathId);
+            if (it != Self->Tables.end() && IsReplicationBootstrapConfig(it->second->ReplicationConfig())) {
+                it->second->MutableReplicationConfig().MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTED);
                 Self->PersistTable(db, pathId);
                 Self->ClearDescribePathCaches(Self->PathsById.at(pathId));
             }
+        };
+        complete(item.DstPathId);
+        for (const auto childIdx : item.ChildItems) {
+            complete(importInfo.Items.at(childIdx).DstPathId);
         }
     }
 
@@ -1545,19 +1533,11 @@ private:
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "destination changed");
             }
             const auto path = TPath::Resolve(item.DstPathName, Self);
-            if (IsReplicationBootstrapTable(path, Self)) {
+            if (IsWaitingImportTable(path, Self)) {
                 item.ReplicationConfig = Self->Tables.at(path.Base()->PathId)->ReplicationConfig();
                 item.DstPathId = path.Base()->PathId;
                 Self->PersistImportItemDstPathId(db, *importInfo, msg.ItemIdx);
-            } else if (!item.ReplicationConfig.HasBootstrapInfo()
-                && !GetImportReplicationConfig(item.DstPathName, Self, item.ReplicationConfig, error)) {
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid replication");
             }
-            if (!ValidateImportReplicationConfig(item.ReplicationConfig, Self, error)) {
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid replication");
-            }
-            // Existing imported data may be partial. A new import replaces the
-            // whole unattached destination using the backup's complete schema.
             TVector<TString> indexesToBuild;
             if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error, indexesToBuild)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
@@ -1634,7 +1614,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            CompleteImport(db, *importInfo);
+            CompleteImport(*importInfo);
         }
 
         Self->PersistImportState(db, *importInfo);
@@ -1699,12 +1679,6 @@ private:
             return CancelAndPersist(db, importInfo, -1, fillResult.ErrorMessage, "invalid items in schema mapping");
         }
 
-        for (auto& item : importInfo->Items) {
-            TString error;
-            if (!GetImportReplicationConfig(item.DstPathName, Self, item.ReplicationConfig, error)) {
-                return CancelAndPersist(db, importInfo, -1, error, "invalid replication destination");
-            }
-        }
         importInfo->State = EState::Waiting;
         PersistImportState(db, *importInfo);
         PersistSchemaMappingImportFields(db, *importInfo, itemsSizeBefore);
@@ -1947,7 +1921,7 @@ private:
         if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists
             && item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()) {
             const auto path = TPath::Resolve(item.DstPathName, Self);
-            if (!IsTableCreatedByImport(path, *importInfo, itemIdx)) {
+            if (!IsImportingTable(path)) {
                 Self->TxIdToImport.erase(txId);
                 return CancelAndPersist(db, importInfo, itemIdx, "Import destination was replaced", "destination changed");
             }
@@ -2024,7 +1998,7 @@ private:
 
         if (item.State == EState::Done || (item.State == EState::CreateSchemeObject
             && (!item.ReplicationConfig.HasBootstrapInfo()
-                || IsTableCreatedByImport(TPath::Resolve(item.DstPathName, Self), *importInfo, itemIdx)))) {
+                || IsImportingTable(TPath::Resolve(item.DstPathName, Self))))) {
             UpdateItemDstPathId(db, *importInfo, itemIdx);
             for (auto childIdx : item.ChildItems) {
                 UpdateItemDstPathId(db, *importInfo, childIdx);
@@ -2037,7 +2011,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            CompleteImport(db, *importInfo);
+            CompleteImport(*importInfo);
         }
 
         Self->PersistImportState(db, *importInfo);
@@ -2182,7 +2156,7 @@ private:
         case EState::CreateSchemeObject:
             if (item.ReplicationConfig.HasBootstrapInfo()) {
                 const auto path = TPath::Resolve(item.DstPathName, Self);
-                if (!IsTableCreatedByImport(path, *importInfo, itemIdx) || path.Base()->CreateTxId != txId) {
+                if (!IsImportingTable(path) || path.Base()->CreateTxId != txId) {
                     // DROP completed (or another scheme operation we waited for).
                     // Reconcile again instead of starting data transfer.
                     item.DstPathId = {};
@@ -2282,9 +2256,10 @@ private:
             return SendNotificationsIfFinished(importInfo);
         }
 
+        CompleteReplicaItem(db, *importInfo, itemIdx);
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            CompleteImport(db, *importInfo);
+            CompleteImport(*importInfo);
         } else if (AllDoneOrWaiting(stateCounts)) {
             RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }

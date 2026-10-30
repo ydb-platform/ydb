@@ -1,5 +1,4 @@
 #include "controller_impl.h"
-#include "bootstrap_tables.h"
 
 #include <util/generic/algorithm.h>
 
@@ -296,9 +295,6 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (desiredState == TReplication::EState::Done) {
-            RegisterBootstrapTables(*Replication, record.GetBootstrapTables(), db);
-        }
         if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
             issue.clear();
         }

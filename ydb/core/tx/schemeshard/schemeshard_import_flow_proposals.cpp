@@ -157,8 +157,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         tableDesc.SetIsRestore(true);
         if (item.ReplicationConfig.HasBootstrapInfo()) {
             *tableDesc.MutableReplicationConfig() = item.ReplicationConfig;
-            tableDesc.MutableReplicationConfig()->MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
-            tableDesc.MutableReplicationConfig()->MutableBootstrapInfo()->SetImportId(importInfo.Id);
+            tableDesc.MutableReplicationConfig()->MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTING);
         }
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);

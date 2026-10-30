@@ -1,7 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_helpers.h"
-#include "schemeshard_replication_bootstrap.h"
 #include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -54,18 +53,6 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         switch (importInfo->State) {
         case TImportInfo::EState::Done:
         case TImportInfo::EState::Cancelled:
-            for (const auto& item : importInfo->Items) {
-                if (!item.ReplicationConfig.HasBootstrapInfo()) {
-                    continue;
-                }
-                const auto owner = TPath::Init(TPathId::FromProto(item.ReplicationConfig.GetBootstrapInfo().GetReplicationId()), Self);
-                const auto destination = TPath::Resolve(item.DstPathName, Self);
-                if (owner.IsResolved() && !owner.IsDeleted()
-                    && (!destination.IsResolved() || destination.IsDeleted())) {
-                    return respond(Ydb::StatusIds::PRECONDITION_FAILED,
-                        "Retry S3 import or drop replication before forgetting the destination replacement checkpoint");
-                }
-            }
             // Kill leftover helper actors: each holds a TImportInfo::TPtr and would
             // otherwise pin the import state in RAM long after it is forgotten.
             if (auto schemaMappingGetter = std::exchange(importInfo->SchemaMappingGetter, {})) {

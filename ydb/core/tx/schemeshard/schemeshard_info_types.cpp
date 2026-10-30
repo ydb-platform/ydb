@@ -1037,15 +1037,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         auto& updated = *alterData->TableDescriptionFull->MutableReplicationConfig();
         updated.CopyFrom(cfg);
-        if (source && source->ReplicationConfig().HasBootstrapInfo() && !cfg.HasBootstrapInfo()) {
-            // Controller attachment/detachment replaces the replication config.
-            // Keep the bootstrap origin for diagnostics, but revoke import privileges.
-            auto& bootstrap = *updated.MutableBootstrapInfo();
-            bootstrap.CopyFrom(source->ReplicationConfig().GetBootstrapInfo());
-            bootstrap.SetStatus(cfg.GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE
-                ? NKikimrSchemeOp::TBootstrapInfo::DETACHED
-                : NKikimrSchemeOp::TBootstrapInfo::ATTACHED);
-        }
     }
 
     if (op.HasIncrementalBackupConfig()) {

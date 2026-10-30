@@ -298,14 +298,11 @@ message TTTLSettings {
 message TBootstrapInfo {
     enum EStatus {
         UNKNOWN = 0;
-        WAITING_IMPORT = 1; // Empty destination or an incomplete import.
-        IMPORTED = 2; // The whole import has completed; attachment is allowed.
-        ATTACHED = 3;
-        DETACHED = 4;
+        WAITING_IMPORT = 1;
+        IMPORTED = 2;
+        IMPORTING = 3;
     }
 
-    optional NKikimrProto.TPathID ReplicationId = 1;
-    optional uint64 ImportId = 2;
     optional EStatus Status = 3;
 }
 

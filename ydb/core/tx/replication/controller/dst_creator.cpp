@@ -334,7 +334,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
         if (CreateImportPlaceholder) {
             auto& bootstrap = *replicationConfig.MutableBootstrapInfo();
-            PathId.ToProto(bootstrap.MutableReplicationId());
             bootstrap.SetStatus(NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
         }
     }
@@ -624,11 +623,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
         const auto& replicationConfig = got.GetReplicationConfig();
         const auto& bootstrap = replicationConfig.GetBootstrapInfo();
-        if (replicationConfig.HasBootstrapInfo()
-            && (bootstrap.GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT
-                || bootstrap.GetStatus() == NKikimrSchemeOp::TBootstrapInfo::IMPORTED)
-            && TPathId::FromProto(bootstrap.GetReplicationId()) != PathId) {
-            error = "Destination was restored for another replication";
+        if (!ShouldCreateDestination() && replicationConfig.HasBootstrapInfo()
+            && bootstrap.GetStatus() != NKikimrSchemeOp::TBootstrapInfo::IMPORTED) {
+            error = "Destination import is not complete";
             return false;
         }
         const bool needsConfig = InitialScan || Attaching || IsReplica(got);
@@ -1075,7 +1072,7 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
-    // Create an empty owned replica now; leave attachment until after S3 import.
+    // Create an empty replica now; leave attachment until after S3 import.
     const bool CreateImportPlaceholder;
     bool Cleanup;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;

@@ -1,7 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_replication_bootstrap.h"
 
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/library/actors/core/log.h>
@@ -72,7 +71,6 @@ public:
             ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
-            FillReplicationBootstrapTables(pathId, ev->Record, context.SS);
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvDropReplication to controller",
                 {"tabletId", tabletId},
@@ -336,9 +334,6 @@ public:
         Y_ABORT_UNLESS(context.SS->Replications.contains(path->PathId));
         auto replication = context.SS->Replications.at(path->PathId);
         Y_ABORT_UNLESS(!replication->AlterData);
-        if (!CheckReplicationBootstrapTables(path->PathId, *result, context.SS)) {
-            return result;
-        }
 
         const auto txType = Cascade
             ? TTxState::TxDropReplicationCascade

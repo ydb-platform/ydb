@@ -978,6 +978,18 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
 
     RemoveQueue.erase(id);
     const auto worker = Workers.find(id);
+    if (worker != Workers.end() && worker->second.HasHeartbeat()) {
+        const auto heartbeat = worker->second.GetHeartbeat();
+        auto workers = WorkersByHeartbeat.find(heartbeat);
+        if (workers != WorkersByHeartbeat.end()) {
+            workers->second.erase(id);
+            if (workers->second.empty()) {
+                WorkersByHeartbeat.erase(workers);
+            }
+        }
+    }
+    WorkersWithHeartbeat.erase(id);
+    PendingHeartbeats.erase(id);
     if (worker != Workers.end() && worker->second.HasSession()) {
         const auto session = Sessions.find(worker->second.GetSession());
         if (session != Sessions.end()) {
@@ -989,6 +1001,8 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
     StoppingWorkers.erase(id);
     Workers.erase(id);
     TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
+    TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = WorkersWithHeartbeat.size();
+    TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = PendingHeartbeats.size();
 
     auto replication = Find(id.ReplicationId());
     if (!replication) {

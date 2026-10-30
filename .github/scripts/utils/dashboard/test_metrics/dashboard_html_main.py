@@ -1,8 +1,8 @@
 """HTML dashboard rendering for tests resource dashboard.
 
 Contains build_html_dashboard which takes a pre-computed payload and writes
-the self-contained HTML file with Plotly.js charts, CPU suggestions table
-and ya.make update script generator.
+the HTML shell plus a sibling *_data.json (fetched at runtime) with Plotly.js
+charts, CPU suggestions table and ya.make update script generator.
 """
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ from typing import Any, Optional
 
 try:
     from .dashboard_html_payload import build_dashboard_payload
-    from .html_embed import js_script_json
+    from .html_embed import js_script_json, write_dashboard_data_json
 except ImportError:
     from dashboard_html_payload import build_dashboard_payload  # type: ignore[no-redef]
-    from html_embed import js_script_json  # type: ignore[no-redef]
+    from html_embed import js_script_json, write_dashboard_data_json  # type: ignore[no-redef]
 
 
 def build_html_dashboard(
@@ -60,7 +60,9 @@ def build_html_dashboard(
     rf_ram = rf.get("ram_gb", "?")
     rf_budget = rf.get("mem_budget_gb", "?")
     rf_ya_mem = rf.get("ya_make_mem_limit_gb", "?")
-    payload_js = js_script_json(payload)
+    out_data = out_html.with_name(out_html.stem + "_data.json")
+    write_dashboard_data_json(out_data, payload)
+    data_url_js = js_script_json(out_data.name)
     suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
 
     html = f"""<!doctype html>
@@ -251,6 +253,7 @@ def build_html_dashboard(
   </style>
 </head>
 <body>
+  <div id="dashboardLoadError" style="display:none;margin:16px;padding:12px 16px;border:1px solid #fca5a5;background:#fef2f2;border-radius:8px;color:#991b1b;font-size:14px;"></div>
   <div id="chartTip"></div>
   <div id="dashboardHeader" style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border-radius:8px;border:1px solid #e2e8f0;">
     <div id="headerRow1" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;font-size:14px;line-height:1.5;">
@@ -465,6 +468,23 @@ def build_html_dashboard(
     </div>
   </div>
   <script>
+    (async function() {{
+    const dataUrl = {data_url_js};
+    let data;
+    try {{
+      const resp = await fetch(dataUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      data = await resp.json();
+    }} catch (err) {{
+      const el = document.getElementById('dashboardLoadError');
+      if (el) {{
+        el.style.display = 'block';
+        el.textContent = 'Failed to load ' + dataUrl + ': ' + err +
+          '. Open via HTTP with the sibling *_data.json next to this HTML (file:// fetch is blocked).';
+      }}
+      return;
+    }}
+
     function showTab(id) {{
       const tabs = ['chunkTab', 'suiteTab'];
       tabs.forEach(t => {{
@@ -491,7 +511,6 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    const data = {payload_js};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
     function formatHeadlineNumber(metric, value) {{
@@ -2319,6 +2338,14 @@ def build_html_dashboard(
       suiteSearchEl.addEventListener('input', applySuiteSearch);
     }}
     applySuiteSearch();
+
+    // onclick/onchange handlers in the HTML markup need globals.
+    window.showTab = showTab;
+    window.clearSuiteSearch = clearSuiteSearch;
+    window.clearAllMarkers = clearAllMarkers;
+    window.applyTimezoneToAllCharts = applyTimezoneToAllCharts;
+    window.applyMarkersToCharts = applyMarkersToCharts;
+    }})();
   </script>
 </body>
 </html>

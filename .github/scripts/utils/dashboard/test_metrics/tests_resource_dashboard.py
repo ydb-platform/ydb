@@ -1835,6 +1835,7 @@ def main() -> None:
         print(f"Chunks CSV written: {args.out_csv}")
     if args.out_html:
         print(f"HTML written: {args.out_html}")
+        print(f"Dashboard data written: {args.out_html.with_name(args.out_html.stem + '_data.json')}")
         if args.full_table:
             print(f"Table HTML written: {args.out_html.with_name(args.out_html.stem + '_table.html')}")
 

@@ -14,6 +14,7 @@ try:
         palette,
         topn_other_map,
     )
+    from .html_embed import strip_suggestion_hover_text
 except ImportError:
     from dashboard_html_series import (
         build_active_series,
@@ -24,6 +25,7 @@ except ImportError:
         palette,
         topn_other_map,
     )
+    from html_embed import strip_suggestion_hover_text  # type: ignore[no-redef]
 
 
 def _percentile(values: list[float], p: float) -> float:
@@ -434,7 +436,7 @@ def build_dashboard_payload(
         "ram_tracks_suite_no_synthetic": ram_tracks_suite_no_synthetic,
         "cpu_tracks_no_synthetic": cpu_tracks_no_synthetic,
         "ram_tracks_no_synthetic": ram_tracks_no_synthetic,
-        "cpu_suggestions": cpu_suggestions or [],
+        "cpu_suggestions": strip_suggestion_hover_text(cpu_suggestions or []),
         "run_config": run_config or {},
         "xs_cpu": xs_cpu,
         "cpu_tracks": cpu_tracks,

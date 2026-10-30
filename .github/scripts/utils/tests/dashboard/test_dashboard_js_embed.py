@@ -12,7 +12,7 @@ from _paths import TEST_METRICS, add_product_paths
 
 add_product_paths(TEST_METRICS)
 
-from html_embed import js_script_json
+from html_embed import js_script_json, strip_suggestion_hover_text, write_dashboard_data_json
 
 _DIR = TEST_METRICS
 
@@ -26,6 +26,33 @@ class JsScriptJsonTest(unittest.TestCase):
         upper = js_script_json({"x": "</SCRIPT>"})
         self.assertNotIn("</SCRIPT>", upper)
         self.assertIn("\\u003c/SCRIPT\\u003e", upper)
+
+    def test_strip_suggestion_hover_text(self):
+        rows = strip_suggestion_hover_text(
+            [
+                {
+                    "suite_path": "a/b",
+                    "recommended_cpu": 4,
+                    "recommended_cpu_tooltip": "long text",
+                    "mem_explain": "why",
+                    "cpu_action": "raise",
+                }
+            ]
+        )
+        self.assertEqual(
+            rows,
+            [{"suite_path": "a/b", "recommended_cpu": 4, "cpu_action": "raise"}],
+        )
+
+    def test_write_dashboard_data_json_compact(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dashboard_data.json"
+            write_dashboard_data_json(path, {"a": 1, "b": [2, 3]})
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(text, '{"a":1,"b":[2,3]}')
 
     def test_cpu_seconds_keeps_seconds(self):
         from tests_resource_dashboard import cpu_seconds

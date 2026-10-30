@@ -52,6 +52,7 @@ if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resour
 else
   mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
   rm -f "$TESTS_METRICS_DIR/dashboard.html" \
+    "$TESTS_METRICS_DIR/dashboard_data.json" \
     "$TESTS_METRICS_DIR/trace.json" \
     "$TESTS_METRICS_DIR/stats.json" \
     "$TESTS_METRICS_DIR/dashboard_suggestions.json" \

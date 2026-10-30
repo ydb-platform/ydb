@@ -41,6 +41,43 @@ blob_storage_config:
         UNIT_ASSERT(!rules[1].HasPDiskFilters());
     }
 
+    Y_UNIT_TEST(PDiskKindInitKeepsEmptyPDiskConfigPresence) {
+        // An empty YAML map stays an empty message: for a drive it is an explicit override replacing the host
+        // default, while an absent field inherits (the kind profile or the host default).
+        const auto request = BuildInitDistributedStorageCommand(R"(
+pdisk_kinds:
+- name: qlc
+  pdisk_config: {}
+host_configs:
+- host_config_id: 1
+  default_host_pdisk_config:
+    expected_slot_count: 10
+  drive:
+  - path: /dev/named-absent
+    type: NVME
+    kind_name: qlc
+  - path: /dev/named-empty
+    type: NVME
+    kind_name: qlc
+    pdisk_config: {}
+  - path: /dev/legacy-empty
+    type: NVME
+    pdisk_config: {}
+  - path: /dev/legacy-absent
+    type: NVME
+)");
+        const auto& kind = request.GetCommand(0).GetDefinePDiskKind();
+        UNIT_ASSERT(kind.HasPDiskConfig());
+        UNIT_ASSERT_VALUES_EQUAL(kind.GetPDiskConfig().ByteSizeLong(), 0);
+        const auto& host = request.GetCommand(1).GetDefineHostConfig();
+        UNIT_ASSERT_VALUES_EQUAL(host.DriveSize(), 4);
+        for (const auto& drive : host.GetDrive()) {
+            const bool explicitlyEmpty = drive.GetPath().EndsWith("-empty");
+            UNIT_ASSERT_VALUES_EQUAL_C(drive.HasPDiskConfig(), explicitlyEmpty, drive.GetPath());
+            UNIT_ASSERT_VALUES_EQUAL_C(drive.GetPDiskConfig().ByteSizeLong(), 0, drive.GetPath());
+        }
+    }
+
     Y_UNIT_TEST(Iterate) {
         NJson::TJsonValue e1;
         e1.SetType(NJson::EJsonValueType::JSON_MAP);
@@ -186,6 +223,114 @@ feature_flags:
         UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("NVME"), 144115188075855873ull);
         UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("zzz"), yexception);
         UNIT_CHECK_GENERATED_EXCEPTION(PdiskCategoryFromString("-1"), yexception);
+    }
+
+    Y_UNIT_TEST(NamedPDiskKindsPreserveSourceSettings) {
+        const TString yaml = R"(
+self_management_config: {enabled: true, erasure_species: block-4-2}
+pdisk_kinds:
+  - name: qlc
+    pdisk_config: {expected_slot_size: 600000000000, max_slots: 8, io_piece_size_bytes: 65536}
+host_configs:
+  - host_config_id: 1
+    default_host_pdisk_config: {log_weight: 99}
+    drive:
+      - path: /dev/nvme0n1
+        type: NVME
+        kind_name: qlc
+        max_slots: 4
+        pdisk_config: {io_piece_size_bytes: 0, use_noop_scheduler: false}
+hosts:
+  - host: fqdn1
+    host_config_id: 1
+)";
+        const auto config = Parse(yaml, true);
+        const auto& bs = config.GetBlobStorageConfig();
+        UNIT_ASSERT_VALUES_EQUAL(bs.PDiskKindsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(bs.GetPDiskKinds(0).GetName(), "qlc");
+        UNIT_ASSERT_VALUES_EQUAL(bs.GetPDiskKinds(0).GetPDiskConfig().GetMaxSlots(), 8);
+        const auto& drive = bs.GetDefineHostConfig(0).GetDrive(0);
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetKindName(), "qlc");
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetKind(), 0); // IDs are assigned by BSC.
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetPDiskConfig().GetMaxSlots(), 4);
+        UNIT_ASSERT(!drive.GetPDiskConfig().HasExpectedSlotSize());
+        UNIT_ASSERT(drive.GetPDiskConfig().HasIoPieceSizeBytes());
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetPDiskConfig().GetIoPieceSizeBytes(), 0);
+        UNIT_ASSERT(drive.GetPDiskConfig().HasUseNoopScheduler());
+        UNIT_ASSERT(!drive.GetPDiskConfig().GetUseNoopScheduler());
+
+        const auto request = BuildInitDistributedStorageCommand(yaml);
+        UNIT_ASSERT_VALUES_EQUAL(request.CommandSize(), 3);
+        UNIT_ASSERT(request.GetCommand(0).HasDefinePDiskKind());
+        UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(0).GetDefinePDiskKind().GetName(), "qlc");
+        UNIT_ASSERT(request.GetCommand(1).HasDefineHostConfig());
+        UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(1).GetDefineHostConfig().GetDrive(0).SerializeAsString(),
+            drive.SerializeAsString());
+        UNIT_ASSERT(request.GetCommand(2).HasDefineBox());
+    }
+
+    Y_UNIT_TEST(PDiskKindsReachInitCommand) {
+        const TString yaml = R"(
+blob_storage_config:
+  service_set: {groups: [{erasure_species: none}]}
+pdisk_kinds:
+  - name: qlc
+    pdisk_config: {log_weight: 8}
+host_configs:
+  - host_config_id: 1
+    drive: [{path: /dev/nvme0n1, type: NVME, kind_name: qlc}]
+hosts:
+  - host: fqdn1
+    host_config_id: 1
+)";
+        const auto request = BuildInitDistributedStorageCommand(yaml);
+        UNIT_ASSERT_VALUES_EQUAL(request.CommandSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(0).GetDefinePDiskKind().GetName(), "qlc");
+        UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(0).GetDefinePDiskKind().GetPDiskConfig().GetLogWeight(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(request.GetCommand(1).GetDefineHostConfig().GetDrive(0).GetKindName(), "qlc");
+
+        // Init assigns ItemConfigGeneration=Max, so BSC would accept both and the last one would win.
+        UNIT_ASSERT_EXCEPTION_CONTAINS(BuildInitDistributedStorageCommand(R"(
+pdisk_kinds:
+  - {name: qlc, pdisk_config: {log_weight: 8}}
+  - {name: qlc, pdisk_config: {log_weight: 9}}
+host_configs:
+  - host_config_id: 1
+    drive: [{path: /dev/nvme0n1, type: NVME, kind_name: qlc}]
+hosts:
+  - host: fqdn1
+    host_config_id: 1
+)"), yexception, "Duplicate PDisk kind Name# qlc");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(BuildInitDistributedStorageCommand(R"(
+pdisk_kinds:
+  - {name: "", pdisk_config: {log_weight: 8}}
+host_configs:
+  - host_config_id: 1
+    drive: [{path: /dev/nvme0n1, type: NVME}]
+hosts:
+  - host: fqdn1
+    host_config_id: 1
+)"), yexception, "PDisk kind name must not be empty");
+    }
+
+    Y_UNIT_TEST(NamedPDiskPoolFilterYaml) {
+        const auto config = Parse(R"(
+storage_pool_types:
+  - kind: capacity
+    pool_config:
+      box_id: 1
+      erasure_species: none
+      vdisk_kind: Default
+      pdisk_filter:
+        - property: [{type: NVME}, {kind_name: qlc}]
+host_configs:
+  - nvme: [disk1]
+hosts:
+  - host: fqdn1
+)", true);
+        const auto& pool = config.GetDomainsConfig().GetDomain(0).GetStoragePoolTypes(0).GetPoolConfig();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetPDiskFilter(0).GetProperty(1).GetKindName(), "qlc");
+        UNIT_ASSERT(!pool.GetPDiskFilter(0).GetProperty(1).HasKind());
     }
 
     Y_UNIT_TEST(AllowDefaultHostConfigId) {

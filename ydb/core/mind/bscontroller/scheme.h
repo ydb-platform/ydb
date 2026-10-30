@@ -273,9 +273,10 @@ struct Schema : NIceDb::Schema {
         // struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct DiskScope : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct KindName : Column<11, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<HostConfigId, Path>;
-        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, DiskScope>;
+        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, DiskScope, KindName>;
     };
 
     struct BoxHostV2 : Table<105> {
@@ -527,6 +528,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
     };
 
+    struct PDiskKind : Table<137> {
+        struct KindId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct KindName : Column<2, NScheme::NTypeIds::String> {};
+        struct PDiskConfig : Column<3, NScheme::NTypeIds::String> {};
+        struct Generation : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<KindName>;
+        using TColumns = TableColumns<KindId, KindName, PDiskConfig, Generation>;
+    };
 
     using TTables = SchemaTables<
         Node,
@@ -556,7 +566,8 @@ struct Schema : NIceDb::Schema {
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,
         DatabaseSpaceExhaustedPool,
-        BoxStoragePoolPDiskFilterV2
+        BoxStoragePoolPDiskFilterV2,
+        PDiskKind
     >;
 
     using TSettings = SchemaSettings<

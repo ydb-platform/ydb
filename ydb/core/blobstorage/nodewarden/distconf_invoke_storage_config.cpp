@@ -801,6 +801,10 @@ namespace NKikimr::NStorage {
         if (response.StatusSize() != 1 || response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_DISTCONF_CONTROL) {
             throw TExError() << "BS_CONTROLLER is way too old to process this query";
         }
+        // An older BSC would silently drop the unknown kind fields and apply partial PDisk configs.
+        if (response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_PDISK_KINDS && UsesPDiskKinds(ProposedStorageConfig)) {
+            throw TExError() << "BS_CONTROLLER is way too old to use named PDisk kinds";
+        }
 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;

@@ -459,6 +459,9 @@ void ConvertStoragePool(const NKikimrBlobStorage::TDefineStoragePool& from, Ydb:
                 case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
                     CopyNodeLocation(f->mutable_location(), property.GetLocation());
                     break;
+                case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKindName:
+                    f->set_kind_name(property.GetKindName());
+                    break;
                 default:
                     break;
             }

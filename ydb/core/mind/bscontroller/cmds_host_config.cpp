@@ -24,21 +24,29 @@ namespace NKikimr::NBsController {
             driveInfo.Type = drive.GetType();
             driveInfo.SharedWithOs = drive.GetSharedWithOs();
             driveInfo.ReadCentric = drive.GetReadCentric();
-            driveInfo.Kind = drive.GetKind();
+            if (!drive.GetKindName().empty()) {
+                driveInfo.KindName = drive.GetKindName();
+            }
+            driveInfo.Kind = ResolvePDiskKind(drive.GetKindName(), drive.GetKind());
             if (drive.HasDiskScope()) {
                 driveInfo.DiskScope = drive.GetDiskScope();
             }
 
-            if (drive.HasPDiskConfig()) {
-                const TString context = TStringBuilder() << "HostConfigId# " << id
-                    << " Path# " << drive.GetPath();
-                ValidatePDiskConfig(drive.GetPDiskConfig(), context);
-                TString config;
-                const bool success = drive.GetPDiskConfig().SerializeToString(&config);
-                Y_ABORT_UNLESS(success);
-                driveInfo.PDiskConfig = config;
+            const TString context = TStringBuilder() << "HostConfigId# " << id << " Path# " << drive.GetPath();
+            if (driveInfo.KindName) {
+                if (drive.HasPDiskConfig()) {
+                    driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
+                }
+                // Validate the effective settings even when this host config is not used by a box yet.
+                driveInfo.MaterializedPDiskConfig = MaterializePDiskConfig(drive.GetKindName(), driveInfo.PDiskConfig, context);
             } else {
-                driveInfo.PDiskConfig = defaultPDiskConfig;
+                if (drive.HasPDiskConfig()) {
+                    ValidatePDiskConfig(drive.GetPDiskConfig(), context);
+                    driveInfo.PDiskConfig = drive.GetPDiskConfig().SerializeAsString();
+                } else {
+                    driveInfo.PDiskConfig = defaultPDiskConfig;
+                }
+                driveInfo.MaterializedPDiskConfig = driveInfo.PDiskConfig;
             }
 
             Schema::HostConfigDrive::TKey::Type key(id, drive.GetPath());
@@ -55,6 +63,7 @@ namespace NKikimr::NBsController {
             driveInfo.ReadCentric = false;
             driveInfo.Kind = 0;
             driveInfo.PDiskConfig = defaultPDiskConfig;
+            driveInfo.MaterializedPDiskConfig = defaultPDiskConfig;
 
             for (const auto& path : field) {
                 const auto [it, inserted] = config.Drives.emplace(Schema::HostConfigDrive::TKey::Type(id, path), driveInfo);
@@ -69,6 +78,7 @@ namespace NKikimr::NBsController {
 
         auto &hostConfigs = HostConfigs.Unshare();
         hostConfigs[id] = std::move(config);
+        HostPDiskConfigUpdates.erase(id);
 
         for (const auto& [boxId, box] : Boxes.Get()) {
             for (const auto& [hostKey, host] : box.Hosts) {
@@ -123,6 +133,7 @@ namespace NKikimr::NBsController {
 
         // remove entry from the table
         hostConfigs.erase(it);
+        HostPDiskConfigUpdates.erase(id);
     }
 
 } // NKikimr::NBsController

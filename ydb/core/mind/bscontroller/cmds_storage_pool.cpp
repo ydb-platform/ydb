@@ -26,7 +26,8 @@ namespace NKikimr::NBsController {
 
     TBlobStorageController::TStoragePoolInfo TBlobStorageController::ResolveStoragePoolForPile(
             const TBoxStoragePoolId& id, const TStoragePoolInfo& pool, TBridgePileId pileId,
-            const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config) {
+            const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config,
+            const TMap<TString, TPDiskKindInfo>& kinds) {
         auto result = pool;
         // Ordinary groups can span piles. Only physical parts with a pile identity use overrides.
         if (pool.DDisk || !pileId || !bridgeInfo || !config) {
@@ -50,14 +51,14 @@ namespace NKikimr::NBsController {
         result.SetGroupGeometry(effective.GetGeometry());
         result.PDiskFilters.clear();
         for (const auto& filter : effective.GetPDiskFilter()) {
-            result.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), filter));
+            result.PDiskFilters.insert(ParsePDiskFilter(kinds, std::get<0>(id), std::get<1>(id), filter));
         }
         return result;
     }
 
     TBlobStorageController::TStoragePoolInfo TBlobStorageController::GetStoragePoolForPile(
             const TBoxStoragePoolId& id, TBridgePileId pileId) const {
-        return ResolveStoragePoolForPile(id, StoragePools.at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+        return ResolveStoragePoolForPile(id, StoragePools.at(id), pileId, BridgeInfo.get(), StorageConfig.get(), PDiskKinds);
     }
 
     std::optional<TString> TBlobStorageController::ValidateStoragePoolPileOverrides(
@@ -74,7 +75,7 @@ namespace NKikimr::NBsController {
                 const auto [it, inserted] = geometries.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
                     const auto pool = ResolveStoragePoolForPile(group->StoragePoolId, StoragePools.at(group->StoragePoolId),
-                        group->BridgePileId, BridgeInfo.get(), &config);
+                        group->BridgePileId, BridgeInfo.get(), &config, PDiskKinds);
                     it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
                 }
                 const auto& geometry = it->second;
@@ -207,7 +208,7 @@ namespace NKikimr::NBsController {
         }
 
         for (const auto &item : cmd.GetPDiskFilter()) {
-            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
+            storagePool.PDiskFilters.insert(ParsePDiskFilter(PDiskKinds.Get(), boxId, storagePoolId, item));
         }
 
         if (cmd.HasExistingGroups()) {
@@ -234,7 +235,7 @@ namespace NKikimr::NBsController {
             const auto [erasure, inserted] = erasures.try_emplace(group->BridgePileId);
             if (inserted) {
                 erasure->second = Self.ResolveStoragePoolForPile(id, storagePool, group->BridgePileId,
-                    BridgeInfo.get(), StorageConfig.get()).ErasureSpecies;
+                    BridgeInfo.get(), StorageConfig.get(), PDiskKinds.Get()).ErasureSpecies;
             }
             if (group->ErasureSpecies != erasure->second) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
@@ -851,6 +852,17 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {
         NKikimrBlobStorage::TBaseConfig *pb = status.MutableBaseConfig();
+        const auto& kindNames = PDiskKindNames.Get();
+        for (const auto& [name, kind] : PDiskKinds.Get()) {
+            auto* info = pb->AddPDiskKind();
+            info->SetKind(kind.KindId);
+            auto* config = info->MutableConfig();
+            config->SetName(name);
+            config->SetItemConfigGeneration(kind.Generation.GetOrElse(1));
+            if (kind.PDiskConfig && !config->MutablePDiskConfig()->ParseFromString(*kind.PDiskConfig)) {
+                throw TExError() << "PDisk kind KindName# " << name << " undeserializable PDiskConfig string";
+            }
+        }
 
         if (cmd.GetRetrieveDevices()) {
             DrivesSerials.ForEach([&](const auto& serial, const auto& driveInfo) {
@@ -897,7 +909,11 @@ namespace NKikimr::NBsController {
         if (!cmd.GetSuppressPDisks()) {
             PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdiskInfo) {
                 if (!virtualGroupsOnly || pdiskFilter.contains(pdiskId)) {
-                    Serialize(pb->AddPDisk(), pdiskId, pdiskInfo);
+                    auto* disk = pb->AddPDisk();
+                    Serialize(disk, pdiskId, pdiskInfo);
+                    if (const auto it = kindNames.find(disk->GetKind()); it != kindNames.end()) {
+                        disk->SetKindName(it->second);
+                    }
                 }
             });
         }

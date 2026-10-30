@@ -1994,6 +1994,11 @@
                 "ColumnId": 10,
                 "ColumnName": "DiskScope",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "KindName",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2007,7 +2012,8 @@
                     5,
                     6,
                     7,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2276,6 +2282,62 @@
                     1,
                     2,
                     3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 137,
+        "TableName": "PDiskKind",
+        "TableKey": [
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "KindId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "KindName",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "PDiskConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Generation",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

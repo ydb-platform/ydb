@@ -514,8 +514,8 @@ namespace NKikimr::NPQ {
             }
 
             AFL_ENSURE(data->GetDataSize() == it->second.DataSize,
-                {"#_data->GetDataSize", data->GetDataSize()},
-                {"#_it->second.DataSize", it->second.DataSize});
+                {"dataSize", data->GetDataSize()},
+                {"itDataSize", it->second.DataSize});
 
             const TBlobId& blob = it->first;
             LOG_D("Got data from cache. Partition offset partno count parts_count source size accessed times before, last time",

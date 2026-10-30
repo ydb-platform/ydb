@@ -87,7 +87,7 @@ public:
 
             LastCompletedTx = NOlap::TSnapshot(step, txId);
             AFL_VERIFY(LastCompletedTx > Self->LastCompletedTx,
-                {"#_self.last_completed_tx", Self->LastCompletedTx},
+                {"lastCompletedTx", Self->LastCompletedTx},
                 {"lastCompletedStep", LastCompletedTx});
             NIceDb::TNiceDb db(txc.DB);
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedStep, LastCompletedTx->GetPlanStep());

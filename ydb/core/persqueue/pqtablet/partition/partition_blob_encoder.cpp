@@ -41,9 +41,9 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
     }
     AFL_ENSURE(DataKeysBody.empty() ||
                    Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount(),
-        {"#_DataKeysBody.size", DataKeysBody.size()},
+        {"dataKeysBody.size", DataKeysBody.size()},
         {"lastKey", DataKeysBody.back().Key},
-        {"#_head.offset", Head.Offset});
+        {"headOffset", Head.Offset});
     AFL_ENSURE(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         AFL_ENSURE(HeadKeys.size() <= totalMaxCount);
@@ -241,9 +241,9 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
         sizeLag = DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - it->CumulativeSize;
         AFL_ENSURE(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize,
             {"bodySize", BodySize},
-            {"#_DataKeysBody.back().CumulativeSize", DataKeysBody.back().CumulativeSize},
-            {"#_DataKeysBody.back().Size", DataKeysBody.back().Size},
-            {"#_DataKeysBody.front().CumulativeSize", DataKeysBody.front().CumulativeSize});
+            {"backCumulativeSize", DataKeysBody.back().CumulativeSize},
+            {"backSize", DataKeysBody.back().Size},
+            {"frontCumulativeSize", DataKeysBody.front().CumulativeSize});
     }
 
     if (HeadKeys.empty()) {
@@ -579,7 +579,7 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
 {
     AFL_ENSURE(ForFastWrite);
     AFL_ENSURE(Head.PackedSize == 0,
-        {"#_Head.PackedSize", Head.PackedSize});
+        {"headPackedSize", Head.PackedSize});
 
     // We calculate the initial offset if this is the first write operation.
     if (NewHead.PackedSize > 0 && DataKeysBody.empty()) {

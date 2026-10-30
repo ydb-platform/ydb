@@ -118,7 +118,7 @@ private:
             } else {
                 AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
                     {"chunkIdx", chunkIdx},
-                    {"#_i.GetChunkIdx", i.GetChunkIdx()},
+                    {"iChunkIdx", i.GetChunkIdx()},
                     {"entity", entityId},
                     {"details", debugString()});
                 chunkIdx = i.GetChunkIdx();

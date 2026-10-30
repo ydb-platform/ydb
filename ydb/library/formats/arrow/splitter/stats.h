@@ -201,8 +201,9 @@ public:
             AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second,
                 {"columnId", info.GetColumnId()},
                 {"columnName", info.GetColumnName()});
-            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
-                                                                          "column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second,
+                {"columnId", info.GetColumnId()},
+                {"columnName", info.GetColumnName()});
         } else {
             it->second->Merge(info);
         }

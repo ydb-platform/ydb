@@ -986,16 +986,16 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
         } else {
             AFL_ENSURE(itUpdated == UpdatedKeys.end() || itUpdated->first.GetOffset() > itExisting->Key.GetOffset()
                 || itUpdated->first.GetOffset() == itExisting->Key.GetOffset() && itUpdated->first.GetPartNo() > itExisting->Key.GetPartNo(),
-                {"#_offset l", itUpdated->first.GetOffset()},
-                {"#_offset r", itExisting->Key.GetOffset()},
-                {"#_partNo l", itUpdated->first.GetPartNo()},
-                {"#_partNo r", itExisting->Key.GetPartNo()});
+                {"offsetL", itUpdated->first.GetOffset()},
+                {"offsetR", itExisting->Key.GetOffset()},
+                {"partNoL", itUpdated->first.GetPartNo()},
+                {"partNoR", itExisting->Key.GetPartNo()});
             AFL_ENSURE(itDeleted == DeletedKeys.end() || itDeleted->GetOffset() > itExisting->Key.GetOffset()
                 || itDeleted->GetOffset() == itExisting->Key.GetOffset() && itDeleted->GetPartNo() > itExisting->Key.GetPartNo(),
-                {"#_offset l", itDeleted->GetOffset()},
-                {"#_offset r", itExisting->Key.GetOffset()},
-                {"#_partNo l", itDeleted->GetPartNo()},
-                {"#_partNo r", itExisting->Key.GetPartNo()});
+                {"offsetL", itDeleted->GetOffset()},
+                {"offsetR", itExisting->Key.GetOffset()},
+                {"partNoL", itDeleted->GetPartNo()},
+                {"partNoR", itExisting->Key.GetPartNo()});
             addCurrentKey();
         }
         itExisting++;

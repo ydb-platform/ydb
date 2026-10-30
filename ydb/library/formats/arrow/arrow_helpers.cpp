@@ -814,7 +814,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std:
             AFL_VERIFY(it != i->chunks().end());
             AFL_VERIFY(positions[idx + 1] - currentPosition <= length,
                 {"length", length},
-                {"#_idx+1", positions[idx + 1]},
+                {"posIdxPlus1", positions[idx + 1]},
                 {"pos", currentPosition});
             auto chunk = (*it)->Slice(positions[idx] - currentPosition, positions[idx + 1] - positions[idx]);
             AFL_VERIFY_DEBUG(chunk->length() == positions[idx + 1] - positions[idx])

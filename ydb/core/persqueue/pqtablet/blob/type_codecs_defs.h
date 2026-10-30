@@ -339,7 +339,7 @@ public:
     const ICodec* GetCodec(TCodecSig sig) const {
         auto iter = Codecs.find(sig);
         AFL_ENSURE(iter != Codecs.end(),
-            {"#_Unregistered codec", ui16(sig)});
+            {"codec", ui16(sig)});
         return iter->second;
     }
 

@@ -652,8 +652,8 @@ struct TEvPQ {
             //error or empty response(all from cache) or not empty response at all
             AFL_ENSURE(Error.HasError() || Blobs.empty() || (!Blobs[0].Empty()),
                 {"cookie", Cookie},
-                {"#_Error code", NPersQueue::NErrorCode::EErrorCode_Name(Error.ErrorCode)},
-                {"#_blobs count", Blobs.size()});
+                {"errorCode", NPersQueue::NErrorCode::EErrorCode_Name(Error.ErrorCode)},
+                {"blobsCount", Blobs.size()});
         }
 
     private:

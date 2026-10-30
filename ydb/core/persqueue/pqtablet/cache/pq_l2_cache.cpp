@@ -104,8 +104,8 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE,
             {"key", key},
             {"currentSize", CurrentSize},
-            {"#_Cache.Size", Cache.Size()},
-            {"MAXBLOBSIZE", MAX_BLOB_SIZE});
+            {"cacheSize", Cache.Size()},
+            {"maxBlobSize", MAX_BLOB_SIZE});
 
         CurrentSize += blob.Value->GetDataSize();
 
@@ -114,12 +114,12 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             auto oldest = Cache.FindOldest();
             AFL_ENSURE(oldest != Cache.End(),
                 {"tablet", tabletId},
-                {"#_Cache.Size", Cache.Size()},
+                {"cacheSize", Cache.Size()},
                 {"currentSize", CurrentSize},
                 {"maxSize", MaxSize},
-                {"#_blob.Value->GetDataSize", blob.Value->GetDataSize()},
-                {"#_blobs.size", blobs.size()},
-                {"#_outEvicted.size", outEvicted.size()});
+                {"blobValueDataSize", blob.Value->GetDataSize()},
+                {"blobsSize", blobs.size()},
+                {"outEvictedSize", outEvicted.size()});
 
             TCacheValue::TPtr value = oldest.Value();
             outEvicted.emplace(oldest.Key(), value);

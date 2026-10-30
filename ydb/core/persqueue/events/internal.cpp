@@ -16,7 +16,7 @@ namespace NKikimr::NPQ {
         , Batches(nullptr)
     {
         AFL_ENSURE(RawValue.size() <= Size,
-            {"#_RawValue.size", RawValue.size()},
+            {"rawValueSize", RawValue.size()},
             {"size", Size},
             {"key", Key});
     }

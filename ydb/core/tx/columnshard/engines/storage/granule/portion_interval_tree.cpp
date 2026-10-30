@@ -51,7 +51,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
                 return NArrow::TSimpleRowViewV0(std::get<SimpleRow>(pos).GetData());
             default:
                 AFL_VERIFY(false,
-                    {"#_pos.index", pos.index()});
+                    {"posindex", pos.index()});
                 break;
         }
     };
@@ -66,7 +66,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
                 return std::get<SimpleRow>(pos).GetSchema();
             default:
                 AFL_VERIFY(false,
-                    {"#_pos.index", pos.index()});
+                    {"posIndex", pos.index()});
                 break;
         }
     };

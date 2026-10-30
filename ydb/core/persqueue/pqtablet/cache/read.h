@@ -211,7 +211,7 @@ namespace NPQ {
                 AFL_ENSURE(resp.ReadResultSize() && resp.ReadResultSize() + cachedCount == outBlobs.size(),
                     {"resultSize", resp.ReadResultSize()},
                     {"cachedCount", cachedCount},
-                    {"#_outBlobs.size", outBlobs.size()},
+                    {"outBlobsSize", outBlobs.size()},
                     {"proto", ev->Get()->ToString()});
 
                 TVector<bool> kvBlobs(outBlobs.size(), false);
@@ -239,7 +239,7 @@ namespace NPQ {
                         AFL_ENSURE(pos < outBlobs.size(),
                             {"description", "Got resulting blob with no place for it"},
                             {"pos", pos},
-                            {"#_outBlobs.size", outBlobs.size()});
+                            {"outBlobsSize", outBlobs.size()});
                         kvBlobs[pos] = true;
 
                         AFL_ENSURE(outBlobs[pos].Empty());
@@ -284,8 +284,8 @@ namespace NPQ {
                 AFL_ENSURE(resp.WriteResultSize() == (kvReq.Blobs.size() + kvReq.MetadataWritesCount),
                     {"description", "Mismatch write result size"},
                     {"size", resp.WriteResultSize()},
-                    {"#_kvReq.Blobs.size", kvReq.Blobs.size()},
-                    {"#_kvReq.MetadataWritesCount", kvReq.MetadataWritesCount});
+                    {"kvReqBlobsSize", kvReq.Blobs.size()},
+                    {"kvReqMetadataWritesCount", kvReq.MetadataWritesCount});
 
                 for (ui32 i = 0; i < resp.WriteResultSize(); ++i) {
                     auto status = resp.GetWriteResult(i).GetStatus();

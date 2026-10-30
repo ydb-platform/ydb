@@ -745,7 +745,7 @@ public:
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             default:
                 AFL_ENSURE(false,
-                    {"#_unknown message", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
             RuntimeError(

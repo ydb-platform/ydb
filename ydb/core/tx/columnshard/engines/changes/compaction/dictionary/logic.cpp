@@ -141,7 +141,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         }
 
         AFL_VERIFY(Iterators[inputIdx].MoveToPosition(inputRecordIdx));
-        AFL_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
+        auto cond = NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
             const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetPositions().get());
             if constexpr (type.IsIndexType()) {
                 if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
@@ -150,7 +150,9 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                 } else {
                     const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetLocalPosition());
                     AFL_VERIFY(inputIdx < RemapIndexes.size());
-                    AFL_VERIFY(dictIdx < RemapIndexes[inputIdx].size())("size", RemapIndexes[inputIdx].size())("idx", dictIdx);
+                    AFL_VERIFY(dictIdx < RemapIndexes[inputIdx].size(),
+                        {"size", RemapIndexes[inputIdx].size()},
+                        {"idx", dictIdx});
                     const ui32 finalValueIndex = RemapIndexes[inputIdx][dictIdx];
                     if (finalValueIndex == NullIndex) {
                         records.emplace_back(-1);
@@ -166,7 +168,8 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                 return true;
             }
             return false;
-        }),
+        });
+        AFL_VERIFY(cond,
             {"type", Iterators[inputIdx].GetCurrentDataChunk().GetDataType()->ToString()});
     }
 

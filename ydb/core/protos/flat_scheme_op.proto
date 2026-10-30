@@ -324,7 +324,6 @@ message TTableReplicationConfig {
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
 
-    reserved 3, 4, 5; // Fields used by the earlier bootstrap prototype.
     optional TBootstrapInfo BootstrapInfo = 6;
 }
 

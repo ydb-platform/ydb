@@ -10,6 +10,7 @@ TEST_SRCS(
 
 TAG(ya:fat)
 SIZE(LARGE)
+REQUIREMENTS(cpu:2)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 

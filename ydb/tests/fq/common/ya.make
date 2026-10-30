@@ -18,6 +18,7 @@ PY_SRCS(
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
+REQUIREMENTS(cpu:2)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)

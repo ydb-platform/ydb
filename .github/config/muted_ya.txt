@@ -268,6 +268,7 @@ ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.Test
 ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_mkql_not_increased[kikimr0]
 ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
+ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit[v1-client0]
 ydb/tests/fq/streaming py3test.[*/*] chunk
@@ -353,5 +354,6 @@ ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
+ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]

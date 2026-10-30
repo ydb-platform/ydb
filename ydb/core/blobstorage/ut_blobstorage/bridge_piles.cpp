@@ -1,6 +1,9 @@
 #include "bridge_config_yaml.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
+#include <util/system/type_name.h>
 
 using namespace NBridgeTest;
 
@@ -315,6 +318,67 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             NKikimrBridge::TGroupState::SYNCED);
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+
+    // the DS proxy started before the node knew the group was bridged forwards requests to the bridge proxy it has put
+    // in front of itself, and the bunch of puts delivered to it directly (as restarted puts are) goes there too
+    Y_UNIT_TEST(ForwardingProxyPassesBunchOfEvents) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+
+        // catch the DS proxy getting the bridged group info on the node which hasn't served the group yet
+        const ui32 nodeId = 16;
+        TActorId forwarderId;
+        env.Runtime->FilterFunction = [&](ui32 recipientNodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (recipientNodeId == nodeId && ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy && ev->HasEvent()) {
+                const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                if (info && info->IsBridged() && info->GroupID == TGroupId::FromValue(groupId) && actor &&
+                        TypeName(*actor).Contains("TBlobStorageGroupProxy")) {
+                    forwarderId = ev->GetRecipientRewrite();
+                }
+            }
+            return true;
+        };
+        TDataChecker checker(env);
+        checker.Write(groupId, nodeId);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(forwarderId, "the DS proxy wasn't started for the bridged group");
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        const TString data = "put of the bunch";
+        auto bunch = std::make_unique<TEvBlobStorage::TEvBunchOfEvents>();
+        std::vector<TLogoBlobID> ids;
+        for (ui32 step = 1; step <= 2; ++step) {
+            const TLogoBlobID id(100700, 1, step, 0, data.size(), 0);
+            ids.push_back(id);
+            bunch->Bunch.emplace_back(new IEventHandle(forwarderId, edge, new TEvBlobStorage::TEvPut(id, data,
+                TInstant::Max()), 0, step));
+        }
+        std::vector<NKikimrProto::EReplyStatus> statuses;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == edge && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult) {
+                statuses.push_back(ev->Get<TEvBlobStorage::TEvPutResult>()->Status);
+                return false;
+            }
+            return true;
+        };
+        env.Runtime->Send(new IEventHandle(forwarderId, edge, bunch.release()), nodeId);
+        WaitUntil(env, [&] { return statuses.size() == ids.size(); }, "results of puts of the bunch",
+            TDuration::Seconds(1), 60);
+        env.Runtime->FilterFunction = {};
+        for (const auto status : statuses) {
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        }
+        for (const auto& id : ids) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Responses[0].Status, NKikimrProto::OK, res->Get()->ToString());
+        }
     }
 
 }

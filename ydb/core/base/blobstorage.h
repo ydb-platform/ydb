@@ -772,7 +772,7 @@ struct TEvBlobStorage {
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
-        TEvPut(TCloneEventPolicy, const TEvPut& origin)
+        TEvPut(TCloneEventPolicy, const TEvPut& origin, std::optional<bool> reduceInterpileTraffic = std::nullopt)
             : Id(origin.Id)
             , Buffer(origin.Buffer)
             , Deadline(origin.Deadline)
@@ -782,7 +782,7 @@ struct TEvBlobStorage {
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
-            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+            , ReduceInterpileTraffic(reduceInterpileTraffic.value_or(origin.ReduceInterpileTraffic))
             , IsZeroEntry(origin.IsZeroEntry)
             , FailOnSlowDown(origin.FailOnSlowDown)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
@@ -1452,6 +1452,7 @@ struct TEvBlobStorage {
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
         bool IsMonitored = true;
+        bool IsIdempotent = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TabletId(origin.TabletId)
@@ -1460,6 +1461,7 @@ struct TEvBlobStorage {
             , IssuerGuid(origin.IssuerGuid)
             , WriteSource(origin.WriteSource)
             , IsMonitored(origin.IsMonitored)
+            , IsIdempotent(origin.IsIdempotent)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
@@ -1486,6 +1488,7 @@ struct TEvBlobStorage {
                 << " Generation# " << Generation
                 << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
+                << " IsIdempotent# " << IsIdempotent
                 << "}";
             return str.Str();
         }

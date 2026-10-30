@@ -91,7 +91,16 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::HandleAssimilate(TAutoPtr<IEventHandle> ev) {
-        TActivationContext::Forward(ev, ProxyId);
+        if (ProxyId) {
+            TActivationContext::Forward(ev, ProxyId);
+        } else {
+            // there is no physical group behind the agent (the virtual group has none, or its decommission is done), so
+            // the request has nothing to enumerate and would be lost if forwarded
+            auto& msg = *ev->Get<TEvBlobStorage::TEvAssimilate>();
+            auto response = msg.MakeErrorResponse(NKikimrProto::ERROR, "no physical group to assimilate",
+                TGroupId::FromValue(VirtualGroupId));
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+        }
     }
 
     void TBlobDepotAgent::HandlePendingEvent() {

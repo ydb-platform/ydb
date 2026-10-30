@@ -223,4 +223,67 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         checker.CheckAll();
     }
 
+
+    // the bridge proxy started on the node doesn't get the storage config; requests to it are answered with error after
+    // the configuration timeout, as the DS proxy does when it can't get configured, and served once the config comes
+    Y_UNIT_TEST(NoStorageConfigFailsRequests) {
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 nodeId = 16;
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        bool hold = true;
+        std::unique_ptr<IEventHandle> result;
+        env.Runtime->FilterFunction = [&](ui32 recipientNodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == edge) {
+                result = std::move(ev);
+                return false;
+            } else if (hold && recipientNodeId == nodeId && ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                    held.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        auto get = [&] {
+            result.reset();
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(TLogoBlobID(100500, 1, 1, 0, 1, 0), 0, 0,
+                    TInstant::Max(), NKikimrBlobStorage::FastRead));
+            });
+            const TInstant start = env.Runtime->GetClock();
+            WaitUntil(env, [&] { return !!result; }, "result", TDuration::MilliSeconds(100), 600);
+            return std::make_tuple(result->Get<TEvBlobStorage::TEvGetResult>(), env.Runtime->GetClock() - start);
+        };
+
+        auto [res, duration] = get();
+        UNIT_ASSERT(!held.empty()); // the proxy has been started without the config
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::ERROR, res->ToString());
+        UNIT_ASSERT_C(duration <= ProxyConfigurationTimeout + TDuration::Seconds(2), duration);
+
+        std::tie(res, duration) = get(); // the proxy doesn't wait any more
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::ERROR, res->ToString());
+        UNIT_ASSERT_C(duration <= TDuration::Seconds(1), duration);
+
+        hold = false;
+        for (auto& ev : std::exchange(held, {})) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        std::tie(res, duration) = get();
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].Status, NKikimrProto::NODATA);
+    }
+
 }

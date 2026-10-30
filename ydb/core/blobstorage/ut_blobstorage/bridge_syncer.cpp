@@ -286,4 +286,72 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         checker.CheckAll();
         CheckPileData(env, checker, 1, 9);
     }
+
+    // BSC doesn't check piles to sync while it notifies distconf of a synced pile, and the check requested meanwhile (here
+    // by the other pile coming back) must run once the notification is answered: it is the check that resets the parts
+    // of the pile coming back, and nothing else makes it run on a quiet cluster
+    Y_UNIT_TEST(RecheckAfterSyncNotification) {
+        using namespace NBridgeTest;
+
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        for (ui32 pile : {1, 2}) {
+            SwitchPileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+        }
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId);
+
+        auto isBsc = [&](const TActorId& actorId) {
+            IActor *actor = env.Runtime->GetActor(actorId);
+            return actor && TypeName(*actor).Contains("TBlobStorageController");
+        };
+        bool holding = true;
+        THashSet<ui64> notifyCookies;
+        std::vector<std::tuple<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType && isBsc(ev->Sender)) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (record.HasNotifyBridgeSyncFinished()) {
+                    const auto& cmd = record.GetNotifyBridgeSyncFinished();
+                    using T = std::decay_t<decltype(cmd)>;
+                    if (cmd.GetBSC() && TBridgePileId::FromProto(&cmd, &T::GetBridgePileId) ==
+                            TBridgePileId::FromPileIndex(1)) {
+                        notifyCookies.insert(ev->Cookie);
+                    }
+                }
+            } else if (holding && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
+                    notifyCookies.contains(ev->Cookie) && isBsc(ev->GetRecipientRewrite())) {
+                held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return !held.empty(); }, "BSC notification of pile 1 synced", TDuration::Seconds(1), 300);
+
+        // pile 2 comes back while BSC waits for the answer to the notification
+        SwitchPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        env.Sim(TDuration::Seconds(10));
+
+        holding = false;
+        for (auto& [nodeId, ev] : std::exchange(held, {})) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        env.Runtime->FilterFunction = {};
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        checker.CheckAll();
+        CheckPileData(env, checker, 2, 17);
+    }
 }

@@ -3013,6 +3013,7 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
         .Levels = proto.levels(),
         .OverlapClusters = proto.overlap_clusters(),
         .OverlapRatio = proto.overlap_ratio(),
+        .AutoUpdate = proto.has_autoupdate() ? std::make_optional(proto.autoupdate()) : std::nullopt,
     };
 }
 
@@ -3022,6 +3023,11 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     settings.set_levels(Levels);
     settings.set_overlap_clusters(OverlapClusters);
     settings.set_overlap_ratio(OverlapRatio);
+    if (AutoUpdate.has_value()) {
+        settings.set_autoupdate(*AutoUpdate);
+    } else {
+        settings.clear_autoupdate();
+    }
 }
 
 void TKMeansTreeSettings::Out(IOutputStream& o) const {

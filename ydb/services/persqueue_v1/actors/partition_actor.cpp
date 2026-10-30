@@ -1726,6 +1726,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         } else if (PipeClient && IsNeedMorePartitionData()) {
             WaitDataInPartition(ctx);
         }
+    } else {
+        // An inactive partition has no messages for this reader after ReadOffset, e.g. all of them are older than read_from.
+        ReadOffset = Max(ReadOffset, EndOffset);
     }
 
     if (!ReadingFinishedSent) {

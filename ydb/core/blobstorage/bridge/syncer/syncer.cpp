@@ -126,21 +126,13 @@ namespace NKikimr::NBridge {
             // this operation is only possible while syncing blocks, so enforce it
             Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::BLOCKS);
             const auto& [tabletId] = key;
-            std::optional<ui32> sourceGeneration = sourceItem
-                ? std::make_optional(sourceItem->BlockedGeneration)
-                : std::nullopt;
-            std::optional<ui32> targetGeneration = targetItem
-                ? std::make_optional(targetItem->BlockedGeneration)
-                : std::nullopt;
-            if (sourceGeneration < targetGeneration) {
-                // synced group has lesser blocked generation for this tablet than unsynced one: we need to update
-                // blocked generation in source group and this will lead to possible tablet restart
-                Y_ABORT_UNLESS(targetGeneration);
-                IssueQuery(false, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *targetGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
-            } else if (targetGeneration < sourceGeneration) {
-                // we just need to update target group generation to current one in source group
-                Y_ABORT_UNLESS(sourceGeneration);
-                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, *sourceGeneration, TInstant::Max(), TWriteSource::SyncerMergeBlock));
+            const ui32 generation = Max(sourceItem ? sourceItem->BlockedGeneration : 0,
+                targetItem ? targetItem->BlockedGeneration : 0);
+            for (bool toTargetGroup : {false, true}) {
+                auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max(),
+                    TWriteSource::SyncerMergeBlock);
+                request->IsIdempotent = true;
+                IssueQuery(toTargetGroup, std::move(request));
             }
         };
 
@@ -206,9 +198,12 @@ namespace NKikimr::NBridge {
                     break;
 
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    if ((!sourceItem || sourceItem->DoNotKeep) && targetItem && !targetItem->DoNotKeep) {
-                        // we are missing source item (or it has DoNotKeep flag); given Puts are forbidden at this stage
-                        // or before, it means that blob has vanished and should be deleted
+                    if (targetItem && !targetItem->DoNotKeep && (sourceItem ? sourceItem->DoNotKeep : targetItem->Keep)) {
+                        // the source item has DoNotKeep flag, or it is missing; the source collects blobs only behind
+                        // the barriers already synced to the target, so the missing blob vanishes from the target too,
+                        // unless it is kept there; the blob not kept is left alone, as it may also be the write which
+                        // has reached the target only, and the bridge proxy can restore it into the source later on, so
+                        // DoNotKeep here would make piles disagree on its fate
                         doNotKeepToIssue.push_back(blobId);
                     }
                     break;
@@ -422,9 +417,7 @@ namespace NKikimr::NBridge {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS09, "TEvBlockResult", (LogId, LogId), (Msg, msg));
         const NKikimrProto::EReplyStatus status = msg.Status;
-        const bool success = status == NKikimrProto::OK
-            || status == NKikimrProto::ALREADY
-            || status == NKikimrProto::BLOCKED;
+        const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
         CheckIfDone();
     }
@@ -494,10 +487,17 @@ namespace NKikimr::NBridge {
                 }
             }
         } else if (msg.GroupId == TargetGroupId.GetRawId()) { // it was an index query for checking target blob
+            std::unique_ptr<TVector<TLogoBlobID>> keep;
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
-                    // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier
-                    SourceKeepFlags.erase(r.Id);
+                    // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
+                    // the blob has been written since then without it, as the bridge proxy restoring it may do
+                    if (SourceKeepFlags.erase(r.Id) && !r.Keep) {
+                        if (!keep) {
+                            keep = std::make_unique<TVector<TLogoBlobID>>();
+                        }
+                        keep->push_back(r.Id);
+                    }
                     SyncerDataStats->BytesDone += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
@@ -514,6 +514,12 @@ namespace NKikimr::NBridge {
                     Y_DEBUG_ABORT();
                     errorReason = TStringBuilder() << "TEvGet from target group failed with " << r.Status;
                 }
+            }
+            if (keep) {
+                const ui64 tabletId = keep->front().TabletID(); // the index query is made for blobs of a single tablet
+                IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
+                    false, 0u, 0u, keep.release(), nullptr, TInstant::Max(), true, TWriteSource::SyncerMergeGC, false,
+                    true));
             }
         } else {
             Y_DEBUG_ABORT();

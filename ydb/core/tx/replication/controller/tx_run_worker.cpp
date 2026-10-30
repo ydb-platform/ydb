@@ -49,13 +49,7 @@ public:
             return;
         }
 
-        auto& record = Event->Get()->Record;
-        auto* cmd = record.MutableCommand();
-        auto* worker = Self->GetOrCreateWorker(Id, cmd);
-
-        if (!worker->HasCommand()) {
-            worker->SetCommand(cmd);
-        }
+        auto* worker = Self->GetOrCreateWorker(Id);
 
         if (!worker->HasSession()) {
             Self->BootQueue.insert(Id);
@@ -128,6 +122,15 @@ public:
 
         Self->WorkersWithHeartbeat.erase(Id);
         Self->PendingHeartbeats.erase(Id);
+        if (worker != Self->Workers.end() && worker->second.HasSession()) {
+            const auto session = Self->Sessions.find(worker->second.GetSession());
+            if (session != Self->Sessions.end()) {
+                session->second.DetachWorker(Id);
+            }
+        }
+
+        Self->LagExpiryQueue.Remove(Id);
+        Self->StoppingWorkers.erase(Id);
         Self->Workers.erase(Id);
         Self->TabletCounters->Simple()[COUNTER_WORKERS] = Self->Workers.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();

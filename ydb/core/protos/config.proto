@@ -389,6 +389,9 @@ message TBlobStorageConfig {
     // How many leading VDisks (order number 0 .. N-1) may use the stripe heap. Unset means 0. A storage-pool value
     // (TStoragePoolSettings) overrides this. Applied when a VDisk starts; running VDisks are not restarted.
     optional uint32 VDiskHeapAllocatorNumLeadingDisks = 15;
+
+    // Persistent per-pile allocation rules. At most one rule may match a (pile, pool kind) or static group.
+    repeated NKikimrBlobStorage.TStoragePoolPileOverride StoragePoolPileOverrides = 16;
 }
 
 message TSelfManagementConfig {
@@ -564,6 +567,8 @@ message TInterconnectConfig {
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
     optional bool EnableRdmaSendReceive = 69 [default = false];
+    optional string RdmaQpCachePoolName = 71; // Specify name of pool for qp creation/destruction
+    optional uint32 RdmaQpPoolSize = 72 [default = 1024];
 
     message TV2Config {
         // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config

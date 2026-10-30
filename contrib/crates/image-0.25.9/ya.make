@@ -1,0 +1,120 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(image)
+
+CRATE_VERSION(0.25.9)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.25.9)
+LICENSE("MIT OR Apache-2.0")
+
+CRATE_SOURCES(
+    src/animation.rs
+    src/codecs/avif/decoder.rs
+    src/codecs/avif/encoder.rs
+    src/codecs/avif/mod.rs
+    src/codecs/avif/ycgco.rs
+    src/codecs/avif/yuv.rs
+    src/codecs/bmp/decoder.rs
+    src/codecs/bmp/encoder.rs
+    src/codecs/bmp/mod.rs
+    src/codecs/dds.rs
+    src/codecs/dxt.rs
+    src/codecs/farbfeld.rs
+    src/codecs/gif.rs
+    src/codecs/hdr/decoder.rs
+    src/codecs/hdr/encoder.rs
+    src/codecs/hdr/mod.rs
+    src/codecs/ico/decoder.rs
+    src/codecs/ico/encoder.rs
+    src/codecs/ico/mod.rs
+    src/codecs/jpeg/decoder.rs
+    src/codecs/jpeg/encoder.rs
+    src/codecs/jpeg/entropy.rs
+    src/codecs/jpeg/mod.rs
+    src/codecs/jpeg/transform.rs
+    src/codecs/openexr.rs
+    src/codecs/png.rs
+    src/codecs/pnm/autobreak.rs
+    src/codecs/pnm/decoder.rs
+    src/codecs/pnm/encoder.rs
+    src/codecs/pnm/header.rs
+    src/codecs/pnm/mod.rs
+    src/codecs/qoi.rs
+    src/codecs/tga/decoder.rs
+    src/codecs/tga/encoder.rs
+    src/codecs/tga/header.rs
+    src/codecs/tga/mod.rs
+    src/codecs/tiff.rs
+    src/codecs/webp/decoder.rs
+    src/codecs/webp/encoder.rs
+    src/codecs/webp/mod.rs
+    src/color.rs
+    src/error.rs
+    src/hooks.rs
+    src/imageops/affine.rs
+    src/imageops/colorops.rs
+    src/imageops/fast_blur.rs
+    src/imageops/filter_1d.rs
+    src/imageops/mod.rs
+    src/imageops/sample.rs
+    src/images/buffer.rs
+    src/images/buffer_par.rs
+    src/images/dynimage.rs
+    src/images/flat.rs
+    src/images/generic_image.rs
+    src/images/sub_image.rs
+    src/images.rs
+    src/io/decoder.rs
+    src/io/encoder.rs
+    src/io/format.rs
+    src/io/free_functions.rs
+    src/io/image_reader_type.rs
+    src/io/limits.rs
+    src/io.rs
+    src/math/mod.rs
+    src/math/rect.rs
+    src/math/utils.rs
+    src/metadata/cicp.rs
+    src/metadata.rs
+    src/traits.rs
+    src/utils/mod.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGES.md
+    Cargo.lock
+    LICENSE-APACHE
+    LICENSE-MIT
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    gif
+    jpeg
+    png
+    webp
+)
+PEERDIR(
+    contrib/crates/bytemuck-1.25.2
+    contrib/crates/byteorder-lite-0.1.0
+    contrib/crates/color_quant-1.1.0
+    contrib/crates/gif-0.14.1
+    contrib/crates/image-webp-0.2.4
+    contrib/crates/moxcms-0.7.11
+    contrib/crates/num-traits-0.2.19
+    contrib/crates/png-0.18.0
+    contrib/crates/zune-core-0.5.1
+    contrib/crates/zune-jpeg-0.5.12
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+)
+
+END()

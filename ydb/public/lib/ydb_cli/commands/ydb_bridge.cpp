@@ -93,10 +93,6 @@ void TCommandBridgeUpdate::Config(TConfig& config) {
         .RequiredArgument("NAME:STATE").Handler([this](const TString& value) {
             PileStateUpdates.push_back(value);
         });
-    config.Opts->AddLongOption("quorum-pile", "Acquire quorum only for specific set of piles. Can be used multiple times.")
-        .RequiredArgument("NAME").Handler([this](const TString& value) {
-            QuorumPiles.push_back(value);
-        });
     config.Opts->AddLongOption('f', "file", "Path to a JSON file with state updates.")
         .RequiredArgument("PATH").StoreResult(&FilePath);
     config.Opts->MutuallyExclusive("set", "file");
@@ -152,12 +148,7 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
-    std::vector<std::string> quorumPiles;
-    for (const auto& s : QuorumPiles) {
-        quorumPiles.push_back(std::string(s));
-    }
-
-    auto result = client.UpdateClusterState(Updates, quorumPiles).GetValueSync();
+    auto result = client.UpdateClusterState(Updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
@@ -399,15 +390,22 @@ int TCommandBridgeRejoin::Run(TConfig& config) {
 
 TCommandBridgeConvert::TCommandBridgeConvert(bool allowEmptyDatabase)
     : TYdbCommand("convert", {}, "Convert a non-bridged cluster into a bridged one with a single pile. All nodes must "
-        "already run with a single-pile bridge config. Storage groups are converted in the background.")
+        "already run with a single-pile bridge config. By default, existing storage pools and their groups are "
+        "converted in the background.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
+    CompletionDescription = "Convert a non-bridged cluster into a bridged one with a single pile";
 }
 
 void TCommandBridgeConvert::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("skip-storage-pool-conversion",
+            "Leave existing storage pools and their groups non-bridged. They will not be replicated to added piles "
+            "until converted separately (ydb-dstool pool set-bridge-mode). Static storage groups are still converted "
+            "to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
+        .StoreTrue(&SkipStoragePoolConversion);
 }
 
 void TCommandBridgeConvert::Parse(TConfig& config) {
@@ -418,7 +416,8 @@ int TCommandBridgeConvert::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
-    auto result = client.ConvertToBridge().GetValueSync();
+    auto result = client.ConvertToBridge(NYdb::NBridge::TConvertToBridgeSettings()
+        .SkipStoragePoolConversion(SkipStoragePoolConversion)).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster converted to bridge mode successfully." << Endl;

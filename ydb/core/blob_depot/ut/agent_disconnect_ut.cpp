@@ -468,9 +468,83 @@ void CheckPutCompletesDuringReconnect(bool holdRegistrationResult) {
     UNIT_ASSERT_VALUES_EQUAL(nextResult->Get()->Status, NKikimrProto::OK);
 }
 
+void CheckGetCompletesAfterDisconnect(bool nodata) {
+    TTestEnv env(false);
+    auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+    info->BlobDepotId = TTestEnv::TabletId;
+    const auto agentId = env.Runtime.Register(CreateBlobDepotAgent(TTestEnv::VirtualGroupId, info, {}));
+    env.Runtime.EnableScheduleForActor(agentId);
+    const auto edge = env.Runtime.AllocateEdgeActor();
+
+    TActorId pipeId;
+    auto pipeObserver = env.Runtime.AddObserver<TEvTabletPipe::TEvClientConnected>(
+        [&](TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+            if (ev->Recipient == agentId) {
+                pipeId = ev->Get()->ClientId;
+            }
+        });
+    const TString data = "test-data";
+    const TLogoBlobID id(12345, 1, 1, 0, data.size(), 0);
+    env.Runtime.SendAsync(new IEventHandle(agentId, edge, new TEvBlobStorage::TEvPut(id, data, TInstant::Max())));
+    const auto putResult = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(edge, TDuration::Seconds(1));
+    UNIT_ASSERT(putResult);
+    UNIT_ASSERT_VALUES_EQUAL_C(putResult->Get()->Status, NKikimrProto::OK, putResult->Get()->ErrorReason);
+    UNIT_ASSERT(pipeId);
+
+    // Hold the physical read issued by the agent to the storage proxy.
+    TBlockEvents<TEvBlobStorage::TEvGetResult> reads(env.Runtime, [&](const auto& ev) {
+        return ev->Recipient == agentId;
+    });
+    env.Runtime.SendAsync(new IEventHandle(agentId, edge, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+        NKikimrBlobStorage::EGetHandleClass::FastRead)));
+    env.Runtime.WaitFor("physical read", [&] { return !reads.empty(); }, TDuration::Seconds(1));
+
+    if (nodata) {
+        // NODATA makes the agent resolve the key again; disconnect while this resolve is in flight.
+        for (auto& ev : reads) {
+            auto& msg = *ev->Get();
+            for (ui32 i = 0; i < msg.ResponseSz; ++i) {
+                msg.Responses[i].Status = NKikimrProto::NODATA;
+                msg.Responses[i].Buffer = {};
+            }
+        }
+        TBlockEvents<TEvBlobDepot::TEvResolve> resolves(env.Runtime, [&](const auto& ev) {
+            return ev->Sender == agentId;
+        });
+        reads.Stop().Unblock();
+        env.Runtime.WaitFor("resolve after NODATA", [&] { return !resolves.empty(); }, TDuration::Seconds(1));
+        env.Runtime.ClosePipe(pipeId, agentId, 0);
+    } else {
+        // The physical read is not a tablet request: it survives the disconnect and completes normally.
+        env.Runtime.ClosePipe(pipeId, agentId, 0);
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        reads.Stop().Unblock();
+    }
+
+    const auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(edge, TDuration::Seconds(1));
+    UNIT_ASSERT_C(result, "Get did not complete after BlobDepot tablet disconnect");
+    const auto& msg = *result->Get();
+    UNIT_ASSERT_VALUES_EQUAL(msg.ResponseSz, 1);
+    if (nodata) {
+        UNIT_ASSERT_VALUES_EQUAL(msg.Responses[0].Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(msg.ErrorReason, "disconnected");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL_C(msg.Responses[0].Status, NKikimrProto::OK, msg.ErrorReason);
+        UNIT_ASSERT_VALUES_EQUAL(msg.Responses[0].Buffer.ConvertToString(), data);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
+    Y_UNIT_TEST(GetPhysicalReadCompletesAfterDisconnect) {
+        CheckGetCompletesAfterDisconnect(false);
+    }
+
+    Y_UNIT_TEST(GetNodataResolveFailsOnDisconnect) {
+        CheckGetCompletesAfterDisconnect(true);
+    }
+
     Y_UNIT_TEST(ExpiredCommitBeforeGarbageCollection) {
         CheckExpiredCommit(true);
     }

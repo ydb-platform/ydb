@@ -28,20 +28,22 @@ void TTreeElement::AccountSnapshotDuration(TDuration period) {
     });
 }
 
-void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
-    CpuLimit = Min<ui64>(GetCpuLimit(), totalLimit);
+void TTreeElement::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
+    CpuLimit = Min<ui64>(GetCpuLimit(), totalCpuLimit);
 
     if (IsPool()) {
         CpuMaxDemand = 0;
         PreciseCpuActualDemand = 0;
         CpuBurstUsage = 0;
         CpuBurstThrottle = 0;
+        MemoryDemand = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-            child->UpdateBottomUp(totalLimit, period);
+            child->UpdateBottomUp(totalCpuLimit, period);
             CpuMaxDemand += child->CpuMaxDemand;
             PreciseCpuActualDemand += child->PreciseCpuActualDemand;
             CpuBurstUsage += child->CpuBurstUsage;
             CpuBurstThrottle += child->CpuBurstThrottle;
+            MemoryDemand += child->MemoryDemand;
         });
 
         if (CpuMaxDemand > 0) {
@@ -61,6 +63,8 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
 
     // Nothing is reserved beyond CpuActualDemand - an idle guarantee is left to the others.
     CpuGuarantee = Min<ui64>(GetCpuGuarantee(), CpuActualDemand);
+
+    MemoryDemand = Min<ui64>(MemoryDemand, GetMemoryLimit());
 }
 
 namespace {
@@ -93,7 +97,7 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
             if (unsatisfiedDemand.at(i) > 0 &&
                 children.at(i)->GetWeight() * leftFairShare >= unsatisfiedDemand.at(i) * totalWeight)
             {
-                children.at(i)->FairShare += unsatisfiedDemand.at(i);
+                children.at(i)->CpuFairShare += unsatisfiedDemand.at(i);
                 leftFairShare -= unsatisfiedDemand.at(i);
                 unsatisfiedDemand.at(i) = 0;
                 satisfied = true;
@@ -112,7 +116,7 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
                 if (unsatisfiedDemand.at(i) > 0) {
                     const double proportion = children.at(i)->GetWeight() * leftFairShare / totalWeight;
                     const auto share = Min<ui64>(static_cast<ui64>(proportion), leftFairShare - given);
-                    children.at(i)->FairShare += share;
+                    children.at(i)->CpuFairShare += share;
                     unsatisfiedDemand.at(i) -= share;
                     given += share;
                     remainders.emplace_back(proportion - share, i);
@@ -131,7 +135,7 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
                     break;
                 }
                 if (unsatisfiedDemand.at(i) > 0) {
-                    ++children.at(i)->FairShare;
+                    ++children.at(i)->CpuFairShare;
                     --unsatisfiedDemand.at(i);
                     --leftFairShare;
                 }
@@ -147,11 +151,11 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
 void TTreeElement::DistributeFairShare() {
     const ui64 totalGuaranteedShare = GetChildrenCpuGuarantee();
 
-    // The guarantees overflow FairShare (e.g. of the databases, which are not validated) - split it by them.
-    if (totalGuaranteedShare >= FairShare) {
+    // The guarantees overflow CpuFairShare (e.g. of the databases, which are not validated) - split it by them.
+    if (totalGuaranteedShare >= CpuFairShare) {
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
             // TODO: distribute the resources lost cause of integer division.
-            child->FairShare = totalGuaranteedShare > 0 ? child->GetCpuGuarantee() * FairShare / totalGuaranteedShare : 0;
+            child->CpuFairShare = totalGuaranteedShare > 0 ? child->GetCpuGuarantee() * CpuFairShare / totalGuaranteedShare : 0;
         });
         return;
     }
@@ -164,21 +168,40 @@ void TTreeElement::DistributeFairShare() {
         Y_ASSERT(child->CpuMaxDemand >= child->CpuActualDemand);
         Y_ASSERT(child->CpuActualDemand >= child->GetCpuGuarantee());
         children.at(i) = child;
-        child->FairShare = child->GetCpuGuarantee();
+        child->CpuFairShare = child->GetCpuGuarantee();
         unsatisfiedDemand.at(i) = child->CpuActualDemand - child->GetCpuGuarantee();
     });
 
-    const auto leftFairShare = FillDemand(children, unsatisfiedDemand, FairShare - totalGuaranteedShare);
+    const auto leftFairShare = FillDemand(children, unsatisfiedDemand, CpuFairShare - totalGuaranteedShare);
 
     // 2nd pass: give leftFairShare as a headroom up to CpuMaxDemand - to grow before the next snapshot.
     for (size_t i = 0; i < children.size(); ++i) {
-        unsatisfiedDemand.at(i) = children.at(i)->CpuMaxDemand - children.at(i)->FairShare;
+        unsatisfiedDemand.at(i) = children.at(i)->CpuMaxDemand - children.at(i)->CpuFairShare;
     }
 
     FillDemand(children, unsatisfiedDemand, leftFairShare);
 }
 
 void TTreeElement::UpdateTopDown() {
+    // Memory goes first, since the CPU pass publishes snapshots of queries.
+    UpdateMemoryTopDown();
+    UpdateCpuTopDown();
+}
+
+void TTreeElement::UpdateMemoryTopDown() {
+    // TODO: replace with the actual fair-share distribution - for now it's just the limit inherited from the parent,
+    //       like the pools of the resource manager had: the sum of the fair-shares may exceed the one of the parent,
+    //       then the memory is taken on the first-come basis until the total limit of the root.
+    ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
+        // The default pool has no fair-share
+        child->MemoryFairShare = dynamic_cast<TDefaultPool*>(child)
+            ? Infinity()
+            : Min<ui64>(child->GetMemoryLimit(), MemoryFairShare);
+        child->UpdateMemoryTopDown();
+    });
+}
+
+void TTreeElement::UpdateCpuTopDown() {
     // At this moment we know own fair-share. Need to calibrate children.
 
     if (!IsPool()) {
@@ -190,7 +213,7 @@ void TTreeElement::UpdateTopDown() {
         DistributeFairShare();
 
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
-            child->UpdateTopDown();
+            child->UpdateCpuTopDown();
         });
     }
     // All-equal variant (when children are queries)
@@ -198,7 +221,7 @@ void TTreeElement::UpdateTopDown() {
     else {
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             if (query->CpuMaxDemand > 0) {
-                query->FairShare = FairShare;
+                query->CpuFairShare = CpuFairShare;
             }
 
             if (auto originalQuery = query->Origin.lock()) {
@@ -220,7 +243,7 @@ TQuery::TQuery(const TQueryId& id, const NDynamic::TQueryPtr& query)
 {
 }
 
-void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
+void TQuery::UpdateBottomUp(ui64 totalCpuLimit, TDuration period) {
     RawCpuActualDemand = CalculateRawCpuActualDemand(period);
 
     // The actual demand grows immediately, but falls only when it stays low for two snapshots in a row: otherwise
@@ -231,7 +254,7 @@ void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
     // Every task is able to use at most one CPU - and the departed tasks don't want anything anymore.
     PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuMaxDemand * MicroCoresPerCore);
 
-    TTreeElement::UpdateBottomUp(totalLimit, period);
+    TTreeElement::UpdateBottomUp(totalCpuLimit, period);
 }
 
 ui64 TQuery::CalculateRawCpuActualDemand(TDuration period) const {
@@ -259,7 +282,7 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
 
 void TPool::AccountSnapshotDuration(TDuration period) {
     if (Counters) {
-        const auto fairShare = FairShare * period.MicroSeconds();
+        const auto fairShare = CpuFairShare * period.MicroSeconds();
 
         Counters->Demand->Set(CpuMaxDemand * 1'000'000);
         Counters->FairShare->Add(fairShare);
@@ -276,8 +299,21 @@ void TPool::AccountSnapshotDuration(TDuration period) {
             }
         }
         Counters->AdjustedSatisfaction->Add(adjustedSatisfaction * period.MicroSeconds());
+
+        Counters->MemoryDemand->Set(MemoryDemand);
+        Counters->MemoryFairShare->Set(MemoryFairShare);
     }
     TTreeElement::AccountSnapshotDuration(period);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// TDefaultPool
+///////////////////////////////////////////////////////////////////////////////
+
+TDefaultPool::TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs)
+    : NHdrf::TTreeElementBase<ETreeType::SNAPSHOT>(id, attrs)
+    , TPool(id, counters, attrs)
+{
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -315,9 +351,22 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 void TRoot::Update(const TRootPtr& previous) {
     const auto period = previous && Timestamp > previous->Timestamp ? Timestamp - previous->Timestamp : TDuration::Zero();
 
-    UpdateBottomUp(TotalLimit, period);
+    UpdateBottomUp(TotalCpuLimit, period);
 
-    FairShare = CpuMaxDemand;
+    CpuFairShare = CpuMaxDemand;
+
+    // Reduce the root's fair-share by default pools' usage
+    ui64 defaultPoolsUsage = 0;
+    ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
+        database->ForEachChild<TPool>([&](TPool* pool, size_t) {
+            if (dynamic_cast<TDefaultPool*>(pool)) {
+                defaultPoolsUsage += pool->MemoryUsage;
+            }
+        });
+    });
+
+    const ui64 memoryLimit = Min<ui64>(GetMemoryLimit(), TotalMemoryLimit);
+    MemoryFairShare = memoryLimit > defaultPoolsUsage ? memoryLimit - defaultPoolsUsage : 0;
     UpdateTopDown();
 
     if (period) {

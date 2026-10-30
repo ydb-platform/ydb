@@ -97,7 +97,7 @@ struct TActualizerSchema {
     NOlap::TVersionedIndex Index;
 
     explicit TActualizerSchema(NOlap::TIndexInfo&& indexInfo) {
-        Index.AddIndex(NOlap::TSnapshot(1, 1), Cache->UpsertIndexInfo(std::move(indexInfo)));
+        Index.AddIndex(NOlap::TSnapshot(1, 1), Cache->GetOrInsertIndexInfo(std::move(indexInfo)));
     }
 
     const NOlap::TIndexInfo& GetIndexInfo() const {
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         }
         auto wideIndexInfo = NOlap::TIndexInfo::BuildFromProto(1, wideSchema, NOlap::TTestStoragesManager::GetInstance(), schema.Cache);
         UNIT_ASSERT(wideIndexInfo);
-        schema.Index.AddIndex(NOlap::TSnapshot(2, 1), schema.Cache->UpsertIndexInfo(std::move(*wideIndexInfo)));
+        schema.Index.AddIndex(NOlap::TSnapshot(2, 1), schema.Cache->GetOrInsertIndexInfo(std::move(*wideIndexInfo)));
 
         // Rotate the wide portion through every id so the check does not depend on hash iteration order.
         for (ui64 widePortionId = 1; widePortionId <= PortionsCount; ++widePortionId) {

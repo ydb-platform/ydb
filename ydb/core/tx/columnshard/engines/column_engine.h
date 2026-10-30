@@ -111,15 +111,24 @@ protected:
 public:
     class TSchemaVersionView {
     private:
-        const NKikimrTxColumnShard::TSchemaPresetVersionInfo& Info;
+        const NKikimrSchemeOp::TColumnTableSchema* Schema = nullptr;
+        const NKikimrSchemeOp::TColumnTableSchemaDiff* Diff = nullptr;
 
     public:
         explicit TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
-            : Info(info)
+            : Schema(info.HasSchema() ? &info.GetSchema() : nullptr)
+            , Diff(info.HasDiff() ? &info.GetDiff() : nullptr)
         {
         }
 
         TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo&&) = delete;
+
+        explicit TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff)
+            : Diff(&diff)
+        {
+        }
+
+        TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff&&) = delete;
 
         TSchemaVersionView(const TSchemaVersionView&) = delete;
         TSchemaVersionView(TSchemaVersionView&&) = delete;
@@ -127,29 +136,29 @@ public:
         TSchemaVersionView& operator=(TSchemaVersionView&&) = delete;
 
         bool HasSchema() const {
-            return Info.HasSchema();
+            return Schema != nullptr;
         }
 
         const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
-            AFL_VERIFY(Info.HasSchema());
-            return Info.GetSchema();
+            AFL_VERIFY(Schema);
+            return *Schema;
         }
 
         bool HasDiff() const {
-            return Info.HasDiff();
+            return Diff != nullptr;
         }
 
         const NKikimrSchemeOp::TColumnTableSchemaDiff& GetDiffVerified() const {
-            AFL_VERIFY(Info.HasDiff());
-            return Info.GetDiff();
+            AFL_VERIFY(Diff);
+            return *Diff;
         }
 
         ui64 GetVersion() const {
-            if (Info.HasSchema()) {
-                return Info.GetSchema().GetVersion();
+            if (Schema) {
+                return Schema->GetVersion();
             }
-            AFL_VERIFY(Info.HasDiff());
-            return Info.GetDiff().GetVersion();
+            AFL_VERIFY(Diff);
+            return Diff->GetVersion();
         }
     };
 
@@ -214,7 +223,6 @@ public:
         NActualizer::EActualizationScope scope) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
     virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
 

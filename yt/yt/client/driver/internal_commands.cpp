@@ -241,7 +241,7 @@ void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
 void TForsakeChaosShortcut::Register(TRegistrar registrar)
 {
     registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
-        registrar.Parameter("chaos_object_id", &TThis::ChaosObjectId_);
+    registrar.Parameter("chaos_object_id", &TThis::ChaosObjectId_);
 }
 
 void TForsakeChaosShortcut::DoExecute(ICommandContextPtr context)

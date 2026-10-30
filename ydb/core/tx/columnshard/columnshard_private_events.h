@@ -100,6 +100,7 @@ struct TEvPrivate {
 
         EvContinueFindEmptyHistoryIntervals,
         EvFindEmptyHistoryIntervalsPortionsReady,
+        EvPrefetchPortionsMetadata,
         EvEnd
     };
 
@@ -381,6 +382,8 @@ struct TEvPrivate {
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
         TEvPingSnapshotsUsage() = default;
     };
+
+    struct TEvPrefetchPortionsMetadata: public TEventLocal<TEvPrefetchPortionsMetadata, EvPrefetchPortionsMetadata> {};
 
     struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
         const ui32 Channel;

@@ -8,11 +8,16 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/serialized_enum.h>
+#include <util/system/cpu_id.h>
+#include <util/system/unaligned_mem.h>
 
+#include <array>
+#include <bit>
 #include <cstring>
 
 #include "scalar_layout_converter_test_enums.h"
@@ -86,7 +91,187 @@ void AssertFixedSizeValuesEqual(EFixedSizeScalarType type, const NYql::NUdf::TUn
 } // namespace
 
 Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
+    Y_UNIT_TEST(TestSerializedKeys) {
+        TScalarLayoutConverterTestData data;
+        auto& pb = data.PgmBuilder;
+        auto* doubleType = pb.NewDataType(NUdf::EDataSlot::Double);
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* strType = pb.NewDataType(NUdf::EDataSlot::String);
+        auto array = [&](TVector<NUdf::TUnboxedValue> items) -> NUdf::TUnboxedValue {
+            return data.HolderFactory.RangeAsArray(items.begin(), items.end());
+        };
+        const NUdf::TUnboxedValue zero = NUdf::TUnboxedValuePod(0.0);
+        const NUdf::TUnboxedValue negativeZero = NUdf::TUnboxedValuePod(-0.0);
+        const NUdf::TUnboxedValue nan1 = NUdf::TUnboxedValuePod(std::bit_cast<double>(ui64(0x7ff8000000000001)));
+        const NUdf::TUnboxedValue nan2 = NUdf::TUnboxedValuePod(std::bit_cast<double>(ui64(0xfff8000000000002)));
+        auto* listType = pb.NewListType(doubleType);
+        auto* tupleType = pb.NewTupleType({strType, listType});
+        auto* dictType = pb.NewDictType(intType, doubleType, false);
+        auto dict = [&](bool reverse) {
+            auto builder = data.HolderFactory.NewDict(dictType, reverse ? NUdf::TDictFlags::Hashed : NUdf::TDictFlags::Sorted);
+            for (i64 key : reverse ? TVector<i64>{2, 1} : TVector<i64>{1, 2}) {
+                builder->Add(NUdf::TUnboxedValuePod(key), reverse ? NUdf::TUnboxedValue(negativeZero) : NUdf::TUnboxedValue(zero));
+            }
+            return builder->Build();
+        };
+        auto* nestedOptional = pb.NewOptionalType(pb.NewOptionalType(doubleType));
+        auto* variantType = pb.NewVariantType(pb.NewTupleType({doubleType, strType}));
+        auto* emptyListType = pb.NewEmptyList().GetStaticType();
+        struct TCase {
+            NMiniKQL::TType* LeftType;
+            NMiniKQL::TType* RightType;
+            NUdf::TUnboxedValue Left;
+            NUdf::TUnboxedValue Right;
+            bool Equal;
+            bool EqualNulls;
+        };
+        TVector<TCase> cases = {
+            {listType, listType, array({zero, nan1}), array({negativeZero, nan2}), true, true},
+            {listType, listType, array({zero}), array({zero, zero}), false, false},
+            {tupleType, tupleType, array({MakeString(TString(256, 'x')), array({zero})}),
+                                   array({MakeString(TString(256, 'x')), array({negativeZero})}), true, true},
+            {dictType, dictType, dict(false), dict(true), true, true},
+            {variantType, variantType, data.HolderFactory.CreateVariantHolder(zero, 0),
+                                       data.HolderFactory.CreateVariantHolder(negativeZero, 0), true, true},
+            {listType, pb.NewOptionalType(listType), array({zero}), array({negativeZero}), true, true},
+            {emptyListType, pb.NewOptionalType(emptyListType), data.HolderFactory.GetEmptyContainerLazy(),
+                                                              data.HolderFactory.GetEmptyContainerLazy(), true, true},
+            {nestedOptional, nestedOptional, zero, negativeZero, true, true},
+            {nestedOptional, nestedOptional, NUdf::TUnboxedValuePod().MakeOptional(),
+                                             NUdf::TUnboxedValuePod().MakeOptional(), true, true},
+            {nestedOptional, nestedOptional, {}, {}, false, true},
+            {nestedOptional, nestedOptional, {}, NUdf::TUnboxedValuePod().MakeOptional(), false, false},
+        };
+        for (const auto& test : cases) {
+            const TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+            auto left = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), {test.LeftType}, roles, data.HolderFactory);
+            auto right = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), {test.RightType}, roles, data.HolderFactory);
+            TPackResult l, r;
+            left->Pack(&test.Left, l);
+            right->Pack(&test.Right, r);
+            const auto* layout = left->GetTupleLayout();
+            UNIT_ASSERT_VALUES_EQUAL(layout->KeysEqual(l.PackedTuples.data(), l.Overflow.data(),
+                                                       r.PackedTuples.data(), r.Overflow.data()), test.Equal);
+            if (test.Equal) {
+                UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<ui32>(l.PackedTuples.data()), ReadUnaligned<ui32>(r.PackedTuples.data()));
+            }
+            for (bool isLeft : {true, false}) {
+                auto* type = isLeft ? test.LeftType : test.RightType;
+                // Dict iteration order can change on unpack; other cases check the original float bits too.
+                TValuePacker original(type->IsDict(), type);
+                const TString expected(original.Pack(isLeft ? test.Left : test.Right));
+                NUdf::TUnboxedValue unpacked;
+                (isLeft ? left : right)->Unpack(isLeft ? l : r, 0, &unpacked);
+                UNIT_ASSERT_VALUES_EQUAL(TString(original.Pack(unpacked)), expected);
+            }
+            left->ApplyEqualNulls({0});
+            right->ApplyEqualNulls({0});
+            l.Clear();
+            r.Clear();
+            left->Pack(&test.Left, l);
+            right->Pack(&test.Right, r);
+            UNIT_ASSERT_VALUES_EQUAL(layout->KeysEqual(l.PackedTuples.data(), l.Overflow.data(),
+                                                       r.PackedTuples.data(), r.Overflow.data()), test.EqualNulls);
+        }
+    }
+
+    Y_UNIT_TEST(TestSerializedPayload) {
+        TScalarLayoutConverterTestData data;
+        auto& pb = data.PgmBuilder;
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* strType = pb.NewDataType(NUdf::EDataSlot::String);
+        auto* optionalType = pb.NewOptionalType(intType);
+        auto array = [&](TVector<NUdf::TUnboxedValue> items) -> NUdf::TUnboxedValue {
+            return data.HolderFactory.RangeAsArray(items.begin(), items.end());
+        };
+        struct TCase {
+            NMiniKQL::TType* Type;
+            TVector<NUdf::TUnboxedValue> Values;
+        };
+        const NUdf::TUnboxedValue empty;
+        const NUdf::TUnboxedValue number = NUdf::TUnboxedValuePod(i64(42));
+        const NUdf::TUnboxedValue text = MakeString(TString(256, 'x'));
+        auto* tupleType = pb.NewTupleType({strType, optionalType, intType});
+        auto* listType = pb.NewListType(optionalType);
+        auto* dictType = pb.NewDictType(intType, strType, false);
+        auto dict = data.HolderFactory.NewDict(dictType, NUdf::TDictFlags::Hashed);
+        dict->Add(NUdf::TUnboxedValue(number), NUdf::TUnboxedValue(text));
+        auto* variantType = pb.NewVariantType(pb.NewTupleType({strType, optionalType}));
+        auto* structType = pb.NewStructType({{"a", strType}, {"b", intType}});
+        auto* tzType = pb.NewDataType(NUdf::EDataSlot::TzDatetime);
+        auto tzValue = NUdf::TUnboxedValuePod(ui32(123));
+        tzValue.SetTimezoneId(1);
+        TVector<TCase> cases = {
+            {listType, {array({}), array({number, empty, number})}},
+            {pb.NewOptionalType(listType), {empty, array({}), array({number, empty})}},
+            {tupleType, {array({text, empty, number}), array({MakeString(""), number, number})}},
+            {pb.NewOptionalType(tupleType), {empty, array({text, empty, number})}},
+            {pb.NewOptionalType(optionalType), {empty, empty.MakeOptional(), number}},
+            {dictType, {data.HolderFactory.GetEmptyContainerLazy(), dict->Build()}},
+            {variantType, {data.HolderFactory.CreateVariantHolder(text, 0),
+                           data.HolderFactory.CreateVariantHolder(empty, 1)}},
+            {structType, {array({text, number})}},
+            {tzType, {tzValue}},
+            {pb.NewOptionalType(tzType), {empty, tzValue}},
+        };
+        for (auto& test : cases) {
+            const TVector<NMiniKQL::TType*> types{intType, test.Type, intType};
+            const TVector<NPackedTuple::EColumnRole> roles{
+                NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload,
+                NPackedTuple::EColumnRole::Payload};
+            auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+            TValuePacker packer(true, test.Type);
+            TVector<TString> expected;
+            TVector<NUdf::TUnboxedValue> rows;
+            for (const auto& value : test.Values) {
+                expected.emplace_back(packer.Pack(value));
+                rows.insert(rows.end(), {number, value, number});
+            }
+            TPackResult packed;
+            converter->PackBatch(rows.data(), test.Values.size(), packed);
+            converter->Pack(rows.data(), packed);
+            expected.push_back(expected.front());
+            std::array<TPackResult, 4> buckets;
+            converter->BucketPack(rows.data(), test.Values.size(), buckets.data(), 2);
+            rows.clear();
+            test.Values.clear();
+
+            TVector<NUdf::TUnboxedValue> unpacked(packed.NTuples * types.size());
+            converter->UnpackBatch(packed, unpacked.data());
+            for (ui32 row = 0; row < packed.NTuples; ++row) {
+                UNIT_ASSERT_VALUES_EQUAL(unpacked[row * 3].Get<i64>(), 42);
+                UNIT_ASSERT_VALUES_EQUAL(TString(packer.Pack(unpacked[row * 3 + 1])), expected[row]);
+                UNIT_ASSERT_VALUES_EQUAL(unpacked[row * 3 + 2].Get<i64>(), 42);
+                NUdf::TUnboxedValue single[3];
+                converter->Unpack(packed, row, single);
+                UNIT_ASSERT_VALUES_EQUAL(TString(packer.Pack(single[1])), expected[row]);
+            }
+            // Deep copies use the same path when the join moves tuples between partitions.
+            TPackResult copied;
+            for (const auto tuple : packed) {
+                copied.AppendTuple(tuple, converter->GetTupleLayout());
+            }
+            packed.Clear();
+            converter->UnpackBatch(copied, unpacked.data());
+            for (ui32 row = 0; row < copied.NTuples; ++row) {
+                UNIT_ASSERT_VALUES_EQUAL(TString(packer.Pack(unpacked[row * 3 + 1])), expected[row]);
+            }
+            size_t bucketRows = 0;
+            for (const auto& bucket : buckets) {
+                TVector<NUdf::TUnboxedValue> values(bucket.NTuples * 3);
+                converter->UnpackBatch(bucket, values.data());
+                for (ui32 row = 0; row < bucket.NTuples; ++row) {
+                    UNIT_ASSERT_VALUES_EQUAL(TString(packer.Pack(values[row * 3 + 1])), expected[bucketRows++]);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(bucketRows + 1, expected.size());
+        }
+    }
+
     Y_UNIT_TEST(TestFixedSize) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -118,6 +303,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMultipleFixedSize) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -157,6 +345,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestString) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -195,6 +386,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMixedTypes) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -264,6 +458,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestOptional) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -307,6 +504,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestOptionalString) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto optionalStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
@@ -358,6 +558,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestEmptyStrings) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -390,6 +593,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestLargeStrings) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -431,6 +637,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackFixedSize) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -462,6 +671,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackMultipleColumns) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -503,6 +715,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackStrings) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -543,6 +758,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackMixedTypes) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -667,7 +885,86 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
     }
 
+    Y_UNIT_TEST(TestUnpackBatchMatchesSingleUnpack) {
+        TScalarLayoutConverterTestData data;
+
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        const auto optInt32Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int32, true);
+        const auto optUint64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Uint64, true);
+        const auto optDoubleType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Double, true);
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{stringType, optInt32Type, optUint64Type, optDoubleType, int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        constexpr ui32 maxTuples = 17;
+        const ui32 numColumns = types.size();
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(maxTuples * numColumns);
+        for (ui32 i = 0; i < maxTuples; ++i) {
+            testValues.push_back(MakeString(NUdf::TStringRef(TString(i * 5, static_cast<char>('a' + i)))));
+            testValues.push_back(i % 3 == 0 ? NYql::NUdf::TUnboxedValuePod() : NYql::NUdf::TUnboxedValuePod(static_cast<i32>(i) - 8));
+            testValues.push_back(i % 4 == 1 ? NYql::NUdf::TUnboxedValuePod() : NYql::NUdf::TUnboxedValuePod(static_cast<ui64>(i) << 40));
+            testValues.push_back(i % 5 == 2 ? NYql::NUdf::TUnboxedValuePod() : NYql::NUdf::TUnboxedValuePod(static_cast<double>(i) / 4));
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i) * 7));
+        }
+
+        TVector<NYql::NUdf::TUnboxedValue> batchOut(maxTuples * numColumns);
+        for (ui32 round = 0; round < 2; ++round) {
+            for (ui32 count : {ui32(0), ui32(1), ui32(7), ui32(8), ui32(9), maxTuples}) {
+                TPackResult packed;
+                converter->PackBatch(testValues.data(), count, packed);
+                converter->UnpackBatch(packed, batchOut.data());
+
+                for (ui32 row = 0; row < count; ++row) {
+                    NYql::NUdf::TUnboxedValue single[5];
+                    converter->Unpack(packed, row, single);
+                    for (ui32 col = 0; col < numColumns; ++col) {
+                        const auto& actual = batchOut[row * numColumns + col];
+                        const auto& expected = testValues[row * numColumns + col];
+                        UNIT_ASSERT_VALUES_EQUAL(actual.HasValue(), expected.HasValue());
+                        UNIT_ASSERT_VALUES_EQUAL(actual.HasValue(), single[col].HasValue());
+                        if (!expected.HasValue()) {
+                            continue;
+                        }
+                        switch (col) {
+                            case 0:
+                                UNIT_ASSERT_VALUES_EQUAL(TString(actual.AsStringRef()), TString(expected.AsStringRef()));
+                                UNIT_ASSERT_VALUES_EQUAL(TString(actual.AsStringRef()), TString(single[col].AsStringRef()));
+                                break;
+                            case 1:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i32>(), expected.Get<i32>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i32>(), single[col].Get<i32>());
+                                break;
+                            case 2:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<ui64>(), expected.Get<ui64>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<ui64>(), single[col].Get<ui64>());
+                                break;
+                            case 3:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<double>(), expected.Get<double>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<double>(), single[col].Get<double>());
+                                break;
+                            default:
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i64>(), expected.Get<i64>());
+                                UNIT_ASSERT_VALUES_EQUAL(actual.Get<i64>(), single[col].Get<i64>());
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestBucketPack) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -728,6 +1025,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestFixedSizePackUnpack, EFixedSizeScalarType, EFixedSizePackMode) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         const auto scalarType = Arg<0>();
         const auto packMode = Arg<1>();
 
@@ -763,6 +1063,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestFixedSizeOptional, EFixedSizeScalarType) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         const auto scalarType = Arg<0>();
 
         TScalarLayoutConverterTestData data;
@@ -803,6 +1106,9 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TScalarLayoutConverterTestData data;
 
         auto* const nullType = data.Env.GetTypeOfNullLazy();

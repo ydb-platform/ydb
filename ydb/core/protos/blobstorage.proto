@@ -1441,6 +1441,25 @@ message TEvNodeWardenGroupInfo {
     repeated uint32 StartedGroupIds = 2;
 }
 
+message TEvVRestorePart {
+    optional TVDiskID VDiskID = 1;
+    optional NKikimrProto.TLogoBlobID BlobID = 2;
+    optional uint64 Deadline = 3; // microseconds since the epoch
+}
+
+message TEvVRestorePartResult {
+    enum EResponseOrigin {
+        VRESTORE_PART_ACTOR = 0;
+        SKELETON_FRONT = 1;
+        MON_RESTORE_PART_REQUEST_ACTOR = 2;
+        BLOB_RECOVERY_ACTOR = 3;
+        SKELETON = 4;
+    }
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional EResponseOrigin ResponseOrigin = 3;
+}
+
 message TEvControllerProposeConfigRequest {
     optional uint64 ConfigHash = 1;
     optional uint64 ConfigVersion = 2;
@@ -1749,6 +1768,7 @@ message TEvInterpilePut {
         repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 6;
         optional NActorsProto.TTraceId TraceId = 7;
         optional NKikimrBlobStorage.TDataKind.E DataKind = 9;
+        optional uint32 WriteSourceOp = 10;
     }
 
     optional uint32 GroupId = 1;
@@ -1762,6 +1782,10 @@ message TEvInterpilePutResult {
     message TItem {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
+        optional uint32 RacingGeneration = 3;
+        optional bool WrittenBeyondBarrier = 4;
+        optional uint32 StatusFlags = 5;
+        optional float ApproximateFreeSpaceShare = 6;
     }
 
     repeated TItem Items = 1;

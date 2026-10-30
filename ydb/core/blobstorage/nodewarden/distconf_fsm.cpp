@@ -1,6 +1,8 @@
 #include "distconf.h"
-#include "distconf_quorum.h"
 #include "distconf_invoke.h"
+#include "distconf_quorum.h"
+
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_span_deserialization.h>
@@ -48,8 +50,61 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        if (!IsBridged() || !StorageConfig || !Cfg) {
+            record.SetStatus(TResult::ERROR);
+            record.SetErrorReason("cluster is not bridged");
+            return;
+        }
+
+        std::vector<TNodeIdentifier> connected;
+        connected.reserve(AllBoundNodes.size());
+        absl::flat_hash_set<ui32> connectedNodeIds;
+        connectedNodeIds.reserve(AllBoundNodes.size());
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            connected.push_back(nodeId);
+            connectedNodeIds.insert(nodeId.NodeId());
+        }
+
+        auto *report = record.MutablePileConnectivity();
+        report->SetReporterNodeId(SelfId().NodeId());
+        report->SetHasScepter(static_cast<bool>(Scepter));
+        report->SetBindingInProgress(Binding && !Binding->RootNodeId);
+        report->SetClusterStateGeneration(StorageConfig->GetClusterState().GetGeneration());
+
+        for (const auto& pile : BridgeInfo->Piles) {
+            if (pile.IsFreeSlot) {
+                continue;
+            }
+
+            auto *item = report->AddPiles();
+            pile.BridgePileId.CopyToProto(item, &TResult::TPileConnectivity::TPile::SetBridgePileId);
+            item->SetPileName(pile.Name);
+
+            item->SetNumStaticNodes(pile.StaticNodeIds.size());
+            const ui32 numConnected = std::ranges::count_if(pile.StaticNodeIds, [&](ui32 nodeId) {
+                return connectedNodeIds.contains(nodeId);
+            });
+            item->SetNumConnectedStaticNodes(numConnected);
+
+            // An inactive pile may have no static-group part, making storage quorum vacuously true.
+            item->SetHasNodeQuorum(numConnected && pile.State != NKikimrBridge::TClusterState::INACTIVE
+                && HasNodeQuorum(*StorageConfig, connected, pile.BridgePileId, *Cfg, nullptr, true));
+
+            const auto traits = NBridge::PileStateTraits(pile.State);
+            item->SetRequiresConfigQuorum(traits.RequiresConfigQuorum);
+            item->SetRequiresDataQuorum(traits.RequiresDataQuorum);
+        }
+
+        record.SetStatus(TResult::OK);
+    }
+
     void TDistributedConfigKeeper::ReconcileNodeRole() {
         UpdateQuorums();
+        if (Halted) {
+            return; // the halted keeper neither binds nor takes the scepter
+        }
         if (RootProbe && (HasStaticGroupConfig() || !AllNodeIds.contains(RootProbe->NodeId)
                           || AllBoundNodes.contains(AllNodeIds.at(RootProbe->NodeId)))) {
             AbortRootProbe();

@@ -323,14 +323,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (!InitialScan) {
-            replicationConfig.SetImportState(PreparingImport()
-                ? NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT
-                : NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        if (CreatePlaceholder()) {
+            replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         }
     }
 
-    bool PreparingImport() const {
+    bool CreatePlaceholder() const {
         return !InitialScan && DesiredState == TReplication::EState::Paused;
     }
 
@@ -357,7 +355,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (Attaching) {
             AttachDst();
-        } else if (InitialScan || PreparingImport()) {
+        } else if (InitialScan || CreatePlaceholder()) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -484,7 +482,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            if (InitialScan || PreparingImport() || Attaching) {
+            if (InitialScan || CreatePlaceholder() || Attaching) {
                 return Success();
             }
 
@@ -540,13 +538,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        if (!InitialScan && !PreparingImport()
-                && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+        const auto importState = got.GetReplicationConfig().GetImportState();
+        // Attachment clears ImportState. The persisted path id lets us recover
+        // after that ALTER commits but before the controller records success.
+        const bool attached = (Attaching || PendingDstPathId) && IsReplica(got)
+            && importState == NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE;
+        if (!InitialScan && !CreatePlaceholder() && !attached
+                && importState != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }
 
-        const bool needsConfig = InitialScan || PreparingImport() || Attaching || IsReplica(got);
+        const bool needsConfig = InitialScan || CreatePlaceholder() || Attaching || IsReplica(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
@@ -819,7 +822,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"dstPathId", DstPathId});
 
         auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId);
-        result->WaitingImport = PreparingImport();
+        result->WaitingImport = CreatePlaceholder();
         Send(Parent, result.Release());
         PassAway();
     }
@@ -895,7 +898,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
-            if (!InitialScan && !PreparingImport()) {
+            if (!InitialScan && !CreatePlaceholder()) {
                 return Resolve(PathId);
             }
             [[fallthrough]];

@@ -1715,6 +1715,15 @@ public:
         return false;
     }
 
+    bool IsActiveDirectImport() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool IsIncrementalRestore() const {
         for (const auto& [_, info] : TableInfos) {
             if (info->IsIncrementalRestore()) {

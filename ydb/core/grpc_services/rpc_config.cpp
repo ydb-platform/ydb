@@ -6,6 +6,8 @@
 #include "rpc_config_base.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/blobstorage/base/pdisk_config_validation.h>
+#include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
@@ -366,6 +368,27 @@ public:
             return false; // assuming no distconf enabled in this config
         }
         return newConfig.GetSelfManagementConfig().GetEnabled();
+    }
+
+    std::optional<TString> CheckControllerInterface(ui32 interfaceVersion) override {
+        if (interfaceVersion >= BSC_INTERFACE_PDISK_KINDS) {
+            return std::nullopt;
+        }
+        // An older BSC with AllowUnknownFields would drop the kind fields and apply partial PDisk configs.
+        NKikimrConfig::TAppConfig newConfig;
+        try {
+            auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+            auto config = shim.StorageConfig
+                ? NFyaml::TDocument::Parse(*shim.StorageConfig)
+                : NFyaml::TDocument::Parse(shim.MainConfig.value_or(TString{"{}"}));
+            newConfig = NYamlConfig::YamlToProto(config.Root(), true, true);
+        } catch (const std::exception&) {
+            return std::nullopt; // the controller reports parse errors itself
+        }
+        if (UsesNamedPDiskKinds(newConfig.GetBlobStorageConfig(), newConfig.GetSelfManagementConfig())) {
+            return "BS_CONTROLLER is way too old to use named PDisk kinds";
+        }
+        return std::nullopt;
     }
 
     std::unique_ptr<IEventBase> ProcessControllerQuery() override {

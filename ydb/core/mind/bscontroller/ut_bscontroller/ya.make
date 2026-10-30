@@ -13,6 +13,7 @@ SRCS(
     main.cpp
     group_state_ut.cpp
     pdisk_filter_compatibility_ut.cpp
+    pdisk_kinds.cpp
 )
 
 PEERDIR(

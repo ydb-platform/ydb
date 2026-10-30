@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_pdisk_config.proto";
+
+package NKikimrBlobStorage;
+
+message TDefinePDiskKind {
+    // Nonempty UTF-8 name, at most 255 bytes, without whitespace or control characters.
+    string Name = 1;
+    TPDiskConfig PDiskConfig = 2;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
+}
+
+message TDeletePDiskKind {
+    string Name = 1;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
+}
+
+message TPDiskKind {
+    TDefinePDiskKind Config = 1;
+    uint64 Kind = 2; // controller-assigned ID, for diagnostics and materialized exports
+}

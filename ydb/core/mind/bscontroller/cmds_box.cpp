@@ -137,6 +137,8 @@ namespace NKikimr::NBsController {
                                 const THostConfigInfo::TDriveKey newKey{{jt->second, key.Path}};
                                 if (const auto [it, inserted] = newHostConfig.Drives.emplace(newKey, value); !inserted) {
                                     throw TExError() << "duplicate drives in origin/target host configs";
+                                } else {
+                                    it->second.MaterializedPDiskConfig = GetMaterializedPDiskConfig(key, value);
                                 }
                             }
                         };

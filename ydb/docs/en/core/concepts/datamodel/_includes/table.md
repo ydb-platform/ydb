@@ -163,10 +163,6 @@ The speed of renaming is determined by the type of data transactions currently r
 * [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
-### Column groups {#column-groups}
-
-{{ ydb-short-name }} lets you group table columns to optimize storage and access. Column groups improve partial row read performance by splitting column storage into separate groups. See [creating column groups](../../../yql/reference/syntax/create_table/family.md) and [changing column groups](../../../yql/reference/syntax/alter_table/family.md).
-
 ### Bloom filter {#bloom-filter}
 
 Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more efficiently determine if some keys are missing in a table when making multiple point queries by primary key. This reduces the number of required disk I/O operations but increases the amount of memory consumed.

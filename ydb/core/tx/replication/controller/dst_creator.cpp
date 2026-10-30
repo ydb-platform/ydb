@@ -79,9 +79,32 @@ bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
     return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
 }
 
+EDstCreatorMode GetDstCreatorMode(const TReplication& replication, const TReplication::ITarget& target) {
+    if (replication.GetConfig().GetInitialScan()) {
+        return EDstCreatorMode::CreateTable;
+    }
+    if (target.GetDstState() == TReplication::EDstState::Creating
+            && replication.GetDesiredState() == TReplication::EState::Paused) {
+        return EDstCreatorMode::CreatePlaceholder;
+    }
+    return EDstCreatorMode::ValidateImportedTable;
+}
+
 } // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
+    bool IsCreatingTable() const {
+        return CreatorMode == EDstCreatorMode::CreateTable;
+    }
+
+    bool IsCreatingPlaceholder() const {
+        return CreatorMode == EDstCreatorMode::CreatePlaceholder;
+    }
+
+    bool IsValidatingImportedTable() const {
+        return CreatorMode == EDstCreatorMode::ValidateImportedTable;
+    }
+
     void Resolve(const TPathId& pathId) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = Database;
@@ -312,7 +335,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (CreatePlaceholder) {
+        if (IsCreatingPlaceholder()) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         }
     }
@@ -338,10 +361,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (InitialScan || CreatePlaceholder) {
-            CreateDst();
-        } else {
+        if (IsValidatingImportedTable()) {
             DescribeDstPath();
+        } else {
+            CreateDst();
         }
     }
 
@@ -452,7 +475,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return Success();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (!InitialScan) {
+            if (!IsCreatingTable()) {
                 return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
             }
             return AllocateTxId();
@@ -488,7 +511,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return false;
         }
 
-        if (!InitialScan && !CreatePlaceholder && !IsImported(got)) {
+        if (IsValidatingImportedTable() && !IsImported(got)) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }
@@ -755,7 +778,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"dstPathId", DstPathId});
 
         auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId);
-        result->WaitingImport = CreatePlaceholder;
+        result->WaitingImport = IsCreatingPlaceholder();
         Send(Parent, result.Release());
         PassAway();
     }
@@ -799,8 +822,7 @@ public:
             EReplicationMode mode,
             EConsistencyLevel consistency,
             const TString& database,
-            bool initialScan,
-            TReplication::EState desiredState)
+            EDstCreatorMode creatorMode)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -812,8 +834,7 @@ public:
         , DstPath(dstPath)
         , Mode(mode)
         , Consistency(consistency)
-        , InitialScan(initialScan)
-        , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
+        , CreatorMode(creatorMode)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
@@ -825,7 +846,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
-            if (!InitialScan && !CreatePlaceholder) {
+            if (IsValidatingImportedTable()) {
                 return Resolve(PathId);
             }
             [[fallthrough]];
@@ -858,8 +879,7 @@ private:
     const TString DstPath;
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
-    const bool InitialScan;
-    const bool CreatePlaceholder;
+    const EDstCreatorMode CreatorMode;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -942,16 +962,15 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), replication->GetDesiredState());
+        GetDstCreatorMode(*replication, *target));
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        TReplication::EState desiredState)
+        EReplicationMode mode, EConsistencyLevel consistency, EDstCreatorMode creatorMode)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, desiredState);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, creatorMode);
 }
 
 }

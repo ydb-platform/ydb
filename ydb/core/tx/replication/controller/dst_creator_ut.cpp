@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
                 env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
                 "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
                 "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
-                false, TReplication::EState::Paused));
+                EDstCreatorMode::CreatePlaceholder));
             auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
             UNIT_ASSERT(result->Get()->WaitingImport);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             env.GetRuntime().Register(CreateDstCreator(
                 env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
                 "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, EDstCreatorMode::ValidateImportedTable));
             auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT(!result->Get()->IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "expected IMPORTED");
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, EDstCreatorMode::ValidateImportedTable));
 
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -215,7 +215,8 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return env.GetRuntime().Register(CreateDstCreator(
                 env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
                 "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global, false));
+                "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Global,
+                EDstCreatorMode::ValidateImportedTable));
         };
 
         createDstCreator();
@@ -281,7 +282,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, EDstCreatorMode::ValidateImportedTable));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusPathDoesNotExist);
@@ -305,7 +306,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, EDstCreatorMode::ValidateImportedTable));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSchemeError);
@@ -339,14 +340,14 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 1, TReplication::ETargetKind::Table,
-            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            "/Root/Source", "/Root/Dst", EReplicationMode::ReadOnly, EConsistencyLevel::Row, EDstCreatorMode::ValidateImportedTable));
         UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender())->Get()->IsSuccess());
 
         env.GetRuntime().Register(CreateDstCreator(
             env.GetSender(), env.GetSchemeshardId("/Root/Source"), env.GetYdbProxy(),
             "/Root", env.GetPathId("/Root"), 1, 2, TReplication::ETargetKind::IndexTable,
             "/Root/Source/by_value/indexImplTable", "/Root/Dst/by_value/indexImplTable",
-            EReplicationMode::ReadOnly, EConsistencyLevel::Row, false));
+            EReplicationMode::ReadOnly, EConsistencyLevel::Row, EDstCreatorMode::ValidateImportedTable));
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, NKikimrScheme::StatusSuccess, ev->Get()->Error);
         const auto desc = env.GetDescription("/Root/Dst/by_value/indexImplTable");

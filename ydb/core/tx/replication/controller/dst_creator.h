@@ -17,6 +17,12 @@ enum class EConsistencyLevel {
     Global,
 };
 
+enum class EDstCreatorMode {
+    CreateTable,
+    CreatePlaceholder,
+    ValidateImportedTable,
+};
+
 void FillReplicationConfig(
     NKikimrSchemeOp::TTableReplicationConfig& out,
     EReplicationMode mode,
@@ -32,7 +38,7 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     const TString& database, const TPathId& pathId,
     ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
     EReplicationMode mode = EReplicationMode::ReadOnly,
-    EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
-    TReplication::EState desiredState = TReplication::EState::Ready);
+    EConsistencyLevel consistency = EConsistencyLevel::Row,
+    EDstCreatorMode creatorMode = EDstCreatorMode::CreateTable);
 
 }

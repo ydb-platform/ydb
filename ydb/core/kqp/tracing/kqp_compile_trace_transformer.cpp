@@ -10,16 +10,16 @@ namespace {
 
 class TCompileTraceTransformer : public TGraphTransformerBase {
 public:
-    TCompileTraceTransformer(TAutoPtr<IGraphTransformer>&& transformer, TIntrusivePtr<TKikimrQueryContext> queryCtx,
+    TCompileTraceTransformer(TAutoPtr<IGraphTransformer>&& transformer, TCompileTraceProvider getTrace,
             ui8 verbosity, TString name)
         : Transformer(std::move(transformer))
-        , QueryCtx(std::move(queryCtx))
+        , GetTrace(std::move(getTrace))
         , Verbosity(verbosity)
         , Name(std::move(name))
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        if (auto* trace = QueryCtx->CompileTrace.Get()) {
+        if (auto* trace = GetTrace()) {
             // Does nothing if the region is still open, e.g. after Repeat.
             trace->BeginRegion(Verbosity, Name, this);
         }
@@ -67,23 +67,23 @@ private:
     }
 
     void EndRegion(bool success) {
-        if (auto* trace = QueryCtx->CompileTrace.Get()) {
+        if (auto* trace = GetTrace()) {
             trace->EndRegion(Name, this, success);
         }
     }
 
 private:
     TAutoPtr<IGraphTransformer> Transformer;
-    const TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+    const TCompileTraceProvider GetTrace;
     const ui8 Verbosity;
     const TString Name;
 };
 
 class TCompileTraceMarker : public TSyncTransformerBase {
 public:
-    TCompileTraceMarker(TIntrusivePtr<TKikimrQueryContext> queryCtx, bool begin, ui8 verbosity, TString name,
+    TCompileTraceMarker(TCompileTraceProvider getTrace, bool begin, ui8 verbosity, TString name,
             const void* group, TCompileTraceAttributes attributes = {})
-        : QueryCtx(std::move(queryCtx))
+        : GetTrace(std::move(getTrace))
         , Begin(begin)
         , Verbosity(verbosity)
         , Name(std::move(name))
@@ -93,7 +93,7 @@ public:
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) final {
         output = input;
-        if (auto* trace = QueryCtx->CompileTrace.Get()) {
+        if (auto* trace = GetTrace()) {
             if (Begin) {
                 trace->BeginRegion(Verbosity, Name, Group, Attributes);
             } else {
@@ -107,7 +107,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+    const TCompileTraceProvider GetTrace;
     const bool Begin;
     const ui8 Verbosity;
     const TString Name;
@@ -118,19 +118,19 @@ private:
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateCompileTraceTransformer(TAutoPtr<IGraphTransformer>&& transformer,
-        TIntrusivePtr<TKikimrQueryContext> queryCtx, ui8 verbosity, TString name) {
-    return new TCompileTraceTransformer(std::move(transformer), std::move(queryCtx), verbosity, std::move(name));
+        TCompileTraceProvider getTrace, ui8 verbosity, TString name) {
+    return new TCompileTraceTransformer(std::move(transformer), std::move(getTrace), verbosity, std::move(name));
 }
 
-TAutoPtr<IGraphTransformer> CreateCompileTraceBegin(TIntrusivePtr<TKikimrQueryContext> queryCtx,
+TAutoPtr<IGraphTransformer> CreateCompileTraceBegin(TCompileTraceProvider getTrace,
         ui8 verbosity, TString name, const void* group, TCompileTraceAttributes attributes) {
-    return new TCompileTraceMarker(std::move(queryCtx), true, verbosity, std::move(name), group,
+    return new TCompileTraceMarker(std::move(getTrace), true, verbosity, std::move(name), group,
         std::move(attributes));
 }
 
-TAutoPtr<IGraphTransformer> CreateCompileTraceEnd(TIntrusivePtr<TKikimrQueryContext> queryCtx, TString name,
+TAutoPtr<IGraphTransformer> CreateCompileTraceEnd(TCompileTraceProvider getTrace, TString name,
         const void* group) {
-    return new TCompileTraceMarker(std::move(queryCtx), false, 0, std::move(name), group);
+    return new TCompileTraceMarker(std::move(getTrace), false, 0, std::move(name), group);
 }
 
 } // namespace NKikimr::NKqp

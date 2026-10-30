@@ -75,6 +75,24 @@ bool TCompileTrace::Pop(const NWilson::TTraceId& id) {
     return false;
 }
 
+TCompileTraceDependencies::TCompileTraceDependencies(TCompileTrace* trace, TString name)
+    : Trace(trace)
+    , Name(std::move(name))
+{}
+
+NWilson::TSpan TCompileTraceDependencies::Start(TString name) {
+    if (Trace && !Join) {
+        Join = Trace->StartSpan(TCompileTraceLevels::Phase, Name);
+        MarkAsyncFlow(Join);
+    }
+    auto dependency = Join.CreateChild(TCompileTraceLevels::Step, std::move(name));
+    MarkAsyncFlow(dependency);
+    if (dependency) {
+        LinkDependsOn(Join, dependency.GetTraceId());
+    }
+    return dependency;
+}
+
 void FinishCompileDependency(NWilson::TSpan& span, bool futureSuccess, bool operationSuccess) {
     if (futureSuccess && operationSuccess) {
         span.EndOk();

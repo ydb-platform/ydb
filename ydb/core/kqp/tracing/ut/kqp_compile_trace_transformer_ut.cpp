@@ -1,14 +1,8 @@
-#include <ydb/core/kqp/host/kqp_compile_trace_transformer.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/tracing/test_util/kqp_trace_test_helpers.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/testlib/helpers.h>
-
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-
-#include <library/cpp/random_provider/random_provider.h>
-#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NKqp {
 
@@ -16,6 +10,45 @@ using namespace NYql;
 using namespace NTest;
 
 Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
+    Y_UNIT_TEST(ReusablePipelineResolvesCurrentTrace) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = new NWilson::TFakeWilsonUploader();
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), runtime.Register(uploader));
+        TCompileTrace::TPtr trace;
+        const auto getTrace = [&] { return trace.Get(); };
+        const int group = 0;
+        auto begin = CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, "Region", &group);
+        auto end = CreateCompileTraceEnd(getTrace, "Region", &group);
+        auto inner = CreateFunctorTransformer([](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) {
+            output = input;
+            return IGraphTransformer::TStatus::Ok;
+        });
+        auto wrapped = CreateCompileTraceTransformer(TAutoPtr<IGraphTransformer>(inner.Release()), getTrace,
+            TCompileTraceLevels::Step, "Work");
+        TExprContext ctx;
+        auto input = ctx.NewAtom(TPositionHandle(), "input");
+        TExprNode::TPtr output;
+        TString previousTrace;
+        for (const bool enabled : {false, true, false, true}) {
+            trace = enabled ? MakeIntrusive<TCompileTrace>(NWilson::TTraceId::NewTraceId(15, 4095),
+                runtime.GetActorSystem(0)) : nullptr;
+            for (auto* transformer : {begin.Get(), wrapped.Get(), end.Get()}) {
+                transformer->Rewind();
+                UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(input, output, ctx).Level, IGraphTransformer::TStatus::Ok);
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), enabled ? 2 : 0);
+            if (enabled) {
+                AssertDescendant(*uploader, "Work", "Region");
+                const auto& id = FindSpan(*uploader, "Work")->trace_id();
+                UNIT_ASSERT(id != previousTrace);
+                previousTrace = id;
+            }
+            ClearUploader(*uploader);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(ExceptionsEndSpans, Async) {
         class TThrowingTransformer : public TGraphTransformerBase {
         public:
@@ -42,14 +75,11 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
         runtime.Initialize();
         auto* uploader = new NWilson::TFakeWilsonUploader();
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), runtime.Register(uploader));
-        const auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
-        auto queryCtx = MakeIntrusive<TKikimrQueryContext>(
-            registry.Get(), CreateDefaultTimeProvider(), CreateDefaultRandomProvider());
-        queryCtx->CompileTrace = MakeIntrusive<TCompileTrace>(
+        auto trace = MakeIntrusive<TCompileTrace>(
             NWilson::TTraceId::NewTraceId(15, 4095), runtime.GetActorSystem(0));
-        const auto parent = queryCtx->CompileTrace->GetCurrentParent();
+        const auto parent = trace->GetCurrentParent();
         auto transformer = CreateCompileTraceTransformer(TAutoPtr<IGraphTransformer>(new TThrowingTransformer()),
-            queryCtx, TCompileTraceLevels::Phase, "Failing optimizer");
+            [trace] { return trace.Get(); }, TCompileTraceLevels::Phase, "Failing optimizer");
         TExprContext ctx;
         auto input = ctx.NewAtom(TPositionHandle(), "input");
         TExprNode::TPtr output;
@@ -60,9 +90,9 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
         } else {
             UNIT_ASSERT_EXCEPTION(transformer->Transform(input, output, ctx), yexception);
         }
-        queryCtx->CompileTrace->Finish(false);
+        trace->Finish(false);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT(queryCtx->CompileTrace->GetCurrentParent() == parent);
+        UNIT_ASSERT(trace->GetCurrentParent() == parent);
         const auto spanCount = uploader->Spans.size();
         const auto* failing = FindSpan(*uploader, "Failing optimizer");
         UNIT_ASSERT(failing);
@@ -81,10 +111,7 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
         auto* uploader = new NWilson::TFakeWilsonUploader();
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), runtime.Register(uploader));
 
-        const auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
-        auto queryCtx = MakeIntrusive<TKikimrQueryContext>(
-            registry.Get(), CreateDefaultTimeProvider(), CreateDefaultRandomProvider());
-        queryCtx->CompileTrace = MakeIntrusive<TCompileTrace>(
+        auto trace = MakeIntrusive<TCompileTrace>(
             NWilson::TTraceId::NewTraceId(15, 4095), runtime.GetActorSystem(0));
 
         using TStatus = IGraphTransformer::TStatus;
@@ -94,7 +121,7 @@ Y_UNIT_TEST_SUITE(TKqpCompileTraceTransformer) {
             return status;
         });
         auto transformer = CreateCompileTraceTransformer(TAutoPtr<IGraphTransformer>(inner.Release()),
-            queryCtx, TCompileTraceLevels::Phase, "Test phase");
+            [trace] { return trace.Get(); }, TCompileTraceLevels::Phase, "Test phase");
         TExprContext ctx;
         auto input = ctx.NewAtom(TPositionHandle(), "input");
         TExprNode::TPtr output;

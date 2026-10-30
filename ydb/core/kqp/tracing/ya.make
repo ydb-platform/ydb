@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_compile_trace.cpp
+    kqp_compile_trace_transformer.cpp
     kqp_execution_rendering.cpp
     kqp_scan_rendering.cpp
     kqp_shard_rendering.cpp
@@ -22,6 +23,7 @@ PEERDIR(
     ydb/library/security
     ydb/public/api/protos
     yql/essentials/ast
+    yql/essentials/core
 )
 
 END()

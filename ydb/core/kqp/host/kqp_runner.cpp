@@ -1,5 +1,5 @@
 #include "kqp_host_impl.h"
-#include "kqp_compile_trace_transformer.h"
+#include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -359,9 +359,10 @@ private:
         TCompileTraceScope traceScope(sessionCtx->QueryPtr()->CompileTrace.Get(), TCompileTraceLevels::Step,
             "Create transformer pipelines");
         const auto queryCtx = sessionCtx->QueryPtr();
+        const auto getTrace = [queryCtx] { return queryCtx->CompileTrace.Get(); };
         const auto traced = [&](TAutoPtr<IGraphTransformer>&& transformer, const TString& name,
                 ui8 verbosity = TCompileTraceLevels::Phase) {
-            return CreateCompileTraceTransformer(std::move(transformer), queryCtx, verbosity, name);
+            return CreateCompileTraceTransformer(std::move(transformer), getTrace, verbosity, name);
         };
         const TCompileTraceAttributes oldRbo{{TString(OptimizerAttribute), TString(OldRboOptimizer)}};
         const TCompileTraceAttributes newRbo{{TString(OptimizerAttribute), TString(NewRboOptimizer)}};
@@ -448,10 +449,10 @@ private:
         Transformer = CreateCompositeGraphTransformer(
             {
                 // Its logical and physical rules run in one restarting loop, which is one phase.
-                TTransformStage{ CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, "Optimize query", &oldRboPhases, oldRbo), "TraceBeginOptimizeQuery", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, "Optimize query", &oldRboPhases, oldRbo), "TraceBeginOptimizeQuery", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ physicalOptimizeTransformer, "PhysicalOptimize", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalOptimize"),
-                TTransformStage{ CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, "Convert to physical plan", &oldRboPhases), "TraceBeginConvertToPhysicalPlan", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, "Convert to physical plan", &oldRboPhases), "TraceBeginConvertToPhysicalPlan", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ traced(std::move(physicalBuildTxsTransformer), "Build transactions", TCompileTraceLevels::Step), "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildTxs"),
                 TTransformStage{ traced(std::move(physicalBuildQueryTransformer), "Build physical query", TCompileTraceLevels::Step), "PhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
@@ -459,7 +460,7 @@ private:
                 TTransformStage{ CreateSaveExplainTransformerInput(*TransformCtx), "SaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ traced(std::move(physicalPeepholeTransformer), "Peephole physical stages", TCompileTraceLevels::Step), "PhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalPeephole"),
-                TTransformStage{ CreateCompileTraceEnd(queryCtx, "Convert to physical plan", &oldRboPhases), "TraceEndConvertToPhysicalPlan", TIssuesIds::DEFAULT_ERROR },
+                TTransformStage{ CreateCompileTraceEnd(getTrace, "Convert to physical plan", &oldRboPhases), "TraceEndConvertToPhysicalPlan", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ compilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ preparedExplainTransformer, "ExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or if explain-only
             },
@@ -494,9 +495,9 @@ private:
             auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
                 .AddServiceTransformers()
                 .Add(Log("NewRBOPhysicalOptimize"), "LogNewRBOPhysicalOptimize")
-                .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Phase, "Optimize query",
+                .Add(CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, "Optimize query",
                     &optimization, newRbo), "TraceBeginOptimizeQuery")
-                .Add(CreateCompileTraceBegin(sessionCtx->QueryPtr(), TCompileTraceLevels::Step, "Annotate KQL query",
+                .Add(CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Step, "Annotate KQL query",
                     &passes), "TraceBeginAnnotateKqlQuery")
                 .AddPreTypeAnnotation()
                 //.AddExpressionEvaluation(funcRegistry)
@@ -504,7 +505,7 @@ private:
                 .AddTypeAnnotationTransformer()
                 //.Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
                 .AddPostTypeAnnotation(/* forSubgraph */ true)
-                .Add(CreateCompileTraceEnd(sessionCtx->QueryPtr(), "Annotate KQL query", &passes),
+                .Add(CreateCompileTraceEnd(getTrace, "Annotate KQL query", &passes),
                     "TraceEndAnnotateKqlQuery")
                 //.AddCommonOptimization()
 
@@ -514,7 +515,7 @@ private:
                     SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem, funcRegistry, TransformCtx),
                     "Run new RBO", TCompileTraceLevels::Step), "NewRBOTransformer")
                 .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
-                .Add(CreateCompileTraceEnd(sessionCtx->QueryPtr(), "Optimize query", &optimization),
+                .Add(CreateCompileTraceEnd(getTrace, "Optimize query", &optimization),
                     "TraceEndOptimizeQuery")
 
                 //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")

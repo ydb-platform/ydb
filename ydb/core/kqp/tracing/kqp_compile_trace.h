@@ -117,6 +117,24 @@ private:
     bool Finished = false;
 };
 
+// Concurrent dependencies of a compilation, grouped by a lazily opened wait.
+// Both the group and its requests complete on future callback threads. Call
+// Start only from compiler turns; hand ReleaseJoin() to TraceCompileDependency
+// with the combined future when all requests have been dispatched.
+class TCompileTraceDependencies {
+public:
+    TCompileTraceDependencies(TCompileTrace* trace, TString name);
+
+    NWilson::TSpan Start(TString name);
+    const NWilson::TSpan& GetJoin() const { return Join; }
+    NWilson::TSpan ReleaseJoin() { return std::move(Join); }
+
+private:
+    TCompileTrace* const Trace;
+    const TString Name;
+    NWilson::TSpan Join;
+};
+
 // Ends a dependency span. A fulfilled future may contain an error result. Keep
 // this distinct from an exception: only the latter can short-circuit
 // WaitExceptionOrAll.

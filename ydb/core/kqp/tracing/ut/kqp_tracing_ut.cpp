@@ -9,6 +9,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -103,6 +104,58 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         for (const TStringBuf name : {"Operation error", "Void operation error"}) {
             AssertStatus(*uploader, name, NTraceProto::Status::STATUS_CODE_ERROR);
             UNIT_ASSERT_VALUES_EQUAL(FindSpan(*uploader, name)->status().message(), "Dependency operation failed");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DependencyGroupsPreserveLifetimeAndVerbosity, Steps) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        const ui8 level = Steps ? NKqp::TCompileTraceLevels::Step : NKqp::TCompileTraceLevels::Phase;
+        auto first = NThreading::NewPromise<void>();
+        auto last = NThreading::NewPromise<void>();
+        NThreading::TFuture<void> ready;
+        {
+            NKqp::TCompileTraceDependencies disabled(nullptr, "Disabled");
+            UNIT_ASSERT(!disabled.Start("Disabled request"));
+            UNIT_ASSERT(!disabled.GetJoin());
+
+            NKqp::TCompileTrace trace(NWilson::TTraceId::NewTraceId(level, 4095), runtime.GetActorSystem(0));
+            NKqp::TCompileTraceDependencies dependencies(&trace, "Dependencies");
+            UNIT_ASSERT(!dependencies.GetJoin());
+            auto a = NKqp::TraceCompileDependency(first.GetFuture(), dependencies.Start("First request"));
+            const auto parent = dependencies.GetJoin().GetTraceId();
+            auto b = NKqp::TraceCompileDependency(last.GetFuture(), dependencies.Start("Last request"));
+            UNIT_ASSERT(dependencies.GetJoin().GetTraceId() == parent);
+            ready = NKqp::TraceCompileDependency(NThreading::WaitAll(a, b), dependencies.ReleaseJoin());
+            // Neither the callbacks nor the request group retain compiler state.
+            trace.Finish(false);
+        }
+        first.SetValue();
+        UNIT_ASSERT(!ready.IsReady());
+        std::thread worker([&] { last.SetValue(); });
+        worker.join();
+        ready.GetValue();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        const auto* join = FindSpan(*uploader, "Dependencies");
+        UNIT_ASSERT(join);
+        AssertStatus(*uploader, "Dependencies", NTraceProto::Status::STATUS_CODE_OK);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*join, NKqp::FlowAttribute)->value().string_value(), NKqp::AsyncFlow);
+        UNIT_ASSERT_VALUES_EQUAL(join->links_size(), Steps ? 2 : 0);
+        if constexpr (Steps) {
+            for (const TStringBuf name : {"First request", "Last request"}) {
+                const auto* request = FindSpan(*uploader, name);
+                UNIT_ASSERT(request);
+                AssertDescendant(*uploader, name, "Dependencies");
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*request, NKqp::FlowAttribute)->value().string_value(), NKqp::AsyncFlow);
+                UNIT_ASSERT(std::ranges::any_of(join->links(), [&](const auto& link) {
+                    return link.span_id() == request->span_id()
+                        && FindAttribute(link, NKqp::RelationAttribute)->value().string_value() == NKqp::DependsOnRelation;
+                }));
+            }
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 1);
         }
     }
 

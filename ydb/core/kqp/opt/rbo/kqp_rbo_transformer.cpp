@@ -409,7 +409,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
     CollectTablesAndColumnsNames(ctx);
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
-    TStatRequestsTrace trace{.Trace = KqpCtx.GetCompileTrace()};
+    TCompileTraceDependencies trace(KqpCtx.GetCompileTrace(), "Await column statistics");
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
                    [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
@@ -475,7 +475,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
             }
         });
     // Each request span records the outcome of its request.
-    ColumnStatisticsReadiness = TraceCompileDependency(ColumnStatisticsReadiness, std::move(trace.Join));
+    ColumnStatisticsReadiness = TraceCompileDependency(ColumnStatisticsReadiness, trace.ReleaseJoin());
 
     SharedState = sharedState;
     return TStatus::Async;

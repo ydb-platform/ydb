@@ -203,7 +203,7 @@ public:
         std::optional<THashMap<std::pair<TString, TString>, THashMap<TString, TString>>> readAttributes;
         const bool isShowCreate = ContainsShowCreateSetting(*input);
         auto* trace = SessionCtx->QueryPtr()->CompileTrace.Get();
-        NWilson::TSpan dependencyJoin;
+        NKikimr::NKqp::TCompileTraceDependencies dependencies(trace, "Await table metadata");
         TVector<std::shared_ptr<IKikimrGateway::TTableMetadataResult>> dependencyResults;
 
         for (auto& it : SessionCtx->Tables().GetTables()) {
@@ -230,27 +230,15 @@ public:
             auto queryType = SessionCtx->Query().Type;
             auto& result = emplaceResult.first->second;
 
-            if (trace && !dependencyJoin) {
-                // Completes on the callback threads of the loads, concurrently with the compiler.
-                dependencyJoin = trace->StartSpan(NKikimr::NKqp::TCompileTraceLevels::Phase,
-                    "Await table metadata");
-                NKikimr::NKqp::MarkAsyncFlow(dependencyJoin);
-            }
-            // The loads of the tables run concurrently. The complete table future
-            // can include multiple gateway requests.
-            auto dependency = dependencyJoin.CreateChild(NKikimr::NKqp::TCompileTraceLevels::Step,
-                "Resolve table metadata");
-            NKikimr::NKqp::MarkAsyncFlow(dependency);
+            // A table's future can include multiple concurrent gateway requests.
+            auto dependency = dependencies.Start("Resolve table metadata");
             dependency.Attribute("db.collection.name", tableName);
-            if (dependencyJoin) {
+            if (dependencies.GetJoin()) {
                 dependencyResults.push_back(result);
-            }
-            if (dependency) {
-                NKikimr::NKqp::LinkDependsOn(dependencyJoin, dependency.GetTraceId());
             }
             // Requests of the load are parented by the table span, or by the wait
             // when the table spans are not recorded at this level.
-            auto& requestParent = dependency ? dependency : dependencyJoin;
+            const auto& requestParent = dependency ? dependency : dependencies.GetJoin();
             auto future = [&] {
                 if (trace) {
                     trace->Push(requestParent);
@@ -303,7 +291,7 @@ public:
         }
 
         AsyncFuture = NKikimr::NKqp::TraceCompileDependency(
-            NThreading::WaitExceptionOrAll(futures), std::move(dependencyJoin),
+            NThreading::WaitExceptionOrAll(futures), dependencies.ReleaseJoin(),
             [results = std::move(dependencyResults)] {
                 // A missing table is a successful load, e.g. for CREATE TABLE:
                 // whether the query needs the table is checked later.

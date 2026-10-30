@@ -1,6 +1,6 @@
 #include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "kqp_host_impl.h"
-#include "kqp_compile_trace_transformer.h"
+#include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
 #include <ydb/core/base/appdata.h>
@@ -2299,17 +2299,18 @@ private:
         static const char phases = 0;
         static const char passes = 0;
         const auto queryCtx = SessionCtx->QueryPtr();
+        const auto getTrace = [queryCtx] { return queryCtx->CompileTrace.Get(); };
         const auto beginTrace = [&](const TString& name) {
-            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Phase, name, &phases);
+            return CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Phase, name, &phases);
         };
         const auto endTrace = [&](const TString& name) {
-            return CreateCompileTraceEnd(queryCtx, name, &phases);
+            return CreateCompileTraceEnd(getTrace, name, &phases);
         };
         const auto beginPass = [&](const TString& name) {
-            return CreateCompileTraceBegin(queryCtx, TCompileTraceLevels::Step, name, &passes);
+            return CreateCompileTraceBegin(getTrace, TCompileTraceLevels::Step, name, &passes);
         };
         const auto endPass = [&](const TString& name) {
-            return CreateCompileTraceEnd(queryCtx, name, &passes);
+            return CreateCompileTraceEnd(getTrace, name, &passes);
         };
 
         YqlTransformer = TTransformationPipeline(TypesCtx)

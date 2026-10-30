@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    kqp_compile_trace_transformer.cpp
     kqp_explain_prepared.cpp
     kqp_gateway_proxy.cpp
     kqp_host.cpp

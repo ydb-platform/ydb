@@ -323,13 +323,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
-        if (CreatePlaceholder()) {
+        if (CreatePlaceholder) {
             replicationConfig.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         }
-    }
-
-    bool CreatePlaceholder() const {
-        return !InitialScan && DesiredState == TReplication::EState::Paused;
     }
 
     void AllocateTxId() {
@@ -355,7 +351,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         if (Attaching) {
             AttachDst();
-        } else if (InitialScan || CreatePlaceholder()) {
+        } else if (InitialScan || CreatePlaceholder) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -482,7 +478,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            if (InitialScan || CreatePlaceholder() || Attaching) {
+            if (InitialScan || CreatePlaceholder || Attaching) {
                 return Success();
             }
 
@@ -543,13 +539,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // after that ALTER commits but before the controller records success.
         const bool attached = (Attaching || PendingDstPathId) && IsReplica(got)
             && importState == NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE;
-        if (!InitialScan && !CreatePlaceholder() && !attached
+        if (!InitialScan && !CreatePlaceholder && !attached
                 && importState != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
             error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }
 
-        const bool needsConfig = InitialScan || CreatePlaceholder() || Attaching || IsReplica(got);
+        const bool needsConfig = InitialScan || CreatePlaceholder || Attaching || IsReplica(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
@@ -822,7 +818,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"dstPathId", DstPathId});
 
         auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId);
-        result->WaitingImport = CreatePlaceholder();
+        result->WaitingImport = CreatePlaceholder;
         Send(Parent, result.Release());
         PassAway();
     }
@@ -881,6 +877,7 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
+        , CreatePlaceholder(!initialScan && desiredState == TReplication::EState::Paused)
         , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
@@ -898,7 +895,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
-            if (!InitialScan && !CreatePlaceholder()) {
+            if (!InitialScan && !CreatePlaceholder) {
                 return Resolve(PathId);
             }
             [[fallthrough]];
@@ -932,6 +929,7 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
+    const bool CreatePlaceholder;
     const TReplication::EState DesiredState;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 

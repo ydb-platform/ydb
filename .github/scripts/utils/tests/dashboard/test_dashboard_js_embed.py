@@ -102,9 +102,25 @@ class JsScriptJsonTest(unittest.TestCase):
             "window.applyTimezoneToAllCharts = applyTimezoneToAllCharts;",
             "window.applyMarkersToCharts = applyMarkersToCharts;",
             "window.applyLayerToggles = applyLayerToggles;",
+            "window.toggleChartTile = toggleChartTile;",
         )
         missing = [name for name in required if name not in source]
         self.assertEqual(missing, [], msg=f"missing window exports: {missing}")
+
+    def test_dashboard_html_uses_chart_tiles_and_collapses_tests_by_suite(self):
+        source = (_DIR / "dashboard_html_main.py").read_text(encoding="utf-8")
+        self.assertIn('class="chart-grid"', source)
+        self.assertIn('class="chart-tile"', source)
+        self.assertIn("function toggleChartTile(btn)", source)
+        self.assertIn('id="testsBySuiteDetails"', source)
+        self.assertIn("Tests in parallel by suite", source)
+        # Tests chart stays under a closed <details>, not in the main suite grid.
+        suite_grid_idx = source.find('id="suiteChartGrid"')
+        tests_details_idx = source.find('id="testsBySuiteDetails"')
+        tests_pane_idx = source.find('id="testsLayerSuite"')
+        self.assertGreater(suite_grid_idx, 0)
+        self.assertGreater(tests_details_idx, suite_grid_idx)
+        self.assertGreater(tests_pane_idx, tests_details_idx)
 
 
 if __name__ == "__main__":

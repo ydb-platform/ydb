@@ -93,6 +93,101 @@ def build_html_dashboard(
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
+    .chart-grid {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 8px 0 16px 0;
+      align-items: start;
+    }}
+    @media (max-width: 1100px) {{
+      .chart-grid {{ grid-template-columns: 1fr; }}
+    }}
+    .chart-tile {{
+      min-width: 0;
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px 10px 10px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 1px 2px rgba(27, 31, 35, 0.04);
+    }}
+    .chart-tile-head {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+    }}
+    .chart-tile-title {{
+      font-size: 13px;
+      font-weight: 600;
+      color: #24292f;
+    }}
+    .chart-tile-expand {{
+      padding: 2px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      background: #f6f8fa;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1.3;
+      color: #57606a;
+    }}
+    .chart-tile-expand:hover {{ background: #eef1f4; }}
+    .chart-pane {{
+      width: 100%;
+      height: 280px;
+      min-width: 0;
+    }}
+    .chart-tile.expanded .chart-pane {{
+      height: 480px;
+    }}
+    .chart-tile-meta {{
+      display: none;
+      margin-top: 6px;
+    }}
+    .chart-tile.expanded .chart-tile-meta {{
+      display: block;
+    }}
+    .chart-tile-meta .hoverbox,
+    .chart-tile-meta .clickbox {{
+      margin: 6px 0;
+      max-height: 180px;
+    }}
+    .chart-tile.span-2 {{
+      grid-column: 1 / -1;
+    }}
+    .chart-tile.span-2 .chart-pane {{
+      height: 320px;
+    }}
+    .chart-tile.span-2.expanded .chart-pane {{
+      height: 520px;
+    }}
+    .chart-secondary {{
+      margin: 4px 0 16px 0;
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      padding: 8px 10px 10px;
+      background: #fafbfc;
+    }}
+    .chart-secondary > summary {{
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      color: #24292f;
+      list-style: none;
+    }}
+    .chart-secondary > summary::-webkit-details-marker {{ display: none; }}
+    .chart-secondary > summary::before {{
+      content: "▸ ";
+      color: #57606a;
+    }}
+    .chart-secondary[open] > summary::before {{ content: "▾ "; }}
+    .chart-secondary .chart-grid {{
+      margin: 10px 0 0 0;
+    }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
     #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
     .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
@@ -416,22 +511,62 @@ def build_html_dashboard(
       </details>
     </div>
   </details>
-  <div id="yaActivity" class="wide"></div>
+  <div class="chart-grid" id="yaActivityGrid">
+    <div class="chart-tile span-2" data-pane="yaActivity">
+      <div class="chart-tile-head">
+        <span class="chart-tile-title">ya make concurrency</span>
+        <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+      </div>
+      <div id="yaActivity" class="chart-pane"></div>
+    </div>
+  </div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
   </div>
   <div id="chunkTab" class="tab active" style="display: none;">
-    <div id="activeLayerChunk" class="wide"></div>
-    <div id="activeHoverChunk" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-    <div id="activeClickChunk" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
-    <div id="cpuLayer" class="wide"></div>
-    <div id="cpuHover" class="hoverbox">Hover CPU chart to see sorted contributors</div>
-    <div id="cpuClick" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
-    <div id="ramLayer" class="wide"></div>
-    <div id="ramHover" class="hoverbox">Hover RAM chart to see sorted contributors</div>
-    <div id="ramClick" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
-    <div id="diskLayer" class="wide" style="display:none;"></div>
+    <div class="chart-grid" id="chunkChartGrid">
+      <div class="chart-tile" data-pane="activeLayerChunk">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Active chunks</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="activeLayerChunk" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="activeHoverChunk" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
+          <div id="activeClickChunk" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="cpuLayer">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">CPU</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="cpuLayer" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="cpuHover" class="hoverbox">Hover CPU chart to see sorted contributors</div>
+          <div id="cpuClick" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="ramLayer">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">RAM</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="ramLayer" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="ramHover" class="hoverbox">Hover RAM chart to see sorted contributors</div>
+          <div id="ramClick" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Disk</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="diskLayer" class="chart-pane"></div>
+      </div>
+    </div>
     <div class="row">
       <div id="cpuPie" class="chart"></div>
       <div id="ramPie" class="chart"></div>
@@ -441,27 +576,71 @@ def build_html_dashboard(
     </div>
   </div>
   <div id="suiteTab" class="tab">
-    <div id="activeLayerSuite" class="wide"></div>
-    <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-    <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
-    <div id="testsLayerSuite" class="wide"></div>
-    <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
-    <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
-    <div id="cpuLayerSuite" class="wide"></div>
-    <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
-    <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
-    <details class="metrics-help" style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">
-      <summary><b>How the CPU value at cursor is calculated</b></summary>
-      <div style="margin:4px 0;">
-        <p><b>Per run:</b> <code>cpu_cores_est = cpu_sec_report / dur_sec</code> (we have real report for every run).</p>
-        <p><b>At time t:</b> value = Σ <code>cpu_cores_est</code> over all runs of this suite with <code>start_us ≤ t &lt; end_us</code>. We do not use one chunk — we sum over all active runs.</p>
-        <p><b>Why value (e.g. 373) ≠ total_cpu_sec/total_dur_sec (e.g. 89.4/135.3):</b> The table totals are from the deduplicated run (one row per suite); the chart value is the instantaneous sum over all runs active at that moment (e.g. many parts in parallel).</p>
+    <div class="chart-grid" id="suiteChartGrid">
+      <div class="chart-tile" data-pane="activeLayerSuite">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Active chunks by suite</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="activeLayerSuite" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
+          <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="cpuLayerSuite">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">CPU by suite</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="cpuLayerSuite" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
+          <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+          <details class="metrics-help" style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">
+            <summary><b>How the CPU value at cursor is calculated</b></summary>
+            <div style="margin:4px 0;">
+              <p><b>Per run:</b> <code>cpu_cores_est = cpu_sec_report / dur_sec</code> (we have real report for every run).</p>
+              <p><b>At time t:</b> value = Σ <code>cpu_cores_est</code> over all runs of this suite with <code>start_us ≤ t &lt; end_us</code>. We do not use one chunk — we sum over all active runs.</p>
+              <p><b>Why value (e.g. 373) ≠ total_cpu_sec/total_dur_sec (e.g. 89.4/135.3):</b> The table totals are from the deduplicated run (one row per suite); the chart value is the instantaneous sum over all runs active at that moment (e.g. many parts in parallel).</p>
+            </div>
+          </details>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="ramLayerSuite">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">RAM by suite</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="ramLayerSuite" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="ramHoverSuite" class="hoverbox">Hover RAM chart to see sorted contributors</div>
+          <div id="ramClickSuite" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Disk by suite</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        </div>
+        <div id="diskLayerSuite" class="chart-pane"></div>
+      </div>
+    </div>
+    <details class="chart-secondary" id="testsBySuiteDetails">
+      <summary>Tests in parallel by suite</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="testsLayerSuite">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Tests running by suite</span>
+          </div>
+          <div id="testsLayerSuite" class="chart-pane"></div>
+          <div class="chart-tile-meta" style="display:block;">
+            <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
+            <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
+          </div>
+        </div>
       </div>
     </details>
-    <div id="ramLayerSuite" class="wide"></div>
-    <div id="ramHoverSuite" class="hoverbox">Hover RAM chart to see sorted contributors</div>
-    <div id="ramClickSuite" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
-    <div id="diskLayerSuite" class="wide" style="display:none;"></div>
     <div class="row">
       <div id="cpuPieSuite" class="chart"></div>
       <div id="ramPieSuite" class="chart"></div>
@@ -480,6 +659,7 @@ def build_html_dashboard(
     window.applyMarkersToCharts = function() {{}};
     window.toggleSuiteMarkers = function() {{}};
     window.applyLayerToggles = function() {{}};
+    window.toggleChartTile = function() {{}};
 
     (async function() {{
     const dataUrl = {data_url_js};
@@ -498,6 +678,29 @@ def build_html_dashboard(
       return;
     }}
 
+    function resizeChartPanes(ids) {{
+      (ids || []).forEach(cid => {{
+        const el = document.getElementById(cid);
+        if (el && window.Plotly) {{
+          try {{ Plotly.Plots.resize(el); }} catch (e) {{ /* chart may not be plotted yet */ }}
+        }}
+      }});
+    }}
+
+    function toggleChartTile(btn) {{
+      const tile = btn && btn.closest ? btn.closest('.chart-tile') : null;
+      if (!tile) return;
+      const open = tile.classList.toggle('expanded');
+      btn.textContent = open ? 'Collapse' : 'Expand';
+      btn.title = open ? 'Collapse chart' : 'Expand chart';
+      const paneId = tile.getAttribute('data-pane');
+      setTimeout(() => {{
+        resizeChartPanes(paneId ? [paneId] : []);
+        if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+      }}, 0);
+    }}
+    window.toggleChartTile = toggleChartTile;
+
     function showTab(id) {{
       const tabs = ['chunkTab', 'suiteTab'];
       tabs.forEach(t => {{
@@ -513,16 +716,23 @@ def build_html_dashboard(
         const ids = id === 'suiteTab'
           ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
           : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
-        ids.forEach(cid => {{
-          const el = document.getElementById(cid);
-          if (el && window.Plotly) {{
-            Plotly.Plots.resize(el);
-          }}
-        }});
+        resizeChartPanes(ids);
         // Re-apply markers after resize (charts lose shapes on hidden→visible transition).
         applyMarkersToCharts();
       }}, 0);
     }}
+
+    (function wireTestsBySuiteDetails() {{
+      const details = document.getElementById('testsBySuiteDetails');
+      if (!details) return;
+      details.addEventListener('toggle', () => {{
+        if (!details.open) return;
+        setTimeout(() => {{
+          resizeChartPanes(['testsLayerSuite']);
+          if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+        }}, 0);
+      }});
+    }})();
 
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
@@ -1849,14 +2059,15 @@ def build_html_dashboard(
           hoverinfo: 'none',
         }};
       }});
+      // Tile header already names the chart; keep a compact Plotly title for context.
       Plotly.newPlot(divId, traces, {{
-        title,
+        title: {{text: title, font: {{size: 12}}, x: 0, xanchor: 'left'}},
         xaxis: axisLayout(xDisp),
         yaxis: {{title: yTitle}},
         hovermode: 'x unified',
         showlegend: false,
-        margin: {{l: 60, r: 20, t: 50, b: 50}},
-      }}, {{responsive: true}});
+        margin: {{l: 52, r: 12, t: 32, b: 40}},
+      }}, {{responsive: true, displayModeBar: 'hover'}});
     }}
 
     function formatValue(y, unit) {{
@@ -2126,7 +2337,9 @@ def build_html_dashboard(
       }}
       const el = document.getElementById('yaActivity');
       if (!traces.length) {{
-        if (el) el.style.display = 'none';
+        const tile = el && el.closest ? el.closest('.chart-tile') : null;
+        if (tile) tile.style.display = 'none';
+        else if (el) el.style.display = 'none';
         return;
       }}
       const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
@@ -2134,13 +2347,13 @@ def build_html_dashboard(
         ? 'ya make concurrency (⚠ clock unaligned — offset not validated)'
         : 'ya make concurrency: build, archives, cache, test chunks, and links';
       Plotly.newPlot('yaActivity', traces, {{
-        title: activityTitle,
+        title: {{text: activityTitle, font: {{size: 12}}, x: 0, xanchor: 'left'}},
         xaxis: axisLayout(allX, true),
         yaxis: {{title: 'active jobs', rangemode: 'tozero'}},
         hovermode: 'x unified',
-        legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
-        margin: {{l: 60, r: 20, t: 50, b: 90}},
-      }}, {{responsive: true}});
+        legend: {{orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top'}},
+        margin: {{l: 52, r: 12, t: 32, b: 80}},
+      }}, {{responsive: true, displayModeBar: 'hover'}});
     }})();
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
@@ -2167,7 +2380,9 @@ def build_html_dashboard(
         Plotly.relayout('cpuLayer', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
         Plotly.relayout('ramLayer', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
         const diskEl = document.getElementById('diskLayer');
+        const diskTile = document.getElementById('diskTileChunk');
         if (diskEl) {{
+          if (diskTile) diskTile.style.display = '';
           diskEl.style.display = '';
           Plotly.newPlot('diskLayer', [
             {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
@@ -2216,7 +2431,9 @@ def build_html_dashboard(
       Plotly.relayout('cpuLayerSuite', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
       Plotly.relayout('ramLayerSuite', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
       const diskEl = document.getElementById('diskLayerSuite');
+      const diskTile = document.getElementById('diskTileSuite');
       if (diskEl) {{
+        if (diskTile) diskTile.style.display = '';
         diskEl.style.display = '';
         Plotly.newPlot('diskLayerSuite', [
           {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
@@ -2376,6 +2593,7 @@ def build_html_dashboard(
     window.applyMarkersToCharts = applyMarkersToCharts;
     window.toggleSuiteMarkers = toggleSuiteMarkers;
     window.applyLayerToggles = applyLayerToggles;
+    window.toggleChartTile = toggleChartTile;
     }})();
   </script>
 </body>

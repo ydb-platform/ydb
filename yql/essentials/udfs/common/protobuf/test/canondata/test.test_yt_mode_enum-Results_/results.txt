@@ -1,0 +1,79 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "StructType";
+                                    [
+                                        [
+                                            "ColorField";
+                                            [
+                                                "DataType";
+                                                "Int32"
+                                            ]
+                                        ];
+                                        [
+                                            "ColorYtIntField";
+                                            [
+                                                "DataType";
+                                                "Int64"
+                                            ]
+                                        ];
+                                        [
+                                            "ColorYtStringField";
+                                            [
+                                                "DataType";
+                                                "String"
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "\n\n{\n\n    \"ColorYtIntField\": 1,\n\n    \"ColorYtStringField\": \"RED\",\n\n    \"ColorField\": 0\n\n}\n\n";
+                        [
+                            "0";
+                            "1";
+                            "RED"
+                        ];
+                        "{\n  \"ColorYtStringField\":-1,\n  \"ColorYtIntField\":1,\n  \"ColorField\":0\n}";
+                        "Success"
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

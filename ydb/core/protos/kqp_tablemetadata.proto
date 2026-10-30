@@ -38,7 +38,7 @@ message TDefaultExpression {
 message TKqpColumnMetadataProto {
     enum EDefaultKind {
         DEFAULT_KIND_UNSPECIFIED = 0;
-        DEFAULT_KIND_NULL = 1;
+        DEFAULT_KIND_NULL = 1; // In column operations, explicitly remove the default.
         DEFAULT_KIND_SEQUENCE = 2;
         DEFAULT_KIND_LITERAL = 3;
         DEFAULT_KIND_EXPRESSION = 4;
@@ -66,5 +66,5 @@ message TKqpColumnMetadataProto {
     // spread across partitions instead of concentrating on the last shard.
     optional bool BitReverseSequenceValue = 15 [default = false];
     optional bool SetNotNullInProgress = 16 [default = false];
-    optional TDefaultExpression DefaultExpression = 17;
+    optional TDefaultExpression DefaultFromExpression = 17;
 };

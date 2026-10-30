@@ -253,7 +253,7 @@ public:
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
 
         auto desiredState = Replication->GetDesiredState();
-        if (record.HasSwitchState()) {
+        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
@@ -423,7 +423,7 @@ public:
             }
             if (it->second.HasSession()) {
                 Self->StopQueue.emplace(id, it->second.GetSession());
-            } else if (it->second.HasCommand()) {
+            } else {
                 Self->BootQueue.insert(id);
             }
         }

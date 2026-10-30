@@ -15,11 +15,7 @@ namespace NKikimr {
 namespace NTable {
 namespace NTest {
 
-    namespace {
-        bool IsIndexPage(EPage type) noexcept {
-            return type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2;
-        }
-    }
+    using NPage::IsIndexPage;
 
     enum class ELargeObjNeed {
         Has = 0,
@@ -49,6 +45,11 @@ namespace NTest {
         const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
             return Pages ? TTestEnv::TryGetPage(part, location, groupId) : nullptr;
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
+        {
+            return Pages ? TTestEnv::TryGetIndexPage(part, location, groupId) : nullptr;
         }
 
         bool Pages = false;
@@ -109,11 +110,23 @@ namespace NTest {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto pass = ShouldPass((const void*)part,
-                static_cast<ui64>(THash<TPageOffset>()(location.Offset)) ^ (ui64(groupId.Raw()) << 48),
-                location.Type == EPage::FlatIndex || location.Type == EPage::BTreeIndex || location.Type == EPage::BTreeIndexV2);
+            return ShouldPass(part, location, part->DataSlot(groupId), false)
+                ? TTestEnv::TryGetPage(part, location, groupId)
+                : nullptr;
+        }
 
-            return pass ? TTestEnv::TryGetPage(part, location, groupId) : nullptr;
+        const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
+        {
+            return ShouldPass(part, location, part->IndexSlot(groupId), true)
+                ? TTestEnv::TryGetIndexPage(part, location, groupId)
+                : nullptr;
+        }
+
+        bool ShouldPass(const TPart* part, const TPageLocation& location, ui32 slot, bool isIndex)
+        {
+            return ShouldPass((const void*)part,
+                static_cast<ui64>(THash<TPageOffset>()(location.Offset)) ^ (ui64(slot) << 48),
+                isIndex);
         }
 
         bool ShouldPass(const void *token, ui64 id, bool isIndex)
@@ -170,12 +183,13 @@ namespace NTest {
         using TPageLocation = NTable::NPage::TPageLocation;
 
         struct TPartGroupLoadingQueue : private NFwd::IPageLoadingQueue {
-            TPartGroupLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 groupRoom,
+            TPartGroupLoadingQueue(TIntrusiveConstPtr<TStore> store, ui32 indexRoom, ui32 groupRoom,
                     TIntrusiveConstPtr<NPageCollection::IPageCollection> indexPageCollection,
                     TIntrusiveConstPtr<NPageCollection::IPageCollection> groupPageCollection,
                     THolder<NFwd::IPageLoadingLogic> line)
                 : IndexPageCollection(std::move(indexPageCollection))
                 , GroupPageCollection(std::move(groupPageCollection))
+                , IndexRoom(indexRoom)
                 , GroupRoom(groupRoom)
                 , Store(std::move(store))
                 , PageLoadingLogic(std::move(line))
@@ -231,7 +245,7 @@ namespace NTest {
             const TIntrusiveConstPtr<NPageCollection::IPageCollection> GroupPageCollection;
 
         private:
-            const ui32 IndexRoom = 0;
+            const ui32 IndexRoom = Max<ui32>();
             const ui32 GroupRoom = Max<ui32>();
             TVector<TPageLocation> IndexFetch;
             TVector<TPageLocation> GroupFetch;
@@ -286,25 +300,32 @@ namespace NTest {
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
+            Y_ENSURE(!IsIndexPage(location.Type), "Index page " << location << " is requested as a data page");
+            return Get(part, location, groupId);
+        }
+
+        const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
+        {
+            Y_ENSURE(location.Type == EPage::Undef || IsIndexPage(location.Type),
+                "Page " << location << " is requested as an index page");
+            // the group queue loads both index and data pages of the group
+            return Get(part, location, groupId);
+        }
+
+    private:
+        const TSharedData* Get(const TPart* part, const TPageLocation& location, TGroupId groupId)
+        {
             InitPart(part);
 
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
             Y_ENSURE(groupId.Index < partStore->Store->GetGroupCount());
 
-            auto type = location.Type;
             ui32 queueIndex = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
 
-            if (groupId.IsMain() && IsIndexPage(type)) {
-                // redirect index page to its actual group queue:
-                groupId = PartIndexPageLocator[part].GetGroup(location.Offset);
-                queueIndex = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
-            }
-
-            return Get(part, queueIndex).DoLoad(location.Offset, type, AheadLo, AheadHi).Page;
+            return Get(part, queueIndex).DoLoad(location.Offset, location.Type, AheadLo, AheadHi).Page;
         }
 
-    private:
         TPartGroupLoadingQueue& Get(const TPart *part, ui32 queueIndex)
         {
             auto& partGroupQueues = PartGroupQueues[part];
@@ -328,42 +349,45 @@ namespace NTest {
                         MakeIntrusive<TStorePageCollection>(partStore->Store, room).Release());
                 };
 
-                auto indexPageCollection = makeCollection(0);
+                auto makeGroupQueue = [&](NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) {
+                    const ui32 indexRoom = part->IndexSlot(groupId);
+                    const ui32 groupRoom = part->DataSlot(groupId);
+                    auto indexPageCollection = makeCollection(indexRoom);
+                    auto groupPageCollection = makeCollection(groupRoom);
+                    return Settle(partStore, indexRoom, groupRoom,
+                        NFwd::CreateCache(part, PartIndexPageLocators[part][groupId], groupId, slices,
+                            groupPageCollection, indexPageCollection),
+                        groupPageCollection, indexPageCollection);
+                };
+
                 partGroupQueues.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
-                    auto groupPageCollection = makeCollection(room);
                     if (room < partStore->Store->GetGroupCount()) {
-                        NPage::TGroupId groupId(room);
-                        partGroupQueues.push_back(Settle(partStore, room,
-                            NFwd::CreateCache(part, PartIndexPageLocator[part], groupId, partStore->Slices,
-                                groupPageCollection, indexPageCollection),
-                            groupPageCollection, indexPageCollection));
-                    } else if (room == partStore->Store->GetOuterRoom()) {
-                        partGroupQueues.push_back(Settle(partStore, room, MakeOuter(partStore, groupPageCollection), groupPageCollection, indexPageCollection));
+                        partGroupQueues.push_back(makeGroupQueue(NPage::TGroupId(room), partStore->Slices));
+                        continue;
+                    }
+                    auto pageCollection = makeCollection(room);
+                    if (room == partStore->Store->GetOuterRoom()) {
+                        partGroupQueues.push_back(Settle(partStore, room, room, MakeOuter(partStore, pageCollection), pageCollection, pageCollection));
                     } else if (room == partStore->Store->GetExternRoom()) {
-                        partGroupQueues.push_back(Settle(partStore, room, MakeExtern(partStore, groupPageCollection), groupPageCollection, indexPageCollection));
+                        partGroupQueues.push_back(Settle(partStore, room, room, MakeExtern(partStore, pageCollection), pageCollection, pageCollection));
                     } else {
                         Y_TABLET_ERROR("Don't know how to work with room " << room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
-                    NPage::TGroupId groupId(group, true);
-                    auto groupPageCollection = makeCollection(group);
-                    partGroupQueues.push_back(Settle(partStore, group,
-                        NFwd::CreateCache(part, PartIndexPageLocator[part], groupId,
-                            nullptr, groupPageCollection, indexPageCollection),
-                        groupPageCollection, indexPageCollection));
+                    partGroupQueues.push_back(makeGroupQueue(NPage::TGroupId(group, true), nullptr));
                 }
             }
         }
 
-        TPartGroupLoadingQueue* Settle(const TPartStore *part, ui16 room,
+        TPartGroupLoadingQueue* Settle(const TPartStore *part, ui32 indexRoom, ui32 groupRoom,
                 THolder<NFwd::IPageLoadingLogic> line,
                 TIntrusiveConstPtr<NPageCollection::IPageCollection> groupPageCollection,
                 TIntrusiveConstPtr<NPageCollection::IPageCollection> indexPageCollection)
         {
             if (line) {
-                GroupQueues.emplace_back(part->Store, room,
+                GroupQueues.emplace_back(part->Store, indexRoom, groupRoom,
                     std::move(indexPageCollection), std::move(groupPageCollection),
                     std::move(line));
                 return &GroupQueues.back();
@@ -400,7 +424,7 @@ namespace NTest {
         const ui32 Edge = Max<ui32>();
         TDeque<TPartGroupLoadingQueue> GroupQueues;
         TMap<const TPart*, TVector<TPartGroupLoadingQueue*>> PartGroupQueues;
-        THashMap<const TPart*, NFwd::TIndexPageLocator> PartIndexPageLocator;
+        THashMap<const TPart*, TMap<TGroupId, NFwd::TIndexPageLocator>> PartIndexPageLocators;
         TAutoPtr<NFwd::TMemTableHandler> MemTable;   /* Wrapper for memtable blobs    */
     };
 

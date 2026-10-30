@@ -26,6 +26,8 @@
 #include <limits>
 #include <numeric>
 
+#include <util/system/cpu_id.h>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -337,6 +339,40 @@ TJoinTestData EmptyRightInnerTestData() {
     constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
     td.JoinMemoryConstraint = joinMemory;
     td.Kind = EJoinKind::Left;
+    return td;
+}
+
+TJoinTestData SerializedListKeySpillingTestData() {
+    auto td = LeftJoinSpillingTestData();
+    auto& setup = *td.Setup;
+    auto& pb = *setup.PgmBuilder;
+    auto dummy = setup.BuildGraph(pb.NewDataLiteral<ui64>(0));
+    const auto& factory = dummy->GetContext().HolderFactory;
+    auto* type = pb.NewDataType(NUdf::EDataSlot::Uint64);
+    auto* rowType = pb.NewTupleType({pb.NewListType(type), type});
+    const auto wrapKey = [&](TypeAndValue& source) {
+        TUnboxedValueVector rows;
+        auto iter = source.Value.GetListIterator();
+        NUdf::TUnboxedValue row;
+        while (iter.Next(row)) {
+            NUdf::TUnboxedValue* keyItem = nullptr;
+            NUdf::TUnboxedValue key = factory.CreateDirectArrayHolder(1, keyItem);
+            keyItem[0] = row.GetElement(0);
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue wrapped = factory.CreateDirectArrayHolder(2, items);
+            items[0] = std::move(key);
+            items[1] = row.GetElement(1);
+            rows.push_back(std::move(wrapped));
+        }
+        source.Type = pb.NewListType(rowType);
+        source.Value = factory.VectorAsArray(rows);
+    };
+    wrapKey(td.Left);
+    wrapKey(td.Right);
+    td.Renames = {{1, EJoinSide::kLeft}, {1, EJoinSide::kRight}};
+    td.Result = ConvertVectorsToTuples(setup, TVector<ui64>{13, 14, 15, 16, 17},
+        TVector<std::optional<ui64>>{std::nullopt, std::nullopt, 0, std::nullopt, 1});
+    td.ExpectsSpilling = true;
     return td;
 }
 
@@ -2700,6 +2736,38 @@ void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
+    Y_UNIT_TEST_TWIN(RejectPgType, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* pgType = pb.NewPgType(23); // int4
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            auto* inputType = BlockJoin ? pb.NewStreamType(multi) : pb.NewFlowType(multi);
+            TCallableBuilder builder(*setup.Env, "ExternalNode", inputType);
+            return TRuntimeNode(builder.Build(), false);
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(intType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({intType}));
+        const auto lhs = source({pgType, intType});
+        const auto rhs = source({intType, intType});
+        const auto join = BlockJoin
+            ? pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType)
+            : pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "PG types are not supported in hash join");
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
@@ -2715,36 +2783,64 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 }
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST(TestSerializedListKeySpilling) {
+        Test(SerializedListKeySpillingTestData(), false);
+    }
+
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(BasicInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestOutputRowsOperatorStat, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TestOutputRowsOperatorStat(BasicInnerJoinTestData(), BlockJoin);
         TestOutputRowsOperatorStat(EmptyInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestCrossPassthrough, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(MixedKeysInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNulls, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKey, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsAfterTupleKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), BlockJoin);
     }
 
@@ -2752,6 +2848,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     // poison leftover so hash/equality cannot
     // rely on that and must canonicalize EqualNulls NULLs
     Y_UNIT_TEST(TestInnerJoinEqualNullsDistinctNullSlotData) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TJoinTestData td = InnerJoinEqualNullsTestData();
         auto descr = MakeJoinDescription(td);
         auto dummy = td.Setup->BuildGraph(td.Setup->PgmBuilder->NewDataLiteral<ui64>(0));
@@ -2770,454 +2869,796 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsNullVsZero, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsNullVsZeroTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsCompositeKey, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsCompositeKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinEqualNulls, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinEqualNullsTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnly, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnlyLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinEqualNullsSecondKeyOnlyLeftIsBuildTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinNullKeysDoNotMatchByDefaultTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinDoubleKeys, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinDoubleKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinOptionalFloatAndIntKeys, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinOptionalFloatAndIntKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(EmptyInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyLeft, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(EmptyLeftInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyRight, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(EmptyRightInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinNarrowRowWithFlags, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinNarrowRowWithFlagsTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinWithMatchesTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeys, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinSpillingTwoKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKey, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinSpillingMultiKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftKindLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinWithMatchesLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinWithMatchesTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinInplaceBuildRowLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinInplaceBuildRowLeftIsBuildTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeysLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinSpillingTwoKeysTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKeyLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinSpillingMultiKeyTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LargeBothSidesLeftSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestSlicedBlocksLeftSpillingLeftIsBuild) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SlicedBlocksLeftSpillingTestDataLeftIsBuild(), true);
     }
 
     Y_UNIT_TEST(TestLargeBothSidesInnerSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LargeBothSidesInnerSpillingTestData(), true);
     }
 
     Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LargeBothSidesLeftSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestSlicedBlocksInnerSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SlicedBlocksInnerSpillingTestData(), true);
     }
 
     Y_UNIT_TEST(TestSlicedBlocksLeftSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SlicedBlocksLeftSpillingTestData(), true);
     }
 
     // Y_UNIT_TEST_TWIN(FullBehavesAsLeftIfRightEmpty, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(FullBehavesAsLeftIfRightEmptyTestData(), BlockJoin);
     // }
 
     // Y_UNIT_TEST_TWIN(TestRightKind, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(RightJoinTestData(), BlockJoin);
     // }
 
     // Y_UNIT_TEST_TWIN(TestFullKindBehavesAsRightIfLeftIsEmpty, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(FullBehavesAsRightIfLeftEmptyTestData(), BlockJoin);
     // }
 
     // Y_UNIT_TEST_TWIN(TestFullKind, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(FullTestData(), BlockJoin);
     // }
 
     // Y_UNIT_TEST_TWIN(TestExclusionKind, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(ExclusionTestData(), BlockJoin);
     // }
 
     Y_UNIT_TEST_TWIN(TestLeftSemiKind, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiTestData(), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(RightSemiTestData(), BlockJoin);
     // }
 
     Y_UNIT_TEST_TWIN(TestLeftOnlyKind, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftSemiKindLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftOnlyKindLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlyTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeys, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiDuplicateKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeysLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiDuplicateKeysTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemiLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SwappedKeyColumnsLeftSemiTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftSemiSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftOnlySpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlySpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
+    //     if (!NX86::HaveAVX2()) {
+    //         return;
+    //     }
     //     Test(RightOnlyTestData(), BlockJoin);
     // }
     Y_UNIT_TEST_TWIN(TestInnerRenamesKind, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(InnerJoinRenamesTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsInner, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SwappedKeyColumnsInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemi, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SwappedKeyColumnsLeftSemiTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockJoinScalarColumn) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(ScalarPayloadInnerJoinTestData(), true);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftFilterInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashRightFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(RightFilterInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CommonFilterInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCommonFilterReversed, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CommonFilterReversedInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashAllFilters, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(AllFiltersInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinLeftFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinCommonFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiLeftFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiCommonFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlyLeftFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlyCommonFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftJoinLeftFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftJoinCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinLeftFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftSemiJoinCommonFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftSemiCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinLeftFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlyLeftFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilterLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessLeftJoinCommonFilterTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftSemi), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftOnly), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinEmptyRight, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessLeftJoinEmptyRightTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingRightIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingSlowSpiller, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TestWithSlowSpiller(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinSpillingRightIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftSemi), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinSpillingRightIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftOnly), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(TrueKeylessInnerJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(KeylessJoinCommonFilterTestData(EJoinKind::Inner), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(TrueCrossJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyLeft, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(EmptyLeftCrossJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyRight, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(EmptyRightCrossJoinTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinCommonFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinLeftFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinRightFilter, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinRightFilterTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAll, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinFilterRejectsAllTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFilters, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinAllFiltersTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(TrueCrossJoinTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthRight, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinZeroWidthRightTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthLeft, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinZeroWidthLeftTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinZeroWidthBothEmptyOutput, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinZeroWidthBothEmptyOutputTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinManyBucketsSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinManyBucketsSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinManyBucketsSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinEmptyProbeSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyProbeSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinEmptyProbeSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinEmptyBuildSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyBuildSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinEmptyBuildSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilterSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinCommonFilterSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinBothSidesSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinBothSidesSpillingLeftIsBuild, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinBothSidesSpillingTestDataLeftIsBuild(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilterSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinLeftFilterSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinRightFilterSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinRightFilterSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFiltersSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinAllFiltersSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinFilterRejectsAllSpilling, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(CrossJoinFilterRejectsAllSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestHashCrossJoinSpillingSlowSpiller, BlockJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         TestWithSlowSpiller(CrossJoinSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SpillingTestData(), true);
     }
     Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         RunFinalDumpSpillingIsBatchedTest();
     }
 
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(BasicInnerJoinTestData(), true, false);
     }
     Y_UNIT_TEST(TestBigStrings) { 
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(BigStringsTestData(), true);
     }
     Y_UNIT_TEST(TestSmallStrings) { 
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(SmallStringsTestData(), true);
     }
     Y_UNIT_TEST(TestOutputBufferBounded) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = OutputBufferBoundedTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 200 * 200);
     }
 
     Y_UNIT_TEST(TestHighFanoutInnerJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         Test(HighFanoutInnerJoinTestData(), true);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedHighFanout) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = HighFanoutInnerJoinTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), HighFanoutBuildRows);
     }
@@ -3226,6 +3667,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     // A row-based limit cannot do both: it would either fragment the narrow case or let the wide
     // case grow a block to tens of megabytes.
     Y_UNIT_TEST(TestOutputBufferBoundedNarrowRows) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = NarrowRowsHighFanoutTestData();
         const auto stats = MeasureOutputBlocks(td);
         AssertOutputBufferBounded(stats, NarrowRowsFanout);
@@ -3233,6 +3677,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedWideRows) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = WideRowsHighFanoutTestData();
         const auto stats = MeasureOutputBlocks(td);
         AssertOutputBufferBounded(stats, WideRowsFanout);
@@ -3240,26 +3687,41 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftSemi);
         AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedLeftOnlyLeftIsBuild) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftOnly);
         AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiSpillingLeftIsBuild) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = LeftSemiSpillingTestDataLeftIsBuild();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 100000);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedCrossJoin) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = CrossJoinOutputBufferBoundedTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), CrossJoinOutputBufferBoundedRows);
     }
 
     Y_UNIT_TEST(TestOutputBufferBoundedCrossJoinSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
         auto td = CrossJoinOutputBufferBoundedSpillingTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 8 * 20000);
     }

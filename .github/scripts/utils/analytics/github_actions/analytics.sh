@@ -1,4 +1,4 @@
-# Sourced by test_ya steps. Must not fail the caller.
+# Sourced by build_and_test_ya steps. Must not fail the caller.
 ANALYTICS_PY="${ANALYTICS_PY:-.github/scripts/utils/analytics/github_actions/ci_metrics.py}"
 
 analytics() {

@@ -1,57 +1,57 @@
 {
-    "test.test[Algorithms]": [
+    "test.test[Algorithms-Results]": [
         {
-            "uri": "file://test.test_Algorithms_/results.txt"
+            "uri": "file://test.test_Algorithms-Results_/results.txt"
         }
     ],
-    "test.test[Basic]": [
+    "test.test[Basic-Results]": [
         {
-            "uri": "file://test.test_Basic_/results.txt"
+            "uri": "file://test.test_Basic-Results_/results.txt"
         }
     ],
-    "test.test[Distinct]": [
+    "test.test[Distinct-Results]": [
         {
-            "uri": "file://test.test_Distinct_/results.txt"
+            "uri": "file://test.test_Distinct-Results_/results.txt"
         }
     ],
-    "test.test[Intervals]": [
+    "test.test[Intervals-Results]": [
         {
-            "uri": "file://test.test_Intervals_/results.txt"
+            "uri": "file://test.test_Intervals-Results_/results.txt"
         }
     ],
-    "test.test[Linear]": [
+    "test.test[Linear-Results]": [
         {
-            "uri": "file://test.test_Linear_/results.txt"
+            "uri": "file://test.test_Linear-Results_/results.txt"
         }
     ],
-    "test.test[Logarithmic]": [
+    "test.test[Logarithmic-Results]": [
         {
-            "uri": "file://test.test_Logarithmic_/results.txt"
+            "uri": "file://test.test_Logarithmic-Results_/results.txt"
         }
     ],
-    "test.test[Methods]": [
+    "test.test[Methods-Results]": [
         {
-            "uri": "file://test.test_Methods_/results.txt"
+            "uri": "file://test.test_Methods-Results_/results.txt"
         }
     ],
-    "test.test[Normalize]": [
+    "test.test[Normalize-Results]": [
         {
-            "uri": "file://test.test_Normalize_/results.txt"
+            "uri": "file://test.test_Normalize-Results_/results.txt"
         }
     ],
-    "test.test[Print]": [
+    "test.test[Print-Results]": [
         {
-            "uri": "file://test.test_Print_/results.txt"
+            "uri": "file://test.test_Print-Results_/results.txt"
         }
     ],
-    "test.test[ToCumulativeDistributionFunction]": [
+    "test.test[ToCumulativeDistributionFunction-Results]": [
         {
-            "uri": "file://test.test_ToCumulativeDistributionFunction_/results.txt"
+            "uri": "file://test.test_ToCumulativeDistributionFunction-Results_/results.txt"
         }
     ],
-    "test.test[Weights]": [
+    "test.test[Weights-Results]": [
         {
-            "uri": "file://test.test_Weights_/results.txt"
+            "uri": "file://test.test_Weights-Results_/results.txt"
         }
     ]
 }

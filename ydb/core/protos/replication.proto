@@ -6,6 +6,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package NKikimrReplication;
@@ -34,6 +35,7 @@ message TReplicationDefaults {
     optional uint32 StreamRetentionPeriodSeconds = 5 [default = 1];
     // Uncommitted messages are protected only for this finite window.
     optional uint32 ConsumerAvailabilityPeriodSeconds = 6 [default = 86400]; // 1d
+    optional uint32 SourceOffsetCommitIntervalMilliSeconds = 7 [default = 1000];
 }
 
 message TStaticCredentials {
@@ -85,6 +87,13 @@ message TBatchingSettings {
     optional uint64 BatchSizeBytes = 2 [default = 8388608];
 }
 
+message TAvailabilityPeriod {
+    oneof Value {
+        google.protobuf.Duration Duration = 1;
+        google.protobuf.Empty Unlimited = 2;
+    }
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -134,6 +143,7 @@ message TReplicationConfig {
     optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
+    optional TAvailabilityPeriod AvailabilityPeriod = 12;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -297,6 +307,7 @@ message TEvDescribeReplicationResult {
     optional TReplicationState State = 4;
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
     optional TReplicationStats Stats = 7;
+    optional TAvailabilityPeriod AvailabilityPeriod = 8;
 }
 
 message TControllerIdentity {
@@ -314,11 +325,20 @@ message TEvHandshake {
     optional TControllerIdentity Controller = 1;
     // Older controllers compare complete serialized schema reports.
     optional bool SupportsIndexMetadata = 2 [default = false];
+    optional bool SupportsSourceOffsets = 3 [default = false];
 }
 
 message TEvStatus {
     repeated TWorkerIdentity Workers = 1;
+    optional bool SupportsSourceOffsets = 2 [default = false];
 }
+
+message TEvSourceOffsetReport {
+    optional TWorkerIdentity Worker = 1;
+    optional uint64 NextOffset = 2;
+}
+
+message TEvSourceOffsetResult {}
 
 message TRemoteTopicReaderSettings {
     optional TConnectionParams ConnectionParams = 1;
@@ -390,6 +410,8 @@ message TRunWorkerCommand {
     optional string Database = 5;
     optional NKikimrProto.NMetricsConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
     optional TReplicationLocationConfig ReplicationLocation = 7;
+    optional bool TrackSourceOffsets = 8 [default = false];
+    optional uint64 ProcessedSourceOffset = 9;
 }
 
 message TEvRunWorker {
@@ -453,6 +475,7 @@ message TEvWorkerStatus {
         REASON_ERROR = 2;
         REASON_INFO = 3;
         REASON_STATS = 4;
+        REASON_SOURCE_OFFSET_MISMATCH = 5;
     }
 
     optional TWorkerIdentity Worker = 1;
@@ -461,6 +484,7 @@ message TEvWorkerStatus {
     optional string ErrorDescription = 4;
     optional uint32 LagMilliSeconds = 5;
     optional TWorkerStats Stats = 6;
+    optional uint64 SourceCommittedOffset = 7;
 }
 
 message TEvWorkerDataEnd {

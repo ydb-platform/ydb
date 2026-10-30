@@ -89,14 +89,23 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         auto& requestData = DecompressQueue.front();
         auto& readResult = requestData.DataEv->Get()->Result;
         for (auto& msg : readResult.Messages) {
-            bool compressed = (msg.GetCodec() != NYdb::NTopic::ECodec::RAW);
-            if (compressed) {
-                if (!requestData.DecompressionDone && Settings.ReportStats_) {
-                    SendOperationChange(EWorkerOperation::DECOMPRESS);
-                }
-                requestData.DecompressionDone = true;
-                DecompressMessage(msg);
+            if (msg.GetCodec() == NYdb::NTopic::ECodec::RAW) {
+                continue;
             }
+            if (!requestData.DecompressionDone && Settings.ReportStats_) {
+                SendOperationChange(EWorkerOperation::DECOMPRESS);
+            }
+            try {
+                DecompressMessage(msg);
+            } catch (...) {
+                if (Settings.ReportStats_) {
+                    SendError();
+                }
+                return Leave(TEvWorker::TEvGone::DATA_ERROR, MakeDecompressionIssue(
+                    TString(Settings.GetBase().Topics_.at(0).Path_), readResult.PartitionId, msg.GetOffset(),
+                    CurrentExceptionMessage(), static_cast<ui32>(msg.GetCodec())));
+            }
+            requestData.DecompressionDone = true;
         }
         ResponseQueue.emplace_back(std::move(requestData));
         DecompressQueue.pop_front();
@@ -227,6 +236,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
         if (Settings.ReportStats_) {
             SendError();
+        }
+
+        if (ev->Get()->FailureKind == TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError) {
+            return Leave(TEvWorker::TEvGone::DATA_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         }
 
         switch (ev->Get()->Result.GetStatus()) {

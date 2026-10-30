@@ -2574,19 +2574,33 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
         AttachWorkers(env, info.ControllerId, {worker});
-        // Fail a real destination operation: reports from an already stopped
-        // worker may legitimately be ignored after PAUSE removes its session.
-        bool destinationErrorInjected = false;
+
+        // Fail the current PAUSE operation, preserving its alterer's identity.
+        // A worker error after its normal stop would be an obsolete report.
+        bool destinationFailed = false;
         auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
-            if (!destinationErrorInjected && ev->HasEvent()) {
-                if (const auto* result = dynamic_cast<TEvPrivate::TEvAlterDstResult*>(ev->GetBase())) {
-                    UNIT_ASSERT(result->IsSuccess());
-                    ev.Reset(new IEventHandle(ev->Recipient, ev->Sender,
-                        new TEvPrivate::TEvAlterDstResult(result->ReplicationId, result->TargetId,
-                            NKikimrScheme::StatusSchemeError, "destination alter failed")));
-                    destinationErrorInjected = true;
-                }
+            if (destinationFailed || !ev->HasEvent()) {
+                return;
             }
+            const auto* result = dynamic_cast<TEvPrivate::TEvAlterDstResult*>(ev->GetBase());
+            if (!result) {
+                return;
+            }
+
+            UNIT_ASSERT(result->IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result->ReplicationId, worker.ReplicationId());
+            UNIT_ASSERT_VALUES_EQUAL(result->TargetId, worker.TargetId());
+            ev.Reset(new IEventHandle(
+                ev->GetRecipientRewrite(),
+                ev->Sender,
+                new TEvPrivate::TEvAlterDstResult(
+                    result->ReplicationId,
+                    result->TargetId,
+                    NKikimrScheme::StatusSchemeError,
+                    "destination alter failed"),
+                0,
+                ev->Cookie));
+            destinationFailed = true;
         });
         UNIT_ASSERT(alter("STATE = \"PAUSED\"").IsSuccess());
         runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
@@ -2597,6 +2611,7 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
                 return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
             },
             TDuration::Seconds(30));
+        UNIT_ASSERT(destinationFailed);
         const auto assertError = [&] {
             const auto state = DescribeReplication(env, info)->Get()->Record.GetState();
             UNIT_ASSERT_C(state.HasError(), state.DebugString());

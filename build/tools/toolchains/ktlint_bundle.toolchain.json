@@ -1,0 +1,61 @@
+{
+    "toolchains": {
+        "ktlint_bundle": {
+            "tools": {
+                "ktlint": {
+                    "bottle": "ktlint_bundle",
+                    "executable": "ktlint"
+                },
+                "ktlint_old": {
+                    "bottle": "ktlint_old_bundle",
+                    "executable": "ktlint_old"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
+                    },
+                    "default": true
+                }
+            ]
+        }
+    },
+    "bottles": {
+        "ktlint_bundle": {
+            "formula": "build/platform/java/ktlint/ktlint.json",
+            "executable": {
+                "ktlint": [
+                    "run.bat"
+                ]
+            }
+        },
+        "ktlint_old_bundle": {
+            "formula": "build/platform/java/ktlint_old/ktlint.json",
+            "executable": {
+                "ktlint_old": [
+                    "run.bat"
+                ]
+            }
+        }
+    }
+}

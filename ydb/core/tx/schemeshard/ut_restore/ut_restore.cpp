@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         s3Mock.Reset(new TS3Mock(ConvertTestData(backup), TS3Mock::TSettings(port)));
         UNIT_ASSERT(s3Mock->Start());
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
 
         TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "Table"
@@ -1336,10 +1336,10 @@ value {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -1411,10 +1411,10 @@ value {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -1487,10 +1487,10 @@ value {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -1551,11 +1551,11 @@ value {
 
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -1623,11 +1623,11 @@ value {
 
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -1699,11 +1699,11 @@ value {
 
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
 
         // Create table with 2 tablets
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -1850,11 +1850,11 @@ value {
 
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::SEQUENCEPROXY, NActors::NLog::PRI_TRACE);
 
         // Create table with 2 tablets
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2626,10 +2626,10 @@ value {
 
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         // Create table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2710,10 +2710,10 @@ value {
 
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         // Create table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -3212,7 +3212,7 @@ value {
         TPortManager portManager;
         THolder<TS3Mock> s3Mock;
 
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data});
         const ui64 restoreTxId = txId;
 
@@ -3444,8 +3444,8 @@ value {
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         ui64 txId = 100;
 
@@ -3625,7 +3625,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             s3Mock.Reset(new TS3Mock(ConvertTestData({GenerateScheme(desc), std::move(data)}), TS3Mock::TSettings(port)));
             UNIT_ASSERT(s3Mock->Start());
 
-            runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
             schemeStr = GenerateTableDescription(desc);
         }
 
@@ -3998,7 +3998,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 s3Mock.Reset(new TS3Mock(ConvertTestData({GenerateScheme(desc), {data}}), TS3Mock::TSettings(port)));
                 UNIT_ASSERT(s3Mock->Start());
 
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 schemeStr = GenerateTableDescription(desc);
             }
 
@@ -4110,8 +4110,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             });
         }
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         auto initialStatus = Ydb::StatusIds::SUCCESS;
         switch (expectedStatus) {
@@ -4624,8 +4624,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(EnableLocalIndexAsSchemeObject);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
 
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         ui64 txId = 100;
 
@@ -4897,8 +4897,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
 
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         ui64 txId = 100;
 
@@ -5873,8 +5873,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         THolder<IEventHandle> delayed;
         auto prevObserver = SetDelayObserver(runtime, delayed, delayFunc);
@@ -7286,7 +7286,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent(2);
@@ -7385,7 +7385,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         constexpr int ViewLayers = 10;
@@ -7680,7 +7680,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
         TVector<std::function<void(TTestBasicRuntime&)>> allCheckers;
@@ -7824,10 +7824,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
 
@@ -7882,7 +7882,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         const auto data = GenerateTestData(R"(
             columns {
@@ -7939,8 +7939,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         ui64 txId = 100;
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -8122,7 +8122,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         auto topic = NDescUT::TSimpleTopic(0, 2);
 
         const auto data = GenerateTestData({
@@ -8176,10 +8176,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         auto topic = NDescUT::TSimpleTopic(1, 0);
 
@@ -8211,10 +8211,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime, TTestEnvOptions{}.EnableTopicMessageLevelParallelism(true));
         ui64 txId = 100;
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         TString topicProto = R"(
             Name: "topic_full_test"
@@ -9176,7 +9176,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent(2);
@@ -9250,7 +9250,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
@@ -9326,7 +9326,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent(2);
@@ -9400,7 +9400,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -9495,7 +9495,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent(1);
@@ -9554,7 +9554,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
@@ -9638,7 +9638,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent(2);
@@ -9716,7 +9716,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         THashMap<TString, TTestDataWithScheme> bucketContent(2);
@@ -9794,7 +9794,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
@@ -9887,7 +9887,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
         TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
@@ -10169,8 +10169,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
 
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -10241,8 +10241,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
 
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
             }
@@ -10281,8 +10281,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
 
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
             }
 
@@ -10320,8 +10320,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
 
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
             }
 
@@ -10492,7 +10492,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
             }
 
@@ -10535,8 +10535,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
 
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
                 if (createsViews) {
@@ -10864,7 +10864,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
             }
 
@@ -10949,8 +10949,8 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 TInactiveZone inactive(activeZone);
 
                 env.SetupRuntime(runtime);
-                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
                 runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
             }
@@ -11131,7 +11131,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
                 env.SetupRuntime(runtime);
                 runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
             }
 
             const ui64 importId = ++t.TxId;
@@ -11176,7 +11176,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
 
                 env.SetupRuntime(runtime);
                 runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
             }
 
             const ui64 importId = ++t.TxId;

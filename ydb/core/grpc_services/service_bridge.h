@@ -12,5 +12,6 @@ namespace NKikimr::NGRpcService {
     void DoConvertToBridge(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoAddPile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
     void DoRemovePile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
+    void DoSetDatabaseBridgeMode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&);
 
 } // NKikimr::NGRpcService

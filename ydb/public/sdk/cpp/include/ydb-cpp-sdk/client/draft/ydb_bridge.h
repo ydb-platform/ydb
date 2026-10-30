@@ -26,6 +26,11 @@ struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 
 struct TRemovePileSettings : public TOperationRequestSettings<TRemovePileSettings> {};
 
+struct TSetDatabaseBridgeModeSettings : public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
+    //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically.
+    FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
+};
+
 enum class EPileState {
     UNSPECIFIED = 0,
     PRIMARY = 1,
@@ -116,6 +121,10 @@ public:
     // Completes when every storage group has lost its part in the pile; the pile is INACTIVE then and may be dropped
     // from the bridge config along with its hosts.
     TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings = {});
+
+    // Atomically change bridge mode of databasePath. For serverless databases, select their shared database.
+    // Requires cluster administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.
+    TAsyncStatus SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode, const TSetDatabaseBridgeModeSettings& settings = {});
 
 private:
     class TImpl;

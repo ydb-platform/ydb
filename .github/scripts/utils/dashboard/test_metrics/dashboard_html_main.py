@@ -121,11 +121,18 @@ def build_html_dashboard(
       min-height: 22px;
     }}
     .chart-tile-title {{
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       letter-spacing: 0.01em;
-      color: #57606a;
+      color: #24292f;
       text-transform: none;
+    }}
+    .chart-tile-sub {{
+      display: block;
+      margin-top: 1px;
+      font-size: 11px;
+      font-weight: 400;
+      color: #656d76;
     }}
     .chart-tile-expand {{
       padding: 0;
@@ -526,7 +533,7 @@ def build_html_dashboard(
   <div class="chart-grid" id="yaActivityGrid">
     <div class="chart-tile span-2" data-pane="yaActivity">
       <div class="chart-tile-head">
-        <span class="chart-tile-title">ya make concurrency</span>
+        <span class="chart-tile-title">ya make concurrency<span class="chart-tile-sub">build, archives, cache, test workers, links</span></span>
         <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
       </div>
       <div id="yaActivity" class="chart-pane"></div>
@@ -540,7 +547,7 @@ def build_html_dashboard(
     <div class="chart-grid" id="chunkChartGrid">
       <div class="chart-tile" data-pane="activeLayerChunk">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Active</span>
+          <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">how many suite+chunk runs are alive at each moment</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
@@ -551,7 +558,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">CPU</span>
+          <span class="chart-tile-title">CPU · estimated cores<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
@@ -562,7 +569,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">RAM</span>
+          <span class="chart-tile-title">RAM · GB<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
@@ -573,7 +580,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Disk</span>
+          <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
@@ -591,7 +598,7 @@ def build_html_dashboard(
     <div class="chart-grid" id="suiteChartGrid">
       <div class="chart-tile" data-pane="activeLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Active</span>
+          <span class="chart-tile-title">Active chunks by suite<span class="chart-tile-sub">how many suite runs are alive at each moment</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="activeLayerSuite" class="chart-pane"></div>
@@ -602,7 +609,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">CPU</span>
+          <span class="chart-tile-title">CPU by suite · estimated cores<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
@@ -621,7 +628,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">RAM</span>
+          <span class="chart-tile-title">RAM by suite · GB<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
@@ -632,7 +639,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Disk</span>
+          <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
@@ -643,7 +650,7 @@ def build_html_dashboard(
       <div class="chart-grid">
         <div class="chart-tile span-2 expanded" data-pane="testsLayerSuite">
           <div class="chart-tile-head">
-            <span class="chart-tile-title">Tests</span>
+            <span class="chart-tile-title">Tests running by suite<span class="chart-tile-sub">how many individual tests are in flight at each moment</span></span>
           </div>
           <div id="testsLayerSuite" class="chart-pane"></div>
           <div class="chart-tile-meta" style="display:block;">

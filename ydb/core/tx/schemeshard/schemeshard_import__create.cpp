@@ -635,31 +635,26 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void MarkTableImported(const TPathId& pathId, NIceDb::TNiceDb& db) {
-        const auto& table = Self->Tables.at(pathId);
-        if (!table->IsImportingReplica()) {
-            return;
-        }
-
-        auto& config = table->MutableReplicationConfig();
-        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-        if (pathId.OwnerId == Self->TabletID()) {
-            db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(config.SerializeAsString()));
-        } else {
-            db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
-        }
-    }
-
     void FinishImportItem(TItem& item, NIceDb::TNiceDb& db) {
         item.State = EState::Done;
-        if (!item.Table || item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+        if (!item.Table || item.Table->store_type() != Ydb::Table::STORE_TYPE_ROW) {
             return;
         }
 
         // Materialized index tables have their own items, without a saved placeholder config.
-        MarkTableImported(item.DstPathId, db);
+        const auto& pathId = item.DstPathId;
+        const auto& table = Self->Tables.at(pathId);
+        if (table->IsImportingReplica()) {
+            auto& config = table->MutableReplicationConfig();
+            config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+            if (pathId.OwnerId == Self->TabletID()) {
+                db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(config.SerializeAsString()));
+            } else {
+                db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
+            }
+        }
         if (item.ReplicationConfig) {
             item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
         }
@@ -2174,7 +2169,19 @@ private:
                 if (indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
                         || indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique)) {
                     const auto implPath = indexPath.Child(NTableIndex::ImplTable);
-                    MarkTableImported(implPath.Base()->PathId, db);
+                    const auto& pathId = implPath.Base()->PathId;
+                    const auto& table = Self->Tables.at(pathId);
+                    if (table->IsImportingReplica()) {
+                        auto& config = table->MutableReplicationConfig();
+                        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+                        if (pathId.OwnerId == Self->TabletID()) {
+                            db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+                                NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(config.SerializeAsString()));
+                        } else {
+                            db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                                NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
+                        }
+                    }
                 }
             }
             if (item.Table) {

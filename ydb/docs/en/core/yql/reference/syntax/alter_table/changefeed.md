@@ -26,6 +26,8 @@
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
 * `USER_SIDS`: Enabling/disabling user [SIDs](../../../../concepts/cdc.md#record-structure). Disabled by default.
 * `TRACE_IDS`: Enabling/disabling OpenTelemetry [trace identifiers](../../../../concepts/cdc.md#record-structure). Disabled by default.
+* `COMPRESSION`: Compression applied independently to every changefeed message in a JSON format. Supported values are `NONE` (default) and `ZSTD`.
+* `COMPRESSION_LEVEL`: Zstandard compression level from `1` to `22`. It can only be specified with `COMPRESSION = 'ZSTD'`; the default level is `3`.
 * `BARRIERS_INTERVAL` — [barrier](../../../../concepts/cdc.md#barriers) emission interval. The value type is `Interval`. Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
 * `TOPIC_AUTO_PARTITIONING`: [Topic autopartitioning mode](../../../../concepts/cdc.md#topic-partitions):
@@ -63,6 +65,17 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     VIRTUAL_TIMESTAMPS = TRUE
+);
+```
+
+The example of creating a changefeed with Zstandard compression level 7:
+
+```yql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    COMPRESSION = 'ZSTD',
+    COMPRESSION_LEVEL = 7
 );
 ```
 

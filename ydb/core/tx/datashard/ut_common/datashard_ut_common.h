@@ -447,6 +447,7 @@ struct TShardedTableOptions {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
         using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
+        using ECompression = NKikimrSchemeOp::ECdcStreamCompression;
 
         TString Name;
         EMode Mode;
@@ -459,6 +460,8 @@ struct TShardedTableOptions {
         bool SchemaChanges = false;
         bool UserSIDs = true;
         bool TraceIds = false;
+        ECompression Compression = NKikimrSchemeOp::ECdcStreamCompressionNone;
+        i32 CompressionLevel = 0;
     };
 
     struct TFamily {

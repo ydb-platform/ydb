@@ -425,6 +425,14 @@ namespace NKikimr::NBsController {
                 }
                 pileId = pile->BridgePileId;
             }
+            // the group becomes the part of its pile, which the settings of the pile, overrides included, apply to
+            const auto erasure = GetStoragePoolForPile(storagePoolId, *pileId).ErasureSpecies;
+            if (group.ErasureSpecies != erasure) {
+                throw TExError() << "GroupId# " << group.ID << " has erasure "
+                    << TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies)
+                    << ", while the settings of its pile need " << TBlobStorageGroupType::ErasureSpeciesName(erasure)
+                    << "; it can't be made bridged";
+            }
             Groups.FindForUpdate(group.ID)->MakeInlinePile(*pileId);
             GroupContentChanged.insert(group.ID);
         });

@@ -49,6 +49,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     using TDeadlineMask = std::bitset<MaxBatchedPutRequests>;
     std::map<TInstant, TDeadlineMask> PutDeadlineMasks;
     TDeadlineMask DeadlineMask;
+    bool DeadlinesScheduled = false;
 
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;
@@ -704,17 +705,17 @@ public:
             BlobsEncrypted = PutImpl.Blobs.size();
         }
 
+        // the deadline of every blob is kept here, the interpile way too: the remote pile replies only once the
+        // whole batch is done there
+        ScheduleDeadlines();
+
         if (ReduceInterpileTraffic) {
             ResumeBootstrap();
             CheckRequests(TEvents::TSystem::Bootstrap);
             return;
         }
 
-        TInstant now = TActivationContext::Now();
-
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            TInstant deadline = std::min(now + MaxTimeout, PutImpl.Blobs[blobIdx].Deadline);
-            PutDeadlineMasks[deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -735,14 +736,24 @@ public:
             getTotalSize()
         );
 
-        ScheduleNextWakeup(TInstant::Zero());
-
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
             partSet.resize(Info->Type.TotalPartCount());
         }
         ResumeBootstrap();
         CheckRequests(TEvents::TSystem::Bootstrap);
+    }
+
+    void ScheduleDeadlines() {
+        if (std::exchange(DeadlinesScheduled, true)) {
+            return; // the fallback from the interpile way bootstraps again
+        }
+        const TInstant now = TActivationContext::Now();
+        for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+            TInstant deadline = std::min(now + MaxTimeout, PutImpl.Blobs[blobIdx].Deadline);
+            PutDeadlineMasks[deadline].set(blobIdx);
+        }
+        ScheduleNextWakeup(TInstant::Zero());
     }
 
     void InterpileBootstrap() {

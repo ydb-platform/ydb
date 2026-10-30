@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
+#include <util/system/type_name.h>
+
 using namespace NBridgeTest;
 
 namespace {
@@ -603,6 +605,123 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "enable_non_uniform_storage");
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+    // The only part of the group is in pile 2, which gets back: the put made while the pile is NOT_SYNCHRONIZED_1 waits,
+    // as the part takes no data then. The pile gets into the data quorum with the generation of the group unchanged,
+    // and the put waiting must go then, as a new one does.
+    Y_UNIT_TEST(RequestWaitingForOnlyPartGoesWhenPileGetsBack) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = GetLogicalPoolGroups(env, 1).front();
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableChangeStoragePoolBridgeMode();
+        cmd->SetBoxId(1);
+        cmd->SetStoragePoolId(1);
+        cmd->SetBridgeMode(false);
+        cmd->SetRetainPileName("pile_2");
+        cmd->SetItemConfigGeneration(ReadStoragePool(env, 1).GetItemConfigGeneration());
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return HasOnlyPart(env, GetGroupInfo(env, groupId), 1); }, "group with the only part");
+
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        WaitForLocalPileState(env, 1, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        const ui32 generation = GetGroupInfo(env, groupId).GetGroupGeneration();
+
+        // the bridge proxy of node 1 learns the pile is NOT_SYNCHRONIZED_1, and the cluster states after it wait: the
+        // pile may get synced very soon, and the put must be made before the proxy learns that
+        const TBridgePileId pileId = TBridgePileId::FromPileIndex(1);
+        bool holdClusterState = true;
+        bool proxyKnowsNotSynchronized = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        const TString data = "data written while the only part gets back";
+        const TLogoBlobID id(100501, 1, 1, 0, data.size(), 0);
+        ui32 numVPuts = 0; // of the blob of the test, made before the proxy learns the pile is synced
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (holdClusterState && nodeId == 1 && ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                if (actor && TypeName(*actor).Contains("TBridgedBlobStorageProxyActor")) {
+                    const auto& bridgeInfo = ev->Get<TEvNodeWardenStorageConfig>()->BridgeInfo;
+                    const auto *pile = bridgeInfo ? bridgeInfo->FindPile(pileId) : nullptr;
+                    if (pile && pile->State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1) {
+                        proxyKnowsNotSynchronized = true;
+                    } else if (proxyKnowsNotSynchronized) {
+                        held.emplace_back(nodeId, std::move(ev));
+                        return false;
+                    }
+                }
+            }
+            if (holdClusterState && ev->HasEvent()) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut) {
+                    const auto& record = ev->Get<TEvBlobStorage::TEvVPut>()->Record;
+                    numVPuts += LogoBlobIDFromLogoBlobID(record.GetBlobID()).FullID() == id;
+                } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVMultiPut) {
+                    for (const auto& item : ev->Get<TEvBlobStorage::TEvVMultiPut>()->Record.GetItems()) {
+                        numVPuts += LogoBlobIDFromLogoBlobID(item.GetBlobID()).FullID() == id;
+                    }
+                }
+            }
+            return true;
+        };
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForLocalPileState(env, 1, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        for (ui32 i = 0; i < 100 && !proxyKnowsNotSynchronized; ++i) {
+            env.Sim(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_C(proxyKnowsNotSynchronized, "the bridge proxy didn't learn the pile is NOT_SYNCHRONIZED_1");
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data,
+                env.Runtime->GetClock() + TDuration::Seconds(30)));
+        });
+        for (ui32 i = 0; held.empty(); ++i) {
+            UNIT_ASSERT_C(i < 100, "no newer cluster state for the bridge proxy");
+            env.Sim(TDuration::MilliSeconds(10));
+        }
+        holdClusterState = false;
+        UNIT_ASSERT_VALUES_EQUAL_C(numVPuts, 0, "the put didn't wait for the pile of the only part");
+        for (auto& [nodeId, ev] : std::exchange(held, {})) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetGroupGeneration(), generation);
+    }
+
+    // The ordinary block-4-2 pool has its group in pile 2, and pile 2 has an override for the kind of the pool with
+    // another erasure. The override is accepted, as it applies to bridged groups only. Making the pool bridged would
+    // turn the group into the part of pile 2 under that override, which its layout doesn't match; it must be refused,
+    // with the pool and the group left as they were.
+    Y_UNIT_TEST(BridgeModeChecksExistingGroupAgainstPileOverride) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 2);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        DropLocationFilter(env, 2);
+
+        const auto result = ReplaceMainConfig(env, [](YAML::Node& config) {
+            YAML::Node rule;
+            rule["pile_name"].push_back("pile_2");
+            rule["kind"].push_back("pool_2");
+            rule["erasure_species"] = "none";
+            rule["geometry"] = YAML::Node(YAML::NodeType::Map);
+            config["blob_storage_config"]["storage_pool_pile_overrides"].push_back(rule);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+
+        const auto response = ChangeStoragePoolBridgeMode(env, 2, true);
+        UNIT_ASSERT_C(!response.GetSuccess(), "the existing group doesn't match the override of its pile");
+        UNIT_ASSERT(!ReadStoragePool(env, 2).GetBridgeMode());
+        UNIT_ASSERT(!GetGroupInfo(env, groups.front()).HasBridgeGroupState());
     }
 
 }

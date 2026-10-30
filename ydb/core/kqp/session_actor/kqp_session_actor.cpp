@@ -1256,6 +1256,8 @@ public:
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
+        AFL_ENSURE(QueryState->UserRequestContext);
+        AFL_ENSURE(!QueryState->UserRequestContext->IsStreamingQuery);
         AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
             "SessionActor.AcquirePersistentSnapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
@@ -1335,6 +1337,15 @@ public:
 
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
         QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
+
+        AFL_ENSURE(QueryState->UserRequestContext);
+        if (QueryState->UserRequestContext->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned for
+            // their whole lifetime. Reads at the acquired step stay valid via the
+            // datashard KeepSnapshotTimeout grace window and are executed right away;
+            // per-event lookups use inconsistent reads instead of a stale snapshot.
+            QueryState->TxCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+        }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();

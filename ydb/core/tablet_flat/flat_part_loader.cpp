@@ -24,6 +24,24 @@ TLoader::TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollecti
 
 TLoader::~TLoader() { }
 
+TLoader::TFetch TLoader::StageShareMeta() {
+    Y_ENSURE(!MetaRequest);
+    while (MetaSlot < Components.PageCollectionComponents.size()) {
+        if (MetaSlot < PageCollections.size() && PageCollections[MetaSlot]) {
+            ++MetaSlot;
+            continue;
+        }
+        auto& component = Components.PageCollectionComponents[MetaSlot];
+        MetaRequest =
+            MakeIntrusiveConst<NPageCollection::TPageCollection>(component.LargeGlobId, component.SharedMeta);
+        return {
+            .PageCollection = MetaRequest,
+            .MetaOnly = true,
+        };
+    }
+    return {};
+}
+
 void TLoader::StageParseMeta()
 {
     if (PageCollections.size() < Components.PageCollectionComponents.size()) {
@@ -33,11 +51,11 @@ void TLoader::StageParseMeta()
     // Build slot 0 first — its meta is needed for the full layout parse
     if (PageCollections.size() > 0 && !PageCollections[0]) {
         auto& comp = Components.PageCollectionComponents[0];
-        Y_ENSURE(comp.RawMeta, "Slot 0 has no raw meta data");
+        Y_ENSURE(comp.SharedMeta, "Slot 0 has no metadata");
 
         auto cache = MakeIntrusive<TPageCollection>(
             MakeIntrusiveConst<NPageCollection::TPageCollection>(
-                comp.LargeGlobId, TSharedData(comp.RawMeta)));
+                comp.LargeGlobId, comp.SharedMeta));
 
         for (auto& p : comp.StickyPages) {
             cache->AddStickyPage(p.Location.Offset, p.Location.Size,
@@ -214,11 +232,11 @@ void TLoader::StageParseMeta()
             continue; // Prebuilt by caller
         }
         auto& comp = Components.PageCollectionComponents[i];
-        Y_ENSURE(comp.RawMeta, "Slot " << i << " has no raw meta data");
+        Y_ENSURE(comp.SharedMeta, "Slot " << i << " has no metadata");
 
         auto collection = MakeIntrusive<TPageCollection>(
             MakeIntrusiveConst<NPageCollection::TPageCollection>(
-                comp.LargeGlobId, TSharedData(comp.RawMeta)));
+                comp.LargeGlobId, comp.SharedMeta));
         for (auto& p : comp.StickyPages) {
             collection->AddStickyPage(p.Location.Offset, p.Location.Size,
                 NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
@@ -233,11 +251,11 @@ void TLoader::StageParseMeta()
     // Construct the outer blob slot as TOuterPageCollection if needed
     if (isOuterSlot && !PageCollections.back()) {
         auto& comp = Components.PageCollectionComponents.back();
-        Y_ENSURE(comp.RawMeta, "Outer blob slot has no raw meta data");
+        Y_ENSURE(comp.SharedMeta, "Outer blob slot has no metadata");
 
         auto cache = MakeIntrusive<TPageCollection>(
             MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
-                comp.LargeGlobId, TSharedData(comp.RawMeta)));
+                comp.LargeGlobId, comp.SharedMeta));
 
         for (auto& p : comp.StickyPages) {
             cache->AddStickyPage(p.Location.Offset, p.Location.Size,
@@ -563,9 +581,18 @@ TLoader::TFetch TLoader::StagePreloadData()
     return LoaderEnv->GetFetch();
 }
 
-void TLoader::Save(TVector<NSharedCache::TEvResult::TLoaded>&& pages)
+void TLoader::Save(
+    TVector<NSharedCache::TEvResult::TLoaded>&& pages, TAtomicSharedPtr<const NPageCollection::TMeta> sharedMeta)
 {
-    if (Stage == EStage::PartView || Stage == EStage::Slice || Stage == EStage::PreloadData) {
+    if (Stage == EStage::SharedMeta) {
+        Y_ENSURE(MetaRequest && pages.empty() && sharedMeta);
+        auto& component = Components.PageCollectionComponents[MetaSlot];
+        Y_ENSURE(
+            sharedMeta->Group == component.LargeGlobId.Group && sharedMeta->Raw.size() == component.LargeGlobId.Bytes);
+        component.SharedMeta = std::move(sharedMeta);
+        MetaRequest.Reset();
+        ++MetaSlot;
+    } else if (Stage == EStage::PartView || Stage == EStage::Slice || Stage == EStage::PreloadData) {
         for (auto& page : pages) {
             LoaderEnv->Save(std::move(page));
         }

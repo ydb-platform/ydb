@@ -124,6 +124,8 @@ struct TCollection {
     void RemoveMetadataRequest(TRequest& request);
     void RefMetadata(const NPageCollection::IPageCollection& collection);
     void UnrefMetadata(const NPageCollection::IPageCollection& collection);
+    bool HasSharedMeta(
+        const NPageCollection::TMeta* meta, const NPageCollection::IPageCollection* except = nullptr) const;
 
     ECacheMode GetCacheMode() {
         return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;

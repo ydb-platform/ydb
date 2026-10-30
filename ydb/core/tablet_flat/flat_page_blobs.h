@@ -126,6 +126,10 @@ namespace NPage {
             return &Raw;
         }
 
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
+        }
+
     public:
         const TSharedData Raw;
 

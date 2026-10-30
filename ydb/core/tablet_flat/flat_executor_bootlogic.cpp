@@ -203,7 +203,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
             NBlockIO::EPriority::Fast,
             std::move(fetch.PageCollection),
             std::move(fetch.Pages),
-            BootAttempt),
+            BootAttempt, fetch.MetaOnly),
         0, (ui64)ERequestTypeCookie::BootLogic);
 
     return NBoot::TSpawned(true);

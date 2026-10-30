@@ -2564,14 +2564,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char outputTopicName[] = "largeMessageOutputTopic";
         constexpr char sourceName[] = "largeMessageSource";
         const auto inputTopicSettings = NTopic::TCreateTopicSettings()
-            .PartitioningSettings(1, 1)
-            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
-            .PartitionWriteBurstBytes(partitionWriteSpeed);
+                                            .PartitioningSettings(1, 1)
+                                            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
+                                            .PartitionWriteBurstBytes(partitionWriteSpeed);
         CreateTopic(inputTopicName, inputTopicSettings, /* local */ true);
         const auto outputTopicSettings = NTopic::TCreateTopicSettings()
-            .PartitioningSettings(1, 1)
-            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
-            .PartitionWriteBurstBytes(partitionWriteSpeed);
+                                             .PartitioningSettings(1, 1)
+                                             .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
+                                             .PartitionWriteBurstBytes(partitionWriteSpeed);
         CreateTopic(outputTopicName, outputTopicSettings, /* local */ true);
         Y_DEFER {
             DropTopic(inputTopicName, /* local */ true);
@@ -2600,20 +2600,18 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         )sql", "source"_a = sourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName,
             "output_expression"_a = outputExpression));
 
-        NYdb::TDriver topicDriver(NYdb::TDriverConfig()
-            .SetEndpoint(GetKikimrRunner()->GetEndpoint())
-            .SetDatabase(TEST_DATABASE)
-            .SetMaxMessageSize(maxMessageSize));
+        NYdb::TDriver topicDriver(
+            NYdb::TDriverConfig().SetEndpoint(GetKikimrRunner()->GetEndpoint()).SetDatabase(TEST_DATABASE).SetMaxMessageSize(maxMessageSize));
         NYdb::NTopic::TTopicClient topicClient(topicDriver);
 
         const std::string inputMessage(inputMessageSize, 'x');
         const auto counters = MakeIntrusive<NYdb::NTopic::TWriterCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
-        auto writeSession = topicClient.CreateSimpleBlockingWriteSession(
-            NYdb::NTopic::TWriteSessionSettings()
-                .Path(inputTopicName)
-                .PartitionId(0)
-                .Counters(counters)
-                .Codec(Compressed ? NYdb::NTopic::ECodec::GZIP : NYdb::NTopic::ECodec::RAW));
+        auto writeSession =
+            topicClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
+                                                             .Path(inputTopicName)
+                                                             .PartitionId(0)
+                                                             .Counters(counters)
+                                                             .Codec(Compressed ? NYdb::NTopic::ECodec::GZIP : NYdb::NTopic::ECodec::RAW));
         UNIT_ASSERT(writeSession->Write(NYdb::NTopic::TWriteMessage(inputMessage), nullptr, TDuration::Seconds(30)));
         UNIT_ASSERT(writeSession->Close(TDuration::Seconds(30)));
         EnsureTopicEndOffset(inputTopicName, 1, topicClient);
@@ -2625,8 +2623,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
 
         // Avoid logging the full expected payload while polling; compare the data after reading.
-        const auto messages = ReadTopicMessages(
-            outputTopicName, { "" }, topicClient, TInstant::Zero(), /* sort */ false, /* checkResult */ false);
+        const auto messages =
+            ReadTopicMessages(outputTopicName, { "" }, topicClient, TInstant::Zero(), /* sort */ false, /* checkResult */ false);
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(messages.front().first.size(), outputMessageSize);
         UNIT_ASSERT_C(inputMessage.compare(0, outputMessageSize, messages.front().first) == 0, "Large topic message contents differ");

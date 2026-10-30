@@ -4,3 +4,4 @@
 * [Actor system development](../actor-system/index.md)
 * [Distributed storage architecture](../distributed-storage.md)
 * [Testing with load actors](../load-actors-overview.md)
+* [Developer UI security guidelines](../developer-ui-security-guidelines.md)

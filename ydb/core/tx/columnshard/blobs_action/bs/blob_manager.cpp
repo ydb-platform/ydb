@@ -391,7 +391,6 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         PopGCBarriers(*CollectGenStepInFlight);
         if (FirstGC) {
             gcContext.InitializeFirst(TabletInfo);
-            FirstGC = false;
         }
         if (!BlobsToKeep.IsEmpty()) {
             AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)(
@@ -413,7 +412,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
     auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()),
         CollectGenStepInFlight, std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID,
-        CurrentGen);
+        CurrentGen, FirstGC);
     if (result->IsEmpty()) {
         BlobsManagerCounters.GCCounters.OnEmptyGCTask();
         CollectGenStepInFlight = {};
@@ -563,6 +562,7 @@ void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep
         LastCollectedGenStep = *genStep;
         AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);
         CollectGenStepInFlight.reset();
+        FirstGC = false;
     } else {
         AFL_VERIFY(!CollectGenStepInFlight);
     }

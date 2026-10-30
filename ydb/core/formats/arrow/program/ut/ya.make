@@ -18,6 +18,7 @@ SRCS(
     ut_kernel_logic.cpp
     ut_collection.cpp
     ut_functions.cpp
+    ut_pattern_hints.cpp
 )
 
 YQL_LAST_ABI_VERSION()

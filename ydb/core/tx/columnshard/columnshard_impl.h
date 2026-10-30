@@ -1,7 +1,6 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
-#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -22,6 +21,8 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
+#include "engines/reader/transaction/scan_gate.h"
+#include "maintenance/cut_history/find_empty_history_intervals.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -219,7 +220,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxSaveCutHistoryRequests;
-    friend class TFindEmptyHistoryIntervalsResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -314,6 +314,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
+    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -404,6 +406,10 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
 public:
     TAtomicCounter InitShardCounter;
+
+    const TTabletCountersHandle& GetTabletCounters() const {
+        return *Counters.GetTabletCounters();
+    }
 
     ui64 BuildEphemeralTxId() {
         static TAtomicCounter Counter = 0;
@@ -532,8 +538,9 @@ private:
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
+    NOlap::NReader::TScanGate ScanGate;
     TBackgroundController BackgroundController;
+    std::unique_ptr<TFindEmptyHistoryIntervals> FindEmptyHistoryIntervals;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -614,14 +621,7 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    std::optional<TEmptyHistoryIntervalsScan> EmptyHistoryIntervalsScan;
-    void InitFindEmptyHistoryIntervals();
-    void StartFindEmptyHistoryIntervals(const TActorContext& ctx);
-    void AbortFindEmptyHistoryIntervals();
-    void FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result);
-    void TryCutHistory(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
@@ -661,6 +661,8 @@ public:
     const TTablesManager& GetTablesManager() const {
         return TablesManager;
     }
+
+    void OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx);
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 

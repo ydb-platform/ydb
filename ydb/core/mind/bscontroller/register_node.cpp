@@ -419,6 +419,8 @@ public:
                 Y_ABORT_UNLESS(node);
                 Y_ABORT_UNLESS(!node->Registered);
                 node->Registered = true;
+                // a share taken in Execute may be older than the one already sent to the node during the commit
+                Self->FillBridgeSyncNodeRate(nodeId, &Response->Record);
                 Self->SendInReply(*Request, std::move(Response));
                 Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
             }

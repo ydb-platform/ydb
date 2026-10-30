@@ -240,7 +240,7 @@ public:
 
         const TString tablePath = GetDatabase() + "/scenario/TestReadUpdateWriteLoad/read_update_write_load/big_table";
         while (!Finished) {
-            int writeTo = random() % RangeAllocator.GetRightBorder();
+            int writeTo = 1 + random() % RangeAllocator.GetRightBorder();
             int writeFrom = std::max(writeTo - 30, 0);
 
             NYdb::TValueBuilder rowsBuilder;

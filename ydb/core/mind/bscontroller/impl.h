@@ -13,11 +13,13 @@
 #include "bridge_sync_counters.h"
 #include "indir.h"
 #include "self_heal.h"
+#include "group_state.h"
 #include "storage_pool_stat.h"
 #include "database_space.h"
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
@@ -25,6 +27,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/mind/table_adapter.h>
@@ -38,6 +41,9 @@
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/hash_multi_map.h>
+
+#include <array>
+#include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
@@ -105,6 +111,7 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxConvertToBridge;
+    class TTxUpdateBridgeGroupModes;
     class TTxBridgePileOperation;
     class TTxAddBridgePile;
     class TTxRemoveBridgePile;
@@ -719,6 +726,9 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
+        // Persisted with the group generation by CommitConfigUpdates.
+        std::optional<std::array<NKikimrBlobStorage::TDataCenterState::EState, 3>> FailRealmStates;
+        std::optional<EMirror3dcGroupState> Mirror3dcState;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 
@@ -768,8 +778,7 @@ public:
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
-        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
-            const std::function<TGroupGeometryInfo()>& getGeom);
+        void CalculateLayoutStatus(TBlobStorageController* self, const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -926,6 +935,7 @@ public:
             }
         }
 
+        static unsigned __int128 ScaleGroupResource(ui64 value, size_t numVDisks, TBlobStorageGroupType type);
         ui64 ScaleGroupResource(ui64 value) const;
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
@@ -980,6 +990,28 @@ public:
         bool IsBridgeConversionCandidate() const {
             return !VDisksInGroup.empty() && !VirtualGroupState && !BlobDepotId && !DDisk && !BridgeGroupInfo &&
                 !BridgeProxyGroupId && !BridgePileId;
+        }
+
+        // the bridged group being made ordinary one (its pool is not bridged anymore) keeps its authority part only,
+        // the part in the pile is going away then
+        bool IsBridgePartDropped(TBridgePileId bridgePileId, bool poolBridgeMode) const {
+            if (poolBridgeMode || !BridgeGroupInfo) {
+                return false;
+            }
+            const auto& state = BridgeGroupInfo->GetBridgeGroupState();
+            const auto authorityPileId = TBridgePileId::FromProto(&state,
+                &NKikimrBridge::TGroupState::GetAuthorityPileId);
+            return authorityPileId && authorityPileId != bridgePileId;
+        }
+
+        // turn the conversion candidate into inline pile in the pile its VDisks reside in; the group generation has to
+        // be bumped (pile generation gets adjusted along with it on commit)
+        void MakeInlinePile(TBridgePileId bridgePileId) {
+            Y_ABORT_UNLESS(IsBridgeConversionCandidate());
+            BridgePileId = bridgePileId;
+            BridgeProxyGroupId = ID;
+            NBridge::MakeInlinePileGroupState(BridgeGroupInfo.emplace().MutableBridgeGroupState(), ID, Generation,
+                bridgePileId);
         }
 
         // BlobDepotId as reported to node wardens: actual tablet id for working virtual group, zero for virtual group which
@@ -1238,7 +1270,7 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
-            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location; // set only through SetLocation
+            TMaybe<TString> Location; // set only through SetLocation
             std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
 
             void SetLocation(const TString& serialized) {
@@ -1265,9 +1297,6 @@ public:
                 }
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
-                }
-                if (rowset.template HaveValue<T::Location>()) {
-                    result.SetLocation(rowset.template GetValue<T::Location>());
                 }
                 return result;
             }
@@ -1324,8 +1353,12 @@ public:
                 return s.Str();
             }
 
+            auto GetLegacyKey() const {
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+            }
+
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, Location);
+                return std::tuple_cat(GetLegacyKey(), std::tie(Location));
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
@@ -1337,7 +1370,7 @@ public:
             }
 
             void Load(IInputStream* s) {
-                TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> location;
+                TMaybe<TString> location;
                 ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
                 Location.Clear();
                 RequiredLocation.reset();
@@ -1375,6 +1408,16 @@ public:
         Table::DDisk::Type DDisk = false;
         Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
+
+        void SetGroupGeometry(const NKikimrBlobStorage::TGroupGeometry& geometry) {
+            RealmLevelBegin = geometry.GetRealmLevelBegin();
+            RealmLevelEnd = geometry.GetRealmLevelEnd();
+            DomainLevelBegin = geometry.GetDomainLevelBegin();
+            DomainLevelEnd = geometry.GetDomainLevelEnd();
+            NumFailRealms = geometry.GetNumFailRealms();
+            NumFailDomainsPerFailRealm = geometry.GetNumFailDomainsPerFailRealm();
+            NumVDisksPerFailDomain = geometry.GetNumVDisksPerFailDomain();
+        }
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1451,6 +1494,10 @@ public:
         TUserIds UserIds;
         TPDiskFilters PDiskFilters;
 
+        bool LoadPDiskFilters(NIceDb::TNiceDb& db, const TBoxStoragePoolId& id);
+        static void UpdatePDiskFilters(NTable::TDatabase& db, const TPDiskFilters* previous,
+            const TPDiskFilters* current);
+
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
             static TTableAdapter<Table, TStoragePoolInfo,
@@ -1482,8 +1529,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
-                    TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
-                    TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
+                    TInlineTable<TUserIds, Schema::BoxStoragePoolUser>
                 > adapter(
                     &TStoragePoolInfo::Name,
                     &TStoragePoolInfo::ErasureSpecies,
@@ -1513,8 +1559,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
-                    &TStoragePoolInfo::UserIds,
-                    &TStoragePoolInfo::PDiskFilters
+                    &TStoragePoolInfo::UserIds
                 );
             callback(&adapter);
         }
@@ -1662,6 +1707,8 @@ private:
     TActorId ResponsivenessActorID;
     TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
+    using TDataCenterStates = std::unordered_map<TString, NKikimrBlobStorage::TDataCenterState::EState>;
+    TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
@@ -1749,6 +1796,9 @@ private:
             EvCheckSyncerDisconnectedNodes,
             EvRetryBridgeConversion,
             EvRetryBridgePileOperation,
+            EvRetryBridgeGroupModes,
+            EvCheckBridgeGroupModes,
+            EvRetrySyncers,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1778,6 +1828,10 @@ private:
     std::unordered_set<TGroupId, THash<TGroupId>> SysViewChangedGroups;
     std::unordered_set<TBoxStoragePoolId, THash<TBoxStoragePoolId>> SysViewChangedStoragePools;
     bool SysViewChangedSettings = false;
+    bool ReportPhantomsOnlyVDisksAsReady = false; // last seen feature flag value affecting VSlots in system views
+
+    void SubscribeToFeatureFlags();
+    void Handle(TEvFeatureFlags::TEvChanged::TPtr ev);
 
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
@@ -1787,6 +1841,7 @@ private:
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;
         bool AllowDegradedWithSinglePhantomsOnly = false;
+        bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
@@ -2007,6 +2062,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void SetHostRecords(THostRecordMap hostRecords);
+    void UpdateGroupLayoutStatus();
+    TGroupGeometryInfo GetStaticGroupGeometry(TBlobStorageGroupType type, TBridgePileId pileId) const;
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2017,6 +2074,8 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
+    TActorId GroupStateActorId;
+    void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;
 
@@ -2202,6 +2261,8 @@ private:
     // Bridge operation
 
     static constexpr TDuration DisconnectedSyncerReactionTime = TDuration::Seconds(10);
+    // the time given to nodes to report their syncers to the new BSC instance, until then their number is not known
+    static constexpr TDuration SyncerReportingTime = TDuration::Seconds(10);
 
     struct TSyncerProgress {
         ui64 BytesDone = 0;
@@ -2226,6 +2287,9 @@ private:
         THashMap<TNodeId, TPerNodeInfo> NodeIds;
         bool InCommit = false;
         ui64 StaticCommitCookie = 0;
+        // the syncer finished with an error is started again after a while only, as it may fail again at once
+        TBackoffTimer RetryBackoff{100, 30000};
+        TMonotonic NotBefore;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2236,7 +2300,18 @@ private:
     THashMap<TGroupId, TSyncerState> TargetGroupToSyncerState;
     ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
-    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
+    TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction; // filled by EnqueueSyncer only
+    TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
+    // syncers beyond this number wait for their turn, which comes after each stage; those of static groups only count, as
+    // there are few of them and they matter the most; 0 means no limit
+    Schema::State::BridgeSyncMaxSyncers::Type BridgeSyncMaxSyncers = Schema::State::BridgeSyncMaxSyncers::Default;
+
+    // the limit for the whole cluster gets divided equally between the nodes hosting syncers; the nodes get a new share
+    // only when one of them starts hosting or stops doing so, or when the limit changes
+    ui64 BridgeSyncTotalRate = 0;
+    std::optional<ui64> BridgeSyncNodeRate; // unset until nodes have had time to report their syncers after BSC start
+    bool BridgeSyncNodeRatesDirty = true; // syncer placement or the limit has changed since BridgeSyncNodeRate was found
+    THashMap<TNodeId, ui64> SentBridgeSyncNodeRates; // the rate last sent to a node by this BSC instance
 
     bool CheckingUnsyncedBridgePiles = false;
     bool NotifyBridgeSyncFinishedErrors = false;
@@ -2276,14 +2351,46 @@ private:
         std::optional<TString> error);
     void HandleRetryBridgePileOperation();
 
-    // add the part in the pile to every bridged group lacking it; added gets (bridge proxy group, new part) pairs
+    // bring the bridged groups relying on single parts in line with the modes of their pools: the ones of bridged pools
+    // stop relying on them when all their parts are synced, the ones of ordinary pools lose their other parts
+    TRetriableStep BridgeGroupModesStep{TEvPrivate::EvRetryBridgeGroupModes};
+    bool BridgeGroupModesCheckScheduled = false;
+    void CheckBridgeGroupModes();
+    void OnBridgeGroupModesStepDone(bool failed, bool recheckLater);
+    void HandleRetryBridgeGroupModes();
+    void HandleCheckBridgeGroupModes();
+
+    // the parts of the groups being made ordinary ones stop getting requests first, and they are deleted after this
+    // delay, so that the requests issued with older group info get finished meanwhile
+    static constexpr TDuration BridgePartDropDelay = TDuration::Seconds(30);
+    // parts which have stopped getting requests, and when BSC has noticed this
+    THashMap<TGroupId, TMonotonic> DroppedBridgePartsSince;
+
+    // add the part in the pile to every bridged group of bridged pool lacking it; added gets (bridge proxy group, new
+    // part) pairs
     void AddBridgePileGroups(TConfigState& state, TBridgePileId pileId, ui64 becameUnsyncedGeneration,
+        std::vector<std::tuple<TGroupId, TGroupId>> *added);
+
+    // part of the bridged group to be created in the pile; it is unsynced from the beginning
+    struct TBridgeGroupPart {
+        TGroupId ProxyGroupId;
+        TBridgePileId PileId;
+        ui64 BecameUnsyncedGeneration = 0; // the one of the current sync of the pile, if there is one going
+    };
+
+    // create the parts of bridged groups, throws TExError when some can't be placed; added gets (bridge proxy group,
+    // new part) pairs
+    void AddBridgeGroupParts(TConfigState& state, const std::vector<TBridgeGroupPart>& parts,
         std::vector<std::tuple<TGroupId, TGroupId>> *added);
 
     // delete the part in the pile of every bridged group (inline pile keeps serving as bridge proxy group only); every
     // group having VDisks in the pile has to be such part, as its data is lost otherwise; returns the number of bridged
     // groups that have lost their part
     size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
+
+    // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
+    // its inline pile goes away
+    void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
 
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
@@ -2308,7 +2415,13 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
+    void EnqueueSyncer(TSyncerState& syncerState);
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
+    void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
+    bool IsNodeHostingSyncers(TNodeId nodeId) const;
+    void UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate);
+    void FillBridgeSyncNodeRate(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update);
+    void HandleRetrySyncers();
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<TGroupId>& groupIdsToRead);
@@ -2351,7 +2464,10 @@ private:
         NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot Request;
         std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)> Callback;
         TBackoffTimer Timer{10, 3000};
+        TMonotonic StartedAt;
+        bool Alarmed = false; // the command has been retried for too long, which is reported
     };
+    static constexpr TDuration InvokeOnRootAlarmTimeout = TDuration::Minutes(1);
     THashMap<ui64, TInvokeOnRootCommand> InvokeOnRootCommands;
 
     void InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,
@@ -2515,6 +2631,8 @@ public:
             {"marker", "BSC09"});
         Become(&TThis::StateWork);
 
+        SubscribeToFeatureFlags();
+
         ValidateInternalState();
         UpdatePDisksCounters();
         IssueInitialGroupContent();
@@ -2523,6 +2641,10 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+        GroupStateActorId = Register(CreateGroupStateActor(SelfId()));
+        for (const auto& [groupId, group] : GroupMap) {
+            UpdateGroupStateActor(groupId);
+        }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();
@@ -2558,6 +2680,7 @@ public:
         CheckSyncerDisconnectedNodes();
         CheckBridgeConversion();
         CheckBridgePileOperation();
+        CheckBridgeGroupModes();
     }
 
     void UpdatePDisksCounters() {
@@ -2913,6 +3036,11 @@ public:
 
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
+    static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+    TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
+    std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
+
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);

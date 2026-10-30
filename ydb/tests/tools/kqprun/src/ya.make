@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/json
     library/cpp/protobuf/json
     ydb/core/client/server
     ydb/core/grpc_services
@@ -14,6 +15,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/util
     ydb/library/aclib
+    ydb/library/actors/wilson
     ydb/library/aws_init
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/services/keyvalue
@@ -28,3 +30,7 @@ GENERATE_ENUM_SERIALIZATION(common.h)
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

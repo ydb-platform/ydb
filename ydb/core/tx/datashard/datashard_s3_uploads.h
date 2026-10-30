@@ -17,10 +17,10 @@ public:
 
     const TS3Upload* Find(ui64 txId) const;
 
-    const TS3Upload& Add(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId);
-    const TS3Upload& Add(NTable::TDatabase& db, ui64 txId, const TString& uploadId) {
+    const TS3Upload& Store(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId);
+    const TS3Upload& Store(NTable::TDatabase& db, ui64 txId, const TString& uploadId) {
         NIceDb::TNiceDb nicedb(db);
-        return Add(nicedb, txId, uploadId);
+        return Store(nicedb, txId, uploadId);
     }
 
     const TS3Upload& ChangeStatus(NIceDb::TNiceDb& db, ui64 txId, TS3Upload::EStatus status,

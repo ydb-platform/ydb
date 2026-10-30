@@ -134,6 +134,8 @@ namespace NKikimr::NStorage {
         if (nodeId == WaitingReplyFromNode) {
             if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                     op && op->Command.HasSwitchBridgeClusterState() &&
+                    // Matching state cannot prove that this invocation won its compare-and-set.
+                    !op->Command.GetSwitchBridgeClusterState().HasExpectedGeneration() &&
                     Self->StorageConfig && Self->StorageConfig->HasClusterState() &&
                     IsClusterStateReached(Self->StorageConfig->GetClusterState(),
                                           op->Command.GetSwitchBridgeClusterState().GetNewClusterState())) {
@@ -238,6 +240,9 @@ namespace NKikimr::NStorage {
 
                     case TQuery::kQueryWorkingRoot:
                         Y_ABORT("QueryWorkingRoot must be handled directly by the keeper");
+
+                    case TQuery::kQueryPileConnectivity:
+                        Y_ABORT("QueryPileConnectivity must be handled directly by the keeper");
 
                     case TQuery::kValidateTargetedProposition:
                         Y_ABORT("ValidateTargetedProposition must be handled directly by the keeper");
@@ -615,7 +620,7 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "Current config validation failed: " << *error;
         } else if (requireScepter && !Self->Scepter) {
-            throw TExError() << "No scepter";
+            throw TExRace() << "No scepter";
         }
 
         if (requireScepter) {
@@ -853,19 +858,35 @@ namespace NKikimr::NStorage {
             SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
             return;
         }
-        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
+        if (ev->Get()->Record.HasQueryPileConnectivity()) {
+            if (!IsSelfStatic && ConnectedToStaticNode && StaticNodeSessionId) {
+                // Dynamic nodes subscribe to static nodes; they have no binding subtree of their own.
+                ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
+                return;
+            }
+            if (!IsSelfStatic || !(Binding && Binding->RootNodeId)) {
+                auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                if (!IsSelfStatic) {
+                    response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
+                    response->Record.SetErrorReason("No static node connection for pile connectivity query");
+                } else {
+                    FillPileConnectivity(response->Record);
+                }
+                // A component top must answer even while binding or running a stalled proposition.
+                SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                return;
+            }
+        }
+        if (Halted) {
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+            response->Record.SetErrorReason("distconf is halted on this node");
+            SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+        } else if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer
-            const ui32 hopNodeId = Binding->NodeId;
-            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
-                .Command = ev->Get()->Record,
-                .Sender = ev->Sender,
-                .SessionId = ev->InterconnectSession,
-                .Cookie = ev->Cookie,
-            }, hopNodeId));
-            TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
-                ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+            ForwardInvokeOnRoot(std::move(ev), Binding->NodeId);
         } else {
             Invoke(TInvokeExternalOperation{
                 .Command = std::move(ev->Get()->Record),
@@ -874,6 +895,17 @@ namespace NKikimr::NStorage {
                 .Cookie = ev->Cookie,
             });
         }
+    }
+
+    void TDistributedConfigKeeper::ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId) {
+        const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
+            .Command = ev->Get()->Record,
+            .Sender = ev->Sender,
+            .SessionId = ev->InterconnectSession,
+            .Cookie = ev->Cookie,
+        }, hopNodeId));
+        TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
     }
 
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {

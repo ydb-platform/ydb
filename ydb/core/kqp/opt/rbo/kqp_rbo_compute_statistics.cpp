@@ -139,6 +139,26 @@ void IUnaryOperator::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Props.Cost = GetInput()->Props.Cost;
 }
 
+void TOpTableEffect::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (!Props.Metadata) {
+        Props.Metadata = TRBOMetadata();
+    }
+
+    const auto& table = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, TKqpTable(Table).Path());
+    switch (table.Metadata->Kind) {
+        case EKikimrTableKind::Datashard:
+            Props.Metadata->StorageType = EStorageType::RowStorage;
+            break;
+        case EKikimrTableKind::Olap:
+            Props.Metadata->StorageType = EStorageType::ColumnStorage;
+            break;
+        default:
+            Props.Metadata->StorageType = EStorageType::NA;
+            break;
+    }
+}
+
 void TOpReplicate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Props.Metadata = GetInput()->Props.Metadata;
@@ -402,10 +422,9 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
-    double filterSelectivity = selectivity * Props.Statistics->Selectivity;
-    Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
-    Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
-    Props.Statistics->Selectivity = filterSelectivity;
+    Props.Statistics->EBytes *= selectivity;
+    Props.Statistics->ERows *= selectivity;
+    Props.Statistics->Selectivity *= selectivity;
 }
 
 /**
@@ -496,7 +515,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // If the aggregate just adds more columns to existing key columns, use original key columns
     if (DistinctAll) {
         Props.Metadata->KeyColumns = TOrderedIUs<>(outputIUs.begin(), outputIUs.end());
-    } else if (IsDeduplication()) {
+    } else if (IsTrivialDistinct()) {
         // Like DistinctAll: the whole grouping tuple is unique, even when the
         // input has no known key.
         Props.Metadata->KeyColumns = KeyColumns;

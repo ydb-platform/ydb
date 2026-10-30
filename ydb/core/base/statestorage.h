@@ -8,12 +8,15 @@
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+#include <util/generic/strbuf.h>
 
 namespace NKikimrConfig {
     class TStateStorageConfig;
 }
 
 namespace NKikimr {
+
+struct TPathId;
 
 struct TEvStateStorage {
     enum EEv {
@@ -85,6 +88,7 @@ struct TEvStateStorage {
         };
 
         ESigWaitMode SigWaitMode;
+        bool WaitForAllRingGroups = false;
 
         TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
@@ -92,8 +96,8 @@ struct TEvStateStorage {
 
         TString ToString() const {
             switch (SigWaitMode) {
-            case SigNone: return "SigNone";
-            case SigAsync: return "SigAsync";
+            case SigNone: return WaitForAllRingGroups ? "SigNone WaitForAllRingGroups" : "SigNone";
+            case SigAsync: return WaitForAllRingGroups ? "SigAsync WaitForAllRingGroups" : "SigAsync";
             case SigSync: return "SigSync";
             default: return "Unknown";
             }
@@ -633,6 +637,9 @@ struct TBoardRetrySettings {
     TDuration StartDelayMs = TDuration::MilliSeconds(2000);
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
+
+ui64 GetSchemeBoardSelectionKey(TStringBuf path);
+ui64 GetSchemeBoardSelectionKey(const TPathId& pathId);
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config);
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config);

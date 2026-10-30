@@ -459,7 +459,7 @@ public:
                         }
 
                         if (entry.PendingReads == 0) {
-                            auto ptr = MakeIntrusive<TCachedLevelTableData>();
+                            auto ptr = MakeIntrusive<TEvKqp::TCachedLevelTableData>();
                             ptr->BatchRows = std::move(entry.Batch);
                             VectorIndexLevelsCache->Put(Settings.TableId.PathId, it->second.CacheKey.value(), ptr);
                             CacheKeysMap.erase(entryIt);
@@ -606,7 +606,7 @@ private:
     std::deque<TStreamLookupShardReadResult> ReadResults;
     std::unordered_set<TString> UniqueKeys;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
-    std::deque<TCachedLevelTableDataPtr> PendingBatches;
+    std::deque<TEvKqp::TCachedLevelTableDataPtr> PendingBatches;
 };
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {

@@ -25,7 +25,7 @@ namespace {
 
 constexpr std::string_view kErrorMessage = "Failed to extract jsonpath tokens from the predicate: ";
 constexpr std::string_view kFullRangeSearchMessage = "full-range search cannot be performed using full-text search";
-constexpr std::string_view kJsonParameterErrorHandlerMessage = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
+constexpr std::string_view kJsonErrorHandlerMessage = "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics";
 
 struct TPredicateCollectResult {
     TString ColumnName;
@@ -552,12 +552,12 @@ TPredicateCollectResult ParseAndCollectJson(const TJsonNodeParams& params, ECall
     }
 
     auto result = AppendComparisonValue(params.ColumnName, std::move(collectResult), std::move(comparisonValue));
-    const bool hasJsonCollectionParamToken = HasJsonCollectionParamToken(params, result.Collect);
-    if (hasJsonCollectionParamToken && (params.ErrorOnEmpty || params.ErrorOnError)) {
-        return MakeCollectError(ctx, pos, kJsonParameterErrorHandlerMessage);
+    // Index lookup can skip rows that must raise an error, regardless of token type.
+    if (params.ErrorOnEmpty || params.ErrorOnError) {
+        return MakeCollectError(ctx, pos, kJsonErrorHandlerMessage);
     }
 
-    if (hasJsonCollectionParamToken) {
+    if (HasJsonCollectionParamToken(params, result.Collect)) {
         result.Collect.SetTokensMode(TCollectResult::ETokensMode::Or);
     }
 

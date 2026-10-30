@@ -102,7 +102,7 @@ namespace NKikimr::NBsController {
 
         GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
-        group->CalculateLayoutStatus(&Self, group->Topology.get(), {});
+        group->CalculateLayoutStatus(&Self, {});
 
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetVirtualGroupId(group->ID.GetRawId());
@@ -401,10 +401,11 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(group);
                 if (Callback(*group, *State)) {
                     group->CalculateGroupStatus();
-                    group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                    group->CalculateLayoutStatus(Self, [&] {
                         const auto& pools = State->StoragePools.Get();
                         if (const auto it = pools.find(group->StoragePoolId); it != pools.end()) {
-                            return TGroupGeometryInfo::FromStoragePool(group->Topology->GType, it->second);
+                            return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                                State->GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                         }
                         Y_DEBUG_ABORT();
                         return TGroupGeometryInfo();

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 $path = Json2::CompilePath("strict $.x");
 
 $jsonpath_error = CAST(@@{"y": []}@@ as Json);

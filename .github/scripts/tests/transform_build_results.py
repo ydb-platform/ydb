@@ -294,6 +294,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     suites_start = time.time()
     total_save_log_time = 0
     logs_by_suite = {}
+    archive_results_by_suite = {}
     suite_count = 0
     
     for suite_name, results in suites.items():
@@ -301,6 +302,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         has_fail_tests = False
         suite_logsdirs = set()
         results_with_logsdir = []
+        not_launched_with_logsdir = []
         processed_files_cache = {}
         results_file_links = []
 
@@ -374,8 +376,12 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 if not isinstance(paths, list):
                     continue
                 if link_type == "logsdir":
+                    if result.get("error_type") == "NOT_LAUNCHED":
+                        not_launched_with_logsdir.append((result, paths))
+                    # Select before muting so muted failures retain their chunk logs.
+                    # Passed results must not pull unrelated chunks into the suite ZIP.
                     for file_path in paths:
-                        if os.path.isdir(file_path):
+                        if is_fail and os.path.isdir(file_path):
                             suite_logsdirs.add(file_path)
                             if result not in results_with_logsdir:
                                 results_with_logsdir.append(result)
@@ -440,9 +446,15 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         save_log_time = time.time() - save_log_start
         total_save_log_time += save_log_time
 
+        # Link unlaunched tests to their archived chunk without selecting extra chunks.
+        for result, paths in not_launched_with_logsdir:
+            if any(path in suite_logsdirs for path in paths):
+                results_with_logsdir.append(result)
+
         # Queue ZIP archives; compress independent suites together below.
         if has_fail_tests and suite_logsdirs:
             logs_by_suite[suite_name] = suite_logsdirs
+            archive_results_by_suite[suite_name] = results_with_logsdir
         
         for result in results:
             status = result.get("status", "")
@@ -452,15 +464,14 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             # Keep all logs for muted tests (they were failed before muting)
             # Keep all logs for NOT_LAUNCHED tests (they were skipped but may have logs)
             if not is_fail and not is_muted and not is_not_launched:
-                # Passed tests keep only the suite ZIP link, attached below
-                # after all archives have been successfully created.
+                # Passed tests have no published logs.
                 result["links"] = {}
 
     save_zip_start = time.monotonic()
     archive_urls = save_zips(logs_by_suite, test_stuff_out, test_stuff_prefix, ya_out_dir)
     save_zip_time = time.monotonic() - save_zip_start
     for suite_name, url in archive_urls.items():
-        for result in suites[suite_name]:
+        for result in archive_results_by_suite[suite_name]:
             result["links"]["logsdir"] = [url]
 
     suites_time = time.time() - suites_start

@@ -189,7 +189,9 @@ class TController::TTxIndexBuild: public TTxBase {
             auto* target = Self->FindTarget(id);
             const bool activeBuild = buildIt != Self->IndexBuilds.end() && !IsCancelledIndexBuild(buildIt->second);
             const bool activeTarget = target && target->GetDstState() != TReplication::EDstState::Removing;
-            if (!activeBuild || !activeTarget || !Self->HasWorkerSession(id, (*it)->Sender.NodeId())) {
+            if (!activeBuild || !activeTarget || !Self->HasWorkerSession(id, (*it)->Sender.NodeId())
+                || Self->ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId()))
+            {
                 it = Self->PendingIndexTxIds.erase(it);
                 continue;
             }
@@ -290,7 +292,9 @@ class TController::TTxIndexBuild: public TTxBase {
         for (auto& [key, build] : Self->IndexBuilds) {
             auto replication = Self->Find(key.first);
             auto* target = replication ? replication->FindTarget(key.second) : nullptr;
-            if (!target || target->GetDstState() == TReplication::EDstState::Removing) {
+            if (!target || Self->ReplicationsWithSourceOffsetMismatch.contains(key.first)
+                || target->GetDstState() == TReplication::EDstState::Removing)
+            {
                 continue;
             }
 
@@ -405,6 +409,12 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         Self->IndexBuildTxInFlight = false;
+        if (!Self->ReplicationsWithSourceOffsetMismatch.empty()) {
+            for (const auto& [txId, _] : Commits) {
+                Self->IndexCommits.erase(txId);
+            }
+            return;
+        }
         for (auto& [node, ev] : Checkpoints) {
             ctx.Send(MakeReplicationServiceId(node), std::move(ev));
         }

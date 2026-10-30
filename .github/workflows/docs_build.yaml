@@ -1,17 +1,21 @@
 name: Build documentation
 
-# SECURITY: triggered by `pull_request` (not `pull_request_target`).
-# This means the workflow runs in fork-isolated context with a read-only
-# GITHUB_TOKEN and no access to base-repo secrets. PR-controlled documentation
-# code (including any JS extensions loaded by Diplodoc/YFM via `require()`)
-# cannot escalate to the privileged base context. The `workflow_dispatch`
-# entry point is used by `docs_build_rebuild.yaml` (and by maintainers) to
-# rebuild a specific PR; it runs with the same read-only permissions.
-
+# Keep triggers in every supported branch; execute the build from main.
 on:
   pull_request:
     paths:
       - 'ydb/docs/**'
+<<<<<<< HEAD
+=======
+      - 'ydb/**/*.proto'
+      - 'yql/**/*.proto'
+      - 'library/**/*.proto'
+      - 'contrib/libs/protobuf/**/*.proto'
+      - 'ydb/library/actors/core/executor_pool_basic_feature_flags.h'
+      - '.github/workflows/docs_build.yaml'
+      - '.github/workflows/docs_build_core.yaml'
+      - '.github/workflows/docs_release.yaml'
+>>>>>>> dc6ac233b69 (docs-ci: call shared documentation workflows from main (#57576))
   workflow_dispatch:
     inputs:
       pull_number:
@@ -21,18 +25,9 @@ on:
 
 jobs:
   build-docs:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.state == 'open'
-    # Include event_name so rebuild_docs workflow_dispatch does not cancel the
-    # pull_request build. Dispatch runs on main and its check attaches to main
-    # SHA; only the pull_request run updates the PR's build-docs status (#48409).
-    concurrency:
-      group: docs-build-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
-      cancel-in-progress: true
-    runs-on: ubuntu-latest
     permissions:
       contents: read
+<<<<<<< HEAD
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -94,3 +89,8 @@ jobs:
           name: inputs
           path: ./inputs/
           overwrite: true
+=======
+    uses: ydb-platform/ydb/.github/workflows/docs_build_core.yaml@main
+    with:
+      pull_number: ${{ inputs.pull_number || '' }}
+>>>>>>> dc6ac233b69 (docs-ci: call shared documentation workflows from main (#57576))

@@ -47,7 +47,7 @@ public:
         Removing,
         Paused,
         Attaching, // Deprecated.
-        WaitingImport = 7,
+        WaitingImport,
         Error = Max<ui8>()
     };
 

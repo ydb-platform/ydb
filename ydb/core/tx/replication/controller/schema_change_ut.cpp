@@ -452,7 +452,9 @@ TReplicationTestInfo StartReplication(
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
     auto session = env.RunCall([&] {
-        return client.CreateSession().GetValueSync().GetSession();
+        auto result = client.CreateSession().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        return result.GetSession();
     });
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
@@ -943,44 +945,21 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
     Y_UNIT_TEST(InitialScanDisabledCreatesWaitingImportDestination) {
-        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
-        auto& runtime = env.GetRuntime();
+        // SDK requests use real gRPC threads, so keep actor timers on real time too.
+        TTestEnv env;
         const TString destination = "/Root/replica1";
         const auto missingDestinationStatus = static_cast<int>(NKikimrScheme::StatusPathDoesNotExist);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
 
-        ui32 destinationCreators = 0;
-        TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver;
-        previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
-            [&](TTestActorRuntimeBase& actorRuntime, const TActorId& parent, const TActorId& actorId) {
-                previousRegistrationObserver(actorRuntime, parent, actorId);
-                if (actorRuntime.FindActor(actorId)->GetActivityType()
-                    == NKikimrServices::TActivity::REPLICATION_CONTROLLER_DST_CREATOR)
-                {
-                    ++destinationCreators;
-                }
-            });
-        Y_DEFER {
-            runtime.SetRegistrationObserverFunc(std::move(previousRegistrationObserver));
-        };
-
-        bool streamCreated = false;
-        auto streamObserver = runtime.AddObserver(
-            [&](IEventHandle::TPtr& ev) {
-                if (ev->GetTypeRewrite() != TEvPrivate::EvCreateStreamResult || !ev->HasEvent()) {
-                    return;
-                }
-                // Private event numbers are shared by unrelated actors.
-                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
-                    UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
-                    streamCreated = true;
-                }
-            });
-
         const auto info = StartReplication(env, 1, "root@builtin", false, false,
             NKikimrSchemeOp::EIndexTypeGlobal, true, false);
         UNIT_ASSERT(!info.Config.GetInitialScan());
-        runtime.WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
+        // Destination creation follows source stream creation. Observe the
+        // persisted result instead of actor registration or private events.
+        UNIT_ASSERT(WaitFor([&] {
+            return env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetImportState()
+                == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+        }));
 
         const auto state = DescribeReplication(env, info);
         UNIT_ASSERT_C(state->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
@@ -990,11 +969,6 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         const auto targetId = state->Get()->Record.GetTargets(0).GetId();
         // The committed stream capability proves source setup has completed.
         UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
-        UNIT_ASSERT(WaitFor([&] {
-            return env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetImportState()
-                == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
-        }));
-        UNIT_ASSERT(destinationCreators > 0);
         const auto placeholderId = env.GetPathId(destination);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
             NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);

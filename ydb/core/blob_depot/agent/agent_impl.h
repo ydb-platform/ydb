@@ -486,6 +486,7 @@ namespace NKikimr::NBlobDepot {
 
             void CheckQueryExecutionTime(TMonotonic now);
             bool CheckDeadline(TMonotonic now);
+            void SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
                 bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);

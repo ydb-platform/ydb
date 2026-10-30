@@ -18,8 +18,7 @@ namespace NKikimr::NBlobDepot {
         std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
         THashSet<TLogoBlobID> ResolutionErrors;
         TEvBlobDepot::TEvResolve::TPtr Ev;
-        static constexpr TDuration RequestTimeout = TDuration::Minutes(5);
-        TInstant Deadline;
+        TInstant Deadline = TInstant::Max(); // the one of the requesting query
 
         ui32 TxInFlight = 0;
 
@@ -203,8 +202,11 @@ namespace NKikimr::NBlobDepot {
             if (Token.expired()) {
                 return PassAway();
             }
-            Deadline = TActivationContext::Now() + RequestTimeout;
-            Schedule(RequestTimeout, new TEvents::TEvWakeup);
+            if (const auto& record = Ev->Get()->Record; record.HasDeadlineUs()) {
+                Deadline = TInstant::MicroSeconds(record.GetDeadlineUs());
+                // nobody waits for the result afterwards; this also bounds the local transactions
+                Schedule(Deadline - TActivationContext::Now(), new TEvents::TEvWakeup);
+            }
 
             YDB_LOG_DEBUG("TResolveDecommitActor::Bootstrap",
                 {"marker", "BDT42"},
@@ -573,7 +575,7 @@ namespace NKikimr::NBlobDepot {
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Wakeup:
-                    return FinishWithError(NLog::PRI_NOTICE, "decommission resolve timed out");
+                    return FinishWithError(NLog::PRI_NOTICE, "decommission resolve deadline exceeded");
                 hFunc(TEvBlobStorage::TEvGetResult, Handle);
                 hFunc(TEvBlobStorage::TEvRangeResult, Handle);
                 hFunc(TEvBlobStorage::TEvPutResult, Handle);

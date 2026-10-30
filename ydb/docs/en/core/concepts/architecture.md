@@ -73,7 +73,7 @@ Partitioning works differently in row-oriented and column-oriented tables:
 * Row-oriented tables are automatically partitioned by primary key ranges, depending on the data volume.
 * Column-oriented tables are partitioned by the hash of the partitioning columns.
 
-Each partition of a table is processed by a specific [tablet](glossary.md#tablets), called a [data shard](glossary.md#datashard) for row-oriented tables and a [column shard](glossary.md#columnshard) for column-oriented tables.
+Each partition of a table is processed by a specific [tablet](glossary.md#tablet), called a [data shard](glossary.md#data-shard) for row-oriented tables and a [column shard](glossary.md#column-shard) for column-oriented tables.
 
 #### Split by Load {#split-by-load}
 

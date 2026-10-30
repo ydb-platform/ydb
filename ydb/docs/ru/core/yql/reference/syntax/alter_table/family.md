@@ -69,7 +69,7 @@ ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 
 Если для таблицы ранее был активирован режим `in_memory`, а затем через `ALTER TABLE` установлен режим кэширования `regular`, все находящиеся в памяти страницы сохраняются, но впоследствии могут вытесняться из памяти согласно общей политике кэширования.
 
-Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит [режим кэширования](../../../../concepts/datamodel/table.md#cache-modes) на `in_memory`:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит [режим кэширования](../../../../concepts/datamodel/table.md) на `in_memory`:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";

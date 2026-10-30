@@ -27,7 +27,7 @@ Anonymous authentication should be used only for informational purposes for loca
 
 {% endnote %}
 
-To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/auth_config.md#auth).
+To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/security_config.md#security-auth).
 
 ## Authenticating by username and password {#static-credentials}
 

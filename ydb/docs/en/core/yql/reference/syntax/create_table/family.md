@@ -10,7 +10,7 @@ Columns of the same table can be grouped to set the following parameters:
 
 * `DATA`: A storage device type for the data in this column group. Acceptable values: `"ssd"`, `"rot"`.
 * `COMPRESSION`: A data compression codec. Acceptable values: `"off"`, `"lz4"`.
-* `CACHE_MODE`: [Caching mode](../../../../concepts/datamodel/table.md#cache-modes). Acceptable values: `"in_memory"`, `"regular"`.
+* `CACHE_MODE`: [Caching mode](../../../../concepts/datamodel/table.md). Acceptable values: `"in_memory"`, `"regular"`.
 
 By default, all columns are in the same group named `default`.  If necessary, the parameters of this group can also be redefined, if they are not redefined, then predefined values are applied.
 

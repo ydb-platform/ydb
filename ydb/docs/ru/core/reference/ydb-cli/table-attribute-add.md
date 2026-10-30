@@ -1,6 +1,6 @@
 # table attribute add
 
-С помощью команды `table attribute add` вы можете добавить [пользовательский атрибут](../../concepts/datamodel/table.md#users-attr) указанной таблице.
+С помощью команды `table attribute add` вы можете добавить [пользовательский атрибут](../../concepts/datamodel/table.md) указанной таблице.
 
 Общий вид команды:
 

@@ -4,7 +4,7 @@
 
 ## Список функций
 
-* {#splittolist} `String::Base32Encode(string:String{Flags:AutoMap}) -> String`
+* `String::Base32Encode(string:String{Flags:AutoMap}) -> String`
 * `String::Base32Decode(string:String) -> String?`
 * `String::Base32StrictDecode(string:String) -> String?`
 * `String::Base64Encode(string:String{Flags:AutoMap}) -> String`
@@ -72,7 +72,7 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Переводят регистр ascii символов строки к ВЕРХНЕМУ, нижнему или Заглавному виду.
 
-* `String::SplitToList(string:String?, delimeter:String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>`
+* `String::SplitToList(string:String?, delimeter:String, [ DelimeterString:Bool?, SkipEmpty:Bool?, Limit:Uint64? ]) -> List<String>` {#splittolist}
 
   Разбивает строку на подстроки по разделителю.
   `string` -- исходная строка

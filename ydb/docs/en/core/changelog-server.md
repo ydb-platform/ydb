@@ -524,7 +524,7 @@ Release date: August 20, 2024.
 
 * Added the ability to set [maintenance task priorities](./devops/concepts/maintenance-without-downtime.md#priority) in the [cluster management system](./concepts/glossary.md#cms).
 * Added a setting to enable [stable names](reference/configuration/node_broker_config.md) for cluster nodes within a tenant.
-* Enabled retrieval of nested groups from the [LDAP server](security/authentication.md#ldap), improved host parsing in the [LDAP-configuration](reference/configuration/auth_config.md#ldap-auth-config), and added an option to disable built-in authentication via login and password.
+* Enabled retrieval of nested groups from the [LDAP server](security/authentication.md#ldap-auth-provider), improved host parsing in the [LDAP-configuration](reference/configuration/auth_config.md#ldap-auth-config), and added an option to disable built-in authentication via login and password.
 * Added support for authenticating [dynamic nodes](./concepts/glossary#dynamic) using SSL-certificates.
 * Implemented the removal of inactive nodes from [Hive](./concepts/glossary#hive) without a restart.
 * Improved management of inflight pings during Hive restarts in large clusters.

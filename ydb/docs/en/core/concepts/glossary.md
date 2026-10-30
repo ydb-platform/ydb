@@ -68,6 +68,10 @@ A static group might require special attention during major maintenance, such as
 
 Regular storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and decommissioned on the fly during [cluster](#cluster) operation.
 
+#### Virtual storage group {#virtual-storage-groups}
+
+**Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
+
 ### Storage pool {#storage-pool}
 
 **Storage pool** is a collection of data storage devices with similar characteristics. Each storage pool is assigned a unique name within a {{ ydb-short-name }} cluster. Technically, each storage pool consists of multiple [PDisks](#pdisk). Each [storage group](#storage-group) is created in a particular storage pool, which determines the performance characteristics of the storage group through the selection of appropriate storage devices. It is typical to have separate storage pools for NVMe, SSD, and HDD devices or particular models of those devices with different capacities and speeds.
@@ -185,6 +189,14 @@ A **secondary index** is an additional data structure used to locate rows in a t
 A special type of **secondary index** is singled out separately - [vector index](#vector-index).
 
 #### Vector Index {#vector-index}
+#### Full-text index {#fulltext-index}
+
+**Full-text index** is a secondary index type used for full-text search over table columns.
+
+#### Local Bloom index {#local-bloom-skip-index}
+
+**Local Bloom index** is a skip index based on Bloom filters for efficient data filtering.
+
 
 **Vector index** is an additional data structure used to speed up the [vector search](query_execution/vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
 The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
@@ -337,7 +349,7 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 
 ### Scheme root {#scheme-root}
 
-A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/cluster-namespace.md). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
 
 ### Scheme object {#scheme-object}
 
@@ -596,6 +608,10 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 A **Hive** is a system tablet responsible for launching and managing other tablets. It also moves tablets between nodes in case of [node](#node) failures or overload. You can learn more about Hive in a [dedicated article](../contributor/hive.md).
 
+
+#### Console {#console}
+
+**Console** is a system tablet responsible for storing [dynamic configuration](../devops/configuration-management/configuration-v1/dynamic-config.md) and delivering it to cluster nodes.
 #### Cluster management system {#cms}
 
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.

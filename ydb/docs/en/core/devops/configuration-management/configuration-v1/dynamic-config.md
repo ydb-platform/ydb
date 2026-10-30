@@ -153,7 +153,7 @@ selector_config:
       cpu_count: 14
 ```
 
-## Updating Dynamic Configuration
+## Updating Dynamic Configuration {#updating-dynamic-configuration}
 
 ```bash
 # Get cluster configuration

@@ -52,7 +52,7 @@ struct TPartitionActorInfo {
     ui64 Generation;
     ui64 NodeId;
     bool ReadingFinished;
-    bool StartedFromEnd; // The first read answer was already ReadingFinished, so this session delivered no data.
+    bool StartedFromEnd; // The partition finished without delivering any data to this session.
     ui64 EndOffset;
 
 

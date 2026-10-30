@@ -290,6 +290,7 @@ private:
     EProtocol Protocol;
 
     bool FirstRead;
+    bool DataDelivered = false;
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;

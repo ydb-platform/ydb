@@ -69,6 +69,13 @@ namespace NKikimr {
             UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
         }
 
+        void WriteToPartition(TTopicSdkTestSetup& setup, const TString& data, ui32 partitionId) {
+            TTopicClient client = setup.MakeClient();
+            std::shared_ptr<ISimpleBlockingWriteSession> session = CreateWriteSession(client, TStringBuilder() << Producer << "-" << partitionId, partitionId, TString{TEST_TOPIC}, false);
+            UNIT_ASSERT(session->Write(Msg(data, 1)));
+            UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+        }
+
         // Partitions 0 and 2 get one message each before the returned read_from, partition 4 gets "child-4" after it.
         TInstant WriteThroughTwoSplits(TTopicSdkTestSetup& setup) {
             ui64 txId = 1006;
@@ -231,6 +238,27 @@ namespace NKikimr {
             }
             TRawReadSession reader(setup, RawSettings(AutoPartitioningSupport, readFrom));
             CommitChildAndCheckSkippedParents(setup, reader);
+        }
+
+        // The reader asks the active parent for data before the split, but read_from filters out its only message.
+        Y_UNIT_TEST_TWIN(ChildCommitAfterReaderStartedBeforeSplit, AutoPartitioningSupport) {
+            TTopicSdkTestSetup setup = CreateSplitSetup();
+            WriteMessage(setup, "parent-0", 1);
+            // Blob write timestamps have second precision.
+            Sleep(TDuration::Seconds(1));
+            TRawReadSession reader(setup, RawSettings(AutoPartitioningSupport, TInstant::Now()));
+            reader.WaitPartitionSession(TEST_TOPIC, ParentPartition);
+
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, ParentPartition, "a");
+            WriteToPartition(setup, "child", PartitionAfterFirstSplit);
+
+            const TRawReadSession::TMessage child = reader.ReadMessage(TEST_TOPIC, PartitionAfterFirstSplit);
+            UNIT_ASSERT_VALUES_EQUAL(child.Data, "child");
+            UNIT_ASSERT_VALUES_EQUAL_C(reader.GetMessages().size(), 1, "read_from must skip the parent message");
+            reader.Commit(child);
+            reader.WaitCommitted(TEST_TOPIC, PartitionAfterFirstSplit, child.Offset + 1);
+            WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, child.Offset + 1}});
         }
 
     } // Y_UNIT_TEST_SUITE(SplitReadFromTimestampRawStream)

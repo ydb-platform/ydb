@@ -811,6 +811,132 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
     }
 
+    void CheckNodesStorageFilterCase(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
+                                    const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots) {
+        vslotsResponses = 0;
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=NodeId&offload_merge=false"
+                << "&use_cache=false&timeout=1000&limit=20&offset=0&with=all" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = TStringBuilder() << query << ": " << result->Response->Body;
+        UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
+        bool hasVSlotsError = false;
+        for (const auto& problem : json["Problems"].GetArray()) {
+            hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
+        UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
+        const auto& nodes = json["Nodes"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), expectedNodeIds.size(), context);
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(nodes[i]["NodeId"].GetUInteger(), expectedNodeIds[i], context);
+        }
+    }
+
+    void CheckNodesStorageFilter(bool vslotsAvailable) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId firstNodeId = runtime.GetNodeId(0);
+        const TNodeId secondNodeId = runtime.GetNodeId(1);
+        const TNodeId nodeWithoutVSlotsId = runtime.GetNodeId(2);
+        size_t vslotsResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
+                ++vslotsResponses;
+                if (!vslotsAvailable) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto* event = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                auto& record = (*event)->Get()->Record;
+                record.ClearEntries();
+                for (ui32 i = 0; i < 2; ++i) {
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetNodeId(runtime.GetNodeId(i));
+                    entry->MutableKey()->SetPDiskId(1);
+                    entry->MutableKey()->SetVSlotId(1000);
+                    auto* info = entry->MutableInfo();
+                    info->SetGroupId(10 + i);
+                    info->SetGroupGeneration(1);
+                    info->SetFailRealm(0);
+                    info->SetFailDomain(0);
+                    info->SetVDisk(0);
+                    info->SetAllocatedSize(100);
+                    info->SetAvailableSize(900);
+                    info->SetStatusV2("READY");
+                    info->SetState("OK");
+                }
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetBoxId(1);
+                entry->MutableKey()->SetStoragePoolId(7);
+                entry->MutableInfo()->SetName("test-pool");
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                for (ui32 i = 0; i < 2; ++i) {
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetGroupId(10 + i);
+                    entry->MutableInfo()->SetBoxId(1);
+                    entry->MutableInfo()->SetStoragePoolId(7 + i);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const std::vector<TNodeId> allNodeIds = {firstNodeId, secondNodeId, nodeWithoutVSlotsId};
+        const std::vector<TNodeId> selectedNodeIds = {firstNodeId, secondNodeId};
+        const std::vector<TNodeId> groupNodeIds = {firstNodeId};
+        const std::pair<TString, bool> fieldCases[] = {
+            {"&fields_required=NodeId,PDisks", false},
+            {"&fields_required=NodeId,VDisks", true},
+            {"&fields_required=NodeId,PDisks&storage=true", true},
+        };
+        for (const auto& [fields, expectVSlots] : fieldCases) {
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable, fields, allNodeIds, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                TStringBuilder() << fields << "&node_id=" << firstNodeId, {firstNodeId}, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                TStringBuilder() << fields << "&node_id=" << nodeWithoutVSlotsId, {nodeWithoutVSlotsId}, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                TStringBuilder() << fields << "&node_id=" << firstNodeId << ',' << secondNodeId,
+                selectedNodeIds, expectVSlots);
+            for (const TString& filter : {TString("&group_id=10"), TString("&pool=test-pool")}) {
+                // Without VSlots, keep the explicit node filter even when group membership is unavailable.
+                CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                    fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true);
+                CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                    TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
+                    vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWithStorageDetails) {
+        CheckNodesStorageFilter(true);
+    }
+
+    Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWhenVSlotsUnavailable) {
+        CheckNodesStorageFilter(false);
+    }
+
     Y_UNIT_TEST(NodesPageKeepsPDisksForDisconnectedNode)
     {
         TPortManager tp;

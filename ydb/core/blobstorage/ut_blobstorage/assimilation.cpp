@@ -533,6 +533,79 @@ void RunVDiskGoesAwayTest() {
 }
 
 Y_UNIT_TEST_SUITE(VDiskAssimilation) {
+    Y_UNIT_TEST(SilentResponseHasBoundedAttempt) {
+        TEnvironmentSetup env{{.NodeCount = 1, .Erasure = TBlobStorageGroupType::ErasureNone}};
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto reader = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const auto scanner = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "inventory survives a timed out attempt";
+        const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+        env.Runtime->WrapInActorContext(reader, [&] {
+            SendToBSProxy(reader, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(reader, false)->Get()->Status,
+            NKikimrProto::OK);
+
+        bool hold = true;
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        std::unique_ptr<IEventHandle> result;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == scanner) {
+                UNIT_ASSERT(!result);
+                result = std::move(ev);
+                return false;
+            }
+            if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvVAssimilateResult) {
+                if (auto *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TBlobStorageGroupAssimilateRequest")) {
+                    held.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        auto scan = [&] {
+            env.Runtime->WrapInActorContext(scanner, [&] {
+                SendToBSProxy(scanner, groupId, new TEvBlobStorage::TEvAssimilate(
+                    std::nullopt, std::nullopt, std::nullopt, true, false));
+            });
+        };
+        scan();
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(!held.empty());
+        UNIT_ASSERT(!result);
+        // Other work on the same live storage continues, so a connection watchdog cannot supply this bound.
+        for (ui32 i = 0; i < 36 && !result; ++i) {
+            env.Runtime->WrapInActorContext(reader, [&] {
+                SendToBSProxy(reader, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto get = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(reader, false);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Status, NKikimrProto::OK);
+            env.Sim(TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_C(result, "assimilation kept waiting for a live silent dependency");
+        UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvBlobStorage::TEvAssimilateResult>()->Status, NKikimrProto::DEADLINE);
+        hold = false;
+        for (auto& ev : held) {
+            env.Runtime->Send(ev.release(), 1);
+        }
+        env.Sim(TDuration::Seconds(1)); // a late completion must not generate another terminal reply
+        result.reset();
+        scan();
+        for (ui32 i = 0; i < 100 && !result; ++i) {
+            env.Sim(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT(result);
+        const auto *msg = result->Get<TEvBlobStorage::TEvAssimilateResult>();
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Blobs.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Blobs.front().Id, id);
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(VDiskGoesAway) {
         RunVDiskGoesAwayTest();
     }

@@ -305,6 +305,7 @@ private:
         auto wasFinished = ev->Get()->WasFinished;
         if (wasFinished) {
             channel->Finish();
+            channel->Drop();
             LOG_I("output channel with id [" << channelId << "] finished prematurely");
         }
         int maxChunks = std::numeric_limits<int>::max();

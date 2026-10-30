@@ -1,5 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
@@ -17,26 +19,35 @@ using namespace NActors;
 using namespace NKikimr::NMiniKQL;
 using namespace NTaskRunnerActor;
 
-// A producer blocked on output until its consumer explicitly closes the channel.
+// Closing output stops new production but leaves buffered chunks until Pop/Drop.
 class TOutputChannelMock : public NTaskRunnerProxy::IOutputChannel {
 public:
     NDqProto::TPopResponse Pop(TDqSerializedBatch& data) override {
         NDqProto::TPopResponse response;
-        if (!Finished && !DataSent) {
+        if (BufferedChunks > 0) {
             data.Proto.SetTransportVersion(NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
             data.Proto.SetRows(1);
             data.Proto.SetRaw("data");
             response.SetResult(true);
-            DataSent = true;
+            --BufferedChunks;
         }
         return response;
     }
 
-    bool IsFinished() const override { return Finished; }
+    bool IsFinished() const override { return Finished && BufferedChunks == 0; }
     void Finish() override { Finished = true; ++FinishCalls; }
 
+    ui64 Drop() override {
+        const auto dropped = std::exchange(BufferedChunks, 0);
+        DroppedChunks += dropped;
+        ++DropCalls;
+        return dropped;
+    }
+
     bool Finished = false;
-    bool DataSent = false;
+    ui32 BufferedChunks = 1;
+    ui32 DroppedChunks = 0;
+    ui32 DropCalls = 0;
     ui32 FinishCalls = 0;
 };
 
@@ -50,7 +61,7 @@ public:
     NDqProto::TPrepareResponse Prepare(const TDqTaskRunnerMemoryLimits&) override { return {}; }
     NDqProto::TRunResponse Run() override {
         NDqProto::TRunResponse response;
-        response.SetResult(static_cast<ui32>(Output->Finished ? ERunStatus::Finished : ERunStatus::PendingOutput));
+        response.SetResult(static_cast<ui32>(Output->IsFinished() ? ERunStatus::Finished : ERunStatus::PendingOutput));
         return response;
     }
     NTaskRunnerProxy::IInputChannel::TPtr GetInputChannel(ui64) override { Y_ABORT("Unexpected input"); }
@@ -127,7 +138,7 @@ struct TEarlyFinishFixture : NUnitTest::TBaseFixture {
         Runtime.CleanupNodes();
     }
 
-    TActorId StartComputeActor() {
+    TActorId StartComputeActor(ui64 channelBufferSize = 1024 * 1024) {
         NDqProto::TDqTask task;
         task.SetId(1);
         auto* output = task.AddOutputs();
@@ -146,6 +157,7 @@ struct TEarlyFinishFixture : NUnitTest::TBaseFixture {
         TComputeRuntimeSettings settings;
         settings.StatsMode = NDqProto::DQ_STATS_MODE_NONE;
         TComputeMemoryLimits limits;
+        limits.ChannelBufferSize = channelBufferSize;
         limits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(1024 * 1024, 1024 * 1024);
         return Runtime.Register(CreateDqAsyncComputeActor(
             Edge, "early-finish", &task, MakeIntrusive<TDqAsyncIoFactory>(), Registry.Get(), settings, limits, factory, {}));
@@ -166,6 +178,8 @@ struct TEarlyFinishFixture : NUnitTest::TBaseFixture {
         UNIT_ASSERT(state);
         UNIT_ASSERT_VALUES_EQUAL(state->Get()->Record.GetState(), static_cast<ui32>(NDqProto::COMPUTE_STATE_FINISHED));
         UNIT_ASSERT_VALUES_EQUAL(Runner->Output->FinishCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(Runner->Output->DropCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(Runner->Output->BufferedChunks, 0);
     }
 };
 
@@ -180,13 +194,27 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorEarlyFinish) {
         ExpectFinished();
     }
 
+    Y_UNIT_TEST_F(DropsAllBufferedChunks, TEarlyFinishFixture) {
+        Runner->Output->BufferedChunks = 4;
+        // One chunk exceeds the consumer's free space: each ordinary read pops
+        // one chunk. Finishing must discard the entire remaining buffer.
+        auto actor = StartComputeActor(/*channelBufferSize=*/1);
+        auto data = Runtime.GrabEdgeEvent<TEvDqCompute::TEvChannelData>(Consumer, TDuration::Seconds(5));
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_C(Runner->Output->BufferedChunks > 1, "Expected multiple queued chunks before early finish");
+        SendFinish(actor, data->Get()->Record.GetSeqNo());
+        ExpectFinished();
+        UNIT_ASSERT_C(Runner->Output->DroppedChunks > 1, "Expected all remaining chunks to be discarded");
+    }
+
     Y_UNIT_TEST_F(FinishesAfterInflightRead, TEarlyFinishFixture) {
+        Runner->Output->BufferedChunks = 4;
         TAutoPtr<IEventHandle> delayed;
         auto observer = Runtime.AddObserver<TEvOutputChannelData>([&](TEvOutputChannelData::TPtr& event) {
             UNIT_ASSERT(!delayed);
             delayed = event.Release();
         });
-        auto actor = StartComputeActor();
+        auto actor = StartComputeActor(/*channelBufferSize=*/1);
         TDispatchOptions waitRead;
         waitRead.CustomFinalCondition = [&] { return bool(delayed); };
         Runtime.DispatchEvents(waitRead);
@@ -199,6 +227,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorEarlyFinish) {
         // Deliver the old read only after PeerFinished has seen PopStarted=true.
         Runtime.Send(delayed.Release());
         ExpectFinished();
+        UNIT_ASSERT(Runner->Output->DroppedChunks > 1);
     }
 }
 

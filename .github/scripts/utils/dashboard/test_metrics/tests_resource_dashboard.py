@@ -159,21 +159,20 @@ def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
     return "build"
 
 
-def parse_evlog_activity(
+def parse_evlog_activity_deltas(
     evlog_path: Optional[Path] = None,
     *,
     events: Optional[list[dict[str, Any]]] = None,
-) -> list[dict[str, Any]]:
-    """Return compile/link/test worker intervals from the complete ya make evlog.
+) -> dict[str, list[tuple[float, int]]]:
+    """Return per-kind +1/-1 deltas for the whole-build concurrency chart.
 
-    Emits compact (kind, start, end) tuples during the sweep and only materializes
-    dict rows at the end so peak memory stays closer to one pass over the events.
+    Keeps only compact (timestamp_us, sign) pairs — no per-node interval dicts.
+    Callers sweep deltas into a step series (see build_active_series_from_deltas).
     """
     if events is None:
         if evlog_path is None:
-            raise ValueError("parse_evlog_activity requires evlog_path or events")
+            raise ValueError("parse_evlog_activity_deltas requires evlog_path or events")
         events = load_json_or_jsonl(evlog_path)
-    # Per-kind +1/-1 deltas; converted to intervals once at the end.
     deltas: dict[str, list[tuple[float, int]]] = defaultdict(list)
     stacks: dict[tuple[int, int], list[tuple[float, str, Optional[str]]]] = defaultdict(list)
     open_by_uid: dict[str, tuple[tuple[int, int], float, str]] = {}
@@ -184,6 +183,8 @@ def parse_evlog_activity(
             deltas[kind].append((start_us, +1))
 
     def _close(kind: str, end_us: float) -> None:
+        # Always emit the matching close (including zero-length) so +1/-1 stays
+        # balanced; zero-length cancels out when sweeping the step series.
         if kind:
             deltas[kind].append((end_us, -1))
 
@@ -203,7 +204,7 @@ def parse_evlog_activity(
                 str(value.get("name") or ""),
                 str(value.get("tag") or ""),
             )
-            if kind and end_sec > start_sec:
+            if kind and end_sec >= start_sec:
                 start_us = start_sec * 1_000_000.0
                 end_us = end_sec * 1_000_000.0
                 _open(kind, start_us)
@@ -232,7 +233,7 @@ def parse_evlog_activity(
                         if stack[i][2] == uid:
                             stack.pop(i)
                             break
-                    if kind and ts > start_us:
+                    if kind and ts >= start_us:
                         _close(kind, ts)
                     completed_uids.add(uid)
                 continue
@@ -257,15 +258,22 @@ def parse_evlog_activity(
         if uid:
             open_by_uid.pop(uid, None)
             completed_uids.add(uid)
-        if kind and ts > start_us:
+        if kind and ts >= start_us:
             _close(kind, ts)
 
-    # Reconstruct non-overlapping/concurrent intervals via per-kind start stacks.
+    return dict(deltas)
+
+
+def activity_deltas_to_intervals(
+    deltas: dict[str, list[tuple[float, int]]],
+) -> list[dict[str, Any]]:
+    """Debug/test helper: LIFO-pair deltas into positive-length intervals."""
     activity: list[dict[str, Any]] = []
     for kind, kind_deltas in deltas.items():
         starts: list[float] = []
-        # Process closes before opens at the same timestamp.
-        for ts, sign in sorted(kind_deltas, key=lambda item: (item[0], item[1])):
+        # Opens before closes at the same timestamp so zero-length pairs cancel
+        # cleanly instead of leaving a stale start for a later close.
+        for ts, sign in sorted(kind_deltas, key=lambda item: (item[0], -item[1])):
             if sign > 0:
                 starts.append(ts)
             elif starts:
@@ -274,6 +282,17 @@ def parse_evlog_activity(
                     activity.append({"kind": kind, "start_us": start_us, "end_us": ts})
     activity.sort(key=lambda row: (float(row["start_us"]), str(row["kind"])))
     return activity
+
+
+def parse_evlog_activity(
+    evlog_path: Optional[Path] = None,
+    *,
+    events: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    """Return compile/link/test worker intervals (test/debug convenience wrapper)."""
+    return activity_deltas_to_intervals(
+        parse_evlog_activity_deltas(evlog_path, events=events)
+    )
 
 
 def _suites_with_indexed_chunks(
@@ -976,11 +995,10 @@ def parse_evlog_runs(
             arg_name = str(value.get("name", ""))
             if not arg_name.startswith("Run("):
                 continue
-            suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            suite_raw, chunk_group, chunk, is_aux = classify_evlog_run_name(arg_name)
             if suite_raw is None or chunk is None:
                 continue
             # Skip aux-only runs (meta.json, run_test.log, etc.): they are side-effect events, not real chunk runs.
-            _suite, _group, _chunk, is_aux = classify_evlog_run_name(arg_name)
             if is_aux:
                 continue
             if suite_filter is not None and normalize_suite_path(suite_raw) != suite_filter:
@@ -1054,7 +1072,7 @@ def parse_evlog_runs(
                     completed_uids.add(uid)
                 continue
             m_uid = RUN_UID_RE.search(arg_name)
-            suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            suite_raw, chunk_group, chunk, is_aux = classify_evlog_run_name(arg_name)
             suite_norm = normalize_suite_path(suite_raw) if suite_raw is not None else None
             is_target = (
                 arg_name.startswith("Run(")
@@ -1062,10 +1080,8 @@ def parse_evlog_runs(
                 and chunk is not None
                 and ev_name == "TM"
                 and (suite_filter is None or suite_norm == suite_filter)
+                and not is_aux
             )
-            # Skip aux-only runs (meta.json, run_test.log, etc.) in trace format too.
-            if is_target and classify_evlog_run_name(arg_name)[3]:
-                is_target = False
             if is_target and m_uid:
                 run_by_uid[m_uid.group(1)] = {
                     "pid": pid,
@@ -1203,6 +1219,7 @@ def _build_resources_overlay(
     enriched_runs: list[dict[str, Any]],
     records: Optional[list[dict[str, Any]]] = None,
     activity: Optional[list[dict[str, Any]]] = None,
+    activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
     try:
@@ -1268,7 +1285,13 @@ def _build_resources_overlay(
         return None
     timeline_starts = [min(xs_evlog)]
     timeline_ends = [max(xs_evlog)]
-    if activity:
+    if activity_deltas:
+        for kind_deltas in activity_deltas.values():
+            for ts, _sign in kind_deltas:
+                sec = float(ts) / 1_000_000.0
+                timeline_starts.append(sec)
+                timeline_ends.append(sec)
+    elif activity:
         timeline_starts.extend(float(row.get("start_us", 0) or 0) / 1_000_000.0 for row in activity)
         timeline_ends.extend(float(row.get("end_us", 0) or 0) / 1_000_000.0 for row in activity)
     return {
@@ -1610,8 +1633,14 @@ def main() -> None:
     ]
     evlog_events = load_json_or_jsonl(args.evlog)
     evlog_runs = parse_evlog_runs(args.evlog, args.suite_path, events=evlog_events)
-    evlog_activity = parse_evlog_activity(args.evlog, events=evlog_events)
+    # Compact +1/-1 deltas only — never materialize one interval dict per node.
+    try:
+        activity_deltas = parse_evlog_activity_deltas(args.evlog, events=evlog_events)
+    except Exception as exc:  # noqa: BLE001 — keep the rest of the dashboard
+        print(f"WARNING: evlog activity parse failed: {exc}", file=sys.stderr)
+        activity_deltas = {}
     del evlog_events
+    activity_deltas.pop("test", None)
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
@@ -1640,27 +1669,10 @@ def main() -> None:
     # Fallback offset 0 keeps build/link activity when clocks already match;
     # stats flag marks that the shift was not median-validated.
     if activity_offsets_us and activity_offset_us:
-        evlog_activity = [
-            {
-                **row,
-                "start_us": float(row.get("start_us", 0) or 0) + activity_offset_us,
-                "end_us": float(row.get("end_us", 0) or 0) + activity_offset_us,
-            }
-            for row in evlog_activity
-        ]
-    # Keep raw TM worker spans and add report-backed chunk spans as a separate
-    # series so the dashboard can compare scheduler occupancy with suite times.
-    evlog_activity = [
-        row for row in evlog_activity if row.get("kind") != "test"
-    ] + [
-        {
-            "kind": "test_report",
-            "start_us": float(row.get("start_us", 0) or 0),
-            "end_us": float(row.get("end_us", 0) or 0),
+        activity_deltas = {
+            kind: [(ts + activity_offset_us, sign) for ts, sign in kind_deltas]
+            for kind, kind_deltas in activity_deltas.items()
         }
-        for row in runs
-    ]
-    evlog_activity.sort(key=lambda row: (float(row["start_us"]), str(row["kind"])))
 
     requirements_cache = None
     repo_root = args.repo_root.resolve() if args.repo_root else _default_repo_root()
@@ -1729,7 +1741,7 @@ def main() -> None:
             args.resources_jsonl,
             enriched_runs,
             records=resources_records,
-            activity=evlog_activity,
+            activity_deltas=activity_deltas,
         )
 
     runner_footprint = resolve_runner_footprint(build_preset=args.build_preset)
@@ -1915,7 +1927,7 @@ def main() -> None:
             tests_per_chunk_by_label=tests_per_chunk_by_label,
             issues_summary=issues_summary,
             suite_chunk_issues_summary=suite_chunk_issues_summary,
-            ya_activity=evlog_activity,
+            ya_activity_deltas=activity_deltas,
         )
         if args.full_table:
             out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")

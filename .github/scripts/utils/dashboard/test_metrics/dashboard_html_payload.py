@@ -7,6 +7,7 @@ from typing import Any, Optional
 try:
     from .dashboard_html_series import (
         build_active_series,
+        build_active_series_from_deltas,
         build_step_series,
         downsample_active_series,
         downsample_step_series,
@@ -18,6 +19,7 @@ try:
 except ImportError:
     from dashboard_html_series import (
         build_active_series,
+        build_active_series_from_deltas,
         build_step_series,
         downsample_active_series,
         downsample_step_series,
@@ -177,7 +179,7 @@ def build_dashboard_payload(
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
     issues_summary: Optional[dict[str, int]] = None,
     suite_chunk_issues_summary: Optional[dict[str, int]] = None,
-    ya_activity: Optional[list[dict[str, Any]]] = None,
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> dict[str, Any]:
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
@@ -223,9 +225,15 @@ def build_dashboard_payload(
     xs_tests_suite, tests_tracks_suite = build_step_series(enriched, "tests_in_chunk", set(top_tests_suite), label_mode="suite")
     xs_active_exact, ys_active_exact = build_active_series(enriched)
     activity_series: dict[str, dict[str, list[float]]] = {}
+    deltas_by_kind = ya_activity_deltas or {}
     for kind in ("build", "archive", "cache", "link", "test_report", "test_tm"):
-        kind_runs = [row for row in (ya_activity or []) if row.get("kind") == kind]
-        activity_xs, activity_ys = build_active_series(kind_runs)
+        if kind == "test_report":
+            # Report-backed chunk spans stay as start/end rows (already epoch-aligned).
+            activity_xs, activity_ys = build_active_series(enriched)
+        else:
+            activity_xs, activity_ys = build_active_series_from_deltas(
+                deltas_by_kind.get(kind) or []
+            )
         activity_xs, activity_ys = downsample_active_series(
             activity_xs, activity_ys, max_points
         )

@@ -92,14 +92,16 @@ class JsScriptJsonTest(unittest.TestCase):
 
     def test_dashboard_html_exports_inline_handler_globals(self):
         source = (_DIR / "dashboard_html_main.py").read_text(encoding="utf-8")
+        # Require the real post-fetch assignments, not the pre-fetch no-op stubs
+        # (`window.showTab = function() {}`).
         required = (
-            "window.toggleSuiteMarkers",
-            "window.showTab",
-            "window.clearSuiteSearch",
-            "window.clearAllMarkers",
-            "window.applyTimezoneToAllCharts",
-            "window.applyMarkersToCharts",
-            "window.applyLayerToggles",
+            "window.toggleSuiteMarkers = toggleSuiteMarkers;",
+            "window.showTab = showTab;",
+            "window.clearSuiteSearch = clearSuiteSearch;",
+            "window.clearAllMarkers = clearAllMarkers;",
+            "window.applyTimezoneToAllCharts = applyTimezoneToAllCharts;",
+            "window.applyMarkersToCharts = applyMarkersToCharts;",
+            "window.applyLayerToggles = applyLayerToggles;",
         )
         missing = [name for name in required if name not in source]
         self.assertEqual(missing, [], msg=f"missing window exports: {missing}")

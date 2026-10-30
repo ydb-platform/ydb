@@ -230,6 +230,31 @@ def test_evlog_activity_closes_tm_on_result_without_e():
     assert by_kind["build"]["end_us"] == 60.0
 
 
+def test_evlog_activity_zero_length_close_stays_balanced():
+    events = [
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 1,
+            "ts": 10.0,
+            "name": "CC",
+            "args": {"name": "Compile(zero.cpp)"},
+        },
+        {"ph": "E", "pid": 1, "tid": 1, "ts": 10.0},
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 1,
+            "ts": 20.0,
+            "name": "CC",
+            "args": {"name": "Compile(real.cpp)"},
+        },
+        {"ph": "E", "pid": 1, "tid": 1, "ts": 30.0},
+    ]
+    activity = parse_evlog_activity(events=events)
+    assert activity == [{"kind": "build", "start_us": 20.0, "end_us": 30.0}]
+
+
 def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
     enriched_runs = [
         {
@@ -271,6 +296,7 @@ def load_tests(loader, tests, pattern):
         test_evlog_activity_covers_compile_link_and_test_jobs,
         test_evlog_activity_chrome_trace_uses_event_name_as_tag,
         test_evlog_activity_closes_tm_on_result_without_e,
+        test_evlog_activity_zero_length_close_stays_balanced,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
         test_active_series_downsampling_preserves_short_peak,
     ):
@@ -284,6 +310,7 @@ if __name__ == "__main__":
     test_evlog_activity_covers_compile_link_and_test_jobs()
     test_evlog_activity_chrome_trace_uses_event_name_as_tag()
     test_evlog_activity_closes_tm_on_result_without_e()
+    test_evlog_activity_zero_length_close_stays_balanced()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
     test_active_series_downsampling_preserves_short_peak()
     print("OK")

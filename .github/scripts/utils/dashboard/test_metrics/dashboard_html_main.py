@@ -35,7 +35,7 @@ def build_html_dashboard(
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
     issues_summary: Optional[dict[str, int]] = None,
     suite_chunk_issues_summary: Optional[dict[str, int]] = None,
-    ya_activity: Optional[list[dict[str, Any]]] = None,
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> None:
     payload = build_dashboard_payload(
         suite_filter=suite_filter,
@@ -52,7 +52,7 @@ def build_html_dashboard(
         tests_per_chunk_by_label=tests_per_chunk_by_label,
         issues_summary=issues_summary,
         suite_chunk_issues_summary=suite_chunk_issues_summary,
-        ya_activity=ya_activity,
+        ya_activity_deltas=ya_activity_deltas,
     )
 
     rf = (run_config or {}).get("runner_footprint") or {}
@@ -583,6 +583,13 @@ def build_html_dashboard(
       const cFailedTotal = cTimeoutTotal + cRegularTotal;
       const cFailedMuted = cTimeoutMuted + cRegularMuted;
       const wallExact = formatHeadlineValue('total_duration_sec', hs.total_duration_sec).split(' (')[0];
+      const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
+      const unalignedNote = activityUnaligned
+        ? ('<span class="group" style="color:#b45309;" title="No report↔evlog chunk matches; '
+          + 'build/archive/cache/link/TM activity uses raw evlog timestamps (offset 0). '
+          + 'If clocks differ, the yaActivity chart may look empty or misaligned.">'
+          + '⚠ ya activity clock unaligned</span>')
+        : '';
       const runLine =
         '<div class="headline-run">' +
           '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites</span>' +
@@ -594,6 +601,7 @@ def build_html_dashboard(
             ' · <b>' + String(timeoutTotal) + '</b> timeout · <b>' + String(skippedTotal) + '</b> skipped</span>' +
           '<span class="group">chunks <b>' + String(cFailedTotal) + '</b> failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
             ' · <b>' + String(cTimeoutTotal) + '</b> timeout</span>' +
+          unalignedNote +
         '</div>';
       function statCell(metric, stats, field) {{
         const s = (stats && typeof stats === 'object') ? stats : {{}};
@@ -2121,8 +2129,12 @@ def build_html_dashboard(
         if (el) el.style.display = 'none';
         return;
       }}
+      const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
+      const activityTitle = activityUnaligned
+        ? 'ya make concurrency (⚠ clock unaligned — offset not validated)'
+        : 'ya make concurrency: build, archives, cache, test chunks, and links';
       Plotly.newPlot('yaActivity', traces, {{
-        title: 'ya make concurrency: build, archives, cache, test chunks, and links',
+        title: activityTitle,
         xaxis: axisLayout(allX, true),
         yaxis: {{title: 'active jobs', rangemode: 'tozero'}},
         hovermode: 'x unified',

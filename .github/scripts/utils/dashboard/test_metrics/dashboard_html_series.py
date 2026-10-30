@@ -92,12 +92,14 @@ def build_step_series(
     return xs, tracks
 
 
-def build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[float]]:
-    events: list[tuple[float, float]] = []
-    for r in runs:
-        events.append((float(r["start_us"]), +1.0))
-        events.append((float(r["end_us"]), -1.0))
-    events.sort(key=lambda x: x[0])
+def build_active_series_from_deltas(
+    deltas: list[tuple[float, int]],
+) -> tuple[list[float], list[float]]:
+    """Sweep per-kind +1/-1 deltas into a concurrency step series (seconds)."""
+    if not deltas:
+        return [], []
+    # Closes before opens at the same timestamp keep the step series stable.
+    events = sorted(deltas, key=lambda item: (item[0], item[1]))
     xs: list[float] = []
     ys: list[float] = []
     cur = 0.0
@@ -105,11 +107,19 @@ def build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[f
     while i < len(events):
         ts = events[i][0]
         while i < len(events) and events[i][0] == ts:
-            cur += events[i][1]
+            cur += float(events[i][1])
             i += 1
         xs.append(ts / 1_000_000.0)
         ys.append(cur)
     return xs, ys
+
+
+def build_active_series(runs: list[dict[str, Any]]) -> tuple[list[float], list[float]]:
+    events: list[tuple[float, int]] = []
+    for r in runs:
+        events.append((float(r["start_us"]), +1))
+        events.append((float(r["end_us"]), -1))
+    return build_active_series_from_deltas(events)
 
 
 def downsample_step_series(

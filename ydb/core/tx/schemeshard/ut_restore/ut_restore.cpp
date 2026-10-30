@@ -8692,11 +8692,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         const auto b = GenerateTestData(R"(
             columns {
-              name: "key"
+              name: "value"
               type { optional_type { item { type_id: UTF8 } } }
             }
             columns {
-              name: "value"
+              name: "key"
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "value"
@@ -8722,14 +8722,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         if (replication) {
             const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table/by_value/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+            const bool build = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
             const auto indexData = ReadTable(runtime, *shards.begin(), "indexImplTable", {"value"}, {"key", "value"}, "'ExcFrom ");
             // The backup's index data differs from the base table. This proves
             // IMPORT/AUTO actually load it instead of silently rebuilding it.
-            const auto& expected = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD ? a : b;
+            const auto& expected = build ? a : b;
             NKqp::CompareYson(expected.Data[0].YsonStr, indexData);
             for (const auto& path : {"/MyRoot/Table", "/MyRoot/Table/by_value/indexImplTable"}) {
                 const auto config = DescribePath(runtime, path).GetPathDescription().GetTable().GetReplicationConfig();
-                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+                // BuildIndex writes into an ordinary private impl table. Its
+                // replica mode is applied later, when replication attaches.
+                const auto expectedMode = build && TStringBuf(path) != "/MyRoot/Table"
+                    ? NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE
+                    : NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY;
+                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), expectedMode);
                 UNIT_ASSERT(!config.GetAwaitingImport());
             }
         }

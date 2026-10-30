@@ -1191,7 +1191,7 @@ private:
         importInfo.EndTime = TAppData::TimeProvider->Now();
         // Completion changes only SchemeShard ownership metadata. DataShard's
         // replication mode stays READ_ONLY during import and attachment.
-        // Include implementation tables of indexes built from imported data.
+        // Include owned implementation tables of materialized indexes.
         for (const auto& [pathId, table] : Self->Tables) {
             const auto& config = table->ReplicationConfig();
             if (config.HasBootstrapReplication() && config.GetBootstrapImportId() == importInfo.Id

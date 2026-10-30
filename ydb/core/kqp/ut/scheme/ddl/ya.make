@@ -1,0 +1,32 @@
+UNITTEST_FOR(ydb/core/kqp)
+
+FORK_SUBTESTS()
+SPLIT_FACTOR(50)
+SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
+SRCS(kqp_scheme_ut.cpp)
+
+PEERDIR(
+    ydb/public/sdk/cpp/src/client/import
+    yql/essentials/types/binary_json
+    library/cpp/threading/local_executor
+    ydb/core/kqp/ut/common
+    ydb/library/yql/udfs/common/knn
+    ydb/services/workload_manager/ut/common
+    ydb/core/tx/columnshard/hooks/testing
+    ydb/public/sdk/cpp/src/client/arrow
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/topic
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
+)
+
+YQL_LAST_ABI_VERSION()
+GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
+
+END()

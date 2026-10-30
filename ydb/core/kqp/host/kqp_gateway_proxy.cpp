@@ -1082,15 +1082,22 @@ public:
 
         bool isPrepare = IsPrepare();
         auto gateway = Gateway;
-        auto sessionCtx = SessionCtx;
+        // The asynchronous schema request must not retain the compilation session
+        // and its expression nodes beyond completion of the owning host.
+        auto queryCtx = isPrepare ? SessionCtx->QueryPtr() : nullptr;
         auto profilesFuture = Gateway->GetTableProfiles();
         auto tablePromise = NewPromise<TGenericResult>();
         auto temporary = metadata->Temporary;
-        profilesFuture.Subscribe([gateway, sessionCtx, metadata, tablePromise, pathPair, isPrepare, temporary, existingOk]
+        profilesFuture.Subscribe([gateway, queryCtx, metadata, tablePromise, pathPair, isPrepare, temporary, existingOk]
             (const TFuture<IKqpGateway::TKqpTableProfilesResult>& future) mutable {
+                auto complete = [&](auto result) {
+                    metadata.Reset();
+                    queryCtx.Reset();
+                    tablePromise.SetValue(std::move(result));
+                };
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
-                    tablePromise.SetValue(ResultFromIssues<TGenericResult>(profilesResult.Status(),
+                    complete(ResultFromIssues<TGenericResult>(profilesResult.Status(),
                         profilesResult.Issues()));
                     return;
                 }
@@ -1112,7 +1119,7 @@ public:
                         if (isLocalBloom) {
                             if (index.Type == TIndexDescription::EType::LocalBloomNgramFilter &&
                                 metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom ngram indexes are supported only for column tables"));
+                                complete(ResultFromError<TGenericResult>("Local bloom ngram indexes are supported only for column tables"));
                                 return;
                             }
 
@@ -1128,7 +1135,7 @@ public:
                                     if (desc->FalsePositiveProbability) {
                                         fpp = *desc->FalsePositiveProbability;
                                         if (fpp <= 0.0 || fpp >= 1.0) {
-                                            tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            complete(ResultFromError<TGenericResult>(
                                                 "false_positive_probability must be in range (0, 1)"));
                                             return;
                                         }
@@ -1145,7 +1152,7 @@ public:
                                         validPrefix = (index.KeyColumns[i] == pk[i]);
                                     }
                                     if (!validPrefix) {
-                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                        complete(ResultFromError<TGenericResult>(
                                             "Bloom filter index columns must be a prefix of the primary key"));
                                         return;
                                     }
@@ -1155,7 +1162,7 @@ public:
                                     // the same PK prefix would collapse to a single engine prefix, so reject
                                     // the duplicate column set.
                                     if (!bloomPrefixes.emplace(prefix, fpp).second) {
-                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                        complete(ResultFromError<TGenericResult>(
                                             "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed"));
                                         return;
                                     }
@@ -1176,7 +1183,7 @@ public:
 
                         if (index.Type == TIndexDescription::EType::LocalMinMax) {
                             if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>(NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
+                                complete(ResultFromError<TGenericResult>(NKikimr::NOlap::NIndexes::NMinMax::DisabledForRowTablesErrorMessage));
                                 return;
                             }
                         }
@@ -1220,7 +1227,7 @@ public:
                         entry->SetFalsePositiveProbability(fpp);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
-                        tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
+                        complete(ResultFromError<TGenericResult>(columnError));
                         return;
                     }
                     for(const auto& [seq, seqType]: sequences) {
@@ -1242,7 +1249,7 @@ public:
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
                     tableDesc = schemeTx.MutableCreateTable();
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
-                        tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));
+                        complete(ResultFromError<TGenericResult>(columnError));
                         return;
                     }
                 }
@@ -1254,12 +1261,12 @@ public:
                     IKqpGateway::TGenericResult errResult;
                     errResult.AddIssue(NYql::TIssue(error));
                     errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-                    tablePromise.SetValue(errResult);
+                    complete(errResult);
                     return;
                 }
 
                 if (isPrepare) {
-                    auto& phyQuery = *sessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                    auto& phyQuery = *queryCtx->PreparingQuery->MutablePhysicalQuery();
                     auto& phyTx = *phyQuery.AddTransactions();
                     phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
                     schemeTx.SetFailedOnAlreadyExists(!existingOk);
@@ -1267,7 +1274,7 @@ public:
 
                     TGenericResult result;
                     result.SetSuccess();
-                    tablePromise.SetValue(result);
+                    complete(result);
                 } else {
                     if (temporary) {
                         auto code = Ydb::StatusIds::BAD_REQUEST;
@@ -1275,8 +1282,11 @@ public:
                         IKqpGateway::TGenericResult errResult;
                         errResult.AddIssue(NYql::TIssue(error));
                         errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-                        tablePromise.SetValue(errResult);
+                        complete(errResult);
+                        return;
                     }
+                    metadata.Reset();
+                    queryCtx.Reset();
                     gateway->ModifyScheme(std::move(schemeTx)).Subscribe([tablePromise, warnings]
                         (const TFuture<TGenericResult>& future) mutable {
                             auto result = future.GetValue();

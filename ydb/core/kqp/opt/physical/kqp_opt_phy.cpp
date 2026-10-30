@@ -171,9 +171,12 @@ public:
 
 protected:
     TMaybeNode<TExprBase> BuildReturning(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildReturning(node, ctx, TypesCtx, KqpCtx);
-        DumpAppliedRule("BuildReturning", node.Ptr(), output.Ptr(), ctx);
-        return output;
+        const auto output = KqpBuildReturning(node, ctx, TypesCtx, KqpCtx);
+        if (!output) {
+            return {};
+        }
+        DumpAppliedRule("BuildReturning", node.Ptr(), output->Ptr(), ctx);
+        return *output;
     }
 
     TMaybeNode<TExprBase> RewriteReturningUpsert(TExprBase node, TExprContext& ctx) {

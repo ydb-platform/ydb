@@ -40,6 +40,8 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
     ydb/library/aclib
     ydb/library/aclib/protos
+    ydb/library/generated_columns
+    ydb/library/generated_columns/expr
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/constraints

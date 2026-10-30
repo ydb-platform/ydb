@@ -15,8 +15,6 @@ SRCS(
     kqp_client_data_writes_ut.cpp
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
-    kqp_generated_columns_ut.cpp
-    kqp_scheme_ut.cpp
     kqp_secrets_ut.cpp
     kqp_scheme_fulltext_ut.cpp
     kqp_scheme_index_copy_ut.cpp
@@ -42,6 +40,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
-
 END()
+
+RECURSE_FOR_TESTS(
+    ddl
+)

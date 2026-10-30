@@ -51,7 +51,7 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
 
 } // anonymous namespace
 
-TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
+TMaybe<TExprBase> KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
@@ -63,10 +63,13 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     const auto logicalColumns = returning.Columns();
     const auto physicalColumns = BuildPhysicalColumnsForVirtualGeneratedColumns(logicalColumns, tableDesc, returning.Pos(), ctx);
 
-    if (physicalColumns.Raw() != logicalColumns.Raw()) {
+    if (!physicalColumns) {
+        return {};
+    }
+    if (physicalColumns->Raw() != logicalColumns.Raw()) {
         auto physicalReturning = Build<TKqlReturningList>(ctx, returning.Pos())
             .Update(returning.Update())
-            .Columns(physicalColumns)
+            .Columns(*physicalColumns)
             .Table(returning.Table())
             .Done();
 

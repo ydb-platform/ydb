@@ -2,7 +2,9 @@
 
 This page explains how to set up monitoring for a {{ ydb-short-name }} cluster.
 
-{{ ydb-short-name }} provides numerous system state metrics. Instant metric values can be viewed in the web interface {#web-metrics}:
+## Viewing metrics in the web interface {#web-metrics}
+
+{{ ydb-short-name }} provides numerous system state metrics. Instant metric values can be viewed in the web interface:
 
 ```text
 http://<ydb-server-address>:<ydb-port>/counters/

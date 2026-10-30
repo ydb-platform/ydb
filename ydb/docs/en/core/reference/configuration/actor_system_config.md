@@ -1,4 +1,6 @@
-# actor_system_config {#actor-system}
+# actor_system_config
+
+## Actor system configuration {#actor-system}
 
 The CPU resources are mainly used by the actor system. Depending on the type, all actors run in one of the pools (the `name` parameter). Configuration involves allocating a node's CPU cores across the actor system pools. When allocating them, please keep in mind that PDisks and the gRPC API run outside the actor system and require separate resources.
 

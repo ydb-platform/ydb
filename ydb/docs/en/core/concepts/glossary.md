@@ -189,6 +189,12 @@ A **secondary index** is an additional data structure used to locate rows in a t
 A special type of **secondary index** is singled out separately - [vector index](#vector-index).
 
 #### Vector Index {#vector-index}
+
+**Vector index** is an additional data structure used to speed up the [vector search](query_execution/vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
+
+**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+
 #### Full-text index {#fulltext-index}
 
 **Full-text index** is a secondary index type used for full-text search over table columns.
@@ -196,12 +202,6 @@ A special type of **secondary index** is singled out separately - [vector index]
 #### Local Bloom index {#local-bloom-skip-index}
 
 **Local Bloom index** is a skip index based on Bloom filters for efficient data filtering.
-
-
-**Vector index** is an additional data structure used to speed up the [vector search](query_execution/vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
-The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
-
-**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
 
 
 #### Column family {#column-family}
@@ -612,6 +612,7 @@ A **Hive** is a system tablet responsible for launching and managing other table
 #### Console {#console}
 
 **Console** is a system tablet responsible for storing [dynamic configuration](../devops/configuration-management/configuration-v1/dynamic-config.md) and delivering it to cluster nodes.
+
 #### Cluster management system {#cms}
 
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.

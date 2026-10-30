@@ -1,5 +1,6 @@
 #include "flat_bio_actor.h"
 #include "flat_bio_events.h"
+#include "flat_sausage_packet.h"
 #include "shared_cache_btree_walk.h"
 #include "shared_cache_events.h"
 #include "shared_sausagecache_state.h"
@@ -464,6 +465,24 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         const auto &pageCollection = *msg->PageCollection;
         const TLogoBlobID pageCollectionId = pageCollection.Label();
         const bool doTraceLog = DoTraceLog();
+
+        if (msg->MetaOnly) {
+            Y_ENSURE(msg->Pages.empty());
+            const auto* candidate = dynamic_cast<const NPageCollection::TPageCollection*>(msg->PageCollection.Get());
+            Y_ENSURE(candidate);
+            auto sharedMeta = candidate->GetSharedMeta();
+            if (const auto* entry = Collections.FindPtr(pageCollectionId)) {
+                const auto* existing =
+                    dynamic_cast<const NPageCollection::TPageCollection*>(entry->PageCollection.Get());
+                if (existing && existing->LargeGlobId == candidate->LargeGlobId) {
+                    sharedMeta = existing->GetSharedMeta();
+                }
+            }
+            auto result = MakeHolder<TEvResult>(std::move(msg->PageCollection), NKikimrProto::OK, msg->Cookie);
+            result->SharedMeta = std::move(sharedMeta);
+            Send(ev->Sender, result.Release(), 0, ev->Cookie);
+            return;
+        }
 
         TCollection &collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
         ECacheMode cacheMode = collection.GetCacheMode();

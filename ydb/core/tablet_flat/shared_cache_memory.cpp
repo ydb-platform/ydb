@@ -1,5 +1,6 @@
 #include "shared_cache_memory.h"
 #include "shared_sausagecache_state.h"
+#include "flat_sausage_meta.h"
 
 #include <util/generic/algorithm.h>
 
@@ -129,11 +130,28 @@ TCollection::~TCollection() {
     Y_DEBUG_ABORT_UNLESS(!MetadataRequestCount && !RetiredMetadata && !MetadataBytes);
 }
 
+bool TCollection::HasSharedMeta(
+    const NPageCollection::TMeta* meta, const NPageCollection::IPageCollection* except) const {
+    if (PageCollection && PageCollection.Get() != except && PageCollection->GetSharedMeta().Get() == meta) {
+        return true;
+    }
+    if (RetiredMetadata) {
+        for (const auto& reference : *RetiredMetadata) {
+            if (reference.Descriptor != except && reference.Descriptor->GetSharedMeta().Get() == meta) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void TCollection::RefMetadata(const NPageCollection::IPageCollection& collection) {
     const auto* raw = collection.GetMetadataBuffer();
     const bool hasRaw = raw && *raw;
     i64 bytes = collection.GetMetadataMemoryUsage();
-    if (hasRaw) {
+    if (const auto meta = collection.GetSharedMeta(); meta && HasSharedMeta(meta.Get())) {
+        bytes -= meta->GetMemoryUsage();
+    } else if (hasRaw) {
         bytes -= raw->GetAllocationSize();
     }
     Y_ENSURE(bytes >= 0);
@@ -148,7 +166,9 @@ void TCollection::UnrefMetadata(const NPageCollection::IPageCollection& collecti
     const auto* raw = collection.GetMetadataBuffer();
     const bool hasRaw = raw && *raw;
     i64 bytes = collection.GetMetadataMemoryUsage();
-    if (hasRaw) {
+    if (const auto meta = collection.GetSharedMeta(); meta && HasSharedMeta(meta.Get(), &collection)) {
+        bytes -= meta->GetMemoryUsage();
+    } else if (hasRaw) {
         bytes -= raw->GetAllocationSize();
     }
     if (hasRaw) {

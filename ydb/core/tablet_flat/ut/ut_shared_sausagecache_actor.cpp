@@ -3,6 +3,8 @@
 #include <shared_sausagecache_state.h>
 #include <flat_page_blobs.h>
 #include <flat_page_other.h>
+#include <flat_sausage_packet.h>
+#include <flat_sausage_record.h>
 #include <shared_cache_events.h>
 #include <shared_sausagecache.h>
 #include <ydb/core/cms/console/console.h>
@@ -108,6 +110,10 @@ struct TPageCollectionMock : public IPageCollection {
 
     const TSharedData* GetMetadataBuffer() const noexcept override {
         return MetadataBuffer ? &MetadataBuffer : nullptr;
+    }
+
+    TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+        return {};
     }
 
     bool SkipBTreeIndexV1Shadow() const noexcept override {
@@ -428,6 +434,75 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         collection.Id = descriptor->Label();
         collection.SetPageCollection(std::move(descriptor));
         return collection;
+    }
+
+    Y_UNIT_TEST(MetaLookupReusesRegisteredCoreWithoutAddingOwner) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> registered = new NPageCollection::TPageCollection(id, raw);
+        const auto owner = sharedCache.Runtime.AllocateEdgeActor();
+        const auto reader = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(owner, new TEvAttach(registered, ECacheMode::Regular));
+        TWaitForFirstEvent<TEvAttach> attached(sharedCache.Runtime);
+        attached.Wait();
+        const i64 bytes = sharedCache.Counters->MetadataBytes->Val();
+
+        auto duplicate = TSharedData::Copy(raw.data(), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> candidate =
+            new NPageCollection::TPageCollection(id, duplicate);
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, candidate, {}, 77, true), 99);
+        auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 99);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Cookie, 77);
+        UNIT_ASSERT(response->Get()->PageCollection.Get() == candidate.Get());
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == registered->GetSharedMeta().Get());
+        UNIT_ASSERT(response->Get()->Pages.empty());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), bytes);
+        sharedCache.Unregister(owner);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 0);
+        UNIT_ASSERT(response->Get()->SharedMeta->Raw.data() == raw.data());
+    }
+
+    Y_UNIT_TEST(MetaLookupMissDoesNotRegisterCollection) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> candidate = new NPageCollection::TPageCollection(id, raw);
+        const auto reader = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, candidate, {}, 0, true));
+        auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(response->Get()->PageCollection.Get() == candidate.Get());
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 0);
+    }
+
+    Y_UNIT_TEST(MetaLookupChecksStorageGroup) {
+        TSharedPageCacheMock sharedCache;
+        TRecord record(0);
+        auto raw = record.Finish();
+        const TLargeGlobId id(0, TLogoBlobID(1, 1, 10, 1, raw.size(), 0), raw.size());
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> registered = new NPageCollection::TPageCollection(id, raw);
+        const auto owner = sharedCache.Runtime.AllocateEdgeActor();
+        const auto reader = sharedCache.Runtime.AllocateEdgeActor();
+        sharedCache.Send(owner, new TEvAttach(registered, ECacheMode::Regular));
+        TWaitForFirstEvent<TEvAttach> attached(sharedCache.Runtime);
+        attached.Wait();
+        TIntrusiveConstPtr<NPageCollection::TPageCollection> candidate =
+            new NPageCollection::TPageCollection(TLargeGlobId(1, id.Lead, id.Bytes), raw);
+        sharedCache.Send(reader, new TEvRequest(EPriority::Fast, candidate, {}, 0, true));
+        auto response = sharedCache.Runtime.GrabEdgeEvent<TEvResult>(reader);
+        UNIT_ASSERT(response->Get()->SharedMeta.Get() == candidate->GetSharedMeta().Get());
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->SharedMeta->Group, 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
     }
 
     Y_UNIT_TEST(CollectionAndRequestsRetainSharedMetadata) {

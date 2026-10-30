@@ -53,6 +53,10 @@ namespace {
             return nullptr;
         }
 
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
+        }
+
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
             return NTable::NPage::TPageLocation::FromPageIndex(
                 pageId, Frames->Relation(pageId).Size,
@@ -234,6 +238,10 @@ namespace {
 
         const TSharedData* GetMetadataBuffer() const noexcept override {
             return nullptr;
+        }
+
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
         }
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {

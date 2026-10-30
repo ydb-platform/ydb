@@ -1451,7 +1451,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
             stage->Fetching = fetch.PageCollection.Get();
 
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages)),
+                NBlockIO::EPriority::Fast, std::move(fetch.PageCollection), std::move(fetch.Pages), 0, fetch.MetaOnly),
                 0, ui64(ERequestTypeCookie::PendingInit));
 
             ++partSwitch.PendingLoads;
@@ -3356,7 +3356,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             }
 
             Y_ENSURE(msg->Cookie == 0);
-            foundStage->Loader.Save(std::move(msg->Pages));
+            foundStage->Loader.Save(std::move(msg->Pages), std::move(msg->SharedMeta));
             foundSwitch->PendingLoads--;
 
             if (PrepareExternalPart(*foundSwitch, *foundBundle)) {

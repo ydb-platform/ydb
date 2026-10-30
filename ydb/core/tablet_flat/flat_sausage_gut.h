@@ -1,12 +1,15 @@
 #pragma once
 
 #include "flat_sausage_misc.h"
+#include "flat_sausage_meta.h"
 #include "flat_sausage_solid.h"
 
 #include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NPageCollection {
+
+    class TMeta;
 
     class IPageCollection : public TAtomicRefCount<IPageCollection> {
     public:
@@ -29,6 +32,8 @@ namespace NPageCollection {
         virtual i64 GetMetadataMemoryUsage() const noexcept = 0;
         // Serialized metadata buffer, if any; used to deduplicate retained allocations
         virtual const TSharedData* GetMetadataBuffer() const noexcept = 0;
+
+        virtual TAtomicSharedPtr<const TMeta> GetSharedMeta() const noexcept = 0;
         virtual NTable::NPage::TPageLocation GetLocation(ui32 pageId) const = 0;
         /// Returns true when the collection carries both BTreeIndex and BTreeIndexV2 pages
         virtual bool SkipBTreeIndexV1Shadow() const noexcept { return false; }

@@ -62,6 +62,10 @@ namespace {
             return nullptr;
         }
 
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
+        }
+
         TPageLocation GetLocation(ui32) const override {
             return {};
         }

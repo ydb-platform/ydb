@@ -458,7 +458,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-As a result of executing the `ydb_platform.ydb.initial_setup` playbook, a {{ ydb-short-name }} cluster will be created. It will contain a [domain](../../../concepts/glossary.md#domain) named with the `ydb_domain` setting (`Root` by default), a [database](../../../concepts/glossary.md#database) named with the `ydb_database_name` setting (`database` by default), and an initial [user](../../../concepts/glossary.md#access-user) named with the `ydb_user` setting (`root` by default).
+As a result of executing the `ydb_platform.ydb.initial_setup` playbook, a {{ ydb-short-name }} cluster will be created. It will contain a domain named with the `ydb_domain` setting (`Root` by default), a [database](../../../concepts/glossary.md#database) named with the `ydb_database_name` setting (`database` by default), and an initial [user](../../../concepts/glossary.md#access-user) named with the `ydb_user` setting (`root` by default).
 
 ## Optional Next Steps
 

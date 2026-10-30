@@ -2,7 +2,7 @@
 
 {% include [deprecated](_includes/deprecated.md) %}
 
-If you need to decommission a {{ ydb-short-name }} cluster host that contains part of the [static group](../../../reference/configuration/index.md#blob_storage_config), you need to move it to another host.
+If you need to decommission a {{ ydb-short-name }} cluster host that contains part of the [static group](../../../reference/configuration/index.md#blob-storage-config), you need to move it to another host.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 

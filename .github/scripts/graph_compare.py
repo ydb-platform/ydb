@@ -21,10 +21,9 @@ def log(msg: str):
     print(msg)
 
 
-def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: str, head_commit: str) -> None:
+def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: str, head_commit: str, workdir: str = None) -> None:
     ya = ya_make_command.split(' ')[0]
 
-    workdir = os.getenv('workdir')
     if not workdir:
         workdir = tempfile.mkdtemp()
 
@@ -60,6 +59,7 @@ if __name__ == '__main__':
         '--ya-make-command', '-y', type=str, dest='ya_make_command', required=True,
         help='Ya make command'
     )
+    parser.add_argument('--workdir', help='Directory for intermediate graphs and contexts')
     parser.add_argument(dest='base_commit', help='Base commit')
     parser.add_argument(dest='head_commit', help='Head commit')
     opts = parser.parse_args()
@@ -68,5 +68,6 @@ if __name__ == '__main__':
         graph_path=opts.result_graph_path,
         context_path=opts.result_context_path,
         base_commit=opts.base_commit,
-        head_commit=opts.head_commit
+        head_commit=opts.head_commit,
+        workdir=opts.workdir
     )

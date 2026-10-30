@@ -247,6 +247,7 @@ void TTargetBase::Progress(const TActorContext& ctx) {
     case EDstState::WaitingImport:
         break;
     case EDstState::Error:
+    case EDstState::Attaching: // Deprecated.
         break;
     }
 }

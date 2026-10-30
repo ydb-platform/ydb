@@ -409,10 +409,19 @@ namespace TEvDataShard {
         EvS3DirectWriteFinishResult,
         EvS3DirectWriteAbort,
 
+        EvDatabaseFreeze,
+        EvDatabaseFreezeResult,
+
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_DATASHARD)");
+    struct TEvDatabaseFreeze : public TEventPB<TEvDatabaseFreeze,
+        NKikimrTxDataShard::TEvDatabaseFreeze, EvDatabaseFreeze> {};
+
+    struct TEvDatabaseFreezeResult : public TEventPB<TEvDatabaseFreezeResult,
+        NKikimrTxDataShard::TEvDatabaseFreezeResult, EvDatabaseFreezeResult> {};
+
     struct TEvGetShardState : public TEventPB<TEvGetShardState, NKikimrTxDataShard::TEvGetShardState,
         TEvDataShard::EvGetShardState> {
         TEvGetShardState()

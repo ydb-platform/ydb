@@ -51,6 +51,7 @@ SRCS(
     datashard__init.cpp
     datashard_active_transaction.cpp
     datashard_change_sending.cpp
+    datashard_database_freeze.cpp
     datashard_outreadset.cpp
     datashard_s3_uploads.cpp
     datashard_snapshots.cpp

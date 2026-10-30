@@ -1240,6 +1240,13 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
+ui64 TPipeline::AllowedSchemaStep() const {
+    // Database freeze may advance the write edge beyond the mediator step for
+    // its final resolved record. Every planned write after thaw must respect
+    // the same floor as immediate writes, including after a reboot.
+    return Max(LastPlannedTx.Step + 1, Self->SnapshotManager.GetImmediateWriteEdge().Step + 1);
+}
+
 ui64 TPipeline::AllowedDataStep() const
 {
     ui64 latestStep = 0;
@@ -1249,7 +1256,7 @@ ui64 TPipeline::AllowedDataStep() const
     }
 
     return Max(
-        LastPlannedTx.Step + 1,
+        AllowedSchemaStep(),
         latestStep ? latestStep + 1 : TAppData::TimeProvider->Now().MilliSeconds());
 }
 
@@ -2675,4 +2682,3 @@ void TPipeline::ProvideGlobalTxId(const TOperation::TPtr& op, ui64 globalTxId) {
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

@@ -1942,6 +1942,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
     desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     desc.MutableStreamDescription()->SetTraceIds(streamDesc.TraceIds);
+    if (streamDesc.TopicPartitions) {
+        desc.SetTopicPartitions(streamDesc.TopicPartitions);
+    }
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }

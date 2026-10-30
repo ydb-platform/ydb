@@ -478,8 +478,8 @@ namespace NKikimr::NHttpProxy {
                 const bool isServerError = IsServerError(httpCode);
                 auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
                 YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY, NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId), "Request",
-                    {"#_HttpContext.RequestId", HttpContext.RequestId},
-                    {"#_num_0", LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, errorText)});
+                    {"requestId", HttpContext.RequestId},
+                    {"responseInfo", LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, errorText)});
             }
 
             void ReportInputCounters(const TActorContext& ctx) {

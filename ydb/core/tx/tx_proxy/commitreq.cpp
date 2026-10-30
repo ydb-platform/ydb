@@ -300,7 +300,7 @@ private:
                 {"actor", ctx.SelfID},
                 {"txid", TxId},
                 {"shardId", shardId},
-                {"#_PerShardStates.size", PerShardStates.size()},
+                {"perShardStatesSize", PerShardStates.size()},
                 {"marker", "P3"});
 
             auto event = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_COMMIT_WRITES,
@@ -612,7 +612,7 @@ private:
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_msg->TabletId", msg->TabletId});
+            {"tabletId", msg->TabletId});
 
         return MarkShardPrepareError(msg->TabletId, state, true, ctx);
     }
@@ -741,7 +741,7 @@ private:
             {"actor", ctx.SelfID},
             {"txid", TxId},
             {"getStatus", msg->GetStatus()},
-            {"#_msg->GetOrigin", msg->GetOrigin()},
+            {"origin", msg->GetOrigin()},
             {"marker", "P7"});
 
         if (!PlanStep) {
@@ -787,7 +787,7 @@ private:
                 YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Not delivered to coordinator coordinator id",
                     {"actor", ctx.SelfID},
                     {"txid", TxId},
-                    {"#_msg->TabletId", msg->TabletId},
+                    {"tabletId", msg->TabletId},
                     {"marker", "P8"});
 
                 const TString explanation = TStringBuilder()
@@ -799,7 +799,7 @@ private:
                 YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Delivery problem to coordinator coordinator id",
                     {"actor", ctx.SelfID},
                     {"txid", TxId},
-                    {"#_msg->TabletId", msg->TabletId},
+                    {"tabletId", msg->TabletId},
                     {"marker", "P8b"});
 
                 const TString explanation = TStringBuilder()
@@ -816,7 +816,7 @@ private:
             YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard lost pipe while waiting for reply",
                 {"actor", ctx.SelfID},
                 {"txid", TxId},
-                {"#_msg->TabletId", msg->TabletId});
+                {"tabletId", msg->TabletId});
 
             ComplainingDatashards.push_back(msg->TabletId);
 

@@ -1119,10 +1119,10 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "SEND TEvProposeTransaction to datashard with bytes program affected shards followers",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_shardData.ShardId", shardData.ShardId},
-            {"#_shardData.Program.size", shardData.Program.size()},
-            {"#_engine.GetAffectedShardCount", engine.GetAffectedShardCount()},
-            {"#_num_0", (CanUseFollower ? "allowed" : "disallowed")},
+            {"shardId", shardData.ShardId},
+            {"programSize", shardData.Program.size()},
+            {"affectedShardCount", engine.GetAffectedShardCount()},
+            {"canUseFollower", (CanUseFollower ? "allowed" : "disallowed")},
             {"marker", "P4"});
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
@@ -1213,9 +1213,9 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
         YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "SEND TEvProposeTransaction to datashard with read table request affected shards followers",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_partition.ShardId", partition.ShardId},
-            {"#_ReadTableRequest->KeyDesc->GetPartitions().size", ReadTableRequest->KeyDesc->GetPartitions().size()},
-            {"#_num_0", (CanUseFollower ? "allowed" : "disallowed")},
+            {"shardId", partition.ShardId},
+            {"partitionsSize", ReadTableRequest->KeyDesc->GetPartitions().size()},
+            {"canUseFollower", (CanUseFollower ? "allowed" : "disallowed")},
             {"marker", "P4b"});
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
@@ -1257,10 +1257,10 @@ TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLReque
         if (keyd->RowOperation != TKeyDesc::ERowOperation::Read || keyd->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
             CanUseFollower = false;
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Actor txid disallow followers cause of operation read target mode",
-                {"#_ctx.SelfID", ctx.SelfID},
+                {"selfId", ctx.SelfID},
                 {"txId", TxId},
-                {"#_(ui32)keyd->RowOperation", (ui32)keyd->RowOperation},
-                {"#_(ui32)keyd->ReadTarget.GetMode", (ui32)keyd->ReadTarget.GetMode()});
+                {"rowOperation", (ui32)keyd->RowOperation},
+                {"mode", (ui32)keyd->ReadTarget.GetMode()});
         }
         request->ResultSet.emplace_back(std::move(keyd));
     }
@@ -1474,7 +1474,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
         {"actor", ctx.SelfID},
         {"txid", TxId},
         {"to", Services.SchemeCache},
-        {"#_resolveReq->Request->ResultSet.size", resolveReq->Request->ResultSet.size()},
+        {"resultSetSize", resolveReq->Request->ResultSet.size()},
         {"marker", "P2"});
 
     ctx.Send(Services.SchemeCache, resolveReq.Release());
@@ -1796,7 +1796,7 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem (waiting",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_msg->TabletId", msg->TabletId},
+            {"tabletId", msg->TabletId},
             {"notDelivered", msg->NotDelivered},
             {"notPrepared", notPrepared});
 
@@ -1841,8 +1841,8 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem (already prepared, reattaching",
                 {"actor", ctx.SelfID},
                 {"txid", TxId},
-                {"#_msg->TabletId", msg->TabletId},
-                {"#_perTablet->ReattachState.Delay", perTablet->ReattachState.Delay});
+                {"tabletId", msg->TabletId},
+                {"reattachStateDelay", perTablet->ReattachState.Delay});
             ctx.Schedule(perTablet->ReattachState.Delay, new TEvPrivate::TEvReattachToShard(msg->TabletId));
             ++perTablet->RestartCount;
             return;
@@ -1851,8 +1851,8 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem (already prepared)",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_msg->TabletId", msg->TabletId},
-            {"#_num_0", (msg->NotDelivered ? " last message not delivered" : "")});
+            {"tabletId", msg->TabletId},
+            {"notDelivered", msg->NotDelivered});
 
         ComplainingDatashards.push_back(msg->TabletId);
         CancelProposal(0);
@@ -1880,7 +1880,7 @@ void TDataReq::HandlePrepareErrors(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, c
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem (gathering prepare errors)",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_msg->TabletId", msg->TabletId});
+            {"tabletId", msg->TabletId});
 
         return MarkShardError(msg->TabletId, *perTablet, true, ctx);
     }
@@ -1902,8 +1902,8 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         {"tabletStatus", perTablet->TabletStatus},
         {"getStatus", msg->GetStatus()},
         {"tabletId", tabletId},
-        {"#_record.GetReadSize", record.GetReadSize()},
-        {"#_record.OutgoingReadSetInfoSize", record.OutgoingReadSetInfoSize()},
+        {"readSize", record.GetReadSize()},
+        {"outgoingReadSetInfoSize", record.OutgoingReadSetInfoSize()},
         {"marker", "P6"});
 
     WallClockLastPrepareReply = Now();
@@ -2372,7 +2372,7 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
             YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Not delivered to coordinator coordinator id",
                 {"actor", ctx.SelfID},
                 {"txid", TxId},
-                {"#_msg->TabletId", msg->TabletId},
+                {"tabletId", msg->TabletId},
                 {"marker", "P8"});
 
             TStringStream explanation;
@@ -2388,7 +2388,7 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
             YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Delivery problem to coordinator coordinator id",
                 {"actor", ctx.SelfID},
                 {"txid", TxId},
-                {"#_msg->TabletId", msg->TabletId},
+                {"tabletId", msg->TabletId},
                 {"marker", "P8b"});
 
             TStringStream explanation;
@@ -2430,8 +2430,8 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard lost pipe while waiting for reply (reattaching",
                 {"actor", ctx.SelfID},
                 {"txid", TxId},
-                {"#_msg->TabletId", msg->TabletId},
-                {"#_perTablet->ReattachState.Delay", perTablet->ReattachState.Delay});
+                {"tabletId", msg->TabletId},
+                {"delay", perTablet->ReattachState.Delay});
             ctx.Schedule(perTablet->ReattachState.Delay, new TEvPrivate::TEvReattachToShard(msg->TabletId));
             ++perTablet->RestartCount;
             return;
@@ -2440,8 +2440,8 @@ void TDataReq::HandlePlan(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TAct
         YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard lost pipe while waiting for reply",
             {"actor", ctx.SelfID},
             {"txid", TxId},
-            {"#_msg->TabletId", msg->TabletId},
-            {"#_num_0", (msg->NotDelivered ? " (last message not delivered)" : "")});
+            {"tabletId", msg->TabletId},
+            {"notDelivered", msg->NotDelivered});
 
         ComplainingDatashards.push_back(msg->TabletId);
 

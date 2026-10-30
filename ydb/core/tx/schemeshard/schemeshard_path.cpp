@@ -1877,6 +1877,17 @@ bool TPath::IsAsyncReplicaTable() const {
     return tableInfo->IsAsyncReplica();
 }
 
+bool TPath::IsWaitingImportReplica() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto& tableInfo = SS->Tables.at(Base()->PathId);
+    return tableInfo->IsWaitingImportReplica();
+}
+
 bool TPath::IsImportingReplica() const {
     Y_ABORT_UNLESS(IsResolved());
 

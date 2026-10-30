@@ -1017,6 +1017,10 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         }
     }
 
+    bool IsWaitingImportReplica() const {
+        return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+    }
+
     bool IsImportingReplica() const {
         return ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
     }

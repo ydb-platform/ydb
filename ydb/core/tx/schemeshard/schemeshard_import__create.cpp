@@ -184,10 +184,8 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .FailOnRestrictedCreateInTempZone();
 
     if (path.IsResolved()) {
-        if (checks && path->IsTable() && !path.IsDeleted()
-                && ss->Tables.at(path.Base()->PathId)->ReplicationConfig().GetImportState()
-                    == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT) {
-            checks.NotDeleted().NotUnderDeleting().NotUnderOperation();
+        if (checks && !path.IsDeleted() && path.IsWaitingImportReplica()) {
+            checks.NotUnderDeleting().NotUnderOperation();
         } else if (path->IsSysView()) {
             checks
                 .IsResolved()

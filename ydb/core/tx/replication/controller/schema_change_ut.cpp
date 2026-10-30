@@ -2281,7 +2281,9 @@ Y_UNIT_TEST_SUITE(StreamResultFreshness) {
             holdResults = true;
             RestartController(env, info.ControllerId);
         }
-        runtime.WaitFor("obsolete source setup result", [&] { return pending.size() == 1; }, TDuration::Seconds(30));
+        // Source setup uses real SDK callbacks. Bound both replies by the test
+        // runner's wall-clock timeout rather than a simulated deadline.
+        runtime.WaitFor("obsolete source setup result", [&] { return pending.size() == 1; });
         const auto* obsolete = pending[0]->Get<TEvPrivate::TEvCreateStreamResult>();
         const TWorkerId worker(obsolete->ReplicationId, obsolete->TargetId, 0);
         const auto obsoleteActor = pending[0]->Sender;
@@ -2317,7 +2319,7 @@ Y_UNIT_TEST_SUITE(StreamResultFreshness) {
         // limit of one, the replacement cannot finish before this callback.
         sendResult(obsoleteActor, NYdb::EStatus::SCHEME_ERROR);
         assertUnchanged();
-        runtime.WaitFor("replacement source setup result", [&] { return pending.size() == 2; }, TDuration::Seconds(30));
+        runtime.WaitFor("replacement source setup result", [&] { return pending.size() == 2; });
         const auto currentActor = pending[1]->Sender;
         UNIT_ASSERT(currentActor != obsoleteActor);
         holdResults = false;
@@ -2666,7 +2668,9 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
             pending.push_back(std::move(ev));
         });
         const auto waitForResults = [&](ui32 count) {
-            runtime.WaitFor("source setup reply", [&] { return pending.size() >= count; }, TDuration::Seconds(30));
+            // Source setup uses real SDK callbacks, independently of simulated
+            // time. The test runner's wall-clock timeout bounds these waits.
+            runtime.WaitFor(Sprintf("source setup reply %u", count), [&] { return pending.size() >= count; });
         };
         const auto readStreamState = [&] {
             return ReadPersistedStreamState(runtime, info.ControllerId, worker);

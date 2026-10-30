@@ -275,7 +275,7 @@ class StressRunExecutor:
                             if remaining_time > 0:
                                 retry_delay = (
                                     remaining_time
-                                    if success
+                                    if outcome.success
                                     else min(
                                         _FAILED_RUN_RETRY_DELAY_SECONDS,
                                         remaining_time,
@@ -585,7 +585,11 @@ class StressRunExecutor:
                 success = (not stderr_nonempty) and not is_timeout and exit_code == 0
 
             logs_kept = (not info.parsed) or info.logs_kept
-            if not logs_kept:
+            if info.parsed and info.logs_kept:
+                # Trailer paths are expanded on the host ($HOME/tmp/...).
+                stdout_path = info.stdout_path or stdout_path
+                stderr_path = info.stderr_path or stderr_path
+            elif not logs_kept:
                 stdout_path = None
                 stderr_path = None
 

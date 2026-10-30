@@ -1,6 +1,8 @@
 """The workload wrapper must not ship the log back to the test process."""
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -14,11 +16,12 @@ from ydb.tests.library.stability.utils.workload_logs import (
 )
 
 
-def _run(script: str) -> subprocess.CompletedProcess:
+def _run(script: str, env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["bash", "-c", script],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=env,
         check=False,
     )
 
@@ -97,6 +100,27 @@ class WorkloadLogWrapperTest(unittest.TestCase):
         self.assertFalse(info.parsed)
         self.assertFalse(info.logs_kept)
         self.assertEqual(info.stdout_tail, "")
+
+    def test_default_logs_land_in_home_tmp(self):
+        home = tempfile.mkdtemp()
+        try:
+            script, stdout_path, _stderr_path = build_redirected_workload_command(
+                "echo boom >&2; exit 4",
+                "kept_run",
+            )
+            self.assertEqual(stdout_path, "$HOME/tmp/stability_workload_logs/kept_run.out")
+            self.assertIn('mkdir -p "$HOME/tmp/stability_workload_logs"', script)
+            env = os.environ.copy()
+            env["HOME"] = home
+            completed = _run(script, env)
+            info = parse_workload_trailer(completed.stdout.decode())
+            kept = Path(home) / "tmp" / "stability_workload_logs" / "kept_run.err"
+            self.assertEqual(completed.returncode, 4, completed.stderr)
+            self.assertTrue(info.logs_kept)
+            self.assertEqual(info.stderr_path, str(kept))
+            self.assertEqual(kept.read_text().strip(), "boom")
+        finally:
+            shutil.rmtree(home, ignore_errors=True)
 
     def test_log_id_is_filesystem_safe(self):
         log_id = make_log_id("olap host/name iter 1")

@@ -5,9 +5,10 @@ string when the process exits. Stability runs used to store that string on
 every iteration until the test finished, so a long workload on many nodes
 exhausted the test machine RAM.
 
-The wrapper below redirects the workload to files on the host that runs it.
-The SSH session prints only a short trailer: sizes, a nonempty flag, and
-(for a failed run) a base64 tail. A clean success deletes the files.
+The wrapper below redirects the workload to files on the host that runs it,
+under ``$HOME/tmp``. CI removes that directory between tests. The SSH session
+prints only a short trailer: sizes, a nonempty flag, and (for a failed run) a
+base64 tail. A clean success deletes the files.
 """
 from __future__ import annotations
 
@@ -21,7 +22,9 @@ from typing import NamedTuple, Optional
 # Last bytes of a failed run kept in the test process and in the Allure JSON.
 TAIL_BYTES = 8192
 
-WORKLOAD_LOG_DIR = "/tmp/stability_workload_logs"
+# Relative to $HOME on the host that executes the workload. CI wipes ~/tmp
+# between tests, so failed-run logs do not have to be removed by hand.
+WORKLOAD_LOG_DIR = "$HOME/tmp/stability_workload_logs"
 
 _LOG_ID_RE = re.compile(r"[A-Za-z0-9._-]+")
 
@@ -99,27 +102,52 @@ def make_log_id(run_name: str) -> str:
     return f"{safe}_{uuid.uuid4().hex[:8]}"
 
 
+def _shell_log_paths(log_id: str, log_dir: Optional[str]) -> tuple[str, str, str, str, str]:
+    """Shell snippets plus the paths callers should record.
+
+    ``log_dir is None`` means ``$HOME/tmp/stability_workload_logs``, expanded on
+    the host that runs the command. An explicit directory must be absolute so
+    tests can point at a temp dir. Returned paths are not shell-quoted.
+    """
+    if log_dir is None:
+        directory = "$HOME/tmp/stability_workload_logs"
+        stdout_path = f"{directory}/{log_id}.out"
+        stderr_path = f"{directory}/{log_id}.err"
+        return f'"{directory}"', f'"{stdout_path}"', f'"{stderr_path}"', stdout_path, stderr_path
+    if not log_dir.startswith("/"):
+        raise ValueError(f"workload log dir must be absolute: {log_dir!r}")
+    base = log_dir.rstrip("/")
+    stdout_path = f"{base}/{log_id}.out"
+    stderr_path = f"{base}/{log_id}.err"
+    return (
+        shlex.quote(log_dir),
+        shlex.quote(stdout_path),
+        shlex.quote(stderr_path),
+        stdout_path,
+        stderr_path,
+    )
+
+
 def build_redirected_workload_command(
     command: str,
     log_id: str,
-    log_dir: str = WORKLOAD_LOG_DIR,
+    log_dir: Optional[str] = None,
 ) -> tuple[str, str, str]:
     """Wrap ``command`` so its output stays in files on the executing host.
 
-    Returns the shell script, the stdout path, and the stderr path.
+    Returns the shell script and the stdout/stderr paths. With the default
+    directory those paths still contain ``$HOME``; the trailer echoes them
+    after the remote shell expands it.
     """
     if not _LOG_ID_RE.fullmatch(log_id):
         raise ValueError(f"unsafe workload log id: {log_id!r}")
-    if not log_dir or not log_dir.startswith("/"):
-        raise ValueError(f"workload log dir must be absolute: {log_dir!r}")
 
-    stdout_path = f"{log_dir.rstrip('/')}/{log_id}.out"
-    stderr_path = f"{log_dir.rstrip('/')}/{log_id}.err"
+    directory, stdout_shell, stderr_shell, stdout_path, stderr_path = _shell_log_paths(log_id, log_dir)
     script = (
         _SCRIPT
-        .replace("__LOG_DIR__", shlex.quote(log_dir))
-        .replace("__STDOUT__", shlex.quote(stdout_path))
-        .replace("__STDERR__", shlex.quote(stderr_path))
+        .replace("__LOG_DIR__", directory)
+        .replace("__STDOUT__", stdout_shell)
+        .replace("__STDERR__", stderr_shell)
         .replace("__TAIL__", str(TAIL_BYTES))
         .replace("__GREP_ARGS__", _ignored_grep_args())
         .replace("__COMMAND__", command)

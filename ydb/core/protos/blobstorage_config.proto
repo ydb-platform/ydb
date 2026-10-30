@@ -728,26 +728,24 @@ message TDeleteSpecificGroups {
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Volatile cluster-wide states of physical DataCenters for mirror-3-dc groups.
+// Persistent cluster-wide states of physical DataCenters for dynamic mirror-3-dc groups.
 message TDefineDataCenterStates {
     message TDataCenter {
-        enum EState {
+        enum EDataCenterState {
             INCLUDED = 0;
             EXCLUDED = 1;
-            RECOVERING = 2;
         }
-        string Name = 1;
-        EState State = 2;
+        optional string Name = 1;
+        optional EDataCenterState State = 2;
     }
     // Replaces the entire list. Unlisted DataCenters are INCLUDED.
     repeated TDataCenter DataCenter = 1;
 }
 
-// Clear volatile DC states and explicit group overrides, then republish every dynamic mirror-3-dc group.
+// Clear the states and publish a new generation of every dynamic mirror-3-dc group (test use only).
 message TTestResetDataCenterStates {}
 
-// Force group realm states without validating transitions or layout combinations.
-// Explicit group states are persisted across controller restarts.
+// Set persisted group realm states; IgnoreGroupFailModelChecks bypasses transition validation.
 message TDefineFailRealmStates {
     message TGroupDefinition {
         enum EFailRealmState {

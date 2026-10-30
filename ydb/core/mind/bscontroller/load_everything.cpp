@@ -2,6 +2,8 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -76,6 +78,7 @@ public:
         }
 
         // State
+        Self->DataCenterStates.clear();
         {
             using T = Schema::State;
             auto state = db.Table<T>().Select();
@@ -122,6 +125,11 @@ public:
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
+                if (state.HaveValue<T::DataCenterStates>()) {
+                    auto states = ParseDataCenterStates(state.GetValue<T::DataCenterStates>());
+                    Y_VERIFY_S(states.has_value(), states.error());
+                    Self->DataCenterStates = std::move(*states);
+                }
             }
         }
 
@@ -278,7 +286,6 @@ public:
                         for (ui32 realm = 0; realm < 3; ++realm) {
                             (*group.FailRealmStates)[realm] = states.GetState(realm);
                         }
-                        group.HasExplicitFailRealmStates = true;
                     }
                 }
 

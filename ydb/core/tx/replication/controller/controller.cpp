@@ -108,12 +108,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvService::TEvGetTxId, Handle);
         HFunc(TEvService::TEvHeartbeat, Handle);
-<<<<<<< HEAD
-=======
-        HFunc(TEvService::TEvIndexBuildProgress, Handle);
-        HFunc(TEvService::TEvSchemaChangeReport, Handle);
         HFunc(TEvService::TEvSourceOffsetReport, Handle);
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
         HFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
         HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -434,11 +429,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
     TabletCounters->Simple()[COUNTER_SESSIONS] = Sessions.size();
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
-<<<<<<< HEAD
-=======
-    ev->Record.SetSupportsIndexMetadata(true);
     ev->Record.SetSupportsSourceOffsets(true);
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
         flags = IEventHandle::FlagSubscribeOnSession;

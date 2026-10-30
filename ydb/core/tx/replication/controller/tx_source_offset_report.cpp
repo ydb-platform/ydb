@@ -86,20 +86,7 @@ public:
     }
 };
 
-void TController::StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx) {
-    EraseNodesIf(IndexReadyActors, [&](const auto& item) {
-        const auto& [key, actorId] = item;
-        if (key.first != replicationId) {
-            return false;
-        }
-        ctx.Send(actorId, new TEvents::TEvPoison());
-        return true;
-    });
-    for (const auto& [key, _] : SchemaBarriers) {
-        if (key.first == replicationId) {
-            StopSchemaChangeDstAlter(key, ctx);
-        }
-    }
+void TController::StopWorkersForMismatch(ui64 replicationId, const TActorContext&) {
     for (const auto& [id, worker] : Workers) {
         if (id.ReplicationId() == replicationId && worker.HasSession()) {
             StopQueue.emplace(id, worker.GetSession());

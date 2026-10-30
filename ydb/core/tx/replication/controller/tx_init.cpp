@@ -246,14 +246,8 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
-<<<<<<< HEAD
-            && LoadWorkers(db);
-=======
             && LoadWorkers(db)
-            && LoadSchemaBarrierWorkers(db)
-            && LoadIndexBuildWorkers(db)
             && LoadProcessedSourceOffsets(db);
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

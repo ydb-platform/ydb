@@ -108,12 +108,7 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
-<<<<<<< HEAD
-=======
-    void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TActorContext& ctx);
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);

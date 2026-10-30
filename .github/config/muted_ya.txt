@@ -9,6 +9,7 @@ ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInferPDiskSlotCoun
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.TestInvalidExpectedSlotSettingsDoNotCrashNodeWarden
 ydb/core/blobstorage/nodewarden/ut TBlobStorageWardenTest.UseFixedVDiskSlotSizeRuntimeSwitch
 ydb/core/blobstorage/nodewarden/ut TDistconfNodeRoleTest.RepeatReplaceAfterExpansionRestart
+ydb/core/blobstorage/ut_blobstorage SpaceCheckForDiskReassign.Basic
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeFailover.SequentialPrimaryLost
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.ActivationAndValidation
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeMixedStorage.SharedDisconnectionPreservesOrdinaryQuorum
@@ -29,6 +30,7 @@ ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCs
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.RequestUnitForSuccessExplicitPrepare
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined+EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn+EnableCompileTimeDefaults
@@ -45,6 +47,7 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterSharedConsumerDlqAndReadQuota
 ydb/core/quoter/ut QuoterWithKesusTest.FailsToGetBigQuota
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
 ydb/core/tablet/ut TNodeDatabaseMetricsAggregatorTest.ConcurrentPackSeesWholeBuckets
+ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/core/tx/replication/controller/ut_schema_change StreamResultFreshness.CurrentFailureAfterReplacement-DescribeOnly
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapCredentialRetry
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure
@@ -57,6 +60,7 @@ ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReb
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
+ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc

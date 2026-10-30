@@ -319,8 +319,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         }
         case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
             const auto& rightKeyColumns = descr.RightSource.KeyColumnIndexes;
-            TRuntimeNode rightDict = pb.ToSortedDict(
-                args.Right, true,
+            const bool withRightSide = !LeftSemiOrOnly(joinKind);
+            TRuntimeNode rightDict = pb.ToHashedDict(
+                args.Right, withRightSide,
                 [&](TRuntimeNode tuple) {
                     if (rightKeyColumns.size() == 1) {
                         return pb.Nth(tuple, rightKeyColumns.front());
@@ -333,6 +334,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                     return pb.NewTuple(keyTupleElements);
                 },
                 [&](TRuntimeNode tuple) {
+                    if (!withRightSide) {
+                        return pb.NewVoid();
+                    }
                     auto types = AS_TYPE(TTupleType, tuple.GetStaticType())->GetElements();
                     TVector<TRuntimeNode> valueTupleElements;
                     for (ui32 idx = 0; idx < std::ssize(types); ++idx) {
@@ -342,7 +346,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                         }
                     }
                     return pb.NewTuple(valueTupleElements);
-                });
+                }, true);
 
             TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left, {}), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
                 TRuntimeNode::TList values;
@@ -353,16 +357,11 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             });
 
             TRenames scalarMapRenames = MakeScalarMapJoinRenames(std::ssize(descr.LeftSource.ColumnTypes),
-                                                                 std::ssize(descr.RightSource.ColumnTypes) -
-                                                                     descr.RightSource.KeyColumnIndexes.size());
-            TRuntimeNode mapJoinSomething =
-                pb.MapJoinCore(source, rightDict, joinKind, descr.LeftSource.KeyColumnIndexes, scalarMapRenames.Left,
-                               scalarMapRenames.Right, pb.NewFlowType(pb.NewTupleType(resultTypesArr)));
-
-            return ToWideStream(
-                pb, pb.Collect(pb.NarrowMap(mapJoinSomething, [&pb](TRuntimeNode::TList items) -> TRuntimeNode {
-                    return pb.NewTuple(items);
-                })));
+                                                                 withRightSide ? std::ssize(descr.RightSource.ColumnTypes) -
+                                                                     descr.RightSource.KeyColumnIndexes.size() : 0);
+            return pb.FromFlow(pb.MapJoinCore(source, rightDict, joinKind, descr.LeftSource.KeyColumnIndexes,
+                                              scalarMapRenames.Left, scalarMapRenames.Right,
+                                              pb.NewFlowType(multiResultType)));
         }
         case ETestedJoinAlgo::kBlockMap: {
             TVector<ui32> kEmptyColumnDrops;

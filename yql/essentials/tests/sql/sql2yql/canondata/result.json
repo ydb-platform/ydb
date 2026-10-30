@@ -6768,6 +6768,13 @@
             "uri": "https://{canondata_backend}/1773845/2c55630edcce84ba5ed3a6263734db0c358ba24d/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
         }
     ],
+    "test_sql2yql.test[match_recognize-derive_column_order]": [
+        {
+            "checksum": "829ca718337ada1dea2e3b344f6894e3",
+            "size": 2190,
+            "uri": "https://{canondata_backend}/1871182/8ff9b4cef544475baa9e6e6ce2d88c7d9fc8a60d/resource.tar.gz#test_sql2yql.test_select_yql-match_recognize_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[match_recognize-drop_out_of_order]": [
         {
             "checksum": "f860c3212bbccd158b167ff9161717ca",
@@ -18363,6 +18370,11 @@
     "test_sql_format.test[match_recognize-all_rows_per_match]": [
         {
             "uri": "file://test_sql_format.test_match_recognize-all_rows_per_match_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[match_recognize-derive_column_order]": [
+        {
+            "uri": "file://test_sql_format.test_match_recognize-derive_column_order_/formatted.sql"
         }
     ],
     "test_sql_format.test[match_recognize-drop_out_of_order]": [

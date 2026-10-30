@@ -1,0 +1,62 @@
+UNITTEST()
+
+SIZE(MEDIUM)
+
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ENDIF()
+
+SRCS(
+    column_ut.cpp
+    columns_ut.cpp
+    constraints_ut.cpp
+    create_table_ut.cpp
+    delete_ut.cpp
+    distinct_ut.cpp
+    explain_ut.cpp
+    recursive_ut.cpp
+    returning_ut.cpp
+    tx_ut.cpp
+    union_ut.cpp
+    update_ut.cpp
+    window_ut.cpp
+    with_ut.cpp
+    extended_ut.cpp
+    index_ut.cpp
+    insert_ut.cpp
+    group_ut.cpp
+    having_ut.cpp
+    join_ut.cpp
+    offset_ut.cpp
+    order_ut.cpp
+    listener_ut.cpp
+    lock_ut.cpp
+    schemata_ut.cpp
+    sequences_ut.cpp
+    subquery_ut.cpp
+    select_ut.cpp
+    set_ut.cpp
+    session_ut.cpp
+)
+
+PEERDIR(
+    contrib/libs/apache/arrow
+    library/cpp/containers/absl
+    ydb/core/formats/arrow
+    ydb/core/testlib/default
+    ydb/core/tx/data_events
+    ydb/services/sql/wire
+)
+
+DATA(
+    arcadia/contrib/python/pg8000
+    arcadia/contrib/python/scramp
+    arcadia/contrib/python/asn1crypto
+    arcadia/contrib/python/python-dateutil/py3
+    arcadia/contrib/python/six/py3
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

@@ -24,6 +24,7 @@ RECURSE(
     rate_limiter
     replication
     scheme_secret
+    sql
     sqs_topic
     tablet
     test_shard

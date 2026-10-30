@@ -137,6 +137,9 @@ struct TTestSchema {
         std::vector<TStorageTier> Tiers;
         bool WaitEmptyAfter = false;
         bool UseForcedCompaction = false;
+        /// A planner of the tiling family selected by class name, with its settings as the JSON blob of the planner container.
+        std::optional<TString> CompactionPlannerClassName;
+        TString CompactionPlannerFeatures = "{}";
 
         TTableSpecials() noexcept = default;
 
@@ -165,6 +168,13 @@ struct TTestSchema {
         TTableSpecials WithForcedCompaction(bool forced) const {
             TTableSpecials out = *this;
             out.UseForcedCompaction = forced;
+            return out;
+        }
+
+        TTableSpecials WithCompactionPlanner(const TString& className, const TString& features = "{}") const {
+            TTableSpecials out = *this;
+            out.CompactionPlannerClassName = className;
+            out.CompactionPlannerFeatures = features;
             return out;
         }
 

@@ -745,19 +745,30 @@ void TColumnShard::StartOneCompactionTask(const std::shared_ptr<NOlap::NCompacti
     indexChanges->SetActivityFlag(GetTabletActivity());
     indexChanges->SetQueueGuard(guard);
     indexChanges->Start(*this);
+    StartCompactionDataFetching(indexChanges);
+}
 
+void TColumnShard::StartCompactionDataFetching(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges) {
     const ui64 compactionStageMemoryLimit =
         HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
         NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
-    NOlap::NDataFetcher::TRequestInput rInput(indexChanges->GetSwitchedPortions(), actualIndexInfo,
+    // The portions to access are the switched ones, and for a metadata move the moved ones, which need accessors only.
+    NOlap::NDataFetcher::TRequestInput rInput(indexChanges->GetPortionsToAccess(), actualIndexInfo,
         NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, indexChanges->GetTaskIdentifier(), processGuard, TabletID());
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
-    NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-        std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
-            GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    const bool needBlobs = indexChanges->NeedConstruction();
+    std::shared_ptr<NOlap::NDataFetcher::IFetchCallback> executor = std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges,
+        actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, needBlobs);
+    if (needBlobs) {
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(
+            std::move(rInput), std::move(executor), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    } else {
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(
+            std::move(rInput), std::move(executor), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    }
 }
 
 void TColumnShard::StartCompactionTasksUpToLimit() {
@@ -817,25 +828,14 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
         return;
     }
 
-    const ui64 compactionStageMemoryLimit =
-        HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     for (const auto& indexChanges : indexChangesList) {
         AFL_VERIFY(indexChanges);
-        auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
-        compaction.SetActivityFlag(GetTabletActivity());
-        compaction.SetQueueGuard(guard);
-        compaction.Start(*this);
-
-        auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
-        auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
-        NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
-            NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard, TabletID());
-        auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
-        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-            std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(),
-                GetLastCompletedTx(), TabletActivityImpl), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        auto compaction = std::dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
+        AFL_VERIFY(compaction);
+        compaction->SetActivityFlag(GetTabletActivity());
+        compaction->SetQueueGuard(guard);
+        compaction->Start(*this);
+        StartCompactionDataFetching(compaction);
     }
 }
 

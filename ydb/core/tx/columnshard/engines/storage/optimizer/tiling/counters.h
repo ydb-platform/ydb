@@ -4,6 +4,9 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/hash.h>
+#include <util/system/mutex.h>
+
 #include <array>
 #include <atomic>
 
@@ -69,12 +72,14 @@ public:
     }
 
     void SetOverload(const ui64 overload) {
+        // Add before subtracting: a reader on another shard must never see the critical bucket empty while this
+        // level stays overloaded.
+        OverloadHistogram->Add(overload, 1);
+        (*LevelNodeCounts)[LevelBucket(overload)].fetch_add(1);
         if (LastOverload) {
             OverloadHistogram->Sub(*LastOverload, 1);
             (*LevelNodeCounts)[LevelBucket(*LastOverload)].fetch_sub(1);
         }
-        OverloadHistogram->Add(overload, 1);
-        (*LevelNodeCounts)[LevelBucket(overload)].fetch_add(1);
         LastOverload = overload;
     }
 
@@ -116,6 +121,80 @@ public:
     }
 };
 
+/// The node-wide view of the compacted snapshot S of the tiling-s planners (design.md, Observability): the oldest S over
+/// the node's tables, the clock, and their difference, all in seconds since the epoch, so that the compaction delay can
+/// be graphed. Every planner reports its own S into a small registry under a mutex, at most once per second (the adapter
+/// throttles it, 2026-10-27): the mutex is shared by every shard of the node and must stay off the per-portion path.
+class TCompactedSnapshotCounters {
+private:
+    /// A planner's last report. A settled planner, nothing outside its line, reports the clock minus L (decision 6): its
+    /// delay is L for as long as it stays settled, so between reports its delay is kept rather than its snapshot; a
+    /// planner with portions outside keeps its snapshot, so its delay grows with the clock as it should (2026-10-27).
+    struct TReport {
+        ui64 SnapshotSeconds = 0;
+        ui64 ReportedAtSeconds = 0;
+        bool Settled = false;
+
+        ui64 SnapshotAt(const ui64 nowSeconds) const {
+            if (Settled && ReportedAtSeconds <= nowSeconds) {
+                return nowSeconds - (ReportedAtSeconds - SnapshotSeconds);
+            }
+            return SnapshotSeconds;
+        }
+    };
+
+    TMutex Mutex;
+    THashMap<ui64, TReport> SnapshotSecondsByPlanner;
+    const NMonitoring::TDynamicCounters::TCounterPtr OldestSnapshotSeconds;
+    const NMonitoring::TDynamicCounters::TCounterPtr CurrentSnapshotSeconds;
+    const NMonitoring::TDynamicCounters::TCounterPtr MaxDelaySeconds;
+    const NMonitoring::TDynamicCounters::TCounterPtr Planners;
+
+    void Publish(const ui64 nowSeconds) {
+        ui64 oldest = nowSeconds;
+        for (const auto& [_, report] : SnapshotSecondsByPlanner) {
+            oldest = std::min(oldest, report.SnapshotAt(nowSeconds));
+        }
+        OldestSnapshotSeconds->Set(oldest);
+        CurrentSnapshotSeconds->Set(nowSeconds);
+        MaxDelaySeconds->Set(nowSeconds - oldest);
+        Planners->Set(SnapshotSecondsByPlanner.size());
+    }
+
+public:
+    TCompactedSnapshotCounters(const NColumnShard::TCommonCountersOwner& owner)
+        : OldestSnapshotSeconds(owner.GetValue("Snapshot/Compacted/OldestSeconds"))
+        , CurrentSnapshotSeconds(owner.GetValue("Snapshot/CurrentSeconds"))
+        , MaxDelaySeconds(owner.GetValue("Snapshot/Compacted/MaxDelaySeconds"))
+        , Planners(owner.GetValue("Snapshot/Compacted/Planners"))
+    {
+    }
+
+    void Set(const ui64 plannerId, const ui64 snapshotSeconds, const ui64 nowSeconds, const bool settled = false) {
+        TGuard<TMutex> guard(Mutex);
+        SnapshotSecondsByPlanner[plannerId] = TReport{ .SnapshotSeconds = snapshotSeconds, .ReportedAtSeconds = nowSeconds, .Settled = settled };
+        Publish(nowSeconds);
+    }
+
+    void Remove(const ui64 plannerId, const ui64 nowSeconds) {
+        TGuard<TMutex> guard(Mutex);
+        SnapshotSecondsByPlanner.erase(plannerId);
+        Publish(nowSeconds);
+    }
+
+    ui64 GetOldestSeconds() const {
+        return OldestSnapshotSeconds->Val();
+    }
+
+    ui64 GetCurrentSeconds() const {
+        return CurrentSnapshotSeconds->Val();
+    }
+
+    ui64 GetMaxDelaySeconds() const {
+        return MaxDelaySeconds->Val();
+    }
+};
+
 class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
@@ -124,14 +203,33 @@ private:
     std::shared_ptr<TLevelAgents> LastLevel;
     std::shared_ptr<TLevelAgents> Tiling;
     const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
-    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
+    const NMonitoring::THistogramPtr GeneratedTasksPriorityLevel;
+    /// The memory shortage of the advance (tiling-s, 2026-10-26): the bytes an advance would have taken had the budget
+    /// not cut its window, the shortfall against the budget summed over cut windows, and the number of cut windows.
+    const NMonitoring::THistogramPtr AdvanceIdealTaskBytes;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMemoryShortageBytes;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceBudgetCuts;
+    /// Time spent inside the tiling-s adapter per engine call, in microseconds (2026-10-27): the planner's share of the
+    /// shard's transaction Complete phases.
+    const NMonitoring::THistogramPtr PlannerModifyPortionsUs;
+    const NMonitoring::THistogramPtr PlannerUsefulMetricUs;
+    const NMonitoring::THistogramPtr PlannerNextTaskUs;
+    const NMonitoring::THistogramPtr PlannerOverloadedUs;
+    const std::shared_ptr<TCompactedSnapshotCounters> CompactedSnapshot;
 
 public:
     TGlobalCounters()
         : TBase("TilingCompactionOptimizer")
         , TasksSkippedByPriorityGap(TBase::GetDeriviative("Tasks/SkippedByPriorityGap/Count"))
-        , GeneratedTasksPriorityLevel(std::make_shared<NColumnShard::TDeriviativeHistogram>(
-              GetModuleId(), "Tasks/GeneratedByPriorityLevel/Count", "", std::set<i64>{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }))
+        , GeneratedTasksPriorityLevel(TBase::GetHistogram("Tasks/GeneratedByPriorityLevel", NMonitoring::LinearHistogram(12, 0, 1)))
+        , AdvanceIdealTaskBytes(TBase::GetHistogram("Advance/IdealTaskBytes", NMonitoring::ExponentialHistogram(25, 2, 1024)))
+        , AdvanceMemoryShortageBytes(TBase::GetDeriviative("Advance/MemoryShortage/Bytes"))
+        , AdvanceBudgetCuts(TBase::GetDeriviative("Advance/BudgetCut/Count"))
+        , PlannerModifyPortionsUs(TBase::GetHistogram("Planner/ModifyPortionsUs", NMonitoring::ExponentialHistogram(22, 2)))
+        , PlannerUsefulMetricUs(TBase::GetHistogram("Planner/UsefulMetricUs", NMonitoring::ExponentialHistogram(22, 2)))
+        , PlannerNextTaskUs(TBase::GetHistogram("Planner/NextTaskUs", NMonitoring::ExponentialHistogram(22, 2)))
+        , PlannerOverloadedUs(TBase::GetHistogram("Planner/OverloadedUs", NMonitoring::ExponentialHistogram(22, 2)))
+        , CompactedSnapshot(std::make_shared<TCompactedSnapshotCounters>(*this))
     {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>("level=" + ::ToString(i), *this));
@@ -167,8 +265,40 @@ public:
         return Singleton<TGlobalCounters>()->TasksSkippedByPriorityGap;
     }
 
-    static const std::shared_ptr<NColumnShard::TDeriviativeHistogram>& GetGeneratedTasksPriorityLevel() {
+    static const NMonitoring::THistogramPtr& GetGeneratedTasksPriorityLevel() {
         return Singleton<TGlobalCounters>()->GeneratedTasksPriorityLevel;
+    }
+
+    static const NMonitoring::THistogramPtr& GetAdvanceIdealTaskBytes() {
+        return Singleton<TGlobalCounters>()->AdvanceIdealTaskBytes;
+    }
+
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceMemoryShortageBytes() {
+        return Singleton<TGlobalCounters>()->AdvanceMemoryShortageBytes;
+    }
+
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceBudgetCuts() {
+        return Singleton<TGlobalCounters>()->AdvanceBudgetCuts;
+    }
+
+    static const NMonitoring::THistogramPtr& GetPlannerModifyPortionsUs() {
+        return Singleton<TGlobalCounters>()->PlannerModifyPortionsUs;
+    }
+
+    static const NMonitoring::THistogramPtr& GetPlannerUsefulMetricUs() {
+        return Singleton<TGlobalCounters>()->PlannerUsefulMetricUs;
+    }
+
+    static const NMonitoring::THistogramPtr& GetPlannerNextTaskUs() {
+        return Singleton<TGlobalCounters>()->PlannerNextTaskUs;
+    }
+
+    static const NMonitoring::THistogramPtr& GetPlannerOverloadedUs() {
+        return Singleton<TGlobalCounters>()->PlannerOverloadedUs;
+    }
+
+    static const std::shared_ptr<TCompactedSnapshotCounters>& GetCompactedSnapshotCounters() {
+        return Singleton<TGlobalCounters>()->CompactedSnapshot;
     }
 };
 
@@ -190,13 +320,29 @@ public:
     TLevelCounters LastLevel;
     TLevelCounters Tiling;
     const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
-    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
+    const NMonitoring::THistogramPtr GeneratedTasksPriorityLevel;
+    const NMonitoring::THistogramPtr AdvanceIdealTaskBytes;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMemoryShortageBytes;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceBudgetCuts;
+    const NMonitoring::THistogramPtr PlannerModifyPortionsUs;
+    const NMonitoring::THistogramPtr PlannerUsefulMetricUs;
+    const NMonitoring::THistogramPtr PlannerNextTaskUs;
+    const NMonitoring::THistogramPtr PlannerOverloadedUs;
+    const std::shared_ptr<TCompactedSnapshotCounters> CompactedSnapshot;
 
     TCounters()
         : LastLevel(TGlobalCounters::BuildLastClient())
         , Tiling(TGlobalCounters::BuildTilingClient())
         , TasksSkippedByPriorityGap(TGlobalCounters::GetTasksSkippedByPriorityGap())
         , GeneratedTasksPriorityLevel(TGlobalCounters::GetGeneratedTasksPriorityLevel())
+        , AdvanceIdealTaskBytes(TGlobalCounters::GetAdvanceIdealTaskBytes())
+        , AdvanceMemoryShortageBytes(TGlobalCounters::GetAdvanceMemoryShortageBytes())
+        , AdvanceBudgetCuts(TGlobalCounters::GetAdvanceBudgetCuts())
+        , PlannerModifyPortionsUs(TGlobalCounters::GetPlannerModifyPortionsUs())
+        , PlannerUsefulMetricUs(TGlobalCounters::GetPlannerUsefulMetricUs())
+        , PlannerNextTaskUs(TGlobalCounters::GetPlannerNextTaskUs())
+        , PlannerOverloadedUs(TGlobalCounters::GetPlannerOverloadedUs())
+        , CompactedSnapshot(TGlobalCounters::GetCompactedSnapshotCounters())
     {
         for (ui32 i = 0; i < TILING_LAYERS_COUNT; ++i) {
             Levels.emplace_back(TGlobalCounters::BuildLevelClient(i));
@@ -220,6 +366,10 @@ public:
 
     const TLevelCounters& GetTilingCounters() const {
         return Tiling;
+    }
+
+    TCompactedSnapshotCounters& GetCompactedSnapshotCounters() const {
+        return *CompactedSnapshot;
     }
 };
 

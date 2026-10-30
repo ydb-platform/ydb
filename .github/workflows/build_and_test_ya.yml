@@ -17,10 +17,6 @@ on:
         type: string
         default: "linux"
         description: "additional runner label, can be empty"
-      run_build:
-        type: boolean
-        default: true
-        description: "run build"
       run_tests:
         type: boolean
         default: true
@@ -39,17 +35,10 @@ on:
       test_retry_count:
         type: string
         default: ""
-        description: "how many times to retry failed tests"
+        description: "Maximum attempts including the initial run (positive integer). Default: 3, or 1 for TSAN/MSAN."
       test_type:
         type: string
         default: ""
-      folder_prefix:
-        type: string
-        default: "ya-"
-      cache_tests:
-        type: boolean
-        default: false
-        description: "Use cache for tests"
       put_build_results_to_cache:
         type: boolean
         default: true

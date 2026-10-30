@@ -5,6 +5,23 @@
 #include <ydb/core/base/statestorage_impl.h>
 
 Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
+    class TTabletStub : public TActorBootstrapped<TTabletStub> {
+        void IgnoreDemoted() {
+        }
+
+    public:
+        void Bootstrap() {
+            Become(&TThis::StateWork);
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                cFunc(TEvTablet::TEvDemoted::EventType, IgnoreDemoted);
+                cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            }
+        }
+    };
+
     class StateStorageTest {
         public:
         TEnvironmentSetup Env;
@@ -119,7 +136,127 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return ev;
         }
 
+        void RestartAllStateStorageReplicas() {
+            const ui32 nodeId = Env.Settings.ControllerNodeId;
+            auto info = Runtime.StateStorageInfoGenerator(MakeStateStorageReplicaID, nodeId);
+
+            for (const auto& ringGroup : info->RingGroups) {
+                for (const auto& ring : ringGroup.Rings) {
+                    for (const TActorId replica : ring.Replicas) {
+                        const TActorId actor = Runtime.GetNode(nodeId)->ActorSystem->LookupLocalService(replica);
+                        UNIT_ASSERT_C(actor, "StateStorage replica service is not registered: " << replica);
+                        Runtime.Send(new IEventHandle(actor, TActorId(), new TEvents::TEvPoison()), nodeId);
+                    }
+                }
+            }
+
+            // Keep the whole StateStorage unavailable long enough for tracked requests to observe the outage.
+            Env.Sim(TDuration::Seconds(1));
+
+            for (const auto& ringGroup : info->RingGroups) {
+                for (const auto& ring : ringGroup.Rings) {
+                    for (ui32 replicaIndex = 0; replicaIndex < ring.Replicas.size(); ++replicaIndex) {
+                        const TActorId service = ring.Replicas[replicaIndex];
+                        const TActorId actor = Runtime.Register(
+                            CreateStateStorageReplica(info, replicaIndex), nodeId);
+                        Runtime.RegisterService(service, actor);
+                    }
+                }
+            }
+
+            Env.Sim(TDuration::Seconds(1));
+
+        }
+
+        void StopStateStorageReplica(ui32 replicaIndex) {
+            const ui32 nodeId = Env.Settings.ControllerNodeId;
+            auto info = Runtime.StateStorageInfoGenerator(MakeStateStorageReplicaID, nodeId);
+            const auto& replicas = info->RingGroups.front().Rings.front().Replicas;
+            UNIT_ASSERT_C(replicaIndex < replicas.size(), "Invalid StateStorage replica index");
+            const TActorId actor = Runtime.GetNode(nodeId)->ActorSystem->LookupLocalService(replicas[replicaIndex]);
+            UNIT_ASSERT_C(actor, "StateStorage replica service is not registered: " << replicas[replicaIndex]);
+            Runtime.Send(new IEventHandle(actor, TActorId(), new TEvents::TEvPoison()), nodeId);
+        }
+
     };
+
+    Y_UNIT_TEST(TestRecoversAfterAllReplicasRestartWithoutTabletRestart) {
+        static constexpr ui64 TabletId = 0x123456789ULL;
+        static constexpr ui32 Generation = 2;
+
+        StateStorageTest test;
+        const ui32 nodeId = test.Env.Settings.ControllerNodeId;
+        const TActorId leader = test.Runtime.Register(new TTabletStub(), nodeId);
+        test.TabletId = TabletId;
+        test.Runtime.Register(CreateStateStorageTabletGuardian(TabletId, leader, leader, Generation), nodeId);
+        test.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(test.Lookup()->Get()->CurrentGeneration, Generation);
+        test.RestartAllStateStorageReplicas();
+        ui32 recoveredGeneration = 0;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            recoveredGeneration = test.Lookup()->Get()->CurrentGeneration;
+            if (recoveredGeneration == Generation) {
+                break;
+            }
+            test.Env.Sim(TDuration::MilliSeconds(250));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(recoveredGeneration, Generation);
+    }
+
+    Y_UNIT_TEST(TestRecoversWhenReplicaGuardianGoesWhileWaitingForQuorum) {
+        static constexpr ui64 TabletId = 0x123456789ULL;
+        static constexpr ui32 Generation = 2;
+
+        StateStorageTest test;
+        const ui32 nodeId = test.Env.Settings.ControllerNodeId;
+        const TActorId leader = test.Runtime.Register(new TTabletStub(), nodeId);
+        const TActorId tabletGuardian = test.Runtime.Register(
+            CreateStateStorageTabletGuardian(TabletId, leader, leader, Generation), nodeId);
+        test.TabletId = TabletId;
+        test.Env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(test.Lookup()->Get()->CurrentGeneration, Generation);
+
+        TVector<std::pair<ui32, std::unique_ptr<IEventHandle>>> delayedReplicaInfo;
+        bool blockReplicaInfo = true;
+        bool guardianGone = false;
+        auto previousFilter = std::move(test.Runtime.FilterFunction);
+        test.Runtime.FilterFunction = [&](ui32 eventNodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == tabletGuardian) {
+                if (ev->GetTypeRewrite() == TEvents::TEvGone::EventType) {
+                    guardianGone = true;
+                } else if (blockReplicaInfo && ev->GetTypeRewrite() == TEvStateStorage::TEvReplicaInfo::EventType) {
+                    delayedReplicaInfo.emplace_back(eventNodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return !previousFilter || previousFilter(eventNodeId, ev);
+        };
+
+        test.RestartAllStateStorageReplicas();
+        UNIT_ASSERT(!delayedReplicaInfo.empty());
+        guardianGone = false;
+        test.StopStateStorageReplica(0);
+        for (ui32 attempt = 0; attempt < 20 && !guardianGone; ++attempt) {
+            test.Env.Sim(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(guardianGone);
+
+        blockReplicaInfo = false;
+        for (auto& [eventNodeId, ev] : delayedReplicaInfo) {
+            test.Runtime.Send(std::move(ev), eventNodeId);
+        }
+        test.Runtime.FilterFunction = std::move(previousFilter);
+
+        ui32 recoveredGeneration = 0;
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            recoveredGeneration = test.Lookup()->Get()->CurrentGeneration;
+            if (recoveredGeneration == Generation) {
+                break;
+            }
+            test.Env.Sim(TDuration::MilliSeconds(250));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(recoveredGeneration, Generation);
+    }
 
     Y_UNIT_TEST(TestProxyNotifyReplicaConfigChanged1) {
         StateStorageTest test;

@@ -199,7 +199,7 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
     void MakeRequest() {
         ui64 cookie = ++LastCookie;
         Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, cookie, ClusterStateGeneration, ClusterStateGuid), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
-        Become(&TThis::StateLookup);
+        Become(&TThis::StateLookup, TDuration::MilliSeconds(250), new TEvents::TEvWakeup());
     }
 
     void UpdateInfo() {
@@ -217,7 +217,7 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         req->Record.SetIsGuardian(true);
 
         Send(Replica, req.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
-        Become(&TThis::StateUpdate);
+        Become(&TThis::StateUpdate, TDuration::MilliSeconds(250), new TEvents::TEvWakeup());
     }
 
     void Demoted() {
@@ -288,6 +288,7 @@ public:
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            cFunc(TEvents::TEvWakeup::EventType, RequestInfo);
             hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
@@ -319,6 +320,7 @@ public:
             hFunc(TEvents::TEvUndelivered, TBaseGuardian::Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            cFunc(TEvents::TEvWakeup::EventType, UpdateInfo);
             hFunc(TEvStateStorage::TEvConfigVersionInfo, HandleConfigVersion);
         }
     }
@@ -404,7 +406,9 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
     TVector<std::pair<TActorId, TActorId>> ReplicaGuardians; // replica -> guardian, position dependant so vector
     THashSet<TActorId> MissingReplicas;
+    THashSet<TActorId> ResolvedReplicaGuardians;
     ui32 ReplicasOnlineThreshold;
+    bool HaveReplicaList = false;
 
     THolder<TFollowerTracker> FollowerTracker;
 
@@ -435,6 +439,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
+        THashSet<TActorId> updatedResolvedReplicaGuardians;
 
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
@@ -442,6 +447,9 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             for (auto& p : ReplicaGuardians)
                 if (p.first == replica && p.second) {
                     updatedReplicaGuardians.emplace_back(p);
+                    if (ResolvedReplicaGuardians.contains(p.second)) {
+                        updatedResolvedReplicaGuardians.insert(p.second);
+                    }
                     Send(p.second, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
                     p.second = TActorId();
                     found = true;
@@ -460,11 +468,15 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             }
         }
         ReplicaGuardians.swap(updatedReplicaGuardians);
+        ResolvedReplicaGuardians.swap(updatedResolvedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
+        HaveReplicaList = true;
 
         FollowerTracker.Reset(new TFollowerTracker(replicaSz));
 
-        Become(&TThis::StateCalm);
+        if (!Info || ResolvedReplicaGuardians.size() > ReplicasOnlineThreshold) {
+            Become(&TThis::StateCalm);
+        }
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev) {
@@ -496,7 +508,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         return true;
     }
 
-    bool ReplicaDown(TActorId guardian) {
+    bool ReplicaDown(TActorId guardian, bool validateOnlineReplicas = true) {
         bool ret = false;
 
         for (auto it = ReplicaGuardians.begin(), end = ReplicaGuardians.end(); it != end; ++it) {
@@ -507,7 +519,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             }
         }
 
-        if (ret && !ValidateOnlineReplicasOrDie()) {
+        if (ret && validateOnlineReplicas && !ValidateOnlineReplicasOrDie()) {
             // we are dead now
             return false;
         }
@@ -528,12 +540,16 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             );
         }
 
+        HaveReplicaList = false;
         Become(&TThis::StateResolve);
     }
 
     void HandleGoneResolve(TEvents::TEvGone::TPtr &ev) {
-        // already resolving so no more action needed, just refresh active replica list
-        ReplicaDown(ev->Sender);
+        ResolvedReplicaGuardians.erase(ev->Sender);
+        if (ReplicaDown(ev->Sender, false) && HaveReplicaList) {
+            const ui64 rndDelay = AppData()->RandomProvider->GenRand() % 150;
+            SendResolveRequest(TDuration::MilliSeconds(150 + rndDelay), false);
+        }
     }
 
     void HandleGoneCalm(TEvents::TEvGone::TPtr &ev) {
@@ -543,12 +559,17 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         }
     }
 
-    void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
+    void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev, bool validateOnlineReplicas = true) {
         auto* msg = ev->Get();
 
         if (msg->Missing) {
             MissingReplicas.insert(ev->Sender);
-            ValidateOnlineReplicasOrDie();
+            if (!validateOnlineReplicas) {
+                ResolvedReplicaGuardians.erase(ev->Sender);
+            }
+            if (validateOnlineReplicas) {
+                ValidateOnlineReplicasOrDie();
+            }
         } else {
             MissingReplicas.erase(ev->Sender);
         }
@@ -559,6 +580,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const TActorId guardian = ev->Sender;
+        bool found = false;
         for (ui32 idx : xrange(ReplicaGuardians.size())) {
             if (ReplicaGuardians[idx].second != guardian)
                 continue;
@@ -602,7 +624,15 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
                 Send(Launcher(), new TEvTablet::TEvFollowerListRefresh(std::move(reported)));
             }
 
+            found = true;
             break;
+        }
+
+        if (Info && found) {
+            const bool inserted = ResolvedReplicaGuardians.insert(guardian).second;
+            if (HaveReplicaList && inserted && ResolvedReplicaGuardians.size() > ReplicasOnlineThreshold) {
+                Become(&TThis::StateCalm);
+            }
         }
     }
 
@@ -655,6 +685,10 @@ public:
         SendResolveRequest(TDuration::Zero(), true);
     }
 
+    void HandleMissingResolve(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
+        Handle(ev, false);
+    }
+
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTablet::TEvFollowerUpdateState, UpdateFollowerInfo);
@@ -662,7 +696,7 @@ public:
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvents::TEvGone, HandleGoneResolve);
-            hFunc(TEvPrivate::TEvReplicaMissing, Handle);
+            hFunc(TEvPrivate::TEvReplicaMissing, HandleMissingResolve);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
         }

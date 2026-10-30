@@ -86,7 +86,7 @@ public:
     }
 };
 
-void TController::StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx) {
+void TController::StopWorkersForMismatch(ui64 replicationId, const TActorContext&) {
     for (const auto& [id, worker] : Workers) {
         if (id.ReplicationId() == replicationId && worker.HasSession()) {
             StopQueue.emplace(id, worker.GetSession());

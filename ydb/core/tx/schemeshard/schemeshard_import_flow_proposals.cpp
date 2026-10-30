@@ -227,6 +227,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
             *tableDesc.MutableReplicationConfig() = config;
             for (auto& index : *indexedTable.MutableIndexDescription()) {
+                // Match the index types with independent replication targets in
+                // replication/controller/target_discoverer.cpp.
                 if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
                         || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
                     *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;

@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
+
 #include <optional>
 
 #include <util/datetime/base.h>
@@ -121,23 +123,18 @@ private:
 
 class TReplicationDescription {
 public:
-    struct TTransactionVersion {
-        uint64_t Step = 0;
-        uint64_t TxId = 0;
-    };
-
-    struct TInflightTransaction {
+    struct TAssignedTransaction {
         // Exclusive upper source version of the commit interval.
-        TTransactionVersion Version;
+        NScheme::TVirtualTimestamp UpperBoundBarrier;
         // Write transaction ID on the destination.
-        uint64_t TxId = 0;
+        uint64_t WriteTxId = 0;
     };
 
     struct TTransactions {
         // Both lists are ordered by interval version.
-        std::vector<TInflightTransaction> Inflight;
+        std::vector<TAssignedTransaction> Assigned;
         // Versions queued for assignment; reconstructed from worker requests after restart.
-        std::vector<TTransactionVersion> Pending;
+        std::vector<NScheme::TVirtualTimestamp> Pending;
     };
 
     struct TItem {

@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 
@@ -63,23 +64,18 @@ message AvailabilityPeriod {
 
 message DescribeReplicationResult {
     message Transactions {
-        // Exclusive upper source version of a replication commit interval.
-        message Version {
-            uint64 step = 1;
-            uint64 tx_id = 2;
-        }
-
-        message Inflight {
-            Version version = 1;
+        message Assigned {
+            // Exclusive upper source version of the replication commit interval.
+            VirtualTimestamp upper_bound_barrier = 1;
             // Assigned write transaction ID on the destination.
-            uint64 tx_id = 2;
+            uint64 write_tx_id = 2;
         }
 
-        // Assigned transactions, including those awaiting CommitWrites completion.
-        repeated Inflight inflight = 1;
+        // Assigned transactions whose commit has not yet completed.
+        repeated Assigned assigned = 1;
         // Distinct versions queued for transaction-ID assignment, not transaction IDs.
         // This in-memory queue is rebuilt from worker requests after restart.
-        repeated Version pending = 2;
+        repeated VirtualTimestamp pending = 2;
     }
 
     message Stats {

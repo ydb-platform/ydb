@@ -154,16 +154,16 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
 
     if (desc.has_transactions()) {
         auto& transactions = Transactions_.emplace();
-        transactions.Inflight.reserve(desc.transactions().inflight_size());
-        for (const auto& item : desc.transactions().inflight()) {
-            transactions.Inflight.push_back(TInflightTransaction{
-                .Version = {item.version().step(), item.version().tx_id()},
-                .TxId = item.tx_id(),
+        transactions.Assigned.reserve(desc.transactions().assigned_size());
+        for (const auto& item : desc.transactions().assigned()) {
+            transactions.Assigned.push_back(TAssignedTransaction{
+                .UpperBoundBarrier = NScheme::TVirtualTimestamp(item.upper_bound_barrier()),
+                .WriteTxId = item.write_tx_id(),
             });
         }
         transactions.Pending.reserve(desc.transactions().pending_size());
         for (const auto& version : desc.transactions().pending()) {
-            transactions.Pending.push_back(TTransactionVersion{version.step(), version.tx_id()});
+            transactions.Pending.emplace_back(version);
         }
     }
     Items_.reserve(desc.items_size());

@@ -124,7 +124,7 @@ struct TTransactionsEnv: TEnv<> {
     }
 
     size_t Count() {
-        return Describe().inflight_size();
+        return Describe().assigned_size();
     }
 
     std::optional<NYdb::NReplication::TReplicationDescription::TTransactions> SdkTransactions(bool stats) {
@@ -167,35 +167,35 @@ struct TTransactionsEnv: TEnv<> {
 } // namespace
 
 Y_UNIT_TEST_SUITE(ReplicationTransactions) {
-    void Check(TTransactionsEnv& env, const TMap<ui64, ui64>& inflight, const TVector<ui64>& pending = {}) {
+    void Check(TTransactionsEnv& env, const TMap<ui64, ui64>& assigned, const TVector<ui64>& pending = {}) {
         const auto transactions = env.Describe();
-        UNIT_ASSERT_VALUES_EQUAL(transactions.inflight_size(), inflight.size());
+        UNIT_ASSERT_VALUES_EQUAL(transactions.assigned_size(), assigned.size());
         UNIT_ASSERT_VALUES_EQUAL(transactions.pending_size(), pending.size());
         size_t i = 0;
-        for (const auto& [step, txId] : inflight) {
-            const auto& item = transactions.inflight(i++);
-            UNIT_ASSERT_VALUES_EQUAL(item.version().step(), step);
-            UNIT_ASSERT_VALUES_EQUAL(item.version().tx_id(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(item.tx_id(), txId);
+        for (const auto& [step, txId] : assigned) {
+            const auto& item = transactions.assigned(i++);
+            UNIT_ASSERT_VALUES_EQUAL(item.upper_bound_barrier().plan_step(), step);
+            UNIT_ASSERT_VALUES_EQUAL(item.upper_bound_barrier().tx_id(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(item.write_tx_id(), txId);
         }
         for (i = 0; i < pending.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(transactions.pending(i).step(), pending[i]);
+            UNIT_ASSERT_VALUES_EQUAL(transactions.pending(i).plan_step(), pending[i]);
             UNIT_ASSERT_VALUES_EQUAL(transactions.pending(i).tx_id(), 0);
         }
         for (bool stats : {false, true}) {
             const auto result = env.SdkTransactions(stats);
             UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL(result->Inflight.size(), inflight.size());
+            UNIT_ASSERT_VALUES_EQUAL(result->Assigned.size(), assigned.size());
             UNIT_ASSERT_VALUES_EQUAL(result->Pending.size(), pending.size());
             i = 0;
-            for (const auto& [step, txId] : inflight) {
-                const auto& item = result->Inflight[i++];
-                UNIT_ASSERT_VALUES_EQUAL(item.Version.Step, step);
-                UNIT_ASSERT_VALUES_EQUAL(item.Version.TxId, 0);
-                UNIT_ASSERT_VALUES_EQUAL(item.TxId, txId);
+            for (const auto& [step, txId] : assigned) {
+                const auto& item = result->Assigned[i++];
+                UNIT_ASSERT_VALUES_EQUAL(item.UpperBoundBarrier.PlanStep, step);
+                UNIT_ASSERT_VALUES_EQUAL(item.UpperBoundBarrier.TxId, 0);
+                UNIT_ASSERT_VALUES_EQUAL(item.WriteTxId, txId);
             }
             for (i = 0; i < pending.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(result->Pending[i].Step, pending[i]);
+                UNIT_ASSERT_VALUES_EQUAL(result->Pending[i].PlanStep, pending[i]);
                 UNIT_ASSERT_VALUES_EQUAL(result->Pending[i].TxId, 0);
             }
         }
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         env.GetRuntime().GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
         env.CommitStatus(txId, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
         UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Inflight.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.SdkTransactions(true).value().Assigned.size(), 0);
     }
 
     Y_UNIT_TEST(RestoresAssignedTransactionsAfterRestart) {
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
             UNIT_ASSERT(future.Wait(TDuration::Seconds(30)));
             const auto result = future.GetValueSync();
             UNIT_ASSERT(result.HasTransactions());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetTransactions().inflight_size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTransactions().assigned_size(), 0);
             env.SendAsync(env.TabletId, new TEvents::TEvPoisonPill());
             env.Handshake();
             UNIT_ASSERT_VALUES_EQUAL(env.Count(), 0);
@@ -337,23 +337,23 @@ Y_UNIT_TEST_SUITE(ReplicationTransactions) {
         proto.mutable_transactions();
         const auto empty = NYdb::NReplication::TReplicationDescription(proto).GetTransactions();
         UNIT_ASSERT(empty);
-        UNIT_ASSERT(empty->Inflight.empty());
+        UNIT_ASSERT(empty->Assigned.empty());
         UNIT_ASSERT(empty->Pending.empty());
-        auto* item = proto.mutable_transactions()->add_inflight();
-        item->mutable_version()->set_step(10000);
-        item->mutable_version()->set_tx_id(42);
-        item->set_tx_id(123);
+        auto* item = proto.mutable_transactions()->add_assigned();
+        item->mutable_upper_bound_barrier()->set_plan_step(10000);
+        item->mutable_upper_bound_barrier()->set_tx_id(42);
+        item->set_write_tx_id(123);
         auto* pending = proto.mutable_transactions()->add_pending();
-        pending->set_step(20000);
+        pending->set_plan_step(20000);
         pending->set_tx_id(43);
         const auto result = NYdb::NReplication::TReplicationDescription(proto).GetTransactions();
         UNIT_ASSERT(result);
-        UNIT_ASSERT_VALUES_EQUAL(result->Inflight.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Inflight[0].Version.Step, 10000);
-        UNIT_ASSERT_VALUES_EQUAL(result->Inflight[0].Version.TxId, 42);
-        UNIT_ASSERT_VALUES_EQUAL(result->Inflight[0].TxId, 123);
+        UNIT_ASSERT_VALUES_EQUAL(result->Assigned.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Assigned[0].UpperBoundBarrier.PlanStep, 10000);
+        UNIT_ASSERT_VALUES_EQUAL(result->Assigned[0].UpperBoundBarrier.TxId, 42);
+        UNIT_ASSERT_VALUES_EQUAL(result->Assigned[0].WriteTxId, 123);
         UNIT_ASSERT_VALUES_EQUAL(result->Pending.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Pending[0].Step, 20000);
+        UNIT_ASSERT_VALUES_EQUAL(result->Pending[0].PlanStep, 20000);
         UNIT_ASSERT_VALUES_EQUAL(result->Pending[0].TxId, 43);
     }
 }

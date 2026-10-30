@@ -6,11 +6,13 @@ This table will be used by SQL queries to join muted test data with GitHub issue
 
 area_override logic
 -------------------
-Each muted-test issue has a default owner (from TESTOWNERS via the ``Owner:`` line in the
-issue body).  A human can add an ``area/...`` label (e.g. ``area/blobstorage``).  If the
-team behind that area (via ``area_to_owner_mapping``) **differs** from the default owner,
-we store the **area path string** in ``area_override``. ``tests_monitor.py`` reads this table
-(plus ``area_to_owner_mapping``) and fills ``effective_area`` / ``effective_owner_team`` on each
+Each muted-test issue is created with an ``Owner:`` line from TESTOWNERS at mute time
+(that line can go stale). A human can add an ``area/...`` label (e.g. ``area/blobstorage``).
+If the team behind that area (via ``area_to_owner_mapping``) **differs** from the test's
+**current** TESTOWNERS owner (``test_results/analytics/testowners``), we store the **area
+path string** in ``area_override``. When TESTOWNERS has no row yet, we fall back to the
+``Owner:`` line in the issue body. ``tests_monitor.py`` reads this table (plus
+``area_to_owner_mapping``) and fills ``effective_area`` / ``effective_owner_team`` on each
 row; downstream marts use those columns.
 
 Edge cases:
@@ -19,9 +21,11 @@ Edge cases:
   * Closed **COMPLETED** with ``manual-fast-unmute`` label → override can apply (fast-track window)
   * Closed **COMPLETED** without that label: override cleared **only** when **project Status** is
     ``Unmuted`` (do not infer from closer — avoids clearing during the gap before fast-unmute label).
-  * Area resolves to the same team as the default owner → area_override = NULL
+  * Area resolves to the same team as the current TESTOWNERS owner (or body ``Owner:`` fallback)
+    → area_override = NULL
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
+  * Override is resolved **per test** (same issue can override for one suite path and not another)
 
 ``github_issue_state_reason`` / ``info`` (Json): GitHub close reason and a snapshot (assignees,
 labels, project fields, …). For existing deployments run ``ALTER TABLE``; ``CREATE TABLE`` below
@@ -57,6 +61,7 @@ from github_issue_utils import (
     DEFAULT_BUILD_TYPE,
     issue_label_names_lower,
     scan_to_utc_date,
+    team_slug_from_monitor_owner,
 )
 
 
@@ -313,8 +318,12 @@ def resolve_area_override(
     state_reason=None,
     labels_raw=None,
     project_status=None,
+    baseline_owner_team=None,
 ):
-    """If GitHub ``area/...`` implies a different team than ``Owner:``, return that area path.
+    """If GitHub ``area/...`` implies a different team than the baseline owner, return that area path.
+
+    Baseline owner is the test's **current** TESTOWNERS slug when known; otherwise the
+    ``Owner:`` line from the issue body (may be stale after TESTOWNERS reassignment).
 
     **Closed issues**
 
@@ -352,12 +361,34 @@ def resolve_area_override(
     if not resolved_team:
         return None
 
-    default_owner = _extract_default_owner(body)
+    baseline = team_slug_from_monitor_owner(baseline_owner_team)
+    if not baseline:
+        baseline = _extract_default_owner(body)
 
-    if resolved_team.lower() == default_owner.lower():
+    if resolved_team.lower() == (baseline or "").lower():
         return None
 
     return area_label
+
+
+def get_testowners_by_full_name(ydb_wrapper) -> dict:
+    """``full_name`` → raw ``owners`` string from analytics testowners table."""
+    table_path = ydb_wrapper.get_table_path("testowners")
+    try:
+        rows = ydb_wrapper.execute_scan_query(
+            f"SELECT full_name, owners FROM `{table_path}`",
+            query_name="github_issue_mapping_testowners",
+        )
+    except Exception as e:
+        print(f"Warning: Could not load testowners ({e}); area_override falls back to issue Owner:")
+        return {}
+    out = {}
+    for r in rows:
+        fn = r.get("full_name")
+        if fn:
+            out[str(fn)] = r.get("owners")
+    print(f"Loaded testowners for area_override baseline: {len(out)} entries")
+    return out
 
 
 def create_test_issue_mapping_table(ydb_wrapper, table_path):
@@ -468,32 +499,36 @@ def main():
                 return 0
 
             area_to_owner = get_area_to_owner_mapping(ydb_wrapper)
+            testowners_by_name = get_testowners_by_full_name(ydb_wrapper)
 
+            url_to_issue = {}
             url_to_updated_at = {}
-            # Pre-compute area_override per issue URL for O(1) lookup
-            url_to_area_override = {}
             for issue in issues_data:
                 url = issue.get('url', '')
                 if url:
+                    url_to_issue[url] = issue
                     url_to_updated_at[url] = issue.get("updated_at") or issue.get("created_at")
-                    url_to_area_override[url] = resolve_area_override(
-                        issue.get('body', ''),
-                        issue.get('info'),
-                        area_to_owner,
-                        issue.get('state'),
-                        issue.get('state_reason'),
-                        issue.get('labels'),
-                        issue.get('project_status'),
-                    )
 
             print("Creating test-to-issue mapping...")
             test_to_issue = create_test_issue_mapping(issues_data)
             print(f"Created mapping for {len(test_to_issue)} unique test names")
 
+            # Per-test override: compare area team to current TESTOWNERS, not stale Owner: body.
             override_count = 0
-            for issue_list in test_to_issue.values():
+            for test_name, issue_list in test_to_issue.items():
+                baseline = testowners_by_name.get(test_name)
                 for issue_info in issue_list:
-                    ao = url_to_area_override.get(issue_info['url'])
+                    src = url_to_issue.get(issue_info['url'], {})
+                    ao = resolve_area_override(
+                        src.get('body', ''),
+                        src.get('info'),
+                        area_to_owner,
+                        src.get('state'),
+                        src.get('state_reason'),
+                        src.get('labels'),
+                        src.get('project_status'),
+                        baseline_owner_team=baseline,
+                    )
                     issue_info['area_override'] = ao
                     if ao:
                         override_count += 1

@@ -7,24 +7,9 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 29,
-                "ColumnName": "EnableConfigV2",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 30,
-                "ColumnName": "DatabaseSpaceBlockColor",
-                "ColumnType": "Uint32"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 31,
-                "ColumnName": "DatabaseSpaceUnblockColor",
-                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 2,
@@ -150,16 +135,33 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 30,
+                "ColumnName": "DatabaseSpaceBlockColor",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 31,
+                "ColumnName": "DatabaseSpaceUnblockColor",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "DataCenterStates",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    29,
-                    30,
                     1,
-                    31,
                     2,
                     4,
                     5,
@@ -184,7 +186,11 @@
                     24,
                     26,
                     27,
-                    28
+                    28,
+                    29,
+                    30,
+                    31,
+                    32
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -516,6 +522,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "FailRealmStates",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 106,
                 "ColumnName": "BlobDepotConfig",
                 "ColumnType": "String"
@@ -575,6 +586,7 @@
                     15,
                     16,
                     17,
+                    18,
                     106,
                     109,
                     110,

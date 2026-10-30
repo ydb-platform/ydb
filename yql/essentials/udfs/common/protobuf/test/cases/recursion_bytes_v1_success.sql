@@ -1,3 +1,9 @@
+$input = [
+    <|TestField: Just(@@{"inner": {"i": {"a": "hello"}}, "number": 5, "test": {"number": 5, "inner": {"i": {"a": "optional hello"}}}, "repeated": []}@@)|>,
+    <|TestField: Just(@@{"inner": {"i": {"a": "hello"}}, "number": 5, "test": {"number": 5, "inner": {"i": {"a": "optional data"}}}, "repeated": [{"number": 5, "inner": {"i": {"a": "repeated hello"}}}]}@@)|>,
+    <|TestField: Just(@@{"inner": {"i": {"a": "hello"}}, "number": 5, "req": {"req": {"inner": {"i": {"a": "hello"}}, "number": 5, "repeated": []}}, "test": {"number": 5, "inner": {"i": {"a": "optional hello"}}}, "repeated": []}@@)|>,
+];
+
 /*
 syntax='proto2';
 
@@ -63,5 +69,4 @@ $udfParOpt = Udf(Protobuf::Parse, $configOptList as TypeConfig);
 $udfSerOpt = Udf(Protobuf::Serialize, $configOptList as TypeConfig);
 
 SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)), $udfParOpt(TestField), $udfSerOpt($udfParOpt(TestField))
-FROM plato.Input;
-
+FROM AS_TABLE($input);

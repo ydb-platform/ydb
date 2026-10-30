@@ -218,6 +218,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ------
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
+        ------
+        WAIT_BACKGROUND_PROCESSES
     )";
 
     Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage, ELocalIndexAsSchemeObject) {
@@ -249,6 +251,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ------
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
+        ------
+        WAIT_BACKGROUND_PROCESSES
     )";
 
     Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {
@@ -4151,6 +4155,251 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             NKikimrScheme::StatusPathDoesNotExist,
             "idx_bloom should not exist after DROP TABLE, but got status: "
                 << static_cast<int>(bloomDesc->Record.GetSchemeStatus()));
+    }
+
+    // Complex LIKE/ILIKE stay one Re2 match. With the shard flag the bloom-ngram index skips portions
+    // that cannot contain the literal runs; results stay the same as with the flag off.
+    // Index blobs are written by REPLACE, so the test does not wait for compaction.
+    Y_UNIT_TEST(ComplexLikeNgramSkip) {
+        auto run = [](const bool hintsEnabled, const bool caseSensitiveIndex) {
+            auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableCsPatternIndexHints(hintsEnabled);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+            settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+            TKikimrRunner kikimr(settings);
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+            ExecQuery(kikimr, true, R"(
+                CREATE TABLE `/Root/complexLike` (
+                    key Int32 NOT NULL,
+                    value String NOT NULL,
+                    PRIMARY KEY (key)
+                )
+                PARTITION BY HASH (key)
+                WITH (STORE = COLUMN);
+            )");
+            ExecQuery(kikimr, true, TStringBuilder() << R"(
+                ALTER TABLE `/Root/complexLike`
+                ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (value)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = )"
+                << (caseSensitiveIndex ? "true" : "false") << ");");
+            ExecQuery(kikimr, true, R"(
+                ALTER OBJECT `/Root/complexLike` (TYPE TABLE) SET (
+                    ACTION = UPSERT_OPTIONS,
+                    `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`
+                );
+            )");
+
+            auto runDml = [&](const TString& query) {
+                auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            };
+            runDml(R"(
+                $rows = ListMap(ListFromRange(1, 201), ($x) -> { RETURN AsStruct($x AS item); });
+                REPLACE INTO `/Root/complexLike` (key, value)
+                SELECT CAST(item AS Int32) AS key,
+                       "noise_" || CAST(item AS String) AS value
+                FROM AS_TABLE($rows);
+            )");
+            // U+212A folds to k and U+017F folds to s in Re2. The bytes are not ASCII k/s.
+            const TString kelvin("\xE2\x84\xAA\xE2\x84\xAA\xE2\x84\xAA", 9);
+            const TString longS("\xC5\xBF\xC5\xBF\xC5\xBF", 6);
+            runDml(TStringBuilder() << R"(
+                REPLACE INTO `/Root/complexLike` (key, value) VALUES
+                    (1001, "xx aaabbb yy"),
+                    (1002, "bbb aaa"),
+                    (1003, ")" << kelvin << R"("),
+                    (1004, ")" << longS << R"("),
+                    (1005, "(?s)qqq.*zzz"),
+                    (1006, "aaab");
+            )");
+
+            // Two indexed nullable columns. The match for `b` sits in a portion where `a` has no
+            // aaa/bbb at all, so a hint bound to the wrong column would skip that portion.
+            ExecQuery(kikimr, true, R"(
+                CREATE TABLE `/Root/complexLikeTwo` (
+                    key Int32 NOT NULL,
+                    a String,
+                    b String,
+                    PRIMARY KEY (key)
+                )
+                PARTITION BY HASH (key)
+                WITH (STORE = COLUMN);
+            )");
+            for (const char* column : { "a", "b" }) {
+                ExecQuery(kikimr, true, TStringBuilder() << R"(
+                    ALTER TABLE `/Root/complexLikeTwo`
+                    ADD INDEX idx_)" << column << R"( LOCAL USING bloom_ngram_filter
+                        ON ()" << column << R"()
+                        WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = )"
+                    << (caseSensitiveIndex ? "true" : "false") << ");");
+            }
+            ExecQuery(kikimr, true, R"(
+                ALTER OBJECT `/Root/complexLikeTwo` (TYPE TABLE) SET (
+                    ACTION = UPSERT_OPTIONS,
+                    `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`
+                );
+            )");
+            runDml(R"(
+                $rows = ListMap(ListFromRange(1, 201), ($x) -> { RETURN AsStruct($x AS item); });
+                REPLACE INTO `/Root/complexLikeTwo` (key, a, b)
+                SELECT CAST(item AS Int32) AS key,
+                       "noise_a_" || CAST(item AS String) AS a,
+                       "noise_b_" || CAST(item AS String) AS b
+                FROM AS_TABLE($rows);
+            )");
+            runDml(R"(
+                REPLACE INTO `/Root/complexLikeTwo` (key, a, b) VALUES
+                    (1001, "nothing here", "xx aaabbb yy"),
+                    (1003, CAST(NULL AS String), CAST(NULL AS String));
+            )");
+            runDml(R"(
+                REPLACE INTO `/Root/complexLikeTwo` (key, a, b) VALUES
+                    (1002, "xx aaabbb yy", "nothing here");
+            )");
+
+            auto runScan = [&](const TString& query) {
+                auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                return StreamResultToYson(it);
+            };
+            CompareYson(R"([[1001]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value LIKE '%aaa%bbb%' ORDER BY key)"),
+                "LIKE rows");
+            CompareYson(R"([[1001]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%AAA%bbb%' ORDER BY key)"),
+                "ILIKE rows");
+            // A k/s probe must not drop the folded characters. LIKE stays byte-exact.
+            CompareYson(R"([[1003]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%kkk%' ORDER BY key)"),
+                "Kelvin ILIKE");
+            CompareYson(R"([[1004]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%sss%' ORDER BY key)"),
+                "long-s ILIKE");
+            CompareYson(R"([])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value LIKE '%kkk%' ORDER BY key)"),
+                "Kelvin LIKE");
+            CompareYson(R"([[1005]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, true AS Literal))(value)
+                    ORDER BY key;
+                )"),
+                "literal Re2 options");
+            // The pattern is anchored at the end. EndsWith("b") would reject "aaab":
+            // the index stores ab\0, the probe is b\0\0.
+            CompareYson(R"([[1006]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value LIKE '%aaa%b' ORDER BY key)"),
+                "short suffix LIKE");
+            {
+                auto params = kikimr.GetTableClient().GetParamsBuilder().AddParam("$literal").Bool(true).Build().Build();
+                auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                    DECLARE $literal AS Bool;
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, $literal AS Literal))(value)
+                    ORDER BY key;
+                )", params).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                CompareYson(R"([[1005]])", StreamResultToYson(it), "parameter Literal option");
+            }
+            CompareYson(R"([[1005]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(
+                        CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                        CAST(NULL AS Uint64?), true, CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), true
+                    ))(value)
+                    ORDER BY key;
+                )"),
+                "positional Literal option");
+            CompareYson(R"([[1005]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    $safe = Re2::Options(true AS CaseSensitive);
+                    $unsafe = Re2::Options(true AS CaseSensitive, true AS Literal);
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, IF(false, $safe, $unsafe))(value)
+                    ORDER BY key;
+                )"),
+                "conditional Literal option");
+            // Positional Re2::Options with only CaseSensitive (10th argument) set is a plain LIKE.
+            // If the UDF argument order ever drifts, this row disappears or the probe below stops skipping.
+            CompareYson(R"([[1001]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("%aaa%bbb%");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(
+                        CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                        CAST(NULL AS Uint64?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                        CAST(NULL AS Bool?), true
+                    ))(value)
+                    ORDER BY key;
+                )"),
+                "positional CaseSensitive option");
+
+            // The hint names the kernel argument of the matched column, not argument 0.
+            CompareYson(R"([[1001]])",
+                runScan(R"(SELECT key FROM `/Root/complexLikeTwo` WHERE b LIKE '%aaa%bbb%' ORDER BY key)"),
+                "second indexed column");
+            CompareYson(R"([[1002]])",
+                runScan(R"(SELECT key FROM `/Root/complexLikeTwo` WHERE a LIKE '%aaa%bbb%' ORDER BY key)"),
+                "first indexed column");
+            // LIKE is a plain Bool in YDB: Re2.Match takes String? and returns false for NULL.
+            // A projected match gets no checker, and the NULL row reads false with or without an index.
+            CompareYson(R"([[1001;"true"];[1002;"false"];[1003;"false"]])",
+                runScan(R"(
+                    SELECT key, COALESCE(CAST(b LIKE '%aaa%bbb%' AS String), "null") AS matched
+                    FROM `/Root/complexLikeTwo` WHERE key >= 1001 ORDER BY key
+                )"),
+                "projected nullable match");
+            // The match is never NULL, so COALESCE(match, true) is folded to the bare match.
+            // The hint stays sound: the NULL row is false either way.
+            CompareYson(R"([[1001]])",
+                runScan(R"(
+                    SELECT key FROM `/Root/complexLikeTwo`
+                    WHERE key >= 1001 AND COALESCE(b LIKE '%aaa%bbb%', true) ORDER BY key
+                )"),
+                "coalesce true");
+
+            const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+            CompareYson(R"([[0u]])",
+                runScan(R"(SELECT COUNT(*) FROM `/Root/complexLike` WHERE value LIKE '%zzz%qqq%')"),
+                "absent LIKE");
+            const ui64 likeSkipped = csController->GetIndexesSkippingOnSelect().Val() - skipBefore;
+
+            const ui64 ilikeBefore = csController->GetIndexesSkippingOnSelect().Val();
+            CompareYson(R"([[0u]])",
+                runScan(R"(SELECT COUNT(*) FROM `/Root/complexLike` WHERE value ILIKE '%ZZZ%qqq%')"),
+                "absent ILIKE");
+            const ui64 ilikeSkipped = csController->GetIndexesSkippingOnSelect().Val() - ilikeBefore;
+
+            // The index on the second column is live: an absent probe on `b` skips portions.
+            const ui64 secondBefore = csController->GetIndexesSkippingOnSelect().Val();
+            CompareYson(R"([[0u]])",
+                runScan(R"(SELECT COUNT(*) FROM `/Root/complexLikeTwo` WHERE b LIKE '%zzz%qqq%')"),
+                "absent LIKE on second column");
+            const ui64 secondSkipped = csController->GetIndexesSkippingOnSelect().Val() - secondBefore;
+            return std::make_tuple(likeSkipped, ilikeSkipped, secondSkipped);
+        };
+
+        const auto [insensitiveLike, insensitiveIlike, insensitiveSecond] = run(true, false);
+        UNIT_ASSERT_C(insensitiveLike > 0, "case-insensitive ngram did not skip for LIKE");
+        UNIT_ASSERT_C(insensitiveIlike > 0, "case-insensitive ngram did not skip for ILIKE");
+        UNIT_ASSERT_C(insensitiveSecond > 0, "case-insensitive ngram on the second column did not skip");
+
+        const auto [sensitiveLike, sensitiveIlike, sensitiveSecond] = run(true, true);
+        UNIT_ASSERT_C(sensitiveLike > 0, "case-sensitive ngram did not skip for LIKE");
+        UNIT_ASSERT_VALUES_EQUAL(sensitiveIlike, 0);
+        UNIT_ASSERT_C(sensitiveSecond > 0, "case-sensitive ngram on the second column did not skip");
+
+        const auto [disabledLike, disabledIlike, disabledSecond] = run(false, false);
+        UNIT_ASSERT_VALUES_EQUAL(disabledLike, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disabledIlike, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disabledSecond, 0);
     }
 }
 

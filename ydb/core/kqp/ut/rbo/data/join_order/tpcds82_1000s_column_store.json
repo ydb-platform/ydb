@@ -1,0 +1,52 @@
+{
+  "op_name":"HashShuffle",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (BlockHash)",
+        "args":
+          [
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"store_sales"
+                  }
+                ]
+            },
+            {
+              "op_name":"InnerJoin (BlockHash)",
+              "args":
+                [
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"InnerJoin (BlockHash)",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"inventory"
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"date_dim"
+                              }
+                            ]
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"item"
+                  }
+                ]
+            }
+          ]
+      }
+    ]
+}

@@ -47,11 +47,11 @@ The dsproxy-proxy of a static group changes its operating mode according to the 
 
 ## dsproxy-proxy behavior {#dsproxy-proxy}
 
-In mode `PRIMARY/SYNCHRONIZED`, writes are performed synchronously to both groups; reads are performed from the `PRIMARY`, and each read issues a ping request to the second group to ensure timely detection of link failure or a change in that group's operating mode.
+In mode `PRIMARY/SYNCHRONIZED`, writes are performed synchronously to both groups. Reads are sent to both groups too, and the reply of a synchronized group having every blob asked for is taken at once. dsproxy-proxy doesn't ping the groups to watch them: it learns of a link failure from the interconnect and of a mode change from the configuration it gets from Distconf.
 
 In mode `PRIMARY/DISCONNECTED`, reads and writes are performed only in the `PRIMARY` group.
 
-A node learns that a pile has been disconnected when the new configuration reaches it. Until then, its dsproxy-proxy keeps writing to the disconnected pile and may return its replies to reads, which can miss writes already made by nodes that know about the disconnect. For a planned disconnect, when the pile stays reachable, this window is bounded only by how fast the configuration reaches each node; once a node gets it, its interconnect also tears down the sessions to the disconnected pile. Generation numbers can't close the window, because the disconnected pile never learns the new ones. In an unplanned failover, the disconnected pile is unreachable, so the window doesn't arise.
+A node learns that a pile has been disconnected when the new configuration reaches it. Until then, its dsproxy-proxy keeps writing to the disconnected pile and reading from it, and the disconnected pile can miss writes already made by nodes that know about the disconnect. Generation numbers can't fence it, because the disconnected pile never learns the new ones. So dsproxy-proxy never takes the absence of a blob in one pile as the answer: a read that doesn't find a blob, and every range read, waits for the replies of all piles it was sent to and returns the union of what they hold. A blob found in any pile is returned; a blob is reported missing only when no pile has it, and an error from a pile makes the read fail rather than report the blob missing. Assimilation and integrity checks still take the reply of one pile holding the whole group. For a planned disconnect, when the pile stays reachable, the window is bounded by how fast the configuration reaches each node; once a node gets it, its interconnect also tears down the sessions to the disconnected pile. In an unplanned failover, the disconnected pile is unreachable, so the window doesn't arise.
 
 In mode `PRIMARY/NOT_SYNCHRONIZED`, dsproxy-proxy supports several submodes that determine which kinds of writes are performed in the `NOT_SYNCHRONIZED` group:
 
@@ -59,23 +59,15 @@ In mode `PRIMARY/NOT_SYNCHRONIZED`, dsproxy-proxy supports several submodes that
   - `WRITE_KEEP_BARRIER_DONOTKEEP` — barriers and `KEEP` and `DO_NOT_KEEP` flags are written;
   - `WRITE_KEEP_BARRIER_DONOTKEEP_DATA` — data, barriers, and `KEEP` and `DO_NOT_KEEP` flags are written.
 
-The dsproxy-proxy configuration includes:
+The configuration of a bridged group includes, for each pile:
 
-  - mode;
-  - submode;
-  - `PPGeneration` — the generation number of the dsproxy-proxy configuration;
-  - the generation number of the dsproxy group configuration from pile A;
-  - the generation number of the dsproxy group configuration from pile B.
+  - the identifier of the group the pile holds;
+  - the submode of that group, which tells the writes it gets while being synchronized;
+  - the generation of that group's configuration.
 
-When the dsproxy-proxy configuration changes, the configuration generation number and the group configuration generation are always updated for the `PRIMARY` group; for the others, they are updated except when in the `DISCONNECTED` state.
+It also includes the generation of the cluster state it has been made for. dsproxy-proxy holding an older cluster state waits for the newer one before sending the request anywhere, so the modes of piles are always taken together with the group configuration made for them.
 
-The group configuration includes:
-
-  - mode;
-  - submode;
-  - `PPGeneration` — the generation number of the controlling dsproxy-proxy configuration.
-
-On each operation, the group checks the mode, submode, and `PPGeneration`. This ensures that operations from stale dsproxy-proxy instances that missed a mode or submode change are not executed, and avoids cross-interaction when two `PRIMARY` instances appear.
+dsproxy-proxy sends each request to the group of a pile with the generation of that group from its configuration (`ForceGroupGeneration`). The dsproxy of the group answers `RACE` when its configuration has another generation, and VDisks execute only the requests made for their exact group generation. Every change of the configuration of a bridged group, a submode change included, makes the controller (Distconf, for a static group) increase the generations of all its groups, so the requests of dsproxy-proxy that has missed the change are not executed: they come back with `RACE` and are restarted with the newer configuration. A disconnected pile doesn't learn new generations, which is why a disconnect can't be fenced this way.
 
 To transition from mode `PRIMARY/NOT_SYNCHRONIZED` to `PRIMARY/SYNCHRONIZED`, synchronization is performed. During synchronization, missing data is copied from the `PRIMARY` group to the `NOT_SYNCHRONIZED` group, and lock information is copied in both directions.
 

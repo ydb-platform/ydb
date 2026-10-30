@@ -362,10 +362,10 @@ namespace NKikimr::NStorage {
         cmd->SetSchemeBoard(NeedReconfigSB);
         cmd->SetDisableRing(disable);
         AllowNextStep = false;
-        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
         YDB_LOG_ERROR("StateStorageReassignNodeSelfhealActor::RequestChangeStateStorage",
             {"marker", "NW72"},
             {"cmd", cmd});
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
     }
 
     void TStateStorageReassignNodeSelfhealActor::Finish(TResult::EStatus result, const TString& errorReason) {

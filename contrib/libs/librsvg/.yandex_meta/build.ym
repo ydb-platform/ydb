@@ -1,0 +1,145 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block current_version %}2.62.0{% endblock %}
+{% block current_url %}https://github.com/GNOME/librsvg/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
+
+{% block keep_sources %}
+build.py
+.yandex_meta/prepare.py
+ut/ya.make
+ut/render.cpp
+{% endblock %}
+
+{% block patch_source %}
+{{super()}}
+
+cat << EOF > ${SRC}/include/librsvg/rsvg-version.h
+#if !defined (__RSVG_RSVG_H_INSIDE__) && !defined (RSVG_COMPILATION)
+#warning "Including <librsvg/rsvg-version.h> directly is deprecated."
+#endif
+
+#ifndef RSVG_VERSION_H
+#define RSVG_VERSION_H
+
+#define LIBRSVG_MAJOR_VERSION ({{self.version().split('.')[0]}})
+#define LIBRSVG_MINOR_VERSION ({{self.version().split('.')[1]}})
+#define LIBRSVG_MICRO_VERSION ({{self.version().split('.')[2]}})
+#define LIBRSVG_VERSION "{{self.version().strip()}}"
+
+#endif
+EOF
+
+features_in="${SRC}/include/librsvg/rsvg-features.h.in"
+features_out="${SRC}/include/librsvg/rsvg-features.h"
+cp "$features_in" "$features_out"
+sed -i -E 's|^[[:space:]]*#define[[:space:]]+LIBRSVG_HAVE_PIXBUF[[:space:]]*\(@LIBRSVG_HAVE_PIXBUF@\)[[:space:]]*$|#define LIBRSVG_HAVE_PIXBUF (TRUE)|' "$features_out"
+
+
+for name in `ls .`; do
+    if [ -d ${name} ] && [ ${name} != librsvg-c ] && [ ${name} != rsvg ] && [ ${name} != include ] && [ ${name} != patches ] && [ ${name} != benches ] && [ ${name} != ut ]; then
+        rm -r ${name}
+    fi
+done
+
+sed -i -E '
+/^[[:space:]]*members[[:space:]]*=[[:space:]]*\[$/,/^[[:space:]]*\][[:space:]]*$/c\members = [\
+    "librsvg-c",\
+    "rsvg",\
+]
+s/^[[:space:]]*default-members[[:space:]]*=.*/default-members = ["rsvg"]/
+' Cargo.toml
+
+{% endblock %}
+
+{% block build_source %}
+{{super()}}
+python3 .yandex_meta/prepare.py vendor
+{% endblock %}
+
+{% block ya_make %}
+PEERDIR(
+    build/platform/rust
+    build/platform/clang
+    contrib/libs/cairo
+    contrib/libs/cairo/util/cairo-gobject
+    contrib/libs/fontconfig
+    contrib/libs/gdk-pixbuf
+    contrib/libs/libcroco
+    contrib/libs/libxml
+    contrib/libs/pango
+    contrib/libs/pango/pangocairo-1.0
+    contrib/libs/pango/pangoft2-1.0
+    contrib/restricted/glib
+)
+
+IF (OS_DARWIN AND ARCH_ARM64)
+    SET(LIBRSVG_TARGET aarch64-apple-darwin)
+ELSEIF (OS_DARWIN AND ARCH_X86_64)
+    SET(LIBRSVG_TARGET x86_64-apple-darwin)
+ELSEIF (OS_LINUX AND ARCH_AARCH64 AND MUSL)
+    SET(LIBRSVG_TARGET aarch64-unknown-linux-musl)
+ELSEIF (OS_LINUX AND ARCH_AARCH64)
+    SET(LIBRSVG_TARGET aarch64-unknown-linux-gnu)
+ELSEIF (OS_LINUX AND ARCH_X86_64 AND MUSL)
+    SET(LIBRSVG_TARGET x86_64-unknown-linux-musl)
+ELSEIF (OS_LINUX AND ARCH_X86_64 AND NOT MUSL)
+    SET(LIBRSVG_TARGET x86_64-unknown-linux-gnu)
+ELSEIF (OS_WINDOWS AND ARCH_X86_64)
+    SET(LIBRSVG_TARGET x86_64-pc-windows-msvc)
+ELSE()
+    MESSAGE(FATAL_ERROR "We don't have librsvg for this platform")
+ENDIF()
+
+IF (OS_WINDOWS)
+    SET(LIBRSVG_ARCHIVE librsvg_c.lib)
+ELSE()
+    SET(LIBRSVG_ARCHIVE liblibrsvg_c.a)
+ENDIF()
+
+INCLUDE(.yandex_meta/sources.inc)
+
+RUN_PYTHON3(
+    build.py
+    --source \${CURDIR}
+    --rust-root \${RUST_RESOURCE_GLOBAL}
+    --clang-root \${CLANG20_RESOURCE_GLOBAL}
+    --target \${LIBRSVG_TARGET}
+    --output \${BINDIR}/\${LIBRSVG_ARCHIVE}
+    IN_NOPARSE \${LIBRSVG_INPUTS}
+    OUT \${LIBRSVG_ARCHIVE}
+)
+
+ADDINCL(
+    GLOBAL contrib/libs/librsvg/include
+    GLOBAL contrib/libs/librsvg/include/librsvg
+    GLOBAL contrib/libs/cairo/src
+    GLOBAL contrib/libs/gdk-pixbuf
+)
+
+NO_UTIL()
+{% endblock %}
+
+{% block ya_make_suffix %}
+RECURSE_FOR_TESTS(ut)
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+python3 .yandex_meta/prepare.py output "${OUTPUT}"
+{% endblock %}
+
+{% block sanitize_output %}
+{{super()}}
+cp -R "${SRC}/.cargo" "${OUTPUT}/"
+{% endblock %}
+
+{% block run_license_analyzer %}
+{% if no_license_analyzer is not defined %}
+# Match cargo.ym: scan librsvg sources without Cargo's registry dependencies.
+mv "${SRC}/vendor" "${BUILD}/vendor"
+ya tool license_analyzer scan -j ${LICENSE_ANALYZER_JOBS:-2} "${SRC}"
+mv ${SRC}/.yandex_meta/devtools.* ${OUTPUT}/.yandex_meta/
+mv ${SRC}/.yandex_meta/.devtools.* ${OUTPUT}/.yandex_meta/
+ya tool license_analyzer apply "${OUTPUT}"
+{% endif %}
+{% endblock %}

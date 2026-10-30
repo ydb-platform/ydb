@@ -347,6 +347,11 @@ ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
 };
 
 bool IsBuiltEffect(const TExprBase& effect) {
+    // BuildTxs will turn this effect into a stage with a truncate sink.
+    if (effect.Maybe<TKqlUnsafeTruncate>()) {
+        return true;
+    }
+
     // Stage with effect output
     if (effect.Maybe<TDqOutput>()) {
         return true;

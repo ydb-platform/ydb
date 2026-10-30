@@ -73,7 +73,7 @@
 
 ![CPU](./_assets/overloaded-shard-insufficient-cpu/incident-cpu-by-execution-pool.png)
 
-Мы видим рост нагрузки на CPU [в пуле ресурсов пользователей (красный) и интерконнекта (жёлтый)](../../../concepts/glossary.md#actor-system-pool).
+Мы видим рост нагрузки на CPU [в пуле ресурсов пользователей (красный) и интерконнекта (жёлтый)](../../../reference/configuration/actor_system_config.md#tuneconfig).
 
 Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md):
 

@@ -1,0 +1,166 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(tracing_subscriber)
+
+CRATE_VERSION(0.3.23)
+CRATE_EDITION(2018)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/field/debug.rs
+    src/field/delimited.rs
+    src/field/display.rs
+    src/field/mod.rs
+    src/filter/directive.rs
+    src/filter/env/builder.rs
+    src/filter/env/directive.rs
+    src/filter/env/field.rs
+    src/filter/env/mod.rs
+    src/filter/filter_fn.rs
+    src/filter/layer_filters/combinator.rs
+    src/filter/layer_filters/mod.rs
+    src/filter/level.rs
+    src/filter/mod.rs
+    src/filter/targets.rs
+    src/fmt/fmt_layer.rs
+    src/fmt/format/escape.rs
+    src/fmt/format/json.rs
+    src/fmt/format/mod.rs
+    src/fmt/format/pretty.rs
+    src/fmt/mod.rs
+    src/fmt/time/chrono_crate.rs
+    src/fmt/time/datetime.rs
+    src/fmt/time/mod.rs
+    src/fmt/time/time_crate.rs
+    src/fmt/writer.rs
+    src/layer/context.rs
+    src/layer/layered.rs
+    src/layer/mod.rs
+    src/layer/tests.rs
+    src/macros.rs
+    src/prelude.rs
+    src/registry/extensions.rs
+    src/registry/mod.rs
+    src/registry/sharded.rs
+    src/registry/stack.rs
+    src/reload.rs
+    src/sync.rs
+    src/util.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    alloc
+    ansi
+    env-filter
+    fmt
+    json
+    matchers
+    nu-ansi-term
+    once_cell
+    parking_lot
+    registry
+    serde
+    serde_json
+    sharded-slab
+    std
+    thread_local
+    tracing
+    tracing-serde
+)
+
+PEERDIR(
+    contrib/crates/matchers-0.2.0
+    contrib/crates/nu-ansi-term-0.50.3
+    contrib/crates/once_cell-1.21.4
+    contrib/crates/parking_lot-0.12.5
+    contrib/crates/regex-automata-0.4.18
+    contrib/crates/serde-1.0.229
+    contrib/crates/serde_json-1.0.154
+    contrib/crates/sharded-slab-0.1.7
+    contrib/crates/thread_local-1.1.10
+    contrib/crates/tracing-0.1.44
+    contrib/crates/tracing-core-0.1.36
+    contrib/crates/tracing-serde-0.2.0
+)
+
+LICENSE("MIT")
+VERSION(0.3.23)
+ORIGINAL_SOURCE(https://static.crates.io/crates/tracing-subscriber/tracing-subscriber-0.3.23.crate)
+
+CRATE_FEATURES(
+    default
+    regex
+    smallvec
+    tracing-log
+    valuable
+    valuable-serde
+    valuable_crate
+)
+
+PEERDIR(
+    contrib/crates/smallvec-1.16.4
+    contrib/crates/tracing-log-0.2.0
+)
+
+CRATE_SOURCES(
+    src/field/debug.rs
+    src/field/delimited.rs
+    src/field/display.rs
+    src/field/mod.rs
+    src/filter/directive.rs
+    src/filter/env/builder.rs
+    src/filter/env/directive.rs
+    src/filter/env/field.rs
+    src/filter/env/mod.rs
+    src/filter/filter_fn.rs
+    src/filter/layer_filters/combinator.rs
+    src/filter/layer_filters/mod.rs
+    src/filter/level.rs
+    src/filter/mod.rs
+    src/filter/targets.rs
+    src/fmt/fmt_layer.rs
+    src/fmt/format/escape.rs
+    src/fmt/format/json.rs
+    src/fmt/format/mod.rs
+    src/fmt/format/pretty.rs
+    src/fmt/mod.rs
+    src/fmt/time/chrono_crate.rs
+    src/fmt/time/datetime.rs
+    src/fmt/time/mod.rs
+    src/fmt/time/time_crate.rs
+    src/fmt/writer.rs
+    src/layer/context.rs
+    src/layer/layered.rs
+    src/layer/mod.rs
+    src/layer/tests.rs
+    src/lib.rs
+    src/macros.rs
+    src/prelude.rs
+    src/registry/extensions.rs
+    src/registry/mod.rs
+    src/registry/sharded.rs
+    src/registry/stack.rs
+    src/reload.rs
+    src/sync.rs
+    src/util.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/valuable-derive-0.1.1
+)
+
+END()

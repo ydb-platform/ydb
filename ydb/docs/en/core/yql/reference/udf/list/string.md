@@ -62,7 +62,7 @@ Functions for ASCII strings:
 
 * `String::AsciiToTitle(String{Flags:AutoMap}) -> String`: Changes only Latin characters. For working with other alphabets, see Unicode::ToTitle
 
-* Signature:
+* Signature: {#splittolist}
 
   ```text
   String::SplitToList( String?, String,

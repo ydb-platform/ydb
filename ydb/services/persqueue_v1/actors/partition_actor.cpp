@@ -203,8 +203,9 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: parents) {
-            const bool onlyCheck = !SkippedParents.contains(parent->Id);
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = onlyCheck, .ReadSessionId = Session};
+            const bool skipped = SkippedParents.contains(parent->Id);
+            // A skipped parent may be held by another read session, so its commit is not bound to this one.
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = !skipped, .ReadSessionId = skipped ? TString() : Session};
             commits.push_back(commit);
         }
         TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};

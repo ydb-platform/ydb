@@ -17,6 +17,8 @@ namespace NKikimr::NPQ::NTest {
         TVector<TString> Topics;
         bool AutoPartitioningSupport = true;
         TMaybe<TInstant> ReadFrom;
+        // Explicit partitions of every topic.
+        TVector<i64> PartitionIds;
         // StartPartitionSession of these partitions waits for ConfirmStart.
         TVector<std::pair<TString, ui64>> DeferredStarts;
     };

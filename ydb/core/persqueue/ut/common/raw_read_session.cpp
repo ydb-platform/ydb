@@ -43,6 +43,9 @@ namespace NKikimr::NPQ::NTest {
             if (Settings.ReadFrom) {
                 *topic->mutable_read_from() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(Settings.ReadFrom->MilliSeconds());
             }
+            for (const i64 partitionId : Settings.PartitionIds) {
+                topic->add_partition_ids(partitionId);
+            }
         }
         Send(init);
         TFromServer response;

@@ -1,0 +1,207 @@
+# Rust sources pinned by cryptography 41.0.6 Cargo.lock.
+
+RUST_BUILD_SCRIPT(build_script_build)
+
+CRATE_VERSION(0.18.3)
+CRATE_EDITION(2018)
+CRATE_ROOT(../build.rs)
+CRATE_MANIFEST(../Cargo.toml)
+CRATE_MANIFEST_DIR(..)
+
+CRATE_SOURCES(
+    ../src/abstract_.rs
+    ../src/bltinmodule.rs
+    ../src/boolobject.rs
+    ../src/buffer.rs
+    ../src/bytearrayobject.rs
+    ../src/bytesobject.rs
+    ../src/ceval.rs
+    ../src/code.rs
+    ../src/codecs.rs
+    ../src/compile.rs
+    ../src/complexobject.rs
+    ../src/context.rs
+    ../src/cpython/abstract_.rs
+    ../src/cpython/bytesobject.rs
+    ../src/cpython/ceval.rs
+    ../src/cpython/code.rs
+    ../src/cpython/compile.rs
+    ../src/cpython/descrobject.rs
+    ../src/cpython/dictobject.rs
+    ../src/cpython/frameobject.rs
+    ../src/cpython/funcobject.rs
+    ../src/cpython/genobject.rs
+    ../src/cpython/import.rs
+    ../src/cpython/initconfig.rs
+    ../src/cpython/listobject.rs
+    ../src/cpython/methodobject.rs
+    ../src/cpython/mod.rs
+    ../src/cpython/object.rs
+    ../src/cpython/pydebug.rs
+    ../src/cpython/pyerrors.rs
+    ../src/cpython/pylifecycle.rs
+    ../src/cpython/pymem.rs
+    ../src/cpython/pystate.rs
+    ../src/cpython/pythonrun.rs
+    ../src/cpython/tupleobject.rs
+    ../src/cpython/unicodeobject.rs
+    ../src/cpython/weakrefobject.rs
+    ../src/datetime.rs
+    ../src/descrobject.rs
+    ../src/dictobject.rs
+    ../src/enumobject.rs
+    ../src/fileobject.rs
+    ../src/fileutils.rs
+    ../src/floatobject.rs
+    ../src/import.rs
+    ../src/intrcheck.rs
+    ../src/iterobject.rs
+    ../src/lib.rs
+    ../src/listobject.rs
+    ../src/longobject.rs
+    ../src/marshal.rs
+    ../src/memoryobject.rs
+    ../src/methodobject.rs
+    ../src/modsupport.rs
+    ../src/moduleobject.rs
+    ../src/object.rs
+    ../src/objimpl.rs
+    ../src/osmodule.rs
+    ../src/pyarena.rs
+    ../src/pycapsule.rs
+    ../src/pyerrors.rs
+    ../src/pyframe.rs
+    ../src/pyhash.rs
+    ../src/pylifecycle.rs
+    ../src/pymem.rs
+    ../src/pyport.rs
+    ../src/pystate.rs
+    ../src/pystrtod.rs
+    ../src/pythonrun.rs
+    ../src/rangeobject.rs
+    ../src/setobject.rs
+    ../src/sliceobject.rs
+    ../src/structmember.rs
+    ../src/structseq.rs
+    ../src/sysmodule.rs
+    ../src/traceback.rs
+    ../src/tupleobject.rs
+    ../src/typeslots.rs
+    ../src/unicodeobject.rs
+    ../src/warnings.rs
+    ../src/weakrefobject.rs
+)
+
+CRATE_INPUTS(
+    ../.cargo-checksum.json
+    ../.cargo_vcs_info.json
+    ../LICENSE
+    ../README.md
+)
+
+CRATE_FEATURES(
+    abi3
+    abi3-py310
+    abi3-py311
+    abi3-py37
+    abi3-py38
+    abi3-py39
+    default
+    extension-module
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+PEERDIR(
+    contrib/crates/pyo3-build-config-0.18.3
+)
+
+LICENSE("Apache-2.0")
+VERSION(0.18.3)
+ORIGINAL_SOURCE(https://static.crates.io/crates/pyo3-ffi/pyo3-ffi-0.18.3.crate)
+
+CRATE_SOURCES(
+    ../src/abstract_.rs
+    ../src/bltinmodule.rs
+    ../src/boolobject.rs
+    ../src/buffer.rs
+    ../src/bytearrayobject.rs
+    ../src/bytesobject.rs
+    ../src/ceval.rs
+    ../src/code.rs
+    ../src/codecs.rs
+    ../src/compile.rs
+    ../src/complexobject.rs
+    ../src/context.rs
+    ../src/cpython/abstract_.rs
+    ../src/cpython/bytesobject.rs
+    ../src/cpython/ceval.rs
+    ../src/cpython/code.rs
+    ../src/cpython/compile.rs
+    ../src/cpython/descrobject.rs
+    ../src/cpython/dictobject.rs
+    ../src/cpython/frameobject.rs
+    ../src/cpython/funcobject.rs
+    ../src/cpython/genobject.rs
+    ../src/cpython/import.rs
+    ../src/cpython/initconfig.rs
+    ../src/cpython/listobject.rs
+    ../src/cpython/methodobject.rs
+    ../src/cpython/mod.rs
+    ../src/cpython/object.rs
+    ../src/cpython/pydebug.rs
+    ../src/cpython/pyerrors.rs
+    ../src/cpython/pylifecycle.rs
+    ../src/cpython/pymem.rs
+    ../src/cpython/pystate.rs
+    ../src/cpython/pythonrun.rs
+    ../src/cpython/tupleobject.rs
+    ../src/cpython/unicodeobject.rs
+    ../src/cpython/weakrefobject.rs
+    ../src/datetime.rs
+    ../src/descrobject.rs
+    ../src/dictobject.rs
+    ../src/enumobject.rs
+    ../src/fileobject.rs
+    ../src/fileutils.rs
+    ../src/floatobject.rs
+    ../src/import.rs
+    ../src/intrcheck.rs
+    ../src/iterobject.rs
+    ../src/lib.rs
+    ../src/listobject.rs
+    ../src/longobject.rs
+    ../src/marshal.rs
+    ../src/memoryobject.rs
+    ../src/methodobject.rs
+    ../src/modsupport.rs
+    ../src/moduleobject.rs
+    ../src/object.rs
+    ../src/objimpl.rs
+    ../src/osmodule.rs
+    ../src/pyarena.rs
+    ../src/pycapsule.rs
+    ../src/pyerrors.rs
+    ../src/pyframe.rs
+    ../src/pyhash.rs
+    ../src/pylifecycle.rs
+    ../src/pymem.rs
+    ../src/pyport.rs
+    ../src/pystate.rs
+    ../src/pystrtod.rs
+    ../src/pythonrun.rs
+    ../src/rangeobject.rs
+    ../src/setobject.rs
+    ../src/sliceobject.rs
+    ../src/structmember.rs
+    ../src/structseq.rs
+    ../src/sysmodule.rs
+    ../src/traceback.rs
+    ../src/tupleobject.rs
+    ../src/typeslots.rs
+    ../src/unicodeobject.rs
+    ../src/warnings.rs
+    ../src/weakrefobject.rs
+)
+
+END()

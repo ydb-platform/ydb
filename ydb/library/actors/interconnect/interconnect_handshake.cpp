@@ -380,8 +380,8 @@ namespace NActors {
             NInterconnect::NRdma::TMemRegionPtr HandShakeMemRegion;
             TActorId SyncActor;
             void Clear() noexcept {
-                Cq.reset();
                 Qp.reset();
+                Cq.reset();
             }
             operator bool() const noexcept {
                 return Cq && Qp;
@@ -628,6 +628,11 @@ namespace NActors {
                 case TEvReportConnection::EventType:
                     PendingXdcConnection.Reset(static_cast<TEvReportConnection::THandle*>(ev.Release()));
                     break;
+
+                case NInterconnect::NRdma::TEvQpCacheReady::EventType:
+                case NInterconnect::NRdma::TEvQpCacheNoResources::EventType:
+                case NInterconnect::NRdma::TEvQpCacheError::EventType:
+                    break; // stale notification after the local QP cache wait timed out
 
                 case TEvents::TSystem::Poison:
                    throw TExPoison();
@@ -1181,6 +1186,7 @@ namespace NActors {
                             {"marker", "ICRDMA"});
                         Rdma.HandShakeMemRegion.Reset();
                         Rdma.Clear();
+                        RunDelayedRdmaHandshake = success.GetRdmaRetryable();
                     }
                 }
 
@@ -1478,8 +1484,9 @@ namespace NActors {
                     params.emplace(item.GetKey(), item.GetValue());
                 }
 
+                const bool peerRequestedRdma = request.HasRdmaHandshake();
                 std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncomingHandshake;
-                if (Rdma && request.HasRdmaHandshake()) {
+                if (Rdma && peerRequestedRdma) {
                     rdmaIncomingHandshake = request.GetRdmaHandshake();
                 } else {
                     Rdma.Clear();
@@ -1525,6 +1532,9 @@ namespace NActors {
                         }
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incoming side");
+                    }
+                    if (peerRequestedRdma && RunDelayedRdmaHandshake) {
+                        success.SetRdmaRetryable(true);
                     }
 
                     success.SetUseModernFrame(true);
@@ -1657,15 +1667,55 @@ namespace NActors {
                     YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Got CQ handle",
                         {"marker", "ICRDMA"},
                         {"cqPtr", static_cast<void*>(cqPtr.get())});
-                    Rdma.Qp.reset(new NInterconnect::NRdma::TQueuePair);
-                    int err = Rdma.Qp->Init(rdmaCtx, cqPtr.get(), 1024); //TODO: move in to settings
-                    if (err) {
-                        YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to initialize QP, no more attempt to use RDMA on this session",
-                            {"marker", "ICRDMA"});
-                        Rdma.Qp.reset();
+
+                    const TMonotonic now = TActivationContext::Monotonic();
+                    const TMonotonic qpCacheDeadline = now + (Deadline - now) / 2;
+                    for (;;) {
+                        ICq::TGetQpResult result = cqPtr->GetQp(GetActorContext());
+                        if (auto* qp = std::get_if<TQueuePair::TPtr>(&result)) {
+                            Rdma.Qp = std::move(*qp);
+                            Rdma.Cq = std::move(cqPtr);
+                            break;
+                        }
+
+                        if (std::holds_alternative<ICq::TQpCacheEmpty>(result)) {
+                            auto ev = WaitForSpecificEvent<TEvQpCacheReady, TEvQpCacheNoResources, TEvQpCacheError>(
+                                "WaitRdmaQpCache", qpCacheDeadline);
+                            if (!ev) {
+                                YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT,
+                                    "Timed out waiting for RDMA QP cache, continue handshake without RDMA",
+                                    {"marker", "ICRDMA"});
+                                RunDelayedRdmaHandshake = true;
+                                break;
+                            }
+                            if (ev->GetTypeRewrite() == TEvQpCacheReady::EventType) {
+                                // The notification does not reserve a QP for this handshake.
+                                // Retry because another consumer may have taken it already.
+                                continue;
+                            }
+                            if (ev->GetTypeRewrite() == TEvQpCacheNoResources::EventType) {
+                                YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT,
+                                    "Unable to fill RDMA QP cache due to temporary resource exhaustion",
+                                    {"marker", "ICRDMA"});
+                            } else {
+                                Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvQpCacheError::EventType);
+                                YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT,
+                                    "Unable to get QP due to RDMA QP cache error",
+                                    {"marker", "ICRDMA"});
+                            }
+                        } else if (std::holds_alternative<ICq::TQpNoResources>(result)) {
+                            YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT,
+                                "Unable to get QP due to temporary RDMA resource exhaustion",
+                                {"marker", "ICRDMA"});
+                        } else {
+                            Y_ABORT_UNLESS(std::holds_alternative<ICq::TQpCacheError>(result));
+                            YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT,
+                                "Unable to get QP due to RDMA QP cache error",
+                                {"marker", "ICRDMA"});
+                        }
+
                         RunDelayedRdmaHandshake = true;
-                    } else {
-                        Rdma.Cq = cqPtr;
+                        break;
                     }
                 } else {
                     YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get CQ handle, no more attempt to use RDMA on this session",

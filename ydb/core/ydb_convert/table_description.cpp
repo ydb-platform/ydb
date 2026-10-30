@@ -32,6 +32,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) {
@@ -55,13 +57,15 @@ static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStorag
     std::invoke(func, out)->set_media(in.GetPreferredPoolKind());
 }
 
-THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req) {
+template <typename TRequest>
+static THashSet<EAlterOperationKind> GetAlterOperationKindsImpl(const TRequest* req)
+{
     THashSet<EAlterOperationKind> ops;
 
     if (req->add_columns_size() || req->drop_columns_size() ||
         req->alter_columns_size() ||
         req->ttl_action_case() !=
-            Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
+            TRequest::TTL_ACTION_NOT_SET ||
         req->has_alter_storage_settings() || req->add_column_families_size() ||
         req->alter_column_families_size() || req->set_compaction_policy() ||
         req->has_alter_partitioning_settings() ||
@@ -69,7 +73,7 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->has_set_read_replicas_settings() ||
         req->add_statistics_size() || req->drop_statistics_size() ||
         req->metrics_settings_action_case() !=
-            Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET)
+            TRequest::METRICS_SETTINGS_ACTION_NOT_SET)
     {
         ops.emplace(EAlterOperationKind::Common);
     }
@@ -107,6 +111,16 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
     }
 
     return ops;
+}
+
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req)
+{
+    return GetAlterOperationKindsImpl(req);
+}
+
+THashSet<EAlterOperationKind> GetAlterOperationKinds(const NKikimrKqp::TKqpAlterTableRequest* req)
+{
+    return GetAlterOperationKindsImpl(req);
 }
 
 namespace {
@@ -279,9 +293,11 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
 }
 
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
-    const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
-    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData) {
+template <typename TRequest>
+static bool FillAlterTableSettingsDescImpl(NKikimrSchemeOp::TTableDescription& out,
+    const TRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData)
+{
 
     bool changed = false;
     auto &partitionConfig = *out.MutablePartitionConfig();
@@ -297,7 +313,22 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     return NKikimr::FillAlterTableSettingsDesc(out, in, code, error, changed);
 }
 
-bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
+    const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData)
+{
+    return FillAlterTableSettingsDescImpl(out, in, profiles, code, error, appData);
+}
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
+    const NKikimrKqp::TKqpAlterTableRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& code, TString& error, const TAppData* appData)
+{
+    return FillAlterTableSettingsDescImpl(out, in, profiles, code, error, appData);
+}
+
+template <typename TRequest>
+static bool BuildAlterTableAddIndexRequestImpl(const TRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
     ui64 flags,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
@@ -357,9 +388,24 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     return true;
 }
 
+bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
+    ui64 flags,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableAddIndexRequestImpl(req, settings, flags, code, error);
+}
+
+bool BuildAlterTableAddIndexRequest(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrIndexBuilder::TIndexBuildSettings* settings,
+    ui64 flags,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableAddIndexRequestImpl(req, settings, flags, code, error);
+}
+
 // For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
 // ESchemeOpAlterTable that sets ByKeyFilterPrefixes in the partition config.
-bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+template <typename TRequest>
+static bool BuildAlterTableBloomFilterModifySchemeImpl(const TString& path, const TRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
@@ -445,15 +491,45 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
     return true;
 }
 
-bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifySchemeImpl(path, req, modifyScheme, code, error);
+}
+
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifySchemeImpl(path, req, modifyScheme, code, error);
+}
+
+template <typename TRequest>
+static bool BuildAlterTableBloomFilterModifySchemeImpl(const TRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme,
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
     return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
-bool BuildAlterTableSetColumnConstraintRequest(
-    const Ydb::Table::AlterTableRequest* req,
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifySchemeImpl(req, modifyScheme, code, error);
+}
+
+bool BuildAlterTableBloomFilterModifyScheme(const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifySchemeImpl(req, modifyScheme, code, error);
+}
+
+template <typename TRequest>
+static bool BuildAlterTableSetColumnConstraintRequestImpl(
+    const TRequest* req,
     NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
     Ydb::StatusIds::StatusCode& status,
     TString& error)
@@ -492,8 +568,27 @@ bool BuildAlterTableSetColumnConstraintRequest(
     return true;
 }
 
+bool BuildAlterTableSetColumnConstraintRequest(
+    const Ydb::Table::AlterTableRequest* req,
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error)
+{
+    return BuildAlterTableSetColumnConstraintRequestImpl(req, settings, status, error);
+}
 
-bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
+bool BuildAlterTableSetColumnConstraintRequest(
+    const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status,
+    TString& error)
+{
+    return BuildAlterTableSetColumnConstraintRequestImpl(req, settings, status, error);
+}
+
+
+template <typename TRequest>
+static bool BuildAlterTableCompactRequestImpl(const TRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
     const auto ops = GetAlterOperationKinds(req);
@@ -529,7 +624,119 @@ bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKi
     return true;
 }
 
-bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    return BuildAlterTableCompactRequestImpl(req, settings, status, error);
+}
+
+bool BuildAlterTableCompactRequest(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    return BuildAlterTableCompactRequestImpl(req, settings, status, error);
+}
+
+static void FillColumnDefault(const NKikimrKqp::TKqpColumnMetadataProto& in,
+    NKikimrSchemeOp::TColumnDescription& out)
+{
+    using TColumn = NKikimrKqp::TKqpColumnMetadataProto;
+    switch (in.GetDefaultKind()) {
+        case TColumn::DEFAULT_KIND_NULL:
+            out.SetEmptyDefault(google::protobuf::NULL_VALUE);
+            break;
+        case TColumn::DEFAULT_KIND_LITERAL:
+            out.MutableDefaultFromLiteral()->CopyFrom(in.GetDefaultFromLiteral());
+            break;
+        case TColumn::DEFAULT_KIND_SEQUENCE:
+            out.SetDefaultFromSequence(in.GetDefaultFromSequence());
+            break;
+        case TColumn::DEFAULT_KIND_EXPRESSION: {
+            const auto& expression = in.GetDefaultFromExpression();
+            auto& generated = *out.MutableDefaultFromExpression();
+            generated.SetExprText(expression.GetExprText());
+            generated.SetStored(expression.GetStored());
+            generated.MutableDependencyColumnNames()->CopyFrom(expression.GetDependencies());
+            break;
+        }
+        case TColumn::DEFAULT_KIND_UNSPECIFIED:
+            break;
+    }
+}
+
+static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
+    NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    column->SetName(alter.name());
+
+    if (alter.Hasnot_null()) {
+        column->SetNotNull(alter.Getnot_null());
+    }
+
+    if (!alter.family().empty()) {
+        column->SetFamilyName(alter.family());
+    }
+
+    if (alter.has_compression()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Column Compression is not supported in row tables. Use COLUMN FAMILY.";
+        return false;
+    }
+
+    switch (alter.default_value_case()) {
+        case Ydb::Table::ColumnMeta::kFromLiteral: {
+            *column->MutableDefaultFromLiteral() = alter.from_literal();
+            break;
+        }
+        case Ydb::Table::ColumnMeta::kFromSequence: {
+            auto fromSequence = column->MutableDefaultFromSequence();
+            TString sequenceName = alter.from_sequence().name();
+            if (IsStartWithSlash(sequenceName)) {
+                *fromSequence = sequenceName;
+            } else {
+                *fromSequence = JoinPath({workingDir, sequenceName});
+            }
+            break;
+        }
+        case Ydb::Table::ColumnMeta::kEmptyDefault: {
+            column->SetEmptyDefault(google::protobuf::NullValue());
+            break;
+        }
+        default: break;
+    }
+    return true;
+}
+
+static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto& alter,
+    NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    column->SetName(alter.GetName());
+    if (alter.HasNotNull()) {
+        column->SetNotNull(alter.GetNotNull());
+    }
+    if (alter.FamilySize() > 1) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Unsupported number of families";
+        return false;
+    }
+    if (alter.FamilySize() && !alter.GetFamily(0).empty()) {
+        column->SetFamilyName(alter.GetFamily(0));
+    }
+    if (alter.HasCompression()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Column Compression is not supported in row tables. Use COLUMN FAMILY.";
+        return false;
+    }
+    FillColumnDefault(alter, *column);
+    if (column->HasDefaultFromSequence() && !IsStartWithSlash(column->GetDefaultFromSequence())) {
+        column->SetDefaultFromSequence(JoinPath({workingDir, column->GetDefaultFromSequence()}));
+    }
+    return true;
+}
+
+template <typename TRequest>
+static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
     const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& code, TString& error)
@@ -678,44 +885,9 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             }
         }
 
-        for (const auto &alter : req->alter_columns()) {
-            auto column = desc->AddColumns();
-            column->SetName(alter.name());
-
-            if (alter.Hasnot_null()) {
-                column->SetNotNull(alter.Getnot_null());
-            }
-
-            if (!alter.family().empty()) {
-                column->SetFamilyName(alter.family());
-            }
-
-            if (alter.has_compression()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = "Column Compression is not supported in row tables. Use COLUMN FAMILY.";
+        for (const auto& alter : req->alter_columns()) {
+            if (!FillAlterColumnDescription(alter, desc->AddColumns(), workingDir, code, error)) {
                 return false;
-            }
-
-            switch (alter.default_value_case()) {
-                case Ydb::Table::ColumnMeta::kFromLiteral: {
-                    *column->MutableDefaultFromLiteral() = alter.from_literal();
-                    break;
-                }
-                case Ydb::Table::ColumnMeta::kFromSequence: {
-                    auto fromSequence = column->MutableDefaultFromSequence();
-                    TString sequenceName = alter.from_sequence().name();
-                    if (IsStartWithSlash(sequenceName)) {
-                        *fromSequence = sequenceName;
-                    } else {
-                        *fromSequence = JoinPath({workingDir, sequenceName});
-                    }
-                    break;
-                }
-                case Ydb::Table::ColumnMeta::kEmptyDefault: {
-                    column->SetEmptyDefault(google::protobuf::NullValue());
-                    break;
-                }
-                default: break;
             }
         }
 
@@ -800,10 +972,39 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     return true;
 }
 
-bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
+    const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableModifySchemeImpl(path, req, modifyScheme, profiles, resolvedPathId, code, error);
+}
+
+bool BuildAlterTableModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TTableProfiles& profiles,
+    const TPathId& resolvedPathId,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableModifySchemeImpl(path, req, modifyScheme, profiles, resolvedPathId, code, error);
+}
+
+template <typename TRequest>
+static bool BuildAlterTableModifySchemeImpl(const TRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
     const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     return BuildAlterTableModifyScheme(req->path(), req, modifyScheme, profiles, resolvedPathId, code, error);
+}
+
+bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableModifySchemeImpl(req, modifyScheme, profiles, resolvedPathId, code, error);
+}
+
+bool BuildAlterTableModifyScheme(const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    const TTableProfiles& profiles, const TPathId& resolvedPathId, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableModifySchemeImpl(req, modifyScheme, profiles, resolvedPathId, code, error);
 }
 
 template <typename TColumn>
@@ -989,6 +1190,27 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
 
         if (column.HasColumnFamilyName()) {
             newColumn->set_family(column.GetColumnFamilyName());
+        }
+
+        const auto& compression = column.GetSerializer().GetArrowCompression();
+        if (compression.HasCodec()) {
+            auto* newCompression = newColumn->mutable_compression();
+            switch (compression.GetCodec()) {
+                case NKikimrSchemeOp::ColumnCodecPlain:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+                    break;
+                case NKikimrSchemeOp::ColumnCodecLZ4:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+                    break;
+                case NKikimrSchemeOp::ColumnCodecZSTD:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+                    break;
+                default:
+                    ythrow yexception() << "Unsupported column compression codec: " << static_cast<int>(compression.GetCodec());
+            }
+            if (compression.HasLevel()) {
+                newCompression->set_compression_level(compression.GetLevel());
+            }
         }
 
         if (column.HasDataAccessorConstructor()) {
@@ -1231,6 +1453,41 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
 }
 
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
+    const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    for (const auto& column : in) {
+        auto& description = *out.AddColumns();
+        description.SetName(column.GetName());
+        description.SetType(column.GetType());
+        description.SetNotNull(column.GetNotNull());
+        if (column.GetNotNull() && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = "Not null columns feature is not supported yet";
+            return false;
+        }
+        if (column.HasTypeInfo()) {
+            description.MutableTypeInfo()->CopyFrom(column.GetTypeInfo());
+        }
+        if (column.FamilySize() > 1) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Unsupported number of families";
+            return false;
+        }
+        if (column.FamilySize() && !column.GetFamily(0).empty()) {
+            description.SetFamilyName(column.GetFamily(0));
+        }
+        if (column.HasCompression()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Column Compression is not supported in row tables. Use COLUMN FAMILY.";
+            return false;
+        }
+        FillColumnDefault(column, description);
+    }
+    return true;
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     for (const auto& column : in) {
@@ -1306,47 +1563,77 @@ NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterCol
     return out.MutableAlterSchema()->AddAddColumns();
 }
 
+namespace {
+
+struct TColumnCompressionAlgorithm {
+    ui32 PublicAlgorithm;
+    TStringBuf InternalAlgorithm;
+    NKikimrSchemeOp::EColumnCodec Codec;
+
+    bool Matches(ui32 algorithm) const {
+        return PublicAlgorithm == algorithm;
+    }
+
+    bool Matches(TStringBuf algorithm) const {
+        return InternalAlgorithm == algorithm;
+    }
+};
+
+template <typename TAlgorithm>
+std::optional<NKikimrSchemeOp::EColumnCodec> GetColumnCompressionCodec(TAlgorithm algorithm) {
+    static constexpr TColumnCompressionAlgorithm algorithms[] = {
+        {Ydb::Table::ColumnCompression::ALGORITHM_OFF, "off", NKikimrSchemeOp::ColumnCodecPlain},
+        {Ydb::Table::ColumnCompression::ALGORITHM_LZ4, "lz4", NKikimrSchemeOp::ColumnCodecLZ4},
+        {Ydb::Table::ColumnCompression::ALGORITHM_ZSTD, "zstd", NKikimrSchemeOp::ColumnCodecZSTD},
+    };
+    for (const auto& entry : algorithms) {
+        if (entry.Matches(algorithm)) {
+            return entry.Codec;
+        }
+    }
+    return std::nullopt;
+}
+
+template <class TColumnDesc, typename TAlgorithm>
+bool FillColumnCompressionSettings(TColumnDesc* to, bool hasAlgorithm, TAlgorithm algorithm,
+    std::optional<i64> level, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    auto* serializer = to->MutableSerializer();
+    if (hasAlgorithm) {
+        serializer->SetClassName("ARROW_SERIALIZER");
+        auto* arrowCompression = serializer->MutableArrowCompression();
+        const auto codec = GetColumnCompressionCodec(algorithm);
+        if (!codec) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unsupported compression algorithm " << algorithm << " in compression settings";
+            return false;
+        }
+        arrowCompression->SetCodec(*codec);
+    }
+    if (level) {
+        if (!hasAlgorithm) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Compression level specified without an algorithm";
+            return false;
+        }
+        serializer->MutableArrowCompression()->SetLevel(*level);
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 template <class TColumnDesc>
 bool FillColumnCompression(
     const Ydb::Table::ColumnMeta& from, TColumnDesc* to, Ydb::StatusIds::StatusCode& status, TString& error) {
 
-    if (from.has_compression()) {
-        const auto fromCompression = from.compression();
-        auto toSerializer = to->MutableSerializer();
-
-        if (fromCompression.has_algorithm()) {
-            toSerializer->SetClassName("ARROW_SERIALIZER");
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            switch (fromCompression.algorithm()) {
-                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
-                    break;
-                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
-                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
-                    break;
-
-                default:
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.algorithm() << " in compression settings";
-                    return false;
-            }
-        }
-
-        if (fromCompression.has_compression_level()) {
-            if (!fromCompression.has_algorithm()) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Compression level specified without an algorithm";
-                return false;
-            }
-
-            auto arrowCompression = toSerializer->MutableArrowCompression();
-            arrowCompression->SetLevel(fromCompression.compression_level());
-        }
+    if (!from.has_compression()) {
+        return true;
     }
-    return true;
+    const auto& compression = from.compression();
+    return FillColumnCompressionSettings(to, compression.has_algorithm(), ui32(compression.algorithm()),
+        compression.has_compression_level() ? std::optional<i64>(compression.compression_level()) : std::nullopt,
+        status, error);
 }
 
 template <typename TColumnTable>
@@ -1479,9 +1766,159 @@ bool FillColumnFamily(
     return true;
 }
 
-bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
-    NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error) {
-    if (req->metrics_settings_action_case() != Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET) {
+template <typename TColumnDesc>
+static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
+    TColumnDesc* alterColumn, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    alterColumn->SetName(alter.Getname());
+
+    if (alter.has_not_null()) {
+        alterColumn->SetNotNull(alter.not_null());
+    }
+
+    if (!alter.family().empty()) {
+        alterColumn->SetColumnFamilyName(alter.family());
+    }
+
+    if (alter.has_compression()) {
+        if (!FillColumnCompression(alter, alterColumn, status, error)) {
+            return false;
+        }
+    }
+
+    if (alter.encoding_size() > 0) {
+        if (alter.encoding_size() != 1) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = TStringBuilder() << "Several encodings are not yet supported for column: " << alter.Getname();
+            return false;
+        }
+
+        switch (alter.encoding(0).encoding_settings_case()) {
+            case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
+                alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                alterColumn->MutableDataAccessorConstructor()->MutablePlain();
+                break;
+            case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
+                if (!AppData()->FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = TStringBuilder() << "Dictionary encoding is not enabled for column: " << alter.Getname();
+                    return false;
+                }
+                alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+                alterColumn->MutableDataAccessorConstructor()->MutableDictionary();
+                break;
+            case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
+                alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+                break;
+            default:
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = TStringBuilder() << "Unsupported encoding for column: " << alter.Getname();
+                return false;
+
+        }
+    }
+    return true;
+}
+
+template <typename TColumnDesc>
+static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto& column,
+    TColumnDesc* description, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    description->SetName(column.GetName());
+    if (column.HasNotNull()) {
+        description->SetNotNull(column.GetNotNull());
+    }
+    if (column.FamilySize() > 1) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Unsupported number of families";
+        return false;
+    }
+    if (column.FamilySize() && !column.GetFamily(0).empty()) {
+        description->SetColumnFamilyName(column.GetFamily(0));
+    }
+    if (column.HasCompression()) {
+        const auto& compression = column.GetCompression();
+        if (!FillColumnCompressionSettings(description, compression.HasAlgorithm(), TStringBuf(compression.GetAlgorithm()),
+            compression.HasLevel() ? std::optional<i64>(compression.GetLevel()) : std::nullopt, status, error))
+        {
+            return false;
+        }
+    }
+    using TColumn = NKikimrKqp::TKqpColumnMetadataProto;
+    switch (column.GetDefaultKind()) {
+        case TColumn::DEFAULT_KIND_LITERAL:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Default values are not supported in column tables";
+            return false;
+        case TColumn::DEFAULT_KIND_SEQUENCE:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Default sequences are not supported in column tables";
+            return false;
+        case TColumn::DEFAULT_KIND_EXPRESSION:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Generated columns are not supported in column tables";
+            return false;
+        case TColumn::DEFAULT_KIND_UNSPECIFIED:
+        case TColumn::DEFAULT_KIND_NULL:
+            break;
+    }
+    if (column.EncodingSize()) {
+        if (column.EncodingSize() != 1) {
+            status = Ydb::StatusIds::UNSUPPORTED;
+            error = TStringBuilder() << "Several encodings are not yet supported for column: " << column.GetName();
+            return false;
+        }
+        auto& accessor = *description->MutableDataAccessorConstructor();
+        switch (column.GetEncoding(0).GetImplementationCase()) {
+            case NKikimrKqp::TEncoding::kPlain:
+                accessor.SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+                accessor.MutablePlain();
+                break;
+            case NKikimrKqp::TEncoding::kDictionary:
+                if (!AppData()->FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                    status = Ydb::StatusIds::UNSUPPORTED;
+                    error = TStringBuilder() << "Dictionary encoding is not enabled for column: " << column.GetName();
+                    return false;
+                }
+                accessor.SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+                accessor.MutableDictionary();
+                break;
+            case NKikimrKqp::TEncoding::IMPLEMENTATION_NOT_SET:
+                accessor.SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+                break;
+        }
+    }
+    return true;
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out,
+    const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    for (const auto& column : in) {
+        if (column.GetTypeId() == NScheme::NTypeIds::Pg) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Unsupported column type for column: " + column.GetName();
+            return false;
+        }
+        auto& description = *GetAddColumn(out);
+        description.SetType(column.GetType());
+        description.SetNotNull(column.GetNotNull());
+        if (column.HasTypeInfo()) {
+            description.MutableTypeInfo()->CopyFrom(column.GetTypeInfo());
+        }
+        if (!FillAlterColumnDescription(column, &description, status, error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <typename TRequest>
+static bool BuildAlterColumnTableModifySchemeImpl(const TString& path, const TRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    if (req->metrics_settings_action_case() != TRequest::METRICS_SETTINGS_ACTION_NOT_SET) {
         status = Ydb::StatusIds::BAD_REQUEST;
         error = "Metrics settings are not supported for column tables";
         return false;
@@ -1529,53 +1966,8 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         }
 
         for (const auto& alter : req->alter_columns()) {
-            auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
-            alterColumn->SetName(alter.Getname());
-
-            if (alter.has_not_null()) {
-                alterColumn->SetNotNull(alter.not_null());
-            }
-
-            if (!alter.family().empty()) {
-                alterColumn->SetColumnFamilyName(alter.family());
-            }
-
-            if (alter.has_compression()) {
-                if (!FillColumnCompression(alter, alterColumn, status, error)) {
-                    return false;
-                }
-            }
-
-            if (alter.encoding_size() > 0) {
-                if (alter.encoding_size() != 1) {
-                    status = Ydb::StatusIds::UNSUPPORTED;
-                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << alter.Getname();
-                    return false;
-                }
-
-                switch (alter.encoding(0).encoding_settings_case()) {
-                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
-                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
-                        alterColumn->MutableDataAccessorConstructor()->MutablePlain();
-                        break;
-                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
-                        if (!AppData()->FeatureFlags.GetEnableCsDictionaryEncoding()) {
-                            status = Ydb::StatusIds::UNSUPPORTED;
-                            error = TStringBuilder() << "Dictionary encoding is not enabled for column: " << alter.Getname();
-                            return false;
-                        }
-                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
-                        alterColumn->MutableDataAccessorConstructor()->MutableDictionary();
-                        break;
-                    case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
-                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
-                        break;
-                    default:
-                        status = Ydb::StatusIds::UNSUPPORTED;
-                        error = TStringBuilder() << "Unsupported encoding for column: " << alter.Getname();
-                        return false;
-
-                }
+            if (!FillAlterColumnDescription(alter, alterColumnTable->MutableAlterSchema()->AddAlterColumns(), status, error)) {
+                return false;
             }
         }
 
@@ -1786,6 +2178,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         alterColumnTable->SetName(name);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
         alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
+    } else if (OpType == EAlterOperationKind::SetColumnConstraint) {
+        status = Ydb::StatusIds::UNSUPPORTED;
+        error = "SET NOT NULL is not supported for column tables";
+        return false;
     } else if (OpType == EAlterOperationKind::Compact) {
         status = Ydb::StatusIds::INTERNAL_ERROR;
         error = "Compact operation must be handled by PrepareAlterColumnTable, not BuildAlterColumnTableModifyScheme";
@@ -1795,9 +2191,35 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
     return true;
 }
 
-bool BuildAlterColumnTableModifyScheme(
-    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error) {
+bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    return BuildAlterColumnTableModifySchemeImpl(path, req, modifyScheme, alteredTable, status, error);
+}
+
+bool BuildAlterColumnTableModifyScheme(const TString& path, const NKikimrKqp::TKqpAlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    return BuildAlterColumnTableModifySchemeImpl(path, req, modifyScheme, alteredTable, status, error);
+}
+
+template <typename TRequest>
+static bool BuildAlterColumnTableModifySchemeImpl(
+    const TRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error)
+{
     return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, alteredTable, code, error);
+}
+
+bool BuildAlterColumnTableModifyScheme(
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterColumnTableModifySchemeImpl(req, modifyScheme, alteredTable, code, error);
+}
+
+bool BuildAlterColumnTableModifyScheme(
+    const NKikimrKqp::TKqpAlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterColumnTableModifySchemeImpl(req, modifyScheme, alteredTable, code, error);
 }
 
 template <typename TYdbProto>

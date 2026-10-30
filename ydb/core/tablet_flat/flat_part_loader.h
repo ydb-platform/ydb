@@ -37,8 +37,9 @@ namespace NTable {
         };
 
         struct TLoaderEnv : public IPages {
-            TLoaderEnv(TIntrusivePtr<TPageCollection> pageCollection)
+            TLoaderEnv(TIntrusivePtr<TPageCollection> pageCollection, TPartSlots slots)
                 : PageCollection(std::move(pageCollection))
+                , Slots(slots)
             {
             }
 
@@ -61,7 +62,21 @@ namespace NTable {
             const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
             {
                 Y_ENSURE(part == Part, "Unsupported part");
-                Y_ENSURE(groupId.Index == 0, "Unsupported column group");
+                return TryGetSlotPage(Slots.DataSlot(groupId), location);
+            }
+
+            const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
+            {
+                Y_ENSURE(part == Part, "Unsupported part");
+                return TryGetSlotPage(Slots.IndexSlot(groupId), location);
+            }
+
+            /**
+             * Loads a page of the page collection, only the descriptor page collection is supported
+             */
+            const TSharedData* TryGetSlotPage(ui32 slot, const TPageLocation& location)
+            {
+                Y_ENSURE(slot == Slots.DescriptorSlot(), "Unsupported page collection " << slot);
 
                 auto savedPage = SavedPages.find(location.Offset);
 
@@ -134,6 +149,7 @@ namespace NTable {
 
             const TPart* Part = nullptr;
             TIntrusivePtr<TPageCollection> PageCollection;
+            const TPartSlots Slots;
             THashMap<TPageOffset, TSharedData> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
             // Dedup by offset — keep Size/Type for the fetch request
@@ -249,6 +265,11 @@ namespace NTable {
         }
 
     private:
+        TPartSlots GetSlots() const noexcept
+        {
+            return TPartSlots(Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()));
+        }
+
         bool HasBasics() const noexcept
         {
             return SchemeId != Max<TPageId>() && 

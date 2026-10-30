@@ -13,6 +13,7 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
 NNodes::TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteMapJoinWithMapCore(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteBlockHashJoin(const NNodes::TExprBase& node, TExprContext& ctx);
+NNodes::TExprBase DqPeepholeChooseHashJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 
 NNodes::TExprBase DqPeepholeRewriteScalarHashJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExprContext& ctx);

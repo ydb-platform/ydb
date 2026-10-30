@@ -1,3 +1,10 @@
+$input = [
+    <|TestField: Just(@@{"Name":"n1"}@@)|>,
+    <|TestField: Just(@@{"Name":"n1","a":"a1"}@@)|>,
+    <|TestField: Just(@@{"Name":"n1","test":{"Name":"n2","a":"a2"}}@@)|>,
+    <|TestField: Just(@@{"Name":"n1","test":{"Name":"n2","test":{"Name":"n3"}}}@@)|>,
+];
+
 /*
 syntax='proto3';
 
@@ -78,5 +85,4 @@ SELECT
     $udfParseSep(TestField),
     $udfSerializeSep($udfParseSep(TestField)),
     Ensure("Success", StablePickle($udfParseSep(TestField)) == StablePickle($udfParseSep($udfSerializeSep($udfParseSep(TestField)))), "Fail"),
-FROM plato.Input;
-
+FROM AS_TABLE($input);

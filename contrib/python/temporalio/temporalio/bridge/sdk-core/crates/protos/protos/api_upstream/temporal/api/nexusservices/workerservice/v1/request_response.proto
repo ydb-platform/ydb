@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package temporal.api.nexusservices.workerservice.v1;
+
+option go_package = "go.temporal.io/api/nexusservices/workerservice/v1;workerservice";
+option java_package = "io.temporal.api.nexusservices.workerservice.v1";
+option java_multiple_files = true;
+option java_outer_classname = "RequestResponseProto";
+option ruby_package = "Temporalio::Api::Nexusservices::Workerservice::V1";
+option csharp_namespace = "Temporalio.Api.Nexusservices.Workerservice.V1";
+
+import "temporal/api/worker/v1/message.proto";
+
+// (--
+// Internal Nexus service for server-to-worker communication.
+// --)
+
+// Request payload for the "ExecuteCommands" Nexus operation.
+message ExecuteCommandsRequest {
+    repeated temporal.api.worker.v1.WorkerCommand commands = 1;
+}
+
+// Response payload for the "ExecuteCommands" Nexus operation.
+// The results list must be 1:1 with the commands list in the request (same size and order).
+message ExecuteCommandsResponse {
+    repeated temporal.api.worker.v1.WorkerCommandResult results = 1;
+}

@@ -7,7 +7,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_history_cutter.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/util/backoff.h>
 
 namespace NKikimr {

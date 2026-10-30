@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         ExecSchemeQuery(RejectClassifierDdl("hp_direct_topic", "/Root/test_topic"));
 
-        WaitForClassifierPropagation();
+        WaitForClassifierPropagation("reject");
 
         ExecQuery(R"(
             SELECT * FROM `/Root/test_topic` WITH (
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
                 FORMAT = "json_each_row",
                 SCHEMA = (key String NOT NULL, value String NOT NULL)
             ) LIMIT 1;
-        )", NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR), nullptr, TDuration::Seconds(30));
     }
 
     // KindCdcStream — changefeed on a local table. Same proto shape as a
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         ExecSchemeQuery(RejectClassifierDdl("hp_cdc", "/Root/t_cdc/cf"));
 
-        WaitForClassifierPropagation();
+        WaitForClassifierPropagation("reject");
 
         ExecSchemeQuery(R"(
             CREATE TABLE t_cdc (
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
                 FORMAT = "json_each_row",
                 SCHEMA = (key String NOT NULL, value String NOT NULL)
             ) LIMIT 1;
-        )", NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR), nullptr, TDuration::Seconds(30));
     }
 
     // KindExternalDataSource — gate by the local EDS path.
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         ExecSchemeQuery(RejectClassifierDdl("hp_eds_local", "/Root/eds"));
 
-        WaitForClassifierPropagation();
+        WaitForClassifierPropagation("reject");
 
         ExecSchemeQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE eds WITH (
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
                 FORMAT = "json_each_row",
                 SCHEMA = (key String NOT NULL, value String NOT NULL)
             ) LIMIT 1;
-        )", "topic"_a = topicName), NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", "topic"_a = topicName), NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR), nullptr, TDuration::Seconds(30));
     }
 
     // KindTopic — via EDS. Gate by the remote topic name (bare name that only
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         // by TDqPqTopicSource, so the regex is anchored on `/<topic>`.
         ExecSchemeQuery(RejectClassifierDdl("hp_remote_name", "/remote_by_name_topic"));
 
-        WaitForClassifierPropagation();
+        WaitForClassifierPropagation("reject");
 
         ExecSchemeQuery(fmt::format(R"(
             CREATE EXTERNAL DATA SOURCE eds WITH (
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
                 FORMAT = "json_each_row",
                 SCHEMA = (key String NOT NULL, value String NOT NULL)
             ) LIMIT 1;
-        )", "topic"_a = topicName), NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", "topic"_a = topicName), NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR), nullptr, TDuration::Seconds(30));
     }
 
     // KindExternalTable — External Table on top of an ObjectStorage EDS.
@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         ExecSchemeQuery(RejectClassifierDdl("hp_et", "/Root/et_s3"));
 
-        WaitForClassifierPropagation();
+        WaitForClassifierPropagation("reject");
 
         ExecSchemeQuery(R"(
             CREATE EXTERNAL DATA SOURCE eds_s3 WITH (
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         ExecQuery(R"(
             SELECT * FROM et_s3 LIMIT 1;
-        )", NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR), nullptr, TDuration::Seconds(30));
     }
 }
 

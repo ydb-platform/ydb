@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
 
         auto info = TIndexInfo::BuildFromProto(1, proto, storages, cache);
         UNIT_ASSERT(info);
-        return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*info)), TSnapshot(1, 1));
+        return std::make_shared<TSnapshotSchema>(cache->GetOrInsertIndexInfo(std::move(*info)), TSnapshot(1, 1));
     }
 
     // Render each stored BinaryJson document as text. For the corrupt portion this will trigger rendering

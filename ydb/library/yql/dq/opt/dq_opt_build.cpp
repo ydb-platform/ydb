@@ -910,12 +910,13 @@ bool CanRebuildForWideBlockChannelOutput(bool forceBlocks, const TDqOutput& outp
 
 TDqPhyStage RebuildStageOutputAsWideBlock(const TDqPhyStage& stage, TExprContext& ctx)
 {
+    const TCoLambda program(ctx.DeepCopyLambda(stage.Program().Ref()));
     return Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Program()
-            .Args(stage.Program().Args())
+            .Args(program.Args())
             .Body<TCoWideToBlocks>()
-                .Input(stage.Program().Body())
+                .Input(program.Body())
             .Build()
         .Build()
         .Done();

@@ -20,6 +20,7 @@
 #include <chrono>
 #include <future>
 #include <thread>
+#include <tuple>
 
 using namespace NYdb;
 
@@ -1030,4 +1031,32 @@ TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
     proto.set_object_key_prefix("previous");
     TTtlEvictToExternalStorageAction("/Root/eds").SerializeTo(proto);
     EXPECT_FALSE(proto.has_object_key_prefix());
+}
+
+TEST(VectorIndexSettings, ReducedPrecisionRoundTrip) {
+    using TSettings = NYdb::NTable::TVectorIndexSettings;
+    for (const auto& [type, protoType, name] : {
+             std::tuple{TSettings::EVectorType::Uint4, Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4, "uint4"},
+             std::tuple{TSettings::EVectorType::Int4, Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4, "int4"}}) {
+        const TSettings original{TSettings::EMetric::Euclidean, type, 1536};
+        Ydb::Table::VectorIndexSettings proto;
+        original.SerializeTo(proto);
+        EXPECT_EQ(proto.vector_type(), protoType);
+        EXPECT_EQ(proto.vector_dimension(), 1536);
+        EXPECT_EQ(proto.metric(), Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+        const auto restored = TSettings::FromProto(proto);
+        EXPECT_EQ(restored.VectorType, type);
+        EXPECT_EQ(restored.VectorDimension, original.VectorDimension);
+        EXPECT_EQ(restored.Metric, original.Metric);
+        EXPECT_EQ(ToString(type), name);
+
+        NYdb::NTable::TKMeansTreeSettings tree{original, 8, 3};
+        Ydb::Table::KMeansTreeSettings treeProto;
+        tree.SerializeTo(treeProto);
+        const auto restoredTree = NYdb::NTable::TKMeansTreeSettings::FromProto(treeProto);
+        EXPECT_EQ(restoredTree.Settings.VectorType, type);
+        EXPECT_EQ(restoredTree.Settings.VectorDimension, 1536);
+        EXPECT_EQ(restoredTree.Clusters, 8);
+        EXPECT_EQ(restoredTree.Levels, 3);
+    }
 }

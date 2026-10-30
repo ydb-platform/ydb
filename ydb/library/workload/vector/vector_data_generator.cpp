@@ -39,8 +39,27 @@ class TDataGeneratorWrapper final: public IBulkDataGenerator {
 private:
     const std::shared_ptr<IBulkDataGenerator> InnerDataGenerator;
     const TString EmbeddingColumnName;
+    const NVector::TVectorOpts& VectorOpts;
 
 private:
+    template <typename TProducer>
+    TString SerializeEmbedding(TProducer&& produce) const {
+        const auto encode = [&]<typename T>() {
+            TStringBuilder buffer;
+            NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
+            produce([&](float value) { serializer.HandleElement(value); });
+            serializer.Finish();
+            return TString(buffer);
+        };
+        if (VectorOpts.VectorType == "uint4") {
+            return encode.template operator()<TUint4>();
+        }
+        if (VectorOpts.VectorType == "int4") {
+            return encode.template operator()<TInt4>();
+        }
+        return encode.template operator()<float>();
+    }
+
     static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
         arrow::ipc::DictionaryMemo dictionary;
 
@@ -127,14 +146,13 @@ private:
             for (int64_t row = 0; row < batch->num_rows(); ++row) {
                 const auto embeddingFloatList = std::static_pointer_cast<arrow::FloatArray>(embeddingListColumn->value_slice(row));
 
-                TStringBuilder buffer;
-                NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
-                for (int64_t i = 0; i < embeddingFloatList->length(); ++i) {
-                    serializer.HandleElement(embeddingFloatList->Value(i));
-                }
-                serializer.Finish();
+                const TString buffer = SerializeEmbedding([&](auto&& handle) {
+                    for (int64_t i = 0; i < embeddingFloatList->length(); ++i) {
+                        handle(embeddingFloatList->Value(i));
+                    }
+                });
 
-                if (const auto status = newEmbeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
+                if (const auto status = newEmbeddingsBuilder.Append(buffer.data(), static_cast<i32>(buffer.size())); !status.ok()) {
                     ythrow yexception() << status.ToString();
                 }
             }
@@ -192,21 +210,20 @@ private:
             buffer.SkipPrefix("[");
             buffer.ChopSuffix("]");
 
-            TStringBuilder newEmbeddingBuilder;
             const auto splitter = StringSplitter(buffer.begin(), buffer.end()).SplitByFunc([](char c) {
                 return c == ',' || std::isspace(c);
             }).SkipEmpty();
-            NKnnVectorSerialization::TSerializer<float> serializer(&newEmbeddingBuilder.Out);
-            for (auto it = splitter.begin(); it != splitter.end(); ++it) {
-                float value;
-                if (!TryFromString(it->Token(), value)) {
-                    ythrow yexception() << "Cannot parse float from embedding element '" << it->Token() << "'";
+            const TString newEmbedding = SerializeEmbedding([&](auto&& handle) {
+                for (auto it = splitter.begin(); it != splitter.end(); ++it) {
+                    float value;
+                    if (!TryFromString(it->Token(), value)) {
+                        ythrow yexception() << "Cannot parse float from embedding element '" << it->Token() << "'";
+                    }
+                    handle(value);
                 }
-                serializer.HandleElement(value);
-            }
-            serializer.Finish();
+            });
 
-            if (const auto status = newEmbeddingsBuilder.Append(newEmbeddingBuilder.MutRef()); !status.ok()) {
+            if (const auto status = newEmbeddingsBuilder.Append(newEmbedding.data(), static_cast<i32>(newEmbedding.size())); !status.ok()) {
                 ythrow yexception() << status.ToString();
             }
         }
@@ -237,10 +254,11 @@ private:
     }
 
 public:
-    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName)
+    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName, const NVector::TVectorOpts& vectorOpts)
         : IBulkDataGenerator(innerDataGenerator->GetName(), innerDataGenerator->GetSize())
         , InnerDataGenerator(innerDataGenerator)
         , EmbeddingColumnName(embeddingColumnName)
+        , VectorOpts(vectorOpts)
     {}
 
     virtual TDataPortions GenerateDataPortion() override {
@@ -276,6 +294,9 @@ private:
         for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
             if constexpr (std::is_same_v<T, float> || std::is_same_v<T, TFloat16> || std::is_same_v<T, TBFloat16>) {
                 serializer.HandleElement(static_cast<T>(Distribution(RandomGenerator) * 2 - 1));
+            } else if constexpr (NVectorDistance::IsInt4<T>) {
+                std::uniform_int_distribution<int> integerDistribution(T::MinValue, T::MaxValue);
+                serializer.HandleElement(T(integerDistribution(RandomGenerator)));
             } else if constexpr (std::is_same<T, uint8_t>::value) {
                 serializer.HandleElement(Distribution(RandomGenerator) * (UINT8_MAX + 1));
             } else if constexpr (std::is_same<T, int8_t>::value) {
@@ -342,6 +363,10 @@ public:
                 generateEmbedding = [this]() { return GenerateEmbedding<TFloat16>(); };
             } else if (VectorOpts.VectorType == "bfloat16") {
                 generateEmbedding = [this]() { return GenerateEmbedding<TBFloat16>(); };
+            } else if (VectorOpts.VectorType == "uint4") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TUint4>(); };
+            } else if (VectorOpts.VectorType == "int4") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TInt4>(); };
             } else if (VectorOpts.VectorType == "uint8") {
                 generateEmbedding = [this]() { return GenerateEmbedding<uint8_t>(); };
             } else if (VectorOpts.VectorType == "int8") {
@@ -551,7 +576,7 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
                     VectorParams.GetColumns(),
                     TDataGenerator::EPortionSizeUnit::Line
                 );
-                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName));
+                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName, VectorParams.VectorOpts));
             }
         }
         return result;
@@ -573,7 +598,7 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
     );
 
     return {
-        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName)
+        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName, VectorParams.VectorOpts)
     };
 }
 

@@ -36,6 +36,20 @@ using TUint8Vector = TTagged<const char*, TagUint8Vector>;
 static constexpr const char TagBitVector[] = "BitVector";
 using TBitVector = TTagged<const char*, TagBitVector>;
 
+static constexpr const char TagUint4Vector[] = "Uint4Vector";
+using TUint4Vector = TTagged<const char*, TagUint4Vector>;
+static constexpr const char TagInt4Vector[] = "Int4Vector";
+using TInt4Vector = TTagged<const char*, TagInt4Vector>;
+
+// Saturating conversion accepts the corresponding byte-sized integer lists.
+SIMPLE_STRICT_UDF(TToBinaryStringUint4, TUint4Vector(TAutoMap<TListType<ui8>>)) {
+    return TKnnVectorSerializer<TUint4, ui8>::Serialize(valueBuilder, args[0]);
+}
+
+SIMPLE_STRICT_UDF(TToBinaryStringInt4, TInt4Vector(TAutoMap<TListType<i8>>)) {
+    return TKnnVectorSerializer<TInt4, i8>::Serialize(valueBuilder, args[0]);
+}
+
 SIMPLE_STRICT_UDF(TToBinaryStringFloat, TFloatVector(TAutoMap<TListType<float>>)) {
     return TKnnVectorSerializer<float>::Serialize(valueBuilder, args[0]);
 }
@@ -214,7 +228,11 @@ private:
 
 class TFloatFromBinaryString: public TMultiSignatureBase<TFloatFromBinaryString> {
 public:
-    using TMultiSignatureBase::TMultiSignatureBase;
+    TFloatFromBinaryString(IFunctionTypeInfoBuilder& builder, bool optionalResult)
+        : TMultiSignatureBase(builder)
+        , OptionalResult_(optionalResult)
+    {
+    }
 
     static const TStringRef& Name() {
         static auto name = TStringRef::Of("FloatFromBinaryString");
@@ -222,7 +240,11 @@ public:
     }
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
-        return TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
+        auto result = TKnnSerializerFacade::Deserialize(valueBuilder, args[0].AsStringRef());
+        if (!result && !OptionalResult_) {
+            return valueBuilder->NewEmptyList().Release();
+        }
+        return result;
     }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -244,9 +266,9 @@ public:
 
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
-        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
+        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
             TStringBuilder sb;
-            sb << "A result from 'ToBinaryString[Float|Float16|BFloat16|Int8|Uint8|Bit]' is expected as an argument but got '";
+            sb << "A result from 'ToBinaryString[Float|Float16|BFloat16|Uint4|Int4|Int8|Uint8|Bit]' is expected as an argument but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "'";
             builder.SetError(std::move(sb));
@@ -255,17 +277,21 @@ public:
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        if (ValidTag(argTag, {TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0)) {
+        const bool optionalResult = !(ValidTag(argTag, {TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0));
+        if (!optionalResult) {
             builder.Returns<TListType<float>>().IsStrict();
         } else {
             builder.Returns<TOptional<TListType<float>>>().IsStrict();
         }
 
         if (!typesOnly) {
-            builder.Implementation(new TFloatFromBinaryString(builder));
+            builder.Implementation(new TFloatFromBinaryString(builder, optionalResult));
         }
         return true;
     }
+
+private:
+    const bool OptionalResult_;
 };
 
 template <typename Derived>
@@ -297,10 +323,10 @@ public:
         auto arg1Type = argsTuple.GetElementType(1);
         auto arg1Tag = Base::GetArg(*typeInfoHelper, arg1Type, builder);
 
-        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
-            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
+        if (!Base::ValidTag(arg0Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector}) ||
+            !Base::ValidTag(arg1Tag, {TagStoredVector, TagFloatVector, TagFloat16Vector, TagBFloat16Vector, TagUint4Vector, TagInt4Vector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
             TStringBuilder sb;
-            sb << "Both arguments are expected to be results from 'ToBinaryString[Float|Float16|BFloat16|Int8|Uint8|Bit]' but got '";
+            sb << "Both arguments are expected to be results from 'ToBinaryString[Float|Float16|BFloat16|Uint4|Int4|Int8|Uint8|Bit]' but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "' and '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(1)).Out(sb.Out);
@@ -426,6 +452,8 @@ SIMPLE_MODULE(TKnnModule,
               TToBinaryStringFloat,
               TToBinaryStringFloat16,
               TToBinaryStringBFloat16,
+              TToBinaryStringUint4,
+              TToBinaryStringInt4,
               TToBinaryStringInt8,
               TToBinaryStringUint8,
               TToBinaryStringBit,

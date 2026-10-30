@@ -82,6 +82,8 @@ message VectorIndexSettings {
         VECTOR_TYPE_FLOAT = 1;
         VECTOR_TYPE_FLOAT16 = 5;
         VECTOR_TYPE_BFLOAT16 = 6;
+        VECTOR_TYPE_UINT4 = 9; // Packed unsigned 4-bit coordinates, range [0, 15].
+        VECTOR_TYPE_INT4 = 10; // Packed signed 4-bit two's-complement coordinates, range [-8, 7].
         VECTOR_TYPE_UINT8 = 2;
         VECTOR_TYPE_INT8 = 3;
         VECTOR_TYPE_BIT = 4;

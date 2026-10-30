@@ -1,6 +1,7 @@
 #include <ydb/core/sys_view/show_create/formatters/create_table_formatter.h>
 
 #include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -134,6 +135,27 @@ Y_UNIT_TEST_SUITE(CreateTableFormatter) {
             AssertQueryEqual(disabledFormatter.Format("table", "/Root/table", table, false, {}, {}), inlineQuery);
             AssertQueryEqual(separateFormatter.Format("table", "/Root/table", table, false, {}, {}), separateQuery);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(Int4VectorIndex, Signed) {
+        auto table = MakeTableDescription();
+        auto& index = AddIndex(table, EIndexTypeGlobalVectorKmeansTree);
+        auto* settings = index.MutableVectorIndexKmeansTreeDescription()->MutableSettings()->mutable_settings();
+        settings->set_vector_type(Signed
+            ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4
+            : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4);
+        const TString type = Signed ? "int4" : "uint4";
+        const TString indexQuery = TStringBuilder()
+            << "INDEX `idx` GLOBAL USING vector_kmeans_tree ON (`value`) "
+            << "WITH (distance = cosine, vector_type = '" << type << "', vector_dimension = 8, clusters = 4, levels = 2)";
+        const TString columns = "`key` Uint64, `value` String, `cover` Uint32";
+        TCreateTableFormatter formatter;
+        AssertQueryEqual(formatter.Format("table", "/Root/table", table, false, {}, {}),
+            TStringBuilder() << "CREATE TABLE `table` (" << columns << ", " << indexQuery << ", PRIMARY KEY (`key`));");
+        TCreateTableFormatter separateFormatter(true);
+        AssertQueryEqual(separateFormatter.Format("table", "/Root/table", table, false, {}, {}),
+            TStringBuilder() << "CREATE TABLE `table` (" << columns << ", PRIMARY KEY (`key`));"
+                << "ALTER TABLE `table` ADD " << indexQuery << ";");
     }
 
     Y_UNIT_TEST(MultipleGlobalIndexesInlineByDefault) {

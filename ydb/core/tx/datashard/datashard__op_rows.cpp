@@ -200,12 +200,12 @@ static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvEraseRowsRequest:
 }
 
 template <typename TEvRequest>
-static bool AllowExecuteAtReplicated(TDataShard*, TEvRequest&) {
+static bool AllowExecuteAtReplicated(TEvRequest&) {
     return false;
 }
 
-static bool AllowExecuteAtReplicated(TDataShard* self, TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
-    return self->IsImportingReplica();
+static bool AllowExecuteAtReplicated(TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
+    return true;
 }
 
 template <typename TEvResponse>
@@ -241,7 +241,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
-    if (self->IsReplicated() && !AllowExecuteAtReplicated(self, ev)) {
+    if (self->IsReplicated() && !AllowExecuteAtReplicated(ev)) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);

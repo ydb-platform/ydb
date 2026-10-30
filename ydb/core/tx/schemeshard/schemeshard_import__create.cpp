@@ -506,6 +506,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
+    TDeque<TPathId> PathsToPublish;
 
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
@@ -585,8 +586,11 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TImport::TTxProgress: DoComplete");
+        if (PathsToPublish) {
+            Self->PublishToSchemeBoard(TTxId(), std::move(PathsToPublish), ctx);
+        }
     }
 
 private:
@@ -659,38 +663,41 @@ private:
         return result;
     }
 
-    void FinalizeImport(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
-        auto& item = importInfo.Items.at(itemIdx);
-        Y_ABORT_UNLESS(item.ReplicationConfig);
-        auto config = *item.ReplicationConfig;
-        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-        auto propose = MakeModifySchemeTransaction(Self, txId, importInfo);
-        for (const auto& pathId : GetImportTablePaths(item)) {
-            auto& tx = *propose->Record.AddTransaction();
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            tx.SetInternal(true);
-            pathId.ToProto(tx.MutableAlterTable()->MutablePathId());
-            *tx.MutableAlterTable()->MutableReplicationConfig() = config;
-        }
-        item.SubState = ESubState::Proposed;
-        Send(Self->SelfId(), std::move(propose));
-    }
-
-    bool FinishImport(TImportInfo& importInfo, NIceDb::TNiceDb& db) {
-        // Do not expose IMPORTED until every item, including materialized index
-        // tables, has completed. Failed index builds are fatal for replicas.
-        bool finalizing = false;
+    void FinishImport(TImportInfo& importInfo, NIceDb::TNiceDb& db) {
+        // All items, including materialized index tables, have finished. Commit
+        // their import state together with the completion of the import in SS.
         for (ui32 i : xrange(importInfo.Items.size())) {
             auto& item = importInfo.Items[i];
-            if (item.ReplicationConfig && item.ReplicationConfig->GetImportState()
-                    != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
-                item.State = EState::FinalizeImport;
-                Self->PersistImportItemState(db, importInfo, i);
-                AllocateTxId(importInfo, i);
-                finalizing = true;
+            if (!item.ReplicationConfig) {
+                continue;
             }
+
+            for (const auto& pathId : GetImportTablePaths(item)) {
+                const auto& table = Self->Tables.at(pathId);
+                auto& config = table->MutableReplicationConfig();
+                if (config.GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+                    continue;
+                }
+                config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+                if (pathId.OwnerId == Self->TabletID()) {
+                    db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+                        NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(config.SerializeAsString()));
+                } else {
+                    db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                        NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
+                }
+
+                const auto& path = Self->PathsById.at(pathId);
+                // Publish the metadata change without changing the DataShard schema version.
+                ++path->DirAlterVersion;
+                Self->PersistPathDirAlterVersion(db, path);
+                Self->ClearDescribePathCaches(path);
+                PathsToPublish.push_back(pathId);
+            }
+
+            item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+            Self->PersistImportItemState(db, importInfo, i);
         }
-        return !finalizing;
     }
 
     void CreateTable(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
@@ -1356,7 +1363,6 @@ private:
                     break;
 
                 case EState::DropPlaceholder:
-                case EState::FinalizeImport:
                 case EState::CreateSchemeObject:
                 case EState::Transferring:
                 case EState::BuildIndexes:
@@ -1592,7 +1598,8 @@ private:
         }
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
-        if (AllDone(stateCounts) && FinishImport(*importInfo, db)) {
+        if (AllDone(stateCounts)) {
+            FinishImport(*importInfo, db);
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         }
@@ -1768,10 +1775,6 @@ private:
                 itemIdx = i;
                 break;
             }
-            case EState::FinalizeImport:
-                FinalizeImport(*importInfo, i, txId);
-                itemIdx = i;
-                break;
             case EState::CreateSchemeObject:
                 if (item.PreparedCreationQuery) {
                     ExecutePreparedQuery(txc, importInfo, i, txId);
@@ -1917,7 +1920,7 @@ private:
         }
 
         if (record.GetStatus() == NKikimrScheme::StatusSuccess
-                && (item.State == EState::DropPlaceholder || item.State == EState::FinalizeImport)) {
+                && item.State == EState::DropPlaceholder) {
             CompletedTxId = txId;
             return OnNotifyResult(txc, ctx);
         }
@@ -1933,16 +1936,7 @@ private:
             if (IsIn({ NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists },
                 record.GetStatus()
             )) {
-                if (item.State == EState::FinalizeImport) {
-                    // Recover a final ALTER whose acceptance reply was lost.
-                    for (const auto& pathId : GetImportTablePaths(item)) {
-                        const auto path = TPath::Init(pathId, Self);
-                        if (path.IsResolved() && path.IsUnderOperation()) {
-                            txId = path.Base()->LastTxId;
-                            break;
-                        }
-                    }
-                } else if (item.State == EState::DropPlaceholder && record.GetPathDropTxId()) {
+                if (item.State == EState::DropPlaceholder && record.GetPathDropTxId()) {
                     txId = TTxId(record.GetPathDropTxId());
                 } else if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
@@ -1995,7 +1989,8 @@ private:
         }
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
-        if (AllDone(stateCounts) && FinishImport(*importInfo, db)) {
+        if (AllDone(stateCounts)) {
+            FinishImport(*importInfo, db);
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         }
@@ -2144,21 +2139,6 @@ private:
             AllocateTxId(*importInfo, itemIdx);
             break;
 
-        case EState::FinalizeImport: {
-            const bool imported = AllOf(GetImportTablePaths(item), [&](const TPathId& pathId) {
-                const auto table = Self->Tables.FindPtr(pathId);
-                return table && (*table)->ReplicationConfig().GetImportState()
-                    == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
-            });
-            if (imported) {
-                item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-                item.State = EState::Done;
-            } else {
-                AllocateTxId(*importInfo, itemIdx);
-            }
-            break;
-        }
-
         case EState::CreateSchemeObject:
             if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
@@ -2251,7 +2231,8 @@ private:
         }
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
-        if (AllDone(stateCounts) && FinishImport(*importInfo, db)) {
+        if (AllDone(stateCounts)) {
+            FinishImport(*importInfo, db);
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {

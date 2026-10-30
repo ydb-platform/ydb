@@ -170,7 +170,6 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
         case TImportInfo::EState::GetScheme:
         case TImportInfo::EState::CreateSchemeObject:
         case TImportInfo::EState::DropPlaceholder:
-        case TImportInfo::EState::FinalizeImport:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:

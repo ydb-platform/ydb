@@ -179,6 +179,18 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
     };
     checkRestoredObjects();
 
+    // Import completion is persisted in SchemeShard without a final table ALTER.
+    // Attachment must observe IMPORTED even after SchemeShard restarts.
+    const auto schemeShardId = env.GetPathId("/Root/replica").OwnerId;
+    const auto previousSchemeShard = ResolveTablet(runtime, schemeShardId);
+    env.SendAsync(schemeShardId, new TEvents::TEvPoisonPill());
+    WaitFor([&] {
+        InvalidateTabletResolverCache(runtime, schemeShardId);
+        return ResolveTablet(runtime, schemeShardId) != previousSchemeShard;
+    }, "SchemeShard restart after import");
+    UNIT_ASSERT(checkConfig("/Root/replica", TReplicationConfig::IMPORTED));
+    checkRestoredObjects();
+
     const auto replicationId = env.GetPathId("/Root/replication");
     const auto controllerId = env.GetDescription("/Root/replication").GetPathDescription()
         .GetReplicationDescription().GetControllerId();

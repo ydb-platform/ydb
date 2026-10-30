@@ -467,6 +467,7 @@ namespace NKikimr::NBlobDepot {
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
+                Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromLogoBlobId(msg.Id));
             } else {
                 AssimilatedBlobs.push_back({std::move(key), TAssimilatedBlobInfo::TUpdate{
                     TBlobSeqId::FromLogoBlobId(msg.Id), keep, doNotKeep}});

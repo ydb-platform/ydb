@@ -968,6 +968,9 @@ void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, cons
                 TxProcessor->ProcessTx(CreateTxSetMainYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TDatabaseMetadata& value) {
+                if (ev->Get()->ConsoleCommitContext) {
+                    return FailReplaceConfig(ev->Sender, "Controller Console commits require a main config", ctx);
+                }
                 if (!value.Database || (!request.allow_absent_database() && !Self.HasTenant(*value.Database))) {
                     return FailReplaceConfig(ev->Sender, "Unknown database", ctx);
                 }

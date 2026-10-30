@@ -370,6 +370,7 @@ namespace NKikimr::NBlobDepot {
         class TGroupAssimilator;
 
         void StartGroupAssimilator();
+        void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void OnUpdateDecommitState();
 
         ui32 PerGenerationCounter = 1;

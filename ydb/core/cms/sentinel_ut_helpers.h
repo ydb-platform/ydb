@@ -71,6 +71,31 @@ class TTestEnv: public TCmsTestEnv {
     }
 
 public:
+    void UpdateConfig() {
+        Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateConfig));
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvSentinel::TEvConfigUpdated::EventType);
+        UNIT_ASSERT(DispatchEvents(options));
+    }
+
+    TSet<TPDiskID> GetSentinelPDisks() {
+        auto request = MakeHolder<TEvCms::TEvGetSentinelStateRequest>();
+        request->Record.SetShow(NKikimrCms::TGetSentinelStateRequest::ALL);
+        auto* range = request->Record.AddRanges();
+        range->SetBegin(0);
+        range->SetEnd(Max<ui32>());
+        Send(new IEventHandle(Sentinel, GetSender(), request.Release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* response = GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        TSet<TPDiskID> result;
+        for (const auto& pdisk : response->Record.GetPDisks()) {
+            result.emplace(pdisk.GetId().GetNodeId(), pdisk.GetId().GetDiskId());
+        }
+        return result;
+    }
+
     TActorId GetSentinelActor() const {
         return Sentinel;
     }
@@ -121,7 +146,7 @@ public:
                         NCms::TCms::AddHostState(State->ClusterInfo, *nodeInfo, record, State->ClusterInfo->GetTimestamp());
                     }
                 }
-                Send(ev->Sender, TActorId(), response.Release());
+                Send(ev->Sender, TActorId(), response.Release(), 0, true);
                 return TTestActorRuntime::EEventAction::DROP;
             }
 

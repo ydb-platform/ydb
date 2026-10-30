@@ -1854,7 +1854,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
         runtime.GetAppData().FeatureFlags.SetEnableCdcForFederation(true);
-        runtime.GetAppData().ClusterName = "sas";
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -1865,13 +1864,16 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             }
         )", {NKikimrScheme::StatusPreconditionFailed});
 
+        auto* attributes = runtime.GetAppData().PQConfig.MutableCdcAttributes();
+        attributes->SetDC("sas");
+        attributes->SetFederationAccount("account");
+
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
-              UserAttributes { Key: "_federation_account" Value: "account" }
             }
         )");
         env.TestWaitNotification(runtime, txId);

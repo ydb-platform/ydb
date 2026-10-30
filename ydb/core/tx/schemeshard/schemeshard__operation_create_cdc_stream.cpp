@@ -669,20 +669,16 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
     return false;
 }
 
-constexpr TStringBuf FederationAccountAttribute = "_federation_account";
-
 bool IsFederationCdcEnabled() {
     return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
         && AppData()->FeatureFlags.GetEnableCdcForFederation();
 }
 
-TString FederationAccountFromStream(const NKikimrSchemeOp::TCdcStreamDescription& stream) {
-    for (const auto& attribute : stream.GetUserAttributes()) {
-        if (attribute.GetKey() == FederationAccountAttribute && attribute.HasValue()) {
-            return attribute.GetValue();
-        }
-    }
-    return {};
+bool FederationCdcAttributesFilled() {
+    const auto& pqConfig = AppData()->PQConfig;
+    return pqConfig.HasCdcAttributes()
+        && !pqConfig.GetCdcAttributes().GetDC().empty()
+        && !pqConfig.GetCdcAttributes().GetFederationAccount().empty();
 }
 
 } // anonymous
@@ -749,14 +745,13 @@ void DoCreatePqPart(
     pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
     pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
 
-    // Federation topic identity. DC is the process cluster name, the same local
-    // cluster federation topic create stores in PQTabletConfig.DC. The account
-    // is the changefeed attribute _federation_account: there is no cluster-wide
-    // default. Producer and Topic are left empty so the tablet converter derives them.
+    // Federation topic identity comes from PQConfig.CdcAttributes.
+    // Producer and Topic stay empty so the tablet converter derives them.
     if (IsFederationCdcEnabled()) {
+        const auto& attributes = AppData()->PQConfig.GetCdcAttributes();
         pqConfig.SetLocalDC(true);
-        pqConfig.SetDC(AppData()->ClusterName);
-        pqConfig.SetFederationAccount(FederationAccountFromStream(op.GetStreamDescription()));
+        pqConfig.SetDC(attributes.GetDC());
+        pqConfig.SetFederationAccount(attributes.GetFederationAccount());
     }
 
     auto& partitionConfig = *pqConfig.MutablePartitionConfig();
@@ -1022,16 +1017,11 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& streamDesc = op.GetStreamDescription();
     const auto& streamName = streamDesc.GetName();
 
-    if (IsFederationCdcEnabled()) {
-        if (AppData()->ClusterName.empty()) {
-            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-                << "CDC in federation requires local cluster name")};
-        }
-        if (FederationAccountFromStream(streamDesc).empty()) {
-            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-                << "CDC in federation requires " << FederationAccountAttribute)};
-        }
+    if (IsFederationCdcEnabled() && !FederationCdcAttributesFilled()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "CDC in federation requires PQConfig.CdcAttributes with DC and FederationAccount")};
     }
+
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
     const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);

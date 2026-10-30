@@ -8726,8 +8726,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             const auto indexData = ReadTable(runtime, *shards.begin(), "indexImplTable", {"value"}, {"key", "value"}, "'ExcFrom ");
             // The backup's index data differs from the base table. This proves
             // IMPORT/AUTO actually load it instead of silently rebuilding it.
-            const auto& expected = build ? a : b;
-            NKqp::CompareYson(expected.Data[0].YsonStr, indexData);
+            // CSV follows the backup schema (value, key); MiniKQL returns
+            // struct members by name (key, value).
+            const TString expected = build ? a.Data[0].YsonStr
+                : R"([[[[[["value1"];["b1"]]];%false]]])";
+            NKqp::CompareYson(expected, indexData);
             for (const auto& path : {"/MyRoot/Table", "/MyRoot/Table/by_value/indexImplTable"}) {
                 const auto config = DescribePath(runtime, path).GetPathDescription().GetTable().GetReplicationConfig();
                 // BuildIndex writes into an ordinary private impl table. Its

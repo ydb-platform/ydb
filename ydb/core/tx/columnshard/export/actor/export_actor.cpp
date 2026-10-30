@@ -93,18 +93,13 @@ void TActor::AbortExport(const TString& errorMessage) {
             {"message", errorMessage});
         return;
     }
-    if (Stage == EStage::WaitData) {
-        Counters.OnAckResponse();
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    }
     FinishAbortExport(errorMessage);
 }
 
 void TActor::FinishAbortExport(const TString& errorMessage) {
     ExportSession->Abort(errorMessage);
     ExportSession->MutableCursor().InitNext({}, true);
+    Counters.OnOperationsCancelled();
     KillExporter();
     AbortScanIfKnown(errorMessage);
     Stage = EStage::WaitSaveCursor;
@@ -135,17 +130,8 @@ void TActor::PassAway() {
         {"selfId", SelfId()},
         {"tabletId", TabletId},
         {"stage", StageToString(Stage)});
-    if (Stage == EStage::WaitData) {
-        Counters.OnAckResponse();
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    } else if (Stage == EStage::WaitSaveCursor) {
-        Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
-    }
     KillExporter();
     AbortScanIfKnown("export actor destroyed");
-    Counters.OnActorDead();
     TBase::PassAway();
 }
 

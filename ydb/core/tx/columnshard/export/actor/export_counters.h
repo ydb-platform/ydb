@@ -1,9 +1,13 @@
 
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/inflight_guard.h>
+
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap::NExport {
 
@@ -25,6 +29,12 @@ private:
     NMonitoring::THistogramPtr HistogramWriteDurationMs;
     NMonitoring::THistogramPtr HistogramSaveCursorDurationMs;
 
+    std::optional<NCounters::TInflightGuard> AliveGuard;
+    std::optional<NCounters::TInflightGuard> ReadGuard;
+    std::optional<NCounters::TInflightGuard> WriteGuard;
+    std::optional<NCounters::TInflightGuard> CursorGuard;
+    std::optional<NCounters::TInflightGuard> AckGuard;
+
 public:
     TExportCounters()
         : TBase("ExportActor")
@@ -45,53 +55,56 @@ public:
             TBase::GetHistogram("Export/SaveCursor/DurationMs/Histogram", NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 
-    void OnAckSent() const {
+    void OnAckSent() {
         AckSent->Inc();
-        AckInflight->Inc();
+        AckGuard.emplace(AckInflight);
     }
 
-    void OnAckResponse() const {
-        AckInflight->Dec();
+    void OnAckResponse() {
+        AckGuard.reset();
     }
 
-    void OnReadStarted() const {
-        ReadInflight->Inc();
+    void OnReadStarted() {
+        ReadGuard.emplace(ReadInflight);
     }
 
-    void OnReadFinished(const TDuration duration) const {
-        ReadInflight->Dec();
+    void OnReadFinished(const TDuration duration) {
+        ReadGuard.reset();
         HistogramReadDurationMs->Collect(duration.MilliSeconds());
     }
 
-    void OnWriteStarted() const {
-        WriteInflight->Inc();
+    void OnWriteStarted() {
+        WriteGuard.emplace(WriteInflight);
     }
 
-    void OnWriteFinished(const TDuration duration) const {
-        WriteInflight->Dec();
+    void OnWriteFinished(const TDuration duration) {
+        WriteGuard.reset();
         HistogramWriteDurationMs->Collect(duration.MilliSeconds());
         BatchesWritten->Inc();
     }
 
-    void OnSaveCursorStarted() const {
-        CursorInflight->Inc();
+    void OnSaveCursorStarted() {
+        CursorGuard.emplace(CursorInflight);
     }
 
-    void OnSaveCursorFinished(const TDuration duration) const {
-        CursorInflight->Dec();
+    void OnSaveCursorFinished(const TDuration duration) {
+        CursorGuard.reset();
         HistogramSaveCursorDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnOperationsCancelled() {
+        ReadGuard.reset();
+        WriteGuard.reset();
+        CursorGuard.reset();
+        AckGuard.reset();
     }
 
     void OnError() const {
         ErrorsCount->Inc();
     }
 
-    void OnActorAlive() const {
-        AliveActors->Inc();
-    }
-
-    void OnActorDead() const {
-        AliveActors->Dec();
+    void OnActorAlive() {
+        AliveGuard.emplace(AliveActors);
     }
 };
 

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/yql/dq/actors/compute)
 IF (NOT OS_WINDOWS)
 SRCS(
     dq_async_compute_actor_ut.cpp
+    dq_async_compute_actor_early_finish_ut.cpp
     dq_sync_compute_actor_ut.cpp
 )
 ELSE()

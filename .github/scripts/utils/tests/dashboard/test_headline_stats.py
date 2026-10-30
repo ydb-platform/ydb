@@ -33,8 +33,10 @@ class HeadlineHostStatsTest(unittest.TestCase):
             },
         )
         self.assertEqual(stats["cpu"]["max"], 2.0)
+        self.assertEqual(stats["cpu"]["avg"], 1.5)
         self.assertEqual(stats["cpu_host"]["max"], 50.0)
         self.assertEqual(stats["cpu_host"]["median"], 30.0)
+        self.assertEqual(stats["cpu_host"]["avg"], 30.0)
         self.assertAlmostEqual(stats["cpu_host"]["p95"], 48.0)
         self.assertNotIn("p90", stats["cpu_host"])
         self.assertEqual(stats["ram_host"]["max"], 200.0)

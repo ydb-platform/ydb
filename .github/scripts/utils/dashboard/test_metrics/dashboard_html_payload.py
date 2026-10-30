@@ -56,11 +56,12 @@ def _series_total_values(tracks: dict[str, list[float]]) -> list[float]:
 def _describe_distribution(values: list[float]) -> dict[str, float]:
     vals = [float(v or 0.0) for v in values]
     if not vals:
-        return {"max": 0.0, "p95": 0.0, "median": 0.0, "samples": 0.0}
+        return {"max": 0.0, "p95": 0.0, "median": 0.0, "avg": 0.0, "samples": 0.0}
     return {
         "max": float(max(vals)),
         "p95": _percentile(vals, 0.95),
         "median": _percentile(vals, 0.5),
+        "avg": float(sum(vals) / len(vals)),
         "samples": float(len(vals)),
     }
 

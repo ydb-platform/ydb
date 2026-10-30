@@ -115,15 +115,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-<<<<<<< HEAD
-    if (Stage == EStage::WaitData) {
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, false);
-    }
-=======
     Counters.OnOperationsCancelled();
->>>>>>> fa302c58f32 (cs import counters has been fixed (#56300))
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
     Counters.OnSaveProgressStarted();

@@ -66,13 +66,8 @@ public:
         WriteGuard.emplace(WriteInflight);
     }
 
-<<<<<<< HEAD
-    void OnWriteFinished(const TDuration duration, const bool success) const {
-        WriteInflight->Dec();
-=======
-    void OnWriteFinished(const TDuration duration) {
+    void OnWriteFinished(const TDuration duration, const bool success) {
         WriteGuard.reset();
->>>>>>> fa302c58f32 (cs import counters has been fixed (#56300))
         HistogramWriteDurationMs->Collect(duration.MilliSeconds());
         if (success) {
             BatchesWritten->Inc();

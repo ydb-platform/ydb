@@ -116,8 +116,6 @@ public:
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
-<<<<<<< HEAD
-=======
         if (RestartWorkerNode && Self->HasWorkerSession(WorkerId, *RestartWorkerNode)) {
             Self->StopQueue.emplace(WorkerId, *RestartWorkerNode);
             Self->ScheduleProcessQueues();
@@ -127,32 +125,6 @@ public:
             Self->StopWorkersForMismatch(WorkerId.ReplicationId(), ctx);
             return;
         }
-        if (StopReplicationWorkers) {
-            // The error is durable before stopping the remaining partitions.
-            // IsValidWorker also rejects late/recovered starts in this state.
-            for (auto& [id, worker] : Self->Workers) {
-                if (id.ReplicationId() != WorkerId.ReplicationId()) {
-                    continue;
-                }
-                Self->BootQueue.erase(id);
-                if (!worker.HasSession()) {
-                    continue;
-                }
-                if (id == WorkerId) {
-                    // This worker has already stopped; no acknowledgement will follow.
-                    const auto session = Self->Sessions.find(worker.GetSession());
-                    if (session != Self->Sessions.end()) {
-                        session->second.DetachWorker(id);
-                    }
-                    worker.ClearSession();
-                } else {
-                    Self->StopQueue.emplace(id, worker.GetSession());
-                }
-            }
-            Self->ScheduleProcessQueues();
-        }
-
->>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
         if (RemoveStoppedWorker) {
             const auto worker = Self->Workers.find(WorkerId);
             if (worker != Self->Workers.end() && worker->second.HasSession()) {

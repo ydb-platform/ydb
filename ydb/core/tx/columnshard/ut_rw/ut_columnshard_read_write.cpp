@@ -1915,9 +1915,9 @@ void TestDictionaryDistinctResumedFromLegacyCursor(const TString& readerClassNam
         });
 }
 
-// The first scan is non-dictionary-only - we need it to get a valid mid-portion cursor
-// The resumed scan would be dictionary-only-eligible if not for the cursor position.
-void TestDictionaryDistinctResumedInsidePortion(const TString& readerClassName) {
+// The first scan uses row coordinates and emits an interior cursor.
+// Resumption checks both explicit row-coordinate and unmarked legacy cursors.
+void TestDictionaryDistinctResumedInsidePortion(const TString& readerClassName, const bool legacyRowCursor) {
     // More than one stored chunk is needed for an ordinary scan to emit an interior page cursor.
     constexpr ui64 rowsPerPortion = 30'000;
     TTestBlobOptions blobOptions;
@@ -1937,16 +1937,22 @@ void TestDictionaryDistinctResumedInsidePortion(const TString& readerClassName) 
             const ui64 firstPageRows = interrupted.GetReceivedBatches().front()->num_rows();
             UNIT_ASSERT_C(firstPageRows > 0 && firstPageRows < rowsPerPortion, firstPageRows);
             UNIT_ASSERT_VALUES_EQUAL(cursor.GetColumnShardSimple().GetStartRecordIndex(), firstPageRows);
+            UNIT_ASSERT(!cursor.GetIndexMaybeInDictionaryCoordinates());
 
             NKikimrSSA::TProgram program;
             program.AddCommand()->MutableProjection()->AddColumns()->SetId(messageId);
             program.AddCommand()->MutableDistinct()->MutableKeyColumn()->SetId(messageId);
+            NKikimrKqp::TEvKqpScanCursor resumeCursor = cursor;
+            if (legacyRowCursor) {
+                resumeCursor.ClearIndexMaybeInDictionaryCoordinates();
+                UNIT_ASSERT(resumeCursor.GetIndexMaybeInDictionaryCoordinates());
+            }
             const auto dictionaryOnlyCountBeforeResume = GetDictionaryOnlyOptimizationCount(runtime);
             TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
             resumed.SetReverse(std::nullopt);
-            resumed.SetProgram(program);
+            resumed.SetProgram(legacyRowCursor ? programWithFilter : program);
             resumed.SetReplyColumnIds({ messageId });
-            resumed.SetScanCursor(cursor);
+            resumed.SetScanCursor(resumeCursor);
             resumed.ReadAll();
             UNIT_ASSERT(resumed.IsCorrectlyFinished());
             UNIT_ASSERT_VALUES_EQUAL(resumed.GetRecordsCount(), rowsPerPortion - firstPageRows);
@@ -2905,11 +2911,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(DictionaryDistinctResumedInsidePortion) {
-        TestDictionaryDistinctResumedInsidePortion("TRIVIAL");
+        TestDictionaryDistinctResumedInsidePortion("TRIVIAL", false);
     }
 
     Y_UNIT_TEST(DictionaryDistinctResumedInsidePortionSimpleReader) {
-        TestDictionaryDistinctResumedInsidePortion("SIMPLE");
+        TestDictionaryDistinctResumedInsidePortion("SIMPLE", false);
     }
 
     Y_UNIT_TEST(DictionaryDistinctResumedFromLegacyCursor) {
@@ -2918,6 +2924,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(DictionaryDistinctResumedFromLegacyCursorSimpleReader) {
         TestDictionaryDistinctResumedFromLegacyCursor("SIMPLE");
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedFromLegacyRowCursor) {
+        TestDictionaryDistinctResumedInsidePortion("TRIVIAL", true);
+    }
+
+    Y_UNIT_TEST(DictionaryDistinctResumedFromLegacyRowCursorSimpleReader) {
+        TestDictionaryDistinctResumedInsidePortion("SIMPLE", true);
     }
 
     Y_UNIT_TEST(SysViewLimitDrainsEqualPrefixes) {

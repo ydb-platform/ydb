@@ -23,7 +23,3 @@ PY3_LIBRARY()
     )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)

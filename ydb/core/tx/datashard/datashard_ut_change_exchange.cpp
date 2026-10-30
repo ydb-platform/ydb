@@ -4,6 +4,7 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/ut_common/database_freeze.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
@@ -828,6 +829,48 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);");
         WaitForContent(server, "/Root/Table/by_ikey/indexImplTable",
             "ikey = 10, pkey = 1\nikey = 20, pkey = 2");
+    }
+
+    Y_UNIT_TEST(DatabaseFreezeDrainsAsyncIndexBeforeClosingItsInput) {
+        using namespace NDataShard::NTest;
+        using TStage = NKikimrTxDataShard::TDatabaseFreezeState;
+        TPortManager pm;
+        TServer::TPtr server = new TServer(TServerSettings(pm.GetPort(2134))
+            .SetDomainName("Root").SetUseRealThreads(false).SetEnableDataColumnForIndexTable(true));
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+        const auto [baseShards, tableId] = CreateShardedTable(server, sender, "/Root", "Table", TableWithIndex(SimpleAsyncIndex()));
+        const auto indexShards = GetTableShards(server, sender, "/Root/Table/by_ikey/indexImplTable");
+        const TPathId domain(tableId.PathId.OwnerId, 1);
+        TBlockEvents<TEvChangeExchange::TEvApplyRecords> apply(runtime);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (1, 10);");
+        runtime.WaitFor("pending async index record", [&] { return !apply.empty(); });
+        auto lateApply = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
+        lateApply->Record.CopyFrom(apply.front()->Get()->Record);
+
+        for (const auto shard : {baseShards.at(0), indexShards.at(0)}) {
+            WaitDatabaseFreezeStage(runtime, shard, tableId.PathId.OwnerId, domain, 1, TStage::FENCE_WRITES);
+        }
+        const auto pending = SendDatabaseFreeze(runtime, baseShards.at(0), tableId.PathId.OwnerId,
+            domain, 1, TStage::DRAIN_INDEXES);
+        UNIT_ASSERT(!pending.GetReady());
+        apply.Stop().Unblock();
+        for (const auto stage : {TStage::DRAIN_INDEXES, TStage::DRAIN_CDC}) {
+            for (const auto shard : {baseShards.at(0), indexShards.at(0)}) {
+                WaitDatabaseFreezeStage(runtime, shard, tableId.PathId.OwnerId, domain, 1, stage);
+            }
+        }
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable", "ikey = 10, pkey = 1");
+        runtime.SendToPipe(indexShards.at(0), sender, lateApply.Release(), 0, GetPipeConfigWithRetries());
+        const auto rejected = runtime.GrabEdgeEventRethrow<TEvChangeExchange::TEvStatus>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(rejected->Get()->Record.GetStatus()), ui32(NKikimrChangeExchange::TEvStatus::STATUS_REJECT));
+        UNIT_ASSERT_VALUES_EQUAL(ui32(rejected->Get()->Record.GetReason()), ui32(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE));
+        for (const auto shard : {baseShards.at(0), indexShards.at(0)}) {
+            WaitDatabaseFreezeStage(runtime, shard, tableId.PathId.OwnerId, domain, 2, TStage::OPEN);
+        }
+        ExecSQL(server, sender, "UPSERT INTO `/Root/Table` (pkey, ikey) VALUES (2, 20);");
+        WaitForContent(server, "/Root/Table/by_ikey/indexImplTable", "ikey = 10, pkey = 1\nikey = 20, pkey = 2");
     }
 
     Y_UNIT_TEST(ShouldNotReorderChangesOnRace) {

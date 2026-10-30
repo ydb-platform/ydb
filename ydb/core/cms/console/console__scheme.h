@@ -184,7 +184,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Path, Version, Config>;
     };
 
+    struct DatabaseFreezeOperations : Table<105> {
+        struct Epoch : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<Epoch>;
+        using TColumns = TableColumns<Epoch, State>;
+    };
+
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
+                                 DatabaseFreezeOperations,
                                  RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
                                  YamlConfig, DatabaseYamlConfigs, DecommittedGroups>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,

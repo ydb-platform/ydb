@@ -133,18 +133,22 @@ class TChangeSender {
 
 protected:
     template <typename T>
-    void RemoveRecords(TVector<T>&& records) {
+    void RemoveRecords(TVector<T>&& records, bool delivered = true) {
         TVector<ui64> remove(Reserve(records.size()));
         for (const auto& record : records) {
             remove.push_back(record.Order);
         }
 
-        ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
+        auto* event = new TEvChangeExchange::TEvRemoveRecords(std::move(remove));
+        event->DeliveryConfirmed = delivered;
+        ActorOps->Send(GetChangeServer(), event);
     }
 
     template <>
-    void RemoveRecords(TVector<ui64>&& records) {
-        ActorOps->Send(GetChangeServer(), new TEvChangeExchange::TEvRemoveRecords(std::move(records)));
+    void RemoveRecords(TVector<ui64>&& records, bool delivered) {
+        auto* event = new TEvChangeExchange::TEvRemoveRecords(std::move(records));
+        event->DeliveryConfirmed = delivered;
+        ActorOps->Send(GetChangeServer(), event);
     }
 
     inline TActorId GetChangeServer() const {

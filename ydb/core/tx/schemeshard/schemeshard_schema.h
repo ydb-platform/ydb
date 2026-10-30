@@ -2726,7 +2726,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct DatabaseFreezes : Table<141> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<2, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, State>;
+    };
+
     using TTables = SchemaTables<
+        DatabaseFreezes,
         Paths,
         TxInFlight,
         TxDependencies,

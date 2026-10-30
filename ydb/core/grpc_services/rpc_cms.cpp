@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <type_traits>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -91,6 +92,22 @@ private:
     }
 
     void Handle(TEvConsole::TEvRemoveTenantResponse::TPtr& ev, const TActorContext& ctx) {
+        HandleWithOperationParams(ev, ctx);
+    }
+
+    void Handle(TEvConsole::TEvAlterTenantResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& operation = ev->Get()->Record.GetResponse().operation();
+        if constexpr (std::is_same_v<TCmsResponse, TEvConsole::TEvAlterTenantResponse>) {
+            // Older Console versions ignore an unknown AlterDatabase field.
+            // Their immediate SUCCESS must not masquerade as a completed fence.
+            if (this->GetProtoRequest()->has_freeze() && operation.ready()
+                && operation.status() == Ydb::StatusIds::SUCCESS && operation.id().empty())
+            {
+                this->Request_->RaiseIssue(NYql::TIssue("Console does not support database freeze operations"));
+                this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
+                return Die(ctx);
+            }
+        }
         HandleWithOperationParams(ev, ctx);
     }
 

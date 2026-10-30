@@ -338,6 +338,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto it = Self->ChangeRecordsToRemove.begin();
+        if (Self->IsDatabaseFrozen() && Self->DatabaseFreeze.GetDeliveryLost()) {
+            Self->PersistSys(db, Schema::Sys_DatabaseFreeze, Self->DatabaseFreeze.SerializeAsString());
+        }
         while (RemovedCount < BucketSize && it != Self->ChangeRecordsToRemove.end()) {
             Self->RemoveChangeRecord(db, *it);
 
@@ -359,6 +362,7 @@ public:
             Self->Execute(new TTxRemoveChangeRecords(Self), ctx);
         } else {
             Self->RemoveChangeRecordsInFly = false;
+            Self->UnconfirmedChangeRecordsRemoval = false;
         }
 
         if (ChangeExchangeSplit) {
@@ -446,6 +450,17 @@ void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActor
 
 /// Remove
 void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
+    if (!ev->Get()->DeliveryConfirmed) {
+        for (const auto order : ev->Get()->Records) {
+            if (ChangesQueue.contains(order)) {
+                UnconfirmedChangeRecordsRemoval = true;
+                if (IsDatabaseFrozen()) {
+                    DatabaseFreeze.SetDeliveryLost(true);
+                }
+                break;
+            }
+        }
+    }
     ChangeRecordsToRemove.insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     ScheduleRemoveChangeRecords(ctx);
 }
@@ -470,4 +485,3 @@ void TDataShard::Handle(TEvChangeExchange::TEvSplitAck::TPtr&, const TActorConte
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

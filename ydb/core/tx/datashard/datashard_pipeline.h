@@ -149,7 +149,7 @@ public:
     ui64 OutdatedReadSetStep() const;
     ui64 OutdatedCleanupStep() const;
     ui64 AllowedDataStep() const;
-    ui64 AllowedSchemaStep() const { return LastPlannedTx.Step + 1; }
+    ui64 AllowedSchemaStep() const;
     ui64 VacantSchemaStep() const { return KeepSchemaStep + 1; }
 
     TStepOrder GetLastPlannedTx() const { return LastPlannedTx; }

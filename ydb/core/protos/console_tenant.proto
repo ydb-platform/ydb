@@ -38,6 +38,20 @@ message TAlterTenantResponse {
     optional Ydb.Cms.AlterDatabaseResponse Response = 1;
 }
 
+// Kept separately from create/remove transactions and retained across thaw.
+message TDatabaseFreezeOperation {
+    optional string Path = 1;
+    optional uint64 TenantTxId = 2;
+    optional uint64 Epoch = 3;
+    optional bool Freeze = 4;
+    optional bool Ready = 5;
+    optional uint32 Status = 6;
+    optional string Issue = 7;
+    optional string IdempotencyKey = 8;
+    optional uint64 DomainOwnerId = 9;
+    optional uint64 DomainLocalPathId = 10;
+}
+
 message TListTenantsRequest {
     optional Ydb.Cms.ListDatabasesRequest Request = 1;
     optional bytes UserToken = 2 [(Ydb.sensitive) = true];

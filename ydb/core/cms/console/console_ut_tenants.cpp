@@ -1924,6 +1924,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                               Ydb::StatusIds::UNAUTHORIZED,
                               {{"hdd", 1}}, false);
 
+        for (const bool freeze : {false, true}) {
+            auto request = MakeHolder<TEvConsole::TEvAlterTenantRequest>();
+            request->Record.MutableRequest()->set_path(TENANT1_2_NAME);
+            request->Record.MutableRequest()->set_freeze(freeze);
+            request->Record.SetUserToken(NACLib::TUserToken("user1@builtin", {}).SerializeAsString());
+            runtime.SendToConsole(request.Release());
+            auto response = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAlterTenantResponse>(runtime.Sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetResponse().operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+        }
+
         CheckRemoveTenant(runtime, TENANT1_2_NAME,
                           NACLib::TUserToken("user1@builtin", {}).SerializeAsString(),
                           Ydb::StatusIds::UNAUTHORIZED);

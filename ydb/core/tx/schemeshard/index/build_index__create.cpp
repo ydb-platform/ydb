@@ -65,6 +65,9 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId)) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for index builds");
+        }
         auto subDomainInfo = domainPath.DomainInfo();
         const bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
 

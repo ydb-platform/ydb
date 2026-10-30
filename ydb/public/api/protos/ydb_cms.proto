@@ -250,6 +250,11 @@ message AlterDatabaseRequest {
     ScaleRecommenderPolicies scale_recommender_policies = 13;
     // Storage units to deallocate
     repeated StorageUnits storage_units_to_remove = 14;
+
+    // Freeze row-table writes and wait for outstanding writes and CDC delivery.
+    // false removes the database freeze. Must not be combined with other changes.
+    // ASYNC returns an operation id; SUCCESS means all participating shards applied it.
+    optional bool freeze = 15;
 }
 
 message AlterDatabaseResponse {

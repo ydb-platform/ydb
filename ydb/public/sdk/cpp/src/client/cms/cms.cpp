@@ -268,6 +268,9 @@ void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& requ
 }
 
 void TAlterDatabaseSettings::SerializeTo(Ydb::Cms::AlterDatabaseRequest& request) const {
+    if (Freeze_) {
+        request.set_freeze(*Freeze_);
+    }
     for (const auto& [name, value] : AlterAttributes_) {
         (*request.mutable_alter_attributes())[name] = value;
     }

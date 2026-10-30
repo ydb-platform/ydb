@@ -238,6 +238,7 @@ SRCS(
     schemeshard__state_changed_reply.cpp
     schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
+    schemeshard_database_freeze.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp

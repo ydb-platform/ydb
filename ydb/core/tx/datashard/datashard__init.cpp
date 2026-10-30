@@ -56,6 +56,10 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
 
     try {
         Self->State = TShardState::Unknown;
+        Self->DatabaseFreeze.Clear();
+        Self->DatabaseFreezeAcceptedTxIds.clear();
+        Self->DatabaseFreezeLocalWrites = 0;
+        Self->UnconfirmedChangeRecordsRemoval = false;
         Self->LastLocalTid = Schema::MinLocalTid;
         Self->LastLoanTableTid = 0;
         Self->NextSeqno = 1;
@@ -350,6 +354,16 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     // Reads from Sys table
     LOAD_SYS_UI64(db, Schema::Sys_State, Self->State);
+    {
+        TString data;
+        LOAD_SYS_BYTES(db, Schema::Sys_DatabaseFreeze, data);
+        if (data) {
+            Y_ENSURE(Self->DatabaseFreeze.ParseFromString(data));
+            for (const auto txId : Self->DatabaseFreeze.GetAcceptedTxIds()) {
+                Self->DatabaseFreezeAcceptedTxIds.insert(txId);
+            }
+        }
+    }
     LOAD_SYS_UI64(db, Schema::Sys_LastLocalTid, Self->LastLocalTid);
     LOAD_SYS_UI64(db, Schema::Sys_LastLoanTableTid, Self->LastLoanTableTid);
     LOAD_SYS_UI64(db, Schema::Sys_NextSeqno, Self->NextSeqno);

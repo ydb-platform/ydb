@@ -66,6 +66,8 @@ struct TEvChangeExchange {
 
     struct TEvRemoveRecords: public TEventLocal<TEvRemoveRecords, EvRemoveRecords> {
         TVector<ui64> Records;
+        // Discarding a dropped sender is not a delivery acknowledgement.
+        bool DeliveryConfirmed = true;
 
         explicit TEvRemoveRecords(const TVector<ui64>& records);
         explicit TEvRemoveRecords(TVector<ui64>&& records);

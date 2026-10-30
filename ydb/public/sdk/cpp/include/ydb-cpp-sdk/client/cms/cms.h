@@ -210,6 +210,10 @@ struct TAlterDatabaseSettings : public TOperationRequestSettings<TAlterDatabaseS
 
     // Empty value drops the attribute.
     FLUENT_SETTING(TAttributes, AlterAttributes);
+
+    // Wait for a database row-table write fence and CDC delivery, or remove it.
+    // Cannot be combined with AlterAttributes or other database changes.
+    FLUENT_SETTING_OPTIONAL(bool, Freeze);
 };
 
 class TCmsClient {

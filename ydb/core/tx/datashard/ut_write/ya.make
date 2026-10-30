@@ -28,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_write.cpp
+    datashard_ut_database_freeze.cpp
 )
 
 END()

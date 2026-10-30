@@ -148,40 +148,17 @@ void ApplyMirrorSuffix(TString& modernPath, TStringBuf dc, TStringBuf localDc) {
     }
 }
 
-// Legacy rt3. / short / bare → modern path (via CorrectName / GetTopicPath / ConvertOldTopicName).
+// Short legacy / bare → modern path (via ConvertOldTopicName). rt3.<dc>-- is rejected.
 std::expected<TString, TString> TryParseLegacyToModernPath(
     TStringBuf topic,
     TStringBuf localDc,
     TStringBuf dc
 ) {
-    TStringBuf topicDc = dc;
-
     if (topic.StartsWith("rt3.")) {
-        TStringBuf nameWithoutPrefix = topic;
-        nameWithoutPrefix.SkipPrefix("rt3.");
-        TStringBuf nameDc;
-        TStringBuf shortLegacy;
-        if (!nameWithoutPrefix.TrySplit("--", nameDc, shortLegacy)) {
-            return Fail("Malformed legacy style topic name: contains 'rt3.', but no '--'");
-        }
-        if (!topicDc.empty() && topicDc != nameDc) {
-            return Fail("DC specified both in topic name and separate option and they mismatch");
-        }
-        topicDc = nameDc;
-        if (topicDc.empty()) {
-            return Fail(TStringBuilder() << "Internal error: Could not determine DC for topic: " << topic);
-        }
-
-        const std::string original{topic};
-        TString modernPath;
-        if (NPersQueue::CorrectName(original)) {
-            modernPath = TString{NPersQueue::GetTopicPath(original)};
-        } else {
-            modernPath = TString{NPersQueue::ConvertOldTopicName(std::string{shortLegacy})};
-        }
-        ApplyMirrorSuffix(modernPath, topicDc, localDc);
-        return modernPath;
+        return Fail("Topic names with 'rt3.' prefix are not supported");
     }
+
+    TStringBuf topicDc = dc;
 
     // Short name without rt3.: dc from argument or localDc.
     // Empty dc and localDc → local path without -mirrored-from- (same as modern paths).
@@ -323,6 +300,8 @@ std::expected<TResolvedName, TString> ResolveName(
     const auto& pqConfig = AppData()->PQConfig;
     const bool isFederation = !pqConfig.GetTopicsAreFirstClassCitizen();
 
+    const bool absoluteInput = name.StartsWith('/');
+
     // Absolute paths may contain accidental '//' (e.g. JoinPath({"/Root/PQ/", name})).
     // Canonize those before BasicNameChecks; keep relative '//' rejected as before.
     TString canonName;
@@ -342,7 +321,7 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     // Absolute under PQ root first (more specific than request database).
-    // Only in federation for classic PQ leaves (e.g. /Root/PQ/rt3.*). Never strip when the
+    // Only in federation for classic PQ leaves. Never strip when the
     // request database is a proper child of the PQ/domain root — otherwise
     // /Root/test_db/topic with PQ Root=/Root becomes test_db/topic and rejoins as
     // /Root/test_db/test_db/topic.
@@ -378,6 +357,12 @@ std::expected<TResolvedName, TString> ResolveName(
     }
 
     auto wrap = [&](TString path) {
+        // StripLeadingSlash drops the marker. An absolute input that is not
+        // rejoined under PQ/LbRoot must stay absolute, or scheme-cache paths
+        // (/Root/...) miss the resolver map.
+        if (absoluteInput && !path.empty() && !path.StartsWith('/')) {
+            path.prepend('/');
+        }
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
 
@@ -405,10 +390,13 @@ std::expected<TResolvedName, TString> ResolveName(
     if (ctx.Topic.empty()) {
         return Fail("Bad topic name (only account provided?)");
     }
+    if (ctx.Topic.StartsWith("rt3.")) {
+        return Fail("Topic names with 'rt3.' prefix are not supported");
+    }
 
     if (!ctx.IsRootDb) {
         // Relative modern path inside user database.
-        // Explicit legacy (rt3 / -- / @) still converts via LbRoot.
+        // Explicit legacy (-- / @) still converts via LbRoot. rt3. is already rejected.
         if (IsExplicitLegacyName(ctx.Topic)) {
             auto parsed = TryParseLegacyToModernPath(ctx.Topic, localDc, dc);
             if (!parsed) {

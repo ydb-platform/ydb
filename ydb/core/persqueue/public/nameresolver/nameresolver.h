@@ -29,8 +29,9 @@ struct TResolvedName {
  *   are not converted: a leaf like TestSchemeList--test-topic-1 is a literal name.
  *
  * Federation mode (!TopicsAreFirstClassCitizen):
+ *   - Names with an 'rt3.' prefix are rejected.
  *   - Root-like database (empty, prefixes PQ Root, or prefixes LbUserDatabaseRoot):
- *     path with '/' is federation account/topic under LbRoot; explicit legacy (rt3/--/@)
+ *     path with '/' is federation account/topic under LbRoot; explicit legacy (--/@)
  *     also under LbRoot; bare names stay under the request database.
  *   - User database (under LbRoot, e.g. …/account): relative modern path inside that database
  *     (already mirrored …-mirrored-from-<dc> names are kept as-is).
@@ -41,8 +42,7 @@ struct TResolvedName {
  * Full paths under database are accepted: the database prefix is stripped before resolving
  * (e.g. database "/Root" + name "/Root/account/topic" → same as name "account/topic").
  *
- * If dc is empty (default), it is taken from an rt3.<dc>--... name when present;
- * for short / modern paths without rt3., empty dc falls back to localDc.
+ * If dc is empty (default), short and modern paths fall back to localDc.
  * Empty dc and localDc (both default) means local (no -mirrored-from- suffix)
  * for short and modern names.
  *
@@ -61,7 +61,7 @@ struct TResolvedName {
  *     -> Path="/Root/LbCommunal/account/dir/topic", NavigateDatabase="/Root/LbCommunal/account"
  *
  *   // Federation: with localDc (mirroring / DC-aware resolve)
- *   ResolveName("/Root", "rt3.dc1--account--topic", "dc1")
+ *   ResolveName("/Root", "account--topic", "dc1")
  *     -> Path="/Root/LbCommunal/account/topic", NavigateDatabase="/Root/LbCommunal/account"
  *   ResolveName("/Root", "account/topic", "dc1", "dc2")
  *     -> Path="/Root/LbCommunal/account/topic-mirrored-from-dc2", NavigateDatabase="/Root/LbCommunal/account"

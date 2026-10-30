@@ -29,22 +29,25 @@
 
 namespace NInterconnect::NRdma {
 
-void Y_FORCE_INLINE MemoryOrderAcquire(void* addr) {
-    atomic_thread_fence(std::memory_order_acquire);
+void Y_FORCE_INLINE TsanAcquire(const void* addr) {
 #if defined(_tsan_enabled_)
-    __tsan_acquire(addr);
+    __tsan_acquire(const_cast<void*>(addr));
 #else
     Y_UNUSED(addr);
 #endif
 }
 
-void Y_FORCE_INLINE MemoryOrderRlease(void* addr) {
-    atomic_thread_fence(std::memory_order_release);
+void Y_FORCE_INLINE TsanRelease(void* addr) {
 #if defined(_tsan_enabled_)
     __tsan_release(addr);
 #else
     Y_UNUSED(addr);
 #endif
+}
+
+void Y_FORCE_INLINE MemoryOrderAcquire(const void* addr) {
+    atomic_thread_fence(std::memory_order_acquire);
+    TsanAcquire(addr);
 }
 
 NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* counters);
@@ -547,7 +550,6 @@ public:
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
-        MemoryOrderAcquire(&Cb);
         if (Cb) {
             if (wc) {
                 if (wc->status == IBV_WC_SUCCESS) {
@@ -581,7 +583,16 @@ public:
 
     void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
         Cb = std::move(cb);
-        MemoryOrderRlease(&Cb);
+    }
+
+    void TsanReleaseForCompletion() noexcept {
+        // The release fence is shared by the batch in BuildListOfVerbs.
+        TsanRelease(&Cb);
+    }
+
+    void TsanAcquireForCompletion() const noexcept {
+        // The acquire fence is shared by the completion batch in HandleWc.
+        TsanAcquire(&Cb);
     }
 
     void ResetTimer() noexcept {
@@ -791,7 +802,7 @@ public:
         TThread::SetCurrentThreadName("RdmaCqThread");
         SetSigHandler();
         TSimpleCqBase* cq = reinterpret_cast<TSimpleCqBase*>(p);
-        cq->CqThreadId = pthread_self();
+        cq->CqThreadId.store(pthread_self(), std::memory_order_relaxed);
         cq->Loop();
         return nullptr;
     }
@@ -864,6 +875,7 @@ public:
     }
 
     void HandleWc(ibv_wc* wc, size_t sz) noexcept {
+        atomic_thread_fence(std::memory_order_acquire);
         for (size_t i = 0; i < sz; i++, wc++) {
             if (wc->wr_id & TSrq::SRQ_WR_MASK) {
                 VerbsResources->Srq.ProcessCommands();
@@ -872,6 +884,7 @@ public:
                 }
             } else {
                 TWr* wr = &WrBuf[wc->wr_id];
+                wr->TsanAcquireForCompletion();
                 double passed = wr->GetTimePassed();
                 RdmaDeviceVerbTimeUs->Collect(passed * 1000000.0);
                 wr->Reply(As, wc);
@@ -892,14 +905,16 @@ public:
     }
 
     void Awake() noexcept {
-        if (CqThreadId) {
-            pthread_kill(CqThreadId, SIGUSR1);
+        const pthread_t cqThreadId = CqThreadId.load(std::memory_order_relaxed);
+        if (cqThreadId) {
+            pthread_kill(cqThreadId, SIGUSR1);
         }
     }
 
 protected:
     bool IsCqThread() const noexcept {
-        return CqThreadId && pthread_equal(pthread_self(), CqThreadId);
+        const pthread_t cqThreadId = CqThreadId.load(std::memory_order_relaxed);
+        return cqThreadId && pthread_equal(pthread_self(), cqThreadId);
     }
 
     // External terminal notifications may arrive through async_fd while the poller
@@ -957,7 +972,7 @@ protected:
     ui64 SrqRefillRetryCounter = 0;
     NMonitoring::THistogramPtr RdmaDeviceVerbTimeUs;
 private:
-    pthread_t CqThreadId = {};
+    std::atomic<pthread_t> CqThreadId = {};
 };
 
 }

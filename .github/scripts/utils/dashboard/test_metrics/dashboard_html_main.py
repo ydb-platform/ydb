@@ -658,6 +658,7 @@ def build_html_dashboard(
             (withLimit ? ('<td>' + (limit == null || limit === '' ? '—' : limit) + '</td>') : '') +
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +
+            statCell(metric, stats, 'median') +
             statCell(metric, stats, 'avg') +
           '</tr>';
         }}).join('');
@@ -665,7 +666,7 @@ def build_html_dashboard(
           '<table class="headline-table"><thead><tr>' +
             '<th></th>' +
             (withLimit ? '<th title="CPU cores and MemTotal from /proc on this host. Disk rows are throughput, so they have no capacity limit.">limit</th>' : '') +
-            '<th>max</th><th>p95</th><th>avg</th>' +
+            '<th>max</th><th>p95</th><th>median</th><th>avg</th>' +
           '</tr></thead><tbody>' + body + '</tbody></table>'
         );
       }}

@@ -138,11 +138,15 @@ def build_html_dashboard(
     .chart-tile-expand:hover {{ background: #eef1f4; }}
     .chart-pane {{
       width: 100%;
-      height: 280px;
+      height: 300px;
       min-width: 0;
     }}
+    /* Expand = full row width (not a tall half-column) + detail tables. */
+    .chart-tile.expanded {{
+      grid-column: 1 / -1;
+    }}
     .chart-tile.expanded .chart-pane {{
-      height: 480px;
+      height: 420px;
     }}
     .chart-tile-meta {{
       display: none;
@@ -163,7 +167,7 @@ def build_html_dashboard(
       height: 320px;
     }}
     .chart-tile.span-2.expanded .chart-pane {{
-      height: 520px;
+      height: 420px;
     }}
     .chart-secondary {{
       margin: 4px 0 16px 0;
@@ -515,7 +519,7 @@ def build_html_dashboard(
     <div class="chart-tile span-2" data-pane="yaActivity">
       <div class="chart-tile-head">
         <span class="chart-tile-title">ya make concurrency</span>
-        <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+        <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
       </div>
       <div id="yaActivity" class="chart-pane"></div>
     </div>
@@ -529,7 +533,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="activeLayerChunk">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Active chunks</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -540,7 +544,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -551,7 +555,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -562,7 +566,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
       </div>
@@ -580,7 +584,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="activeLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Active chunks by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="activeLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -591,7 +595,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -610,7 +614,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -621,7 +625,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand chart">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
       </div>
@@ -692,7 +696,7 @@ def build_html_dashboard(
       if (!tile) return;
       const open = tile.classList.toggle('expanded');
       btn.textContent = open ? 'Collapse' : 'Expand';
-      btn.title = open ? 'Collapse chart' : 'Expand chart';
+      btn.title = open ? 'Collapse to tile' : 'Expand to full width';
       const paneId = tile.getAttribute('data-pane');
       setTimeout(() => {{
         resizeChartPanes(paneId ? [paneId] : []);
@@ -1063,8 +1067,9 @@ def build_html_dashboard(
         ticktext: tickText || undefined,
         hoverformat: '',
       }};
-      // Full ya-make range only for activity / monitor overlays; suite/chunk
-      // charts keep their natural data span so long builds do not compress them.
+      // Full ya-make range is only for the top yaActivity chart. Suite/chunk
+      // tiles share one test-window range (see syncChartGroupXRange) so axes
+      // line up when charts sit side by side.
       if (useFullMakeRange) {{
         const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
         if (Array.isArray(fullRange) && fullRange.length >= 2) {{
@@ -1073,23 +1078,61 @@ def build_html_dashboard(
       }}
       return layout;
     }}
+    function _collectPlotMs(el) {{
+      const xs = [];
+      if (!el || !el.data) return xs;
+      for (const tr of el.data) {{
+        if (!tr || !Array.isArray(tr.x)) continue;
+        // Monitor / limit overlays span the whole ya-make window; do not let
+        // them widen suite/chunk tile axes past the test tracks.
+        const name = (tr.name == null) ? '' : String(tr.name);
+        if (/monitor|provisioned|cgroup/i.test(name)) continue;
+        for (const v of tr.x) {{
+          const n = _toMs(v);
+          if (n != null) xs.push(n);
+        }}
+      }}
+      return xs;
+    }}
+    function syncChartGroupXRange(ids, sourceIds) {{
+      // Align tile charts to one x-window. sourceIds (default: ids) decide the
+      // span; monitor/disk overlays are omitted from the source so they cannot
+      // pull the window back to the full ya-make range.
+      if (!window.Plotly) return;
+      let minMs = Number.POSITIVE_INFINITY;
+      let maxMs = Number.NEGATIVE_INFINITY;
+      const sources = sourceIds && sourceIds.length ? sourceIds : ids;
+      for (const id of sources) {{
+        const el = document.getElementById(id);
+        for (const n of _collectPlotMs(el)) {{
+          if (n < minMs) minMs = n;
+          if (n > maxMs) maxMs = n;
+        }}
+      }}
+      if (!(minMs < maxMs)) return;
+      const range = [new Date(minMs).toISOString(), new Date(maxMs).toISOString()];
+      const ticks = _buildTickVals(minMs, maxMs, 8);
+      const tickVals = ticks.map(ms => new Date(ms).toISOString());
+      const tickText = ticks.map(ms => _formatTick(ms));
+      for (const id of ids) {{
+        const el = document.getElementById(id);
+        if (!el || !el.data || !el.layout) continue;
+        Plotly.relayout(el, {{
+          'xaxis.range': range,
+          'xaxis.tickmode': 'array',
+          'xaxis.tickvals': tickVals,
+          'xaxis.ticktext': tickText,
+        }});
+      }}
+    }}
     function applyTimezoneToAllCharts() {{
       const ids = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
       for (const id of ids) {{
         const el = document.getElementById(id);
         if (!el || !el.data || !el.layout || !window.Plotly) continue;
-        const xs = [];
-        for (const tr of el.data) {{
-          if (tr && Array.isArray(tr.x)) {{
-            for (const v of tr.x) {{
-              const n = _toMs(v);
-              if (n != null) xs.push(n);
-            }}
-          }}
-        }}
-        if (xs.length === 0) continue;
-        const fullIds = {{yaActivity:1, diskLayer:1, diskLayerSuite:1, cpuLayer:1, ramLayer:1, cpuLayerSuite:1, ramLayerSuite:1}};
-        const ax = axisLayout(xs, !!fullIds[id]);
+        const xs = _collectPlotMs(el);
+        // yaActivity keeps the full make window; tile groups are re-synced below.
+        const ax = axisLayout(xs.map(ms => new Date(ms).toISOString()), id === 'yaActivity');
         const patch = {{
           'xaxis.title': ax.title,
           'xaxis.type': 'date',
@@ -1103,6 +1146,14 @@ def build_html_dashboard(
         if (ax.range) patch['xaxis.range'] = ax.range;
         Plotly.relayout(el, patch);
       }}
+      syncChartGroupXRange(
+        ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer'],
+        ['activeLayerChunk', 'cpuLayer', 'ramLayer']
+      );
+      syncChartGroupXRange(
+        ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite'],
+        ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
+      );
       for (const id of ids) {{
         const el = document.getElementById(id);
         if (el && el.data && window.Plotly) Plotly.Plots.resize(el);
@@ -2377,8 +2428,6 @@ def build_html_dashboard(
         addRamLimitTraces('ramLayer', ro);
         Plotly.relayout('cpuLayer', {{ hovermode: 'x unified' }});
         Plotly.relayout('ramLayer', {{ hovermode: 'x unified' }});
-        Plotly.relayout('cpuLayer', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
-        Plotly.relayout('ramLayer', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
         const diskEl = document.getElementById('diskLayer');
         const diskTile = document.getElementById('diskTileChunk');
         if (diskEl) {{
@@ -2388,20 +2437,24 @@ def build_html_dashboard(
             {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
             {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
           ], {{
-            title: 'Disk bandwidth (+Write, -Read)',
-            xaxis: axisLayout(xDisp, true),
+            title: {{text: 'Disk bandwidth (+Write, -Read)', font: {{size: 12}}, x: 0, xanchor: 'left'}},
+            xaxis: axisLayout(xDisp),
             yaxis: {{ title: 'MB/s' }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
             legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
-            margin: {{l: 60, r: 20, t: 50, b: 90}},
-          }}, {{ responsive: true }});
+            margin: {{l: 52, r: 12, t: 32, b: 80}},
+          }}, {{ responsive: true, displayModeBar: 'hover' }});
         }}
       }}
       attachSortedHover('cpuLayer', 'cpuHover', 'cores');
       attachSortedHover('ramLayer', 'ramHover', 'GB');
       attachSortedClick('cpuLayer', 'cpuClick', 'cores');
       attachSortedClick('ramLayer', 'ramClick', 'GB');
+      syncChartGroupXRange(
+        ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer'],
+        ['activeLayerChunk', 'cpuLayer', 'ramLayer']
+      );
     }}
 
     stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
@@ -2428,8 +2481,6 @@ def build_html_dashboard(
       addRamLimitTraces('ramLayerSuite', ro);
       Plotly.relayout('cpuLayerSuite', {{ hovermode: 'x unified' }});
       Plotly.relayout('ramLayerSuite', {{ hovermode: 'x unified' }});
-      Plotly.relayout('cpuLayerSuite', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
-      Plotly.relayout('ramLayerSuite', {{ 'xaxis.range': axisLayout(xDisp, true).range }});
       const diskEl = document.getElementById('diskLayerSuite');
       const diskTile = document.getElementById('diskTileSuite');
       if (diskEl) {{
@@ -2439,20 +2490,24 @@ def build_html_dashboard(
           {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
           {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
         ], {{
-          title: 'Disk bandwidth (+Write, -Read)',
-          xaxis: axisLayout(xDisp, true),
+          title: {{text: 'Disk bandwidth (+Write, -Read)', font: {{size: 12}}, x: 0, xanchor: 'left'}},
+          xaxis: axisLayout(xDisp),
           yaxis: {{ title: 'MB/s' }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},
           legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
-          margin: {{l: 60, r: 20, t: 50, b: 90}},
-        }}, {{ responsive: true }});
+          margin: {{l: 52, r: 12, t: 32, b: 80}},
+        }}, {{ responsive: true, displayModeBar: 'hover' }});
       }}
     }}
     attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');
     attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
     attachSortedClick('cpuLayerSuite', 'cpuClickSuite', 'cores');
     attachSortedClick('ramLayerSuite', 'ramClickSuite', 'GB');
+    syncChartGroupXRange(
+      ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite'],
+      ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite']
+    );
 
     if (data.by_chunk && data.pie_cpu_labels && data.pie_cpu_labels.length > 0) {{
       Plotly.newPlot('cpuPie', [{{

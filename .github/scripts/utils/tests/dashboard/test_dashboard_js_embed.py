@@ -112,8 +112,12 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn('class="chart-grid"', source)
         self.assertIn('class="chart-tile"', source)
         self.assertIn("function toggleChartTile(btn)", source)
+        self.assertIn("function syncChartGroupXRange(ids, sourceIds)", source)
         self.assertIn('id="testsBySuiteDetails"', source)
         self.assertIn("Tests in parallel by suite", source)
+        # Expand grows to full row width, not a tall half-column (f-string doubles braces).
+        self.assertIn(".chart-tile.expanded {{\n      grid-column: 1 / -1;\n    }}", source)
+        self.assertIn("Expand to full width", source)
         # Tests chart stays under a closed <details>, not in the main suite grid.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')

@@ -96,50 +96,54 @@ def build_html_dashboard(
     .chart-grid {{
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin: 8px 0 16px 0;
+      gap: 20px 28px;
+      margin: 4px 0 18px 0;
       align-items: start;
     }}
     @media (max-width: 1100px) {{
-      .chart-grid {{ grid-template-columns: 1fr; }}
+      .chart-grid {{ grid-template-columns: 1fr; gap: 18px; }}
     }}
     .chart-tile {{
       min-width: 0;
-      border: 1px solid #d0d7de;
-      border-radius: 10px;
-      background: #fff;
-      padding: 8px 10px 10px;
+      background: transparent;
+      padding: 0;
       display: flex;
       flex-direction: column;
-      box-shadow: 0 1px 2px rgba(27, 31, 35, 0.04);
+      border: 0;
+      box-shadow: none;
     }}
     .chart-tile-head {{
       display: flex;
-      align-items: center;
+      align-items: baseline;
       justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 4px;
+      gap: 12px;
+      margin: 0 0 2px 2px;
+      min-height: 22px;
     }}
     .chart-tile-title {{
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
-      color: #24292f;
+      letter-spacing: 0.01em;
+      color: #57606a;
+      text-transform: none;
     }}
     .chart-tile-expand {{
-      padding: 2px 8px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      background: #f6f8fa;
+      padding: 0;
+      border: 0;
+      background: transparent;
       cursor: pointer;
-      font-size: 13px;
-      line-height: 1.3;
-      color: #57606a;
+      font-size: 11px;
+      line-height: 1;
+      color: #0969da;
+      opacity: 0.72;
     }}
-    .chart-tile-expand:hover {{ background: #eef1f4; }}
+    .chart-tile-expand:hover {{ opacity: 1; text-decoration: underline; }}
     .chart-pane {{
       width: 100%;
       height: 300px;
       min-width: 0;
+      border-radius: 6px;
+      overflow: hidden;
     }}
     /* Expand = full row width (not a tall half-column) + detail tables. */
     .chart-tile.expanded {{
@@ -150,7 +154,7 @@ def build_html_dashboard(
     }}
     .chart-tile-meta {{
       display: none;
-      margin-top: 6px;
+      margin-top: 8px;
     }}
     .chart-tile.expanded .chart-tile-meta {{
       display: block;
@@ -159,38 +163,42 @@ def build_html_dashboard(
     .chart-tile-meta .clickbox {{
       margin: 6px 0;
       max-height: 180px;
+      border-color: #eaeef2;
+      background: #fafbfc;
     }}
     .chart-tile.span-2 {{
       grid-column: 1 / -1;
     }}
     .chart-tile.span-2 .chart-pane {{
-      height: 320px;
+      height: 300px;
     }}
     .chart-tile.span-2.expanded .chart-pane {{
-      height: 420px;
+      height: 400px;
     }}
     .chart-secondary {{
-      margin: 4px 0 16px 0;
-      border: 1px solid #d0d7de;
-      border-radius: 10px;
-      padding: 8px 10px 10px;
-      background: #fafbfc;
+      margin: 0 0 16px 0;
+      border: 0;
+      border-top: 1px solid #eaeef2;
+      border-radius: 0;
+      padding: 10px 0 0 0;
+      background: transparent;
     }}
     .chart-secondary > summary {{
       cursor: pointer;
       font-weight: 600;
-      font-size: 13px;
-      color: #24292f;
+      font-size: 12px;
+      color: #57606a;
       list-style: none;
     }}
     .chart-secondary > summary::-webkit-details-marker {{ display: none; }}
     .chart-secondary > summary::before {{
       content: "▸ ";
-      color: #57606a;
+      color: #8c959f;
+      font-weight: 400;
     }}
     .chart-secondary[open] > summary::before {{ content: "▾ "; }}
     .chart-secondary .chart-grid {{
-      margin: 10px 0 0 0;
+      margin: 12px 0 0 0;
     }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
     #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
@@ -519,7 +527,7 @@ def build_html_dashboard(
     <div class="chart-tile span-2" data-pane="yaActivity">
       <div class="chart-tile-head">
         <span class="chart-tile-title">ya make concurrency</span>
-        <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+        <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
       </div>
       <div id="yaActivity" class="chart-pane"></div>
     </div>
@@ -532,8 +540,8 @@ def build_html_dashboard(
     <div class="chart-grid" id="chunkChartGrid">
       <div class="chart-tile" data-pane="activeLayerChunk">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Active chunks</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <span class="chart-tile-title">Active</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -544,7 +552,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -555,7 +563,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -566,7 +574,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
       </div>
@@ -583,8 +591,8 @@ def build_html_dashboard(
     <div class="chart-grid" id="suiteChartGrid">
       <div class="chart-tile" data-pane="activeLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Active chunks by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <span class="chart-tile-title">Active</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="activeLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -594,8 +602,8 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">CPU by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <span class="chart-tile-title">CPU</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -613,8 +621,8 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">RAM by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <span class="chart-tile-title">RAM</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -624,8 +632,8 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Disk by suite</span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">Expand</button>
+          <span class="chart-tile-title">Disk</span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width">expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
       </div>
@@ -635,7 +643,7 @@ def build_html_dashboard(
       <div class="chart-grid">
         <div class="chart-tile span-2 expanded" data-pane="testsLayerSuite">
           <div class="chart-tile-head">
-            <span class="chart-tile-title">Tests running by suite</span>
+            <span class="chart-tile-title">Tests</span>
           </div>
           <div id="testsLayerSuite" class="chart-pane"></div>
           <div class="chart-tile-meta" style="display:block;">
@@ -695,7 +703,7 @@ def build_html_dashboard(
       const tile = btn && btn.closest ? btn.closest('.chart-tile') : null;
       if (!tile) return;
       const open = tile.classList.toggle('expanded');
-      btn.textContent = open ? 'Collapse' : 'Expand';
+      btn.textContent = open ? 'collapse' : 'expand';
       btn.title = open ? 'Collapse to tile' : 'Expand to full width';
       const paneId = tile.getAttribute('data-pane');
       setTimeout(() => {{
@@ -2110,15 +2118,32 @@ def build_html_dashboard(
           hoverinfo: 'none',
         }};
       }});
-      // Tile header already names the chart; keep a compact Plotly title for context.
+      // Tile header names the chart; skip Plotly title to avoid double headings.
+      const ax = axisLayout(xDisp);
       Plotly.newPlot(divId, traces, {{
-        title: {{text: title, font: {{size: 12}}, x: 0, xanchor: 'left'}},
-        xaxis: axisLayout(xDisp),
-        yaxis: {{title: yTitle}},
+        title: false,
+        xaxis: Object.assign(ax, {{
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+        }}),
+        yaxis: {{
+          title: yTitle,
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+          rangemode: 'tozero',
+        }},
         hovermode: 'x unified',
         showlegend: false,
-        margin: {{l: 52, r: 12, t: 32, b: 40}},
-      }}, {{responsive: true, displayModeBar: 'hover'}});
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#fcfcfd',
+        margin: {{l: 48, r: 8, t: 8, b: 36}},
+      }}, {{responsive: true, displayModeBar: 'hover', displaylogo: false}});
     }}
 
     function formatValue(y, unit) {{
@@ -2394,17 +2419,36 @@ def build_html_dashboard(
         return;
       }}
       const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
-      const activityTitle = activityUnaligned
-        ? 'ya make concurrency (⚠ clock unaligned — offset not validated)'
-        : 'ya make concurrency: build, archives, cache, test chunks, and links';
+      // Put clock warning into the tile label when needed; keep the plot clean.
+      const titleEl = document.querySelector('#yaActivityGrid .chart-tile-title');
+      if (titleEl) titleEl.textContent = activityUnaligned
+        ? 'ya make concurrency (clock unaligned)'
+        : 'ya make concurrency';
+      const ax = axisLayout(allX, true);
       Plotly.newPlot('yaActivity', traces, {{
-        title: {{text: activityTitle, font: {{size: 12}}, x: 0, xanchor: 'left'}},
-        xaxis: axisLayout(allX, true),
-        yaxis: {{title: 'active jobs', rangemode: 'tozero'}},
+        title: false,
+        xaxis: Object.assign(ax, {{
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+        }}),
+        yaxis: {{
+          title: 'active jobs',
+          rangemode: 'tozero',
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+        }},
         hovermode: 'x unified',
-        legend: {{orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top'}},
-        margin: {{l: 52, r: 12, t: 32, b: 80}},
-      }}, {{responsive: true, displayModeBar: 'hover'}});
+        legend: {{orientation: 'h', x: 0, y: -0.28, xanchor: 'left', yanchor: 'top', font: {{size: 11}}}},
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#fcfcfd',
+        margin: {{l: 48, r: 8, t: 8, b: 72}},
+      }}, {{responsive: true, displayModeBar: 'hover', displaylogo: false}});
     }})();
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
@@ -2433,18 +2477,34 @@ def build_html_dashboard(
         if (diskEl) {{
           if (diskTile) diskTile.style.display = '';
           diskEl.style.display = '';
+          const diskAx = axisLayout(xDisp);
           Plotly.newPlot('diskLayer', [
             {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
             {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
           ], {{
-            title: {{text: 'Disk bandwidth (+Write, -Read)', font: {{size: 12}}, x: 0, xanchor: 'left'}},
-            xaxis: axisLayout(xDisp),
-            yaxis: {{ title: 'MB/s' }},
+            title: false,
+            xaxis: Object.assign(diskAx, {{
+              titlefont: {{size: 11, color: '#8c959f'}},
+              tickfont: {{size: 10, color: '#656d76'}},
+              gridcolor: '#eef1f4',
+              zerolinecolor: '#eaeef2',
+              linecolor: '#d8dee4',
+            }}),
+            yaxis: {{
+              title: 'MB/s',
+              titlefont: {{size: 11, color: '#8c959f'}},
+              tickfont: {{size: 10, color: '#656d76'}},
+              gridcolor: '#eef1f4',
+              zerolinecolor: '#eaeef2',
+              linecolor: '#d8dee4',
+            }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
-            legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
-            margin: {{l: 52, r: 12, t: 32, b: 80}},
-          }}, {{ responsive: true, displayModeBar: 'hover' }});
+            legend: {{orientation: 'h', x: 0, y: -0.28, xanchor: 'left', yanchor: 'top', font: {{size: 11}}}},
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: '#fcfcfd',
+            margin: {{l: 48, r: 8, t: 8, b: 72}},
+          }}, {{ responsive: true, displayModeBar: 'hover', displaylogo: false }});
         }}
       }}
       attachSortedHover('cpuLayer', 'cpuHover', 'cores');
@@ -2486,18 +2546,34 @@ def build_html_dashboard(
       if (diskEl) {{
         if (diskTile) diskTile.style.display = '';
         diskEl.style.display = '';
+        const diskAx = axisLayout(xDisp);
         Plotly.newPlot('diskLayerSuite', [
           {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
           {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
         ], {{
-          title: {{text: 'Disk bandwidth (+Write, -Read)', font: {{size: 12}}, x: 0, xanchor: 'left'}},
-          xaxis: axisLayout(xDisp),
-          yaxis: {{ title: 'MB/s' }},
+          title: false,
+          xaxis: Object.assign(diskAx, {{
+            titlefont: {{size: 11, color: '#8c959f'}},
+            tickfont: {{size: 10, color: '#656d76'}},
+            gridcolor: '#eef1f4',
+            zerolinecolor: '#eaeef2',
+            linecolor: '#d8dee4',
+          }}),
+          yaxis: {{
+            title: 'MB/s',
+            titlefont: {{size: 11, color: '#8c959f'}},
+            tickfont: {{size: 10, color: '#656d76'}},
+            gridcolor: '#eef1f4',
+            zerolinecolor: '#eaeef2',
+            linecolor: '#d8dee4',
+          }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},
-          legend: {{orientation: 'h', x: 0, y: -0.2, xanchor: 'left', yanchor: 'top'}},
-          margin: {{l: 52, r: 12, t: 32, b: 80}},
-        }}, {{ responsive: true, displayModeBar: 'hover' }});
+          legend: {{orientation: 'h', x: 0, y: -0.28, xanchor: 'left', yanchor: 'top', font: {{size: 11}}}},
+          paper_bgcolor: 'rgba(0,0,0,0)',
+          plot_bgcolor: '#fcfcfd',
+          margin: {{l: 48, r: 8, t: 8, b: 72}},
+        }}, {{ responsive: true, displayModeBar: 'hover', displaylogo: false }});
       }}
     }}
     attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');

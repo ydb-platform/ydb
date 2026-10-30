@@ -222,12 +222,13 @@ struct TAppData {
     TTrueAtomicSharedPtr<TPathNormalizerPtr> PathNormalizer;
 
     TPathNormalizerPtr GetPathNormalizer() const {
-        auto snapshot = PathNormalizer.atomic_load();
+        auto snapshot = PathNormalizer;
         return snapshot ? *snapshot : nullptr;
     }
 
     void SetPathNormalizer(TPathNormalizerPtr normalizer) {
-        PathNormalizer.atomic_store(MakeTrueAtomicShared<TPathNormalizerPtr>(std::move(normalizer)));
+        auto snapshot = MakeTrueAtomicShared<TPathNormalizerPtr>(std::move(normalizer));
+        PathNormalizer.swap(snapshot);
     }
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;

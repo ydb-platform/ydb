@@ -44,34 +44,28 @@ namespace NPrivate {
         }
 
         void UnrefAndDelete(ui64 sub = USE_INCREMENT) {
-            RefWeak();
-            if (Unref(sub) == 0) {
-                ui64 expect = 0;
-                bool flag_is_set = ref_count_.compare_exchange_strong(
-                    expect, DESTROYED_FLAG, std::memory_order_acq_rel, std::memory_order_relaxed);
-                if (flag_is_set) {
-                    DestroyPayload();
-                    UnrefWeakAndDelete(2);
-                    return;
-                }
-            }
+            if (Unref(sub) != 0)
+                return;
+            ui64 expect = 0;
+            bool flag_is_set = ref_count_.compare_exchange_strong(
+                expect, DESTROYED_FLAG, std::memory_order_acq_rel, std::memory_order_relaxed);
+            if (!flag_is_set)
+                return;
+            DestroyPayload();
             UnrefWeakAndDelete();
         }
 
         void* UnrefAndReleaseLast(ui64 sub = USE_INCREMENT) noexcept {
-            RefWeak();
-            if (Unref(sub) == 0) {
-                ui64 expect = 0;
-                bool flag_is_set = ref_count_.compare_exchange_strong(
-                    expect, DESTROYED_FLAG, std::memory_order_acq_rel, std::memory_order_relaxed);
-                if (flag_is_set) {
-                    void* result = GetPtr();
-                    UnrefWeakAndDelete(2);
-                    return result;
-                }
-            }
+            if (Unref(sub) != 0)
+                return nullptr;
+            ui64 expect = 0;
+            bool flag_is_set = ref_count_.compare_exchange_strong(
+                expect, DESTROYED_FLAG, std::memory_order_acq_rel, std::memory_order_relaxed);
+            if (!flag_is_set)
+                return nullptr;
+            void* result = GetPtr();
             UnrefWeakAndDelete();
-            return nullptr;
+            return result;
         }
 
         bool RefFromWeak(ui64 add = USE_INCREMENT) noexcept {
@@ -346,16 +340,6 @@ public:
         return reinterpret_cast<PayloadType*>(obj_ptr);
     }
 
-    TTrueAtomicSharedPtr atomic_load() const noexcept {
-        return TTrueAtomicSharedPtr{ptr_.ConcurrentAcquire()};
-    }
-
-    void atomic_store(TTrueAtomicSharedPtr other) noexcept {
-        auto back_ptr = other.ptr_.Swap(nullptr);
-        back_ptr = ptr_.Swap(back_ptr);
-        NPrivate::TSharedBasePtr::DestroyPtr(back_ptr);
-    }
-
 private:
     mutable NPrivate::TSharedBasePtr ptr_;
 
@@ -429,12 +413,12 @@ public:
         return *this;
     }
 
-    TTrueAtomicSharedPtr<PayloadType> lock() const noexcept {
+    TTrueAtomicSharedPtr<PayloadType> lock() noexcept {
         // create local TTrueAtomicWeakPtr to avoid concurrent changes of this
         TTrueAtomicWeakPtr<PayloadType> local(*this);
         if (auto raw_ptr = local.ptr_.GetRaw())
           if (raw_ptr->RefFromWeak())
-            return TTrueAtomicSharedPtr<PayloadType>(raw_ptr);
+            return TTrueAtomicSharedPtr<PayloadType>(ptr_.GetClean());
         return TTrueAtomicSharedPtr<PayloadType>();
     }
 

@@ -12,6 +12,11 @@ TImpersonateStopPageHandler::TImpersonateStopPageHandler(const NActors::TActorId
 {}
 
 void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
+    const auto& request = event->Get()->Request;
+    if (request->Method == "OPTIONS") {
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateOptionsResponse(request)));
+        return;
+    }
     Register(new THandlerCleanup(event->Sender, event->Get()->Request, HttpProxyId, Settings, CreateNameImpersonatedCookie(Settings.ClientId)));
 }
 

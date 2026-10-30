@@ -69,6 +69,13 @@ void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuild
     headers->Set("Allow", "OPTIONS,GET,POST,PUT,DELETE");
 }
 
+NHttp::THttpOutgoingResponsePtr CreateOptionsResponse(const NHttp::THttpIncomingRequestPtr& request) {
+    NHttp::THeadersBuilder headers;
+    SetCORS(request, &headers);
+    SetRequestIdHeader(headers, CreateMvpLogContext(request).GetRequestId());
+    return request->CreateResponse("204", "No Content", headers);
+}
+
 TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     ui32 hl = SHA256_DIGEST_LENGTH;

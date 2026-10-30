@@ -153,7 +153,7 @@ STFUNC(TDbsControllerActor::StateWork)
                 YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
                     {"tabletID", TabletID()},
                     {"type", ev->GetTypeRewrite()},
-                    {"ev", ev});
+                    {"ev", ev->ShortDebugString()});
             }
             break;
     }

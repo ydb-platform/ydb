@@ -758,9 +758,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_INFO("Success",
             {"dstPathId", DstPathId});
 
-        auto result = MakeHolder<TEvPrivate::TEvCreateDstResult>(ReplicationId, TargetId, DstPathId);
-        result->WaitingImport = CreatePlaceholder;
-        Send(Parent, result.Release());
+        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId, CreatePlaceholder));
         PassAway();
     }
 

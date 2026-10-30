@@ -155,9 +155,9 @@ struct TEvPrivate {
 
     struct TEvCreateDstResult: public TGenericSchemeResult<TEvCreateDstResult, EvCreateDstResult> {
         const TPathId DstPathId;
-        bool WaitingImport = false;
+        const bool WaitingImport = false;
 
-        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId);
+        explicit TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport);
         explicit TEvCreateDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error);
         TString ToString() const override;
     };

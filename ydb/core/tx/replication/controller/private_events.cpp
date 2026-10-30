@@ -56,9 +56,10 @@ TString TEvPrivate::TEvAssignStreamName::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId)
+TEvPrivate::TEvCreateDstResult::TEvCreateDstResult(ui64 rid, ui64 tid, const TPathId& dstPathId, bool waitingImport)
     : TBase(rid, tid, NKikimrScheme::StatusSuccess)
     , DstPathId(dstPathId)
+    , WaitingImport(waitingImport)
 {
 }
 

@@ -191,6 +191,12 @@ namespace NKikimr::NStorage {
             auto copyCurrentConfig = currentConfig;
             auto ss = *(copyCurrentConfig.*ssMutableFunc)();
             auto targetSS = *(targetConfig.*ssMutableFunc)();
+            if (!targetSS.RingGroupsSize() && (!targetSS.HasRing() || (!targetSS.GetRing().RingSize() &&
+                    !targetSS.GetRing().NodeSize()))) {
+                // the generator could place no rings at all (e.g. no allowed node is left), which forcing the heal
+                // can't help; the configuration of faulty nodes, which it can, has rings
+                throw TExError() << "No recommended configuration could be made";
+            }
             const auto clearActorIdOffsets = [](auto& config) {
                 if (config.RingGroupsSize() == 0) {
                     config.MutableRing()->ClearRingGroupActorIdOffset();
@@ -304,12 +310,18 @@ namespace NKikimr::NStorage {
             if (nodesToReplace.size() == 1) {
                 auto placement = nodesToReplace.begin();
                 auto oldRg = oldSSInfo->RingGroups[std::get<0>(placement->second)];
+                // the rings unavailable while the node is replaced: the ring of the node itself, as its first step
+                // disables it, and the disabled rings, as well as rings with nodes not known to be good
                 std::unordered_set<ui32> badRings;
                 for (ui32 ringIdx : xrange(oldRg.Rings.size())) {
                     auto& oldRing = oldRg.Rings[ringIdx];
+                    if (oldRing.IsDisabled) {
+                        badRings.insert(ringIdx);
+                    }
                     for (auto& rep : oldRing.Replicas) {
                         auto oldRep = rep.NodeId();
-                        if (Self->SelfHealNodesState[oldRep]) {
+                        const auto it = Self->SelfHealNodesState.find(oldRep);
+                        if (oldRep == placement->first || it == Self->SelfHealNodesState.end() || it->second) {
                             badRings.insert(ringIdx);
                         }
                     }

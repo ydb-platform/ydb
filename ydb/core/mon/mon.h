@@ -25,6 +25,8 @@ namespace NKikimr {
 
 namespace NActors {
 
+TString GetRelativeRoot(TStringBuf path);
+
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status);
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYql::TIssues& issues, NYdb::EStatus status);
 

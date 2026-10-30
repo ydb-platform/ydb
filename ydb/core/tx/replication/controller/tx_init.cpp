@@ -61,6 +61,9 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
+            if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
+                Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
+            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
 
@@ -188,6 +191,24 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadProcessedSourceOffsets(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ProcessedSourceOffsets>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
+            const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -225,7 +246,14 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
+<<<<<<< HEAD
             && LoadWorkers(db);
+=======
+            && LoadWorkers(db)
+            && LoadSchemaBarrierWorkers(db)
+            && LoadIndexBuildWorkers(db)
+            && LoadProcessedSourceOffsets(db);
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

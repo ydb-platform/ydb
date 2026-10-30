@@ -28,6 +28,8 @@ struct TControllerSchema: NIceDb::Schema {
         struct DesiredState: Column<8, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
         struct Database: Column<9, NScheme::NTypeIds::Utf8> {};
 
+        struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -38,7 +40,15 @@ struct TControllerSchema: NIceDb::Schema {
             Issue,
             NextTargetId,
             DesiredState,
+<<<<<<< HEAD
             Database
+=======
+            Database,
+            DeferredAlter,
+            CommittedStep,
+            CommittedTxId,
+            SourceOffsetMismatch
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
         >;
     };
 
@@ -120,13 +130,61 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId>;
     };
 
+<<<<<<< HEAD
+=======
+    // Freeze membership at the first schema report until every partition has
+    // crossed the same record. These rows outlive the live Workers rows.
+    struct SchemaBarrierWorkers: Table<8> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Reported: Column<4, NScheme::NTypeIds::Bool> {};
+        struct Applied: Column<5, NScheme::NTypeIds::Bool> {};
+        struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
+        struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct IndexMetadata: Column<8, NScheme::NTypeIds::Bool> {};
+
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata>;
+    };
+
+    // Checkpoints outlive live Workers rows: re-registration must retain the
+    // write mode, and retired partitions' scan maxima must still bound the join.
+    struct IndexBuildWorkers: Table<9> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Progress: Column<4, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Progress>;
+    };
+
+    // Unlike Workers, these positions survive pause/resume.
+    // An absent row means progress is unknown.
+    struct ProcessedSourceOffsets: Table<10> {
+        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
+        struct NextOffset: Column<4, NScheme::NTypeIds::Uint64> {};
+        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, NextOffset>;
+    };
+
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     using TTables = SchemaTables<
         SysParams,
         Replications,
         Targets,
         SrcStreams,
         TxIds,
+<<<<<<< HEAD
         Workers
+=======
+        Workers,
+        SchemaBarrierWorkers,
+        IndexBuildWorkers,
+        ProcessedSourceOffsets
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     >;
 
 }; // TControllerSchema

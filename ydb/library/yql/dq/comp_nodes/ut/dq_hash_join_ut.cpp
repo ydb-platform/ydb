@@ -2602,6 +2602,15 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     }
 }
 
+void TestScalarMapJoin(TJoinTestData testData, bool customRenames = false) {
+    auto descr = MakeJoinDescription(testData);
+    if (!customRenames) {
+        descr.CustomRenames.reset();
+    }
+    auto graph = ConstructJoinGraphStream(testData.Kind, ETestedJoinAlgo::kScalarMap, descr, false);
+    CompareListAndStreamIgnoringOrder(testData.Result, *graph);
+}
+
 void RunFinalDumpSpillingIsBatchedTest() {
     auto testData = FinalDumpSpillingTestData();
     auto descr = MakeJoinDescription(testData);
@@ -2735,6 +2744,43 @@ void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
 }
 
 } // namespace
+
+Y_UNIT_TEST_SUITE(TDqJoinPerfScalarMapTest) {
+    Y_UNIT_TEST(Inner) {
+        TestScalarMapJoin(BasicInnerJoinTestData());
+        TestScalarMapJoin(MixedKeysInnerTestData());
+        TestScalarMapJoin(EmptyLeftInnerTestData());
+        TestScalarMapJoin(EmptyRightInnerTestData());
+    }
+
+    Y_UNIT_TEST(Left) {
+        TestScalarMapJoin(LeftJoinWithMatchesTestData());
+        TestScalarMapJoin(LeftJoinTestData());
+    }
+
+    Y_UNIT_TEST(CompositeKey) {
+        TestScalarMapJoin(SwappedKeyColumnsInnerTestData());
+    }
+
+    Y_UNIT_TEST(OptionalKey) {
+        TestScalarMapJoin(InnerJoinIntAndOptionalIntKeyTestData());
+        TestScalarMapJoin(InnerJoinNullKeysDoNotMatchByDefaultTestData());
+    }
+
+    Y_UNIT_TEST(LeftSemi) {
+        TestScalarMapJoin(LeftSemiTestData());
+        TestScalarMapJoin(LeftSemiDuplicateKeysTestData());
+        TestScalarMapJoin(SwappedKeyColumnsLeftSemiTestData());
+    }
+
+    Y_UNIT_TEST(LeftOnly) {
+        TestScalarMapJoin(LeftOnlyTestData());
+    }
+
+    Y_UNIT_TEST(CustomRenames) {
+        TestScalarMapJoin(InnerJoinRenamesTestData(), true);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {

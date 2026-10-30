@@ -95,6 +95,7 @@ public:
         const auto& oldConfig = Replication->GetConfig();
         auto newConfig = std::move(*record.MutableConfig());
 
+<<<<<<< HEAD
         if (oldConfig.HasTransferSpecific()) {
             auto& oldSpecific = oldConfig.GetTransferSpecific();
             auto& newSpecific = newConfig.GetTransferSpecific();
@@ -107,6 +108,10 @@ public:
 
         auto desiredState = Replication->GetState();
         if (record.HasSwitchState()) {
+=======
+        auto desiredState = Replication->GetDesiredState();
+        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;

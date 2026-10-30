@@ -26,6 +26,15 @@ struct TEvService {
         EvGetTxId,
         EvTxIdResult,
         EvHeartbeat,
+<<<<<<< HEAD
+=======
+        EvSchemaChangeReport,
+        EvSchemaChangeResult,
+        EvIndexBuildProgress,
+        EvIndexBuildProgressResult,
+        EvSourceOffsetReport,
+        EvSourceOffsetResult,
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 
         EvEnd,
     };
@@ -65,12 +74,16 @@ struct TEvService {
         explicit TEvWorkerStatus(const TWorkerId& id,
                 NKikimrReplication::TEvWorkerStatus::EStatus status,
                 NKikimrReplication::TEvWorkerStatus::EReason reason,
-                const TString& errorDescription
+                const TString& errorDescription,
+                TMaybe<ui64> sourceCommittedOffset = Nothing()
         ) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(status);
             Record.SetReason(reason);
             Record.SetErrorDescription(errorDescription);
+            if (sourceCommittedOffset) {
+                Record.SetSourceCommittedOffset(*sourceCommittedOffset);
+            }
         }
 
         explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag) {
@@ -129,6 +142,28 @@ struct TEvService {
             version.ToProto(Record.MutableVersion());
         }
     };
+<<<<<<< HEAD
+=======
+
+    struct TEvIndexBuildProgress: public TEventPB<TEvIndexBuildProgress, NKikimrReplication::TEvIndexBuildProgress, EvIndexBuildProgress> {
+        TEvIndexBuildProgress() = default;
+    };
+
+    struct TEvIndexBuildProgressResult: public TEventPB<TEvIndexBuildProgressResult, NKikimrReplication::TEvIndexBuildProgress, EvIndexBuildProgressResult> {
+        TEvIndexBuildProgressResult() = default;
+    };
+
+    struct TEvSourceOffsetReport: public TEventPB<TEvSourceOffsetReport, NKikimrReplication::TEvSourceOffsetReport, EvSourceOffsetReport> {};
+    struct TEvSourceOffsetResult: public TEventPB<TEvSourceOffsetResult, NKikimrReplication::TEvSourceOffsetResult, EvSourceOffsetResult> {};
+
+    struct TEvSchemaChangeReport: public TEventPB<TEvSchemaChangeReport, NKikimrReplication::TEvSchemaChangeReport, EvSchemaChangeReport> {
+        TEvSchemaChangeReport() = default;
+    };
+
+    struct TEvSchemaChangeResult: public TEventPB<TEvSchemaChangeResult, NKikimrReplication::TEvSchemaChangeResult, EvSchemaChangeResult> {
+        TEvSchemaChangeResult() = default;
+    };
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 };
 
 namespace NService {

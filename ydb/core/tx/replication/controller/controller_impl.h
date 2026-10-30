@@ -108,6 +108,12 @@ private:
     void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvHeartbeat::TPtr& ev, const TActorContext& ctx);
+<<<<<<< HEAD
+=======
+    void Handle(TEvService::TEvIndexBuildProgress::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvSourceOffsetReport::TPtr& ev, const TActorContext& ctx);
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
     void Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -120,6 +126,10 @@ private:
     void ProcessStopQueue(const TActorContext& ctx);
     bool IsValidWorker(const TWorkerId& id) const;
     bool HasWorkerSession(const TWorkerId& id, ui32 nodeId) const;
+    bool TracksSourceOffsets(const TWorkerId& id) const;
+    void SetReplicationError(TReplication& replication, const TReplication::ITarget& target) const;
+    void DeleteProcessedSourceOffsets(ui64 replicationId, ui64 targetId, NIceDb::TNiceDb&);
+    void StopWorkersForMismatch(ui64 replicationId, const TActorContext& ctx);
     TWorkerInfo* GetOrCreateWorker(const TWorkerId& id);
     void BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrReplication::TRunWorkerCommand& cmd);
     void StopWorker(ui32 nodeId, const TWorkerId& id);
@@ -154,6 +164,7 @@ private:
     class TTxResolveSecretResult;
     class TTxResolveResourceIdResult;
     class TTxWorkerError;
+    class TTxSourceOffsetReport;
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxCommitChanges;
@@ -178,7 +189,7 @@ private:
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
-    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
+    void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx, bool sourceOffsetMismatch = false, TMaybe<ui64> sourceCommittedOffset = Nothing());
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
 
@@ -218,6 +229,12 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    struct TProcessedSourceOffset {
+        ui64 NextOffset = 0;
+        TMaybe<ui64> PersistedNextOffset;
+    };
+    THashMap<TWorkerId, TProcessedSourceOffset> ProcessedSourceOffsets;
+    THashSet<ui64> ReplicationsWithSourceOffsetMismatch;
     TWorkerLagExpiryQueue LagExpiryQueue;
     bool LagExpiryScheduled = false;
     THashSet<TWorkerId> StoppingWorkers;

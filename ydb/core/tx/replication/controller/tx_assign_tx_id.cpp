@@ -78,6 +78,12 @@ public:
             {"assigned", Self->AssignedTxIds.size()},
             {"allocated", Self->AllocatedTxIds.size()});
 
+        const auto replication = Self->GetSingle();
+        if (replication && Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+            Self->PendingTxId.clear();
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
@@ -149,8 +155,10 @@ public:
         Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
-        for (auto& [nodeId, ev] : Result) {
-            ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
+        if (Self->ReplicationsWithSourceOffsetMismatch.empty()) {
+            for (auto& [nodeId, ev] : Result) {
+                ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
+            }
         }
 
         if (!Self->AllocateTxIdInFlight && Self->AllocatedTxIds.size() < MinAllocatedTxIds) {
@@ -167,6 +175,22 @@ public:
 
 }; // TTxAssignTxId
 
+<<<<<<< HEAD
+=======
+void TController::AllocateTxIds(const TActorContext& ctx) {
+    const auto replication = GetSingle();
+    if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
+        return;
+    }
+    if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
+        return;
+    }
+
+    AllocateTxIdInFlight = true;
+    ctx.Send(TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
+}
+
+>>>>>>> 41196e40700 ([KIKIMR-27431] Stop GLOBAL replication after destination rollback (#56496))
 void TController::RunTxAssignTxId(const TActorContext& ctx) {
     if (!AssignTxIdInFlight) {
         AssignTxIdInFlight = true;

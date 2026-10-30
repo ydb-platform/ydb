@@ -122,7 +122,13 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
+<<<<<<< HEAD
             OVERLOAD
+=======
+            OVERLOAD,
+            DATA_ERROR,
+            DATA_LOSS,
+>>>>>>> 86755d19db1 (Detect data loss when reader session is created and report it via DATA_LOSS status. (#56576))
         };
 
         EStatus Status;

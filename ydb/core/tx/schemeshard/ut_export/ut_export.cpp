@@ -433,8 +433,10 @@ namespace {
 
             TVector<ui64> exportIds;
             for (ui32 i = 0; i < 5; ++i) {
-                TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [cancelled](auto& ev) {
-                    return cancelled && TString(ev->Get()->Request.GetKey()).EndsWith("data_complete.json");
+                // Do not recapture marker requests released by earlier cancelled exports.
+                const TString markerKey = Sprintf("backup%u/data_complete.json", i);
+                TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [cancelled, markerKey](auto& ev) {
+                    return cancelled && TString(ev->Get()->Request.GetKey()) == markerKey;
                 });
                 const ui64 exportId = ++txId;
                 TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(

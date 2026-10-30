@@ -147,6 +147,7 @@ struct TEvYdbProxy {
 
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
         FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
+        FLUENT_SETTING_DEFAULT(bool, FailOnDataLoss, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \
@@ -231,8 +232,9 @@ struct TEvYdbProxy {
         {
         }
 
-        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
+        explicit TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset = 0)
             : ReadSessionId(readSessionId)
+            , CommittedOffset(committedOffset)
         {
         }
 

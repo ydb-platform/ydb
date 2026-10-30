@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy
     ydb/public/sdk/cpp/src/client/topic
+    ydb/services/persqueue_v1/actors
     library/cpp/testing/unittest
 )
 

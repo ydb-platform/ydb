@@ -705,7 +705,7 @@ public:
                 .NotDeleted()
                 .NotUnderOperation();
 
-            if (checks && (!internal || !Transaction.HasRestore())) {
+            if (checks && (!internal || !Transaction.HasRestore() || !path.IsImportingReplica())) {
                 checks.NotAsyncReplicaTable();
             }
 

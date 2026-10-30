@@ -31,7 +31,7 @@ void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxData
 void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex);
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
-    bool isInsideTableIndexPath,
+    const TPath& path,
     TTxId op = InvalidTxId,
     bool internal = false);
 

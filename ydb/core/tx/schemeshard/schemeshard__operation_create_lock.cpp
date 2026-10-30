@@ -141,7 +141,7 @@ public:
                 .NotUnderOperation()
                 .IsTable();
 
-            if (checks && !Transaction.GetInternal()) {
+            if (checks && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
                 checks.NotAsyncReplicaTable();
             }
 

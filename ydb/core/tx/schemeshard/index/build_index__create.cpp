@@ -89,7 +89,7 @@ public:
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
 
-            if (checks && !request.GetInternal()) {
+            if (checks && (!request.GetInternal() || !tablePath.IsImportingReplica())) {
                 checks.NotAsyncReplicaTable();
             }
 

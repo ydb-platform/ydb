@@ -562,7 +562,7 @@ public:
             if (checks && Transaction.HasCreateCdcStream()) {
                 NCdcStreamAtTable::CheckSrcDirOnPropose(
                     checks,
-                    srcPath.IsInsideTableIndexPath(false));
+                    srcPath);
             }
 
             if (!checks) {

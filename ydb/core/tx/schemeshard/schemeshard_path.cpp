@@ -1877,6 +1877,18 @@ bool TPath::IsAsyncReplicaTable() const {
     return tableInfo->IsAsyncReplica();
 }
 
+bool TPath::IsImportingReplica() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto& tableInfo = SS->Tables.at(Base()->PathId);
+    return tableInfo->IsAsyncReplica()
+        && tableInfo->ReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+}
+
 bool TPath::IsCdcStream() const {
     Y_ABORT_UNLESS(IsResolved());
 

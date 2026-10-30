@@ -63,7 +63,7 @@ void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex) 
 
 void CheckSrcDirOnPropose(
     const TPath::TChecker& checks,
-    bool isInsideTableIndexPath,
+    const TPath& path,
     TTxId op,
     bool internal)
 {
@@ -76,12 +76,12 @@ void CheckSrcDirOnPropose(
         .IsTable()
         .NotUnderDeleting();
 
-    if (checks && !internal) {
-        checks.NotAsyncReplicaTable();
-    }
-
     if (checks) {
-        if (!isInsideTableIndexPath) {
+        if (!internal || !path.IsImportingReplica()) {
+            checks.NotAsyncReplicaTable();
+        }
+
+        if (!path.IsInsideTableIndexPath(false)) {
             checks.IsCommonSensePath();
         }
 

@@ -132,7 +132,7 @@ public:
                 .NotBackupTable()
                 .NotUnderDeleting();
 
-            if (checks && !Transaction.GetInternal()) {
+            if (checks && (!Transaction.GetInternal() || !tablePath.IsImportingReplica())) {
                 checks.NotAsyncReplicaTable();
             }
 
@@ -554,7 +554,7 @@ public:
             const auto checks = tablePath.Check();
             NCdcStreamAtTable::CheckSrcDirOnPropose(
                 checks,
-                tablePath.IsInsideTableIndexPath(false),
+                tablePath,
                 InitialScan ? OperationId.GetTxId() : InvalidTxId,
                 Transaction.GetInternal());
 
@@ -890,7 +890,7 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .NotUnderDeleting()
         .NotUnderOperation();
 
-    if (checks && !restore && !internal) {
+    if (checks && !restore && (!internal || !tablePath.IsImportingReplica())) {
         checks.NotAsyncReplicaTable();
     }
 

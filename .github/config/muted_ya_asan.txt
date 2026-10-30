@@ -12,7 +12,6 @@ ydb/core/kqp/ut/rbo KqpRboOlapDistinctPushdown.DistinctLimitSyncPoint_Increments
 ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.ExplainAnalyzeMultipleResultContainers-ConcurrentResults
-ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo KqpRboYql.WindowAggregates-ColumnStore
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk

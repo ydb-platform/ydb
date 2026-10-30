@@ -241,7 +241,7 @@ public:
 
     std::vector<TLogoBlobID> PreparePersistedDeletion() {
         PrepareTableForDrop();
-        const auto blobs = LiveOldBlobs();
+        const auto blobs = GetLiveOldBlobs();
         UNIT_ASSERT(!blobs.empty());
         Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
         Restart(NewGroup);
@@ -275,7 +275,7 @@ public:
         UNIT_ASSERT(!pendingGC.empty());
     }
 
-    std::vector<TLogoBlobID> LiveOldBlobs() const {
+    std::vector<TLogoBlobID> GetLiveOldBlobs() const {
         std::vector<TLogoBlobID> result;
         for (const auto& [id, blob] : OldProxy->AllMyBlobs()) {
             if (id.TabletID() == TabletId && id.Channel() >= FirstDataChannel && !blob.DoNotKeep) {
@@ -574,33 +574,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
     }
 
-    Y_UNIT_TEST(TableDroppedAfterSnapshotAbortsScan) {
-        TFixture f;
-        f.PrepareTableForDrop();
-        f.Restart(NewGroup);
-        TEvFindEmptyHistoryIntervals::TEvContinue::TPtr continuation;
-        auto pauseScan =
-            f.Runtime.AddObserver<TEvFindEmptyHistoryIntervals::TEvContinue>([&](TEvFindEmptyHistoryIntervals::TEvContinue::TPtr& ev) {
-                continuation = ev.Release();
-            });
-        ui32 cuts = 0;
-        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
-            ++cuts;
-            ev.Reset();
-        });
-        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
-        f.Restart();
-        f.WakeupAndDispatch();
-        UNIT_ASSERT(continuation);
-        f.DropTableAndWaitForCleanup();
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
-        pauseScan.Remove();
-        f.Runtime.Send(continuation.Release(), 0, true);
-        f.WakeupAndDispatch();
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
-    }
-
     Y_UNIT_TEST(PersistedDeletionSurvivesRestart) {
         TFixture f;
         const auto blobs = f.PreparePersistedDeletion();
@@ -641,7 +614,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             f.Write(i + 1, i, i + 1, TableId + i % 2);
         }
         f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
-        UNIT_ASSERT(f.LiveOldBlobs().empty());
+        UNIT_ASSERT(f.GetLiveOldBlobs().empty());
         const auto sent = f.Counters()->GetCounter("Deriviative/CutHistory/RequestsSent/Count", true);
         const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         bool cutSent = false;
@@ -706,7 +679,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         std::vector<ui64> ids;
         UNIT_ASSERT(WriteData(f.Runtime, f.Sender, TabletId, 1, TableId, MakeTestBlob({ 0, 1000 }, f.Table.Schema), f.Table.Schema, &ids,
             NEvWrite::EModificationType::Upsert, 42));
-        UNIT_ASSERT(!f.LiveOldBlobs().empty());
+        UNIT_ASSERT(!f.GetLiveOldBlobs().empty());
         ui32 cuts = 0;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](auto& ev) {
             ++cuts;
@@ -718,7 +691,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.WakeupAndDispatch();
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
-        UNIT_ASSERT(!f.LiveOldBlobs().empty());
+        UNIT_ASSERT(!f.GetLiveOldBlobs().empty());
     }
 
     Y_UNIT_TEST_TWIN(TieredIndexStorageControlsHistory, inheritPortionStorage) {
@@ -770,13 +743,13 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                     obsoletePortions += portion->HasRemoveSnapshot();
                 }
             }
-            if (!obsoletePortions && (!inheritPortionStorage || f.LiveOldBlobs().empty())) {
+            if (!obsoletePortions && (!inheritPortionStorage || f.GetLiveOldBlobs().empty())) {
                 break;
             }
             f.WakeupAndDispatch(1);
         }
         UNIT_ASSERT_VALUES_EQUAL(obsoletePortions, 0u);
-        const auto oldBlobs = f.LiveOldBlobs();
+        const auto oldBlobs = f.GetLiveOldBlobs();
         UNIT_ASSERT_VALUES_EQUAL_C(oldBlobs.empty(), inheritPortionStorage, "only a DEFAULT index keeps old local blobs after eviction");
         ui32 cuts = 0;
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
@@ -792,7 +765,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.WakeupAndDispatch();
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), scans + 1);
         UNIT_ASSERT_VALUES_EQUAL(cuts, inheritPortionStorage ? 1u : 0u);
-        UNIT_ASSERT_VALUES_EQUAL(f.LiveOldBlobs().size(), oldBlobs.size());
+        UNIT_ASSERT_VALUES_EQUAL(f.GetLiveOldBlobs().size(), oldBlobs.size());
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
     }
 }

@@ -21,18 +21,22 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         THashSet<TAddress> RequestedAddresses;
 
         virtual void OnAccessorsFetched(std::vector<std::shared_ptr<TPortionDataAccessor>>&& accessors) override {
+            THashMap<ui64, THashMap<ui64, std::vector<TAddress>>> waitingByPortion;
+            for (const auto& address : RequestedAddresses) {
+                if (address.GetTabletId() != TabletId) {
+                    continue;
+                }
+                waitingByPortion[address.GetPortionId()][address.GetPathId().GetRawValue()].push_back(address);
+            }
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
                 const auto& portion = i->GetPortionInfo();
-                std::vector<TAddress> matched;
-                for (const auto& address : RequestedAddresses) {
-                    if (address.GetTabletId() == TabletId && address.GetPortionId() == portion.GetPortionId() &&
-                        address.GetPathId() == portion.GetPathId()) {
-                        matched.push_back(address);
-                    }
-                }
-                AFL_VERIFY(!matched.empty());
-                for (const auto& address : matched) {
+                const auto byPortion = waitingByPortion.find(portion.GetPortionId());
+                AFL_VERIFY(byPortion != waitingByPortion.end());
+                const auto byPath = byPortion->second.find(portion.GetPathId().GetRawValue());
+                AFL_VERIFY(byPath != byPortion->second.end());
+                AFL_VERIFY(!byPath->second.empty());
+                for (const auto& address : byPath->second) {
                     AFL_VERIFY(RequestedAddresses.erase(address));
                     AFL_VERIFY(objects.emplace(address, i).second);
                 }

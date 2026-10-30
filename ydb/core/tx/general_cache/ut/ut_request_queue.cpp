@@ -369,7 +369,8 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 });
         NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1 }, 1);
 
-        auto aborted = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 2 }, 1, true);
+        auto aborted = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 2 });
+        aborted->Aborted = true;
         auto compaction = harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 10 });
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
         UNIT_ASSERT(!aborted->Ready);

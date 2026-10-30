@@ -84,6 +84,14 @@ namespace NPageCollection {
             return Meta.BackingSize();
         }
 
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            return sizeof(TPageCollection) - sizeof(TMeta) + Meta.GetMemoryUsage();
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return &Meta.Raw;
+        }
+
         bool SkipBTreeIndexV1Shadow() const noexcept override
         {
             return SkipBTreeIndexV1Shadow_.load(std::memory_order_relaxed);

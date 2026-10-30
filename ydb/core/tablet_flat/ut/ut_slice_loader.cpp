@@ -131,6 +131,15 @@ namespace {
             return Part->Store->PageCollectionBytes(Room);
         }
 
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            // Fixture backing stores are outside this wrapper's modeled footprint
+            return sizeof(TTestPartPageCollection);
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return nullptr;
+        }
+
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
         {
             return Part->Store->GetPageLocation(Room, pageId);

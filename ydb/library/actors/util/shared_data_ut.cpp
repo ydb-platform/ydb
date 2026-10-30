@@ -1,10 +1,14 @@
 #include "shared_data.h"
+#include "shared_data_backtracing_owner.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/deque.h>
 #include <util/system/sys_alloc.h>
+
+#include <array>
+#include <thread>
 
 namespace NActors {
 
@@ -52,6 +56,18 @@ namespace NActors {
             UNIT_ASSERT_VALUES_EQUAL(TString(data.Slice()), TString(link.Slice()));
         }
 
+        Y_UNIT_TEST(AllocationSizeSurvivesTrimAndSharing) {
+            auto data = TSharedData::Uninitialized(1024);
+            auto copy = data;
+            data.TrimBack(16);
+            UNIT_ASSERT_VALUES_EQUAL(data.size(), 16u);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 1024u + TSharedData::OverheadSize);
+            UNIT_ASSERT_VALUES_EQUAL(copy.GetAllocationSize(), data.GetAllocationSize());
+            data.TrimBack(0);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(copy.GetAllocationSize(), 1024u + TSharedData::OverheadSize);
+        }
+
         Y_UNIT_TEST(TrimBehavior) {
             auto data = TSharedData::Uninitialized(42);
 
@@ -82,11 +98,17 @@ namespace NActors {
                 THeader* header = reinterpret_cast<THeader*>(raw);
                 new (header) THeader(this);
                 char* data = raw + sizeof(THeader);
-                Y_ABORT_UNLESS(Allocated_.insert(data).second);
+                Y_ABORT_UNLESS(Allocated_.emplace(data, sizeof(THeader) + size).second);
                 return TSharedData::AttachUnsafe(data, size);
             }
 
-            void Deallocate(char* data) noexcept {
+            size_t GetAllocationSize(const char* data) const noexcept override {
+                const auto it = Allocated_.find(data);
+                Y_ABORT_UNLESS(it != Allocated_.end());
+                return it->second;
+            }
+
+            void Deallocate(char* data) noexcept override {
                 Y_ABORT_UNLESS(Allocated_.erase(data) > 0);
                 char* raw = data - sizeof(THeader);
                 THeader* header = reinterpret_cast<THeader*>(raw);
@@ -105,9 +127,129 @@ namespace NActors {
             }
 
         private:
-            THashSet<void*> Allocated_;
+            THashMap<const void*, size_t> Allocated_;
             TDeque<char*> Deallocated_;
         };
+
+        struct TAllocationTag {
+            explicit TAllocationTag(std::atomic<size_t>& created, std::atomic<size_t>& destroyed)
+                : Destroyed(destroyed)
+            {
+                ++created;
+            }
+
+            ~TAllocationTag() {
+                ++Destroyed;
+            }
+
+            std::atomic<size_t>& Destroyed;
+        };
+
+        Y_UNIT_TEST(AllocationTagFollowsFinalRelease) {
+            std::atomic<size_t> created{ 0 };
+            std::atomic<size_t> destroyed{ 0 };
+            auto data = TSharedData::Uninitialized(128);
+            auto copy = data;
+            auto& tag = data.GetOrCreateAllocationTag<TAllocationTag>(created, destroyed);
+            UNIT_ASSERT(copy.FindAllocationTag<TAllocationTag>() == &tag);
+            copy.TrimBack(64);
+            UNIT_ASSERT_VALUES_EQUAL(copy.GetAllocationSize(), 128 + TSharedData::OverheadSize);
+            UNIT_ASSERT(&copy.GetOrCreateAllocationTag<TAllocationTag>(created, destroyed) == &tag);
+            UNIT_ASSERT_VALUES_EQUAL(created.load(), 1);
+            data = {};
+            UNIT_ASSERT_VALUES_EQUAL(destroyed.load(), 0);
+            copy = {};
+            UNIT_ASSERT_VALUES_EQUAL(destroyed.load(), 1);
+        }
+
+        Y_UNIT_TEST(AllocationTagPreservesCustomOwner) {
+            std::atomic<size_t> created{ 0 };
+            std::atomic<size_t> destroyed{ 0 };
+            TCustomOwner owner;
+            auto data = owner.Allocate(42);
+            const auto* ptr = data.data();
+            data.GetOrCreateAllocationTag<TAllocationTag>(created, destroyed);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 42 + TSharedData::HeaderSize);
+            data = {};
+            UNIT_ASSERT(owner.NextDeallocated() == ptr);
+            UNIT_ASSERT(owner.NextDeallocated() == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(destroyed.load(), 1);
+        }
+
+        Y_UNIT_TEST(AllocationTagComposesWithTracingOwner) {
+            for (bool traceFirst : { false, true }) {
+                std::atomic<size_t> created{ 0 };
+                std::atomic<size_t> destroyed{ 0 };
+                auto data = TSharedData::Uninitialized(42);
+                if (traceFirst) {
+                    TBackTracingOwner::FakeOwner(data);
+                }
+                auto& tag = data.GetOrCreateAllocationTag<TAllocationTag>(created, destroyed);
+                if (!traceFirst) {
+                    TBackTracingOwner::FakeOwner(data);
+                }
+                UNIT_ASSERT(data.FindAllocationTag<TAllocationTag>() == &tag);
+                UNIT_ASSERT(data.FindAllocationTag<TBackTracingOwner>());
+                UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 42 + TSharedData::OverheadSize);
+                data = {};
+                UNIT_ASSERT_VALUES_EQUAL(destroyed.load(), 1);
+            }
+        }
+
+        Y_UNIT_TEST(ConcurrentAllocationTagInstallation) {
+            std::atomic<size_t> created{ 0 };
+            std::atomic<size_t> destroyed{ 0 };
+            std::atomic<bool> start{ false };
+            auto data = TSharedData::Uninitialized(42);
+            std::array<TAllocationTag*, 8> tags;
+            std::array<std::thread, 8> threads;
+            for (size_t i = 0; i < threads.size(); ++i) {
+                threads[i] = std::thread([&, i, copy = data] {
+                    while (!start.load(std::memory_order_acquire)) {
+                        std::this_thread::yield();
+                    }
+                    if (i % 2 == 0) {
+                        TBackTracingOwner::FakeOwner(copy);
+                    }
+                    tags[i] = &copy.GetOrCreateAllocationTag<TAllocationTag>(created, destroyed);
+                });
+            }
+            start.store(true, std::memory_order_release);
+            for (auto& thread : threads) {
+                thread.join();
+            }
+            for (auto* tag : tags) {
+                UNIT_ASSERT(tag == tags[0]);
+            }
+            UNIT_ASSERT(data.FindAllocationTag<TBackTracingOwner>());
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 42 + TSharedData::OverheadSize);
+            UNIT_ASSERT_VALUES_EQUAL(created.load() - destroyed.load(), 1);
+            data = {};
+            UNIT_ASSERT_VALUES_EQUAL(created.load(), destroyed.load());
+        }
+
+        Y_UNIT_TEST(CustomOwnerAllocationSizeSurvivesTrim) {
+            TCustomOwner owner;
+            auto data = owner.Allocate(42);
+            auto copy = data;
+            data.TrimBack(7);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 42u + TSharedData::HeaderSize);
+            UNIT_ASSERT_VALUES_EQUAL(copy.GetAllocationSize(), data.GetAllocationSize());
+        }
+
+        Y_UNIT_TEST(TracingOwnerAllocationSizeSurvivesTrim) {
+            auto data = TSharedData::AttachUnsafe(TBackTracingOwner::Allocate(42), 42);
+            data.TrimBack(7);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 42u + TSharedData::OverheadSize);
+        }
+
+        Y_UNIT_TEST(TracingOwnerDelegatesAllocationSize) {
+            TCustomOwner owner;
+            auto data = owner.Allocate(42);
+            TBackTracingOwner::FakeOwner(data);
+            data.TrimBack(7);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetAllocationSize(), 42u + TSharedData::HeaderSize);
+        }
 
         Y_UNIT_TEST(CustomOwner) {
             TCustomOwner owner;

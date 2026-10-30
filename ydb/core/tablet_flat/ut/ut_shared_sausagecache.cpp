@@ -234,6 +234,14 @@ void LogCounters(THolder<TSharedPageCacheCounters>& counters) {
         << Endl;
 }
 
+void CheckCacheUsageWithMetadata(const TSharedPageCacheCounters& counters) {
+    const i64 metadataBytes = counters.MetadataBytes->Val();
+    const i64 usedBytes =
+        counters.ActiveBytes->Val() + counters.PassiveBytes->Val() + counters.LoadInFlyBytes->Val() + metadataBytes;
+    UNIT_ASSERT_GT(metadataBytes, 0);
+    UNIT_ASSERT_LE(usedBytes, counters.ActiveLimitBytes->Val());
+}
+
 void WaitEvent(TMyEnvBase& env, ui32 eventType, ui32 requiredCount = 1) {
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(eventType, requiredCount));
@@ -1225,7 +1233,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 98, 13, 1}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    // Metadata shares the 10 MiB budget, leaving room for one fewer page.
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1244,7 +1254,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1265,7 +1276,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1283,7 +1295,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1815,7 +1828,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 98, 13, 1}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    // Metadata shares the 10 MiB budget, leaving room for one fewer page.
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1834,7 +1849,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1855,7 +1871,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -1873,7 +1890,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 138);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
@@ -2140,7 +2158,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    // Metadata shares the 10 MiB budget, leaving room for one fewer page.
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 136);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(26_MB), static_cast<i64>(1_MB / 3));
@@ -2158,7 +2178,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 137);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 136);
+    CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheHitBytes->Val(), static_cast<i64>(26_MB), static_cast<i64>(1_MB / 3));

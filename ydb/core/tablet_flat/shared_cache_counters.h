@@ -39,6 +39,13 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr PageCollections;
     const TCounterPtr Owners;
     const TCounterPtr PageCollectionOwners;
+    // Metadata charge included in the cache's total memory consumption
+    const TCounterPtr MetadataBytes;
+    // Current collection-entry reference footprints, excluding request/event-held descriptors
+    // Shared Raw allocations, executor attribution and page bodies can overlap these bytes
+    const TCounterPtr CollectionMetadataBytes;
+    const TCounterPtr DetachedCollectionMetadataBytes;
+    const TCounterPtr DetachedPageCollections;
 
     // request counters:
     const TCounterPtr PendingRequests;

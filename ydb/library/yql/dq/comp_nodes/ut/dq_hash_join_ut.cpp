@@ -588,6 +588,67 @@ TJoinTestData SerializedListKeySpillingTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData ByRefInnerSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200000;
+    constexpr int rightSize = 200000;
+    constexpr int keyOffset = 100000;
+
+    TVector<ui64> leftCol0(leftSize);
+    TVector<ui64> leftCol1(leftSize);
+    TVector<std::optional<ui64>> leftCol2(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftCol0[i] = i;
+        leftCol1[i] = i * 3;
+        leftCol2[i] = (i % 4 == 0) ? std::nullopt : std::optional<ui64>(i * 100);
+    }
+
+    TVector<ui64> rightCol0(rightSize);
+    TVector<ui64> rightCol1(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightCol0[i] = i + keyOffset;
+        rightCol1[i] = (i + keyOffset) * 3;
+    }
+
+    constexpr int matchCount = leftSize - keyOffset;
+    TVector<ui64> expLeftCol0(matchCount);
+    TVector<ui64> expLeftCol1(matchCount);
+    TVector<std::optional<ui64>> expLeftCol2(matchCount);
+    TVector<ui64> expRightCol0(matchCount);
+    TVector<ui64> expRightCol1(matchCount);
+    for (int i = 0; i < matchCount; ++i) {
+        const int key = i + keyOffset;
+        expLeftCol0[i] = key;
+        expLeftCol1[i] = key * 3;
+        expLeftCol2[i] = (key % 4 == 0) ? std::nullopt : std::optional<ui64>(key * 100);
+        expRightCol0[i] = key;
+        expRightCol1[i] = key * 3;
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2, expRightCol0, expRightCol1);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    td.JoinMemoryConstraint = packedTupleSize * static_cast<ui64>(0.3 * rightSize);
+    td.ExpectsSpilling = true;
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData ByRefLeftSpillingTestData() {
+    auto td = LargeBothSidesLeftSpillingTestData();
+    td.ExpectsSpilling = true;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData SlicedBlocksInnerSpillingTestData() {
     auto td = LargeBothSidesInnerSpillingTestData();
     td.SliceBlocks = true;
@@ -3023,6 +3084,20 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
             return;
         }
         Test(LargeBothSidesLeftSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestByRefInnerSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
+        Test(ByRefInnerSpillingTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestByRefLeftSpilling) {
+        if (!NX86::HaveAVX2()) {
+            return;
+        }
+        Test(ByRefLeftSpillingTestData(), true);
     }
 
     Y_UNIT_TEST(TestSlicedBlocksInnerSpilling) {

@@ -9,7 +9,10 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
+#include <arrow/array/concatenate.h>
 #include <arrow/scalar.h>
+#include <arrow/util/bit_util.h>
+#include <arrow/util/bitmap_ops.h>
 
 #include "dq_join_common.h"
 #include "dq_join_filters.h"
@@ -38,11 +41,61 @@ struct TDqBlockJoinContext {
     TSides<TVector<int>> ColumnPermutation;
 };
 
+struct TProbeRefs {
+    bool Enabled = false;
+    bool ForceFlush = false;
+    TVector<TVector<arrow::Datum>> Blocks;
+    TVector<size_t> RefBegins;
+    const ui8* Begin = nullptr;
+    const ui8* End = nullptr;
+    ui32 RowSize = 0;
+    TVector<TSingleTuple> Build;
+    TVector<ui64> Probe;
+
+    void AddBlock(TVector<arrow::Datum> columns, const TPackResult& pack, ui32 rowSize) {
+        if (!Blocks.empty() && RefBegins.back() == Probe.size()) {
+            Blocks.pop_back();
+            RefBegins.pop_back();
+        }
+        RefBegins.push_back(Probe.size());
+        Blocks.push_back(std::move(columns));
+        Begin = pack.PackedTuples.data();
+        End = Begin + pack.PackedTuples.size();
+        RowSize = rowSize;
+    }
+
+    bool TryAdd(TSingleTuple build, TSingleTuple probe) {
+        if (probe.PackedData < Begin || probe.PackedData >= End) {
+            return false;
+        }
+        Build.push_back(build);
+        Probe.push_back((probe.PackedData - Begin) / RowSize);
+        return true;
+    }
+
+    void Reset() {
+        Build.clear();
+        Probe.clear();
+        ForceFlush = false;
+        if (Begin) {
+            TVector<arrow::Datum> last = std::move(Blocks.back());
+            Blocks.clear();
+            RefBegins.clear();
+            Blocks.push_back(std::move(last));
+            RefBegins.push_back(0);
+        } else {
+            Blocks.clear();
+            RefBegins.clear();
+        }
+    }
+};
+
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
   public:
     TBlockPackedTupleSource(TComputationContext& ctx, TSides<IComputationNode*> stream,
                             const TDqBlockJoinContext* meta,
-                            TSides<std::unique_ptr<IBlockLayoutConverter>>& converters, ESide side)
+                            TSides<std::unique_ptr<IBlockLayoutConverter>>& converters, ESide side,
+                            TProbeRefs* refs = nullptr)
         : Side_(side)
         , Meta_(meta)
         , ArrowPool_(&ctx.ArrowMemoryPool)
@@ -51,6 +104,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
         , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
+        , Refs_(refs)
     {}
 
     bool Finished() const {
@@ -69,6 +123,14 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         if (res != NYql::NUdf::EFetchStatus::Ok) {
             if (res == NYql::NUdf::EFetchStatus::Finish) {
                 Finished_ = true;
+                if (Refs_ && Refs_->Enabled) {
+                    Refs_->Begin = nullptr;
+                    Refs_->End = nullptr;
+                    if (!Refs_->Probe.empty()) {
+                        Refs_->ForceFlush = true;
+                        return Yield{};
+                    }
+                }
                 return Finish{};
             }
             return Yield{};
@@ -95,6 +157,9 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         }
         NormalizeScalarColumns(columns);
         ArrowBlockToInternalConverter_->Pack(columns, result);
+        if (Refs_ && Refs_->Enabled) {
+            Refs_->AddBlock(std::move(columns), result, ArrowBlockToInternalConverter_->GetTupleLayout()->TotalRowSize);
+        }
         return One{std::move(result)};
     }
 
@@ -140,16 +205,28 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
     TVector<int> ColumnPermutation_;
+    TProbeRefs* Refs_;
 };
 
 template<TPhysicalJoin Join>
 struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConverter> {
     using TBase = TPackedTupleOutputBase<Join, IBlockLayoutConverter>;
 
+    static constexpr bool ByRef = !Join.IsGrid && (Join.Kind == EJoinKind::Inner ||
+        (Join.Preserved == ESide::Probe && (Join.Kind == EJoinKind::Left || LeftSemiOrOnly(Join.Kind))));
+
     TRenamesPackedTupleOutput(const TDqBlockJoinContext* meta, TSides<IBlockLayoutConverter*> converters,
-                              const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
+                              const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool, TProbeRefs* refs)
         : TBase(&meta->Renames, converters)
+        , Meta_(meta)
+        , Pool_(&arrowPool)
+        , Refs_(refs)
+        , Layouts_{.Build = converters.Build->GetTupleLayout(), .Probe = converters.Probe->GetTupleLayout()}
+        , RefRowBytes_((LeftSemiOrOnly(Join.Kind) ? 0 : Layouts_.Build->TotalRowSize) + Layouts_.Probe->TotalRowSize)
+        , BuildRowSize_(LeftSemiOrOnly(Join.Kind) ? 0 : Layouts_.Build->TotalRowSize)
+        , BuildVariableBytes_(Layouts_.Build->VariableColumns.size(), 0)
     {
+        Refs_->Enabled = ByRef;
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
             TVector<arrow::Datum> nulls;
             for(auto* type:userNullTypes) {
@@ -169,10 +246,238 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
         i64 Rows;
     };
 
+    i64 SizeTuples() const {
+        return Refs_->Probe.empty() ? TBase::SizeTuples() : std::ssize(Refs_->Probe);
+    }
+
+    i64 SizeBytes() const {
+        if (Refs_->Blocks.size() >= MaxRefBlocks) {
+            return std::numeric_limits<i64>::max();
+        }
+        return TBase::SizeBytes() + std::ssize(Refs_->Probe) * RefRowBytes_ + RefOverflowBytes_;
+    }
+
+    static i64 OverflowBytes(const NPackedTuple::TTupleLayout* layout, const ui8* row) {
+        i64 bytes = 0;
+        for (const auto& col : layout->VariableColumns) {
+            if (ReadUnaligned<ui8>(row + col.Offset) == 255) {
+                bytes += ReadUnaligned<ui32>(row + col.Offset + 1 + sizeof(ui32));
+            }
+        }
+        return bytes;
+    }
+
+    bool TryAddRef(TSingleTuple build, TSingleTuple probe) {
+        if (!Refs_->TryAdd(build, probe)) {
+            return false;
+        }
+        if (BuildRowSize_ > 64) {
+            for (ui32 line = 64; line < BuildRowSize_; line += 64) {
+                __builtin_prefetch(build.PackedData + line);
+            }
+            __builtin_prefetch(build.PackedData + BuildRowSize_ - 1);
+        }
+        if constexpr (!LeftSemiOrOnly(Join.Kind)) {
+            const auto& columns = Layouts_.Build->VariableColumns;
+            for (ui32 i = 0; i < columns.size(); ++i) {
+                const ui8* cell = build.PackedData + columns[i].Offset;
+                const ui32 size = ReadUnaligned<ui8>(cell);
+                if (size == 255) {
+                    const ui32 overflow = ReadUnaligned<ui32>(cell + 1 + sizeof(ui32));
+                    RefOverflowBytes_ += overflow;
+                    BuildVariableBytes_[i] += columns[i].DataSize - 1 - 2 * sizeof(ui32) + overflow;
+                } else {
+                    BuildVariableBytes_[i] += size;
+                }
+            }
+        }
+        if (!Layouts_.Probe->VariableColumns.empty()) {
+            RefOverflowBytes_ += OverflowBytes(Layouts_.Probe, probe.PackedData);
+        }
+        return true;
+    }
+
+    bool NeedsFlush() const {
+        return Refs_->ForceFlush;
+    }
+
+    auto MakeConsumeFn() {
+        struct ConsumeFn {
+            TRenamesPackedTupleOutput& Self;
+            decltype(std::declval<TBase&>().MakeConsumeFn()) Base;
+
+            void operator()(TSides<TSingleTuple> tuples) {
+                if constexpr (ByRef) {
+                    if (Self.TryAddRef(tuples.Build, tuples.Probe)) {
+                        return;
+                    }
+                    MKQL_ENSURE(Self.Refs_->Probe.empty(), "mixed output by reference and by copy");
+                }
+                Base(tuples);
+            }
+
+            void operator()(TSingleTuple tuple) {
+                if constexpr (ByRef && Join.Kind == EJoinKind::Left) {
+                    const TSingleTuple null{.PackedData = Self.Nulls_.PackedTuples.data(),
+                                            .OverflowBegin = Self.Nulls_.Overflow.data()};
+                    if (Self.TryAddRef(null, tuple)) {
+                        return;
+                    }
+                    MKQL_ENSURE(Self.Refs_->Probe.empty(), "mixed output by reference and by copy");
+                } else if constexpr (ByRef && LeftSemiOrOnly(Join.Kind)) {
+                    if (Self.TryAddRef(tuple, tuple)) {
+                        return;
+                    }
+                    MKQL_ENSURE(Self.Refs_->Probe.empty(), "mixed output by reference and by copy");
+                }
+                Base(tuple);
+            }
+        };
+        return ConsumeFn{*this, TBase::MakeConsumeFn()};
+    }
+
     TFlushResult Flush() {
+        if (!Refs_->Probe.empty()) {
+            return FlushRefs();
+        }
         TFlushResult res;
         res.Rows = this->SizeTuples();
         res.Columns = FlushAndApplyRenames();
+        return res;
+    }
+
+    template <typename T>
+    static void GatherValues(const arrow::ArrayData& src, const ui64* idx, size_t count, T* dst) {
+        const T* values = src.GetValues<T>(1);
+        for (size_t i = 0; i < count; ++i) {
+            dst[i] = values[idx[i]];
+        }
+    }
+
+    std::optional<arrow::Datum> GatherFixedProbeColumn(ui32 column) {
+        const auto& refs = *Refs_;
+        const auto& first = *refs.Blocks.front()[column].array();
+        const auto* fixed = dynamic_cast<const arrow::FixedWidthType*>(first.type.get());
+        if (!fixed || first.type->id() == arrow::Type::BOOL || first.buffers.size() != 2 || !first.child_data.empty()) {
+            return std::nullopt;
+        }
+        const i64 width = fixed->bit_width() / 8;
+        if (width != 1 && width != 2 && width != 4 && width != 8) {
+            return std::nullopt;
+        }
+        bool hasNulls = false;
+        for (const auto& block : refs.Blocks) {
+            const auto& data = *block[column].array();
+            if (data.buffers.size() != 2 || !data.type->Equals(*first.type)) {
+                return std::nullopt;
+            }
+            hasNulls |= data.buffers[0] != nullptr && data.GetNullCount() != 0;
+        }
+        const size_t rows = refs.Probe.size();
+        std::shared_ptr<arrow::Buffer> values = ARROW_RESULT(arrow::AllocateBuffer(rows * width, Pool_));
+        std::shared_ptr<arrow::Buffer> bitmap;
+        ui8* bits = nullptr;
+        if (hasNulls) {
+            bitmap = ARROW_RESULT(arrow::AllocateBitmap(rows, Pool_));
+            bits = bitmap->mutable_data();
+        }
+        ui8* dst = values->mutable_data();
+        for (size_t b = 0; b < refs.Blocks.size(); ++b) {
+            const auto& data = *refs.Blocks[b][column].array();
+            const size_t from = refs.RefBegins[b];
+            const size_t to = b + 1 < refs.Blocks.size() ? refs.RefBegins[b + 1] : rows;
+            const ui64* idx = refs.Probe.data() + from;
+            const size_t count = to - from;
+            if (ProbeRuns_[b]) {
+                std::memcpy(dst + from * width, data.GetValues<ui8>(1, (data.offset + idx[0]) * width), count * width);
+                if (bits) {
+                    if (data.buffers[0]) {
+                        arrow::internal::CopyBitmap(data.buffers[0]->data(), data.offset + idx[0], count, bits, from);
+                    } else {
+                        arrow::BitUtil::SetBitsTo(bits, from, count, true);
+                    }
+                }
+                continue;
+            }
+            switch (width) {
+            case 1: GatherValues<ui8>(data, idx, count, reinterpret_cast<ui8*>(dst) + from); break;
+            case 2: GatherValues<ui16>(data, idx, count, reinterpret_cast<ui16*>(dst) + from); break;
+            case 4: GatherValues<ui32>(data, idx, count, reinterpret_cast<ui32*>(dst) + from); break;
+            case 8: GatherValues<ui64>(data, idx, count, reinterpret_cast<ui64*>(dst) + from); break;
+            }
+            if (bits) {
+                const ui8* srcBits = data.buffers[0] ? data.buffers[0]->data() : nullptr;
+                for (size_t i = 0; i < count; ++i) {
+                    arrow::BitUtil::SetBitTo(bits, from + i, !srcBits || arrow::BitUtil::GetBit(srcBits, data.offset + idx[i]));
+                }
+            }
+        }
+        return arrow::ArrayData::Make(first.type, rows, {bitmap, values}, hasNulls ? arrow::kUnknownNullCount : 0);
+    }
+
+    arrow::Datum TakeProbeColumn(ui32 column) {
+        if (Refs_->Blocks.size() == 1 && ProbeRuns_[0]) {
+            return Refs_->Blocks[0][column].array()->Slice(Refs_->Probe.front(), Refs_->Probe.size());
+        }
+        if (auto fixed = GatherFixedProbeColumn(column)) {
+            return *fixed;
+        }
+        const auto& refs = *Refs_;
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Meta_->UserTypes.Probe[column], *Pool_, refs.Probe.size(), nullptr);
+        for (size_t b = 0; b < refs.Blocks.size(); ++b) {
+            NYql::NUdf::IArrayBuilder::TArrayDataItem item{.Data = refs.Blocks[b][column].array().get(), .StartOffset = 0};
+            const size_t from = refs.RefBegins[b];
+            const size_t to = b + 1 < refs.Blocks.size() ? refs.RefBegins[b + 1] : refs.Probe.size();
+            if (ProbeRuns_[b]) {
+                builder->AddMany(&item, 1, refs.Probe[from], to - from);
+            } else {
+                builder->AddMany(&item, 1, refs.Probe.data() + from, to - from);
+            }
+        }
+        arrow::Datum res = builder->Build(true);
+        if (res.is_arraylike() && res.kind() == arrow::Datum::CHUNKED_ARRAY) {
+            const auto& chunks = res.chunked_array()->chunks();
+            if (chunks.size() == 1) {
+                return chunks.front();
+            }
+            return ARROW_RESULT(arrow::Concatenate(chunks, Pool_));
+        }
+        return res;
+    }
+
+    TFlushResult FlushRefs() {
+        TFlushResult res;
+        res.Rows = std::ssize(Refs_->Probe);
+        TVector<arrow::Datum> build;
+        if constexpr (!LeftSemiOrOnly(Join.Kind)) {
+            this->Converters_.Build->GatherUnpack(Refs_->Build.data(), Refs_->Build.size(), BuildVariableBytes_.data(), build);
+        }
+        const auto& refs = *Refs_;
+        ProbeRuns_.assign(refs.Blocks.size(), false);
+        for (size_t b = 0; b < refs.Blocks.size(); ++b) {
+            const size_t from = refs.RefBegins[b];
+            const size_t to = b + 1 < refs.Blocks.size() ? refs.RefBegins[b + 1] : refs.Probe.size();
+            bool run = from < to;
+            for (size_t i = from + 1; run && i < to; ++i) {
+                run = refs.Probe[i] == refs.Probe[i - 1] + 1;
+            }
+            ProbeRuns_[b] = run;
+        }
+        THashMap<ui32, arrow::Datum> probe;
+        for (auto rename : *this->Renames_) {
+            if (rename.Side == ESide::Build) {
+                res.Columns.push_back(build[rename.Index]);
+            } else {
+                auto it = probe.find(rename.Index);
+                if (it == probe.end()) {
+                    it = probe.emplace(rename.Index, TakeProbeColumn(rename.Index)).first;
+                }
+                res.Columns.push_back(it->second);
+            }
+        }
+        Refs_->Reset();
+        RefOverflowBytes_ = 0;
+        std::fill(BuildVariableBytes_.begin(), BuildVariableBytes_.end(), 0);
         return res;
     }
 
@@ -201,6 +506,17 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
             return renamed;
         }
     }
+
+    static constexpr size_t MaxRefBlocks = 64;
+    const TDqBlockJoinContext* Meta_;
+    arrow::MemoryPool* Pool_;
+    TProbeRefs* Refs_;
+    TSides<const NPackedTuple::TTupleLayout*> Layouts_;
+    i64 RefRowBytes_;
+    ui32 BuildRowSize_;
+    TVector<ui64> BuildVariableBytes_;
+    TVector<bool> ProbeRuns_;
+    i64 RefOverflowBytes_ = 0;
 };
 
 template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Join>> {
@@ -247,12 +563,12 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             , Meta_(meta)
             , Converters_(std::move(converters))
             , Join_(TSides<TBlockPackedTupleSource>{.Build = {ctx, streams, meta, Converters_, ESide::Build},
-                                                    .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
+                                                    .Probe = {ctx, streams, meta, Converters_, ESide::Probe, &Refs_}},
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Ctx_(&ctx)
-            , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
+            , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool, &Refs_)
             , PairFilter_(std::move(pairFilter))
             , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
@@ -289,6 +605,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
       private:
         const TDqBlockJoinContext* Meta_;
         TSides<std::unique_ptr<IBlockLayoutConverter>> Converters_;
+        TProbeRefs Refs_;
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Join> Output_;

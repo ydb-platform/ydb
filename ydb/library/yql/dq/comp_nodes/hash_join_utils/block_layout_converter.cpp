@@ -813,6 +813,41 @@ public:
         VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(columns);
     }
 
+    void GatherUnpack(const TSingleTuple* rows, ui32 count, const ui64* variableBytes, TVector<arrow::Datum>& columns) override {
+        columns.resize(Extractors_.size());
+        if (columns.empty()) {
+            return;
+        }
+
+        std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
+        TupleLayout_->ColumnSizes(count, variableBytes, bytesPerColumn);
+
+        TVector<ui8*> columnsData;
+        TVector<ui8*> columnsNullBitmap;
+        for (size_t i = 0; i < columns.size(); ++i) {
+            const auto& mapping = InnerMapping_[i];
+            TVector<ui64> bytesCount;
+            for (auto idx: mapping) {
+                bytesCount.push_back(bytesPerColumn[idx]);
+            }
+
+            bool isBitmapNull = false;
+            if (RememberNullBitmaps_) {
+                isBitmapNull = IsBitmapNull_[i];
+            }
+            columns[i] = Extractors_[i]->ReserveArray(bytesCount, count, isBitmapNull);
+
+            auto data = Extractors_[i]->GetColumnsData(columns[i].array());
+            columnsData.insert(columnsData.end(), data.begin(), data.end());
+
+            auto nullBitmap = Extractors_[i]->GetNullBitmap(columns[i].array());
+            columnsNullBitmap.insert(columnsNullBitmap.end(), nullBitmap.begin(), nullBitmap.end());
+        }
+
+        TupleLayout_->GatherUnpack(columnsData.data(), columnsNullBitmap.data(), rows, count);
+        VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(columns);
+    }
+
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
         return TupleLayout_.get();
     }

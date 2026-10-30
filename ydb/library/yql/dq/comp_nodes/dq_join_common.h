@@ -1442,6 +1442,10 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
     }
 
+    bool NeedsFlush() const {
+        return false;
+    }
+
     auto MakeConsumeFn() {
         struct ConsumeFn {
             TPackedTupleOutputBase& Self;
@@ -1502,6 +1506,10 @@ EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, Ou
             onFlush(output.Flush());
             return EFetchResult::One;
         case EFetchResult::Yield:
+            if (output.NeedsFlush()) {
+                onFlush(output.Flush());
+                return EFetchResult::One;
+            }
             if constexpr (JoinType::FlushOnYield) {
                 if (output.SizeTuples() > 0) {
                     onFlush(output.Flush());

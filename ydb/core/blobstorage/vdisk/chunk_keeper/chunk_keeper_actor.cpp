@@ -4,7 +4,6 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 

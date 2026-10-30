@@ -15,7 +15,6 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
-#include <ydb/core/util/stlog.h>
 
 namespace NYql::NDq {
     struct TComputeRuntimeSettings;

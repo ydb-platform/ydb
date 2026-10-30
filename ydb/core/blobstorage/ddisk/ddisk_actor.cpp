@@ -5,7 +5,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/util/stlog.h>
 
 #if defined(__linux__)
 #include <unistd.h>

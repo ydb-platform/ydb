@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_patch.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
-#include <ydb/core/util/stlog.h>
+
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <cstring>

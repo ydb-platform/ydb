@@ -5,7 +5,6 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 
 #include <util/generic/overloaded.h>
-#include <ydb/core/util/stlog.h>
 
 #include <cerrno>
 #include <optional>

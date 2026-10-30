@@ -12,6 +12,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
+
 using namespace NKikimr;
 using namespace NStorage;
 
@@ -69,15 +70,16 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
             const bool firstInvalidEncryptionMode = !storedHasEncryptionMode && !incomingEncryptionModeIsKnown;
             const bool encryptionModeChanged = storedHasEncryptionMode && storedEncryptionMode != incomingEncryptionMode;
             if (firstInvalidEncryptionMode || encryptionModeChanged) {
-                STLOG(PRI_ERROR, BS_NODE, NW114, "ApplyServiceSet group EncryptionMode diagnostics",
-                    (Origin, origin),
-                    (GroupId, groupId),
-                    (IncomingGeneration, incomingGroup.GetGroupGeneration()),
-                    (StoredHasEncryptionMode, storedHasEncryptionMode),
-                    (StoredEncryptionModeRaw, storedEncryptionMode),
-                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
-                    (StoredLifeCyclePhase, storedLifeCyclePhase),
-                    (IncomingLifeCyclePhase, incomingGroup.GetLifeCyclePhase()));
+                YDB_LOG_ERROR("ApplyServiceSet group EncryptionMode diagnostics",
+                    {"marker", "NW114"},
+                    {"origin", origin},
+                    {"groupId", groupId},
+                    {"incomingGeneration", incomingGroup.GetGroupGeneration()},
+                    {"storedHasEncryptionMode", storedHasEncryptionMode},
+                    {"storedEncryptionModeRaw", storedEncryptionMode},
+                    {"incomingEncryptionModeRaw", incomingEncryptionMode},
+                    {"storedLifeCyclePhase", storedLifeCyclePhase},
+                    {"incomingLifeCyclePhase", incomingGroup.GetLifeCyclePhase()});
                 break;
             }
         }

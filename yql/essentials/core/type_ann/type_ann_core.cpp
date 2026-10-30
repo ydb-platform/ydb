@@ -87,6 +87,36 @@ const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext&
     return ctx.ParseTypeCache[typeStr];
 }
 
+// AsyncInvoke is an internal typed expression, not a change to scalar UDF Run.
+IGraphTransformer::TStatus AsyncInvokeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) {
+    if (!EnsureArgsCount(*input, 2, ctx.Expr) || !EnsureAtom(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    auto it = ctx.Types.AsyncFunctions.find(input->Head().Content());
+    if (it == ctx.Types.AsyncFunctions.end() || !it->second.InputType || !it->second.ResultType) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Unknown async callable: " + TString(input->Head().Content())));
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!EnsureComputable(input->Tail(), ctx.Expr) || !IsSameAnnotation(*input->Tail().GetTypeAnn(), *it->second.InputType)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Async callable argument type mismatch"));
+        return IGraphTransformer::TStatus::Error;
+    }
+    input->SetTypeAnn(it->second.ResultType);
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus AsyncMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const auto type = input->Head().GetTypeAnn();
+    if (!type || (type->GetKind() != ETypeAnnotationKind::Stream && type->GetKind() != ETypeAnnotationKind::Flow)) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "AsyncMap supports Stream/Flow only"));
+        return IGraphTransformer::TStatus::Error;
+    }
+    return MapWrapper(input, output, ctx);
+}
+
 enum class EDictItems {
     Both = 0,
     Keys = 1,
@@ -16213,6 +16243,8 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["NoPush"] = &NoPushWrapper;
     Functions["Likely"] = &NoPushWrapper;
     Functions["Unessential"] = &UnessentialWrapper;
+    Functions["AsyncMap"] = &AsyncMapWrapper;
+    ExtFunctions["AsyncInvoke"] = &AsyncInvokeWrapper;
     Functions["Map"] = &MapWrapper;
     Functions["OrderedMap"] = &MapWrapper;
     Functions["MapNext"] = &MapNextWrapper;

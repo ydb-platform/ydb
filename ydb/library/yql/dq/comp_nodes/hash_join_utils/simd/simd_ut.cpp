@@ -41,7 +41,7 @@ struct TTestFactory {
     }
 };
 
-Y_CPU_UNIT_TEST_SUITE(TSimdAVX2, AVX2, {
+Y_CPU_UNIT_TEST_SUITE(TSimdAVX2, AVX2) {
     using namespace NSimd::NAVX2;
     Y_CPU_UNIT_TEST(SimdBool) {
         TSimd8<bool> tr(true);
@@ -208,9 +208,10 @@ Y_CPU_UNIT_TEST_SUITE(TSimdAVX2, AVX2, {
         UNIT_ASSERT((v1.Blend16<mask>(v2) == res).All());
         UNIT_ASSERT((v1.BlendVar(v2, blend) == res).All());
     }
-})
+}
+Y_CPU_UNIT_TEST_SUITE_END()
 
-Y_CPU_UNIT_TEST_SUITE(TSimdSSE42, SSE42, {
+Y_CPU_UNIT_TEST_SUITE(TSimdSSE42, SSE42) {
     using namespace NSimd::NSSE42;
     Y_CPU_UNIT_TEST(SimdBool) {
         TSimd8<bool> tr(true);
@@ -358,7 +359,8 @@ Y_CPU_UNIT_TEST_SUITE(TSimdSSE42, SSE42, {
         UNIT_ASSERT_EQUAL((v1.Blend16<mask>(v2) == res).All(), true);
         UNIT_ASSERT_EQUAL((v1.BlendVar(v2, blend) == res).All(), true);
     }
-})
+}
+Y_CPU_UNIT_TEST_SUITE_END()
 
 Y_UNIT_TEST_SUITE(SimdFallback) {
     using namespace NSimd::NFallback;

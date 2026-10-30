@@ -62,17 +62,20 @@ struct TTestRegistration {
 #define Y_CPU_TEST_TARGET_POP()
 #endif
 
-// Only explicitly declared test-body methods receive the target attribute.
-// Their constructors, factories and execution wrappers are defined above.
-#define Y_CPU_UNIT_TEST_SUITE_IMPL(N, BASE, FIXTURE, TARGET, ...) \
+// Registration stays above the target region. The suite brace is written by the
+// caller, as with Y_UNIT_TEST_SUITE. Y_CPU_UNIT_TEST_SUITE_END() drops the
+// attribute so it does not apply to the next suite.
+#define Y_CPU_UNIT_TEST_SUITE_IMPL(N, BASE, FIXTURE, TARGET) \
     Y_UNIT_TEST_SUITE_IMPL_F(N, BASE, FIXTURE) {} \
     Y_CPU_TEST_TARGET_PUSH(TARGET) \
-    namespace NTestSuite##N __VA_ARGS__ \
-    Y_CPU_TEST_TARGET_POP()
+    namespace NTestSuite##N
 
-#define Y_CPU_UNIT_TEST_SUITE(N, ISA, ...) \
+#define Y_CPU_UNIT_TEST_SUITE(N, ISA) \
     Y_CPU_UNIT_TEST_SUITE_IMPL(N, NSimd::NTest::TCpuTestSuite<NX86::Have##ISA>, \
-        NUnitTest::TBaseTestCase, Y_CPU_TEST_TARGET_##ISA, __VA_ARGS__)
+        NUnitTest::TBaseTestCase, Y_CPU_TEST_TARGET_##ISA)
+
+#define Y_CPU_UNIT_TEST_SUITE_END() \
+    Y_CPU_TEST_TARGET_POP()
 
 #define Y_CPU_UNIT_TEST_IMPL(N, FORK) \
     struct TBody##N: public TCurrentTestCase { \

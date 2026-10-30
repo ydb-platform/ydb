@@ -2763,6 +2763,222 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
         ReadTopicMessage(outputTopic, expectedMessage);
     }
+<<<<<<< HEAD
+=======
+
+    // The datastreams fixture uses real actor threads, where the test runtime
+    // observers are not invoked; observe the read actor's shard requests through
+    // its pipe cache instead (see kqp_split_ut.cpp for the same pattern).
+    //
+    // Reads are recognized by their table id: internal service queries (e.g.
+    // checkpoint metadata reads) also fly through the read actor and legitimately
+    // take locks, so only the lookup table reads are asserted.
+    class TLockObservingPipeCacheStub final: public TActor<TLockObservingPipeCacheStub> {
+    public:
+        TLockObservingPipeCacheStub(
+            ui64 tableOwnerId, ui64 tablePathId, std::atomic<ui64>& evTableReads, std::atomic<ui64>& evTableReadsWithLocks)
+            : TActor<TLockObservingPipeCacheStub>(&TLockObservingPipeCacheStub::State)
+            , TableOwnerId(tableOwnerId)
+            , TablePathId(tablePathId)
+            , EvTableReads(evTableReads)
+            , EvTableReadsWithLocks(evTableReadsWithLocks)
+        {
+        }
+
+        void State(TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+                auto* forw = reinterpret_cast<TEvPipeCache::TEvForward::TPtr*>(&ev);
+                auto* inner = forw->Get()->Get()->Ev.Get();
+                if (inner->Type() == TEvDataShard::TEvRead::EventType) {
+                    auto* read = static_cast<TEvDataShard::TEvRead*>(inner);
+                    const auto& tableId = read->Record.GetTableId();
+                    if (tableId.GetOwnerId() == TableOwnerId && tableId.GetTableId() == TablePathId) {
+                        ++EvTableReads;
+                        if (read->Record.HasLockTxId()) {
+                            ++EvTableReadsWithLocks;
+                        }
+                    }
+                }
+            }
+            // Transparent proxy: keep Sender/Cookie/TraceId, forward to the real
+            // pipe cache; read results still go directly to the read actor.
+            Forward(ev, MakePipePerNodeCacheID(false));
+        }
+
+    private:
+        const ui64 TableOwnerId;
+        const ui64 TablePathId;
+        std::atomic<ui64>& EvTableReads;
+        std::atomic<ui64>& EvTableReadsWithLocks;
+    };
+
+    // Streaming queries are long-running: their table reads must not take locks,
+    // because any concurrent write would break the locks and abort the query.
+    Y_UNIT_TEST_F(StreamingQueryDoesNotTakeLocks, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        const auto inputTopic = MakeExternalName("LocksInput");
+        const auto outputTopic = MakeExternalName("LocksOutput");
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
+        CreatePqSource(pqSourceName);
+
+        // The enrichment lookup data is read via the read actor: make it multi-shard.
+        ExecQuery(R"(
+            CREATE TABLE LocksKV (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            ) WITH (
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4
+            );
+        )");
+        ExecQuery(R"(
+            UPSERT INTO LocksKV (Key, Value) VALUES (1u, "one"), (2u, "two"), (3u, "three"), (4u, "four");
+        )");
+
+        // Resolve the lookup table id to recognize the streaming query's reads.
+        const auto& tableDesc = GetLocalFlatMsgBusPQClient()->Ls("/Root/LocksKV");
+        const auto& tableSelf = tableDesc->Record.GetPathDescription().GetSelf();
+
+        std::atomic<ui64> evTableReads{ 0 };
+        std::atomic<ui64> evTableReadsWithLocks{ 0 };
+        auto* shim = new TLockObservingPipeCacheStub(tableSelf.GetSchemeshardId(), tableSelf.GetPathId(), evTableReads, evTableReadsWithLocks);
+        InterceptReadActorPipeCache(GetRuntime().Register(shim));
+        Y_DEFER {
+            InterceptReadActorPipeCache(MakePipePerNodeCacheID(false));
+        };
+
+        ExecQuery(fmt::format(R"sql(
+            CREATE STREAMING QUERY LocksQuery AS DO BEGIN
+                $topic_data = SELECT * FROM `{pq_source}`.`{input}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (ServiceId Uint32 NOT NULL)
+                );
+                $joined_data = SELECT s.Value AS LookupValue, t.* FROM $topic_data AS t
+                    LEFT JOIN LocksKV AS s ON t.ServiceId = s.Key;
+                INSERT INTO `{pq_source}`.`{output}`
+                SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) AS Data
+                FROM $joined_data;
+            END DO;
+        )sql", "pq_source"_a = pqSourceName, "input"_a = inputTopic, "output"_a = outputTopic));
+
+        // The .sys/streaming_queries view registration may lag behind the cluster
+        // bootstrap, so poll tolerantly.
+        WaitFor(TEST_OPERATION_TIMEOUT, "streaming query running", [&]() {
+            auto result = GetQueryClient()
+                              ->ExecuteQuery(R"(
+                SELECT Status FROM `.sys/streaming_queries` WHERE Path = "/Root/LocksQuery";
+            )", TTxControl::NoTx())
+                              .GetValueSync();
+            if (result.GetStatus() != EStatus::SUCCESS) {
+                return false;
+            }
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            if (!parser.TryNextRow()) {
+                return false;
+            }
+            return parser.ColumnParser("Status").GetOptionalUtf8().value_or("") == "RUNNING";
+        });
+
+        WriteTopicMessage(inputTopic, R"({"ServiceId": 1})");
+        WriteTopicMessage(inputTopic, R"({"ServiceId": 2})");
+
+        ReadTopicMessages(outputTopic,
+            {
+                R"({"LookupValue":"one","ServiceId":1})", R"({"LookupValue":"two","ServiceId":2})",
+            }, TInstant::Zero(), /* sort */ true);
+
+        // The streaming query reads the lookup table and must not take locks.
+        // Internal service queries (e.g. checkpoint metadata reads) fly through
+        // the same read actor and are filtered out by table id.
+        UNIT_ASSERT_GT(evTableReads.load(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(evTableReadsWithLocks.load(), 0u);
+    }
+
+    Y_UNIT_TEST_TWIN_F(ReadLargeTopicMessage, Compressed, TStreamingTestFixture) {
+        constexpr ui64 maxMessageSize = 136314880;
+        constexpr ui64 partitionWriteSpeed = 50 * 1024 * 1024;
+        constexpr size_t inputMessageSize = Compressed ? 200000000 : 130000000;
+        constexpr size_t outputMessageSize = Compressed ? 70000000 : inputMessageSize;
+
+        auto& config = SetupAppConfig();
+        config.MutableGRpcConfig()->SetMaxMessageSize(maxMessageSize);
+        config.MutablePQConfig()->SetMaxMessageSizeBytes(maxMessageSize);
+
+        constexpr char inputTopicName[] = "largeMessageInputTopic";
+        constexpr char outputTopicName[] = "largeMessageOutputTopic";
+        constexpr char sourceName[] = "largeMessageSource";
+        const auto inputTopicSettings = NTopic::TCreateTopicSettings()
+                                            .PartitioningSettings(1, 1)
+                                            .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
+                                            .PartitionWriteBurstBytes(partitionWriteSpeed);
+        CreateTopic(inputTopicName, inputTopicSettings, /* local */ true);
+        const auto outputTopicSettings = NTopic::TCreateTopicSettings()
+                                             .PartitioningSettings(1, 1)
+                                             .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeed)
+                                             .PartitionWriteBurstBytes(partitionWriteSpeed);
+        CreateTopic(outputTopicName, outputTopicSettings, /* local */ true);
+        Y_DEFER {
+            DropTopic(inputTopicName, /* local */ true);
+            DropTopic(outputTopicName, /* local */ true);
+        };
+
+        ExecQuery(fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{location}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE"
+            );
+        )sql", "source"_a = sourceName, "location"_a = GetKikimrRunner()->GetEndpoint(), "database"_a = TEST_DATABASE));
+
+        const auto outputExpression = Compressed ? fmt::format("SUBSTRING(Data, 0, {})", outputMessageSize) : "Data";
+        const auto operation = ExecScript(fmt::format(R"sql(
+            INSERT INTO `{source}`.`{output_topic}`
+            SELECT {output_expression} AS Data
+            FROM `{source}`.`{input_topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "raw",
+                SCHEMA = (Data String NOT NULL)
+            )
+            LIMIT 1;
+        )sql", "source"_a = sourceName, "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName,
+            "output_expression"_a = outputExpression));
+
+        NYdb::TDriver topicDriver(
+            NYdb::TDriverConfig().SetEndpoint(GetKikimrRunner()->GetEndpoint()).SetDatabase(TEST_DATABASE).SetMaxMessageSize(maxMessageSize));
+        NYdb::NTopic::TTopicClient topicClient(topicDriver);
+
+        const std::string inputMessage(inputMessageSize, 'x');
+        const auto counters = MakeIntrusive<NYdb::NTopic::TWriterCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto writeSession =
+            topicClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
+                                                             .Path(inputTopicName)
+                                                             .PartitionId(0)
+                                                             .Counters(counters)
+                                                             .Codec(Compressed ? NYdb::NTopic::ECodec::GZIP : NYdb::NTopic::ECodec::RAW));
+        UNIT_ASSERT(writeSession->Write(NYdb::NTopic::TWriteMessage(inputMessage), nullptr, TDuration::Seconds(30)));
+        UNIT_ASSERT(writeSession->Close(TDuration::Seconds(30)));
+        EnsureTopicEndOffset(inputTopicName, 1, topicClient);
+
+        if constexpr (Compressed) {
+            UNIT_ASSERT_VALUES_EQUAL(counters->BytesWritten->Val(), inputMessageSize);
+            UNIT_ASSERT_GT(counters->BytesWrittenCompressed->Val(), 0);
+            UNIT_ASSERT_LT(counters->BytesWrittenCompressed->Val(), static_cast<i64>(maxMessageSize));
+        }
+
+        // Avoid logging the full expected payload while polling; compare the data after reading.
+        const auto messages =
+            ReadTopicMessages(outputTopicName, { "" }, topicClient, TInstant::Zero(), /* sort */ false, /* checkResult */ false);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(messages.front().first.size(), outputMessageSize);
+        UNIT_ASSERT_C(inputMessage.compare(0, outputMessageSize, messages.front().first) == 0, "Large topic message contents differ");
+        WaitScriptExecution(operation);
+        topicDriver.Stop(true);
+    }
+>>>>>>> 95446e4dcbc (YQ-5796 fix big message topic processing (#57672))
 }
 
 } // namespace NKikimr::NKqp

@@ -222,8 +222,6 @@ public:
         }
         NIceDb::TNiceDb db(txc.DB);
         TBlobGroupSelector selector(Self->Info());
-        // Read links before deletion intents: cleanup can transfer references between retries.
-        // Retain exclusions and retry only the table whose pages were not ready.
         switch (ReadStage) {
             case EReadStage::SharedBlobs:
                 if (!ExcludePersistedBlobs<Schema::SharedBlobIds>(db, selector, HistoryIntervals)) {

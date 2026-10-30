@@ -55,7 +55,8 @@ public:
     }
 
     void Exclude(const TLogoBlobID& blobId, std::optional<ui32> actualGroup = {}) {
-        Exclude(blobId, actualGroup, [] {});
+        Exclude(blobId, actualGroup, [] {
+        });
     }
 
     const TIntervals& GetIntervals() const {

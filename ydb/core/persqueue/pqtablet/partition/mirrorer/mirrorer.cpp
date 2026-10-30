@@ -714,7 +714,7 @@ bool TMirrorer::IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEven
 
     const auto& messageMeta = message.GetMessageMeta();
     for (const auto& attribute : messageMeta->Fields) {
-        if (attribute.first == "_ydb_service_replication_message") {
+        if (attribute.first == "_ydb_service_replication_message" && attribute.second == "true") {
             return true;
         }
     }
@@ -731,8 +731,10 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
                     auto& pendingOffset = OffsetsByConsumers[consumer];
                     pendingOffset = Max(pendingOffset, offset);
                 }
-                continue;
+            } else {
+                LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
             }
+            continue;
         }
 
         PQ_ENSURE(OffsetToRead <= offset);

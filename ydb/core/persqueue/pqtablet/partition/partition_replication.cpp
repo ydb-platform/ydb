@@ -25,7 +25,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         BlobEncoder.MirroredOffset = Max(BlobEncoder.MirroredOffset, *mirroredOffset);
     }
 
-    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {        
+    for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
         if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
@@ -42,10 +42,12 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
         return;
     }
 
+    const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
+
     // Replication may replay older snapshots; acknowledge the greatest valid offset.
     y_absl::flat_hash_map<TString, ui64> expectedOffsets;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        if (!GetConsumer(Config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+        if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
         auto& expected = expectedOffsets[consumer];

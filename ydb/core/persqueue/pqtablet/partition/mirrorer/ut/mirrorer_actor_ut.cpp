@@ -786,6 +786,51 @@ Y_UNIT_TEST(ReplicationDataBatchesQueuedOffsetsAndWaitsForAck) {
     UNIT_ASSERT(env.CapturedRequests.empty());
 }
 
+Y_UNIT_TEST(ReplicationDataSkipsMalformedServiceMessages) {
+    for (ui64 endOffset : {0u, 10u}) {
+        TMirrorerEnv env({.EndOffset = endOffset, .MirrorConsumerOffsets = true});
+        env.Advance(TDuration::Seconds(1));
+        env.StartSession(0, endOffset, endOffset + 1);
+
+        auto message = MakeCompressed(env.Factory.Session(0).Partition, 0, TString(1, '\xff'));
+        message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
+        std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+        messages.push_back(std::move(message));
+        env.Factory.Session(0).PushEvent(TReadSessionEvent::TDataReceivedEvent(
+            {}, std::move(messages), env.Factory.Session(0).Partition));
+        env.Dispatch();
+        UNIT_ASSERT(env.CapturedRequests.empty());
+        UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+        // Skipping a malformed control payload must leave the regular read offset unchanged.
+        env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, endOffset));
+        env.Dispatch();
+        env.AckWrite(endOffset);
+        env.PushReplicationData(endOffset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), endOffset + 1);
+    }
+}
+
+Y_UNIT_TEST(ReplicationDataRequiresTrueServiceAttribute) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 1);
+
+    NKikimrPQ::TReplicationDataPayload payload;
+    (*payload.MutableOffsetsByConsumers())["consumer"] = 0;
+    auto message = MakeCompressed(env.Factory.Session(0).Partition, 0, payload.SerializeAsString());
+    message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "false");
+    std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+    messages.push_back(std::move(message));
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TDataReceivedEvent(
+        {}, std::move(messages), env.Factory.Session(0).Partition));
+    env.Dispatch();
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+    UNIT_ASSERT(env.FindRequest(1));
+    env.AckWrite(0);
+}
+
 Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
     TMirrorerEnv env({.MirrorConsumerOffsets = true});
     env.Advance(TDuration::Seconds(1));

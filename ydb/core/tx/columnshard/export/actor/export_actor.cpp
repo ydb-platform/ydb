@@ -93,24 +93,13 @@ void TActor::AbortExport(const TString& errorMessage) {
             {"message", errorMessage});
         return;
     }
-<<<<<<< HEAD
-    if (Stage == EStage::WaitData) {
-        Counters.OnAckResponse();
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    }
     FinishAbortExport(errorMessage);
 }
 
 void TActor::FinishAbortExport(const TString& errorMessage) {
     ExportSession->Abort(errorMessage);
     ExportSession->MutableCursor().InitNext({}, true);
-=======
-    ExportSession->Abort(errorMessage);
-    ExportSession->MutableCursor().InitNext({}, true);
     Counters.OnOperationsCancelled();
->>>>>>> fa302c58f32 (cs import counters has been fixed (#56300))
     KillExporter();
     AbortScanIfKnown(errorMessage);
     Stage = EStage::WaitSaveCursor;

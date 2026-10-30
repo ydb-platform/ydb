@@ -1,3 +1,8 @@
+$input = [
+    <|TestField: Just(@@{"inner":{"i":{"a":"hello"}}}@@)|>,
+    <|TestField: Just("{}")|>,
+];
+
 /*
 syntax='proto3';
 
@@ -112,5 +117,4 @@ SELECT TestField,
       $udfSerYT($udfParYT(TestField)),
       $udfParPB(TestField),
       $udfSerPB($udfParPB(TestField)),
-FROM plato.Input;
-
+FROM AS_TABLE($input);

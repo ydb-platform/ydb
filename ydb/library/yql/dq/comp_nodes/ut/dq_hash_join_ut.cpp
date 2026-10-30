@@ -2736,6 +2736,38 @@ void TestOutputRowsOperatorStat(TJoinTestData td, bool blockJoin) {
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
+    Y_UNIT_TEST_TWIN(RejectPgType, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* pgType = pb.NewPgType(23); // int4
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            auto* inputType = BlockJoin ? pb.NewStreamType(multi) : pb.NewFlowType(multi);
+            TCallableBuilder builder(*setup.Env, "ExternalNode", inputType);
+            return TRuntimeNode(builder.Build(), false);
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(intType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({intType}));
+        const auto lhs = source({pgType, intType});
+        const auto rhs = source({intType, intType});
+        const auto join = BlockJoin
+            ? pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType)
+            : pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, {0}, {0}, {0, 0}, {}, returnType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "PG types are not supported in hash join");
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);

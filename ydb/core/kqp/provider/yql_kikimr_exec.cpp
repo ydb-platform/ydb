@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -1210,6 +1211,24 @@ namespace {
                 }
 
                 dstSettings.EnsureGlobalConsistency().CommitInterval = TDuration::FromValue(value);
+            } else if (name == "availability_period") {
+                dstSettings.AvailabilityPeriod = NKikimrReplication::TAvailabilityPeriod();
+                auto& period = *dstSettings.AvailabilityPeriod;
+                if (const auto interval = setting.Value().Maybe<TCoInterval>()) {
+                    const auto value = FromString<i64>(interval.Cast().Literal().Value());
+                    if (value <= 0) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), "Availability period must be positive"));
+                        return false;
+                    }
+                    NKikimr::SetDuration(TDuration::FromValue(value), *period.MutableDuration());
+                } else if (const auto value = setting.Value().Maybe<TCoString>();
+                    value && to_lower(TString(value.Cast().Literal().Value())) == "unlimited")
+                {
+                    period.MutableUnlimited();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), "Invalid availability period"));
+                    return false;
+                }
             } else if (name == "initial_scan") {
                 YQL_ENSURE(setting.Value().Maybe<TCoBool>());
                 dstSettings.InitialScan = FromString<bool>(setting.Value().Cast<TCoBool>().Literal().Value());

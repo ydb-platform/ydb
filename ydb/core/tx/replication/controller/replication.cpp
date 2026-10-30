@@ -343,13 +343,17 @@ public:
         SetState(EState::Error, issue);
     }
 
-    void UpdateLag(ui64 targetId, TDuration lag) {
+    void UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
         auto it = Targets.find(targetId);
         if (it == Targets.end()) {
             return;
         }
 
-        TLagProvider::UpdateLag(it->second, targetId, lag);
+        if (lag) {
+            TLagProvider::UpdateLag(it->second, targetId, *lag);
+        } else {
+            TLagProvider::InvalidateLag(it->second, targetId);
+        }
     }
 
 private:
@@ -666,7 +670,7 @@ bool TReplication::CheckAlterDone() const {
     return (Impl->State == EState::Ready || Impl->State == EState::Paused) && Impl->PendingAlterTargets.empty();
 }
 
-void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
+void TReplication::UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
     Impl->UpdateLag(targetId, lag);
 }
 

@@ -593,6 +593,7 @@ struct TUserTable : public TThrRefBase {
     const TSet<TPathId>& GetSchemaChangesCdcStreams() const;
 
     bool IsReplicated() const;
+    bool IsImportingReplica() const;
     bool IsIncrementalRestore() const;
 
 private:

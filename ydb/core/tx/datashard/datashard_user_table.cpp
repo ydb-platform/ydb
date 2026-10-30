@@ -241,6 +241,10 @@ bool TUserTable::IsReplicated() const {
     }
 }
 
+bool TUserTable::IsImportingReplica() const {
+    return ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING;
+}
+
 bool TUserTable::IsIncrementalRestore() const {
     return IncrementalBackupConfig.Mode == NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP;
 }

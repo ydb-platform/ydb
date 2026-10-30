@@ -1369,7 +1369,8 @@ message TStreamingQueriesConfig {
 
     message TExternalTopicsSettings {
         optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
-        optional uint64 MaxGrpcMessageSize = 2;
+        optional uint64 MaxGrpcMessageSize = 2 [default = 136314880]; // default = 130MB, same as used by logbroker server-size (note that PQConfig.MaxMessageSizeBytes covers inner message payload size, grpc wrapper may be larger)
+        // "magical" numbers are not nice, but duplicating same "magical numbers" all over user configs is not nice either
     }
 
     reserved 1;

@@ -16,6 +16,10 @@
 
 #include <library/cpp/logger/backend.h>
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+#include <util/system/sanitizers.h>
+
 #include "tls/tls.h"
 
 using namespace NActors;
@@ -60,7 +64,8 @@ public:
         common->ClusterUUID = "cluster";
         common->AcceptUUID = {common->ClusterUUID};
         common->TechnicalSelfHostName = address;
-        common->Settings.Handshake = TDuration::Seconds(1);
+        common->Settings.Handshake = NSan::PlainOrUnderSanitizer(
+            TDuration::Seconds(1), TDuration::Seconds(15));
         common->Settings.DeadPeer = deadPeerTimeout;
         common->Settings.CloseOnIdle = TDuration::Minutes(1);
         common->Settings.SendBufferDieLimitInMB = 512;

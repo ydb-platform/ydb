@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <math.h>
 #include <ranges>
 #include <ydb/core/base/hive.h>
@@ -41,6 +42,9 @@
 #include <util/string/printf.h>
 #include <util/string/subst.h>
 #include <util/system/sanitizers.h>
+#include <util/system/datetime.h>
+#include <util/stream/file.h>
+#include <util/system/env.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -886,6 +890,651 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     void BalanceTablets(TTestBasicRuntime& runtime, ui64 hiveTabletId) {
         BalanceTablets(runtime, hiveTabletId, runtime.AllocateEdgeActor());
+    }
+
+    struct TLocalMetricsSnapshotTest {
+        class TMetricsTestHive : public NHive::TTestHive {
+        public:
+            using TTestHive::TTestHive;
+
+            void SetMetricsOverloaded(bool overloaded) {
+                UpdateTabletMetricsInProgress = overloaded ? MAX_UPDATE_TABLET_METRICS_IN_PROGRESS : 0;
+            }
+        };
+
+        static constexpr ui64 ControlledUpdate = 0x123456789;
+        struct TPacket {
+            NKikimrHive::TEvTabletMetrics Record;
+            ui64 Cookie;
+            TActorId Sender;
+            TActorId Hive;
+        };
+        TTestBasicRuntime Runtime{1, false};
+        const ui64 HiveTablet = MakeDefaultHiveID();
+        const bool Legacy;
+        const ui32 Groups;
+        const bool Quiet;
+        ui64 TabletId = 0;
+        TMetricsTestHive* LiveHive = nullptr;
+        TActorId Sender;
+        TActorId Registrar;
+        ui64 ReportedCpuMaximum = 0;
+        TVector<TPacket> Packets;
+        THashSet<IEventHandle*> InjectedAcks;
+        TBlockEvents<TEvLocal::TEvTabletMetricsAck> Acks;
+        TTestActorRuntime::TEventObserverHolder AutoMetrics;
+        TTestActorRuntime::TEventObserverHolder SystemUsage;
+        TTestActorRuntime::TEventObserverHolder Capture;
+
+        explicit TLocalMetricsSnapshotTest(bool legacy = false, ui32 groups = 0, bool quiet = true)
+            : Legacy(legacy)
+            , Groups(groups)
+            , Quiet(quiet)
+            , Acks(Runtime, [this](const auto& ev) { return InjectedAcks.erase(ev.Get()) == 0; })
+            , AutoMetrics(Runtime.AddObserver<TEvLocal::TEvTabletMetrics>([](auto& ev) {
+                // Drive tablet updates explicitly; periodic executor updates are out of this probe.
+                if (ev->Cookie != ControlledUpdate) {
+                    ev.Reset();
+                }
+            }))
+            , SystemUsage(Runtime.AddObserver<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>([this](auto& ev) {
+                if (Quiet) {
+                    ev.Reset();
+                } else {
+                    for (auto& info : *ev->Get()->Record.MutableSystemStateInfo()) {
+                        info.SetNumberOfCpus(16);
+                        info.SetMemoryUsedInAlloc(0);
+                        info.SetMemoryLimit(64ull << 30);
+                        for (auto& pool : *info.MutablePoolStats()) {
+                            pool.set_limit(16);
+                            pool.set_usage(0);
+                        }
+                    }
+                }
+            }))
+            , Capture(Runtime.AddObserver<TEvHive::TEvTabletMetrics>([this](auto& ev) {
+                if (ReportedCpuMaximum != 0) {
+                    ev->Get()->Record.MutableResourceMaximum()->SetCPU(ReportedCpuMaximum);
+                }
+                Packets.push_back({ev->Get()->Record, ev->Cookie, ev->Sender, ev->GetRecipientRewrite()});
+            }))
+        {
+            // Local's first timer may precede pipe connection; allow it before Bootstrap.
+            Runtime.SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime,
+                    const TActorId& parent, const TActorId& actor) {
+                TTestActorRuntimeBase::DefaultRegistrationObserver(runtime, parent, actor);
+                auto* registered = runtime.FindActor(actor);
+                if (registered && registered->GetActivityType() == NKikimrServices::TActivity::LOCAL_ACTOR) {
+                    runtime.EnableScheduleForActor(actor, true);
+                }
+            });
+            Setup(Runtime, true, 1, [](TAppPrepare& app) {
+                app.HiveConfig.SetResourceChangeReactionPeriod(TDuration::Max().Seconds());
+            });
+            CreateTestBootstrapper(Runtime, CreateTestTabletInfo(HiveTablet, TTabletTypes::Hive),
+                [this](const TActorId& tablet, TTabletStorageInfo* info) -> IActor* {
+                    LiveHive = new TMetricsTestHive(info, tablet);
+                    return LiveHive;
+                });
+            MakeSureTabletIsUp(Runtime, HiveTablet, 0);
+            Registrar = Runtime.GetLocalServiceId(MakeLocalRegistrarID(Runtime.GetNodeId(0), HiveTablet), 0);
+            Runtime.EnableScheduleForActor(Registrar, true);
+            Sender = Runtime.AllocateEdgeActor();
+            const ui64 owner = MakeTabletID(false, 1);
+            TabletId = SendCreateTestTablet(Runtime, HiveTablet, owner,
+                MakeHolder<TEvHive::TEvCreateTablet>(owner, 0, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+            MakeSureTabletIsUp(Runtime, TabletId, 0);
+            Advance(TDuration::Seconds(12)); // Drain startup node-only metrics and ACKs.
+            Packets.clear();
+        }
+
+        void Update(ui64 cpu) {
+            NKikimrTabletBase::TMetrics values;
+            values.SetCPU(cpu);
+            values.SetMemory(cpu * 10);
+            for (ui32 i = 0; i < Groups; ++i) {
+                auto* read = values.AddGroupReadThroughput();
+                read->SetGroupID(i + 1);
+                read->SetChannel(i % 3);
+                read->SetThroughput(cpu);
+                auto* write = values.AddGroupWriteThroughput();
+                write->SetGroupID(i + 1);
+                write->SetChannel(i % 3);
+                write->SetThroughput(cpu);
+            }
+            Update(values);
+        }
+
+        void Update(const NKikimrTabletBase::TMetrics& values) {
+            Runtime.Send(new IEventHandle(Registrar, Sender,
+                new TEvLocal::TEvTabletMetrics(TabletId, 0, values), 0, ControlledUpdate));
+            Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        void InjectAck(const NKikimrLocal::TEvTabletMetricsAck& record, TActorId recipient, TActorId sender, ui64 cookie) {
+            auto* msg = new TEvLocal::TEvTabletMetricsAck;
+            msg->Record.CopyFrom(record);
+            auto* handle = new IEventHandle(recipient, sender, msg, 0, cookie);
+            InjectedAcks.insert(handle);
+            Runtime.Send(handle, 0, true);
+            Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        void AckOne() {
+            UNIT_ASSERT(!Acks.empty());
+            auto ack = std::move(Acks.front());
+            Acks.pop_front();
+            InjectAck(ack->Get()->Record, ack->GetRecipientRewrite(), ack->Sender, Legacy ? 0 : ack->Cookie);
+        }
+
+        void Advance(TDuration duration, bool ack = true) {
+            const auto until = Runtime.GetCurrentTime() + duration;
+            while (Runtime.GetCurrentTime() < until) {
+                Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                if (ack) {
+                    while (!Acks.empty()) {
+                        AckOne();
+                    }
+                }
+            }
+        }
+
+        ui64 TabletRecords() const {
+            ui64 count = 0;
+            for (const auto& packet : Packets) {
+                for (const auto& record : packet.Record.GetTabletMetrics()) {
+                    count += record.GetTabletID() == TabletId && record.GetFollowerID() == 0;
+                }
+            }
+            return count;
+        }
+
+        ui64 TabletPackets() const {
+            ui64 count = 0;
+            for (const auto& packet : Packets) {
+                count += std::any_of(packet.Record.GetTabletMetrics().begin(), packet.Record.GetTabletMetrics().end(),
+                    [&](const auto& record) { return record.GetTabletID() == TabletId; });
+            }
+            return count;
+        }
+
+        ui64 PacketBytes() const {
+            ui64 count = 0;
+            for (const auto& packet : Packets) {
+                count += packet.Record.ByteSizeLong();
+            }
+            return count;
+        }
+
+        const TPacket& LastTabletPacket() const {
+            for (auto it = Packets.rbegin(); it != Packets.rend(); ++it) {
+                if (it->Record.TabletMetricsSize()) {
+                    return *it;
+                }
+            }
+            UNIT_FAIL("No tablet metrics packet");
+            Y_ABORT();
+        }
+
+        void WaitRecords(ui64 count) {
+            const auto until = Runtime.GetCurrentTime() + TDuration::Seconds(120);
+            while (TabletRecords() < count && Runtime.GetCurrentTime() < until) {
+                Advance(TDuration::MilliSeconds(100), false);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(TabletRecords(), count);
+            Runtime.WaitFor("the metrics ACK is blocked", [&] { return !Acks.empty(); });
+        }
+
+        void CheckCPU(ui64 cpu) {
+            UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(Runtime, HiveTablet, NHive::COUNTER_METRICS_CPU), cpu);
+        }
+    };
+
+    Y_UNIT_TEST(TestLocalMetricsTrafficProbe) {
+        for (bool legacy : {false, true}) {
+            for (ui32 groups : {0, 32}) {
+                for (ui32 updates : {1, 2, 8}) {
+                    TLocalMetricsSnapshotTest test(legacy, groups);
+                    for (ui32 i = 0; i < updates; ++i) {
+                        test.Update(100 + i);
+                    }
+                    test.Advance(TDuration::Seconds(12));
+                    test.CheckCPU(100 + updates - 1);
+                    const bool versioned = !legacy && test.LastTabletPacket().Cookie != 0;
+                    const ui64 expected = versioned || updates == 1 ? 1 : 2;
+                    UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), expected);
+                    for (const auto& packet : test.Packets) {
+                        for (const auto& metric : packet.Record.GetTabletMetrics()) {
+                            if (metric.GetTabletID() == test.TabletId) {
+                                UNIT_ASSERT_VALUES_EQUAL(metric.GetResourceUsage().GetCPU(), 100 + updates - 1);
+                                UNIT_ASSERT_VALUES_EQUAL(metric.GetResourceUsage().GroupReadThroughputSize(), groups);
+                                UNIT_ASSERT_VALUES_EQUAL(metric.GetResourceUsage().GroupWriteThroughputSize(), groups);
+                            }
+                        }
+                    }
+                    Cerr << "LOCAL_METRICS_PROBE legacy=" << legacy << " groups=" << groups
+                         << " updates=" << updates << " versioned=" << versioned
+                         << " records=" << test.TabletRecords() << " tablet_packets=" << test.TabletPackets()
+                         << " all_packets=" << test.Packets.size() << " body_bytes=" << test.PacketBytes() << Endl;
+                }
+            }
+        }
+    }
+
+    NKikimrTabletBase::TMetrics MakeLocalIopsValues(ui32 groups, ui32 mode, ui64 value = 100) {
+        NKikimrTabletBase::TMetrics values;
+        if (mode != 1) {
+            values.SetCPU(value);
+            values.SetMemory(value * 10);
+            values.SetNetwork(value * 20);
+            values.SetStorage(value * 30);
+        }
+        for (ui32 i = 0; i < groups; ++i) {
+            if (mode != 1) {
+                auto* read = values.AddGroupReadThroughput();
+                read->SetGroupID(i + 1);
+                read->SetChannel(i % 3);
+                read->SetThroughput(value);
+                auto* write = values.AddGroupWriteThroughput();
+                write->CopyFrom(*read);
+            }
+            if (mode != 0) {
+                auto* read = values.AddGroupReadIops();
+                read->SetGroupID(i + 1);
+                read->SetChannel(i % 3);
+                read->SetIops(value);
+                auto* write = values.AddGroupWriteIops();
+                write->CopyFrom(*read);
+            }
+        }
+        return values;
+    }
+
+    NKikimrHive::TTabletInfo GetLocalMetricsTabletInfo(TLocalMetricsSnapshotTest& test) {
+        auto request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+        request->Record.SetTabletID(test.TabletId);
+        request->Record.SetReturnMetrics(true);
+        test.Runtime.SendToPipe(test.HiveTablet, test.Sender, request.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto* response = test.Runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.TabletsSize(), 1);
+        return response->Record.GetTablets(0);
+    }
+
+    void RunLocalMetricsIopsTrafficProbe(ui32 selectedGroups) {
+        // The same probe runs on both sides; it records the observed IOPS count.
+        for (bool legacy : {false, true}) {
+            for (ui32 groups : {selectedGroups}) {
+                for (ui32 mode : {0, 1, 2}) {
+                    if (groups == 0 && mode != 0) {
+                        continue;
+                    }
+                    for (ui32 updates : {1, 8}) {
+                        TLocalMetricsSnapshotTest test(legacy, groups);
+                        for (ui32 i = 0; i < updates; ++i) {
+                            test.Update(MakeLocalIopsValues(groups, mode, 100 + i));
+                        }
+                        test.Advance(TDuration::Seconds(12));
+                        const ui64 expected = legacy && updates > 1 ? 2 : 1;
+                        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), expected);
+                        test.CheckCPU(mode == 1 ? 0 : 100 + updates - 1);
+                        ui64 iopsRecords = 0;
+                        ui64 normalizedBytes = 0;
+                        for (const auto& packet : test.Packets) {
+                            auto normalized = packet.Record;
+                            for (auto& metric : *normalized.MutableTabletMetrics()) {
+                                UNIT_ASSERT(metric.HasResourceUsage());
+                                const auto& values = metric.GetResourceUsage();
+                                UNIT_ASSERT_VALUES_EQUAL(values.GroupReadThroughputSize(), mode == 1 ? 0 : groups);
+                                UNIT_ASSERT_VALUES_EQUAL(values.GroupWriteThroughputSize(), mode == 1 ? 0 : groups);
+                                UNIT_ASSERT(values.GroupReadIopsSize() == 0 || values.GroupReadIopsSize() == (mode == 0 ? 0 : groups));
+                                UNIT_ASSERT_VALUES_EQUAL(values.GroupReadIopsSize(), values.GroupWriteIopsSize());
+                                iopsRecords += values.GroupReadIopsSize() + values.GroupWriteIopsSize();
+                                if (mode != 1) {
+                                    UNIT_ASSERT_VALUES_EQUAL(values.GetMemory(), (100 + updates - 1) * 10);
+                                    UNIT_ASSERT_VALUES_EQUAL(values.GetNetwork(), (100 + updates - 1) * 20);
+                                    UNIT_ASSERT_VALUES_EQUAL(values.GetStorage(), (100 + updates - 1) * 30);
+                                }
+                                metric.MutableResourceUsage()->ClearGroupReadIops();
+                                metric.MutableResourceUsage()->ClearGroupWriteIops();
+                            }
+                            normalizedBytes += normalized.ByteSizeLong();
+                        }
+                        const auto exportDir = GetEnv("HIVE_IOPS_PACKET_DIR");
+                        if (!exportDir.empty() && !legacy && updates == 1) {
+                            TOFStream file(exportDir + "/g" + ToString(groups) + "-m" + ToString(mode) + ".pb");
+                            file << test.LastTabletPacket().Record.SerializeAsString();
+                        }
+                        Cerr << "LOCAL_IOPS_PROBE legacy=" << legacy << " groups=" << groups
+                             << " mode=" << mode << " updates=" << updates
+                             << " records=" << test.TabletRecords() << " packets=" << test.Packets.size()
+                             << " body_bytes=" << test.PacketBytes() << " normalized_bytes=" << normalizedBytes
+                             << " iops_records=" << iopsRecords << Endl;
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsIopsTrafficGroup0) {
+        RunLocalMetricsIopsTrafficProbe(0);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsIopsTrafficGroup32) {
+        RunLocalMetricsIopsTrafficProbe(32);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsIopsTrafficGroup128) {
+        RunLocalMetricsIopsTrafficProbe(128);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsFiltersIopsKeepsUsefulMetrics) {
+        for (bool legacy : {false, true}) {
+            TLocalMetricsSnapshotTest test(legacy, 32);
+            const auto initial = GetLocalMetricsTabletInfo(test).GetMetrics();
+            test.Update(MakeLocalIopsValues(32, 2));
+            test.Advance(TDuration::Seconds(12));
+            UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 1);
+            const auto& values = test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage();
+            UNIT_ASSERT_VALUES_EQUAL(values.GroupReadIopsSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(values.GroupWriteIopsSize(), 0);
+            const auto info = GetLocalMetricsTabletInfo(test);
+            const auto& effective = info.GetMetrics();
+            UNIT_ASSERT_VALUES_EQUAL(effective.GetCPU(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(effective.GetMemory(), std::max<ui64>(initial.GetMemory(), 1000));
+            UNIT_ASSERT_VALUES_EQUAL(effective.GetNetwork(), std::max<ui64>(initial.GetNetwork(), 2000));
+            UNIT_ASSERT_VALUES_EQUAL(effective.GetStorage(), 3000);
+            UNIT_ASSERT_VALUES_EQUAL(effective.GroupReadThroughputSize(), 32);
+            UNIT_ASSERT_VALUES_EQUAL(effective.GroupWriteThroughputSize(), 32);
+        }
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsIopsOnlyKeepsTabletHeartbeat) {
+        for (bool legacy : {false, true}) {
+            TLocalMetricsSnapshotTest test(legacy, 32, false);
+            const auto before = test.LiveHive->GetTablet(test.TabletId).Statistics.GetLastAliveTimestamp();
+            NanoSleep(2'000'000);
+            test.Update(MakeLocalIopsValues(32, 1));
+            test.Advance(TDuration::Seconds(12));
+            UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 1);
+            const auto& metric = test.LastTabletPacket().Record.GetTabletMetrics(0);
+            UNIT_ASSERT(metric.HasResourceUsage());
+            UNIT_ASSERT_VALUES_EQUAL(metric.GetResourceUsage().ByteSizeLong(), 0);
+            const auto after = test.LiveHive->GetTablet(test.TabletId).Statistics.GetLastAliveTimestamp();
+            UNIT_ASSERT_C(after > before, "IOPS-only record must still update tablet LastAlive");
+            UNIT_ASSERT(test.Packets.size() > test.TabletPackets());
+        }
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsIopsDuringAckKeepsPendingHeartbeat) {
+        for (bool legacy : {false, true}) {
+            TLocalMetricsSnapshotTest test(legacy, 32);
+            test.Update(MakeLocalIopsValues(32, 2));
+            test.WaitRecords(1);
+            test.Update(MakeLocalIopsValues(32, 1, 200));
+            test.AckOne();
+            test.Advance(TDuration::Seconds(12));
+            UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 2);
+            test.CheckCPU(100);
+            test.Update(MakeLocalIopsValues(32, 1, 0)); // Explicit obsolete-group zeros.
+            test.Advance(TDuration::Seconds(12));
+            UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 3);
+            const auto& metric = test.LastTabletPacket().Record.GetTabletMetrics(0);
+            UNIT_ASSERT(metric.HasResourceUsage());
+            UNIT_ASSERT_VALUES_EQUAL(metric.GetResourceUsage().ByteSizeLong(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsIopsPendingSurvivesEmptyUpdate) {
+        for (bool legacy : {false, true}) {
+            for (bool duringAck : {false, true}) {
+                TLocalMetricsSnapshotTest test(legacy, 32);
+                test.Update(MakeLocalIopsValues(32, 1));
+                if (duringAck) {
+                    test.WaitRecords(1);
+                }
+                test.Update(NKikimrTabletBase::TMetrics{});
+                if (duringAck) {
+                    test.AckOne();
+                }
+                test.Advance(TDuration::Seconds(12));
+                UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), duringAck || legacy ? 2 : 1);
+                for (const auto& packet : test.Packets) {
+                    for (const auto& metric : packet.Record.GetTabletMetrics()) {
+                        UNIT_ASSERT(metric.HasResourceUsage());
+                        UNIT_ASSERT_VALUES_EQUAL(metric.GetResourceUsage().ByteSizeLong(), 0);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotUpdatesDuringAck) {
+        TLocalMetricsSnapshotTest test;
+        test.Update(100);
+        test.WaitRecords(1);
+        test.Update(200);
+        test.Update(300);
+        test.AckOne();
+        test.Update(400);
+        test.Update(500); // Coalesce again before the second snapshot is sent.
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(500);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 500);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotIgnoresDuplicateAck) {
+        TLocalMetricsSnapshotTest test;
+        test.Update(100);
+        test.WaitRecords(1);
+        auto record = test.Acks.front()->Get()->Record;
+        const auto recipient = test.Acks.front()->GetRecipientRewrite();
+        const auto sender = test.Acks.front()->Sender;
+        const auto cookie = test.Acks.front()->Cookie;
+        UNIT_ASSERT(cookie != 0);
+        test.AckOne();
+        test.Update(200);
+        test.InjectAck(record, recipient, sender, cookie); // No snapshot is in flight yet.
+        test.WaitRecords(2);
+        test.InjectAck(record, recipient, sender, cookie); // A newer snapshot is now in flight.
+        test.InjectAck(record, recipient, sender, 0); // Reject a stale legacy ACK after capability detection.
+        test.AckOne();
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 2);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotRetriesEmptyAck) {
+        TLocalMetricsSnapshotTest test;
+        test.Update(100);
+        test.WaitRecords(1);
+        auto ack = std::move(test.Acks.front());
+        test.Acks.pop_front();
+        auto record = ack->Get()->Record;
+        record.ClearTabletId();
+        record.ClearFollowerId();
+        test.InjectAck(record, ack->GetRecipientRewrite(), ack->Sender, ack->Cookie);
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(100);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 2);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotRetriesHiveOverloadAck) {
+        TLocalMetricsSnapshotTest test;
+        test.Update(100);
+        test.WaitRecords(1);
+        test.AckOne(); // Learn that Hive echoes cookies before hitting the limit.
+
+        test.LiveHive->SetMetricsOverloaded(true);
+        test.Update(200);
+        test.WaitRecords(2);
+        UNIT_ASSERT_VALUES_EQUAL(test.Acks.front()->Get()->Record.TabletIdSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(test.Acks.front()->Cookie, test.LastTabletPacket().Cookie);
+        UNIT_ASSERT(test.Acks.front()->Cookie != 0);
+        test.CheckCPU(100); // The actual Hive handler rejected this batch.
+        test.AckOne();
+
+        test.LiveHive->SetMetricsOverloaded(false);
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 200);
+    }
+
+    Y_UNIT_TEST(TestLocalLegacyMetricsAckAfterReconnectAndRebootKeepsRetry) {
+        TLocalMetricsSnapshotTest test(true);
+        test.Update(100);
+        test.WaitRecords(1);
+        auto old = std::move(test.Acks.front());
+        test.Acks.pop_front();
+
+        test.Runtime.Send(new IEventHandle(test.Registrar, test.Sender,
+            new TEvLocal::TEvReconnect(test.HiveTablet, Max<ui32>())));
+        RebootTablet(test.Runtime, test.TabletId, test.Sender);
+        MakeSureTabletIsUp(test.Runtime, test.TabletId, 0);
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        test.LiveHive->SetMetricsOverloaded(true);
+        test.Update(200);
+        test.WaitRecords(2);
+        auto rejected = std::move(test.Acks.front());
+        test.Acks.pop_front();
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.TabletIdSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(old->Sender, rejected->Sender);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 200);
+
+        // Both ACKs come from the same Hive, as they do with a legacy peer.
+        // The old nonempty ACK must not clear the new incarnation's metrics.
+        test.InjectAck(old->Get()->Record, old->GetRecipientRewrite(), old->Sender, 0);
+        test.InjectAck(rejected->Get()->Record, rejected->GetRecipientRewrite(), rejected->Sender, 0);
+        test.LiveHive->SetMetricsOverloaded(false);
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 200);
+    }
+
+    Y_UNIT_TEST(TestLocalLegacyMetricsAckWhileOfflinePreservesRemainingAck) {
+        TLocalMetricsSnapshotTest test(true);
+        test.Update(100);
+        test.Update(101); // Legacy counter is 2 before the first batch.
+        test.WaitRecords(1);
+        auto first = std::move(test.Acks.front());
+        test.Acks.pop_front();
+
+        test.Runtime.Send(new IEventHandle(test.Registrar, test.Sender,
+            new TEvLocal::TEvReconnect(test.HiveTablet, Max<ui32>())));
+        test.WaitRecords(2);
+        auto second = std::move(test.Acks.front());
+        test.Acks.pop_front();
+        UNIT_ASSERT_VALUES_EQUAL(first->Sender, second->Sender);
+
+        TBlockEvents<TEvLocal::TEvBootTablet> boot(test.Runtime);
+        ForwardToTablet(test.Runtime, test.TabletId, test.Sender, new TEvents::TEvPoisonPill());
+        test.Runtime.WaitFor("replacement boot is blocked", [&] { return !boot.empty(); });
+        // Local has removed the old tablet, but another old batch is unacknowledged.
+        test.InjectAck(first->Get()->Record, first->GetRecipientRewrite(), first->Sender, 0);
+        boot.Stop().Unblock();
+        MakeSureTabletIsUp(test.Runtime, test.TabletId, 0);
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        test.LiveHive->SetMetricsOverloaded(true);
+        test.Update(200);
+        test.WaitRecords(3);
+        auto rejected = std::move(test.Acks.front());
+        test.Acks.pop_front();
+        UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.TabletIdSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(second->Sender, rejected->Sender);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 200);
+
+        test.InjectAck(second->Get()->Record, second->GetRecipientRewrite(), second->Sender, 0);
+        test.InjectAck(rejected->Get()->Record, rejected->GetRecipientRewrite(), rejected->Sender, 0);
+        test.LiveHive->SetMetricsOverloaded(false);
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 200);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsUseCpuMaximumFromSameBatch) {
+        TLocalMetricsSnapshotTest test;
+        const auto checkAccounting = [&](ui64 maximum, ui64 cpu) {
+            const auto& node = test.LiveHive->Node(test.Runtime.GetNodeId(0));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.GetResourceMaximumValues()), maximum);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), cpu);
+            UNIT_ASSERT_VALUES_EQUAL(test.LiveHive->GetTablet(test.TabletId).GetResourceValues().CPU, cpu);
+            test.CheckCPU(cpu);
+        };
+
+        test.ReportedCpuMaximum = 100;
+        test.Update(50);
+        test.WaitRecords(1);
+        checkAccounting(100, 50);
+        test.AckOne();
+
+        test.ReportedCpuMaximum = 200;
+        test.Update(120);
+        test.Update(150); // Must be accepted in the first batch, despite the old limit.
+        test.WaitRecords(2);
+        checkAccounting(200, 150);
+        UNIT_ASSERT(test.Acks.front()->Cookie != 0);
+        test.AckOne();
+        test.Advance(TDuration::Seconds(12));
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 2); // No retry masks the result.
+
+        test.ReportedCpuMaximum = 100;
+        test.Update(180); // Below the old limit, but above the newly advertised one.
+        test.WaitRecords(3);
+        checkAccounting(100, 150); // Reject the sample and retain the previous window maximum.
+        test.AckOne();
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotReconnectRetainsUpdates) {
+        TLocalMetricsSnapshotTest test;
+        test.Update(100);
+        test.WaitRecords(1);
+        auto old = std::move(test.Acks.front());
+        test.Acks.pop_front();
+        test.Runtime.Send(new IEventHandle(test.Registrar, test.Sender,
+            new TEvLocal::TEvReconnect(test.HiveTablet, Max<ui32>())));
+        test.WaitRecords(2);
+        test.Update(200);
+        test.InjectAck(old->Get()->Record, old->GetRecipientRewrite(), old->Sender, old->Cookie);
+        test.AckOne();
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(test.LastTabletPacket().Record.GetTabletMetrics(0).GetResourceUsage().GetCPU(), 200);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotRebootRetainsNewUpdate) {
+        TLocalMetricsSnapshotTest test;
+        test.Update(100);
+        test.WaitRecords(1);
+        RebootTablet(test.Runtime, test.TabletId, test.Sender);
+        MakeSureTabletIsUp(test.Runtime, test.TabletId, 0);
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        test.Update(200);
+        test.AckOne();
+        test.Advance(TDuration::Seconds(12));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 2);
+    }
+
+    Y_UNIT_TEST(TestLocalMetricsSnapshotKeepsNodeHeartbeat) {
+        TLocalMetricsSnapshotTest test(false, 0, false);
+        test.Update(100);
+        test.Update(200);
+        test.Advance(TDuration::Seconds(15));
+        test.CheckCPU(200);
+        UNIT_ASSERT_VALUES_EQUAL(test.TabletRecords(), 1);
+        UNIT_ASSERT(test.Packets.size() > test.TabletPackets());
+        for (const auto& packet : test.Packets) {
+            UNIT_ASSERT(packet.Record.HasTotalNodeUsage());
+            UNIT_ASSERT(packet.Record.HasTotalNodeCpuUsage());
+            UNIT_ASSERT(packet.Record.HasResourceMaximum());
+        }
     }
 
     Y_UNIT_TEST(TestCreateTablet) {

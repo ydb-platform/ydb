@@ -23,6 +23,11 @@ public:
         auto& record = Event->Get()->Record;
         TNodeId nodeId = Event->Sender.NodeId();
         NIceDb::TNiceDb db(txc.DB);
+        TNodeInfo* node = Self->FindNode(nodeId);
+        if (node != nullptr) {
+            // Validate tablet metrics against the limits advertised in this batch.
+            node->UpdateResourceMaximum(record.GetResourceMaximum());
+        }
         for (const auto& metrics : record.GetTabletMetrics()) {
             TTabletId tabletId = metrics.GetTabletID();
             TFollowerId followerId = metrics.GetFollowerID();
@@ -48,9 +53,7 @@ public:
             Reply->Record.AddTabletId(tabletId);
             Reply->Record.AddFollowerId(followerId);
         }
-        TNodeInfo* node = Self->FindNode(nodeId);
         if (node != nullptr) {
-            node->UpdateResourceMaximum(record.GetResourceMaximum());
             node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
@@ -69,7 +72,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Event->Sender, Reply.Release());
+        ctx.Send(Event->Sender, Reply.Release(), 0, Event->Cookie);
         Self->UpdateTabletMetricsInProgress--;
     }
 };

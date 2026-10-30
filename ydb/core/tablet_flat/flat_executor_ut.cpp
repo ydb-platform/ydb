@@ -3528,6 +3528,62 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
     }
 
+    // The leader gets the follower list with its only follower. The follower is then lost for good, as the leader sees
+    // it; as it is in the list, the leader must keep it, and must not tell the user tablet that it is detached.
+    Y_UNIT_TEST(FollowerInRefreshedListIsKept) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        TActorId leaderSys;
+        TActorId followerSys;
+        auto attachObserver = env->AddObserver<TEvTablet::TEvFollowerAttach>([&](auto& ev) {
+            leaderSys = ev->GetRecipientRewrite();
+            followerSys = ev->Sender;
+        });
+        // only the list sent by the test reaches the leader
+        auto refreshObserver = env->AddObserver<TEvTablet::TEvFollowerListRefresh>([&](auto& ev) {
+            if (ev->Sender != env.Edge) {
+                ev.Reset();
+            }
+        });
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.FireDummyFollower(1);
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        env.SendSync(rows.MakeScheme(std::move(policy)));
+        UNIT_ASSERT(leaderSys && followerSys);
+
+        env->Send(new IEventHandle(leaderSys, env.Edge, new TEvTablet::TEvFollowerListRefresh({followerSys})));
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+
+        // the next update for the follower is answered as if the follower is gone
+        bool loseFollower = true;
+        std::optional<ui64> updateCookie;
+        auto updateObserver = env->AddObserver<TEvTablet::TEvFollowerUpdate>([&](auto& ev) {
+            if (loseFollower && ev->Sender == leaderSys && ev->GetRecipientRewrite() == followerSys) {
+                updateCookie = ev->Cookie;
+                ev.Reset();
+            }
+        });
+        ui32 numDetached = 0;
+        auto detachedObserver = env->AddObserver<TEvTablet::TEvFollowerDetached>([&](auto&) {
+            ++numDetached;
+        });
+
+        ui32 step = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(1, step) });
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return updateCookie.has_value(); };
+        env->DispatchEvents(options, TDuration::Seconds(10));
+        UNIT_ASSERT_C(updateCookie, "the leader didn't send an update to the follower");
+        loseFollower = false;
+
+        env->Send(new IEventHandle(leaderSys, followerSys, new TEvents::TEvUndelivered(
+            TEvTablet::TEvFollowerUpdate::EventType, TEvents::TEvUndelivered::ReasonActorUnknown), 0, *updateCookie));
+        env->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(numDetached, 0);
+    }
+
     Y_UNIT_TEST(VacuumWaitsForFollowerGc) {
         TMyEnvBase env;
         TRowsModel rows;

@@ -779,8 +779,11 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerListRefresh::TPtr &ev) {
             }
         }
 
-        if (infoIt != LeaderInfo.end() && infoIt->first == *it)
+        // the follower is in the list, so it is done here; the loops after this one handle only the absent ones
+        if (infoIt != LeaderInfo.end() && infoIt->first == *it) {
             infoIt->second.PresentInList = true;
+            ++infoIt;
+        }
     }
 
     while (infoIt != LeaderInfo.end()) {

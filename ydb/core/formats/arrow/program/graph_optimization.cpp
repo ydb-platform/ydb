@@ -418,6 +418,11 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
     if (requiredDataColumnIds.size() != 1) {
         return false;
     }
+    for (const auto& [_, graphNode] : Nodes) {
+        if (graphNode->Is(EProcessorType::Filter)) {
+            return false;
+        }
+    }
 
     const ui32 columnId = *requiredDataColumnIds.begin();
 

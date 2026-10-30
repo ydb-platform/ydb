@@ -303,7 +303,8 @@ private:
 
     void CollectSensors(ISensorWriter* writer) override
     {
-        i64 timeDeltaUsec = TInstant::Now().MicroSeconds() - LastUpdateTime_.MicroSeconds();
+        auto now = TInstant::Now();
+        i64 timeDeltaUsec = now.MicroSeconds() - LastUpdateTime_.MicroSeconds();
         if (timeDeltaUsec <= 0) {
             return;
         }
@@ -312,7 +313,7 @@ private:
         CollectSensorsAggregatedTimings(writer, TidToInfo_, tidToInfo, timeDeltaUsec);
         TidToInfo_ = tidToInfo;
 
-        LastUpdateTime_ = TInstant::Now();
+        LastUpdateTime_ = now;
     }
 
     struct TTimings

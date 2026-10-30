@@ -593,6 +593,11 @@ namespace NFlatExecutorSetup {
          */
         virtual ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) = 0;
 
+        // Attempt one ready transaction inline, preferring normal-priority work.
+        // Low-priority work may execute before queued cancellation events.
+        // Returns whether execution was attempted, not whether it completed.
+        virtual bool TryExecuteReadyTransaction() = 0;
+
         /**
          * Cancel a previously enqueued transaction with the specified id.
          */

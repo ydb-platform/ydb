@@ -1,5 +1,7 @@
 #include "export_actor.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
@@ -45,7 +47,8 @@ void TActor::HandleWakeup() {
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
-    if (elapsed > OperationTimeout) {
+    const auto operationTimeout = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetBackupSettings().GetExportOperationTimeoutSeconds());
+    if (elapsed > operationTimeout) {
         const TString errorMessage = TStringBuilder()
                                      << "Export operation timed out after " << elapsed.Seconds() << "s"
                                      << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", scanActorId "

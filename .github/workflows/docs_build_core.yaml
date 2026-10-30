@@ -1,0 +1,127 @@
+name: Build documentation core
+
+# Called by docs_build.yaml from main or a stable branch. The caller supplies
+# a read-only token; PR documentation is checked out by its head SHA.
+on:
+  workflow_call:
+    inputs:
+      pull_number:
+        required: false
+        type: string
+
+jobs:
+  build-docs:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.state == 'open'
+    # Include event_name so rebuild_docs workflow_dispatch does not cancel the
+    # pull_request build. Dispatch runs on main and its check attaches to main
+    # SHA; only the pull_request run updates the PR's build-docs status (#48409).
+    concurrency:
+      group: docs-build-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+
+      - name: Get commit SHA
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Disable PDF for PR build
+        run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
+
+      - name: Detect feature flag generator
+        id: feature_flags
+        env:
+          FEATURE_FLAG_DEFAULTS_ENABLED: ${{ vars.FEATURE_FLAG_DEFAULTS_ENABLED }}
+        run: |
+          if [[ -f ydb/docs/tools/feature_flags/requirements.txt && -f ydb/docs/tools/feature_flags/generate.py ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Feature flag generator is absent in this PR revision; skipping it for backward compatibility"
+          fi
+          if [[ "$FEATURE_FLAG_DEFAULTS_ENABLED" == "false" ]]; then
+            echo "::notice::Feature flag defaults are disabled by the FEATURE_FLAG_DEFAULTS_ENABLED repository variable"
+          fi
+
+      - name: Set up Python for feature flag defaults
+        if: >-
+          steps.feature_flags.outputs.present == 'true' &&
+          vars.FEATURE_FLAG_DEFAULTS_ENABLED != 'false'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Generate version-local feature flag defaults
+        if: >-
+          steps.feature_flags.outputs.present == 'true' &&
+          vars.FEATURE_FLAG_DEFAULTS_ENABLED != 'false'
+        run: |
+          python -m pip install -r ydb/docs/tools/feature_flags/requirements.txt
+          python -m unittest discover -s ydb/docs/tools/feature_flags -p 'test_*.py'
+          python ydb/docs/tools/feature_flags/generate.py --catalog feature-flag-defaults.json
+
+      - name: Upload feature flag inventory
+        if: >-
+          steps.feature_flags.outputs.present == 'true' &&
+          vars.FEATURE_FLAG_DEFAULTS_ENABLED != 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-flag-defaults
+          path: feature-flag-defaults.json
+
+      - name: Build
+        uses: diplodoc-platform/docs-build-action@v3
+        with:
+          revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
+          src-root: "./ydb/docs"
+          cli-version: "stable"
+          use-ya-opensource: false
+
+      - name: Fail on documentation build issues
+        run: |
+          set -euo pipefail
+          if [[ ! -f build-html.log ]]; then
+            echo "::error::Documentation build log (build-html.log) not found"
+            exit 1
+          fi
+          issue_count=$(grep -cE '^(ERR|WARN)' build-html.log || true)
+          if [[ "$issue_count" -gt 0 ]]; then
+            echo "::error::Documentation build has ${issue_count} error(s)/warning(s)"
+            grep -E '^(ERR|WARN)' build-html.log | sort -u | head -20
+            if [[ "$issue_count" -gt 20 ]]; then
+              echo "... and $((issue_count - 20)) more (see PR comment for full log)"
+            fi
+            exit 1
+          fi
+          echo "No documentation build warnings or errors"
+
+      # docs-build-action writes github.event.number to inputs/pr-number.
+      # For workflow_dispatch this field is empty, so patch the artifact.
+      - name: Download inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs
+
+      - name: Save PR number to inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        run: printf '%s' "$PULL_NUMBER" > ./inputs/pr-number
+
+      - name: Upload inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs/
+          overwrite: true

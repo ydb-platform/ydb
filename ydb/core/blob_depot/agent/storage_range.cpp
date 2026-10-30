@@ -17,6 +17,7 @@ namespace NKikimr::NBlobDepot {
             std::map<TLogoBlobID, TString> FoundBlobs;
             std::vector<TRead> Reads;
             bool Reverse = false;
+            bool ResolveFinished = false;
             bool Finished = false;
 
         public:
@@ -127,6 +128,7 @@ namespace NKikimr::NBlobDepot {
                 if (msg.GetStatus() == NKikimrProto::OVERRUN) {
                     Agent.RegisterRequest(id, this, std::move(context), {}, true);
                 } else {
+                    ResolveFinished = true;
                     CheckAndFinish();
                 }
             }
@@ -163,7 +165,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void CheckAndFinish() {
-                if (!ReadsInFlight && !Finished) {
+                if (ResolveFinished && !ReadsInFlight && !Finished) {
                     for (auto& [id, buffer] : FoundBlobs) {
                         Y_VERIFY_S(buffer.size() == Request.IsIndexOnly ? 0 : id.BlobSize(), "Id# " << id << " Buffer.size# " << buffer.size());
                         Response->Responses.emplace_back(id, std::move(buffer));

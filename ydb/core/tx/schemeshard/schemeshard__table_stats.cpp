@@ -161,6 +161,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MergeRequest(
 
     auto& merge = *propose.MutableSplitMergeTablePartitions();
     merge.SetTablePath(tablePath.PathString());
+    // OwnerId/LocalId let the propose resolve the table without a path lookup and let
+    // TSplitMerge::Propose attribute a lock rejection to the deferred shards (pathId
+    // is derived from these fields, not from TablePath).
+    merge.SetTableOwnerId(ui64(pathId.OwnerId));
+    merge.SetTableLocalId(pathId.LocalPathId);
     merge.SetSchemeshardId(ss->TabletID());
 
     for (auto shardIdx : shardsToMerge) {
@@ -604,6 +609,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = (index ? Self->GetMainTableForIndex(pathId) : nullptr);
+    const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
 
     // Save CPU resources when potential merge will certainly be immediately rejected by Self->IgniteOperation()
     // and potential split will probably be rejected later.
@@ -619,6 +625,21 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             {"reason", inflightLimitErrStr},
         );
         if (!DemandTracking) {
+            // Always-on observability under saturation (Finding 12): the cheap O(1) checks
+            // keep the split-demand counter observing demand even with the flag off, so
+            // counter rates stay comparable across flag states. CheckSplitByLoad mirrors
+            // its own maxShards defaulting (policy unset / index tables), so by-load demand
+            // is not silently skipped for them (Finding 24 residual). The O(partitions)
+            // merge scan is deliberately skipped: merge demand stays unobserved with the
+            // flag off under saturation (documented counter-contract gap, accepted
+            // trade-off).
+            TString splitReason;
+            if (rec.GetShardState() == NKikimrTxDataShard::Ready
+                && (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, splitReason)
+                    || table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, splitReason
+            ))) {
+                Self->NoteSplitDemandDetected();
+            }
             return true;
         }
         if (const auto* deferred = table->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx)) {
@@ -626,7 +647,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             // learn here. The direction is known for free from the stored flag, so the
             // always-on demand-detection counter still re-reports the unmet demand each
             // stats cycle even under saturation (comparable across flag states).
-            if (*deferred) {
+            if (deferred->WantsSplit) {
                 Self->NoteSplitDemandDetected();
             } else {
                 Self->NoteMergeDemandDetected();
@@ -636,8 +657,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
         // else check for demand type and record proper deferral
     }
-
-    const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
 
     // Determine the demand direction, so that a slot-limit deferral is recorded with the
     // shard's actual direction instead of being hardcoded as split demand (the former
@@ -1143,17 +1162,23 @@ void TSchemeShard::RecordSplitMergeDeferralImpl(const TPathId& pathId, TTableInf
     h.RecordDeferral(reason);
 
     auto& tableState = table.MutableTableSplitMergeState();
-    const auto [it, newlyDeferred] = tableState.DeferredShards.emplace(shardIdx, wantsSplit);
+    const auto [it, newlyDeferred] = tableState.DeferredShards.emplace(
+        shardIdx, TTableSplitMergeState::TDeferredShardInfo{wantsSplit, reason});
     if (newlyDeferred) {
         ++tableState.DemandCount(wantsSplit);
         if (tableState.DeferredShards.size() == 1) {
             TablesWithDeferredSplitMerge.insert(pathId);
         }
-    } else if (it->second != wantsSplit) {
-        // Re-deferral with a changed direction: move the count so the aggregate always
-        // mirrors the latest direction of the deferral.
-        it->second = wantsSplit;
-        tableState.MoveDemandCount(wantsSplit);
+    } else {
+        if (it->second.WantsSplit != wantsSplit) {
+            // Re-deferral with a changed direction: move the count so the aggregate always
+            // mirrors the latest direction of the deferral.
+            it->second.WantsSplit = wantsSplit;
+            tableState.MoveDemandCount(wantsSplit);
+        }
+        // Refresh the saved reason on re-deferral: the latest evidence wins, and the
+        // revisit path's reason gate must not act on a stale reason.
+        it->second.Reason = reason;
     }
 
     const TInstant candidate = h.LastCandidate(wantsSplit) ? h.LastCandidate(wantsSplit) : now;
@@ -1273,7 +1298,10 @@ void TSchemeShard::ScheduleSplitMergeRevisit(const TActorContext& ctx) {
 }
 
 class TTxRevisitSplitMerge: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    TSideEffects SideEffects;
+    // Per-proposal side effects of ignited merges (Finding 17): each proposal gets its own
+    // TSideEffects so a rejected sibling cannot erase them; only ignited ones are applied
+    // in Complete().
+    TVector<TSideEffects::TPtr> IgnitedProposalSideEffects;
     // Datashards to re-request fresh stats from (re-drives a deferred split with a freed slot).
     struct TStatsRequest {
         TTabletId TabletId;
@@ -1335,13 +1363,61 @@ public:
             const TShardIdx shardIdx = table->PickMostDeferredPartition();
             if (shardIdx != InvalidShardIdx) {
                 if (!TryMergeInline(pathId, table, shardIdx, now, txc, ctx)) {
-                    // Not mergeable from cached stats -> re-request fresh stats to re-drive a split
-                    // with the now-free slot (the histogram path fires it and records it).
-                    if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
-                        // Key sample is only needed to compute a split boundary; skip the
-                        // extra datashard work for merge-wanting shards.
-                        const bool wantsSplit = table->GetTableSplitMergeState().DeferredShards.Value(shardIdx, true);
-                        StatsRequests.push_back({shardInfo->TabletID, pathId.LocalPathId, wantsSplit});
+                    // Not mergeable from cached stats -> a split-wanting shard is re-driven by a
+                    // fresh stats request (the histogram path fires the split and records it).
+                    // Merge-wanting shards are NOT re-requested: the histogram path evaluates
+                    // splits only, so the response cannot service them (merges are proposed by
+                    // TryMergeInline from cached stats; the periodic stats stream refreshes
+                    // those) -- and its split-only evidence must not expire their deferral.
+                    const auto* deferred = table->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx);
+                    bool reRequestStats = deferred && deferred->WantsSplit;
+                    if (reRequestStats) {
+                        // Reason-aware gating (Finding 20): only slot-related deferrals
+                        // (InFlightLimit, or no recorded reason) are re-driven unconditionally.
+                        // Reasons with their own recovery edge used to wait for that edge --
+                        // but the edge only re-nudges the scheduler, it never resets the
+                        // reason, so the shard was stranded and (being deterministically
+                        // re-picked) starved its siblings (Review B regression). Re-check the
+                        // blocking condition from current state instead: once cleared, the
+                        // shard is serviceable and gets its stats request like an
+                        // InFlightLimit deferral; while blocked, send nothing (a stats round
+                        // trip cannot resolve the condition and would spin at RTT speed).
+                        switch (deferred->Reason) {
+                            case TPartitionSplitMergeState::EDeferralReason::InFlightLimit:
+                                break;  // slot-related: the slot is free in this wave
+                            case TPartitionSplitMergeState::EDeferralReason::PathLocked:
+                                // Lock dropped -> serviceable; still locked -> wait for the
+                                // drop-lock edge.
+                                reRequestStats = !Self->LockedPaths.contains(pathId);
+                                break;
+                            case TPartitionSplitMergeState::EDeferralReason::Borrowed:
+                                // Compaction finished -> serviceable; still borrowed -> wait
+                                // for the compaction-done edge.
+                                reRequestStats = !Self->ShardsWithBorrowed.contains(shardIdx);
+                                break;
+                            case TPartitionSplitMergeState::EDeferralReason::NoCachedTxId:
+                                // txIds replenished -> serviceable; still empty -> nothing to
+                                // propose with (this also makes the Finding 25 replenish
+                                // nudge effective).
+                                reRequestStats = !Self->CachedTxIds.empty();
+                                break;
+                            case TPartitionSplitMergeState::EDeferralReason::ShardLimitPath:
+                            case TPartitionSplitMergeState::EDeferralReason::ShardLimitSubdomain:
+                                // A quota change is not cheaply re-checkable here; the
+                                // periodic stats stream re-drives these once the quota allows.
+                                reRequestStats = false;
+                                break;
+                            default:
+                                reRequestStats = false;
+                                break;
+                        }
+                    }
+                    if (reRequestStats) {
+                        if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                            // Key sample is only needed to compute a split boundary; the
+                            // re-request is split-wanting only (gated above).
+                            StatsRequests.push_back({shardInfo->TabletID, pathId.LocalPathId, /* collectKeySample */ true});
+                        }
                     }
                 }
             }
@@ -1358,7 +1434,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        SideEffects.ApplyOnComplete(Self, ctx);
+        for (const auto& sideEffects : IgnitedProposalSideEffects) {
+            sideEffects->ApplyOnComplete(Self, ctx);
+        }
 
         // Prune stale TablesWithDeferredSplitMerge entries (dropped tables, drained deferred
         // sets) even when stats batches stop flowing, so the gauges never freeze at a stale
@@ -1420,14 +1498,16 @@ private:
             {"message", request->Record.ShortDebugString()}
         );
 
+        // Per-proposal side effects (Finding 17): a rejected sibling merge in the same wave
+        // must not erase the completion actions of an already-ignited merge. Each proposal
+        // gets its own TSideEffects; on rejection AbortOperationPropose clears only this
+        // proposal's instance, and only ignited instances are applied and collected.
+        auto proposalSideEffects = MakeIntrusive<TSideEffects>();
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
-        TProposeContext context{Self, txc, ctx, SideEffects, memChanges, dbChanges};
+        TProposeContext context{Self, txc, ctx, *proposalSideEffects, memChanges, dbChanges};
 
         auto response = Self->IgniteOperation(*request, context);
-
-        dbChanges.Apply(Self, txc, ctx);
-        SideEffects.ApplyOnExecute(Self, txc, ctx);
 
         // Only clear the deferred state when the op actually ignited; on rejection the
         // recorded demand survives so the shard keeps its fair-scheduling turn.
@@ -1441,8 +1521,14 @@ private:
             return true;
         }
 
-        for (const TShardIdx& merged : shardsToMerge) {
-            Self->RecordMergeApplied(pathId, *table, merged, now);
+        dbChanges.Apply(Self, txc, ctx);
+        proposalSideEffects->ApplyOnExecute(Self, txc, ctx);
+        IgnitedProposalSideEffects.push_back(std::move(proposalSideEffects));
+
+        if (DemandTracking) {
+            for (const TShardIdx& merged : shardsToMerge) {
+                Self->RecordMergeApplied(pathId, *table, merged, now);
+            }
         }
         return true;
     }

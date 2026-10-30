@@ -639,64 +639,40 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    TVector<TPathId> GetImportTablePaths(const TItem& item) const {
-        TVector<TPathId> result{item.DstPathId};
-        const auto path = TPath::Init(item.DstPathId, Self);
-        if (!path.IsResolved() || path.IsDeleted()) {
-            return result;
+    void MarkTableImported(const TPathId& pathId, NIceDb::TNiceDb& db) {
+        const auto& table = Self->Tables.at(pathId);
+        if (!table->IsImportingReplica()) {
+            return;
         }
-        // Synchronous index tables are independent replication targets. This also
-        // covers indexes built from data rather than materialized from the backup.
-        for (const auto& [name, indexId] : path.Base()->GetChildren()) {
-            const auto index = TPath::Init(indexId, Self);
-            if (index.IsDeleted() || (!index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
-                    && !index.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique))) {
-                continue;
-            }
-            for (const auto& [implName, implId] : index.Base()->GetChildren()) {
-                const auto impl = TPath::Init(implId, Self);
-                if (!impl.IsDeleted() && impl->IsTable()) {
-                    result.push_back(implId);
-                }
-            }
+
+        auto& config = table->MutableReplicationConfig();
+        config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+        if (pathId.OwnerId == Self->TabletID()) {
+            db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(config.SerializeAsString()));
+        } else {
+            db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
         }
-        return result;
+
+        const auto& path = Self->PathsById.at(pathId);
+        // Publish the metadata change without changing the DataShard schema version.
+        ++path->DirAlterVersion;
+        Self->PersistPathDirAlterVersion(db, path);
+        Self->ClearDescribePathCaches(path);
+        PathsToPublish.push_back(pathId);
     }
 
-    void FinishImport(TImportInfo& importInfo, NIceDb::TNiceDb& db) {
-        // All items, including materialized index tables, have finished. Commit
-        // their import state together with the completion of the import in SS.
-        for (ui32 i : xrange(importInfo.Items.size())) {
-            auto& item = importInfo.Items[i];
-            if (!item.ReplicationConfig) {
-                continue;
-            }
+    void FinishImportItem(TItem& item, NIceDb::TNiceDb& db) {
+        item.State = EState::Done;
+        if (!item.Table || item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+            return;
+        }
 
-            for (const auto& pathId : GetImportTablePaths(item)) {
-                const auto& table = Self->Tables.at(pathId);
-                auto& config = table->MutableReplicationConfig();
-                if (config.GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
-                    continue;
-                }
-                config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-                if (pathId.OwnerId == Self->TabletID()) {
-                    db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
-                        NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(config.SerializeAsString()));
-                } else {
-                    db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-                        NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(config.SerializeAsString()));
-                }
-
-                const auto& path = Self->PathsById.at(pathId);
-                // Publish the metadata change without changing the DataShard schema version.
-                ++path->DirAlterVersion;
-                Self->PersistPathDirAlterVersion(db, path);
-                Self->ClearDescribePathCaches(path);
-                PathsToPublish.push_back(pathId);
-            }
-
+        // Materialized index tables have their own items, without a saved placeholder config.
+        MarkTableImported(item.DstPathId, db);
+        if (item.ReplicationConfig) {
             item.ReplicationConfig->SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
-            Self->PersistImportItemState(db, importInfo, i);
         }
     }
 
@@ -1599,7 +1575,6 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            FinishImport(*importInfo, db);
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         }
@@ -1984,13 +1959,17 @@ private:
             }
         }
 
+        if (item.State == EState::Done) {
+            FinishImportItem(item, db);
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+        }
+
         if (txId != InvalidTxId) {
             SubscribeTx(*importInfo, itemIdx);
         }
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            FinishImport(*importInfo, db);
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         }
@@ -2177,7 +2156,7 @@ private:
                     item.State = EState::CreateChangefeed;
                     AllocateTxId(*importInfo, itemIdx);
                 } else {
-                    item.State = EState::Done;
+                    FinishImportItem(item, db);
                 }
             }
             break;
@@ -2199,6 +2178,15 @@ private:
                     item.Issue += "\n";
                 }
                 item.Issue += *issue;
+            } else if (item.ReplicationConfig) {
+                // Built indexes have no import item: mark their replica table as soon as the build completes.
+                const auto tablePath = TPath::Init(item.DstPathId, Self);
+                const auto indexPath = tablePath.Child(item.Table->indexes(item.NextIndexIdx).name());
+                if (indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
+                        || indexPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique)) {
+                    const auto implPath = indexPath.Child(NTableIndex::ImplTable);
+                    MarkTableImported(implPath.Base()->PathId, db);
+                }
             }
             if (item.Table) {
                 ++item.NextIndexIdx;
@@ -2210,7 +2198,7 @@ private:
                 item.State = EState::CreateChangefeed;
                 AllocateTxId(*importInfo, itemIdx);
             } else {
-                item.State = EState::Done;
+                FinishImportItem(item, db);
             }
             break;
 
@@ -2222,7 +2210,7 @@ private:
                 item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
                 AllocateTxId(*importInfo, itemIdx);
             } else {
-                item.State = EState::Done;
+                FinishImportItem(item, db);
             }
             break;
 
@@ -2232,7 +2220,6 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            FinishImport(*importInfo, db);
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {

@@ -590,9 +590,6 @@ struct TUserTable : public TThrRefBase {
     const TSet<TPathId>& GetSchemaChangesCdcStreams() const;
 
     bool IsReplicated() const;
-    bool IsReplicationBootstrap() const {
-        return ReplicationConfig.Mode == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP;
-    }
     bool IsIncrementalRestore() const;
 
 private:

@@ -1,4 +1,3 @@
-#include "schemeshard_replication_bootstrap.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -706,10 +705,6 @@ public:
 
         schema.ClearReplicationConfig();
         schema.ClearIncrementalBackupConfig();
-        if (!PrepareReplicationBootstrapTable(dstPath.PathString(), context.SS, schema, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
 
         const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 

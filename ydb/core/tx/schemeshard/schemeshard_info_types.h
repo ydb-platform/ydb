@@ -1011,7 +1011,6 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     bool IsAsyncReplica() const {
         switch (TableDescription.GetReplicationConfig().GetMode()) {
             case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
-            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP:
                 return false;
             default:
                 return true;
@@ -3964,6 +3963,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         BuildIndexes = 5,
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
+        DropReplicaPlaceholder = 8,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -3999,6 +3999,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         NBackup::TMetadata Metadata;
         TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
+        NKikimrSchemeOp::TTableReplicationConfig ReplicationConfig;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

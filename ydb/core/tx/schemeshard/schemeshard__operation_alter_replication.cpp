@@ -416,7 +416,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Replications.contains(path.Base()->PathId));
         auto replication = context.SS->Replications.at(path.Base()->PathId);
 
-        if (!CheckReplicationBootstrapTables(path.Base()->PathId, *result, context.SS)) {
+        if (!CheckReplicationBootstrapTables(path.Base()->PathId, *result, context.SS, op.HasState() && op.GetState().HasStandBy())) {
             return result;
         }
 

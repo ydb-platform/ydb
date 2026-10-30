@@ -160,11 +160,19 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
-    {
+    if (baseTableDescription.GetReplicationConfig().HasBootstrapReplication()) {
+        const auto& config = baseTableDescription.GetReplicationConfig();
         TString error;
-        if (!PrepareReplicationBootstrapTable(baseTablePath.PathString(), context.SS,
-                *indexedTable.MutableTableDescription(), error)) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, error)};
+        if (!tx.GetInternal()
+            || !ValidateImportReplicationConfig(baseTableDescription.GetReplicationConfig(), context.SS, error)) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                error.empty() ? TString("Replication bootstrap config requires an internal operation") : error)};
+        }
+        if (config.HasBootstrapImportId()) {
+            const auto import = context.SS->Imports.find(config.GetBootstrapImportId());
+            if (import == context.SS->Imports.end() || import->second->IsFinished()) {
+                return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Bootstrap import is no longer active")};
+            }
         }
     }
     {

@@ -201,7 +201,7 @@ IDataShardChangeCollector* CreateChangeCollector(
         const TUserTable& table)
 {
     const bool hasAsyncIndexes = table.HasAsyncIndexes();
-    const bool hasCdcStreams = table.HasCdcStreams() && !table.IsReplicationBootstrap();
+    const bool hasCdcStreams = table.HasCdcStreams();
 
     if (!hasAsyncIndexes && !hasCdcStreams) {
         return nullptr;

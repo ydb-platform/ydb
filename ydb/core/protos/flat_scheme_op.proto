@@ -298,9 +298,6 @@ message TTableReplicationConfig {
     enum EReplicationMode {
         REPLICATION_MODE_NONE = 0;
         REPLICATION_MODE_READ_ONLY = 1;
-        // Allows loading the destination before attachment. TTL and CDC are
-        // suspended until the owner attaches or releases the table.
-        REPLICATION_MODE_BOOTSTRAP = 2;
     }
 
     enum EConsistencyLevel {
@@ -312,9 +309,12 @@ message TTableReplicationConfig {
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
 
-    // The destination is being prepared for replication, but the controller has
-    // not attached it yet. Cleared by the attachment's ALTER TABLE.
+    // Replication owns this destination before attachment. Cleared on attachment.
     optional NKikimrProto.TPathID BootstrapReplication = 3;
+    // Destination is not ready for attachment: it is empty or an import has
+    // not completed. Cleared in SchemeShard when the whole import succeeds.
+    optional bool AwaitingImport = 4 [default = false];
+    optional uint64 BootstrapImportId = 5;
 }
 
 message TTableIncrementalBackupConfig {

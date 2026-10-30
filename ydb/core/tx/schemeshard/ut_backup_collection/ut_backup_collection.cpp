@@ -2999,9 +2999,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
     }
 
-    void BackupRestoreCoveringIndex(bool bootstrap) {
+    Y_UNIT_TEST(BackupRestoreCoveringIndex) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).InitYdbDriver(bootstrap));
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
@@ -3058,17 +3058,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "CoverTable");
         env.TestWaitNotification(runtime, txId);
 
-        if (bootstrap) {
-            TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
-                Name: "Replication"
-                Config {
-                    InitialScan: false
-                    Specific { Targets { SrcPath: "/Source" DstPath: "/MyRoot/CoverTable" } }
-                }
-            )");
-            env.TestWaitNotification(runtime, txId);
-        }
-
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/CoverCollection")");
         env.TestWaitNotification(runtime, txId);
@@ -3077,10 +3066,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::PathExist,
             NLs::IndexesCount(1)
         });
-        const auto restored = DescribePath(runtime, "/MyRoot/CoverTable");
-        UNIT_ASSERT_VALUES_EQUAL(restored.GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
-            bootstrap ? NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP
-                      : NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/CoverTable/idx_name_age"), {
             NLs::PathExist,
@@ -3088,14 +3073,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             NLs::IndexKeys({"name", "age"}),
             NLs::IndexDataColumns({"ega"})
         });
-    }
-
-    Y_UNIT_TEST(BackupRestoreCoveringIndex) {
-        BackupRestoreCoveringIndex(false);
-    }
-
-    Y_UNIT_TEST(BackupRestoreCoveringIndexReplicationBootstrap) {
-        BackupRestoreCoveringIndex(true);
     }
 
     Y_UNIT_TEST(AlterTableInBackupCollectionProtection) {

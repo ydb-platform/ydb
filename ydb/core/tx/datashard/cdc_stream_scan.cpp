@@ -587,13 +587,6 @@ public:
         }
 
         auto table = Self->GetUserTables().at(tablePathId.LocalPathId);
-        if (table->IsReplicationBootstrap()) {
-            // SchemeShard retries ABORTED with backoff. Do not scan a partially
-            // restored destination or finish its initial scan prematurely.
-            Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED,
-                "CDC initial scan is suspended while loading a replication destination");
-            return true;
-        }
         if (record.GetTableSchemaVersion() != table->GetTableSchemaVersion()) {
             Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::SCHEME_ERROR,
                 TStringBuilder() << "Schema version mismatch"

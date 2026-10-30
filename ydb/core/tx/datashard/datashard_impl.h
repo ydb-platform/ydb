@@ -1719,15 +1719,6 @@ public:
         return false;
     }
 
-    bool IsReplicationBootstrap() const {
-        for (const auto& [_, info] : TableInfos) {
-            if (info->IsReplicationBootstrap()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool IsIncrementalRestore() const {
         for (const auto& [_, info] : TableInfos) {
             if (info->IsIncrementalRestore()) {

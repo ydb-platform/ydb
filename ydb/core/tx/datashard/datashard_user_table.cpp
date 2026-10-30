@@ -235,7 +235,6 @@ const TSet<TPathId>& TUserTable::GetSchemaChangesCdcStreams() const {
 bool TUserTable::IsReplicated() const {
     switch (ReplicationConfig.Mode) {
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
-        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP:
             return false;
         default:
             return true;

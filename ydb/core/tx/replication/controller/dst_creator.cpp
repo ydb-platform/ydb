@@ -285,7 +285,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Ydb::StatusIds::StatusCode status;
         TString error;
 
-        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, scheme.indexes_size())) {
+        if (!FillTableDescription(TxBody, scheme, TableProfiles, status, error, scheme.indexes_size() || PrepareImport)) {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 
@@ -297,7 +297,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         TxBody.SetWorkingDir(pathPair.first);
 
         NKikimrSchemeOp::TTableDescription* desc = nullptr;
-        if (scheme.indexes_size()) {
+        if (scheme.indexes_size() || PrepareImport) {
             NeedToCheck = true;
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);
@@ -329,6 +329,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
+        if (PrepareImport) {
+            PathId.ToProto(replicationConfig.MutableBootstrapReplication());
+            replicationConfig.SetAwaitingImport(true);
+        }
     }
 
     void AllocateTxId() {
@@ -360,7 +364,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             ExecuteSchemeTx(DropIndexTx);
         } else if (Attaching) {
             AttachDst();
-        } else if (InitialScan) {
+        } else if (InitialScan || PrepareImport) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -546,11 +550,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
             for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                if (ShouldDropVectorIndex(index)) {
+                if (!PrepareImport && ShouldDropVectorIndex(index)) {
                     return PrepareDropIndex(index, record);
                 }
             }
-            if (InitialScan || AttachmentComplete) {
+            if (InitialScan || PrepareImport || AttachmentComplete) {
                 return Success();
             }
 
@@ -561,7 +565,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return PrepareAttachment();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (!InitialScan) {
+            if (!InitialScan && !PrepareImport) {
                 return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
             }
             return AllocateTxId();
@@ -595,11 +599,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     bool CheckScheme(const NKikimrSchemeOp::TPathDescription& desc, TString& error) const {
         if (PendingDstPathId && Cleanup) {
             const auto& table = desc.GetTable();
-            return NotReplica(table)
-                || (table.GetReplicationConfig().GetMode() == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP
-                    && table.GetReplicationConfig().HasBootstrapReplication()
-                    && TPathId::FromProto(table.GetReplicationConfig().GetBootstrapReplication()) == PathId)
-                || CheckReplicationConfig(table.GetReplicationConfig(), Mode, Consistency, error);
+            return NotReplica(table) || CheckReplicationConfig(table.GetReplicationConfig(), Mode, Consistency, error);
         }
 
         switch (Kind) {
@@ -617,21 +617,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             error = "Destination was restored for another replication";
             return false;
         }
-        const bool bootstrap = got.GetReplicationConfig().GetMode()
-            == NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP;
-        const bool needsConfig = InitialScan || Attaching || IsReplica(got) || bootstrap;
+        const bool needsConfig = InitialScan || Attaching || IsReplica(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {
             error = "Empty replication config";
             return false;
         }
 
-        auto replicationConfig = got.GetReplicationConfig();
-        if (bootstrap && replicationConfig.HasBootstrapReplication()) {
-            // Attachment changes the prepared destination to read-only mode.
-            replicationConfig.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-        }
-        if (needsConfig && !CheckReplicationConfig(replicationConfig, Mode, Consistency, error)) {
+        if (needsConfig && !CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
             return false;
         }
 
@@ -899,7 +892,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_INFO("Success",
             {"dstPathId", DstPathId});
 
-        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
+        // Import can replace the placeholder. Resolve its final path only at STANDBY.
+        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId,
+            PrepareImport ? TPathId() : DstPathId));
         PassAway();
     }
 
@@ -994,7 +989,8 @@ public:
             const TString& database,
             bool initialScan,
             const TPathId& pendingDstPathId,
-            bool cleanup)
+            bool cleanup,
+            bool prepareImport)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -1007,6 +1003,7 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
+        , PrepareImport(prepareImport)
         , Cleanup(cleanup)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
@@ -1024,7 +1021,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
-            if (!InitialScan) {
+            if (!InitialScan && !PrepareImport) {
                 return Resolve(PathId);
             }
             [[fallthrough]];
@@ -1060,6 +1057,7 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
+    const bool PrepareImport;
     bool Cleanup;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -1152,7 +1150,9 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetConfig().GetInitialScan(),
         target->GetPendingDstPathId(),
         replication->GetDesiredState() == TReplication::EState::Done
-            || replication->GetState() == TReplication::EState::Removing);
+            || replication->GetState() == TReplication::EState::Removing,
+        !replication->GetConfig().GetInitialScan()
+            && replication->GetDesiredState() == TReplication::EState::Paused);
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
@@ -1160,9 +1160,10 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
         const TPathId& pendingDstPathId,
-        bool cleanup)
+        bool cleanup,
+        bool prepareImport)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup, prepareImport);
 }
 
 }

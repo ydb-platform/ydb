@@ -1,4 +1,3 @@
-#include "schemeshard_replication_bootstrap.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
@@ -584,10 +583,6 @@ public:
         PrepareScheme(schema);
 
         TString errStr;
-        if (!PrepareReplicationBootstrapTable(dstPath.PathString(), context.SS, schema, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
 
         if (!CheckColumnTypesConstraints(schema, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);

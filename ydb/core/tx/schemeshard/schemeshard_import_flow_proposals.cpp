@@ -140,6 +140,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
         tableDesc.SetName(wdAndPath.second);
         tableDesc.SetIsRestore(true);
+        if (item.ReplicationConfig.HasBootstrapReplication()) {
+            error = "A column table cannot replace a replication placeholder";
+            return nullptr;
+        }
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         Ydb::StatusIds::StatusCode status;
@@ -151,6 +155,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         auto& tableDesc = *indexedTable.MutableTableDescription();
         tableDesc.SetName(wdAndPath.second);
         tableDesc.SetIsRestore(true);
+        if (item.ReplicationConfig.HasBootstrapReplication()) {
+            *tableDesc.MutableReplicationConfig() = item.ReplicationConfig;
+            tableDesc.MutableReplicationConfig()->SetAwaitingImport(true);
+            tableDesc.MutableReplicationConfig()->SetBootstrapImportId(importInfo.Id);
+        }
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         Ydb::StatusIds::StatusCode status;

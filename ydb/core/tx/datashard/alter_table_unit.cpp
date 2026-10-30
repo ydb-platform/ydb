@@ -267,8 +267,6 @@ void TAlterTableUnit::Complete(TOperation::TPtr op,
                                const TActorContext &)
 {
     DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-    // Releasing a bootstrap destination resumes suspended CDC heartbeats.
-    DataShard.EmitHeartbeats();
 }
 
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,

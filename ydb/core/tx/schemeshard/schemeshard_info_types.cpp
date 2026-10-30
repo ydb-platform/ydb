@@ -1025,7 +1025,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
             break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
-        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_BOOTSTRAP:
             if (source && !allowReplicationMode) {
                 errStr = "Cannot set replication mode";
                 return nullptr;
@@ -3644,7 +3643,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
 
             TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
             TString explain;
-            if (!ValidateImportDstPath(dstPath, ss, explain)) {
+            if (!ValidateImportDstPath(dstPath, ss, explain, Id)) {
                 result.AddError(explain);
                 continue;
             }
@@ -3712,7 +3711,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                     }
 
                     TString explain;
-                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                    if (!ValidateImportDstPath(dstPath, ss, explain, Id)) {
                         result.AddError(explain);
                         continue;
                     }

@@ -86,6 +86,21 @@ For profiling memory allocations build kqprun with ya make flag `-D PROFILE_MEMO
     ./kqprun --sql "SELECT 42" --script-statistics stats.log --script-timeline-file timeline.svg
     ```
 
+### Trace files
+
+* Collect query spans locally without a tracing backend:
+    ```(bash)
+    ./kqprun --app-config configuration/app_config.conf \
+        -p query.sql -C query -A explain \
+        --trace-file spans.jsonl --trace-dataset experiment --trace-level 15
+    ```
+
+    `--trace-file` overwrites its destination and streams one protobuf JSON span in an OTLP resource envelope per line. The local format uses base64 IDs and enum names. `--trace-dataset` sets the `dataset.name` resource attribute (default: `kqprun`); `--trace-level` accepts 1 through 15 (default: 15).
+
+    Generic query requests have a `kqprun.query` parent span with `query.name` set to the input basename, or the zero-based request number for inline SQL, and `query.index` set to that request number. Labels do not depend on SQL text or its redaction. Query and script requests are traced; schema creation is not. `--trace-id` remains a separate text correlation ID and does not enable span collection.
+
+    Normal finalization waits 300 ms for spans that end after the query response and checks for writer errors. This is a grace period, not a guarantee that arbitrarily delayed spans have arrived. Span detail depends on the instrumentation in the binary; detailed compilation phases require the separate KQP compilation tracing changes.
+
 ### Cluster
 
 * Embedded UI, flag `-M` means the beginning of the range of ports used for different nodes:

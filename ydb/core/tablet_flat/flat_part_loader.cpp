@@ -462,7 +462,11 @@ TLoader::TFetch TLoader::StageSliceBounds()
         return {};
     }
 
-    LoaderEnv->EnsureNoNeedPages();
+    // A keys-loader pass may request pages from several slots, but each fetch serves only one.
+    // Drain the remaining requests before running the keys loader again.
+    if (auto fetch = LoaderEnv->GetFetch()) {
+        return fetch;
+    }
 
     TKeysLoader loader(PartView.Part.Get(), LoaderEnv.Get());
 

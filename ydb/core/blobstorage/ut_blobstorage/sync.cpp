@@ -108,6 +108,10 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         TestCutting(TBlobStorageGroupType::Erasure4Plus2Block);
     }
 
+    Y_UNIT_TEST(TestSyncLogCuttingBlock82) {
+        TestCutting(TBlobStorageGroupType::Erasure8Plus2Block);
+    }
+
     Y_UNIT_TEST(SyncLogDiskOverflowOldSnapshotCreatesDuplicateFreeChunkWithoutRestart) {
         /*
          * Actor-level reproducer for the live duplicate TOneChunk scenario.

@@ -70,6 +70,7 @@ struct TTestArgs {
     TBlobStorageGroupType GType;
     ui32 MaskForCookieBruteForcing;
 
+    bool EnableVPatchForTesting = false;
     ui32 StatusFlags = 1;
     float ApproximateFreeSpaceShare = 0.1;
     TVector<TVector<ui64>> PartPlacement;
@@ -81,6 +82,7 @@ struct TTestArgs {
         }
         switch (GType.GetErasure()) {
         case TErasureType::Erasure4Plus2Block:
+        case TErasureType::Erasure8Plus2Block:
             for (ui64 idx = 0; idx < GType.TotalPartCount(); ++idx) {
                 PartPlacement[idx].push_back(idx + 1);
             }
@@ -615,7 +617,7 @@ void RunMovedPatchTest(TTestBasicRuntime &runtime, const TTestArgs &args, EMoved
     TDSProxyEnv env;
     env.Configure(runtime, args.GType, args.CurrentGroupId, 0, TBlobStorageGroupInfo::EEM_NONE);
     TEvBlobStorage::TEvPatch::TPtr patch = CreatePatch(runtime, env, args);
-    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true);
+    std::unique_ptr<IActor> patchActor = env.CreatePatchRequestActor(patch, true, args.EnableVPatchForTesting);
     runtime.Register(patchActor.release(), 0, 0, TMailboxType::Simple, 0, env.FakeProxyActorId);
     ConductMovedPatch(runtime, env, args, movedCase);
 }
@@ -834,10 +836,11 @@ Y_UNIT_TEST_SUITE(TDSProxyPatchTest) {
 template <typename ECase>
 void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &args, ECase testCase),
         TErasureType::TErasureType::EErasureSpecies erasure,
-        ECase testCase)
+        ECase testCase, bool enableVPatchForTesting = false)
 {
     TTestArgs args;
     args.MakeDefault(erasure, true);
+    args.EnableVPatchForTesting = enableVPatchForTesting;
     TTestBasicRuntime runtime(1, false);
     SetLogPriorities(runtime);
     SetupRuntime(runtime);
@@ -889,6 +892,11 @@ void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &a
 
     Y_UNIT_TEST_PATCH_PACK(ErasureNone)
     Y_UNIT_TEST_PATCH_PACK(Erasure4Plus2Block)
+    Y_UNIT_TEST_PATCH_PACK(Erasure8Plus2Block)
+
+    Y_UNIT_TEST(MovedFallbackBlock82WithFastPathEnabled) {
+        RunGeneralTest(RunMovedPatchTest, TErasureType::Erasure8Plus2Block, EMovedPatchCase::Ok, true);
+    }
     Y_UNIT_TEST_PATCH_PACK(ErasureMirror3dc)
 
 }

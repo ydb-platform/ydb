@@ -127,8 +127,9 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
                 q.Id = blobSet.Get(queryIdx % blobCount).Id;
                 if (checkCrc) {
                     q.Shift = (queryIdx % groupType.DataParts()) * groupType.PartUserSize(q.Id.BlobSize());
-                    q.Shift = q.Shift <= q.Id.BlobSize() ? q.Shift : 0;
-                    q.Size = Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift));
+                    q.Shift = q.Shift < q.Id.BlobSize() ? q.Shift : 0;
+                    q.Size = Min<ui64>(q.Id.BlobSize() - q.Shift,
+                        Max((ui64)16, (ui64)(queryIdx * 177) % (q.Id.BlobSize() - q.Shift)));
                 } else {
                     q.Shift = (queryIdx * 177) % q.Id.BlobSize();
                     q.Size = Min((ui64)70, (ui64)q.Id.BlobSize() - (ui64)q.Shift);
@@ -196,6 +197,14 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
 // Without CRC
 Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsAllOk) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetBlobCrcCheck) {
+    TestIntervalsAndCrcAllOk(TErasureType::Erasure8Plus2Block, false, true);
 }
 
 //Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
@@ -1122,6 +1131,10 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, false);
+}
+
+Y_UNIT_TEST(TestBlock82GetIntervalsWipedAllOk) {
+    TestIntervalsWipedAllOk(TErasureType::Erasure8Plus2Block, false);
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedError) {

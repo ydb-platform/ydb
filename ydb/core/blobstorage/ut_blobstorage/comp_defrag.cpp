@@ -398,11 +398,16 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
     static constexpr ui64 MAX_DEFRAG_INFLIGHT = 2;
 
     using TTetsEnvBase::TTetsEnvBase;
-    TTestEnvCompDefragIndependent(double garbageThresholdToRunCompaction = 0.0)
+    TTestEnvCompDefragIndependent(double garbageThresholdToRunCompaction = 0.0,
+            TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            EBlobHeaderMode headerMode = EBlobHeaderMode::OLD_HEADER)
         : TTetsEnvBase({
-            .NodeCount = 8,
+            .NodeCount = erasure.BlobSubgroupSize(),
             .VDiskReplPausedAtStart = false,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
+            .VDiskConfigPreprocessor = [headerMode](TVDiskConfig& config) {
+                config.BlobHeaderMode = headerMode;
+            },
             .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
             .MinHugeBlobInBytes = MIN_HUGE_BLOB_SIZE,
             .PDiskSize = 20_GB,
@@ -410,7 +415,7 @@ struct TTestEnvCompDefragIndependent : TTetsEnvBase {
         })
     {
         DataSmall = FastGenDataForLZ4(32_KB, 0);
-        DataLarge = FastGenDataForLZ4(1_MB, 0);
+        DataLarge = FastGenDataForLZ4(256_KB * erasure.DataParts(), 0);
 
         SetIcbControl("VDiskControls.MaxChunksToDefragInflight", MAX_DEFRAG_INFLIGHT);
         SetIcbControl("VDiskControls.DefaultHugeGarbagePerMille", 50);
@@ -695,13 +700,10 @@ struct TTestEnvCompBroker {
 
 Y_UNIT_TEST_SUITE(CompDefrag) {
 
-    Y_UNIT_TEST(DoesItWork) {
-        TTestEnvCompDefragIndependent env(0.01);
-
-        if (env.Env.Runtime->GetNode(1)->AppData->FeatureFlags.GetEnableTinyDisks()) {
-            // TODO: rewrite test for new huge blob sizes
-            return;
-        }
+    void TestDoesItWork(TBlobStorageGroupType erasure, EBlobHeaderMode mode = EBlobHeaderMode::OLD_HEADER) {
+        std::unordered_map<TActorId, ui32> pendingChunkDeletes;
+        std::unordered_map<ui32, ui32> freedHugeChunks;
+        TTestEnvCompDefragIndependent env(0.01, erasure, mode);
 
         ui32 N = 70000;
         ui32 batchSize = 1000;
@@ -715,9 +717,12 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
             Cerr << "Bytes written (small): " << env.BytesWrittenSmall << Endl
                 << "Bytes written (large): " << env.BytesWrittenLarge << Endl;
             auto metrics = env.PrintMetrics();
-            UNIT_ASSERT_VALUE_IN(N * 6, metrics.Level0 + metrics.Level1 + metrics.Level2 + metrics.Level3, N * 8);
-            UNIT_ASSERT_VALUE_IN(N * 6, metrics.Level2, N * 8); // everything should be on level 2
-            UNIT_ASSERT_VALUE_IN(env.BytesWrittenLarge / TTestEnvCompDefragIndependent::CHUNK_SIZE, metrics.HugeUsedChunks, std::ceil(env.BytesWrittenLarge * 1.125 / TTestEnvCompDefragIndependent::CHUNK_SIZE));
+            UNIT_ASSERT_VALUE_IN(N * erasure.TotalPartCount(), metrics.Level0 + metrics.Level1 + metrics.Level2 + metrics.Level3, N * erasure.BlobSubgroupSize());
+            UNIT_ASSERT_VALUE_IN(N * erasure.TotalPartCount(), metrics.Level2, N * erasure.BlobSubgroupSize()); // everything should be on level 2
+            // Each VDisk may retain one partially filled chunk for this slot size.
+            UNIT_ASSERT_VALUE_IN(env.BytesWrittenLarge / TTestEnvCompDefragIndependent::CHUNK_SIZE,
+                metrics.HugeUsedChunks, std::ceil(env.BytesWrittenLarge * 1.125 / TTestEnvCompDefragIndependent::CHUNK_SIZE)
+                    + erasure.BlobSubgroupSize());
 
             compactionBytesWritten = metrics.CompactionBytesWritten;
 
@@ -729,25 +734,73 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         }
 
 
+        // HugeKeeper sends TEvNotifyChunksDeleted only after the deletion log record is committed.
+        env.SetFilterFunction(NPDisk::TEvLog::EventType, [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const auto* msg = ev->Get<NPDisk::TEvLog>();
+            if (msg->Signature.GetUnmasked() == TLogSignature::SignatureHugeBlobFreeChunk) {
+                pendingChunkDeletes.emplace(ev->Sender, msg->CommitRecord.DeleteChunks.size());
+            }
+            return true;
+        });
+        env.SetFilterFunction(TEvNotifyChunksDeleted::EventType, [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (auto it = pendingChunkDeletes.find(ev->Sender); it != pendingChunkDeletes.end()) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvNotifyChunksDeleted>()->Chunks.size(), it->second);
+                freedHugeChunks[nodeId] += it->second;
+                pendingChunkDeletes.erase(it);
+            }
+            return true;
+        });
         DeleteHugeBlobsOfTablet(env, N, 1);
         env.Env.Sim(TDuration::Minutes(30)); // defrag scheduler runs every 5-5.5 minutes
+        UNIT_ASSERT(pendingChunkDeletes.empty());
+        for (const auto& [nodeId, count] : env.CompactionsPerNode) {
+            ui32 chunksFreed = freedHugeChunks[nodeId];
+            Cerr << "Node " << nodeId << " had " << count << " compactions and " << chunksFreed << " chunks freed" << Endl;
+            UNIT_ASSERT_GT(chunksFreed, TTestEnvCompDefragIndependent::MAX_DEFRAG_INFLIGHT);
+            UNIT_ASSERT_VALUE_IN(1, count, chunksFreed / TTestEnvCompDefragIndependent::MAX_DEFRAG_INFLIGHT - 1);
+        }
+        env.RunFullCompaction(); // release obsolete huge references created by defrag
+        env.Env.Sim(TDuration::Minutes(30));
 
 
         { // check metrics
             auto metrics = env.PrintMetrics();
 
-            for (const auto& [nodeId, count] : env.CompactionsPerNode) {
-                ui32 chunksFreed = env.ChunksFreedByDefragPerNode[nodeId];
-                Cerr << "Node " << nodeId << " had " << count << " compactions and " << chunksFreed << " chunks freed" << Endl;
-
-                UNIT_ASSERT_VALUE_IN(1, count, chunksFreed / TTestEnvCompDefragIndependent::MAX_DEFRAG_INFLIGHT - 1);
-            }
             Cerr << "Total compaction bytes written during deletion: " << metrics.CompactionBytesWritten - compactionBytesWritten << Endl
                 << "Amplification to lsm size: " << (metrics.CompactionBytesWritten - compactionBytesWritten) / float(metrics.DskSpaceCurInplacedData) << Endl;
 
+            UNIT_ASSERT_GT(metrics.DefragBytesRewritten, 0);
             UNIT_ASSERT_VALUES_EQUAL(metrics.HugeChunksCanBeFreed, 0);
             UNIT_ASSERT_LT(env.GetMetrics().HugeUsedChunks, totalHugeChunks);
         }
+        for (ui32 pass = 0; pass < 2; ++pass) {
+            if (pass) {
+                for (ui32 node = 1; node <= erasure.BlobSubgroupSize(); ++node) {
+                    env.Env.RestartNode(node);
+                }
+                env.Env.Sim(TDuration::Minutes(1));
+            }
+            env.Sender = env.Env.Runtime->AllocateEdgeActor(1);
+            // Tablet 2 survives the GC above; check one huge and one inline blob.
+            for (ui32 index : {3, 13}) {
+                auto put = env.GetData(index);
+                env.SendToDsProxy(new TEvBlobStorage::TEvGet(put->Id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+                auto get = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(env.Sender, false);
+                UNIT_ASSERT_VALUES_EQUAL(get->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(get->Get()->ResponseSz, 1);
+                UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Buffer.ConvertToString(), put->Buffer.ConvertToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DoesItWork) {
+        TestDoesItWork(TBlobStorageGroupType::Erasure4Plus2Block);
+    }
+
+    Y_UNIT_TEST(DoesItWorkBlock82) {
+        TestDoesItWork(TBlobStorageGroupType::Erasure8Plus2Block, EBlobHeaderMode::NO_HEADER);
     }
 
     Y_UNIT_TEST(DelayedCompaction) {

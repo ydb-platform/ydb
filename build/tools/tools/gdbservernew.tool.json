@@ -1,0 +1,6 @@
+{
+    "tool": {
+        "type": "toolchain",
+        "description": "Run gdbserver for Ubuntu 16.04 or later"
+    }
+}

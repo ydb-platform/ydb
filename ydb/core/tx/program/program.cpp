@@ -113,6 +113,9 @@ TConclusionStatus TProgramContainer::ParseProgram(const NArrow::NSSA::IColumnRes
     YDB_LOG_DEBUG("",
         {"parseProtoProgram", program.DebugString()});
     NArrow::NSSA::TProgramBuilder programBuilder(columnResolver, KernelsRegistry);
+    if (PatternIndexHintsEnabled || (HasAppData() && AppData()->FeatureFlags.GetEnableCsPatternIndexHints())) {
+        programBuilder.EnablePatternIndexHints();
+    }
     bool hasProjection = false;
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {

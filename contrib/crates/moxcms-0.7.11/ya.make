@@ -1,0 +1,151 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(moxcms)
+
+CRATE_VERSION(0.7.11)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(0.7.11)
+LICENSE("BSD-3-Clause OR Apache-2.0")
+
+CRATE_SOURCES(
+    src/chad.rs
+    src/chromaticity.rs
+    src/cicp.rs
+    src/conversions/avx/interpolator.rs
+    src/conversions/avx/interpolator_q0_15.rs
+    src/conversions/avx/lut4_to_3.rs
+    src/conversions/avx/lut4_to_3_q0_15.rs
+    src/conversions/avx/mod.rs
+    src/conversions/avx/rgb_xyz.rs
+    src/conversions/avx/rgb_xyz_opt.rs
+    src/conversions/avx/rgb_xyz_q2_13.rs
+    src/conversions/avx/rgb_xyz_q2_13_opt.rs
+    src/conversions/avx/t_lut3_to_3.rs
+    src/conversions/avx/t_lut3_to_3_q0_15.rs
+    src/conversions/avx512/mod.rs
+    src/conversions/avx512/rgb_xyz_opt.rs
+    src/conversions/avx512/rgb_xyz_q2_13_opt.rs
+    src/conversions/bpc.rs
+    src/conversions/gray2rgb.rs
+    src/conversions/gray2rgb_extended.rs
+    src/conversions/interpolator.rs
+    src/conversions/katana/finalizers.rs
+    src/conversions/katana/md3x3.rs
+    src/conversions/katana/md4x3.rs
+    src/conversions/katana/md_3xn.rs
+    src/conversions/katana/md_nx3.rs
+    src/conversions/katana/md_pipeline.rs
+    src/conversions/katana/mod.rs
+    src/conversions/katana/pcs_stages.rs
+    src/conversions/katana/rgb_xyz.rs
+    src/conversions/katana/stages.rs
+    src/conversions/katana/xyz_lab.rs
+    src/conversions/katana/xyz_rgb.rs
+    src/conversions/lut3x3.rs
+    src/conversions/lut3x4.rs
+    src/conversions/lut4.rs
+    src/conversions/lut_transforms.rs
+    src/conversions/mab.rs
+    src/conversions/mab4x3.rs
+    src/conversions/mba3x4.rs
+    src/conversions/md_lut.rs
+    src/conversions/md_luts_factory.rs
+    src/conversions/mod.rs
+    src/conversions/neon/interpolator.rs
+    src/conversions/neon/interpolator_q0_15.rs
+    src/conversions/neon/lut4_to_3.rs
+    src/conversions/neon/lut4_to_3_q0_15.rs
+    src/conversions/neon/mod.rs
+    src/conversions/neon/rgb_xyz.rs
+    src/conversions/neon/rgb_xyz_opt.rs
+    src/conversions/neon/rgb_xyz_q1_30_opt.rs
+    src/conversions/neon/rgb_xyz_q2_13.rs
+    src/conversions/neon/rgb_xyz_q2_13_opt.rs
+    src/conversions/neon/t_lut3_to_3.rs
+    src/conversions/neon/t_lut3_to_3_q0_15.rs
+    src/conversions/prelude_lut_xyz_rgb.rs
+    src/conversions/rgb2gray.rs
+    src/conversions/rgb2gray_extended.rs
+    src/conversions/rgb_xyz_factory.rs
+    src/conversions/rgbxyz.rs
+    src/conversions/rgbxyz_fixed.rs
+    src/conversions/rgbxyz_float.rs
+    src/conversions/sse/interpolator.rs
+    src/conversions/sse/interpolator_q0_15.rs
+    src/conversions/sse/lut4_to_3.rs
+    src/conversions/sse/lut4_to_3_q0_15.rs
+    src/conversions/sse/mod.rs
+    src/conversions/sse/rgb_xyz.rs
+    src/conversions/sse/rgb_xyz_opt.rs
+    src/conversions/sse/rgb_xyz_q2_13.rs
+    src/conversions/sse/rgb_xyz_q2_13_opt.rs
+    src/conversions/sse/t_lut3_to_3.rs
+    src/conversions/sse/t_lut3_to_3_q0_15.rs
+    src/conversions/transform_lut3_to_3.rs
+    src/conversions/transform_lut3_to_4.rs
+    src/conversions/transform_lut4_to_3.rs
+    src/conversions/xyz_lab.rs
+    src/dat.rs
+    src/defaults.rs
+    src/dt_ucs.rs
+    src/err.rs
+    src/gamma.rs
+    src/gamut.rs
+    src/helpers.rs
+    src/ictcp.rs
+    src/jzazbz.rs
+    src/jzczhz.rs
+    src/lab.rs
+    src/lut_hint.rs
+    src/luv.rs
+    src/matan/curve_shape.rs
+    src/matan/degeneration.rs
+    src/matan/discontinuity.rs
+    src/matan/mod.rs
+    src/matan/monotonic.rs
+    src/matan/slope_limit.rs
+    src/math/mod.rs
+    src/matrix.rs
+    src/mlaf.rs
+    src/nd_array.rs
+    src/oklab.rs
+    src/oklch.rs
+    src/profile.rs
+    src/reader.rs
+    src/rgb.rs
+    src/safe_math.rs
+    src/srlab2.rs
+    src/tag.rs
+    src/transform.rs
+    src/trc.rs
+    src/writer.rs
+    src/xyy.rs
+    src/yrg.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    Cargo.lock
+    LICENSE-APACHE.md
+    LICENSE.md
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+
+CRATE_FEATURES(
+    avx
+    default
+    neon
+    sse
+)
+PEERDIR(
+    contrib/crates/num-traits-0.2.19
+    contrib/crates/pxfm-0.1.27
+)
+
+END()

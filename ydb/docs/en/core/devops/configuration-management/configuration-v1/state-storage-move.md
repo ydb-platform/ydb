@@ -20,7 +20,7 @@ domains_config:
 ...
 ```
 
-On the host with `node_id:1`, a cluster [static node](../../../reference/configuration/hosts.md#hosts) is configured and running, which serves part of State Storage. Suppose we need to decommission this host.
+On the host with `node_id:1`, a cluster [static node](../../../reference/configuration/hosts.md) is configured and running, which serves part of State Storage. Suppose we need to decommission this host.
 
 To replace `node_id:1`, we [added](cluster-expansion.md#add-host) a new host with `node_id:10` to the cluster and [deployed](cluster-expansion.md#add-static-node) a static node on it.
 

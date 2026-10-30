@@ -1,0 +1,13 @@
+version: v1beta1
+build:
+  roots:
+    - .
+lint:
+  ignore:
+    - dependencies
+  use:
+    - DEFAULT
+breaking:
+  ignore:
+  use:
+    - PACKAGE

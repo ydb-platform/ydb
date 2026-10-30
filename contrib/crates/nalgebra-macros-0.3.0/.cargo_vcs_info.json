@@ -1,0 +1,7 @@
+{
+  "git": {
+    "sha1": "631064a3bcdf0b307f23ab0853b8dadad52a7d37",
+    "dirty": true
+  },
+  "path_in_vcs": "nalgebra-macros"
+}

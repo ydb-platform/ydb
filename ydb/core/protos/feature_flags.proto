@@ -461,4 +461,5 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     optional bool EnableUnsafeTruncateTable = 373 [default = false];
+    optional bool EnableCsPatternIndexHints = 374 [default = false];
 }

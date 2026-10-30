@@ -1,6 +1,8 @@
 YQL_UDF_TEST()
 
-DEPENDS(yql/essentials/udfs/common/json)
+DEPENDS(
+    yql/essentials/udfs/common/json
+)
 
 TIMEOUT(300)
 

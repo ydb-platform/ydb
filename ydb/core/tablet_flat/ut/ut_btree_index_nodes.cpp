@@ -1648,7 +1648,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         UNIT_ASSERT_C(meta.LevelCount() >= 2, "Expected LevelCount >= 2, got " + ToString(meta.LevelCount()));
 
         TTestEnv env;
-        auto rootPage = env.TryGetPage(part.Get(), meta.RootV2, TGroupId{});
+        auto rootPage = env.TryGetIndexPage(part.Get(), meta.RootV2, TGroupId{});
         UNIT_ASSERT_C(rootPage, "Failed to load V2 root page");
 
         // V2 format is determined by root metadata — pass v2Format=true
@@ -2324,9 +2324,14 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
                 Y_TABLET_ERROR("Unused");
             }
             const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
-                Y_UNUSED(part);
+                return TryGetSlotPage(location, part->DataSlot(groupId));
+            }
+            const TSharedData* TryGetIndexPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+                return TryGetSlotPage(location, part->IndexSlot(groupId));
+            }
+            const TSharedData* TryGetSlotPage(const TPageLocation& location, ui32 slot) {
                 if (Loaded.count(location.GetByteOffset())) {
-                    return Part->Store->GetPage(groupId.Index, location.Offset);
+                    return Part->Store->GetPage(slot, location.Offset);
                 }
                 Missed.push_back(location);
                 return nullptr;

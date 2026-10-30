@@ -22,7 +22,13 @@ WITH (option = value [, ...])
     * `CA_CERT` — a [root certificate for TLS](../../../concepts/connect.md#tls-cert). Optional parameter. Can be specified if the source database supports an encrypted data interchange protocol (`CONNECTION_STRING` starts with `grpcs://`).
     * `INITIAL_SCAN`: whether to perform an [initial scan](../../../concepts/async-replication.md#initial-scan). An optional `Bool` parameter. If omitted, the server setting is used; the default is `TRUE`.
         * `TRUE`: source data is transferred through changefeeds, and replica objects are created automatically.
-        * `FALSE`: replication is created in the `PAUSED` state and prepares changefeeds without an initial scan. Target tables are not created or attached to replication until it switches to `STANDBY`. First, back up the source and restore the data on the target, then start replication using [ALTER ASYNC REPLICATION](alter-async-replication.md). When replication starts, target tables must exist and match the source schemas, including indexes. For the procedure, see the [initial synchronization guide](../../../devops/async-replication-initial-sync.md).
+        * `FALSE`: replication is created in the `PAUSED` state and prepares changefeeds without an initial scan. Target tables are not created or attached to replication until it switches to `STANDBY`. First, back up the source and restore the data on the target, then start replication using [ALTER ASYNC REPLICATION](alter-async-replication.md). When replication starts, target tables must exist and match the source schemas, subject to the [restrictions](../../../concepts/async-replication.md#restrictions). For the procedure, see the [initial synchronization guide](../../../devops/async-replication-initial-sync.md).
+    * `AVAILABILITY_PERIOD`: the [availability period for unacknowledged changes](../../../concepts/async-replication.md#availability-period). An optional parameter: a positive value of type `Interval` or the string `'UNLIMITED'`. The default is `'UNLIMITED'`.
+        * `'UNLIMITED'`: changes are retained until replication acknowledges their processing.
+        * `Interval`, for example, `Interval('PT48H')`: unacknowledged changes are protected from deletion for the specified period. After it expires, they may be deleted.
+
+        This parameter can only be set when replication is created. For help choosing a value, see the [comparison of retention options](../../../concepts/async-replication.md#availability-period).
+
     * Authentication details for the source database (mandatory) depending on the authentication method:
 
         * [Access token](../../../recipes/ydb-sdk/auth-access-token.md):
@@ -136,7 +142,19 @@ WITH (
 );
 ```
 
-The following statement creates replication for [initial synchronization using backup and restore](../../../devops/async-replication-initial-sync.md):
+The following statement creates replication with a 48-hour availability period for unacknowledged changes:
+
+```yql
+CREATE ASYNC REPLICATION my_replication_with_availability_period
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_PATH = 'my_secret',
+    AVAILABILITY_PERIOD = Interval('PT48H')
+);
+```
+
+The following statement creates replication for [initial synchronization using backup and restore](../../../devops/async-replication-initial-sync.md), retaining unacknowledged changes without an age limit:
 
 ```yql
 CREATE ASYNC REPLICATION my_replication_without_initial_scan
@@ -144,7 +162,8 @@ FOR original_table AS replica_table
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_PATH = 'my_secret',
-    INITIAL_SCAN = FALSE
+    INITIAL_SCAN = FALSE,
+    AVAILABILITY_PERIOD = 'UNLIMITED'
 );
 ```
 

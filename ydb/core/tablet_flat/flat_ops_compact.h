@@ -850,6 +850,10 @@ namespace NTabletFlatExecutor {
                     auto gcList = SharedCachePages->GCList;
                     auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
                         auto sharedPage = MakeIntrusive<TPage>(loadedPage.Location.Offset, loadedPage.Location.Size, loadedPage.Location.Type, loadedPage.Location.Crc32, nullptr);
+                        if (loadedPage.Location.Type == NTable::NPage::EPage::Globs) {
+                            Y_ENSURE(!saveCompactedPages->GlobsPageData);
+                            saveCompactedPages->GlobsPageData = loadedPage.Data;
+                        }
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {

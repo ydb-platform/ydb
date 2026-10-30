@@ -39,7 +39,7 @@ namespace NActors {
             NActors::NMemory::TLabel<MemoryLabelSharedData>::Sub(privateHeader->AllocSize);
 
             auto* header = reinterpret_cast<THeader*>(raw + PrivateHeaderSize);
-            Y_DEBUG_ABORT_UNLESS(header->Owner == nullptr);
+            Y_DEBUG_ABORT_UNLESS(header->Owner.load(std::memory_order_relaxed) == nullptr);
             header->~THeader();
 
             y_deallocate(raw);

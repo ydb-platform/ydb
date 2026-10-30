@@ -44,6 +44,15 @@ namespace {
         bool Verify(const TPageLocation&, TArrayRef<const char>) const override { return true; }
         size_t BackingSize() const noexcept override { return 0; }
 
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            // Fixture backing stores are outside this wrapper's modeled footprint
+            return sizeof(TBlobPageCollection);
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return nullptr;
+        }
+
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
             return NTable::NPage::TPageLocation::FromPageIndex(
                 pageId, Frames->Relation(pageId).Size,
@@ -216,6 +225,15 @@ namespace {
 
         size_t BackingSize() const noexcept override {
             return Store->PageCollectionBytes(Room);
+        }
+
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            // Fixture backing stores are outside this wrapper's modeled footprint
+            return sizeof(TTestPageCollection);
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return nullptr;
         }
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {

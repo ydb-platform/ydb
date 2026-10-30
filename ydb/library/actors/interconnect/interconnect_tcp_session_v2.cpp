@@ -71,7 +71,7 @@ namespace NActors {
         // v2 establishes exactly one connection for its lifetime (no continuation)
         Y_ABORT_UNLESS(!Socket, "TInterconnectSessionTCPv2 does not support connection continuation");
 
-        YDB_LOG_INFO("Handshake done socket: %li",
+        YDB_LOG_INFO("Handshake done",
             {"marker", "ICS91"},
             {"sender", ev->Sender},
             {"self", ev->Get()->Self},

@@ -284,7 +284,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
-        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Socket: %li",
+        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Terminate socket",
             {"marker", "ICS01"},
             {"socket", (Socket ? i64(*Socket) : -1)},
             {"reason", reason});
@@ -387,7 +387,7 @@ namespace NActors {
         // check for overloaded queues
         ui64 sendBufferDieLimit = Proxy->Common->Settings.SendBufferDieLimitInMB * ui64(1 << 20);
         if (sendBufferDieLimit != 0 && TotalOutputQueueSize > sendBufferDieLimit) {
-            YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT_SESSION, "Socket: %li output queue is overloaded, actual bytes, limit is",
+            YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT_SESSION, "Output queue is overloaded, actual bytes, limit is",
                 {"marker", "ICS03"},
                 {"socket", Socket ? i64(*Socket) : -1},
                 {"totalOutputQueueSize", TotalOutputQueueSize},
@@ -540,12 +540,12 @@ namespace NActors {
             return;
         }
 
-        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Handshake done socket: %li",
+        YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Handshake done socket",
             {"marker", "ICS09"},
             {"sender", ev->Sender},
             {"self", ev->Get()->Self},
             {"peer", ev->Get()->Peer},
-            {"qp", i64(*ev->Get()->Socket)},
+            {"socket", i64(*ev->Get()->Socket)},
             {"qpNum", (ev->Get()->RdmaHanshakeResult.IsOk() ? (int)ev->Get()->RdmaHanshakeResult.GetOk()->RdmaQp->GetQpNum() : -1)});
 
         NewConnectionSet = TActivationContext::Now();
@@ -884,7 +884,7 @@ namespace NActors {
             }
 
             const bool wasConnected(Socket);
-            YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Socket disconnect %li",
+            YDB_LOG_INFO_COMP(::NActorsServices::INTERCONNECT_SESSION, "Socket disconnect",
                 {"marker", "ICS07"},
                 {"socket", Socket ? i64(*Socket) : -1},
                 {"reason", ev->Get()->Reason});

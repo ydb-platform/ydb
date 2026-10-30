@@ -54,10 +54,6 @@ PEERDIR(
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/parser/pg_wrapper/interface
-    yql/essentials/providers/common/codec
-    yql/essentials/providers/common/mkql
     yql/essentials/public/decimal
     yql/essentials/types/uuid
     yql/essentials/utils

@@ -6,7 +6,6 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 
 namespace NKikimr::NKqp {
 
@@ -667,10 +666,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
         rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, lookupKeyColumns, *schemeType, read->Pos, ctx);
-        if (!rangeInfo.LiteralRange) {
-            rangeInfo.EvaluatedRanges = NOpt::EvaluateReadRanges(rangeInfo.ComputeNode, rangeInfo.ExpectedMaxRanges,
-                ctx, rboCtx.TypeCtx, rboCtx.FuncRegistry);
-        }
 
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
@@ -741,10 +736,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     // Only the row storage read source takes a literal range, but explain shows it for any storage.
     rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
-    if (!rangeInfo.LiteralRange) {
-        rangeInfo.EvaluatedRanges = NOpt::EvaluateReadRanges(rangeInfo.ComputeNode, rangeInfo.ExpectedMaxRanges,
-            ctx, rboCtx.TypeCtx, rboCtx.FuncRegistry);
-    }
     if (rangeInfo.LiteralRange) {
         YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);
     }

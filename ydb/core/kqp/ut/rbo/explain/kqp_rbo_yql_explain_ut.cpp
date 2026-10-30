@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {"IN over a transformed list parameter", "sc_row", "DECLARE $list AS List<Int64>; SELECT * FROM `/Root/sc_row` WHERE a IN ListTake($list, 1);", {}, "a ∈ Take(…)"},
             {"Condition that does not depend on the row", "sc_row", "DECLARE $flag AS Bool; SELECT * FROM `/Root/sc_row` WHERE a = 1 OR $flag;", {}, "a ∈ {1} ∪ (a ∈ (-∞, +∞) if $flag)"},
 
-            {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;", {}},
+            {"Fraction on an integer key: equal", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a = 1.5;", {}, "a ∈ {1.5}"},
             {"Fraction on an integer key: less", "sc_row", "SELECT * FROM `/Root/sc_row` WHERE a < 2.5;", {}, "", true},
             {"Value above Int8: less", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k < 300;", {"({k: -∞}, {k: 127}]"}},
             {"Value above Int8: greater", "sc_i8", "SELECT * FROM `/Root/sc_i8` WHERE k > 300;", {}},

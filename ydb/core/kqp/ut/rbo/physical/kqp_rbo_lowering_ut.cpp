@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_source_builder.h>
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_lookup_join_builder.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
-#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 
@@ -504,10 +503,6 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         const auto point = compile("(RangeFinalize (RangeFor '== (Int64 '1) (DataType 'Int64)))", ctx);
         const auto literal = compile("'((KqlKeyInc (Int64 '1)) (KqlKeyInc (Int64 '1)))", ctx);
         const auto parameter = compile("(RangeFor '>= (Parameter '$lo (DataType 'Int64)) (DataType 'Int64))", ctx);
-        NYql::TTypeAnnotationContext types;
-        const auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
-        const auto evaluated = NOpt::EvaluateReadRanges(point, 1, ctx, types, *functionRegistry);
-        UNIT_ASSERT(evaluated);
 
         for (const auto storage : {NYql::EStorageType::RowStorage, NYql::EStorageType::ColumnStorage}) {
             TOpRead read("t", {a}, storage, table, nullptr, nullptr, std::nullopt, std::nullopt,
@@ -515,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             for (const bool useLiteral : {false, true}) {
                 read.RangeInfo = TOpRead::TRangeInfo{
                     .ComputeNode = point, .KeyColumns = {"_alias_t\\.nested.a"}, .UsedPrefixLen = 1,
-                    .LiteralRange = useLiteral ? literal : nullptr, .EvaluatedRanges = evaluated,
+                    .ExpectedMaxRanges = 1, .LiteralRange = useLiteral ? literal : nullptr,
                 };
                 const auto json = read.ToJson(0, registry);
                 const auto text = read.ToString(ctx, registry);
@@ -529,8 +524,11 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             UNIT_ASSERT_VALUES_EQUAL(read.ToJson(0, registry)["ReadRangesExpression"].GetStringSafe(), "a ∈ [$lo, +∞)");
             UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "Ranges expression: (a ∈ [$lo, +∞))");
 
-            // Empty evaluated ranges are still a description, not a reason to fall back to the expression.
-            read.RangeInfo->EvaluatedRanges = compile("(List (ListType (DataType 'Int64)))", ctx);
+            // Empty interpreted ranges are still a description.
+            read.RangeInfo = TOpRead::TRangeInfo{
+                .ComputeNode = compile("(RangeEmpty (DataType 'Int64))", ctx),
+                .KeyColumns = {"t.a"}, .ExpectedMaxRanges = 0,
+            };
             UNIT_ASSERT(read.ToJson(0, registry)["ReadRanges"].GetArray().empty());
             UNIT_ASSERT_STRING_CONTAINS(read.ToString(ctx, registry), "Ranges: []");
 

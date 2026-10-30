@@ -420,8 +420,8 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
             rangedKeys.push_back(SplitAliasedMemberName(RangeInfo->KeyColumns[i]).second);
         }
 
-        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges,
-                                                          RangeInfo->ComputeNode, RangeInfo->KeyColumns);
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->ComputeNode,
+                                                          RangeInfo->KeyColumns, RangeInfo->ExpectedMaxRanges);
         if (description.Ranges) {
             NJson::TJsonValue readRanges(NJson::EJsonValueType::JSON_ARRAY);
             for (const auto& range : *description.Ranges) {
@@ -478,8 +478,8 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
         res << " OlapFilter: (" << PrintRBOExpression(NOpt::TOlapFilterInspector::RenameColumns(OlapFilterLambda, names, ctx), ctx) << ")";
     }
     if (RangeInfo) {
-        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->EvaluatedRanges,
-                                                          RangeInfo->ComputeNode, RangeInfo->KeyColumns);
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->ComputeNode,
+                                                          RangeInfo->KeyColumns, RangeInfo->ExpectedMaxRanges);
         if (description.Ranges) {
             res << " Ranges: [" << JoinSeq(", ", *description.Ranges) << "]";
         } else if (description.Expression) {

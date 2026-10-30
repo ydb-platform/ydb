@@ -4,8 +4,6 @@
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/subst.h>
@@ -21,21 +19,14 @@ NYql::TExprNode::TPtr Compile(TStringBuf expression, NYql::TExprContext& ctx) {
     return node;
 }
 
-const NMiniKQL::IFunctionRegistry& FunctionRegistry() {
-    static const auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
-    return *registry;
-}
-
 std::optional<TVector<TString>> Describe(TStringBuf expression, const TVector<TString>& keys, size_t maxRanges = MaxExplainedReadRanges) {
     NYql::TExprContext ctx;
-    NYql::TTypeAnnotationContext types;
     auto ranges = Compile(expression, ctx);
     // The extractor finalizes its internal range representation before handing it to the read source.
     if (!ranges->IsCallable("RangeFinalize")) {
         ranges = ctx.NewCallable(ranges->Pos(), "RangeFinalize", {ranges});
     }
-    const auto evaluated = EvaluateReadRanges(ranges, MaxEvaluatedRangeInputs, ctx, types, FunctionRegistry());
-    auto description = DescribeReadRanges(nullptr, evaluated, nullptr, keys);
+    auto description = DescribeReadRanges(nullptr, ranges, keys, MaxEvaluatedRangeInputs);
     if (description.Ranges && description.Ranges->size() > maxRanges) {
         return std::nullopt;
     }
@@ -44,7 +35,7 @@ std::optional<TVector<TString>> Describe(TStringBuf expression, const TVector<TS
 
 TString DescribeLiteral(TStringBuf expression, const TVector<TString>& keys) {
     NYql::TExprContext ctx;
-    const auto description = DescribeReadRanges(Compile(expression, ctx), nullptr, nullptr, keys);
+    const auto description = DescribeReadRanges(Compile(expression, ctx), nullptr, keys);
     UNIT_ASSERT(description.Ranges);
     UNIT_ASSERT_VALUES_EQUAL(description.Ranges->size(), 1);
     return description.Ranges->front();
@@ -52,7 +43,7 @@ TString DescribeLiteral(TStringBuf expression, const TVector<TString>& keys) {
 
 void AssertExpression(TStringBuf expression, const TVector<TString>& keys, TStringBuf expected) {
     NYql::TExprContext ctx;
-    const auto actual = DescribeReadRanges(nullptr, nullptr, Compile(expression, ctx), keys).Expression;
+    const auto actual = DescribeReadRanges(nullptr, Compile(expression, ctx), keys).Expression;
     UNIT_ASSERT(actual);
     UNIT_ASSERT_VALUES_EQUAL(*actual, expected);
 }
@@ -202,26 +193,18 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         )", {"a"}, {});
     }
 
-    Y_UNIT_TEST(RangeLimitFallsBackToFullRange) {
-        AssertRanges(R"(
-            (RangeMultiply (Uint64 '1)
-                (RangeUnion
-                    (RangeFor '== (Uint64 '1) (DataType 'Uint64))
-                    (RangeFor '== (Uint64 '3) (DataType 'Uint64))))
-        )", {"a"}, {"({a: -∞}, {a: +∞})"});
-    }
-
-    Y_UNIT_TEST(RangeLimitPadsComputedPrefix) {
-        AssertRanges(R"(
-            (RangeMultiply (Uint64 '1)
-                (RangeUnion
-                    (RangeFor '== (Uint64 '1) (DataType 'Uint64))
-                    (RangeFor '== (Uint64 '3) (DataType 'Uint64)))
-                (RangeFor '== (Uint64 '10) (DataType 'Uint64)))
-        )", {"a", "b"}, {
-            "({a: 1, b: -∞}, {a: 1, b: +∞})",
-            "({a: 3, b: -∞}, {a: 3, b: +∞})"
-        });
+    Y_UNIT_TEST(RangeLimitUsesStructuralDescription) {
+        const TString first = R"((RangeMultiply (Uint64 '1)
+            (RangeUnion (RangeFor '== (Int64 '1) (DataType 'Int64))
+                        (RangeFor '== (Int64 '3) (DataType 'Int64)))))";
+        UNIT_ASSERT(!Describe(first, {"a"}));
+        AssertExpression(first, {"a"}, "a ∈ {1, 3}");
+        const TString product = R"((RangeMultiply (Uint64 '1)
+            (RangeUnion (RangeFor '== (Int64 '1) (DataType 'Int64))
+                        (RangeFor '== (Int64 '3) (DataType 'Int64)))
+            (RangeFor '== (Int64 '10) (DataType 'Int64))))";
+        UNIT_ASSERT(!Describe(product, {"a", "b"}));
+        AssertExpression(product, {"a", "b"}, "a ∈ {1, 3} × b ∈ {10}");
     }
 
     Y_UNIT_TEST(UnionMergesOverlappingRanges) {
@@ -287,20 +270,16 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertRanges(R"(
             (RangeFor '== (Utf8 '"Привет\n") (DataType 'Utf8))
         )", {"name"}, {"[{name: \"Привет\\n\"}, {name: \"Привет\\n\"}]"});
-        AssertRanges(R"(
-            (RangeFor '== (PgConst 'NULL (PgType 'text)) (PgType 'text))
-        )", {"name"}, {"[{name: \"NULL\"}, {name: \"NULL\"}]"});
-        AssertRanges(R"(
-            (RangeFor '> (PgConst '5 (PgType 'int4)) (PgType 'int4))
-        )", {"id"}, {"({id: 5}, {id: +∞})"});
     }
 
-    Y_UNIT_TEST(PgTextUsesRuntimeOrdering) {
-        AssertRanges(R"(
-            (RangeIntersect
-                (RangeFor '> (PgConst 'a (PgType 'text)) (PgType 'text))
-                (RangeFor '< (PgConst 'b (PgType 'text)) (PgType 'text)))
-        )", {"name"}, {"({name: \"a\"}, {name: \"b\"})"});
+    Y_UNIT_TEST(PgOrderingIsLeftToTheStructuralDescription) {
+        const TString text = "(RangeFor '== (PgConst 'NULL (PgType 'text)) (PgType 'text))";
+        UNIT_ASSERT(!Describe(text, {"name"}));
+        AssertExpression(text, {"name"}, "name ∈ {\"NULL\"}");
+        const TString bounds = "(RangeIntersect (RangeFor '> (PgConst 'a (PgType 'text)) (PgType 'text)) "
+                               "(RangeFor '< (PgConst 'b (PgType 'text)) (PgType 'text)))";
+        UNIT_ASSERT(!Describe(bounds, {"name"}));
+        AssertExpression(bounds, {"name"}, "name ∈ (\"a\", \"b\")");
     }
 
     Y_UNIT_TEST(LiteralRangePadsMissingColumns) {
@@ -338,16 +317,15 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
 
     Y_UNIT_TEST(EvaluationBoundsInputsBeforeComputing) {
         NYql::TExprContext ctx;
-        NYql::TTypeAnnotationContext types;
         const auto point = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
-        UNIT_ASSERT(EvaluateReadRanges(point, MaxEvaluatedRangeInputs, ctx, types, FunctionRegistry()));
-        UNIT_ASSERT(!EvaluateReadRanges(point, MaxEvaluatedRangeInputs + 1, ctx, types, FunctionRegistry()));
-        UNIT_ASSERT(!EvaluateReadRanges(point, {}, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(DescribeReadRanges(nullptr, point, {"a"}, MaxEvaluatedRangeInputs).Ranges);
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, point, {"a"}, MaxEvaluatedRangeInputs + 1).Ranges);
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, point, {"a"}, {}).Ranges);
         const auto manyNodes = Compile(PointsUnion(MaxRangeEvaluationNodes), ctx);
-        UNIT_ASSERT(!EvaluateReadRanges(manyNodes, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, manyNodes, {"a"}, 1).Ranges);
         const auto largeValue = Compile(TStringBuilder() << "(RangeFor '== (String '\""
             << TString(MaxRangeEvaluationBytes + 1, 'x') << "\") (DataType 'String))", ctx);
-        UNIT_ASSERT(!EvaluateReadRanges(largeValue, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, largeValue, {"a"}, 1).Ranges);
 
         // Every shared value is also reachable by a short path; visiting it once must not hide the deep path.
         const auto one = Compile("(Int64 '1)", ctx);
@@ -360,7 +338,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         const auto list = ctx.NewCallable(one->Pos(), "AsList", std::move(values));
         auto first = ctx.NewCallable(one->Pos(), "Nth", {list, ctx.NewAtom(one->Pos(), "0")});
         const auto deepRange = ctx.ChangeChild(*point, 1, std::move(first));
-        UNIT_ASSERT(!EvaluateReadRanges(deepRange, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, deepRange, {"a"}, 1).Ranges);
     }
 
     Y_UNIT_TEST(EvaluationRejectsRuntimeAndUnboundedExpressions) {
@@ -373,7 +351,6 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
 
     Y_UNIT_TEST(EvaluationFailureDoesNotChangeQueryContext) {
         NYql::TExprContext ctx;
-        NYql::TTypeAnnotationContext types;
         const auto point = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
         const auto failing = ctx.NewCallable(point->Pos(), "Ensure", {
             point, ctx.NewCallable(point->Pos(), "Bool", {ctx.NewAtom(point->Pos(), "false")}),
@@ -381,19 +358,19 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         ctx.AddError(NYql::TIssue({}, "existing query issue"));
         const auto issues = ctx.IssueManager.GetIssues().ToString();
         ctx.Step.Done(NYql::TExprStep::ExprEval);
-        UNIT_ASSERT(!EvaluateReadRanges(failing, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, failing, {"a"}, 1).Ranges);
         UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().ToString(), issues);
         UNIT_ASSERT(ctx.Step.IsDone(NYql::TExprStep::ExprEval));
         UNIT_ASSERT(!point->GetTypeAnn());
         const auto invalid = Compile("(RangeFor 'invalid (Int64 '1) (DataType 'Int64))", ctx);
-        UNIT_ASSERT(!EvaluateReadRanges(invalid, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, invalid, {"a"}, 1).Ranges);
         UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().ToString(), issues);
         UNIT_ASSERT(ctx.Step.IsDone(NYql::TExprStep::ExprEval));
-        UNIT_ASSERT(EvaluateReadRanges(point, 1, ctx, types, FunctionRegistry()));
+        UNIT_ASSERT(DescribeReadRanges(nullptr, point, {"a"}, 1).Ranges);
         UNIT_ASSERT_VALUES_EQUAL(ctx.IssueManager.GetIssues().ToString(), issues);
         UNIT_ASSERT(ctx.Step.IsDone(NYql::TExprStep::ExprEval));
         UNIT_ASSERT(!point->GetTypeAnn());
-        const auto fallback = DescribeReadRanges(nullptr, nullptr, point, {"a"});
+        const auto fallback = DescribeReadRanges(nullptr, point, {"a"});
         UNIT_ASSERT(!fallback.Ranges);
         UNIT_ASSERT_VALUES_EQUAL(*fallback.Expression, "a ∈ {1}");
     }
@@ -447,8 +424,8 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertExpression(SqlIn("(Just (AsList (Int64 '3) (Int64 '3)))", 10000), {"a"}, "a ∈ {3}");
     }
 
-    Y_UNIT_TEST(SqlInOverLimitReadsEverything) {
-        AssertRanges(SqlIn(TupleList, 1), {"a"}, {"({a: -∞}, {a: +∞})"});
+    Y_UNIT_TEST(SqlInOverLimitIsSymbolic) {
+        UNIT_ASSERT(!Describe(SqlIn(TupleList, 1), {"a"}));
         AssertExpression(SqlIn(TupleList, 1), {"a"}, "a ∈ {1, 2}");
     }
 
@@ -456,7 +433,8 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         const auto withNull = SqlIn(R"(
             (Just (AsList (Nothing (OptionalType (DataType 'Int64))) (Just (Int64 '1))))
         )", 1);
-        AssertRanges(withNull, {"a"}, {"[{a: 1}, {a: 1}]"});
+        // Even if NULL filtering could bring the count below the limit, do not guess a coarser scan.
+        UNIT_ASSERT(!Describe(withNull, {"a"}));
         AssertExpression(withNull, {"a"}, "a ∈ {NULL, 1}");
 
         const auto withParameter = SqlIn(R"(
@@ -518,7 +496,7 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         const auto parameter = TupleSqlIn("(Map (Just (Parameter '$pairs (ListType (TupleType (DataType 'Int32) (DataType 'Int32))))) (lambda '(x) x))", 10000);
         UNIT_ASSERT(!Describe(parameter, {"a", "b"}));
         AssertExpression(parameter, {"a", "b"}, "(b, a) ∈ $pairs");
-        AssertRanges(TupleSqlIn(PairList, 1), {"a", "b"}, {"({a: -∞, b: -∞}, {a: +∞, b: +∞})"});
+        UNIT_ASSERT(!Describe(TupleSqlIn(PairList, 1), {"a", "b"}));
     }
 
     Y_UNIT_TEST(TupleSqlInProjectionIsNotPlainMembership) {
@@ -530,21 +508,20 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         SubstGlobal(duplicated, "(Nth t '1)", "(Nth t '0)");
         for (const auto& expression : {projected, duplicated}) {
             NYql::TExprContext ctx;
-            UNIT_ASSERT(!DescribeReadRanges(nullptr, nullptr, Compile(expression, ctx), {"a", "b"}).Expression);
+            UNIT_ASSERT(!DescribeReadRanges(nullptr, Compile(expression, ctx), {"a", "b"}).Expression);
         }
     }
 
-    Y_UNIT_TEST(FloatRangesStopBeforeNaN) {
-        // NaN is ordered after every number and equals nothing, so ranges up to infinity end before it.
-        AssertRanges("(RangeFor '> (Double '5) (DataType 'Double))", {"x"}, {"({x: 5}, {x: nan})"});
-        AssertRanges("(RangeFor '== (Double '1.5) (DataType 'Double))", {"x"}, {"[{x: 1.5}, {x: 1.5}]"});
-        AssertRanges("(RangeFor '== (Double 'nan) (DataType 'Double))", {"x"}, {});
-        AssertRanges("(RangeFor '!= (Double '5) (DataType 'Double))", {"x"}, {"({x: -∞}, {x: 5})", "({x: 5}, {x: +∞})"});
-        AssertRanges("(RangeFor '>= (Int32 '5) (DataType 'Double))", {"x"}, {"[{x: 5}, {x: nan})"});
+    Y_UNIT_TEST(FloatRangesRemainSymbolic) {
+        for (const TStringBuf op : {">", "==", "!=", ">="}) {
+            UNIT_ASSERT(!Describe(TStringBuilder() << "(RangeFor '" << op << " (Double '5) (DataType 'Double))", {"x"}));
+        }
+        UNIT_ASSERT(!Describe("(RangeFor '== (Double 'nan) (DataType 'Double))", {"x"}));
+        AssertExpression("(RangeFor '> (Double '5) (DataType 'Double))", {"x"}, "x ∈ (5, +∞)");
     }
 
     Y_UNIT_TEST(DecimalAndDateValues) {
-        AssertRanges("(RangeFor '< (Decimal '\"1.5\" '10 '2) (DataType 'Decimal '10 '2))", {"d"}, {"({d: -∞}, {d: 1.5})"});
+        UNIT_ASSERT(!Describe("(RangeFor '< (Decimal '\"1.5\" '10 '2) (DataType 'Decimal '10 '2))", {"d"}));
         AssertRanges("(RangeFor '>= (Date '19723) (DataType 'Date))", {"d"}, {"[{d: 2024-01-01}, {d: +∞})"});
     }
 
@@ -555,9 +532,9 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         AssertRanges("(RangeFor '> (Int64 '-300) (DataType 'Int8))", {"a"}, {"[{a: -128}, {a: +∞})"});
         AssertRanges("(RangeFor '== (Int64 '300) (DataType 'Int8))", {"a"}, {});
         AssertRanges("(RangeFor '!= (Int64 '300) (DataType 'Int8))", {"a"}, {"({a: -∞}, {a: +∞})"});
-        // A fraction has no Int64 counterpart, a whole number does.
-        AssertRanges("(RangeFor '== (Double '1.5) (DataType 'Int64))", {"a"}, {});
-        AssertRanges("(RangeFor '== (Double '2) (DataType 'Int64))", {"a"}, {"[{a: 2}, {a: 2}]"});
+        // Float-to-integer conversions are deliberately not interpreted.
+        UNIT_ASSERT(!Describe("(RangeFor '== (Double '1.5) (DataType 'Int64))", {"a"}));
+        UNIT_ASSERT(!Describe("(RangeFor '== (Double '2) (DataType 'Int64))", {"a"}));
     }
 
     Y_UNIT_TEST(StartsWithIsAPrefixRange) {
@@ -578,6 +555,96 @@ Y_UNIT_TEST_SUITE(KqpReadRangeDescriptions) {
         const TString full = "(If (Parameter '$flag (DataType 'Bool)) (AsRange '('((Nothing (OptionalType (DataType 'Int64))) (Int32 '0)) "
                              "'((Nothing (OptionalType (DataType 'Int64))) (Int32 '0)))) (RangeEmpty (DataType 'Int64)))";
         AssertExpression(full, {"a"}, "a ∈ (-∞, +∞) if $flag");
+    }
+
+    Y_UNIT_TEST(WidePointsMergeAndFinalizeWithSuffixInfinities) {
+        const TString points = "(RangeUnion (RangeFor '=== (Int32 '1) (DataType 'Int64)) "
+                               "(RangeFor '=== (Int32 '2) (DataType 'Int64)))";
+        AssertRanges(points, {"a"}, {"[{a: 1}, {a: 3})"});
+        const TString suffix = "(AsRange '('((Nothing (OptionalType (DataType 'Int64))) (Int32 '0)) "
+                               "'((Nothing (OptionalType (DataType 'Int64))) (Int32 '0))))";
+        AssertRanges(TStringBuilder() << "(RangeMultiply (Uint64 '100) " << points << ' ' << suffix << ')',
+                     {"a", "b"}, {"({a: 1, b: -∞}, {a: 3, b: -∞})"});
+        AssertRanges(TStringBuilder() << "(RangeMultiply (Uint64 '100) (RangeFor '=== (Int32 '1) (DataType 'Int64)) " << suffix << ')',
+                     {"a", "b"}, {"({a: 1, b: -∞}, {a: 1, b: +∞})"});
+    }
+
+    Y_UNIT_TEST(IntegerExtremesDoNotOverflow) {
+        AssertRanges("(RangeFor '=== (Uint64 '18446744073709551615) (DataType 'Uint64))", {"a"},
+                     {"[{a: 18446744073709551615}, {a: 18446744073709551615}]"});
+        AssertRanges("(RangeFor '== (Int64 '-1) (DataType 'Uint64))", {"a"}, {});
+        AssertRanges("(RangeFor '< (Uint64 '18446744073709551615) (DataType 'Int64))", {"a"},
+                     {"({a: -∞}, {a: 9223372036854775807}]"});
+        AssertRanges("(RangeFor '=== (Int64 '-9223372036854775808) (DataType 'Int64))", {"a"},
+                     {"[{a: -9223372036854775808}, {a: -9223372036854775808}]"});
+    }
+
+    Y_UNIT_TEST(UnionKeepsAnExcludedPointGap) {
+        AssertRanges("(RangeUnion (RangeFor '< (Int64 '5) (DataType 'Int64)) "
+                     "(RangeFor '> (Int64 '5) (DataType 'Int64)))", {"a"},
+                     {"({a: -∞}, {a: 5})", "({a: 5}, {a: +∞})"});
+        AssertRanges("(RangeUnion (RangeFor '< (Int64 '5) (DataType 'Int64)) "
+                     "(RangeFor '>= (Int64 '5) (DataType 'Int64)))", {"a"}, {"({a: -∞}, {a: +∞})"});
+        AssertRanges("(RangeIntersect (RangeFor '>= (Int64 '5) (DataType 'Int64)) "
+                     "(RangeFor '< (Int64 '5) (DataType 'Int64)))", {"a"}, {});
+    }
+
+    Y_UNIT_TEST(Utf8PrefixesUseTheExistingSuccessorFunction) {
+        AssertRanges("(RangeFor 'StartsWith (String '\"при\") (DataType 'Utf8))", {"s"},
+                     {"[{s: \"при\"}, {s: \"прй\"})"});
+        AssertRanges("(RangeFor 'StartsWith (String '\"\\xFF\") (DataType 'String))", {"s"},
+                     {"[{s: \"\\xFF\"}, {s: +∞})"});
+    }
+
+    Y_UNIT_TEST(SqlInRecognizesTheWholeTemplate) {
+        auto changed = SqlIn(TupleList, 10000);
+        SubstGlobal(changed, "(Uint64 '10001)", "(Uint64 '1)");
+        UNIT_ASSERT(!Describe(changed, {"a"}));
+        changed = SqlIn(TupleList, 10000);
+        SubstGlobal(changed, "(RangeFor '== item", "(RangeFor '> item");
+        UNIT_ASSERT(!Describe(changed, {"a"}));
+        // A narrowing tuple cast may discard a whole row. It is not plain projection.
+        changed = TupleSqlIn(PairList, 10000);
+        SubstGlobal(changed, "(TupleType (DataType 'Int32) (DataType 'Int32))",
+                    "(TupleType (DataType 'Int8) (DataType 'Int8))");
+        UNIT_ASSERT(!Describe(changed, {"a", "b"}));
+    }
+
+    Y_UNIT_TEST(SharedLiteralBoundsHaveAnExpandedSizeLimit) {
+        NYql::TExprContext ctx;
+        const auto value = Compile(TStringBuilder() << "(Just (String '\"" << TString(1024, 'x') << "\"))", ctx);
+        NYql::TExprNode::TListType components(40, value);
+        components.push_back(Compile("(Int32 '1)", ctx));
+        const auto bound = ctx.NewList(value->Pos(), std::move(components));
+        const auto pair = ctx.NewList(value->Pos(), {bound, bound});
+        const auto ranges = ctx.NewCallable(value->Pos(), "AsRange", {pair});
+        const auto description = DescribeReadRanges(nullptr, ranges, TVector<TString>(40, "key"), 1);
+        UNIT_ASSERT(!description.Ranges);
+        UNIT_ASSERT(!description.Expression);
+
+        const auto smallBound = ctx.NewList(value->Pos(), {value, Compile("(Int32 '1)", ctx)});
+        const auto smallPair = ctx.NewList(value->Pos(), {smallBound, smallBound});
+        auto shared = ctx.NewCallable(value->Pos(), "AsRange", {smallPair});
+        for (size_t i = 0; i < 6; ++i) shared = ctx.NewCallable(value->Pos(), "RangeUnion", {shared, shared});
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, shared, {"key"}, 1).Ranges);
+    }
+
+    Y_UNIT_TEST(SharedExpressionAndCompositeWidthAreBounded) {
+        NYql::TExprContext ctx;
+        auto node = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
+        for (size_t i = 0; i < 20; ++i) node = ctx.NewCallable(node->Pos(), "RangeUnion", {node, node});
+        const auto description = DescribeReadRanges(nullptr, node, {"a"}, 1);
+        UNIT_ASSERT(!description.Ranges);
+        UNIT_ASSERT(!description.Expression);
+        const auto point = Compile("(RangeFor '== (Int64 '1) (DataType 'Int64))", ctx);
+        NYql::TExprNode::TListType arguments{Compile("(Uint64 '1000)", ctx)};
+        TVector<TString> keys;
+        for (size_t i = 0; i < 65; ++i) {
+            arguments.push_back(point);
+            keys.push_back(TStringBuilder() << 'k' << i);
+        }
+        node = ctx.NewCallable(point->Pos(), "RangeMultiply", std::move(arguments));
+        UNIT_ASSERT(!DescribeReadRanges(nullptr, node, keys, 1).Ranges);
     }
 }
 

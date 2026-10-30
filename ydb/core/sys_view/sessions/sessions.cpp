@@ -15,6 +15,8 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr::NSysView {
 
 using namespace NActors;
@@ -155,8 +157,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvListSessionsResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TSessionsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TSessionsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -218,8 +220,9 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());
+            YDB_LOG_DEBUG("TSessionsScan::StartScan: sending list sessions request to node",
+                {"nodeId", nodeId},
+                {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -249,8 +252,8 @@ private:
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListSessionsRequest) {
             ui32 nodeId = ev->Cookie;
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Received undelivered response for node_id: " << nodeId);
+            YDB_LOG_INFO("TSessionsScan::Undelivered: list sessions response undelivered",
+                {"nodeId", nodeId});
             StartScan();
         }
     }

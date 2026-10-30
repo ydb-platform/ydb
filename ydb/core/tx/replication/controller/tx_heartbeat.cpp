@@ -2,6 +2,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId, const TVector<TString>& tables) {
@@ -33,17 +35,18 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
-            << ": pending# " << Self->PendingHeartbeats.size());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"pending", Self->PendingHeartbeats.size()});
 
         if (Self->Workers.empty()) {
-            CLOG_W(ctx, "There are no workers");
+            YDB_LOG_WARN_CTX(ctx, "There are no workers");
             return true;
         }
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            CLOG_E(ctx, "Ambiguous replication instance");
+            YDB_LOG_ERROR_CTX(ctx, "Ambiguous replication instance");
             return true;
         }
 
@@ -113,15 +116,16 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete"
-            << ": pending# " << Self->PendingHeartbeats.size());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete",
+            {"pending", Self->PendingHeartbeats.size()});
 
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
 
         if (auto& ev = CommitProposal) {
-            CLOG_N(ctx, "Propose commit"
-                << ": writeTxId# " << Self->CommittingTxId);
+            YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
+                {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
@@ -157,12 +161,13 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
-            << ": writeTxId# " << Self->CommittingTxId);
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"writeTxId", Self->CommittingTxId});
 
         auto replication = Self->GetSingle();
         if (!replication) {
-            CLOG_E(ctx, "Ambiguous replication instance");
+            YDB_LOG_ERROR_CTX(ctx, "Ambiguous replication instance");
             return true;
         }
 
@@ -173,9 +178,9 @@ public:
         const auto& record = Status->Get()->Record;
         const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
         if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
-            CLOG_W(ctx, "Error committing changes"
-                << ": writeTxId# " << Self->CommittingTxId
-                << ", issues# " << NYql::IssuesFromMessageAsString(record.GetIssues()));
+            YDB_LOG_WARN_CTX(ctx, "Error committing changes",
+                {"writeTxId", Self->CommittingTxId},
+                {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
             CommitProposal = MakeCommitProposal(Self->CommittingTxId, replication->GetTargetTablePaths());
@@ -203,13 +208,14 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
         if (auto& ev = CommitProposal) {
-            CLOG_N(ctx, "Propose commit"
-                << ": writeTxId# " << Self->CommittingTxId);
+            YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
+                {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
     }
@@ -217,12 +223,13 @@ public:
 }; // TTxCommitChanges
 
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Handle",
+        {"ev", ev->Get()->ToString()});
 
     if (ev->Cookie != CommittingTxId) {
-        CLOG_E(ctx, "Cookie mismatch"
-            << ": expected# " << CommittingTxId
-            << ", got# " << ev->Cookie);
+        YDB_LOG_ERROR_CTX(ctx, "Cookie mismatch",
+            {"expected", CommittingTxId},
+            {"got", ev->Cookie});
         return;
     }
 

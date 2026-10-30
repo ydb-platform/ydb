@@ -1512,7 +1512,7 @@ void TPersQueue::HandleDeleteSessionRequest(
 
 void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                             const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-                                            const TActorId& pipeClient, const TActorId&
+                                            const TActorId& pipeClient, const TActorId& sender
 ) {
     PQ_ENSURE(req.HasCmdCreateSession());
     const auto& cmd = req.GetCmdCreateSession();
@@ -1547,6 +1547,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
 
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
+            pipeIter->second.ClientActor = sender;
             LOG_D("Created session",
                 {"sessionId", cmd.GetSessionId()},
                 {"onPipe", pipeIter->first});
@@ -2588,9 +2589,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     auto& req = request.GetPartitionRequest();
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
-    if (auto pipe = PipesInfo.find(pipeClient); pipe != PipesInfo.end()) {
-        pipe->second.ClientActor = ev->Sender;
-    }
 
     if (request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
         auto pipeIter = PipesInfo.find(pipeClient);

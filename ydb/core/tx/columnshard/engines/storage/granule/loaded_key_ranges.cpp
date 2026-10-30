@@ -23,8 +23,14 @@ bool StartsAtOrAbove(const TPredicateContainer& rangeStart, const NArrow::NMerge
     if (isFullKey) {
         return true;
     }
-    // loadedFrom = (100, "m"): rangeStart ">= 100" selects (100, "a") < loadedFrom; rangeStart "> 100" does not
-    return !rangeStart.IsInclude();
+    // loadedFrom = (100, "m")
+    if (rangeStart.IsInclude()) {
+        // rangeStart ">= 100" selects (100, "a"), but (100, "a") < loadedFrom
+        return false;
+    } else {
+        // rangeStart "> 100" selects (101, *), loadedFrom < (101, *)
+        return true;
+    }
 }
 
 }   // namespace

@@ -564,7 +564,7 @@ Release date: August 14, 2023.
 
 ## Version 23.1 {#23-1}
 
-Release date: May 5, 2023. To update to version 23.1, select the [Downloads](downloads/index.md#ydb-server) section.
+Release date: May 5, 2023. To update to version 23.1, select the [Downloads](downloads/ydb-open-source-database.md) section.
 
 ### Functionality
 
@@ -590,7 +590,7 @@ Release date: May 5, 2023. To update to version 23.1, select the [Downloads](dow
 
 ## Version 22.5 {#22-5}
 
-Release date: March 7, 2023. To update to version **22.5**, select the [Downloads](downloads/index.md#ydb-server) section.
+Release date: March 7, 2023. To update to version **22.5**, select the [Downloads](downloads/ydb-open-source-database.md) section.
 
 ### What's new
 
@@ -609,7 +609,7 @@ Release date: March 7, 2023. To update to version **22.5**, select the [Download
 
 ## Version 22.4 {#22-4}
 
-Release date: October 12, 2022. To update to version **22.4**, select the [Downloads](downloads/index.md#ydb-server) section.
+Release date: October 12, 2022. To update to version **22.4**, select the [Downloads](downloads/ydb-open-source-database.md) section.
 
 ### What's new
 

@@ -71,6 +71,10 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         RegisterBootstrapTables(*Replication, record.GetBootstrapTables(), db);
+        THashSet<TPathId> bootstrapTables;
+        for (const auto& table : record.GetBootstrapTables()) {
+            bootstrapTables.insert(TPathId::FromProto(table.GetPathId()));
+        }
 
         Self->DeferredAlters.erase(Replication->GetId());
         for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
@@ -111,7 +115,8 @@ public:
 
             const bool cascadeWithoutDestination = record.GetCascade() && !target->GetDstPathId();
             const bool pendingAttachment = target->GetPendingDstPathId()
-                && (record.GetCascade() || target->GetDstState() == TReplication::EDstState::Attaching);
+                && (record.GetCascade() || target->GetDstState() == TReplication::EDstState::Attaching
+                    || bootstrapTables.contains(target->GetPendingDstPathId()));
             if (!cascadeWithoutDestination && !pendingAttachment) {
                 continue;
             }
@@ -159,19 +164,20 @@ public:
             }
 
             const bool attaching = target->GetDstState() == TReplication::EDstState::Attaching;
+            const bool bootstrapDestination = bootstrapTables.contains(target->GetPendingDstPathId());
             if (!attaching) {
                 target->Shutdown(ctx);
             }
 
             target->SetStreamState(target->GetStreamState() == TReplication::EStreamState::Removed
-                && (restoredOnly || target->GetPendingDstPathId())
+                && (restoredOnly || bootstrapDestination)
                 ? TReplication::EStreamState::Removed : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );
 
             // Keep the creator until its submitted ALTER has finished; the imported table is detached afterwards.
-            if (!attaching && (record.GetCascade() || detachIndex || target->GetPendingDstPathId())) {
+            if (!attaching && (record.GetCascade() || detachIndex || bootstrapDestination)) {
                 target->SetDstState(TReplication::EDstState::Removing);
                 db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                     NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())

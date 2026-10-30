@@ -1609,6 +1609,7 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
+<<<<<<< HEAD
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
 TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
                              const TString& transformLambda,
@@ -1618,6 +1619,9 @@ TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TStr
                             std::map<TString, TNodePtr>&& settings,
                             const TObjectOperatorContext& context);
 TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
+=======
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context);
+>>>>>>> 46dca7351bf (Support FORCE syntax for DROP ASYNC REPLICATION)
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
 TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);

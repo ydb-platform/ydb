@@ -428,14 +428,29 @@ namespace NKikimr::NBridge {
         const TMonotonic timestamp = now + timeout;
 
         if (QueriesInFlight < MaxQueriesInFlight) {
-            if (now < timestamp) {
-                TActivationContext::Schedule(timestamp, handle.release());
-            } else {
-                TActivationContext::Send(handle.release());
-            }
+            SendQuery(std::move(handle), timestamp);
             ++QueriesInFlight;
         } else {
             PendingQueries.emplace_back(std::move(handle), timestamp);
+        }
+    }
+
+    void TSyncerActor::SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore) {
+        const TMonotonic now = TActivationContext::Monotonic();
+        if (now < notBefore) {
+            const ui64 cookie = handle->Cookie;
+            // Own throttled requests until dispatch so terminating this attempt also cancels delayed writes/reads.
+            DelayedQueries.emplace(cookie, std::move(handle));
+            Schedule(notBefore - now, new TEvents::TEvWakeup(cookie));
+        } else {
+            TActivationContext::Send(handle.release());
+        }
+    }
+
+    void TSyncerActor::Handle(TEvents::TEvWakeup::TPtr ev) {
+        if (const auto it = DelayedQueries.find(ev->Get()->Tag); it != DelayedQueries.end()) {
+            TActivationContext::Send(it->second.release());
+            DelayedQueries.erase(it);
         }
     }
 
@@ -614,13 +629,8 @@ namespace NKikimr::NBridge {
             --QueriesInFlight;
         } else {
             Y_ABORT_UNLESS(QueriesInFlight == MaxQueriesInFlight);
-            TMonotonic now = TActivationContext::Monotonic();
             auto& [handle, timestamp] = PendingQueries.front();
-            if (now < timestamp) {
-                TActivationContext::Schedule(timestamp, handle.release());
-            } else {
-                TActivationContext::Send(handle.release());
-            }
+            SendQuery(std::move(handle), timestamp);
             PendingQueries.pop_front();
         }
 
@@ -713,6 +723,7 @@ namespace NKikimr::NBridge {
         hFunc(TEvBlobStorage::TEvGetResult, Handle)
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle)
         hFunc(TEvents::TEvUndelivered, Handle)
+        hFunc(TEvents::TEvWakeup, Handle)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 

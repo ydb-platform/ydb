@@ -65,6 +65,7 @@ namespace NKikimr::NBridge {
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
+        THashMap<ui64, std::unique_ptr<IEventHandle>> DelayedQueries;
         std::deque<std::tuple<std::unique_ptr<IEventHandle>, TMonotonic>> PendingQueries;
         ui64 NextCookie = 1;
 
@@ -82,11 +83,13 @@ namespace NKikimr::NBridge {
             ui64 quoterBytes = 0);
         void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
+        void SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore);
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
+        void Handle(TEvents::TEvWakeup::TPtr ev);
         TQueryPayload OnQueryFinished(ui64 cookie, bool success);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

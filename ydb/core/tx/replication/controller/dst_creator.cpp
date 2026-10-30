@@ -475,19 +475,18 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
-        const bool requiresCompletedImport = !InitialScan && !CreatePlaceholder;
-        if (requiresCompletedImport
-                && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
-            error = "Destination table import is not complete (expected IMPORTED)";
-            return false;
-        }
-
         if (!got.HasReplicationConfig()) {
             error = "Empty replication config";
             return false;
         }
 
         if (!CheckReplicationConfig(got.GetReplicationConfig(), Mode, Consistency, error)) {
+            return false;
+        }
+
+        if (!InitialScan && !CreatePlaceholder
+                && got.GetReplicationConfig().GetImportState() != NKikimrSchemeOp::TTableReplicationConfig::IMPORTED) {
+            error = "Destination table import is not complete (expected IMPORTED)";
             return false;
         }
 

@@ -64,7 +64,7 @@ inline bool GetImportReplicationConfig(const TString& destination, TSchemeShard*
 }
 
 inline bool IsReplicationBootstrapTable(const TPath& path, TSchemeShard* ss) {
-    if (!path.IsResolved() || !path->IsTable()) {
+    if (!path.IsResolved() || path.IsDeleted() || !path->IsTable()) {
         return false;
     }
     const auto table = ss->Tables.find(path.Base()->PathId);

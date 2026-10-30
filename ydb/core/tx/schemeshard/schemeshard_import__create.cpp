@@ -1186,6 +1186,23 @@ private:
         }
     }
 
+    void CompleteImport(NIceDb::TNiceDb& db, TImportInfo& importInfo) {
+        importInfo.State = EState::Done;
+        importInfo.EndTime = TAppData::TimeProvider->Now();
+        // Completion changes only SchemeShard ownership metadata. DataShard's
+        // replication mode stays READ_ONLY during import and attachment.
+        // Include implementation tables of indexes built from imported data.
+        for (const auto& [pathId, table] : Self->Tables) {
+            const auto& config = table->ReplicationConfig();
+            if (config.HasBootstrapReplication() && config.GetBootstrapImportId() == importInfo.Id
+                && config.GetAwaitingImport()) {
+                table->MutableReplicationConfig().ClearAwaitingImport();
+                Self->PersistTable(db, pathId);
+                Self->ClearDescribePathCaches(Self->PathsById.at(pathId));
+            }
+        }
+    }
+
     void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf issue, TStringBuf marker) {
         if (itemIdx != ui32(-1)) {
             Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
@@ -1554,8 +1571,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            importInfo->State = EState::Done;
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+            CompleteImport(db, *importInfo);
         }
 
         Self->PersistImportState(db, *importInfo);
@@ -1966,8 +1982,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            importInfo->State = EState::Done;
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+            CompleteImport(db, *importInfo);
         }
 
         Self->PersistImportState(db, *importInfo);
@@ -2207,8 +2222,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            importInfo->State = EState::Done;
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+            CompleteImport(db, *importInfo);
         } else if (AllDoneOrWaiting(stateCounts)) {
             RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }

@@ -8662,11 +8662,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     void MaterializedIndex(
             Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
             bool enableDataShardDirectPartImport,
-            const TString& metadata = R"({"version": 1})")
+            const TString& metadata = R"({"version": 1})",
+            bool replication = false)
     {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true).InitYdbDriver(replication));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        if (replication) {
+            ui64 txId = 1000;
+            CreateBootstrapReplication(runtime, env, txId, "Replication", "/MyRoot/Table", true);
+        }
 
         const auto a = GenerateTestData(R"(
             columns {
@@ -8714,6 +8719,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
+        if (replication) {
+            const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table/by_value/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+            const auto indexData = ReadTable(runtime, *shards.begin(), "indexImplTable", {"value"}, {"key", "value"}, "'ExcFrom ");
+            // The backup's index data differs from the base table. This proves
+            // IMPORT/AUTO actually load it instead of silently rebuilding it.
+            const auto& expected = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD ? a : b;
+            NKqp::CompareYson(expected.Data[0].YsonStr, indexData);
+            for (const auto& path : {"/MyRoot/Table", "/MyRoot/Table/by_value/indexImplTable"}) {
+                const auto config = DescribePath(runtime, path).GetPathDescription().GetTable().GetReplicationConfig();
+                UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+                UNIT_ASSERT(!config.GetAwaitingImport());
+            }
+        }
     }
 
     Y_UNIT_TEST_FLAG(MaterializedIndexBuild, EnableDataShardDirectPartImport) {
@@ -8730,6 +8749,18 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(MaterializedIndexOldMetadata, EnableDataShardDirectPartImport) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, EnableDataShardDirectPartImport, R"({"version": 0})");
+    }
+
+    Y_UNIT_TEST_FLAG(ImportReplicationMaterializedIndexBuild, directParts) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD, directParts, R"({"version": 1})", true);
+    }
+
+    Y_UNIT_TEST_FLAG(ImportReplicationMaterializedIndexImport, directParts) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, directParts, R"({"version": 1})", true);
+    }
+
+    Y_UNIT_TEST_FLAG(ImportReplicationMaterializedIndexAuto, directParts) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, directParts, R"({"version": 1})", true);
     }
 
     void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail, bool enableDataShardDirectPartImport) {

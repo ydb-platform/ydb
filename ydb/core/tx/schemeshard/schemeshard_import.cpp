@@ -333,20 +333,6 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& i
 }
 
 void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
-    if (importInfo.State == TImportInfo::EState::Done) {
-        // Completion is SchemeShard-only ownership metadata; the DataShard
-        // replication mode remains READ_ONLY throughout import and attachment.
-        // Mark all implementation tables too, including indexes built from data.
-        for (const auto& [pathId, table] : Tables) {
-            const auto& config = table->ReplicationConfig();
-            if (config.HasBootstrapReplication() && config.GetBootstrapImportId() == importInfo.Id
-                && config.GetAwaitingImport()) {
-                table->MutableReplicationConfig().ClearAwaitingImport();
-                PersistTable(db, pathId);
-                ClearDescribePathCaches(PathsById.at(pathId));
-            }
-        }
-    }
     db.Table<Schema::Imports>().Key(importInfo.Id).Update(
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo.State)),
         NIceDb::TUpdate<Schema::Imports::Issue>(importInfo.Issue),

@@ -1885,6 +1885,30 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(config.GetFederationAccount(), "account");
         UNIT_ASSERT(!config.HasProducer());
         UNIT_ASSERT(!config.HasTopic());
+
+        // ALTER TOPIC copies the current tablet config and changes retention.
+        // streamImpl is private, so the request allows access to it.
+        auto* ev = AlterPQGroupRequest(++txId, "/MyRoot/Table/Stream", R"(
+            Name: "streamImpl"
+        )");
+        auto* modify = ev->Record.MutableTransaction()->Mutable(0);
+        modify->SetAllowAccessToPrivatePaths(true);
+        auto* alterConfig = modify->MutableAlterPersQueueGroup()->MutablePQTabletConfig();
+        alterConfig->CopyFrom(config);
+        alterConfig->ClearPartitionKeySchema();
+        alterConfig->MutablePartitionConfig()->SetLifetimeSeconds(3600);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto altered = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        const auto& alteredConfig = altered.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT(alteredConfig.GetLocalDC());
+        UNIT_ASSERT_VALUES_EQUAL(alteredConfig.GetDC(), "sas");
+        UNIT_ASSERT_VALUES_EQUAL(alteredConfig.GetFederationAccount(), "account");
+        UNIT_ASSERT_VALUES_EQUAL(alteredConfig.GetPartitionConfig().GetLifetimeSeconds(), 3600);
+        UNIT_ASSERT(!alteredConfig.HasProducer());
+        UNIT_ASSERT(!alteredConfig.HasTopic());
     }
 
 } // TCdcStreamTests

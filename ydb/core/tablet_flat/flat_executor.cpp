@@ -1314,11 +1314,11 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
                 Y_ENSURE(nextAuxIdx < auxProto.BySwitchAuxSize());
                 aux = &auxProto.GetBySwitchAux(nextAuxIdx++);
+                Owner->OnFollowerPartsReplaced(proto.GetTableId());
             }
 
             const ui32 followerGcStep = update->NeedFollowerGcAck ? Step0 : 0;
-            if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus())
-                Owner->OnFollowerPartsReplaced(proto.GetTableId());
+
             AddFollowerPartSwitch(proto, aux, followerGcStep, Step0);
 
             // Row version changes are rolled up immediately (similar to schema changes)

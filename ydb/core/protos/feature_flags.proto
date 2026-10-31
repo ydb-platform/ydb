@@ -359,4 +359,7 @@ message TFeatureFlags {
     // Keys SourceId→Partition mapping by a unique topic Id (UUID) instead of the topic name,
     // so that deleting and recreating a topic with the same name does not inherit stale mappings.
     optional bool EnableTopicSourceIdMappingById = 313 [default = false];
+    // Allows CDC when topics are not first-class citizens (federation).
+    // Dedicated clusters do not need this: TopicsAreFirstClassCitizen is already true there.
+    optional bool EnableCdcForFederation = 369 [default = false];
 }

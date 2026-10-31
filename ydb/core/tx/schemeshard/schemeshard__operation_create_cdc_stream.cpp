@@ -669,6 +669,18 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
     return false;
 }
 
+bool IsFederationCdcEnabled() {
+    return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+        && AppData()->FeatureFlags.GetEnableCdcForFederation();
+}
+
+bool FederationCdcAttributesFilled() {
+    const auto& pqConfig = AppData()->PQConfig;
+    return pqConfig.HasCdcAttributes()
+        && !pqConfig.GetCdcAttributes().GetDC().empty()
+        && !pqConfig.GetCdcAttributes().GetFederationAccount().empty();
+}
+
 } // anonymous
 
 TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op, ui64 tablePartitionCount, ui64 maxShardsInPath) {
@@ -732,6 +744,15 @@ void DoCreatePqPart(
     pqConfig.SetTopicName(streamName);
     pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
     pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+
+    // Federation topic identity comes from PQConfig.CdcAttributes.
+    // Producer and Topic stay empty so the tablet converter derives them.
+    if (IsFederationCdcEnabled()) {
+        const auto& attributes = AppData()->PQConfig.GetCdcAttributes();
+        pqConfig.SetLocalDC(true);
+        pqConfig.SetDC(attributes.GetDC());
+        pqConfig.SetFederationAccount(attributes.GetFederationAccount());
+    }
 
     auto& partitionConfig = *pqConfig.MutablePartitionConfig();
     partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
@@ -988,7 +1009,8 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         << ": opId# " << opId
         << ", tx# " << tx.ShortDebugString());
 
-    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+        && !AppData()->FeatureFlags.GetEnableCdcForFederation()) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
             << "CDC stream creation is not allowed when topic is not FirstClassCitizen")};
     }
@@ -998,6 +1020,12 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto& tableName = op.GetTableName();
     const auto& streamDesc = op.GetStreamDescription();
     const auto& streamName = streamDesc.GetName();
+
+    if (IsFederationCdcEnabled() && !FederationCdcAttributesFilled()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "CDC in federation requires PQConfig.CdcAttributes with DC and FederationAccount")};
+    }
+
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
     const auto checksResult = DoNewStreamPathChecks(context, opId, workingDirPath, tableName, streamName, acceptExisted);

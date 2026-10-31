@@ -1877,6 +1877,78 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )", {NKikimrScheme::StatusPreconditionFailed});
     }
 
+    Y_UNIT_TEST(CreateCdcStreamInFederationWhenEnabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().FeatureFlags.SetEnableCdcForFederation(true);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusPreconditionFailed});
+
+        auto* attributes = runtime.GetAppData().PQConfig.MutableCdcAttributes();
+        attributes->SetDC("sas");
+        attributes->SetFederationAccount("account");
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        const auto& config = describe.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT(config.GetLocalDC());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetDC(), "sas");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetFederationAccount(), "account");
+        UNIT_ASSERT(!config.HasProducer());
+        UNIT_ASSERT(!config.HasTopic());
+
+        // ALTER TOPIC copies the current tablet config and changes retention.
+        // streamImpl is private, so the request allows access to it.
+        auto* ev = AlterPQGroupRequest(++txId, "/MyRoot/Table/Stream", R"(
+            Name: "streamImpl"
+        )");
+        auto* modify = ev->Record.MutableTransaction()->Mutable(0);
+        modify->SetAllowAccessToPrivatePaths(true);
+        auto* alterConfig = modify->MutableAlterPersQueueGroup()->MutablePQTabletConfig();
+        alterConfig->CopyFrom(config);
+        alterConfig->ClearPartitionKeySchema();
+        alterConfig->MutablePartitionConfig()->SetLifetimeSeconds(3600);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto altered = DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl");
+        const auto& alteredConfig = altered.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        UNIT_ASSERT(alteredConfig.GetLocalDC());
+        UNIT_ASSERT_VALUES_EQUAL(alteredConfig.GetDC(), "sas");
+        UNIT_ASSERT_VALUES_EQUAL(alteredConfig.GetFederationAccount(), "account");
+        UNIT_ASSERT_VALUES_EQUAL(alteredConfig.GetPartitionConfig().GetLifetimeSeconds(), 3600);
+        UNIT_ASSERT(!alteredConfig.HasProducer());
+        UNIT_ASSERT(!alteredConfig.HasTopic());
+    }
+
 } // TCdcStreamTests
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {

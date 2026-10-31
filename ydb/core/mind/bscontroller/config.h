@@ -146,6 +146,7 @@ namespace NKikimr {
             TConfigFitAction Fit;
 
             THashSet<TGroupId> GroupContentChanged;
+            TVector<ui32> GroupStateUpdates;
             THashSet<TGroupId> GroupFailureModelChanged;
 
             bool ResetDataCenterStates = false;

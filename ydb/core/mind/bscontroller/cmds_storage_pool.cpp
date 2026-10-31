@@ -4,9 +4,95 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <array>
+#include <algorithm>
 
 namespace NKikimr::NBsController {
 
+<<<<<<< HEAD
+=======
+    static void UpdateFailRealmDataCenter(NKikimrBlobStorage::TFailRealmInfo* realm,
+            ui32 nodeId, const THostRecordMapImpl& hostRecords) {
+        NActorsInterconnect::TNodeLocation location;
+        if (hostRecords.GetHostId(nodeId)) {
+            hostRecords.GetLocation(nodeId).Serialize(&location, false);
+        }
+        if (!realm->HasDataCenter()) {
+            realm->SetDataCenter(location.GetDataCenter());
+        } else if (realm->GetDataCenter() != location.GetDataCenter()) {
+            // Once the realm has an unknown or conflicting location, keep its name empty.
+            realm->SetDataCenter("");
+        }
+    }
+
+    TBlobStorageController::TStoragePoolInfo TBlobStorageController::ResolveStoragePoolForPile(
+            const TBoxStoragePoolId& id, const TStoragePoolInfo& pool, TBridgePileId pileId,
+            const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config) {
+        auto result = pool;
+        // Ordinary groups can span piles. Only physical parts with a pile identity use overrides.
+        if (pool.DDisk || !pileId || !bridgeInfo || !config) {
+            return result;
+        }
+        const auto *pile = bridgeInfo->FindPile(pileId);
+        if (!pile) {
+            return result;
+        }
+        const auto *rule = FindStoragePoolPileOverride(config->GetBlobStorageConfig(), pile->Name, pool.Kind);
+        if (!rule) {
+            return result;
+        }
+        // Keep the base pool intact: Console may later resend it with a different group count.
+        NKikimrBlobStorage::TDefineStoragePool effective;
+        Serialize(&effective, id, pool);
+        ApplyStoragePoolPileOverride(effective, *rule);
+        if (!TBlobStorageGroupType::ParseErasureName(result.ErasureSpecies, effective.GetErasureSpecies())) {
+            throw TExError() << "invalid ErasureSpecies in storage pool pile override";
+        }
+        result.SetGroupGeometry(effective.GetGeometry());
+        result.PDiskFilters.clear();
+        for (const auto& filter : effective.GetPDiskFilter()) {
+            result.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id), filter));
+        }
+        return result;
+    }
+
+    TBlobStorageController::TStoragePoolInfo TBlobStorageController::GetStoragePoolForPile(
+            const TBoxStoragePoolId& id, TBridgePileId pileId) const {
+        return ResolveStoragePoolForPile(id, StoragePools.at(id), pileId, BridgeInfo.get(), StorageConfig.get());
+    }
+
+    std::optional<TString> TBlobStorageController::ValidateStoragePoolPileOverrides(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        if (auto error = NKikimr::ValidateStoragePoolPileOverrides(config.GetBlobStorageConfig())) {
+            return error;
+        }
+        try {
+            std::map<std::pair<TBoxStoragePoolId, TBridgePileId>, TGroupGeometryInfo> geometries;
+            for (const auto& [groupId, group] : GroupMap) {
+                if (!group->BridgePileId || group->DDisk || group->VDisksInGroup.empty()) {
+                    continue;
+                }
+                const auto [it, inserted] = geometries.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
+                if (inserted) {
+                    const auto pool = ResolveStoragePoolForPile(group->StoragePoolId, StoragePools.at(group->StoragePoolId),
+                        group->BridgePileId, BridgeInfo.get(), &config);
+                    it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+                }
+                const auto& geometry = it->second;
+                if (group->ErasureSpecies != geometry.GetErasure()
+                        || group->Topology->GetNumVDisksPerFailDomain() != geometry.GetNumVDisksPerFailDomain()
+                        || group->Topology->GetTotalFailRealmsNum() != geometry.GetNumFailRealms()
+                        || group->Topology->GetNumFailDomainsPerFailRealm() != geometry.GetNumFailDomainsPerFailRealm()) {
+                    return TStringBuilder() << "storage pool pile override changes erasure or topology of existing GroupId# "
+                        << groupId;
+                }
+            }
+        } catch (const std::exception& ex) {
+            return TStringBuilder() << "invalid storage pool pile override: " << ex.what();
+        }
+        return std::nullopt;
+    }
+
+>>>>>>> a63405d0931 ([BlobStorage] Promote fail-realm states after durability replication (#57406))
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status) {
         TBoxId boxId = cmd.GetBoxId();
         if (!cmd.HasBoxId()) {
@@ -619,7 +705,21 @@ namespace NKikimr::NBsController {
 
             Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
+<<<<<<< HEAD
                    Serialize(pb->AddGroup(), groupInfo, finder, BridgeInfo.get());
+=======
+                    auto* group = pb->AddGroup();
+                    Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    if (group->FailRealmsSize()) {
+                        for (const TVSlotInfo* slot : groupInfo.VDisksInGroup) {
+                            UpdateFailRealmDataCenter(group->MutableFailRealms(slot->RingIdx),
+                                slot->VSlotId.NodeId, *HostRecords);
+                        }
+                    }
+                    if (const auto pool = pools.find(groupInfo.StoragePoolId); pool != pools.end()) {
+                        group->SetStoragePoolName(pool->second.Name);
+                    }
+>>>>>>> a63405d0931 ([BlobStorage] Promote fail-realm states after durability replication (#57406))
                 }
             });
         }
@@ -686,10 +786,21 @@ namespace NKikimr::NBsController {
                     if (const auto& info = group.Info) {
                         x->SetGroupGeneration(info->GroupGeneration);
                         x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(info->Type.GetErasure()));
+                        if (info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+                            for (ui32 realm = 0; realm < 3; ++realm) {
+                                x->AddFailRealms()->SetState(info->GetFailRealmState(realm));
+                            }
+                        }
+                        ui32 orderNumber = 0;
                         for (TActorId actorId : info->GetDynamicInfo().ServiceIdForOrderNumber) {
                             const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(actorId);
                             const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
                             vslotId.Serialize(x->AddVSlotId());
+                            if (x->FailRealmsSize()) {
+                                UpdateFailRealmDataCenter(x->MutableFailRealms(info->GetVDiskId(orderNumber).FailRealm),
+                                    nodeId, *HostRecords);
+                            }
+                            ++orderNumber;
                         }
                         const auto& status = group.GetStatus(finder, BridgeInfo.get());
                         x->SetOperatingStatus(status.OperatingStatus);
@@ -860,6 +971,10 @@ namespace NKikimr::NBsController {
                     || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()
                     || group->Topology->GetTotalFailRealmsNum() != 3) {
                 throw TExError() << "GroupId# " << groupId << " is not an ordinary mirror-3-dc group";
+            }
+            if (definition.HasExpectedGroupGeneration() && definition.GetExpectedGroupGeneration() != group->Generation) {
+                throw TExGroupGenerationMismatch(definition.GetGroupId(),
+                    definition.GetExpectedGroupGeneration(), group->Generation);
             }
             if (definition.FailRealmStatesSize() != 3) {
                 throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";

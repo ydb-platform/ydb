@@ -1518,10 +1518,22 @@ struct TReplicationSettings : public TReplicationSettingsBase {
         void Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const;
     };
 
+    enum class EChangefeedFormat {
+        Json,
+        Binary,
+    };
+
+    enum class EChangefeedCompression {
+        None,
+        Zstd,
+    };
+
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
     TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
+    TMaybe<EChangefeedFormat> ChangefeedFormat;
+    TMaybe<EChangefeedCompression> ChangefeedCompression;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {

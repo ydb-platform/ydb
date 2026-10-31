@@ -305,6 +305,9 @@ struct TVDiskMock {
     ui64 FirstLsnToKeep = 1;
 
     TMap<EChunkState, TSet<TChunkIdx>> Chunks;
+    // From TEvYardInitResult and TEvChunkReserveResult, for building sectors as a VDisk does.
+    NPDisk::TFormatContextPtr FormatContext;
+    TMap<TChunkIdx, ui64> ChunkNonces;
 
     TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false, TActorId whiteboardProxyId = {})
         : TestCtx(testCtx)
@@ -336,6 +339,11 @@ struct TVDiskMock {
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;
+        FormatContext = evInitRes->FormatContext;
+        ChunkNonces.clear();
+        for (size_t i = 0; i < evInitRes->OwnedChunkNonces.size(); ++i) {
+            ChunkNonces[evInitRes->OwnedChunks[i]] = evInitRes->OwnedChunkNonces[i];
+        }
 
         TSet<TChunkIdx> commited = Chunks[EChunkState::COMMITTED];
         for (TChunkIdx chunk : evInitRes->OwnedChunks) {
@@ -352,6 +360,9 @@ struct TVDiskMock {
         UNIT_ASSERT(evReserveRes->ChunkIds.size() == chunkCountToReserve);
         for (const ui32 reservedChunk : evReserveRes->ChunkIds) {
             Chunks[EChunkState::RESERVED].emplace(reservedChunk);
+        }
+        for (size_t i = 0; i < evReserveRes->ChunkNonces.size(); ++i) {
+            ChunkNonces[evReserveRes->ChunkIds[i]] = evReserveRes->ChunkNonces[i];
         }
     }
 

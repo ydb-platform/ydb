@@ -398,6 +398,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
             vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
+            vdiskConfig->EnableVDiskSectorPreparation = EnableVDiskSectorPreparation;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
             vdiskConfig->SpaceReportPeriodSeconds = SpaceReportPeriodSeconds;
 

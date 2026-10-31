@@ -1,6 +1,7 @@
 #include "query_readbatch.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
@@ -49,6 +50,8 @@ namespace NKikimr {
                     Priority, cookie));
 
                 msg->BlobId = it->HugeBlobId;
+                // Whole raw sectors, to be checked and opened here rather than in the PDisk completion thread.
+                msg->RawSectors = UseRawSectorReads(*Ctx->PDiskCtx);
 
                 YDB_LOG_DEBUG_CTX(ctx, VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
 
@@ -90,6 +93,7 @@ namespace NKikimr {
             NPDisk::TEvChunkReadResult *msg = ev->Get();
 
             TGlueRead *glueRead = static_cast<TGlueRead *>(msg->Cookie);
+            OpenRawSectors(*Ctx->PDiskCtx, *msg, glueRead->Part.Offset, glueRead->Part.Size, glueRead->HugeBlobId);
             glueRead->Data = std::move(msg->Data);
             glueRead->Success = status == NKikimrProto::OK;
 

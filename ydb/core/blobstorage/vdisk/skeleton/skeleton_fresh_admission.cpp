@@ -81,6 +81,7 @@ namespace NKikimr {
         const TReservation reservation = *std::exchange(InFlight, std::nullopt);
 
         if (msg->Status == NKikimrProto::OK) {
+            PDiskCtx->ChunkNonces->Record(msg->ChunkIds, msg->ChunkNonces);
             Hull->AddFreshReservedChunks(reservation.Split, msg->ChunkIds);
             // A grant tells nothing of the bounds stricter than its own, nor of the purposes that have to leave
             // more of the reserves alone: a batch refused at its strictest bound and admitted at the next is handled

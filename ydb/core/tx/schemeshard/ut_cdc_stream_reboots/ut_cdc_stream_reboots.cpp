@@ -719,6 +719,59 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         ui32 ExpectedPartitionCount;
     };
 
+    void CreateCompressedStream(TTestWithReboots& t, const TMaybe<i32>& compressionLevel) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            NKikimrSchemeOp::TCdcStreamDescription streamDesc;
+            streamDesc.SetName("Stream");
+            streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatJson);
+            streamDesc.SetCompression(NKikimrSchemeOp::ECdcStreamCompressionZstd);
+            if (compressionLevel) {
+                streamDesc.SetCompressionLevel(*compressionLevel);
+            }
+
+            TString strDesc;
+            UNIT_ASSERT_C(google::protobuf::TextFormat::PrintToString(streamDesc, &strDesc),
+                "protobuf serialization failed");
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription { %s }
+            )", strDesc.c_str()));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            }
+
+            const auto describe = DescribePrivatePath(runtime, "/MyRoot/Table/Stream");
+            const auto& persisted = describe.GetPathDescription().GetCdcStreamDescription();
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(persisted.GetCompression()),
+                static_cast<ui32>(NKikimrSchemeOp::ECdcStreamCompressionZstd));
+            UNIT_ASSERT_VALUES_EQUAL(persisted.GetCompressionLevel(), compressionLevel.GetOrElse(3));
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithZstdDefaultLevel, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateCompressedStream(t, Nothing());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithZstdExplicitLevel, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateCompressedStream(t, 7);
+    }
+
     void CheckRegistrations(TTestActorRuntime& runtime, const TItem& table, const TItem& topic,
             const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition>* initialTablePartitions = nullptr)
     {

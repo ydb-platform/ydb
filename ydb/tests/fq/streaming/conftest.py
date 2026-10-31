@@ -16,6 +16,9 @@ def kikimr(request):
     config = get_ydb_config(request)
     if "enable_htap_tx" in param:
         config.yaml_config["table_service_config"]["enable_htap_tx"] = param["enable_htap_tx"]
+    if max_message_size := param.get("max_message_size"):
+        config.yaml_config["grpc_config"]["max_message_size"] = max_message_size
+        config.yaml_config["pqconfig"]["max_message_size_bytes"] = max_message_size
     kikimr = Kikimr(
         config,
         enable_discovery=param.get("enable_discovery", True),

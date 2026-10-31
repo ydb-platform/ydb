@@ -9,7 +9,10 @@ from typing import ClassVar, List, Optional
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.common.types import TabletTypes
 
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import (
+    require_cluster,
+    require_external_cluster,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
 
 
@@ -26,7 +29,7 @@ class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
 
     def _grpc_client(self):
         if self._client is None:
-            cluster = require_external_cluster()
+            cluster = require_cluster()
             n = cluster.nodes[1]
             self._client = kikimr_client_factory(n.host, n.grpc_port, retry_count=10)
         return self._client

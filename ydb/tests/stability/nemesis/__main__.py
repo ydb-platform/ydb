@@ -69,7 +69,7 @@ def parse_args():
 
     parser.add_argument(
         'command',
-        choices=['install', 'stop', 'run', 'liveness'],
+        choices=['install', 'stop', 'run', 'liveness', 'local-action'],
         help=(
             "install — deploy and start services on the cluster; "
             "stop — stop services on the cluster; "
@@ -151,6 +151,21 @@ def parse_args():
             'Override via KIKIMR_LOGS_DIRECTORY env var.'
         ),
     )
+
+    parser.add_argument(
+        '--manifest',
+        metavar='PATH',
+        help='Local harness manifest for the local-action command.',
+    )
+    parser.add_argument('--local-type', help='Nemesis type for local-action.')
+    parser.add_argument(
+        '--action',
+        choices=['inject', 'extract'],
+        default='inject',
+        help='Action for local-action.',
+    )
+    parser.add_argument('--node-id', type=int, help='Target static node for local-action.')
+    parser.add_argument('--slot-idx', type=int, help='Target slot for local-action.')
 
     return parser.parse_args()
 
@@ -253,6 +268,22 @@ def run_liveness_checks(settings: Settings):
 
 def main():
     args = parse_args()
+    if args.command == "local-action":
+        from ydb.tests.stability.nemesis.internal.nemesis.local_sibling import (
+            run_local_action,
+        )
+
+        if not args.manifest or not args.local_type:
+            raise ValueError("local-action requires --manifest and --local-type")
+        result = run_local_action(
+            args.manifest,
+            args.local_type,
+            args.action,
+            node_id=args.node_id,
+            slot_idx=args.slot_idx,
+        )
+        print(json.dumps(result), flush=True)
+        return
 
     # Build kwargs from argv (only include non-None values)
     argv_kwargs = {}

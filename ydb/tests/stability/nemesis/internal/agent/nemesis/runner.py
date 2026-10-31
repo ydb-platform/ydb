@@ -107,26 +107,27 @@ class NemesisManager:
             flush_thread.daemon = True
             flush_thread.start()
 
+            status = 'finished'
+            ret_code = 0
+            error_text = ''
             try:
                 execute_with_logging()
-                # Force final log capture
-                final_logs = log_capture_string.getvalue()
-                with self.processes_lock:
-                    if proc_id < len(self.processes):
-                        self.processes[proc_id]['logs'] = final_logs
-                        self.processes[proc_id]['status'] = 'finished'
-                        self.processes[proc_id]['ret_code'] = 0
-                stop_flushing.set()
-                flush_thread.join(timeout=2)
             except Exception as e:
-                final_logs = log_capture_string.getvalue()
+                status = 'error'
+                ret_code = 1
+                error_text = f"\nError executing process: {str(e)}\n{traceback.format_exc()}"
+            finally:
+                # Publish completion only after the flusher has stopped. Otherwise
+                # API clients can observe "finished", let the test end, and race
+                # the flusher against the StringIO close below.
                 stop_flushing.set()
-                flush_thread.join(timeout=2)
+                flush_thread.join()
+                final_logs = log_capture_string.getvalue()
                 with self.processes_lock:
                     if proc_id < len(self.processes):
-                        self.processes[proc_id]['logs'] = final_logs + f"\nError executing process: {str(e)}\n{traceback.format_exc()}"
-                        self.processes[proc_id]['status'] = 'error'
-                        self.processes[proc_id]['ret_code'] = 1
+                        self.processes[proc_id]['logs'] = final_logs + error_text
+                        self.processes[proc_id]['status'] = status
+                        self.processes[proc_id]['ret_code'] = ret_code
             log_capture_string.close()
         except Exception as e:
             with self.processes_lock:

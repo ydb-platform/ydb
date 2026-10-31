@@ -133,6 +133,19 @@ class TestSnapshot:
             {"h1": _error_entry(), "h2": _hc("h2")}, now=10.0, last_update=10.0, max_age_sec=180.0
         )
         assert snap.fresh and snap.answering == frozenset({"h2"})
+        assert snap.good == frozenset({"h2"})
+
+        degraded = build_snapshot(
+            {"h1": _hc("h1", result="DEGRADED")},
+            now=10.0,
+            last_update=10.0,
+            max_age_sec=180.0,
+        )
+        assert degraded.answering == frozenset({"h1"})
+        assert degraded.good == frozenset()
+        assert not _node_predicate(ChaosTarget.for_node("h1", node_id=1))(
+            degraded
+        )
 
         results = {
             "h1": _hc("h1", vdisks=[_vdisk("1-1-0", "GREEN")]),
@@ -171,6 +184,30 @@ class TestSnapshot:
         assert hc_predicate_for(
             host, kind=TargetKind.HOST, scope=ImpactScope.NODE, nemesis_type="NetworkNemesis"
         )(skew_bad)
+
+        disk = ChaosTarget.for_disk("h1", node_id=1)
+        disk_recovered = hc_predicate_for(
+            disk,
+            kind=TargetKind.DISK,
+            scope=ImpactScope.DISK,
+        )
+        other_node_degraded = build_snapshot(
+            {
+                "h1": _hc("h1", vdisks=[_vdisk("1-1-0")]),
+                "h2": _hc("h2", vdisks=[_vdisk("2-1-0", "BLUE")]),
+            },
+            now=10.0,
+            last_update=10.0,
+            max_age_sec=180.0,
+        )
+        assert disk_recovered(other_node_degraded)
+        target_degraded = build_snapshot(
+            {"h1": _hc("h1", vdisks=[_vdisk("1-1-0", "BLUE")])},
+            now=10.0,
+            last_update=10.0,
+            max_age_sec=180.0,
+        )
+        assert not disk_recovered(target_degraded)
 
 
 class TestNodeAndSlotRecovery:

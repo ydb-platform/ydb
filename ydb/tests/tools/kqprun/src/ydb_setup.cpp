@@ -522,6 +522,14 @@ private:
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
 
+        if (Settings_.SchemeLimits) {
+            NKikimrSubDomains::TSubDomainSettings subdomain;
+            subdomain.SetName(serverSettings.DomainName);
+            *subdomain.MutableSchemeLimits() = *Settings_.SchemeLimits;
+            const auto status = Client_->AlterSubdomain("/", subdomain);
+            Y_ENSURE(status == NKikimr::NMsgBusProxy::MSTATUS_OK, "Failed to apply root scheme limits, status: " << status);
+        }
+
         Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
         CreateTenants();
     }

@@ -9,6 +9,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/schema.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
+#include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/metadata.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
@@ -88,19 +89,71 @@ std::shared_ptr<arrow::Schema> ParquetSchema() {
     return arrow::schema({ arrow::field("ts", arrow::timestamp(arrow::TimeUnit::MICRO), false) });
 }
 
-// Valid control: one timestamp and one row per row group.
-TString MakeParquet(int rows) {
+std::shared_ptr<arrow::Array> MakeTimestamps(int begin, int end) {
     arrow::TimestampBuilder builder(arrow::timestamp(arrow::TimeUnit::MICRO), arrow::default_memory_pool());
-    for (int i = 0; i < rows; ++i) {
+    for (int i = begin; i < end; ++i) {
         UNIT_ASSERT(builder.Append(i * 1000000LL).ok());
     }
     std::shared_ptr<arrow::Array> array;
     UNIT_ASSERT(builder.Finish(&array).ok());
-    auto table = arrow::Table::Make(ParquetSchema(), { array });
+    return array;
+}
+
+std::vector<i64> ExpectedTimestamps(int rows) {
+    std::vector<i64> expected;
+    for (i64 i = 0; i < rows; ++i) {
+        expected.push_back(i * 1000000);
+    }
+    return expected;
+}
+
+// Valid control: one timestamp column, rowGroupSize rows per row group.
+TString MakeParquet(int rows, int rowGroupSize = 1) {
+    auto table = arrow::Table::Make(ParquetSchema(), { MakeTimestamps(0, rows) });
     auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
-    UNIT_ASSERT(parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), sink, 1).ok());
+    UNIT_ASSERT(parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), sink, rowGroupSize).ok());
     auto buffer = sink->Finish().ValueOrDie();
     return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
+TString AppendFooter(TString body, parquet::FileMetaDataBuilder& builder) {
+    auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
+    builder.Finish()->WriteTo(sink.get());
+    auto footer = sink->Finish().ValueOrDie();
+    body.append(reinterpret_cast<const char*>(footer->data()), footer->size());
+    // The Parquet trailer stores the footer length in little-endian order.
+    for (ui32 i = 0; i < 4; ++i) {
+        body.push_back(static_cast<char>((footer->size() >> (8 * i)) & 0xff));
+    }
+    return body + "PAR1";
+}
+
+// Real data row groups behind a leading row group whose column chunk is zero bytes long.
+TString MakeParquetWithLeadingEmptyRowGroup(int rows, int rowGroupSize) {
+    const TString source = MakeParquet(rows, rowGroupSize);
+    auto input = std::make_shared<arrow::io::BufferReader>(reinterpret_cast<const ui8*>(source.data()), source.size());
+    auto metadata = parquet::ParquetFileReader::Open(input)->metadata();
+    ui32 footerSize = 0;
+    for (ui32 i = 0; i < 4; ++i) {
+        footerSize |= static_cast<ui32>(static_cast<ui8>(source[source.size() - 8 + i])) << (8 * i);
+    }
+    auto properties = parquet::WriterProperties::Builder().build();
+    auto builder = parquet::FileMetaDataBuilder::Make(metadata->schema(), properties);
+    auto emptyRowGroup = builder->AppendRowGroup();
+    emptyRowGroup->NextColumnChunk()->Finish(0, 0, -1, 4, 0, 0, false, false, {}, {});
+    emptyRowGroup->set_num_rows(0);
+    emptyRowGroup->Finish(0);
+    for (int i = 0; i < metadata->num_row_groups(); ++i) {
+        const auto rowGroupMetadata = metadata->RowGroup(i);
+        const auto column = rowGroupMetadata->ColumnChunk(0);
+        auto rowGroup = builder->AppendRowGroup();
+        rowGroup->NextColumnChunk()->Finish(column->num_values(), column->has_dictionary_page() ? column->dictionary_page_offset() : 0, -1,
+            column->data_page_offset(), column->total_compressed_size(), column->total_uncompressed_size(), column->has_dictionary_page(), false,
+            {}, {});
+        rowGroup->set_num_rows(rowGroupMetadata->num_rows());
+        rowGroup->Finish(rowGroupMetadata->total_byte_size());
+    }
+    return AppendFooter(source.substr(0, source.size() - 8 - footerSize), *builder);
 }
 
 // Replacement fixture for corrupt metadata: empty row groups with arbitrary signed sizes.
@@ -116,21 +169,13 @@ TString MakeParquetWithCompressedSizes(const std::vector<i64>& sizes) {
         rowGroup->set_num_rows(0);
         rowGroup->Finish(0);
     }
-    auto sink = arrow::io::BufferOutputStream::Create().ValueOrDie();
-    builder->Finish()->WriteTo(sink.get());
-    auto footer = sink->Finish().ValueOrDie();
-    TString body = "PAR1";
-    body.append(reinterpret_cast<const char*>(footer->data()), footer->size());
-    // The Parquet trailer stores the footer length in little-endian order.
-    for (ui32 i = 0; i < 4; ++i) {
-        body.push_back(static_cast<char>((footer->size() >> (8 * i)) & 0xff));
-    }
-    return body + "PAR1";
+    return AppendFooter("PAR1", *builder);
 }
 
 struct TReadResult {
     bool Finished = false;
     ui64 Rows = 0;
+    ui64 Batches = 0;
     std::vector<i64> Values;
     std::vector<NDqProto::StatusIds::StatusCode> Errors;
     TString Issues;
@@ -155,6 +200,7 @@ public:
             } else if (ev->GetTypeRewrite() == TEvS3Provider::TEvNextRecordBatch::EventType) {
                 const auto& batch = ev->Get<TEvS3Provider::TEvNextRecordBatch>()->Batch;
                 Result.Rows += batch->num_rows();
+                ++Result.Batches;
                 if (batch->num_columns()) {
                     auto values = std::static_pointer_cast<arrow::TimestampArray>(batch->column(0));
                     for (i64 i = 0; i < values->length(); ++i) {
@@ -172,7 +218,9 @@ public:
         });
     }
 
-    void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB) {
+    void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB, bool batched = true,
+        ui64 batchDecodeTargetBytes = 16_MB)
+    {
         NS3::TRange range;
         auto* path = range.AddPaths();
         path->SetName("file.parquet");
@@ -183,6 +231,8 @@ public:
         Execute([&](TFakeActor& actor) {
             TS3ReadActorFactoryConfig config;
             config.DataInflight = dataInflight;
+            config.BatchedRowGroupDecode = batched;
+            config.BatchDecodeTargetBytes = batchDecodeTargetBytes;
             auto [input, inputActor] =
                 CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory, std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {
                 }), gateway, std::move(source), 0, TCollectStatsLevel::None,
@@ -258,11 +308,19 @@ void CheckReaderCount(ui64 parallelRowGroups, ui64 expectedCount, ui64 dataInfli
     UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
     UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 10);
     std::sort(reader.Result.Values.begin(), reader.Result.Values.end());
-    std::vector<i64> expected;
-    for (i64 i = 0; i < 10; ++i) {
-        expected.push_back(i * 1000000);
-    }
-    UNIT_ASSERT_VALUES_EQUAL(reader.Result.Values, expected);
+    UNIT_ASSERT_VALUES_EQUAL(reader.Result.Values, ExpectedTimestamps(10));
+}
+
+TReadResult ReadParquet(TString body, ui64 parallelRowGroups, bool batched, ui64 batchDecodeTargetBytes = 16_MB) {
+    TParquetReader reader;
+    auto gateway = std::make_shared<TParquetGateway>();
+    gateway->Body = std::move(body);
+    reader.Start(gateway, ParquetSource(parallelRowGroups), 200_MB, batched, batchDecodeTargetBytes);
+    reader.ReadToEnd();
+    UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+    UNIT_ASSERT(reader.Result.Finished);
+    std::sort(reader.Result.Values.begin(), reader.Result.Values.end());
+    return reader.Result;
 }
 
 }   // namespace
@@ -338,6 +396,36 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
 
     Y_UNIT_TEST(FairShareMultiplicationOverflow) {
         CheckReaderCount(0, 5, ui64(1) << 63);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3ParquetDecode) {
+    Y_UNIT_TEST(LargeRowGroupBatched) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            const auto result = ReadParquet(MakeParquet(1000, 500), parallel, true, 1_KB);
+            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 1000);
+            UNIT_ASSERT_C(result.Batches > 2, "batches=" << result.Batches);
+            UNIT_ASSERT_VALUES_EQUAL(result.Values, ExpectedTimestamps(1000));
+        }
+    }
+
+    Y_UNIT_TEST(LargeRowGroupWhole) {
+        for (ui64 parallel : { 0, 1, 2 }) {
+            const auto result = ReadParquet(MakeParquet(1000, 500), parallel, false, 1_KB);
+            UNIT_ASSERT_VALUES_EQUAL(result.Rows, 1000);
+            UNIT_ASSERT_VALUES_EQUAL(result.Batches, 2);
+            UNIT_ASSERT_VALUES_EQUAL(result.Values, ExpectedTimestamps(1000));
+        }
+    }
+
+    Y_UNIT_TEST(LeadingEmptyRowGroup) {
+        for (bool batched : { true, false }) {
+            for (ui64 parallel : { 0, 1, 2 }) {
+                const auto result = ReadParquet(MakeParquetWithLeadingEmptyRowGroup(12, 3), parallel, batched);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.Rows, 12, "batched=" << batched << " parallel=" << parallel);
+                UNIT_ASSERT_VALUES_EQUAL(result.Values, ExpectedTimestamps(12));
+            }
+        }
     }
 }
 

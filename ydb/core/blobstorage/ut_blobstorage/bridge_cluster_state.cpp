@@ -6,6 +6,81 @@
 using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeClusterState) {
+    Y_UNIT_TEST(RecoveredStateRejectsInvalidPileRolesAndStates) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const auto current = QueryStorageConfig(env);
+        UNIT_ASSERT(!NStorage::ValidateConfig(current));
+        auto check = [&](const auto& mutate, TStringBuf expected) {
+            auto recovered = current;
+            mutate(*recovered.MutableClusterState());
+            const auto error = NStorage::ValidateConfig(recovered);
+            UNIT_ASSERT_C(error, "malformed recovered cluster state was accepted");
+            UNIT_ASSERT_STRING_CONTAINS(*error, expected);
+        };
+        for (ui32 role : {0u, 4u, Max<ui32>()}) {
+            check([&](auto& state) { state.SetPrimaryPile(role); }, "Incorrect primary pile");
+            check([&](auto& state) { state.SetPromotedPile(role); }, "Incorrect promoted pile");
+        }
+        check([](auto& state) { state.SetPerPileState(0, NKikimrBridge::TClusterState::SUSPENDED); },
+            "Incorrect primary pile state");
+        check([](auto& state) {
+            state.SetPromotedPile(2);
+            state.SetPerPileState(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        }, "Incorrect promoted pile state");
+        check([](auto& state) {
+            state.SetPerPileState(2, static_cast<NKikimrBridge::TClusterState::EPileState>(Max<int>()));
+        }, "Incorrect pile state");
+        auto valid = current;
+        valid.MutableClusterState()->SetPromotedPile(2);
+        valid.MutableClusterState()->SetPerPileState(2, NKikimrBridge::TClusterState::SUSPENDED);
+        UNIT_ASSERT(!NStorage::ValidateConfig(valid));
+    }
+
+    Y_UNIT_TEST(RejectsInvalidPileRolesAndStates) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto current = QueryStorageConfig(env).GetClusterState();
+        auto check = [&](const auto& mutate, TStringBuf expected) {
+            auto next = current;
+            next.SetGeneration(next.GetGeneration() + 1);
+            mutate(next);
+            const auto response = InvokeDistconf(env, [&](auto& record) {
+                record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(next);
+            });
+            UNIT_ASSERT_EQUAL_C(response.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+                response.DebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorReason(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(QueryStorageConfig(env).GetClusterState().SerializeAsString(),
+                current.SerializeAsString());
+        };
+        for (ui32 role : {0u, 3u, Max<ui32>()}) {
+            check([&](auto& state) { state.SetPrimaryPile(role); }, "Incorrect primary pile");
+            check([&](auto& state) { state.SetPromotedPile(role); }, "Incorrect promoted pile");
+        }
+        check([](auto& state) {
+            state.SetPerPileState(1, static_cast<NKikimrBridge::TClusterState::EPileState>(Max<int>()));
+        }, "Incorrect pile state");
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
     Y_UNIT_TEST(DisconnectReplacesSyncStateAfterAnotherPile) {
         TEnvironmentSetup env{{
             .NodeCount = 24,

@@ -430,6 +430,7 @@ class YaTestTags(Enum):
     NotAutocheck = "ya:not_autocheck"
     Notags = "ya:notags"
     PerfTest = "ya:perftest"
+    PerfTestWithSanitizers = "ya:perftest_with_sanitizers"
     Privileged = "ya:privileged"
     ReportChunks = "ya:report_chunks"
     RunWithAsserts = "ya:relwithdebinfo"

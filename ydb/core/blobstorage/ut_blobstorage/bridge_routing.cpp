@@ -3,6 +3,7 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 
 #include <util/system/type_name.h>
 
@@ -63,9 +64,151 @@ namespace {
         };
     }
 
+    class TQueuedRoutingTest {
+    public:
+        TEnvironmentSetup Env{MakeTwoPileSettings()};
+        NKikimrBlobStorage::TGroupInfo Group;
+        TActorId Proxy;
+        TActorId Edge;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;
+        TBridgeInfo::TPtr BridgeInfo;
+        std::map<ui64, std::unique_ptr<TEvBlobStorage::TEvGetResult>> Results;
+        bool RaceWithNewerPileGeneration = false;
+
+        TQueuedRoutingTest() {
+            Env.CreatePool();
+            Env.Sim(TDuration::Seconds(30));
+            Group = GetGroupInfo(Env, Env.GetGroups().front());
+            // Model group info arriving before the cluster state it depends on.
+            Group.MutableBridgeGroupState()->SetClusterStateGeneration(
+                QueryStorageConfig(Env).GetClusterState().GetGeneration() + 1);
+            Edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetRecipientRewrite() == Proxy &&
+                        ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                    Config = ev->Get<TEvNodeWardenStorageConfig>()->Config;
+                    BridgeInfo = ev->Get<TEvNodeWardenStorageConfig>()->BridgeInfo;
+                } else if (RaceWithNewerPileGeneration && ev->GetRecipientRewrite() == Proxy &&
+                        ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                    auto *msg = ev->Get<TEvBlobStorage::TEvGetResult>();
+                    msg->Status = NKikimrProto::RACE;
+                    for (const auto& pile : Group.GetBridgeGroupState().GetPile()) {
+                        if (pile.GetGroupId() == msg->GroupId) {
+                            msg->RacingGeneration = pile.GetGroupGeneration() + 1;
+                        }
+                    }
+                } else if (ev->GetRecipientRewrite() == Edge && ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult) {
+                    UNIT_ASSERT_C(!Results.contains(ev->Cookie), "duplicate terminal response");
+                    Results.emplace(ev->Cookie, std::unique_ptr<TEvBlobStorage::TEvGetResult>(
+                        ev->Release<TEvBlobStorage::TEvGetResult>().Release()));
+                    return false;
+                }
+                return true;
+            };
+            Proxy = Env.Runtime->Register(CreateBridgeProxyActor(TBlobStorageGroupInfo::Parse(Group, nullptr, nullptr)), 1);
+            WaitUntil(Env, [&] { return bool(Config); }, "proxy storage config", TDuration::MilliSeconds(10), 100);
+        }
+
+        ~TQueuedRoutingTest() {
+            Env.Runtime->FilterFunction = {};
+        }
+
+        void SendGet(ui64 cookie, TInstant deadline = TInstant::Max()) {
+            Env.Runtime->Send(new IEventHandle(Proxy, Edge, new TEvBlobStorage::TEvGet(
+                TLogoBlobID(100500, 1, 1, 0, 10, 0), 0, 0, deadline, NKikimrBlobStorage::FastRead), 0, cookie), 1);
+        }
+
+        void RepeatConfig() {
+            Env.Runtime->Send(new IEventHandle(Proxy, Edge, new TEvNodeWardenStorageConfig(Config, true, BridgeInfo)), 1);
+        }
+
+        void MakeRoutingAvailable() {
+            Group.MutableBridgeGroupState()->SetClusterStateGeneration(Config->GetClusterState().GetGeneration());
+            UpdateGroupInfo();
+            RepeatConfig();
+        }
+
+        void UpdateGroupInfo() {
+            Group.SetGroupGeneration(Group.GetGroupGeneration() + 1);
+            Env.Runtime->Send(new IEventHandle(Proxy, Edge, new TEvBlobStorage::TEvConfigureProxy(
+                TBlobStorageGroupInfo::Parse(Group, nullptr, nullptr), nullptr)), 1);
+        }
+
+        void CheckSuccess(ui64 cookie) {
+            WaitUntil(Env, [&] { return Results.contains(cookie); }, "completed read", TDuration::MilliSeconds(10), 100);
+            const auto& result = *Results.at(cookie);
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result.ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.Responses[0].Status, NKikimrProto::NODATA);
+        }
+    };
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeRouting) {
+
+    Y_UNIT_TEST(RestartLimitReturnsError) {
+        TQueuedRoutingTest test;
+        test.MakeRoutingAvailable();
+        test.RaceWithNewerPileGeneration = true;
+        auto request = std::make_unique<TEvBlobStorage::TEvGet>(TLogoBlobID(100500, 1, 1, 0, 10, 0),
+            0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+        request->RestartCounter = 99; // the next RACE exhausts this request's retry budget
+        test.Env.Runtime->Send(new IEventHandle(test.Proxy, test.Edge, request.release(), 0, 1), 1);
+        WaitUntil(test.Env, [&] { return test.Results.contains(1); }, "restart limit error",
+            TDuration::MilliSeconds(10), 100);
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(test.Results.at(1)->ErrorReason, "too many restarts");
+        test.RaceWithNewerPileGeneration = false;
+        test.SendGet(2);
+        test.CheckSuccess(2);
+    }
+
+    Y_UNIT_TEST(RoutingBudgetSurvivesConfigNotifications) {
+        TQueuedRoutingTest test;
+        test.SendGet(1);
+        for (ui32 i = 0; i < 12; ++i) {
+            test.Env.Sim(TDuration::MilliSeconds(250));
+            test.RepeatConfig();
+        }
+        UNIT_ASSERT_C(test.Results.contains(1), "storage config notifications renewed the routing wait");
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
+        test.MakeRoutingAvailable();
+        test.SendGet(2);
+        test.CheckSuccess(2);
+        test.Env.Sim(TDuration::Seconds(3)); // expired work must not resume or reply twice
+    }
+
+    Y_UNIT_TEST(QueuedDeadlineOvertakesEarlierRequest) {
+        TQueuedRoutingTest test;
+        test.SendGet(1);
+        test.Env.Sim(TDuration::MilliSeconds(10));
+        test.SendGet(2, test.Env.Runtime->GetClock() + TDuration::MilliSeconds(100));
+        test.Env.Sim(TDuration::MilliSeconds(200));
+        UNIT_ASSERT_C(test.Results.contains(2), "queued read ignored its shorter caller deadline");
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(2)->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(!test.Results.contains(1));
+        test.MakeRoutingAvailable();
+        test.CheckSuccess(1);
+        test.Env.Sim(TDuration::Seconds(3));
+    }
+
+    Y_UNIT_TEST(RoutingBudgetSurvivesGroupGenerationRetries) {
+        TQueuedRoutingTest test;
+        test.MakeRoutingAvailable();
+        test.RaceWithNewerPileGeneration = true;
+        test.SendGet(1);
+        for (ui32 i = 0; i < 12; ++i) {
+            test.Env.Sim(TDuration::MilliSeconds(250));
+            test.UpdateGroupInfo(); // still behind the pile generation reported by RACE
+        }
+        UNIT_ASSERT_C(test.Results.contains(1), "group notifications renewed the routing wait");
+        UNIT_ASSERT_VALUES_EQUAL(test.Results.at(1)->Status, NKikimrProto::ERROR);
+        test.RaceWithNewerPileGeneration = false;
+        test.SendGet(2);
+        test.CheckSuccess(2);
+        test.Env.Sim(TDuration::Seconds(3));
+    }
 
     // the bridge proxy which knows the group state made for newer cluster state than it knows must not skip the pile
     // that takes no part in data quorum by its cluster state, as the pile may have got synced already

@@ -128,7 +128,18 @@ struct TEvYdbProxy {
     };
 
     struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        enum class EFailureKind {
+            Unspecified,
+            DataError,
+        };
+
         using TBase::TBase;
+        EFailureKind FailureKind = EFailureKind::Unspecified;
+
+        TEvTopicReaderGone(NYdb::TStatus status, EFailureKind kind)
+            : TBase(std::move(status))
+            , FailureKind(kind)
+        {}
     };
 
     struct TTopicReaderSettings: private NYdb::NTopic::TReadSessionSettings {
@@ -148,6 +159,7 @@ struct TEvYdbProxy {
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
         FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
         FLUENT_SETTING_DEFAULT(bool, RetryOnSchemeError, false);
+        FLUENT_SETTING_DEFAULT(bool, FailOnDataLoss, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \

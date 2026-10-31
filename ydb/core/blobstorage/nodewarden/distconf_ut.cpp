@@ -1,4 +1,5 @@
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/nodestate.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/tabletid.h>
@@ -798,6 +799,50 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             UNIT_ASSERT_VALUES_EQUAL(pile.GetNumConnectedStaticNodes(), 2);
             UNIT_ASSERT(pile.GetHasNodeQuorum());
         }
+    }
+
+    Y_UNIT_TEST(DynamicNodeRejectsUnknownPileName) {
+        const auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        FillTwoPileBridgedMetadata(state, config);
+        TTestActorSystem runtime(5);
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+
+        bool configPushed = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 5 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenDynamicConfigPush::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenDynamicConfigPush>()->Record.HasConfig()) {
+                configPushed = true;
+            }
+            return true;
+        };
+        // Its startup registry resolves a local name which is absent from the committed cluster registry. The stale
+        // nameservice locations still let it subscribe to a static node and receive the current configuration.
+        const auto startupConfig = MakeTwoPileBridgedConfig("pile0", "unknown-pile");
+        const auto invalid = RegisterKeeper(runtime, startupConfig, 5, state, {}, &bridge, nullptr, "unknown-pile");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return configPushed; }));
+        const auto deadline = runtime.GetClock() + TDuration::Seconds(1);
+        runtime.Sim([&] { return runtime.GetClock() < deadline; });
+        UNIT_ASSERT(runtime.GetActor(invalid));
+        UNIT_ASSERT_C(!state.NodeWardenConfigs.contains(5), "unresolvable local pile was accepted");
+        UNIT_ASSERT(FindConvergedRoot(runtime, keepers) == 1);
+
+        // Correcting the node's startup location allows a replacement keeper to accept the same cluster config.
+        runtime.Send(new IEventHandle(invalid, {}, new TEvents::TEvPoison), 5);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.GetActor(invalid); }));
+        RegisterKeeper(runtime, config, 5, state, {}, &bridge, nullptr, "pile1");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(5); }));
+        UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(5)->GetFingerprint(), config.GetFingerprint());
     }
 
     // pile registry lists piles in the order other than local BridgeConfig does; pile ids must come from the registry
@@ -1756,6 +1801,101 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     // empty pile name is accepted by bridge config, so a cluster may have one; it must not be taken for a free slot
     Y_UNIT_TEST(ImpliedPileRegistryWithEmptyPileName) {
         CheckImpliedPileRegistryPersisted("", "pile1");
+    }
+
+    // nodes of the same pile having committed different configurations with the same generation don't connect, as the
+    // nodes of different piles don't
+    Y_UNIT_TEST(SamePileConfigFingerprintMismatchRefused) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        NKikimrConfig::TBridgeConfig bridge;
+        for (const char *name : {"pile0", "pile1"}) {
+            bridge.AddPiles()->SetName(name);
+        }
+        bool changed = false;
+        if (const auto error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, nullptr, &changed)) {
+            UNIT_FAIL(*error);
+        }
+        config.SetGeneration(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        const auto configPtr = std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config);
+
+        TTestActorSystem runtime(4);
+        runtime.GetAppDataBridgeConfig().CopyFrom(bridge);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+
+        const auto bridgeInfo = NStorage::TDistributedConfigKeeper::GenerateBridgeInfo(config,
+            *MakeNodeWardenConfig(config, &bridge), 1);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(1), runtime.Register(
+            new TStorageConfigProvider(configPtr, bridgeInfo), 1));
+        runtime.RegisterService(GetNameserviceActorId(), runtime.Register(new TIgnoreActor, 1));
+        const TActorId checkerId = runtime.Register(CreateDistconfBridgeConnectionCheckerActor(
+            TBridgePileId::FromPileIndex(0), "pile0"), 1);
+
+        // node 4 is of the same pile as node 1
+        auto check = [&](const NKikimrBlobStorage::TStorageConfig& peerConfig) {
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            TBridgePileId::FromPileIndex(0).CopyToProto(&payload, &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            payload.SetBridgePileName("pile0");
+            payload.SetPileListChangeCapable(true);
+            payload.MutableStorageConfig()->CopyFrom(peerConfig);
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            const TActorId edge = runtime.AllocateEdgeActor(1);
+            runtime.Send(new IEventHandle(checkerId, edge, new TEvInterconnect::TEvCheckIncomingConnection(4,
+                std::move(params))), 1);
+            return runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(edge)->Get()->ErrorReason;
+        };
+        UNIT_ASSERT(!check(config));
+
+        auto divergent = config;
+        divergent.MutableSelfManagementConfig()->SetAutomaticBootstrap(!config.GetSelfManagementConfig().GetAutomaticBootstrap());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&divergent);
+        const auto error = check(divergent);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "config fingerprint mismatch");
+    }
+
+    // the node finding the configuration committed with the same generation as its own, but different from it, takes no
+    // part in distconf anymore: it doesn't serve requests with either of the configurations
+    Y_UNIT_TEST(ConfigFingerprintMismatchHalts) {
+        auto committed = MakeStorageConfig(1, 1);
+        committed.MutableSelfManagementConfig()->SetEnabled(true);
+        committed.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        auto base = committed;
+        base.SetGeneration(0);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&base);
+        TNodeWardenTestState state;
+        state.Metadata[std::pair<ui32, TString>{1, "/dev/disk1_1"}].MutableCommittedStorageConfig()->CopyFrom(committed);
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        const TActorId keeper = RegisterKeeper(runtime, base, 1, state);
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return state.NodeWardenConfigs.contains(1)
+                && state.NodeWardenConfigs.at(1)->GetFingerprint() == committed.GetFingerprint();
+        }));
+
+        auto query = [&] {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            request->Record.MutableQueryConfig();
+            const TActorId edge = runtime.AllocateEdgeActor(1);
+            runtime.Send(new IEventHandle(keeper, edge, request.release()), 1);
+            return runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge)->Get()->Record;
+        };
+        auto result = query();
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, result.DebugString());
+
+        auto divergent = committed;
+        divergent.MutableSelfManagementConfig()->SetAutomaticBootstrap(true);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&divergent);
+        UNIT_ASSERT(runtime.WrapInActorContext(keeper, [&](IActor *actor) {
+            UNIT_ASSERT(!static_cast<NStorage::TDistributedConfigKeeper*>(actor)->ApplyStorageConfig(divergent));
+        }));
+        result = query();
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR, result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetErrorReason(), "halted");
     }
 
     Y_UNIT_TEST(DelayedConnectionNotificationDoesNotBreakBridgeGather) {
@@ -7400,6 +7540,53 @@ selector_config: []
         CheckBridgeCommittedCatchup(EBridgeCommittedCatchup::ColdIntermediate);
     }
 
+    Y_UNIT_TEST(DisableFlatStateStorageRingPreservesReplicaIds) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        auto *stateStorage = fixture.Config.MutableStateStorageConfig();
+        stateStorage->SetSSId(1);
+        auto *flatRing = stateStorage->MutableRing();
+        flatRing->SetNToSelect(3);
+        flatRing->AddNode(1);
+        flatRing->AddNode(2);
+        flatRing->AddNode(3);
+        const auto before = BuildStateStorageInfo(*stateStorage);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+
+        const TActorId edge = fixture.Runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableReassignStateStorageNode();
+        command->SetFrom(2);
+        command->SetTo(4);
+        command->SetStateStorage(true);
+        command->SetDisableRing(true);
+        fixture.Runtime.Send(new IEventHandle(fixture.Root(), edge, request.release()), 1);
+        auto response = fixture.Runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() == TResult::OK,
+            response->Get()->Record.DebugString());
+
+        const auto committed = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        const auto& ring = committed.GetStateStorageConfig().GetRing();
+        UNIT_ASSERT_VALUES_EQUAL(ring.NodeSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ring.RingSize(), 3);
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(ring.GetRing(i).NodeSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ring.GetRing(i).GetNode(0), i + 1);
+            UNIT_ASSERT(ring.GetRing(i).GetUseSingleNodeActorId());
+            UNIT_ASSERT_VALUES_EQUAL(ring.GetRing(i).GetIsDisabled(), i == 1);
+        }
+        const auto after = BuildStateStorageInfo(committed.GetStateStorageConfig());
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(before->RingGroups[0].Rings[i].Replicas,
+                after->RingGroups[0].Rings[i].Replicas);
+        }
+    }
+
     Y_UNIT_TEST(ReassignVDiskStatusTimeoutReleasesQueue) {
         TCommitConfirmationFixture fixture;
         fixture.Start();
@@ -7841,6 +8028,151 @@ selector_config: []
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&boardGroup,
             &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), TBridgePileId::FromPileIndex(0));
         CheckDurableConfigConverges(fixture, committed);
+    }
+
+    // State storage of three single-node rings 1, 2, 3, two of them needed for the quorum. Node 1 is seen bad, and the
+    // allowed nodes 1, 2, 4 make the healthy node 3 move to 4. Replacing the one node disables its ring first, and with
+    // the ring of node 1 out too, only one ring would be left; this must not go the way of replacing the one node.
+    Y_UNIT_TEST(SelfHealDoesNotDisableHealthyRingWithoutQuorum) {
+        TCommitConfirmationFixture fixture(false, 4);
+        fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticSchemeBoardManagement(false);
+        for (ui32 nodeId : {1, 2, 4}) {
+            fixture.Config.MutableSelfManagementConfig()->AddStateStorageSelfHealAllowedNodes(nodeId);
+        }
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : nodes) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig(), {1, 2, 3});
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig(), {1, 2, 4});
+        makeConfig(fixture.Config.MutableSchemeBoardConfig(), {1, 2, 4});
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policy = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        std::optional<ui32> reassignedNode; // the node the way of replacing the one node started with
+        bool reconfigured = false; // the full way has proposed the state storage without node 3
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (command.HasReassignStateStorageNode() && !reassignedNode) {
+                    reassignedNode = command.GetReassignStateStorageNode().GetFrom();
+                } else if (command.HasReconfigStateStorage() &&
+                        command.GetReconfigStateStorage().HasStateStorageConfig()) {
+                    const TString config = command.GetReconfigStateStorage().GetStateStorageConfig().ShortDebugString();
+                    reconfigured |= !config.Contains("Node: 3");
+                }
+                if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
+                    ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+                }
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policy));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(nodeId == 1 ? NKikimr::BAD : NKikimr::GOOD); // node 1 is bad
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
+        SimUntil(runtime, [&] { return reassignedNode || reconfigured; });
+        UNIT_ASSERT_C(reassignedNode != 3u, "the ring of the healthy node 3 is disabled while the ring of node 1 is out");
+        UNIT_ASSERT_C(reassignedNode || reconfigured, "self-heal didn't move the state storage off node 3");
+    }
+
+    Y_UNIT_TEST(SelfHealRejectsEmptyGeneratedStateStorageConfig) {
+        TCommitConfirmationFixture fixture(false);
+        auto *selfManagement = fixture.Config.MutableSelfManagementConfig();
+        selfManagement->SetAutomaticStateStorageManagement(true);
+        selfManagement->SetAutomaticStateStorageBoardManagement(false);
+        selfManagement->SetAutomaticSchemeBoardManagement(false);
+        selfManagement->AddStateStorageSelfHealAllowedNodes(9999);
+
+        auto *stateStorage = fixture.Config.MutableStateStorageConfig();
+        stateStorage->SetSSId(1);
+        auto *group = stateStorage->MutableRing();
+        group->SetNToSelect(1);
+        group->AddRing()->AddNode(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+
+        auto& runtime = fixture.Runtime;
+        TActorId edge;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        ui32 reconfigurationRequests = 0;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (edge && ev->GetRecipientRewrite() == edge
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                response.emplace(ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                    && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasReconfigStateStorage()) {
+                ++reconfigurationRequests;
+            }
+            return true;
+        };
+
+        runtime.Start();
+        const auto& policy = fixture.Config.GetSelfManagementConfig();
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policy));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        for (ui32 nodeId : {1, 2, 3}) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(0);
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return response.has_value(); }),
+            "Self-heal did not return a controlled failure");
+
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(response->GetStatus() == TResult::ERROR, response->DebugString());
+        UNIT_ASSERT_C(TString(response->GetErrorReason()).Contains("Failed to generate a nonempty StateStorage"),
+            response->DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, 0);
+        const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(committed.GetFingerprint(), fixture.Config.GetFingerprint());
     }
 
     void CheckBridgeFreshNodeExpansion(bool crossPile, bool failProposal, bool changePileList = false) {
@@ -10066,6 +10398,74 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateDCStateStorage(3, 1, 3), 9, {1, 2, 3, 4, 5, 6, 7, 8, 9});
         CheckStateStorage(GenerateDCStateStorage(3, 1, 18), 9, {1, 2, 3, 19, 20, 21, 37, 38, 39});
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
+    }
+
+    Y_UNIT_TEST(GenerateConfigUsesSmallestDCIndependentOfHealthOrder) {
+        struct TDcSpec {
+            TString Name;
+            ui32 Nodes;
+            ui32 State;
+        };
+        const std::array<TDcSpec, 3> specs = {{
+            {"bad-large", 3, NKikimr::BAD},
+            {"good-small", 1, NKikimr::GOOD},
+            {"good-large", 3, NKikimr::GOOD},
+        }};
+        const std::array<std::array<ui32, 3>, 6> permutations = {{
+            {{0, 1, 2}},
+            {{0, 2, 1}},
+            {{1, 0, 2}},
+            {{1, 2, 0}},
+            {{2, 0, 1}},
+            {{2, 1, 0}},
+        }};
+
+        for (const auto& permutation : permutations) {
+            NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+            NKikimrBlobStorage::TStorageConfig config;
+            ui32 nodeId = 1;
+            for (ui32 specIndex : permutation) {
+                const auto& spec = specs[specIndex];
+                for (ui32 i : xrange(spec.Nodes)) {
+                    auto* node = config.AddAllNodes();
+                    node->SetNodeId(nodeId);
+                    node->MutableLocation()->SetDataCenter(spec.Name);
+                    node->MutableLocation()->SetRack("rack-" + std::to_string(i));
+                    keeper.SelfHealNodesState[nodeId++] = spec.State;
+                }
+            }
+
+            NKikimrConfig::TStateStorageConfig generated;
+            std::unordered_set<ui32> usedNodes;
+            const bool goodConfig = keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, nullptr,
+                true, 0, 0, 1000);
+
+            UNIT_ASSERT(!goodConfig);
+            UNIT_ASSERT_VALUES_EQUAL(generated.RingGroupsSize(), 1);
+            const auto& group = generated.GetRingGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetNToSelect(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(group.RingSize(), 3);
+            for (const auto& ring : group.GetRing()) {
+                UNIT_ASSERT_VALUES_EQUAL(ring.NodeSize(), 1);
+            }
+        }
+
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        NKikimrBlobStorage::TStorageConfig config;
+        ui32 nodeId = 1;
+        for (const auto& spec : specs) {
+            for (ui32 i : xrange(spec.Nodes)) {
+                auto* node = config.AddAllNodes();
+                node->SetNodeId(nodeId);
+                node->MutableLocation()->SetDataCenter(spec.Name);
+                node->MutableLocation()->SetRack("rack-" + std::to_string(i));
+                keeper.SelfHealNodesState[nodeId++] = spec.State;
+            }
+        }
+        NKikimrConfig::TStateStorageConfig generated;
+        std::unordered_set<ui32> usedNodes;
+        UNIT_ASSERT(!keeper.GenerateStateStorageConfig(&generated, config, usedNodes, {}, nullptr,
+            true, /*overrideReplicasInRingCount=*/2, /*overrideRingsCount=*/9, 1000));
     }
 
     void CheckStateStorage2(const NKikimrConfig::TStateStorageConfig& ss, std::string expected) {

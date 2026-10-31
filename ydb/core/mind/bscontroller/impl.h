@@ -40,6 +40,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
@@ -722,7 +723,7 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
-        // Derived from the volatile DataCenterStates; intentionally omitted from the table adapter.
+        // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
@@ -1265,7 +1266,7 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
-            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location; // set only through SetLocation
+            TMaybe<TString> Location; // set only through SetLocation
             std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
 
             void SetLocation(const TString& serialized) {
@@ -1292,9 +1293,6 @@ public:
                 }
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
-                }
-                if (rowset.template HaveValue<T::Location>()) {
-                    result.SetLocation(rowset.template GetValue<T::Location>());
                 }
                 return result;
             }
@@ -1351,8 +1349,12 @@ public:
                 return s.Str();
             }
 
+            auto GetLegacyKey() const {
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+            }
+
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, Location);
+                return std::tuple_cat(GetLegacyKey(), std::tie(Location));
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
@@ -1364,7 +1366,7 @@ public:
             }
 
             void Load(IInputStream* s) {
-                TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> location;
+                TMaybe<TString> location;
                 ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
                 Location.Clear();
                 RequiredLocation.reset();
@@ -1488,6 +1490,10 @@ public:
         TUserIds UserIds;
         TPDiskFilters PDiskFilters;
 
+        bool LoadPDiskFilters(NIceDb::TNiceDb& db, const TBoxStoragePoolId& id);
+        static void UpdatePDiskFilters(NTable::TDatabase& db, const TPDiskFilters* previous,
+            const TPDiskFilters* current);
+
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
             static TTableAdapter<Table, TStoragePoolInfo,
@@ -1519,8 +1525,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
-                    TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
-                    TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
+                    TInlineTable<TUserIds, Schema::BoxStoragePoolUser>
                 > adapter(
                     &TStoragePoolInfo::Name,
                     &TStoragePoolInfo::ErasureSpecies,
@@ -1550,8 +1555,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
-                    &TStoragePoolInfo::UserIds,
-                    &TStoragePoolInfo::PDiskFilters
+                    &TStoragePoolInfo::UserIds
                 );
             callback(&adapter);
         }
@@ -1699,8 +1703,9 @@ private:
     TActorId ResponsivenessActorID;
     TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
-    using TDataCenterStates = THashMap<TString, NKikimrBlobStorage::TGroupInfo::TFailRealm::EState>;
-    TDataCenterStates DataCenterStates; // Not persisted.
+    using TDataCenterStates = std::unordered_map<TString,
+        NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
+    TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
@@ -1790,6 +1795,7 @@ private:
             EvRetryBridgePileOperation,
             EvRetryBridgeGroupModes,
             EvCheckBridgeGroupModes,
+            EvRetrySyncers,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2267,6 +2273,9 @@ private:
         THashMap<TNodeId, TPerNodeInfo> NodeIds;
         bool InCommit = false;
         ui64 StaticCommitCookie = 0;
+        // the syncer finished with an error is started again after a while only, as it may fail again at once
+        TBackoffTimer RetryBackoff{100, 30000};
+        TMonotonic NotBefore;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2278,6 +2287,7 @@ private:
     ui64 NextStaticSyncerCommitCookie = 0;
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
+    TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
 
     bool CheckingUnsyncedBridgePiles = false;
     bool NotifyBridgeSyncFinishedErrors = false;
@@ -2389,6 +2399,7 @@ private:
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
+    void HandleRetrySyncers();
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<TGroupId>& groupIdsToRead);
@@ -2431,7 +2442,10 @@ private:
         NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot Request;
         std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)> Callback;
         TBackoffTimer Timer{10, 3000};
+        TMonotonic StartedAt;
+        bool Alarmed = false; // the command has been retried for too long, which is reported
     };
+    static constexpr TDuration InvokeOnRootAlarmTimeout = TDuration::Minutes(1);
     THashMap<ui64, TInvokeOnRootCommand> InvokeOnRootCommands;
 
     void InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,

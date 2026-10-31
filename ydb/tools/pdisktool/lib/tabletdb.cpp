@@ -106,7 +106,7 @@ public:
             return {true, nullptr};
         }
         if (lob == NTable::ELargeObj::Outer
-                && partStore->GroupsCount >= partStore->PageCollections.size()) {
+                && partStore->OuterSlot() >= partStore->PageCollections.size()) {
             ++Stats.PagesMissing;
             Repeated.Add("A part refers to an outer value group it does not have",
                 partStore->Label.ToString());

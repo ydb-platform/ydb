@@ -27,7 +27,9 @@ ECodec GetEffectiveCodecId(ECodec id)
             break;
 
         case ECodec::IsaReedSolomon_3_3:
-            effectiveCodecId = ECodec::IsaReedSolomon_3_3;
+        case ECodec::IsaReedSolomon_4_6:
+        case ECodec::IsaReedSolomon_5_5:
+            effectiveCodecId = id;
             break;
 
         case ECodec::JerasureLrc_12_2_2:

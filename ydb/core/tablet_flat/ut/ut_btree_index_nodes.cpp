@@ -611,7 +611,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         builder.AddChild(child);
 
         TWriterBundle pager(1, TLogoBlobID());
-        auto result = builder.Finish(pager);
+        auto result = builder.Finish(pager, 0);
 
         auto expected = Meta(child, 0, 0);
         UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
@@ -641,7 +641,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         }
 
         TWriterBundle pager(1, TLogoBlobID());
-        auto result = builder.Finish(pager);
+        auto result = builder.Finish(pager, 0);
 
         Dump(result, builder.GroupInfo, pager.Back());
 
@@ -673,10 +673,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
             TSerializedCellVec deserialized(keys[i]);
             builder.AddKey(deserialized.GetCells());
             builder.AddChild(children[i + 1]);
-            builder.Flush(pager);
+            builder.Flush(pager, 0);
         }
 
-        auto result = builder.Finish(pager);
+        auto result = builder.Finish(pager, 0);
 
         Dump(result, builder.GroupInfo, pager.Back());
 
@@ -758,10 +758,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
             TSerializedCellVec deserialized(keys[i]);
             builder.AddKey(deserialized.GetCells());
             builder.AddChild(children[i + 1]);
-            builder.Flush(pager);
+            builder.Flush(pager, 0);
         }
 
-        auto result = builder.Finish(pager);
+        auto result = builder.Finish(pager, 0);
 
         Dump(result, builder.GroupInfo, pager.Back());
 

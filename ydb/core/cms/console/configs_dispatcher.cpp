@@ -392,7 +392,7 @@ void TConfigsDispatcher::Bootstrap()
 {
     YDB_LOG_DEBUG("TConfigsDispatcher Bootstrap");
 
-    PathNormalizer = AppData()->PathNormalizer;
+    PathNormalizer = AppData()->GetPathNormalizer();
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         mon->UpdatePathNormalizer(PathNormalizer);
@@ -1339,8 +1339,9 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         if (serialized != PathAliasesConfig) {
             try {
                 PathNormalizer = aliases.RulesSize()
-                    ? std::make_shared<NPathAliasing::TPathNormalizer>(aliases) : nullptr;
+                    ? std::make_shared<NPathAliasing::TPathNormalizer>(aliases, AppData()->Counters) : nullptr;
                 PathAliasesConfig = serialized;
+                AppData()->SetPathNormalizer(PathNormalizer);
                 if (AppData()->Mon) {
                     AppData()->Mon->UpdatePathNormalizer(PathNormalizer);
                 }
@@ -1606,6 +1607,7 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
                 ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);
             }
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
+            subscription->UpdateInProcess->Record.SetLocal(true);
             Y_FOR_EACH_BIT(kind, kinds) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }

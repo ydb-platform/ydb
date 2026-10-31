@@ -2,6 +2,8 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/library/yaml_config/yaml_config.h>
@@ -42,6 +44,7 @@ public:
             auto boxStoragePool = db.Table<Schema::BoxStoragePool>().Range().Select();
             auto boxStoragePoolUser = db.Table<Schema::BoxStoragePoolUser>().Range().Select();
             auto boxStoragePoolPDiskFilter = db.Table<Schema::BoxStoragePoolPDiskFilter>().Range().Select();
+            auto boxStoragePoolPDiskFilterV2 = db.Table<Schema::BoxStoragePoolPDiskFilterV2>().Range().Select();
             auto groupStoragePool = db.Table<Schema::GroupStoragePool>().Range().Select();
             auto groupLatencies = db.Table<Schema::GroupLatencies>().Select();
             auto scrubState = db.Table<Schema::ScrubState>().Select();
@@ -64,6 +67,7 @@ public:
                     || !boxStoragePool.IsReady()
                     || !boxStoragePoolUser.IsReady()
                     || !boxStoragePoolPDiskFilter.IsReady()
+                    || !boxStoragePoolPDiskFilterV2.IsReady()
                     || !groupStoragePool.IsReady()
                     || !groupLatencies.IsReady()
                     || !scrubState.IsReady()
@@ -76,6 +80,7 @@ public:
         }
 
         // State
+        Self->DataCenterStates.clear();
         {
             using T = Schema::State;
             auto state = db.Table<T>().Select();
@@ -122,6 +127,11 @@ public:
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
+                if (state.HaveValue<T::DataCenterStates>()) {
+                    auto states = ParseDataCenterStates(state.GetValue<T::DataCenterStates>());
+                    Y_VERIFY_S(states.has_value(), states.error());
+                    Self->DataCenterStates = std::move(*states);
+                }
             }
         }
 
@@ -270,6 +280,16 @@ public:
                 if (groups.HaveValue<T::BridgeGroupInfo>()) {
                     group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
                 }
+                if (groups.HaveValue<T::FailRealmStates>()) {
+                    const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.StateSize()) {
+                        Y_ABORT_UNLESS(states.StateSize() == 3);
+                        group.FailRealmStates.emplace();
+                        for (ui32 realm = 0; realm < 3; ++realm) {
+                            (*group.FailRealmStates)[realm] = states.GetState(realm);
+                        }
+                    }
+                }
 
 #undef OPTIONAL
 
@@ -288,7 +308,10 @@ public:
                 || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
             return false;
         }
-        for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
+        for (auto& [storagePoolId, storagePool] : Self->StoragePools) {
+            if (!storagePool.LoadPDiskFilters(db, storagePoolId)) {
+                return false;
+            }
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 

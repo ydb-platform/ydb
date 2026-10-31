@@ -119,12 +119,13 @@ void TMkqlIOSpecs::Init(NCommon::TCodecContext& codecCtx,
     InitInput(codecCtx, inAttrs, {}, tableNames, nullptr, columns, {});
 }
 
-void TMkqlIOSpecs::Init(NCommon::TCodecContext& codecCtx, const TString& outSpecs) {
-    Init(codecCtx, ParseYsonSpec(false, outSpecs));
+void TMkqlIOSpecs::Init(NCommon::TCodecContext& codecCtx, const TString& outSpecs, NKikimr::NMiniKQL::IStatsRegistry* jobStats) {
+    Init(codecCtx, ParseYsonSpec(false, outSpecs), jobStats);
 }
 
-void TMkqlIOSpecs::Init(NCommon::TCodecContext& codecCtx, const NYT::TNode& outAttrs) {
+void TMkqlIOSpecs::Init(NCommon::TCodecContext& codecCtx, const NYT::TNode& outAttrs, NKikimr::NMiniKQL::IStatsRegistry* jobStats) {
     InitOutput(codecCtx, outAttrs);
+    JobStats_ = jobStats;
 }
 
 void TMkqlIOSpecs::SetTableOffsets(const TVector<ui64>& offsets) {

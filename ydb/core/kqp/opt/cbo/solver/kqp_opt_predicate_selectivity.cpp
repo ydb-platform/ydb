@@ -89,6 +89,35 @@ namespace {
         return Nothing();
     }
 
+    template<typename T>
+    TExprNode::TPtr FindNode(const TExprBase& input) {
+        for (const auto& child : input.Ptr()->Children()) {
+            if (TExprBase(child).Maybe<T>()) {
+                return child;
+            }
+
+            auto tmp = FindNode<T>(TExprBase(child));
+            if (tmp != nullptr) {
+                return tmp;
+            }
+        }
+
+        return nullptr;
+    }
+
+    TMaybe<TString> GetAttributeType(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
+        if (!stats || !stats->ColumnStatistics) {
+            return Nothing();
+        }
+
+        auto it = stats->ColumnStatistics->Data.find(attributeName);
+        if (it != stats->ColumnStatistics->Data.end()) {
+            return it->second.Type;
+        }
+
+        return Nothing();
+    }
+
     enum class EValueParseClass {
         Bool,
         SignedInt,
@@ -112,6 +141,10 @@ namespace {
         } else if (typeName == "Float" || typeName == "Double" || typeName.StartsWith("Decimal")) {
             return EValueParseClass::Float;
         }
+
+        // other types are considered as string and compared lexicographically
+        // Utf8, String, Text considered as text
+        // Uuid, Bytes, DyNumber, Yson, Json, JsonDocument
         return EValueParseClass::Text;
     }
 
@@ -154,6 +187,7 @@ namespace {
     }
 
     // Estimates number of rows based on histogram and predicate type.
+    // Supported types by histogram: i8, i16, i32, ui8, ui16, ui32, ui64, float, double
     template <typename T>
     TMaybe<ui64> EstimateInequalityPredicateByType(const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator,
                                                     T val, EInequalityPredicateType predicate) {
@@ -175,6 +209,7 @@ namespace {
         }
         return Nothing();
     }
+
     template <typename T>
     TMaybe<ui64> EstimateRangePredicateByType(const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator,
                                                 T leftVal, T rightVal,
@@ -307,7 +342,7 @@ namespace {
             ui32 l = FromString<ui32>(left);
             ui32 r = FromString<ui32>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
+        } else if (columnType == "Interval" || columnType == "Interval64" || columnType == "Datetime64" || columnType == "Timestamp64") {
             i64 l = FromString<i64>(left);
             i64 r = FromString<i64>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
@@ -318,7 +353,7 @@ namespace {
         }
 
         // other types are considered as string and compared lexicographically
-        // "Utf8", "String", Uuid, "Yson", "Json"
+        // Utf8, String, Text, Uuid, Bytes, DyNumber, Yson, Json, JsonDocument
         return (left < right) ? -1 : (left > right) ? 1 : 0;
     }
 
@@ -364,6 +399,9 @@ namespace {
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
                 return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Float") {
+                float val = FromString<float>(value);
+                return EstimateInequalityPredicateByType<float>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
@@ -373,8 +411,19 @@ namespace {
             } else if (columnType == "Date32") {
                 i32 val = FromString<i32>(value);
                 return EstimateInequalityPredicateByType<i32>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Datetime") {
+                ui32 val = FromString<ui32>(value);
+                return EstimateInequalityPredicateByType<ui32>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Timestamp") {
+                ui64 val = FromString<ui64>(value);
+                return EstimateInequalityPredicateByType<ui64>(eqWidthHistogram, val, predicate);
+            } else if (columnType == "Interval" || columnType == "Interval64" || columnType == "Datetime64" || columnType == "Timestamp64") {
+                i64 val = FromString<i64>(value);
+                return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
             }
+
             // TODO: Add support for other types.
+            // Utf8, String, Text, Uuid, Bytes, DyNumber, Yson, Json, JsonDocument
             return Nothing();
         }
 
@@ -438,6 +487,10 @@ namespace {
                 i64 leftVal = FromString<i64>(leftValue);
                 i64 rightVal = FromString<i64>(rightValue);
                 return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Float") {
+                float leftVal = FromString<float>(leftValue);
+                float rightVal = FromString<float>(rightValue);
+                return EstimateRangePredicateByType<float>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
             } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double leftVal = FromString<double>(leftValue);
                 double rightVal = FromString<double>(rightValue);
@@ -450,8 +503,22 @@ namespace {
                 i32 leftVal = FromString<i32>(leftValue);
                 i32 rightVal = FromString<i32>(rightValue);
                 return EstimateRangePredicateByType<i32>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Datetime") {
+                ui32 leftVal = FromString<ui32>(leftValue);
+                ui32 rightVal = FromString<ui32>(rightValue);
+                return EstimateRangePredicateByType<ui32>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Timestamp") {
+                ui64 leftVal = FromString<ui64>(leftValue);
+                ui64 rightVal = FromString<ui64>(rightValue);
+                return EstimateRangePredicateByType<ui64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
+            } else if (columnType == "Interval" || columnType == "Interval64" || columnType == "Datetime64" || columnType == "Timestamp64") {
+                i64 leftVal = FromString<i64>(leftValue);
+                i64 rightVal = FromString<i64>(rightValue);
+                return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
             }
+
             // TODO: Add support for other types.
+            // Utf8, String, Text, Uuid, Bytes, DyNumber, Yson, Json, JsonDocument
             return Nothing();
         }
 
@@ -516,14 +583,14 @@ namespace {
             } else if (columnType == "Datetime") {
                 ui32 val = FromString<ui32>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
-                return countMinSketch->Probe(value.data(), value.size());
-            } else if (columnType == "Interval" || columnType == "Timestamp64" || columnType == "Interval64") {
-                i64 val = FromString<i64>(value);
-                return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Timestamp") {
                 ui64 val = FromString<ui64>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
+            } else if (columnType == "Interval" || columnType == "Interval64" || columnType == "Datetime64" || columnType == "Timestamp64") {
+                i64 val = FromString<i64>(value);
+                return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
+            } else if (columnType == "Utf8" || columnType == "String" || columnType == "Yson" || columnType == "Json") {
+                return countMinSketch->Probe(value.data(), value.size());
             } else if (columnType == "Uuid") {
                 const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
                 std::pair<ui64, ui64> val{};
@@ -531,6 +598,9 @@ namespace {
                 val.second = uuidData[1];  // high128
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             }
+
+            // TODO: Add support for other types.
+            // Text, Bytes, DyNumber, JsonDocument
             return Nothing();
         }
 
@@ -547,37 +617,7 @@ namespace {
     }
 }
 
-template<typename T>
-TExprNode::TPtr FindNode(const TExprBase& input) {
-    for (const auto& child : input.Ptr()->Children()) {
-        if (TExprBase(child).Maybe<T>()) {
-            return child;
-        }
-
-        auto tmp = FindNode<T>(TExprBase(child));
-        if (tmp != nullptr) {
-            return tmp;
-        }
-    }
-
-    return nullptr;
-}
-
 namespace NKikimr::NKqp {
-
-
-TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
-    if (!Stats || !Stats->ColumnStatistics) {
-        return Nothing();
-    }
-
-    auto it = Stats->ColumnStatistics->Data.find(attributeName);
-    if (it != Stats->ColumnStatistics->Data.end()) {
-        return it->second.Type;
-    }
-
-    return Nothing();
-}
 
 double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
     const TExprBase& left,
@@ -590,11 +630,13 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
     }
 
     if (auto attribute = IsAttribute(left)) {
-        // It seems like this is not possible in current version ?!
         // In case both arguments refer to an attribute, return TWO_COLUMNS_DEFAULT_SELECTIVITY
         if (IsAttribute(right)) {
             return TWO_COLUMNS_DEFAULT_SELECTIVITY;
-        } else if (IsConstantExprWithParams(right.Ptr())) {
+        }
+
+        // In case the right side is a constant that can be extracted, compute the selectivity using statistics
+        else if (IsConstantExprWithParams(right.Ptr())) {
             TString attributeName = attribute.GetRef();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultInequalitySelectivity(Stats, attributeName);
@@ -615,7 +657,6 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                 if (!estimation.Defined() || !Stats->Nrows) {
                     return DefaultInequalitySelectivity(Stats, attributeName);
                 }
-                // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that ?!
                 return estimation.GetRef() / std::max(Stats->Nrows, 1e-4);
             }
             return DefaultInequalitySelectivity(Stats, attributeName);
@@ -729,7 +770,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::CreateLeafNode(TMaybe<
         node->Column = ref;
     }
 
-    TMaybe<TString> colType = GetAttributeType(ref);
+    TMaybe<TString> colType = GetAttributeType(Stats, ref);
     if (colType.Defined()) {
         node->ColumnType = colType.GetRef();
     }
@@ -756,6 +797,21 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate
     std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
     node->Selectivity = resSelectivity;
 
+    return node;
+}
+
+std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessBoolLiteralPredicate(
+    bool value,
+    bool underNot,
+    bool collectMembers
+) {
+    Y_UNUSED(collectMembers);
+
+    double resSelectivity = (value != underNot) ? 1.0 : 0.0;
+
+    // TODO: temporal column naming
+    std::shared_ptr<TTreeNode> node = CreateLeafNode("Bool");
+    node->Selectivity = resSelectivity;
 
     return node;
 }
@@ -978,6 +1034,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
         }
     }
 
+    // empty set if all types do not match
     if (droppedElements && node->Children.empty()) {
         return nullptr;
     }
@@ -1433,7 +1490,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
     }
 
     // Process equality predicate
-    else if (auto equality = input.Maybe<TCoCmpEqual>()) {
+    else if (auto equality = input.Maybe<TCoCmpEqual>()) { // x1 = x2
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
         return ConvertEqualityToRange(left, right, underNot, !underNot && collectMembers);
@@ -1447,32 +1504,32 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
     }
 
     // Process all inequality predicates
-    else if (auto less = input.Maybe<TCoCmpLess>()) {
+    else if (auto less = input.Maybe<TCoCmpLess>()) { // x < value
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
         return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::Less);
     }
 
-    else if (auto greater = input.Maybe<TCoCmpGreater>()) {
+    else if (auto greater = input.Maybe<TCoCmpGreater>()) { // x > value
         auto left = greater.Cast().Left();
         auto right = greater.Cast().Right();
         return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::Greater);
     }
 
-    else if (auto lessOrEqual = input.Maybe<TCoCmpLessOrEqual>()) {
+    else if (auto lessOrEqual = input.Maybe<TCoCmpLessOrEqual>()) { // x <= value
         auto left = lessOrEqual.Cast().Left();
         auto right = lessOrEqual.Cast().Right();
         return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::LessOrEqual);
     }
 
-    else if (auto greaterOrEqual = input.Maybe<TCoCmpGreaterOrEqual>()) {
+    else if (auto greaterOrEqual = input.Maybe<TCoCmpGreaterOrEqual>()) { // x >= value
         auto left = greaterOrEqual.Cast().Left();
         auto right = greaterOrEqual.Cast().Right();
         return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::GreaterOrEqual);
     }
 
     // Process Pg operators
-    else if (input.Ptr()->IsCallable("PgResolvedOp") && PgComparisonSigns.contains(input.Ptr()->ChildPtr(0)->Content())){
+    else if (input.Ptr()->IsCallable("PgResolvedOp") && PgComparisonSigns.contains(input.Ptr()->ChildPtr(0)->Content())) {
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
@@ -1486,20 +1543,27 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
         }
     }
 
-    // Process string predicates
+    // Process string predicates (Find, LIKE %value%)
     else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
         auto left = TExprBase(input.Ptr()->ChildRef(0));
         auto right = TExprBase(input.Ptr()->ChildRef(1));
         return ProcessStringPredicate(left, right, underNot, collectMembers, true);
     }
 
+    // Process string predicates (StartsWith LIKE value%, EndsWith LIKE %value)
     else if (auto comparison = input.Maybe<TCoCompare>()) {
         auto left = comparison.Cast().Left();
         auto right = comparison.Cast().Right();
         return ProcessStringPredicate(left, right, underNot, collectMembers, false);
     }
 
-    // Process regular expression
+    // Process boolean literals
+    else if (auto boolLiteral = input.Maybe<TCoBool>()) {
+        const bool value = FromString<bool>(boolLiteral.Cast().Literal().Value());
+        return ProcessBoolLiteralPredicate(value, underNot, collectMembers);;
+    }
+
+    // Process regular expression and StringContainsIgnoreCase (ILIKE %value%)
     else if (input.Maybe<TCoAtom>()) {
         auto atom = input.Cast<TCoAtom>();
         // regexp (all starts with Re2)

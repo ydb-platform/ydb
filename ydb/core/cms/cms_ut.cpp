@@ -1283,10 +1283,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
     {
         TCmsTestEnv env(8);
 
-        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+        auto allowed = env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
         env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+
+        auto denied = env.CheckPermissionRequest("other-user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(denied.GetStatus().GetReason(),
+            TStringBuilder() << "Cannot lock node '" << env.GetNodeId(0)
+                << "': node state: 'Locked' (permission " << allowed.GetPermissions(0).GetId() << " owned by user)");
     }
 
     Y_UNIT_TEST(RequestRestartServicesWrongHost)
@@ -2285,6 +2291,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         config.MutableClusterLimits()->SetDisabledNodesLimit(2);
         config.MutableClusterLimits()->SetDisabledNodesRatioLimit(20);
         config.SetInfoCollectionTimeout(TDuration::Minutes(1).GetValue());
+        config.MutableSentinelConfig()->SetEnable(false);
         env.SetCmsConfig(config);
 
         auto res = env.GetCmsConfig();
@@ -2295,6 +2302,39 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesLimit(), 2);
         UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesRatioLimit(), 20);
         UNIT_ASSERT_VALUES_EQUAL(res.GetInfoCollectionTimeout(), TDuration::Minutes(1).GetValue());
+
+        auto restartAndCheckConfig = [&] {
+            TActorId cms;
+            THashSet<TActorId> ackSenders;
+            auto activeObserver = env.AddObserver<TEvTablet::TEvTabletActive>([&](auto& ev) {
+                cms = ev->Sender;
+            });
+            auto ackObserver = env.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>([&](auto& ev) {
+                ackSenders.insert(ev->Sender);
+            });
+            env.RestartCms();
+            // TabletActive precedes replay of the initial configuration.
+            env.WaitFor("CMS configuration replay", [&] { return cms && ackSenders.contains(cms); }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(env.GetCmsConfig().SerializeAsString(), res.SerializeAsString());
+        };
+        restartAndCheckConfig();
+
+        config.SetDefaultRetryTime(TDuration::Minutes(12).GetValue());
+        config.MutableTenantLimits()->SetDisabledNodesLimit(3);
+        config.MutableTenantLimits()->SetDisabledNodesRatioLimit(30);
+        config.MutableClusterLimits()->SetDisabledNodesLimit(4);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(40);
+        config.MutableSentinelConfig()->SetDryRun(true);
+        env.SetCmsConfig(config);
+        res = env.GetCmsConfig();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetDefaultRetryTime(), TDuration::Minutes(12).GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(res.GetTenantLimits().GetDisabledNodesLimit(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetTenantLimits().GetDisabledNodesRatioLimit(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesLimit(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetClusterLimits().GetDisabledNodesRatioLimit(), 40);
+        UNIT_ASSERT(res.GetSentinelConfig().GetDryRun());
+
+        restartAndCheckConfig();
     }
 
     Y_UNIT_TEST(RestartNodeInDownState)

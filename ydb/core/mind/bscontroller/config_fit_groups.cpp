@@ -172,6 +172,11 @@ namespace NKikimr {
                     NKikimrBridge::TGroupState *mainGroupState = mainGroup.MutableBridgeGroupState();
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
+                    if (State.StorageConfig) {
+                        // New groups bypass GroupContentChanged, but their initial SYNCED parts already depend on
+                        // this cluster state: a proxy with an older view must not acknowledge writes skipping a part.
+                        mainGroupState->SetClusterStateGeneration(State.StorageConfig->GetClusterState().GetGeneration());
+                    }
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
                         NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
                         if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE ||

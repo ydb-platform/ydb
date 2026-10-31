@@ -228,6 +228,8 @@ private:
     template <typename TRequestEvent, typename TResponse>
     bool CheckSession(TEventHandle<TRequestEvent>& ev, std::unique_ptr<TResponse>& failEvent, TResponse::ProtoRecordType::EStatus status);
 
+    bool IsCurrentConfigSession(const TActorId& senderId, const TActorId& pipeServerId) const;
+
     template <class T>
     void HandleWithRights(T &ev, const TActorContext &ctx) {
         constexpr bool HasHandleUnauthorized = requires(T &ev) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
@@ -45,6 +46,7 @@ struct TYdbSetupSettings: public NKikimrRun::TServerSettings {
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
     bool SameSession = false;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 
     bool DisableDiskMock = false;
     bool FormatStorage = false;

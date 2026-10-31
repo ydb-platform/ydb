@@ -112,6 +112,20 @@ void TPutImpl::ProcessInterpilePutResult(TEvInterpilePutResult& ev, TLogContext&
         return PrepareReply(NKikimrProto::ERROR, logCtx, "incorrect TEvInterpilePutResult", outPutResults);
     }
 
+    // the remote pile's answers tell the same the VDisks would, had the blobs been written to them from here
+    for (size_t i = 0; i < Blobs.size(); ++i) {
+        auto& item = ev.Record.GetItems(i);
+        WrittenBeyondBarrier[i] = WrittenBeyondBarrier[i] || item.GetWrittenBeyondBarrier();
+        if (item.HasStatusFlags()) {
+            StatusFlags.Merge(item.GetStatusFlags());
+        }
+        if (item.HasApproximateFreeSpaceShare()) {
+            const float share = item.GetApproximateFreeSpaceShare();
+            if (ApproximateFreeSpaceShare == 0.f || share < ApproximateFreeSpaceShare) {
+                ApproximateFreeSpaceShare = share;
+            }
+        }
+    }
     for (size_t i = 0; i < Blobs.size(); ++i) {
         auto& item = ev.Record.GetItems(i);
         PrepareOneReply(item.GetStatus(), i, logCtx, item.GetErrorReason(), outPutResults);

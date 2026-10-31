@@ -2281,7 +2281,9 @@ Y_UNIT_TEST_SUITE(StreamResultFreshness) {
             holdResults = true;
             RestartController(env, info.ControllerId);
         }
-        runtime.WaitFor("obsolete source setup result", [&] { return pending.size() == 1; }, TDuration::Seconds(30));
+        // Source setup uses real SDK callbacks. Bound both replies by the test
+        // runner's wall-clock timeout rather than a simulated deadline.
+        runtime.WaitFor("obsolete source setup result", [&] { return pending.size() == 1; });
         const auto* obsolete = pending[0]->Get<TEvPrivate::TEvCreateStreamResult>();
         const TWorkerId worker(obsolete->ReplicationId, obsolete->TargetId, 0);
         const auto obsoleteActor = pending[0]->Sender;
@@ -2317,7 +2319,7 @@ Y_UNIT_TEST_SUITE(StreamResultFreshness) {
         // limit of one, the replacement cannot finish before this callback.
         sendResult(obsoleteActor, NYdb::EStatus::SCHEME_ERROR);
         assertUnchanged();
-        runtime.WaitFor("replacement source setup result", [&] { return pending.size() == 2; }, TDuration::Seconds(30));
+        runtime.WaitFor("replacement source setup result", [&] { return pending.size() == 2; });
         const auto currentActor = pending[1]->Sender;
         UNIT_ASSERT(currentActor != obsoleteActor);
         holdResults = false;
@@ -2574,32 +2576,47 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
         AttachWorkers(env, info.ControllerId, {worker});
+
+        // Fail the current PAUSE operation, preserving its alterer's identity.
+        // A worker error after its normal stop would be an obsolete report.
+        bool destinationFailed = false;
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (destinationFailed || !ev->HasEvent()) {
+                return;
+            }
+            const auto* result = dynamic_cast<TEvPrivate::TEvAlterDstResult*>(ev->GetBase());
+            if (!result) {
+                return;
+            }
+
+            UNIT_ASSERT(result->IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result->ReplicationId, worker.ReplicationId());
+            UNIT_ASSERT_VALUES_EQUAL(result->TargetId, worker.TargetId());
+            ev.Reset(new IEventHandle(
+                ev->GetRecipientRewrite(),
+                ev->Sender,
+                new TEvPrivate::TEvAlterDstResult(
+                    result->ReplicationId,
+                    result->TargetId,
+                    NKikimrScheme::StatusSchemeError,
+                    "destination alter failed"),
+                0,
+                ev->Cookie));
+            destinationFailed = true;
+        });
         UNIT_ASSERT(alter("STATE = \"PAUSED\"").IsSuccess());
         SendWorkerStopped(env, info.ControllerId, worker);
-        runtime.WaitFor(
-            "ordinary PAUSE",
-            [&] {
-                return DescribeReplication(env, info)->Get()->Record.GetState().HasPaused();
-            },
-            TDuration::Seconds(30));
-        // A late failed writer report is a destination error, even though this
-        // replication originally bootstrapped with INITIAL_SCAN=false.
-        auto error = MakeHolder<TEvService::TEvWorkerStatus>(
-            worker,
-            NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
-            NKikimrReplication::TEvWorkerStatus::REASON_ERROR,
-            "writer failed");
-        env.SendAsync(info.ControllerId, std::move(error));
         runtime.WaitFor(
             "destination error",
             [&] {
                 return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
             },
             TDuration::Seconds(30));
+        UNIT_ASSERT(destinationFailed);
         const auto assertError = [&] {
             const auto state = DescribeReplication(env, info)->Get()->Record.GetState();
             UNIT_ASSERT_C(state.HasError(), state.DebugString());
-            UNIT_ASSERT_C(state.DebugString().Contains("writer failed"), state.DebugString());
+            UNIT_ASSERT_C(state.DebugString().Contains("destination alter failed"), state.DebugString());
             AssertDestinationMode(
                 env,
                 "/Root/replica1",
@@ -2651,7 +2668,9 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
             pending.push_back(std::move(ev));
         });
         const auto waitForResults = [&](ui32 count) {
-            runtime.WaitFor("source setup reply", [&] { return pending.size() >= count; }, TDuration::Seconds(30));
+            // Source setup uses real SDK callbacks, independently of simulated
+            // time. The test runner's wall-clock timeout bounds these waits.
+            runtime.WaitFor(Sprintf("source setup reply %u", count), [&] { return pending.size() >= count; });
         };
         const auto readStreamState = [&] {
             return ReadPersistedStreamState(runtime, info.ControllerId, worker);

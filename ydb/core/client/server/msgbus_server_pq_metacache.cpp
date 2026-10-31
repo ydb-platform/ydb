@@ -266,7 +266,15 @@ private:
                 }
             } else {
                 for (auto& t : Topics) {
-                    ret.push_back(std::make_pair(t->GetPrimaryPath(), t->GetDatabase().GetOrElse("")));
+                    if (DbRoot == "/Root/logbroker-federation"
+                        && t->GetOriginalTopic() == "SourceIdMeta2/replication")
+                    {
+                        ret.emplace_back(
+                            "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication",
+                            "/Root/logbroker/shared/federation-1");
+                    } else {
+                        ret.emplace_back(t->GetPrimaryPath(), t->GetDatabase().GetOrElse(""));
+                    }
                 }
             }
             return ret;

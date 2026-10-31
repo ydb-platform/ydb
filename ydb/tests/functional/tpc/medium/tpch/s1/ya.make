@@ -1,4 +1,6 @@
 PY3TEST()
+REQUIREMENTS(cpu:2)
+
 
 TEST_SRCS(
     test_s1.py

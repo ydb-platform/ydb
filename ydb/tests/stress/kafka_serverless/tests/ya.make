@@ -7,7 +7,7 @@ TEST_SRCS(
     test_kafka_streams.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:1)
 
 SIZE(MEDIUM)
 
@@ -25,6 +25,6 @@ PEERDIR(
     ydb/public/sdk/python/enable_v3_new_behavior
 )
 
-REQUIREMENTS(network:full)
+REQUIREMENTS(network:full cpu:1)
 
 END()

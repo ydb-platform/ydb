@@ -17,8 +17,7 @@ Y_UNIT_TEST_SUITE(TStateStorageEventScopes) {
     bool Passes(ui32 type, const TScopeId& origin, const TScopeId& local) {
         auto filter = std::make_shared<TEventFilter>();
         RegisterStateStorageEventScopes(filter);
-        IEventHandle ev(type, 0, TActorId(), TActorId(), nullptr, 0);
-        ev.OriginScopeId = origin;
+        IEventHandle ev(TActorId(), type, 0, TActorId(), TActorId(), nullptr, 0, origin, {});
         return filter->CheckIncomingEvent(ev, local);
     }
 

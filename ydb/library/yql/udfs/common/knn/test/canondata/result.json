@@ -69,6 +69,11 @@
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"
         }
     ],
+    "test.test[Int4Serialization]": [
+        {
+            "uri": "file://test.test_Int4Serialization_/results.txt"
+        }
+    ],
     "test.test[Int8Serialization]": [
         {
             "uri": "file://test.test_Int8Serialization_/results.txt"
@@ -97,6 +102,11 @@
     "test.test[OptionalAutoUnpacking]": [
         {
             "uri": "file://test.test_OptionalAutoUnpacking_/results.txt"
+        }
+    ],
+    "test.test[Uint4Serialization]": [
+        {
+            "uri": "file://test.test_Uint4Serialization_/results.txt"
         }
     ],
     "test.test[Uint8Serialization]": [

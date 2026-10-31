@@ -1,6 +1,9 @@
 #pragma once
 
 #include "knn-defines.h"
+#include "knn-serializer-shared.h"
+
+#include <ydb/library/vector_distance/int4_distance.h>
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
@@ -112,6 +115,17 @@ private:
         return VectorFuncImpl(v1.data(), v2.data(), v1.size(), v2.size(), std::forward<Func>(func));
     }
 
+    template <typename T, typename Func>
+    static TDistanceResult Int4VectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
+        size_t count1 = 0, count2 = 0;
+        if (!NKnnVectorSerialization::TryGetInt4ElementCount(str1, count1)
+                || !NKnnVectorSerialization::TryGetInt4ElementCount(str2, count2)) {
+            return {};
+        }
+        return VectorFuncImpl(reinterpret_cast<const ui8*>(str1.data()), reinterpret_cast<const ui8*>(str2.data()),
+            count1, count2, std::forward<Func>(func));
+    }
+
     template <typename Func>
     static auto BitVectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
         auto [v1, bitLen1] = GetBitArray(str1);
@@ -143,6 +157,14 @@ public:
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L1Distance(v1, v2, len);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L1Distance(v1, v2, len, std::bool_constant<false>{});
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L1Distance(v1, v2, len, std::bool_constant<true>{});
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
@@ -185,6 +207,14 @@ public:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
                 });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L2Distance(v1, v2, len, std::bool_constant<false>{});
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::L2Distance(v1, v2, len, std::bool_constant<true>{});
+                });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
@@ -225,6 +255,14 @@ public:
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::DotProduct(v1, v2, len);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::DotProduct(v1, v2, len, std::bool_constant<false>{});
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    return NVectorDistance::NInt4::DotProduct(v1, v2, len, std::bool_constant<true>{});
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [](const ui8* v1, const ui8* v2, size_t len) {
@@ -279,6 +317,16 @@ public:
                     const i64 lr = ::DotProduct(v1, v2, len);
                     const i64 rr = ::DotProduct(v2, v2, len);
                     return compute(ll, lr, rr);
+                });
+            case EFormat::Uint4Vector:
+                return Int4VectorFunc<TUint4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    const auto res = NVectorDistance::NInt4::TriWayDotProduct(v1, v2, len, std::bool_constant<false>{});
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Int4Vector:
+                return Int4VectorFunc<TInt4>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {
+                    const auto res = NVectorDistance::NInt4::TriWayDotProduct(v1, v2, len, std::bool_constant<true>{});
+                    return compute(res.LL, res.LR, res.RR);
                 });
             case EFormat::Uint8Vector:
                 return VectorFunc<ui8>(str1, str2, [&](const ui8* v1, const ui8* v2, size_t len) {

@@ -561,4 +561,35 @@ hosts:
         UNIT_ASSERT_VALUES_EQUAL(domain.GetStoragePoolTypes(1).GetKind(), "ssd");
         UNIT_ASSERT_VALUES_EQUAL(domain.GetStoragePoolTypes(1).GetPoolConfig().GetKind(), "ssd");
     }
+
+    // The storage config exported to YAML keeps the settings of each drive: the slot count of one drive, the slot
+    // size of another, and the attributes, not a default slot count
+    Y_UNIT_TEST(ProtoToYamlKeepsDriveSettings) {
+        NKikimrConfig::StorageConfig storageConfig;
+        auto *hostConfig = storageConfig.add_host_config();
+        hostConfig->set_host_config_id(1);
+        auto *byCount = hostConfig->add_drive();
+        byCount->set_path("/dev/disk1");
+        byCount->set_type("SSD");
+        byCount->set_expected_slot_count(24);
+        byCount->set_shared_with_os(true);
+        byCount->set_read_centric(true);
+        byCount->set_kind(7);
+        auto *bySize = hostConfig->add_drive();
+        bySize->set_path("/dev/disk2");
+        bySize->set_type("ROT");
+        bySize->set_expected_slot_size(1000000);
+        bySize->set_max_slots(5);
+
+        const YAML::Node yaml = YAML::Load(ParseProtoToYaml(storageConfig));
+        const YAML::Node drives = yaml["host_configs"][0]["drive"];
+        UNIT_ASSERT_VALUES_EQUAL(drives.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(drives[0]["expected_slot_count"].as<ui64>(), 24);
+        UNIT_ASSERT(drives[0]["shared_with_os"].as<bool>());
+        UNIT_ASSERT(drives[0]["read_centric"].as<bool>());
+        UNIT_ASSERT_VALUES_EQUAL(drives[0]["kind"].as<ui64>(), 7);
+        UNIT_ASSERT_C(!drives[1]["expected_slot_count"], YAML::Dump(drives[1]));
+        UNIT_ASSERT_VALUES_EQUAL(drives[1]["expected_slot_size"].as<ui64>(), 1000000);
+        UNIT_ASSERT_VALUES_EQUAL(drives[1]["max_slots"].as<ui32>(), 5);
+    }
 }

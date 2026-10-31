@@ -689,7 +689,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
                 UNIT_ASSERT(message.GetFederatedPartitionSession()->GetReadSourceDatabaseName() == "dc1");
-                UNIT_ASSERT(message.GetFederatedPartitionSession()->GetTopicPath() == setup->GetTestTopic());
+                // With /Root, the server returns account/topic; this test topic has an empty account.
+                UNIT_ASSERT_VALUES_EQUAL(message.GetFederatedPartitionSession()->GetTopicPath(), "/" + setup->GetTestTopic());
                 UNIT_ASSERT(message.GetData().ends_with(message.GetFederatedPartitionSession()->GetTopicOriginDatabaseName()));
 
                 UNIT_ASSERT(!sentSet.empty());

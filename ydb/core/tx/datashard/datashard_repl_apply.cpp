@@ -38,7 +38,7 @@ public:
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(*Self, &locksDb);
 
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready || Self->IsDatabaseFrozen()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,

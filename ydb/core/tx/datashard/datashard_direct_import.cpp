@@ -52,6 +52,9 @@ namespace NDataShard {
 using namespace NTabletFlatExecutor;
 
 bool TDataShard::IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender) {
+    if (IsUserTableWriteBlocked()) {
+        return false;
+    }
     auto op = Pipeline.FindOp(txId);
     if (!op || !op->IsSchemeTx() || !op->IsWaitingForAsyncJob()) {
         return false;
@@ -202,6 +205,10 @@ bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const
     // Attach the part as a bottom layer and persist the final restore progress
     // atomically, so a restart after this commit resumes to completion (via the
     // stored ProcessedBytes == ContentLength) instead of writing a second part.
+    if (!LocalWriteRegistered) {
+        ++Self->DatabaseFreezeLocalWrites;
+        LocalWriteRegistered = true;
+    }
     txc.Env.AttachPart(userTablePtr->LocalTid, std::move(msg->Result));
     // The executor now transfers the reservation into the attachment commit.
     Self->DirectImports.erase(session);
@@ -218,6 +225,9 @@ bool TDataShard::TTxS3DirectWriteFinish::Execute(TTransactionContext& txc, const
 }
 
 void TDataShard::TTxS3DirectWriteFinish::Complete(const TActorContext& ctx) {
+    if (LocalWriteRegistered) {
+        --Self->DatabaseFreezeLocalWrites;
+    }
     auto* msg = Ev->Get();
     ctx.Send(Ev->Sender, new TEvDataShard::TEvS3DirectWriteFinishResult(msg->TxId, Success, Error), 0, Ev->Cookie);
 

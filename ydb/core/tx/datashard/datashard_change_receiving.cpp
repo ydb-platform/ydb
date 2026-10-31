@@ -61,7 +61,9 @@ public:
     }
 
     bool ExecuteHandshake(NIceDb::TNiceDb& db, const NKikimrChangeExchange::TEvHandshake& req, NKikimrChangeExchange::TEvStatus& resp) {
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready
+            || Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC)
+        {
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;
@@ -314,6 +316,10 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             Pipeline.AddCommittingOp(*MvccVersion);
         }
 
+        if (!LocalWriteRegistered) {
+            ++Self->DatabaseFreezeLocalWrites;
+            LocalWriteRegistered = true;
+        }
         if (UseStepTxId(record)) {
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
         } else {
@@ -343,7 +349,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        if (Self->State != TShardState::Ready) {
+        if (Self->State != TShardState::Ready
+            || Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC)
+        {
             Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             Status->Record.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;
@@ -409,6 +417,10 @@ public:
     void Complete(const TActorContext& ctx) override {
         Y_ENSURE(Status);
 
+        if (LocalWriteRegistered) {
+            --Self->DatabaseFreezeLocalWrites;
+        }
+
         if (MvccVersion) {
             Pipeline.RemoveCommittingOp(*MvccVersion);
         }
@@ -427,6 +439,7 @@ private:
     TEvChangeExchange::TEvApplyRecords::TPtr Ev;
     THolder<TEvChangeExchange::TEvStatus> Status;
     std::optional<TRowVersion> MvccVersion;
+    bool LocalWriteRegistered = false;
 
     TSerializedCellVec KeyCells;
     TSerializedCellVec ValueCells;
@@ -476,4 +489,3 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

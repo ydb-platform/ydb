@@ -94,7 +94,13 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     // Check state is proper for scheme transactions.
-    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)) {
+    const bool finishCdcScan = tx.HasAlterCdcStreamNotice()
+        && tx.GetAlterCdcStreamNotice().GetStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady;
+    // Finalization changes CDC metadata only. Its retries must also work after
+    // DRAIN_CDC, when the shard is ready but SchemeShard may still await its ACK.
+    if (!DataShard.IsStateActive() || (DataShard.IsStateFrozen() && !unfreezeTx)
+        || (DataShard.IsDatabaseFrozen() && !finishCdcScan))
+    {
         TString error = TStringBuilder()
             << "Wrong shard state for scheme transaction at tablet "
             << DataShard.TabletID() << " state: " << DataShard.GetState() << " txId: "
@@ -865,4 +871,3 @@ THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

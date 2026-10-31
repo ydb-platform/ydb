@@ -9,6 +9,10 @@ TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3
 }
 
 bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
+    if (!Self->IsUserTableWriteBlocked() && !LocalWriteRegistered) {
+        ++Self->DatabaseFreezeLocalWrites;
+        LocalWriteRegistered = true;
+    }
     auto mvccVersion = Self->GetMvccVersion();
     
     // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
@@ -32,6 +36,9 @@ bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActor
 }
 
 void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
+    if (LocalWriteRegistered) {
+        --Self->DatabaseFreezeLocalWrites;
+    }
     TActorId target;
     THolder<IEventBase> event;
     ui64 cookie;

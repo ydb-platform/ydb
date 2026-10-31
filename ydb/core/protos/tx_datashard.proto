@@ -3002,6 +3002,38 @@ message TEvValidateUniqueIndexRequest {
     optional NKikimrProto.TRowVersion Snapshot = 8;
 }
 
+// Durable database write fence. Stages only advance within an epoch.
+message TDatabaseFreezeState {
+    enum EStage {
+        OPEN = 0;
+        FENCE_WRITES = 1;
+        DRAIN_INDEXES = 2;
+        DRAIN_CDC = 3;
+    }
+    optional uint64 Epoch = 1;
+    optional EStage Stage = 2;
+    repeated uint64 AcceptedTxIds = 3;
+    optional bool FinalHeartbeatsEmitted = 4;
+    optional bool DeliveryLost = 5;
+}
+
+message TEvDatabaseFreeze {
+    optional uint64 Epoch = 1;
+    optional uint64 SchemeShardId = 2;
+    optional uint64 DomainOwnerId = 3;
+    optional uint64 DomainLocalPathId = 4;
+    optional TDatabaseFreezeState.EStage Stage = 5;
+}
+
+message TEvDatabaseFreezeResult {
+    optional uint64 Epoch = 1;
+    optional uint64 TabletId = 2;
+    optional TDatabaseFreezeState.EStage Stage = 3;
+    optional bool Ready = 4;
+    optional uint32 Status = 5; // Ydb.StatusIds.StatusCode
+    optional string Issue = 6;
+}
+
 message TEvValidateUniqueIndexResponse {
     optional uint64 Id = 1;
 

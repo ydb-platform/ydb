@@ -78,6 +78,48 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertAlmostEqual(phases["test_duration_sec"], 10.0)
         self.assertAlmostEqual(phases["total_duration_sec"], 15.0)
 
+    def test_phase_durations_overlap_build_and_test(self):
+        # Build still active after tests start: build wall stops at first test.
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 3_000_000, "end_us": 10_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (8_000_000, -1)],
+                "link": [(1_000_000, 1), (9_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 3.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 7.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 10.0)
+
+    def test_phase_durations_late_link_and_build_only(self):
+        # Link after compile, no tests → build span only.
+        phases = _phase_durations_sec(
+            runs=[],
+            ya_activity_deltas={
+                "build": [(0, 1), (2_000_000, -1)],
+                "link": [(3_000_000, 1), (5_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 0.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 5.0)
+
+    def test_phase_durations_suite_filter_uses_filtered_runs_only_for_tests(self):
+        # Mimic --suite-path: runs already filtered, deltas still whole-job.
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "only/filtered", "chunk": 0, "start_us": 20_000_000, "end_us": 25_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (10_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 20.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 25.0)
+
 
 if __name__ == "__main__":
     unittest.main()

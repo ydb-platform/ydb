@@ -10,6 +10,7 @@ from __future__ import annotations
 import html as html_lib
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import quote
 
 try:
     from .dashboard_html_payload import build_dashboard_payload
@@ -80,7 +81,7 @@ def build_html_dashboard(
         "stroke-linecap='round' stroke-linejoin='round'/>"
         "</svg>"
     )
-    favicon_href = "data:image/svg+xml," + favicon_svg.replace("'", "%27").replace("<", "%3C").replace(">", "%3E").replace("#", "%23").replace(" ", "%20")
+    favicon_href = "data:image/svg+xml," + quote(favicon_svg, safe="")
 
     html = f"""<!doctype html>
 <html>
@@ -611,7 +612,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="activeLayerChunk">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">how many suite+chunk runs are alive at each moment</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -622,7 +623,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU · estimated cores<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -633,7 +634,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM · GB<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -644,7 +645,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
       </div>
@@ -662,7 +663,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU by suite · estimated cores<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -681,7 +682,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM by suite · GB<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -692,7 +693,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
       </div>
@@ -781,6 +782,7 @@ def build_html_dashboard(
       btn.title = open
         ? 'Collapse to half-width tile'
         : 'Expand to full width (same as ya make concurrency)';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
       const paneId = tile.getAttribute('data-pane');
       // Resize this pane and neighbours — grid reflow changes sibling widths too.
       const grid = tile.parentElement;
@@ -815,22 +817,39 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    (function wireCollapsedSuiteDetails() {{
-      [
-        ['testsBySuiteDetails', 'testsLayerSuite'],
-        ['activeBySuiteDetails', 'activeLayerSuite'],
-      ].forEach(([detailsId, paneId]) => {{
-        const details = document.getElementById(detailsId);
-        if (!details) return;
-        details.addEventListener('toggle', () => {{
-          if (!details.open) return;
+    // Charts inside closed <details> plot with width≈0 if drawn on load.
+    // Defer first Plotly.newPlot until the section is opened; later opens
+    // only resize + re-apply markers.
+    const _plottedDetailPanes = new Set();
+    const _detailPlotFns = {{}};
+    function ensureDetailsPlot(detailsId, paneId, plotFn) {{
+      _detailPlotFns[paneId] = plotFn;
+      const details = document.getElementById(detailsId);
+      const run = () => {{
+        if (_plottedDetailPanes.has(paneId)) {{
           setTimeout(() => {{
             resizeChartPanes([paneId]);
+            if (typeof syncChartGroupXRange === 'function') syncChartGroupXRange(ALL_TIME_CHART_IDS);
             if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
           }}, 0);
+          return;
+        }}
+        try {{ plotFn(); }} catch (e) {{ console.warn('deferred plot failed', paneId, e); return; }}
+        _plottedDetailPanes.add(paneId);
+        setTimeout(() => {{
+          resizeChartPanes([paneId]);
+          if (typeof syncChartGroupXRange === 'function') syncChartGroupXRange(ALL_TIME_CHART_IDS);
+          if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+        }}, 0);
+      }};
+      if (details && !details.open) {{
+        details.addEventListener('toggle', () => {{
+          if (details.open) run();
         }});
-      }});
-    }})();
+        return;
+      }}
+      run();
+    }}
 
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
@@ -962,17 +981,35 @@ def build_html_dashboard(
           + 'If clocks differ, the yaActivity chart may look empty or misaligned.">'
           + '⚠ ya activity clock unaligned</span>')
         : '';
+      // build_* comes from whole-job ya_activity; test_* from (possibly filtered) runs.
+      const suiteFilterRaw = (data.suite_filter == null) ? '' : String(data.suite_filter).trim();
+      const suiteFiltered = !!(suiteFilterRaw && suiteFilterRaw.toUpperCase() !== 'ALL SUITES');
+      const filterScopeNote = suiteFiltered
+        ? ('<span class="group muted" title="Suite filter is active: test duration / suite counts '
+          + 'cover matching suites only; build duration is still the whole-job compile/link phase '
+          + 'from ya activity.">build = whole job</span>')
+        : '';
+      const buildTip = suiteFiltered
+        ? 'Whole-job build/archive/cache/link activity until the first filtered-suite test start'
+        : 'From the first build/archive/cache/link activity to the first test start';
+      const testTip = suiteFiltered
+        ? 'Filtered suites only: first matching test start → last matching test end'
+        : 'From the first test start to the last test end';
+      const totalTip = suiteFiltered
+        ? 'Earliest of whole-job build start / filtered test start → latest end'
+        : 'From the first build/archive/cache/link activity to the last test end';
       const runLine =
         '<div class="headline-run">' +
           '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites</span>' +
           '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks</span>' +
           '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests</span>' +
-          '<span class="group" title="From the first build/archive/cache/link activity to the last test end">' +
+          '<span class="group" title="' + totalTip + '">' +
             '<b>' + wallExact + '</b> total duration</span>' +
-          '<span class="group" title="From the first build/archive/cache/link activity to the first test start">' +
+          '<span class="group" title="' + buildTip + '">' +
             '<b>' + buildExact + '</b> build duration</span>' +
-          '<span class="group" title="From the first test start to the last test end">' +
+          '<span class="group" title="' + testTip + '">' +
             '<b>' + testExact + '</b> test duration</span>' +
+          filterScopeNote +
           '<span class="group">tests <b>' + String(failedTotal) + '</b> failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
             ' · <b>' + String(timeoutTotal) + '</b> timeout · <b>' + String(skippedTotal) + '</b> skipped</span>' +
           '<span class="group">chunks <b>' + String(cFailedTotal) + '</b> failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
@@ -1274,8 +1311,9 @@ def build_html_dashboard(
       return xs;
     }}
     function syncChartGroupXRange(ids) {{
-      // All time-series tiles share the evlog window (build → tests), matching
-      // the top ya make concurrency chart.
+      // Intentional: all time-series tiles share the full evlog window
+      // (build → tests), matching ya make concurrency. A long build compresses
+      // the test segment — that alignment is preferred over per-chart spans.
       if (!window.Plotly) return;
       let span = fullEvlogRangeMs();
       if (!span) {{
@@ -2679,12 +2717,16 @@ def build_html_dashboard(
       attachSortedClick('ramLayer', 'ramClick', 'GB');
     }}
 
-    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
-    attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
-    attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
-    stackedArea('testsLayerSuite', data.xs_tests_suite, data.tests_tracks_suite, 'Layered tests running by suite', 'tests', true);
-    attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
-    attachSortedClick('testsLayerSuite', 'testsClickSuite', 'tests');
+    ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite', () => {{
+      stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
+      attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
+      attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
+    }});
+    ensureDetailsPlot('testsBySuiteDetails', 'testsLayerSuite', () => {{
+      stackedArea('testsLayerSuite', data.xs_tests_suite, data.tests_tracks_suite, 'Layered tests running by suite', 'tests', true);
+      attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
+      attachSortedClick('testsLayerSuite', 'testsClickSuite', 'tests');
+    }});
 
     stackedArea('cpuLayerSuite', data.xs_cpu_suite, data.cpu_tracks_suite, 'Layered CPU (estimated cores) by suite', 'cores');
     stackedArea('ramLayerSuite', data.xs_ram_suite, data.ram_tracks_suite, 'Layered RAM by suite', 'GB');

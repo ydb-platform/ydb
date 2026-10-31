@@ -146,6 +146,13 @@ class JsScriptJsonTest(unittest.TestCase):
             '<h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">',
             source,
         )
+        self.assertIn("function ensureDetailsPlot(detailsId, paneId, plotFn)", source)
+        self.assertIn("_plottedDetailPanes", source)
+        self.assertIn("ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite'", source)
+        self.assertIn("ensureDetailsPlot('testsBySuiteDetails', 'testsLayerSuite'", source)
+        self.assertIn("build = whole job", source)
+        self.assertIn("aria-expanded", source)
+        self.assertIn("from urllib.parse import quote", source)
         self.assertIn("CPU by suite · estimated cores", source)
         self.assertIn("chart-tile-sub", source)
         # Expand matches the ya-activity full-row slot (same as .span-2).

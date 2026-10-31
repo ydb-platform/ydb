@@ -1,6 +1,7 @@
 PY3TEST()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 TEST_SRCS(
     test_connectivity.py

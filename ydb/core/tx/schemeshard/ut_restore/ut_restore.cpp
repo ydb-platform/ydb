@@ -4305,6 +4305,71 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             AfterPropose ? EFinalizeReboot::AfterPropose : EFinalizeReboot::BeforePropose);
     }
 
+    Y_UNIT_TEST_FLAG(ReplicaImportFinalizesItemsIndependently, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        CreateReplicaPlaceholder(runtime, env, 10, "First");
+        CreateReplicaPlaceholder(runtime, env, 11, "Second");
+        const auto backup = GenerateTestData(Utf8KeyValueScheme(), {{"a", 1}});
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3(ConvertTestData({{"/a", backup}, {"/b", backup}}), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3.Start());
+
+        bool blocked = false;
+        ui64 otherFinalizeTxId = 0;
+        bool otherFinalized = false;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() != TTableReplicationConfig::IMPORTED) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TransactionSize(), 1);
+                if (!blocked) {
+                    blocked = true;
+                    ev.Reset();
+                    return;
+                }
+                otherFinalizeTxId = ev->Get()->Record.GetTxId();
+            }
+        });
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (otherFinalizeTxId && ev->Get()->Record.GetTxId() == otherFinalizeTxId) {
+                otherFinalized = true;
+            }
+        });
+        TestImport(runtime, 20, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "a" destination_path: "/MyRoot/First" }
+                items { source_prefix: "b" destination_path: "/MyRoot/Second" }
+            }
+        )", port));
+        runtime.WaitFor("one item finalizes while the other waits for ALTER", [&] { return otherFinalized; });
+        UNIT_ASSERT(blocked);
+        const auto firstState = DescribePath(runtime, "/MyRoot/First").GetPathDescription()
+            .GetTable().GetReplicationConfig().GetImportState();
+        const auto secondState = DescribePath(runtime, "/MyRoot/Second").GetPathDescription()
+            .GetTable().GetReplicationConfig().GetImportState();
+        UNIT_ASSERT((firstState == TTableReplicationConfig::IMPORTING && secondState == TTableReplicationConfig::IMPORTED)
+            || (firstState == TTableReplicationConfig::IMPORTED && secondState == TTableReplicationConfig::IMPORTING));
+        UNIT_ASSERT_UNEQUAL(TestGetImport(runtime, 20, "/MyRoot").GetResponse().GetEntry().GetProgress(),
+            Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 20);
+        TestGetImport(runtime, 20, "/MyRoot");
+        for (const TString path : {"/MyRoot/First", "/MyRoot/Second"}) {
+            CheckImportedReplica(runtime, path);
+            const auto table = DescribePrivatePath(runtime, path, true, true);
+            NKqp::CompareYson(backup.Data[0].YsonStr, ReadTable(runtime,
+                table.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
+                table.GetPathDescription().GetTable().GetName(), {"key"}, {"key", "value"}));
+        }
+    }
+
     Y_UNIT_TEST(ReplicaImportFailureDoesNotMarkImported) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -8461,6 +8526,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", {{"b", 1}}, "", metadata);
         b.Data[0] = TTestData("\"value1\",\"b1\"\n", GenerateTestData("b", 1).YsonStr);
 
+        const bool importedIndex = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})");
         ui32 finalAlterRequests = 0;
         auto finalAlterObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
             ui32 tables = 0;
@@ -8471,7 +8538,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             if (tables) {
                 UNIT_ASSERT(replica);
-                UNIT_ASSERT_VALUES_EQUAL(tables, 2);
+                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex ? 1 : 2);
                 ++finalAlterRequests;
             }
         });
@@ -8492,7 +8559,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
-        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
         if (replica) {
             CheckImportedReplica(runtime, "/MyRoot/Table");
             CheckImportedReplica(runtime, "/MyRoot/Table/by_value/indexImplTable");
@@ -8501,8 +8568,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/by_value/indexImplTable", true, true);
         NKqp::CompareYson(a.Data[0].YsonStr, ReadTable(runtime,
             table.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "Table", {"key"}, {"key", "value"}));
-        const bool importedIndex = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
-            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})");
         NKqp::CompareYson((importedIndex ? b : a).Data[0].YsonStr, ReadTable(runtime,
             index.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "indexImplTable",
             {"value", "key"}, {"key", "value"}));

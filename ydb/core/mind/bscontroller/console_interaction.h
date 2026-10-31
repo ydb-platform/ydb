@@ -20,9 +20,11 @@ namespace NKikimr::NBsController {
 
         TConsoleInteraction(TBlobStorageController& controller);
         void Start();
-        void OnConfigCommit();
+        // storageApplyCookie: the cookie of the application of the storage config the committed replacement waits for
+        void OnConfigCommit(bool mainConfigChanged, std::optional<ui64> storageApplyCookie = std::nullopt);
         void Stop();
         void ProcessDryRunResponse(bool success, TString errorReason = {});
+        void ProcessApplyResponse(ui64 cookie, bool success, TString errorReason);
 
         void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr& ev);
         void Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr& ev);
@@ -43,10 +45,15 @@ namespace NKikimr::NBsController {
         TBackoffTimer MakeSessionBackoffTimer{1, 1000};
         TInstant ValidationTimeout;
         ui64 ExpectedValidationTimeoutCookie = 0;
+        ui64 ValidationRequestCookie = Max<ui64>(); // the cookie the validation of the replacement going on was asked with
         TBackoffTimer GetBlockBackoff{1, 1000};
         ui32 BlockedGeneration = 0;
         bool Working = false;
         bool CommitInProgress = false;
+        // the committed replacement is answered once Console has committed it and the storage config has applied
+        bool ConsoleCommitted = false;
+        std::optional<ui64> StorageApplyCookie; // the application of the committed replacement, if it is going on
+        std::optional<TString> StorageApplyError;
         std::optional<bool> SwitchEnableConfigV2;
         TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr PendingReplaceRequest;
         std::optional<TAuditLogInfo> AuditLogInfo;
@@ -67,8 +74,10 @@ namespace NKikimr::NBsController {
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
         void MaybeDisableConfigV2();
+        void OnConsoleCommit();
 
         void CommitConfig();
+        void MaybeFinishCommittedReplacement();
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,
             std::optional<TString> errorReason = std::nullopt, bool disabledConfigV2 = false);
     };

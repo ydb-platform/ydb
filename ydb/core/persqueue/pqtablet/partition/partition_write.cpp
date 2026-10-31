@@ -579,6 +579,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan.End();
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
+    CompleteReplicationDataWrite(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
@@ -1338,10 +1339,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    ui64 poffset = p.Offset.GetOrElse(curOffset);
+    ui64 defaultOffset = Max(curOffset, BlobEncoder.MirroredOffset);
     if (AppData(ctx)->PQConfig.HasMinOffset()) {
-        poffset = p.Offset.GetOrElse(std::max(curOffset, AppData(ctx)->PQConfig.GetMinOffset()));
+        defaultOffset = Max(defaultOffset, AppData(ctx)->PQConfig.GetMinOffset());
     }
+    const ui64 poffset = p.Offset.GetOrElse(defaultOffset);
 
     LOG_T(
         "Topic partition process write",
@@ -1520,6 +1522,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
         curOffset = poffset;
+        p.Offset = poffset;
     }
 
     std::optional<ui64> deduplicationResult;

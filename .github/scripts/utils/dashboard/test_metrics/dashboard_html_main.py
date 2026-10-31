@@ -96,9 +96,48 @@ def build_html_dashboard(
     .toolbar button {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
     .cpu-help {{ display: none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d0d7de; background: #f6f8fa; font-size: 12px; line-height: 1.45; }}
     .cpu-help ol, .cpu-help ul {{ margin: 6px 0 6px 18px; padding: 0; }}
-    .metrics-help {{ margin: 8px 0 12px 0; }}
-    .metrics-help .box {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.45; }}
+    /* Secondary collapses (Run stats / Config / help): quiet chrome, not H2. */
+    details.aux-fold {{
+      margin: 4px 0 8px 0;
+    }}
+    details.aux-fold > summary,
+    .metrics-help > summary {{
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: #656d76;
+      list-style: none;
+    }}
+    details.aux-fold > summary::-webkit-details-marker,
+    .metrics-help > summary::-webkit-details-marker {{ display: none; }}
+    details.aux-fold > summary::before,
+    .metrics-help > summary::before {{
+      content: "▸ ";
+      color: #8c959f;
+      font-weight: 400;
+    }}
+    details.aux-fold[open] > summary::before,
+    .metrics-help[open] > summary::before {{ content: "▾ "; }}
+    .metrics-help {{ margin: 6px 0 10px 0; }}
+    .metrics-help .box {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.45; color: #57606a; }}
     .metrics-help ul {{ margin: 6px 0 0 18px; padding: 0; }}
+    .section-label {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #57606a;
+      line-height: 1.3;
+    }}
+    .section-label .help-btn {{
+      padding: 0 7px;
+      min-width: auto;
+      font-size: 12px;
+      font-weight: 600;
+      color: #57606a;
+    }}
     .tabs {{ display: flex; gap: 8px; margin: 8px 0 12px 0; }}
     .tabbtn {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
     .tabbtn.active {{ background: #e7f3ff; border-color: #8cc8ff; }}
@@ -136,16 +175,16 @@ def build_html_dashboard(
       min-height: 22px;
     }}
     .chart-tile-title {{
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 600;
       letter-spacing: 0.01em;
-      color: #24292f;
+      color: #0f172a;
       text-transform: none;
     }}
     .chart-tile-sub {{
       display: block;
-      margin-top: 1px;
-      font-size: 11px;
+      margin-top: 2px;
+      font-size: 12px;
       font-weight: 400;
       color: #656d76;
     }}
@@ -262,7 +301,7 @@ def build_html_dashboard(
     .monitor-box a {{
       color: #2563eb;
       text-decoration: none;
-      font-weight: 600;
+      font-weight: 500;
     }}
     .monitor-box a:hover {{ text-decoration: underline; }}
     .monitor-url {{
@@ -280,9 +319,12 @@ def build_html_dashboard(
       background: #f8fafc;
     }}
     .headline-stats-title {{
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #656d76;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
     }}
     .headline-run {{
       display: flex;
@@ -290,10 +332,16 @@ def build_html_dashboard(
       align-items: center;
       gap: 6px 16px;
       font-size: 13px;
-      line-height: 1.4;
+      line-height: 1.45;
       margin-bottom: 12px;
+      color: #57606a;
     }}
-    .headline-run b {{ font-variant-numeric: tabular-nums; }}
+    .headline-run b {{
+      font-variant-numeric: tabular-nums;
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+    }}
     .headline-run .muted {{ color: #64748b; font-weight: 400; }}
     .headline-run .group {{ white-space: nowrap; }}
     .headline-run .group + .group {{
@@ -401,7 +449,7 @@ def build_html_dashboard(
     </div>
     <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
     <div id="monitoringLinkWrap" class="monitor-box">
-      <b>Runner monitoring:</b>
+      <span>Runner monitoring:</span>
       <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
       <span id="monitoringLinkMeta" class="monitor-url"></span>
     </div>
@@ -410,19 +458,19 @@ def build_html_dashboard(
     <div class="headline-stats-title">Resource summary</div>
     <div id="headlineStatsGrid" class="headline-stats-grid"></div>
   </div>
-  <details style="margin: 8px 0 12px 0;">
-    <summary><b>Run stats</b></summary>
+  <details class="aux-fold">
+    <summary>Run stats</summary>
     <pre id="stats"></pre>
   </details>
-  <details style="margin: 8px 0 12px 0;">
-    <summary><b>Config</b></summary>
+  <details class="aux-fold">
+    <summary>Config</summary>
     <pre id="runConfig"></pre>
   </details>
   <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
-    <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-      <span>CPU suggestions (recommended_cpu for runner)</span>
-      <button id="cpuHelpToggle" type="button" title="Show recommendation logic" style="padding:0 8px;min-width:auto;">?</button>
-    </h3>
+    <div class="section-label">
+      <span>CPU suggestions</span>
+      <button id="cpuHelpToggle" class="help-btn" type="button" title="Show recommendation logic">?</button>
+    </div>
     <div id="cpuHelpText" class="cpu-help">
       <ol>
         <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
@@ -446,24 +494,24 @@ def build_html_dashboard(
     <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
     <p style="font-size:12px;color:#64748b;margin:4px 0 8px 0;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
-    <details id="heavyTestsDetails" style="margin: 8px 0 12px 0;">
-      <summary><b>Long/heavy tests near timeout</b></summary>
+    <details id="heavyTestsDetails" class="aux-fold">
+      <summary>Long/heavy tests near timeout</summary>
       <div id="cpuHeavyTestsTable" class="clickbox"></div>
     </details>
   </div>
   <div class="toolbar">
-    <label for="suiteSearch"><b>Search suite:</b></label>
+    <label for="suiteSearch">Search suite:</label>
     <input id="suiteSearch" type="text" placeholder="e.g. ydb/core/tx/schemeshard/ut_cdc_stream_reboots" />
     <button onclick="clearSuiteSearch()">Clear</button>
-    <label for="tzSelect"><b>Timezone:</b></label>
+    <label for="tzSelect">Timezone:</label>
     <select id="tzSelect" onchange="applyTimezoneToAllCharts()" style="padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;">
       <option value="Europe/Moscow">MSK</option>
       <option value="UTC">UTC</option>
       <option value="local" selected>Local</option>
     </select>
     <button onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
-    <span style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:3px 6px;background:#fff;">
-      <b>Marker types:</b>
+    <span style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:3px 6px;background:#fff;color:#57606a;">
+      <span>Marker types:</span>
       <label><input type="checkbox" id="mkStart" checked onchange="applyMarkersToCharts()">start</label>
       <label><input type="checkbox" id="mkEnd" checked onchange="applyMarkersToCharts()">end</label>
       <label><input type="checkbox" id="mkPar" onchange="applyMarkersToCharts()">par</label>
@@ -473,8 +521,8 @@ def build_html_dashboard(
       <label><input type="checkbox" id="mkError" onchange="applyMarkersToCharts()">errors</label>
       <label><input type="checkbox" id="mkTimeout" onchange="applyMarkersToCharts()">timeouts</label>
     </span>
-    <span id="markersLegend" style="display:none;font-size:11px;line-height:1.5;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fafafa;">
-      <b>Markers:</b>
+    <span id="markersLegend" style="display:none;font-size:11px;line-height:1.5;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fafafa;color:#57606a;">
+      <span>Markers:</span>
       <span style="margin-left:6px;">&#9135;&#9135; start</span>
       <span style="margin-left:6px;">&#8209;&#8209;&#8209; end</span>
       <span style="margin-left:6px;">&#183;&#183;&#183; par/others peak</span>
@@ -493,7 +541,7 @@ def build_html_dashboard(
     </span>
     <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:8px;padding:6px 10px;background:#fff;">
       <span class="layer-toggle-box">
-        <b>Layers:</b>
+        <span>Layers:</span>
         <span class="layer-toggle-list">
           <label class="layer-toggle-item"><span>Metrics by suite</span><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()"></label>
           <label class="layer-toggle-item"><span>System CPU</span><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()"></label>
@@ -502,8 +550,8 @@ def build_html_dashboard(
       </span>
     </span>
   </div>
-  <details class="metrics-help">
-    <summary><b>How CPU/RAM chart metrics are calculated</b></summary>
+  <details class="metrics-help aux-fold">
+    <summary>How CPU/RAM chart metrics are calculated</summary>
     <div class="box">
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
@@ -533,8 +581,8 @@ def build_html_dashboard(
           timeout occurs. If no chunk exceeds the budget, split is not raised.
         </li>
       </ul>
-      <details style="margin-top:8px;">
-        <summary><b>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</b></summary>
+      <details class="aux-fold" style="margin-top:8px;">
+        <summary>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</summary>
         <div style="margin:6px 0;">
           <p><b>Per run</b> (we use <code>dur_sec = max(duration_report_sec, duration_evlog_sec)</code> so cores are not inflated when evlog span is short):</p>
           <p><code>cpu_cores_est<sub>run</sub> = cpu_sec_report / dur_sec</code></p>
@@ -621,7 +669,7 @@ def build_html_dashboard(
           <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
           <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
           <details class="metrics-help" style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">
-            <summary><b>How the CPU value at cursor is calculated</b></summary>
+            <summary>How the CPU value at cursor is calculated</summary>
             <div style="margin:4px 0;">
               <p><b>Per run:</b> <code>cpu_cores_est = cpu_sec_report / dur_sec</code> (we have real report for every run).</p>
               <p><b>At time t:</b> value = Σ <code>cpu_cores_est</code> over all runs of this suite with <code>start_us ≤ t &lt; end_us</code>. We do not use one chunk — we sum over all active runs.</p>
@@ -1738,7 +1786,7 @@ def build_html_dashboard(
         }}).join('');
         const heavyWrap = document.getElementById('cpuHeavyTestsTable');
         const heavyDetails = document.getElementById('heavyTestsDetails');
-        const heavySummaryLabel = document.querySelector('#heavyTestsDetails summary b');
+        const heavySummaryLabel = document.querySelector('#heavyTestsDetails summary');
         const heavyMarker = (col) => (col === heavySortCol ? (heavySortAsc ? ' ▲' : ' ▼') : '');
         if (heavySummaryLabel) {{
           heavySummaryLabel.textContent = 'Long/heavy tests near timeout (' + heavyTestsFlat.length + ')';
@@ -1749,11 +1797,11 @@ def build_html_dashboard(
         }}
         if (heavyWrap) {{
           if (!heavyTestsFlat.length) {{
-            heavyWrap.innerHTML = '<b>Long/heavy tests near timeout</b><div style=\"margin-top:6px;color:#64748b;\">No tests at >=97% of the chunk timeout budget in current filter.</div>';
+            heavyWrap.innerHTML = '<div style=\"color:#64748b;\">No tests at >=97% of the chunk timeout budget in current filter.</div>';
             if (heavyDetails) heavyDetails.open = false;
           }} else {{
             heavyWrap.innerHTML =
-              '<b>Long/heavy tests near timeout (>=97% of the chunk timeout budget)</b>' +
+              '<div style=\"font-size:12px;color:#656d76;margin-bottom:4px;\">&gt;=97% of the chunk timeout budget</div>' +
               '<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">' +
               '<thead><tr><th>#</th><th data-hcol=\"1\" style=\"cursor:pointer;user-select:none;\">suite_path' + heavyMarker(1) + '</th><th data-hcol=\"2\" style=\"cursor:pointer;user-select:none;\">ya_size' + heavyMarker(2) + '</th><th data-hcol=\"3\" style=\"cursor:pointer;user-select:none;\">threshold' + heavyMarker(3) + '</th><th data-hcol=\"4\" style=\"cursor:pointer;user-select:none;\">test' + heavyMarker(4) + '</th><th data-hcol=\"5\" style=\"cursor:pointer;user-select:none;\">duration' + heavyMarker(5) + '</th><th data-hcol=\"6\" style=\"cursor:pointer;user-select:none;\">chunk' + heavyMarker(6) + '</th></tr></thead>' +
               '<tbody>' + heavyBody + '</tbody></table>';

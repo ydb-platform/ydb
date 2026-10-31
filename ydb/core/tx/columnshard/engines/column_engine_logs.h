@@ -218,7 +218,8 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
         auto result = GetGranuleOptional(pathId);
-        AFL_VERIFY(result)("path_id", pathId);
+        AFL_VERIFY(result,
+            {"pathId", pathId});
         return result;
     }
 

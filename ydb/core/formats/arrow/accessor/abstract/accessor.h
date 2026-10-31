@@ -94,7 +94,9 @@ public:
         }
 
         ui32 GetLocalIndex(const ui32 global) const {
-            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            AFL_VERIFY(Contains(global),
+                {"pos", global},
+                {"start", GlobalStartPosition});
             return global - GlobalStartPosition;
         }
 
@@ -325,7 +327,9 @@ protected:
 
             ui64 idx = chunkCurrent->GetStartPosition();
             for (i32 i = chunkCurrent->GetChunkIndex() - 1; i >= 0; --i) {
-                AFL_VERIFY(idx >= accessor.GetChunkLength(i))("idx", idx)("length", accessor.GetChunkLength(i));
+                AFL_VERIFY(idx >= accessor.GetChunkLength(i),
+                    {"idx", idx},
+                    {"length", accessor.GetChunkLength(i)});
                 const ui64 nextIdx = idx - accessor.GetChunkLength(i);
                 if (nextIdx <= position && position < idx) {
                     return accessor.OnArray(i, nextIdx);
@@ -343,9 +347,17 @@ protected:
         if (chunkCurrent) {
             chunkCurrentInfo << chunkCurrent->DebugString();
         }
-        AFL_VERIFY(recordsCountChunks == GetRecordsCount())("pos", position)("count", GetRecordsCount())("chunks_map", sb)(
-            "chunk_current", chunkCurrentInfo)("chunks_count", recordsCountChunks);
-        AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
+        AFL_VERIFY(recordsCountChunks == GetRecordsCount(),
+            {"pos", position},
+            {"count", GetRecordsCount()},
+            {"chunksMap", sb},
+            {"chunkCurrent", chunkCurrentInfo},
+            {"chunksCount", recordsCountChunks});
+        AFL_VERIFY(false,
+            {"pos", position},
+            {"count", GetRecordsCount()},
+            {"chunksMap", sb},
+            {"chunkCurrent", chunkCurrentInfo});
     }
 
     virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
@@ -423,7 +435,9 @@ public:
     }
 
     TLocalDataAddress GetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
-        AFL_VERIFY(position < GetRecordsCount())("position", position)("records_count", GetRecordsCount());
+        AFL_VERIFY(position < GetRecordsCount(),
+            {"position", position},
+            {"recordsCount", GetRecordsCount()});
         return DoGetLocalData(chunkCurrent, position);
     }
 
@@ -482,10 +496,15 @@ public:
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
     std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
-        AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
+        AFL_VERIFY(offset + count <= GetRecordsCount(),
+            {"offset", offset},
+            {"count", count},
+            {"records", GetRecordsCount()});
         auto result = DoISlice(offset, count);
         AFL_VERIFY(result);
-        AFL_VERIFY(result->GetRecordsCount() == count)("records", result->GetRecordsCount())("count", count);
+        AFL_VERIFY(result->GetRecordsCount() == count,
+            {"records", result->GetRecordsCount()},
+            {"count", count});
         return result;
     }
 

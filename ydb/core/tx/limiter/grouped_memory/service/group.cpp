@@ -84,7 +84,9 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 } else {
                     scope.ReaccountAdmittedGroup(externalGroupId);
                     if (!forced) {
-                        AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                        AFL_VERIFY(++allocationsCount <= allocationsLimit,
+                            {"count", allocationsCount},
+                            {"limit", allocationsLimit});
                     }
                 }
                 if (!forced) {

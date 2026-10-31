@@ -10,7 +10,10 @@
 namespace NKikimr::NOlap::NExport {
 
 void TActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    AFL_VERIFY(Stage == from,
+        {"from", (ui32)from},
+        {"real", (ui32)Stage},
+        {"to", (ui32)to});
     Stage = to;
     StageStartTime = TInstant::Now();
 }
@@ -174,7 +177,8 @@ void TActor::OnTxCompleted(const ui64 /*txId*/) {
 void TActor::OnSessionProgressSaved() {
     Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
     if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
-        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor,
+            {"real", (ui32)Stage});
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
@@ -188,7 +192,8 @@ void TActor::OnSessionProgressSaved() {
         SaveSessionState();
         SwitchStage(EStage::WaitSaveCursor, EStage::Finished);
     } else {
-        AFL_VERIFY(Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
+        AFL_VERIFY(Stage == EStage::WaitSaveCursor,
+            {"real", (ui32)Stage});
         SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
         AFL_VERIFY(ScanActorId);
         Counters.OnReadStarted();
@@ -300,7 +305,8 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
     // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
     const auto txId = ExportSession->GetTxId();
-    AFL_VERIFY(txId)("reason", "export_session_has_no_tx_id");
+    AFL_VERIFY(txId,
+        {"reason", "export_session_has_no_tx_id"});
     ev->Record.SetTxId(*txId);
     ev->Record.SetTablePath(backupTask.GetTableName());
     ev->Record.SetSchemaVersion(0);

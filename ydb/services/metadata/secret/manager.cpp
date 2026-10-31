@@ -38,7 +38,8 @@ private:
 
 public:
     TConclusionStatus HandleResult(const Ydb::Table::ExecuteQueryResult& result) const override {
-        AFL_VERIFY(result.result_sets_size() == 1)("size", result.result_sets_size());
+        AFL_VERIFY(result.result_sets_size() == 1,
+            {"size", result.result_sets_size()});
         const auto& resultSet = result.result_sets(0);
         TSecret::TDecoder decoder(resultSet);
 

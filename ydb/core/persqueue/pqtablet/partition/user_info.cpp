@@ -371,7 +371,9 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     ui32 step = 0;
     TString session;
     NDeprecatedUserData::Parse(data, offset, gen, step, session);
-    AFL_ENSURE(offset <= (ui64)Max<i64>())("description", "Offset is too big")("offset", offset);
+    AFL_ENSURE(offset <= (ui64)Max<i64>(),
+        {"description", "Offset is too big"},
+        {"offset", offset});
 
     if (!userInfo) {
         Create(ctx, user, 0, false, TDuration::Zero(), session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {}, false);
@@ -394,7 +396,9 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     bool res = userData.ParseFromString(data);
     AFL_ENSURE(res);
 
-    AFL_ENSURE(userData.GetOffset() <= (ui64)Max<i64>())("description", "Offset is too big")("offset", userData.GetOffset());
+    AFL_ENSURE(userData.GetOffset() <= (ui64)Max<i64>(),
+        {"description", "Offset is too big"},
+        {"offset", userData.GetOffset()});
     i64 offset = static_cast<i64>(userData.GetOffset());
 
     TUserInfo* userInfo = GetIfExists(user);
@@ -424,7 +428,8 @@ void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     if (ImporantOrExtendedAvailabilityPeriod(*it->second)) {
         UpdateImportantExtSlice(it->second.Get(), EImportantSliceAction::Remove);
     } else {
-        AFL_ENSURE(!ImportantExtUsersInfoSlice.contains(user))("user", user);
+        AFL_ENSURE(!ImportantExtUsersInfoSlice.contains(user),
+            {"user", user});
     }
     UsersInfo.erase(it);
 }
@@ -612,11 +617,13 @@ void TUsersInfoStorage::UpdateImportantExtSlice(TUserInfo* userInfo, EImportantS
     switch (action) {
         using enum EImportantSliceAction;
         case Insert: {
-            AFL_ENSURE(ImportantExtUsersInfoSlice.emplace(userInfo->User, userInfo).second)("user", userInfo->User);
+            AFL_ENSURE(ImportantExtUsersInfoSlice.emplace(userInfo->User, userInfo).second,
+                {"user", userInfo->User});
             break;
         }
         case Remove: {
-            AFL_ENSURE(ImportantExtUsersInfoSlice.erase(userInfo->User) > 0)("user", userInfo->User);
+            AFL_ENSURE(ImportantExtUsersInfoSlice.erase(userInfo->User) > 0,
+                {"user", userInfo->User});
             break;
         }
     }

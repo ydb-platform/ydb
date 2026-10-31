@@ -78,7 +78,8 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
     }
     // Remap positions to indices into the filtered dictionary and choose their width based on new dictionary size.
-    AFL_VERIFY(dictArray->length() <= Max<ui32>())("dictionary_length", dictArray->length());
+    AFL_VERIFY(dictArray->length() <= Max<ui32>(),
+        {"dictionaryLength", dictArray->length()});
     const ui32 dictionaryLength = dictArray->length();
     const auto positionsTargetType = NDictionary::TConstructor::GetTypeByVariantsCount(dictionaryLength);
     std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsTargetType);

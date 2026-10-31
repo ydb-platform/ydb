@@ -134,7 +134,8 @@ private:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-                    AFL_VERIFY(false)("entry", entry.ToString());
+                    AFL_VERIFY(false,
+                        {"entry", entry});
             }
         }
     }

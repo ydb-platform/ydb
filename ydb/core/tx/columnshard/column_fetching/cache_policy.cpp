@@ -24,8 +24,7 @@ private:
         THashMap<TActorId, THashMap<NColumnShard::TEvPrivate::TEvAskColumnData::TPortionRequest, std::set<ui32>>> columns;
         for (const auto& [consumer, addresses] : objectAddressesByConsumer) {
             for (const auto& address : addresses) {
-                AFL_VERIFY(
-                columns[address.GetTabletActorId()]
+                AFL_VERIFY(columns[address.GetTabletActorId()]
                        [NColumnShard::TEvPrivate::TEvAskColumnData::TPortionRequest(address.GetInternalPortionAddress(), consumer)]
                            .emplace(address.GetColumnId()).second);
             }

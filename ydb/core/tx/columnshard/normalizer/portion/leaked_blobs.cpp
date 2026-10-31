@@ -388,7 +388,9 @@ private:
             return;
         }
         for (auto&& i : CSBlobIds) {
-            AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
+            AFL_VERIFY(BSBlobIds.erase(i),
+                {"error", "have to use broken blobs repair"},
+                {"blobId", i});
         }
         for (auto&& i : CSBlobIdsToDelete) {
             BSBlobIds.erase(i);
@@ -445,7 +447,9 @@ public:
 
     void Handle(TEvBlobStorage::TEvRangeResult::TPtr& ev, const TActorContext& /*ctx*/) {
         TEvBlobStorage::TEvRangeResult* msg = ev->Get();
-        AFL_VERIFY(msg->Status == NKikimrProto::OK)("status", msg->Status)("error", msg->ErrorReason);
+        AFL_VERIFY(msg->Status == NKikimrProto::OK,
+            {"status", msg->Status},
+            {"error", msg->ErrorReason});
         AFL_VERIFY(--WaitingCount >= 0);
         AFL_VERIFY(WaitingRequests.erase(ev->Cookie));
         for (auto& resp : msg->Responses) {
@@ -635,7 +639,8 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(TDbWrapper& wrapper
                 conclusion = LoadColumns(wrapper);
                 break;
             case TProcessPortionsStep::Finished:
-                AFL_VERIFY(false)("error", "finished step");
+                AFL_VERIFY(false,
+                    {"error", "finished step"});
         }
         if (conclusion.IsFail()) {
             return conclusion;
@@ -722,8 +727,11 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadColumns(TDbWrapper& wrapper) {
         const auto& blobIds = columnChunk.GetBlobIds();
         if (!portion.GetDeferredIndexBlobIdxs().empty()) {
             for (auto& idx : portion.GetDeferredIndexBlobIdxs()) {
-                AFL_VERIFY(idx < blobIds.size())("idx", idx)("blob_ids_size", blobIds.size())("path_id", portion.GetPathId())(
-                                   "portion_id", portion.GetPortionId());
+                AFL_VERIFY(idx < blobIds.size(),
+                    {"idx", idx},
+                    {"blobIdsSize", blobIds.size()},
+                    {"pathId", portion.GetPathId()},
+                    {"portionId", portion.GetPortionId()});
                 Result.emplace(blobIds[idx].GetLogoBlobId());
             }
         } else {
@@ -753,9 +761,13 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadBlobsToDelete(NIceDb::TNiceDb& db)
         const TString& blobIdStr = rowset.GetValue<NColumnShard::Schema::BlobsToDeleteWT::BlobId>();
         TString error;
         TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(blobIdStr, &DsGroupSelector, error);
-        AFL_VERIFY(blobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-        AFL_VERIFY(!Result.contains(blobId.GetLogoBlobId()))("blob_id", blobId.GetLogoBlobId())(
-            "error", "blob id is in both IndexColumnsV2 and BlobsToDeleteWT tables");
+        AFL_VERIFY(blobId.IsValid(),
+            {"event", "cannot_parse_blob"},
+            {"error", error},
+            {"originalString", blobIdStr});
+        AFL_VERIFY(!Result.contains(blobId.GetLogoBlobId()),
+            {"blobId", blobId.GetLogoBlobId()},
+            {"error", "blob id is in both IndexColumnsV2 and BlobsToDeleteWT tables"});
         ResultToDelete.emplace(blobId.GetLogoBlobId());
         if (!rowset.Next()) {
             Stats.OnStoppedOnBlobsToDelete();
@@ -810,14 +822,23 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
     for (ui32 i = 1; i < tokens.size(); ++i) {
         const TStringBuf token = tokens[i];
         const size_t eqPos = token.find('=');
-        AFL_VERIFY(eqPos != TStringBuf::npos)("error", "invalid param format, expected key=value")("token", token)("description", description);
+        AFL_VERIFY(eqPos != TStringBuf::npos,
+            {"error", "invalid param format, expected key=value"},
+            {"token", token},
+            {"description", description});
 
         const TStringBuf key = token.SubStr(0, eqPos);
         const TStringBuf value = token.SubStr(eqPos + 1);
         if (key == "batch_size") {
             const auto parsed = TryFromString<size_t>(TString(value));
-            AFL_VERIFY(parsed.Defined())("error", "cannot parse batch_size")("value", TString(value))("description", description);
-            AFL_VERIFY(*parsed > 0)("error", "batch_size has to be > 0")("value", *parsed)("description", description);
+            AFL_VERIFY(parsed.Defined(),
+                {"error", "cannot parse batch_size"},
+                {"value", TString(value)},
+                {"description", description});
+            AFL_VERIFY(*parsed > 0,
+                {"error", "batch_size has to be > 0"},
+                {"value", *parsed},
+                {"description", description});
             BatchSize = *parsed;
         } else if (key == "print_leaked_blob_ids") {
             if (value == "true") {
@@ -825,15 +846,23 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
             } else if (value == "false") {
                 PrintLeakedBlobIds = false;
             } else {
-                AFL_VERIFY(false)("error", "cannot parse print_leaked_blob_ids")("value", TString(value))("description", description);
+                AFL_VERIFY(false,
+                    {"error", "cannot parse print_leaked_blob_ids"},
+                    {"value", TString(value)},
+                    {"description", description});
             }
         } else if (key == "log_level") {
             NActors::NLog::EPriority parsedPriority = NActors::NLog::PRI_WARN;
-            AFL_VERIFY(TryParseLogPriority(value, parsedPriority))("error", "cannot parse log_level")("value", TString(value))(
-                "description", description);
+            AFL_VERIFY(TryParseLogPriority(value, parsedPriority),
+                {"error", "cannot parse log_level"},
+                {"value", TString(value)},
+                {"description", description});
             LogLevel = parsedPriority;
         } else {
-            AFL_VERIFY(false)("error", "unknown param key")("key", key)("description", description);
+            AFL_VERIFY(false,
+                {"error", "unknown param key"},
+                {"key", key},
+                {"description", description});
         }
     }
 

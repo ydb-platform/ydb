@@ -325,8 +325,10 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) {
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(presetId);
-    AFL_VERIFY(vIndex.IsEmpty() || schema.GetVersion() >= vIndex.GetLastSchema()->GetVersion())("empty", vIndex.IsEmpty())(
-                                                          "current", schema.GetVersion())("last", vIndex.GetLastSchema()->GetVersion());
+    AFL_VERIFY(vIndex.IsEmpty() || schema.GetVersion() >= vIndex.GetLastSchema()->GetVersion(),
+        {"empty", vIndex.IsEmpty()},
+        {"current", schema.GetVersion()},
+        {"last", vIndex.GetLastSchema()->GetVersion()});
 
     if (!vIndex.IsEmpty() && schema.GetVersion() == vIndex.GetLastSchema()->GetVersion()) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -363,7 +365,9 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
                 {"diff", schema.GetDiffVerified().DebugString()});
         }
     } else {
-        AFL_VERIFY(schema.HasSchema())("has_diff", schema.HasDiff())("is_empty", vIndex.IsEmpty());
+        AFL_VERIFY(schema.HasSchema(),
+            {"hasDiff", schema.HasDiff()},
+            {"isEmpty", vIndex.IsEmpty()});
         if (!indexInfo) {
             auto built = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
             AFL_VERIFY(built);
@@ -388,11 +392,13 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
 
     ISnapshotSchema::TPtr secondLast = vIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(vIndex.GetLastSchema()->GetVersion() - 1);
 
-    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");
+    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version,
+        {"reason", "incorrect schema registration order"});
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.HasDiff()) {
-        AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
+        AFL_VERIFY(prevSchema,
+            {"reason", "no base schema to apply diff for"});
         AFL_VERIFY(presetId == prevSchema->GetIndexInfo().GetPresetId());
         indexInfoOptional =
             NOlap::TIndexInfo::BuildFromProto(schema.GetDiffVerified(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
@@ -704,7 +710,9 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     }
 
     if (ActualizationStarted) {
-        NActors::TLogContextGuard logGuard = TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size());
+        YDB_LOG_CREATE_CONTEXT(
+            {"queue", "ttl"},
+            {"external_count", pathEviction.size()});
         for (auto&& i : GranulesStorage->GetTables()) {
             if (pathEviction.contains(i.first)) {
                 continue;

@@ -14,7 +14,8 @@ void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& 
 void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& indexSchema) {
     Id = indexSchema.GetId();
     Name = indexSchema.GetName();
-    AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
+    AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema),
+        {"incorrectProto", indexSchema.DebugString()});
 }
 
 bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {

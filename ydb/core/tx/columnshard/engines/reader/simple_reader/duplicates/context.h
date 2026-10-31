@@ -109,7 +109,8 @@ public:
     TFilterAccumulator(const TEvRequestFilter::TPtr& request);
 
     ~TFilterAccumulator() {
-        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());
+        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped(),
+            {"state", DebugString()});
     }
 
     TString DebugString() const {
@@ -256,7 +257,9 @@ public:
 
     TPortionInfo::TConstPtr GetPortion(const ui64 portionId) const {
         auto* findPortion = RequiredPortions.FindPtr(portionId);
-        AFL_VERIFY(findPortion)("id", portionId)("context", DebugString());
+        AFL_VERIFY(findPortion,
+            {"id", portionId},
+            {"context", DebugString()});
         return *findPortion;
     }
 

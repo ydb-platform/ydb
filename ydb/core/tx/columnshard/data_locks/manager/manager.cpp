@@ -8,7 +8,8 @@ namespace NKikimr::NOlap::NDataLocks {
 
 std::shared_ptr<TManager::TGuard> TManager::RegisterLock(const std::shared_ptr<ILock>& lock) {
     AFL_VERIFY(lock);
-    AFL_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second)("process_id", lock->GetLockName());
+    AFL_VERIFY(ProcessLocks.emplace(lock->GetLockName(), lock).second,
+        {"processId", lock->GetLockName()});
     YDB_LOG_DEBUG("",
         {"event", "lock"},
         {"processId", lock->GetLockName()});
@@ -19,7 +20,8 @@ void TManager::UnregisterLock(const TString& processId) {
     YDB_LOG_DEBUG("",
         {"event", "unlock"},
         {"processId", processId});
-    AFL_VERIFY(ProcessLocks.erase(processId))("process_id", processId);
+    AFL_VERIFY(ProcessLocks.erase(processId),
+        {"processId", processId});
 }
 
 std::optional<TString> TManager::IsLocked(

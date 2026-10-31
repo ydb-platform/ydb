@@ -42,7 +42,8 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
-    AFL_VERIFY(TObjectKey(GCTask->GetStorageId()).Parse(*ev->Get()->Key, logoBlobId, errorMessage))("error", errorMessage);
+    AFL_VERIFY(TObjectKey(GCTask->GetStorageId()).Parse(*ev->Get()->Key, logoBlobId, errorMessage),
+        {"error", errorMessage});
     BlobIdsToRemove.erase(logoBlobId);
     CheckFinished();
 }

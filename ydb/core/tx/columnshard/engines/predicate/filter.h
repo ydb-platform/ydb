@@ -216,7 +216,9 @@ protected:
         if (!entity.GetSourceRecordsCount()) {
             usage = false;
         } else {
-            AFL_VERIFY(recordIndex <= entity.GetSourceRecordsCount())("index", recordIndex)("count", entity.GetSourceRecordsCount());
+            AFL_VERIFY(recordIndex <= entity.GetSourceRecordsCount(),
+                {"index", recordIndex},
+                {"count", entity.GetSourceRecordsCount()});
             usage = recordIndex < entity.GetSourceRecordsCount();
         }
         return true;
@@ -343,8 +345,10 @@ private:
         }
         // Identity before position: a slot number only names this source while the sources set is the one
         // the cursor was taken on, and comparing a record index against another source explains nothing.
-        AFL_VERIFY(!PortionId || *PortionId == entity.GetSourceId())("source_idx", *SourceIdx)("cursor_portion_id", *PortionId)(
-                                               "found_source_id", entity.GetSourceId());
+        AFL_VERIFY(!PortionId || *PortionId == entity.GetSourceId(),
+            {"sourceIdx", *SourceIdx},
+            {"cursorPortionId", *PortionId},
+            {"foundSourceId", entity.GetSourceId()});
         return CheckRecordIndexIsBorder(entity, RecordIndex, usage);
     }
 
@@ -498,7 +502,9 @@ class TRangesBuilder {
                 return std::nullopt;
             }
             auto columns = schema->field_names();
-            AFL_VERIFY(columns.size() >= NumColumns)("schema", columns.size())("predicate", NumColumns);
+            AFL_VERIFY(columns.size() >= NumColumns,
+                {"schema", columns.size()},
+                {"predicate", NumColumns});
             columns.resize(NumColumns);
             return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false));
         }

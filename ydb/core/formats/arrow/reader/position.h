@@ -155,7 +155,9 @@ public:
     }
 
     std::shared_ptr<TSortableScanData> Trim(const ui64 numFields) const {
-        AFL_VERIFY(numFields < Fields.size())("req", numFields)("self", Fields.size());
+        AFL_VERIFY(numFields < Fields.size(),
+            {"req", numFields},
+            {"self", Fields.size()});
         return std::make_shared<TSortableScanData>(TSortableScanData(StartPosition, FinishPosition, LastInit, RecordsCount,
             std::vector<std::shared_ptr<NAccessor::IChunkedArray>>(Columns.begin(), Columns.begin() + numFields),
             std::vector<std::shared_ptr<arrow::Field>>(Fields.begin(), Fields.begin() + numFields)));
@@ -419,7 +421,9 @@ public:
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        AFL_VERIFY(Position < RecordsCount,
+            {"position", Position},
+            {"count", RecordsCount});
 
         if (dataColumns.size()) {
             Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns);
@@ -436,7 +440,9 @@ public:
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
         RecordsCount = batch->num_rows();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        AFL_VERIFY(Position < RecordsCount,
+            {"position", Position},
+            {"count", RecordsCount});
         Sorting = std::make_shared<TSortableScanData>(Position, batch);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
@@ -452,7 +458,9 @@ public:
             AFL_VERIFY(columns.front()->length() == columns[i]->length());
         }
         RecordsCount = columns.front()->length();
-        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        AFL_VERIFY(Position < RecordsCount,
+            {"position", Position},
+            {"count", RecordsCount});
         Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
@@ -531,7 +539,9 @@ public:
     }
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {
-        AFL_VERIFY(colIdx < Sorting->GetColumns().size())("req", colIdx)("size", Sorting->GetColumns().size());
+        AFL_VERIFY(colIdx < Sorting->GetColumns().size(),
+            {"req", colIdx},
+            {"size", Sorting->GetColumns().size()});
         return Sorting->GetColumns()[colIdx]->GetScalar(Sorting->GetPositionInChunk(colIdx, Position));
     }
 
@@ -684,9 +694,13 @@ public:
         if (!IsAvailablePosition(position)) {
             return false;
         }
-        AFL_VERIFY(Sorting->InitPosition(position))("pos", position)("count", RecordsCount);
+        AFL_VERIFY(Sorting->InitPosition(position),
+            {"pos", position},
+            {"count", RecordsCount});
         if (Data) {
-            AFL_VERIFY(Data->InitPosition(position))("pos", position)("count", RecordsCount);
+            AFL_VERIFY(Data->InitPosition(position),
+                {"pos", position},
+                {"count", RecordsCount});
         }
         Position = position;
         return true;

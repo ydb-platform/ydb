@@ -35,7 +35,8 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         const auto& portionInfo = portionInfoWithBlobs.GetPortionResult().GetPortionInfoPtr();
-        AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second)("portion_info", portionInfo->DebugString(true));
+        AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second,
+            {"portionInfo", portionInfo->DebugString(true)});
         portionInfoWithBlobs.GetPortionResult().SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
 }

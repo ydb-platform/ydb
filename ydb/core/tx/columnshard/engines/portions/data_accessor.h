@@ -190,8 +190,9 @@ public:
         AFL_VERIFY(ResultLoader);
         if (DataLoader) {
             AFL_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
-            AFL_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()))("data", DataLoader->GetField()->ToString())(
-                "result", ResultLoader->GetField()->ToString());
+            AFL_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()),
+                {"data", DataLoader->GetField()->ToString()},
+                {"result", ResultLoader->GetField()->ToString()});
         }
     }
 
@@ -212,7 +213,9 @@ public:
                 TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
-            AFL_VERIFY(RecordsCountByChunks == RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
+            AFL_VERIFY(RecordsCountByChunks == RecordsCount,
+                {"byChunks", RecordsCountByChunks},
+                {"expected", RecordsCount});
             AFL_VERIFY(DataLoader);
             return TPreparedColumn(std::move(BlobsInfo), DataLoader);
         }
@@ -240,7 +243,9 @@ private:
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunk", i.GetChunkIdx())("idx", chunkIdx);
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
+                    {"chunk", i.GetChunkIdx()},
+                    {"idx", chunkIdx});
                 chunkIdx = i.GetChunkIdx();
             }
         }
@@ -350,8 +355,10 @@ public:
                 if (itRecord->GetEntityId() < *itColumn) {
                     ++itRecord;
                 } else if (*itColumn < itRecord->GetEntityId()) {
-                    AFL_VERIFY(!validation || recordsInEntityCount)("problem", "validation")("reason", "no_chunks_for_column")(
-                        "column_id", *itColumn);
+                    AFL_VERIFY(!validation || recordsInEntityCount,
+                        {"problem", "validation"},
+                        {"reason", "no_chunks_for_column"},
+                        {"columnId", *itColumn});
                     ++itColumn;
                     recordsInEntityCount = 0;
                 } else {
@@ -587,7 +594,9 @@ public:
 
     ui32 GetSliceOffsetRows(const ui32 sliceBorderIdx) const {
         AFL_VERIFY(SliceBorderOffsets);
-        AFL_VERIFY(sliceBorderIdx < SliceBorderOffsets->size())("idx", sliceBorderIdx)("size", SliceBorderOffsets->size());
+        AFL_VERIFY(sliceBorderIdx < SliceBorderOffsets->size(),
+            {"idx", sliceBorderIdx},
+            {"size", SliceBorderOffsets->size()});
         return (*SliceBorderOffsets)[sliceBorderIdx];
     }
 };

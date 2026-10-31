@@ -40,7 +40,8 @@ public:
     }
 
     ui32 GetColumnId() const {
-        AFL_VERIFY(ColumnIds.size() == 1)("size", ColumnIds.size());
+        AFL_VERIFY(ColumnIds.size() == 1,
+            {"size", ColumnIds.size()});
         return *ColumnIds.begin();
     }
 

@@ -22,8 +22,10 @@ TConclusionStatus TWaitBackgroundProcessesCommand::DoExecute(TKikimrRunner& /*ki
         dataSourceCount = NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val();
     }
 
-    AFL_VERIFY(processScopeCount == 0 && dataSourceCount == 0)("error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds")(
-        "ProcessScopeCount", processScopeCount)("DataSourceCount", dataSourceCount);
+    AFL_VERIFY(processScopeCount == 0 && dataSourceCount == 0,
+        {"error", TStringBuilder() << "WAIT_BACKGROUND_PROCESSES timeout after " << TimeoutSeconds << " seconds"},
+        {"processScopeCount", processScopeCount},
+        {"dataSourceCount", dataSourceCount});
 
     Cerr << "WAIT_BACKGROUND_PROCESSES: All background processes completed successfully" << Endl;
     return TConclusionStatus::Success();

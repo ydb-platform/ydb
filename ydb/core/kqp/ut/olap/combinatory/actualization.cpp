@@ -10,7 +10,8 @@ namespace {
 void ExecuteAlter(TKikimrRunner& kikimr, const TString& alterQuery) {
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-    AFL_VERIFY(alterResult.GetStatus() == NYdb::EStatus::SUCCESS)("error", alterResult.GetIssues().ToString());
+    AFL_VERIFY(alterResult.GetStatus() == NYdb::EStatus::SUCCESS,
+        {"error", alterResult.GetIssues()});
 }
 }   // namespace
 

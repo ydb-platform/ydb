@@ -294,7 +294,8 @@ private:
     void HandleQueuedResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
         // A queued waiter leaves the wait queue only through the drain path, which always answers
         // Allow; every other decision is taken before the waiter is enqueued.
-        AFL_VERIFY(ev->Get()->GetDecision() == EAdmitDecision::Allow)("decision", (ui64)ev->Get()->GetDecision());
+        AFL_VERIFY(ev->Get()->GetDecision() == EAdmitDecision::Allow,
+            {"decision", (ui64)ev->Get()->GetDecision()});
         Queued = false;
         StartWrite(ctx);
         Finish(ctx);

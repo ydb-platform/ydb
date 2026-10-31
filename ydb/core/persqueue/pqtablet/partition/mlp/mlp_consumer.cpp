@@ -421,7 +421,8 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             break;
         }
         default:
-            AFL_ENSURE(false)("c", record.GetCookie());
+            AFL_ENSURE(false,
+                {"c", record.GetCookie()});
     }
 
     Storage->InitMetrics();
@@ -463,7 +464,8 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
         return;
     }
 
-    AFL_ENSURE(CurrentStateFunc() == &TConsumerActor::StateWrite)("c", record.GetCookie());
+    AFL_ENSURE(CurrentStateFunc() == &TConsumerActor::StateWrite,
+        {"c", record.GetCookie()});
 
     LOG_D("TX write finished");
     Become(&TConsumerActor::StateWork);
@@ -524,7 +526,9 @@ void TConsumerActor::UpdateStorageConfig() {
         Config.ShortDebugString()}
     );
 
-    AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
+    AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder(),
+        {"initial", Storage->GetKeepMessageOrder()},
+        {"new", Config.GetKeepMessageOrder()});
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
     Storage->SetReceiveAttemptIdPeriod(TDuration::MilliSeconds(Config.GetReadRequestAttemptIdPeriodMs()));
@@ -544,10 +548,10 @@ void TConsumerActor::InitializeDetailedMetrics() {
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
-    AFL_ENSURE(Config.GetGeneration() == ev->Get()->Config.GetGeneration())
-        ("c", Config.GetName())
-        ("l", Config.GetGeneration())
-        ("r", ev->Get()->Config.GetGeneration());
+    AFL_ENSURE(Config.GetGeneration() == ev->Get()->Config.GetGeneration(),
+        {"c", Config.GetName()},
+        {"l", Config.GetGeneration()},
+        {"r", ev->Get()->Config.GetGeneration()});
 
     TopicConfig = std::move(ev->Get()->TopicConfig);
     Config = std::move(ev->Get()->Config);
@@ -1086,7 +1090,8 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
 
-    AFL_ENSURE(IsSucess(ev))("e", ev->Get()->Response->DebugString());
+    AFL_ENSURE(IsSucess(ev),
+        {"e", ev->Get()->Response->DebugString()});
 }
 
 void TConsumerActor::HandleOnInit(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -1128,7 +1133,8 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(result.GetData());
-        AFL_ENSURE(res)("o", result.GetOffset());
+        AFL_ENSURE(res,
+            {"o", result.GetOffset()});
 
         for (auto& attr : *proto.MutableMessageMeta()) {
             if (attr.key() == MESSAGE_ATTRIBUTE_KEY) {
@@ -1228,7 +1234,9 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
             .Offset = offset,
             .SeqNo = seqNo
         });
-        AFL_ENSURE(result)("o", offset)("s", seqNo);
+        AFL_ENSURE(result,
+            {"o", offset},
+            {"s", seqNo});
     }
 
     ScheduleProcessing();
@@ -1301,7 +1309,9 @@ void TConsumerActor::NotifyPQRB(bool force) {
 
 const NKikimrPQ::TPQTabletConfig::TPartition& TConsumerActor::GetPartitionConfig(ui32 partitionId) const {
     const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = NPQ::GetPartitionConfigFromAllPartitions(TopicConfig, partitionId);
-    AFL_ENSURE(configPtr != nullptr)("partitionId", partitionId)("selfPartitionId", PartitionId);
+    AFL_ENSURE(configPtr != nullptr,
+        {"partitionId", partitionId},
+        {"selfPartitionId", PartitionId});
     return *configPtr;
 }
 

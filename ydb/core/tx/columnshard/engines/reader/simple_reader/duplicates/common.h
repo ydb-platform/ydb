@@ -142,7 +142,8 @@ public:
 
     TPortionInfo::TConstPtr GetPortionVerified(const ui64 portionId) const {
         auto* findPortion = Portions.FindPtr(portionId);
-        AFL_VERIFY(findPortion)("portion", portionId);
+        AFL_VERIFY(findPortion,
+            {"portion", portionId});
         return *findPortion;
     }
 };
@@ -193,7 +194,8 @@ public:
         : Begin(begin)
         , End(end)
     {
-        AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater)("borders", DebugString());
+        AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater,
+            {"borders", DebugString()});
     }
 
     TString DebugString() const {

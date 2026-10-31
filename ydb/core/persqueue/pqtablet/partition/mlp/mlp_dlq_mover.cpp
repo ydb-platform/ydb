@@ -127,7 +127,8 @@ void TDLQMoverActor::CreateWriter() {
 
     auto& chooser = TopicInfo.Info->PartitionChooser;
     TargetPartition = chooser->GetPartition(ProducerId);
-    AFL_ENSURE(TargetPartition)("p", ProducerId);
+    AFL_ENSURE(TargetPartition,
+        {"p", ProducerId});
 
     TPartitionWriterOpts opts; // TODO request units
     opts.WithDeduplication(true)
@@ -271,9 +272,9 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
     }
 
     bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
-    AFL_ENSURE(PendingMessagesSize >= messageSize)
-        ("PendingMessagesSize", PendingMessagesSize)
-        ("messageSize", messageSize);
+    AFL_ENSURE(PendingMessagesSize >= messageSize,
+        {"pendingMessagesSize", PendingMessagesSize},
+        {"messageSize", messageSize});
     PendingMessagesSize -= messageSize;
     if (processingPaused) {
         ProcessQueue();

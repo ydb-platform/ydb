@@ -108,7 +108,8 @@ public:
     }
 
     void OnWriteOperationFinished() {
-        AFL_VERIFY(OperationsInProgress > 0)("operations_in_progress", OperationsInProgress);
+        AFL_VERIFY(OperationsInProgress > 0,
+            {"operationsInProgress", OperationsInProgress});
         --OperationsInProgress;
     }
 
@@ -145,8 +146,11 @@ public:
     }
 
     void SetAborting() {
-        AFL_VERIFY(ReadyForAborting())("lock_id", GetLockId())("needs_aborting", NeedsAborting())(
-            "operations_in_progress", OperationsInProgress)("aborting", Aborting);
+        AFL_VERIFY(ReadyForAborting(),
+            {"lockId", GetLockId()},
+            {"needsAborting", NeedsAborting()},
+            {"operationsInProgress", OperationsInProgress},
+            {"aborting", Aborting});
         Aborting = true;
     }
 
@@ -155,8 +159,12 @@ public:
     }
 
     void SetAborted(const ui64 txId) {
-        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId)("arg_tx_id", txId)("assigned_tx_id", TxId)("lock_id", GetLockId())("aborting",
-                                               IsAborting())("aborted", Aborted);
+        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId,
+            {"argTxId", txId},
+            {"assignedTxId", TxId},
+            {"lockId", GetLockId()},
+            {"aborting", IsAborting()},
+            {"aborted", Aborted});
         Aborted = true;
     }
 
@@ -216,7 +224,8 @@ public:
 
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
-        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
+        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end(),
+            {"writeId", insertWriteId});
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
             {"event", "ask_by_insert_id"},
             {"writeId", insertWriteId},
@@ -226,8 +235,9 @@ public:
 
     void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
         const auto op = GetOperationVerified(operationId);
-        AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
-            "expected", JoinSeq(", ", insertions));
+        AFL_VERIFY(op->GetInsertWriteIds() == insertions,
+            {"operationData", JoinSeq(", ", op->GetInsertWriteIds())},
+            {"expected", JoinSeq(", ", insertions)});
         for (auto&& i : insertions) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
                 {"event", "add_write_id_to_operation_id"},
@@ -248,7 +258,8 @@ public:
 
     TWriteOperation::TPtr GetOperationVerified(const TOperationWriteId writeId) const {
         auto result = GetOperationOptional(writeId);
-        AFL_VERIFY(!!result)("op_id", writeId);
+        AFL_VERIFY(!!result,
+            {"opId", writeId});
         return result;
     }
 
@@ -287,13 +298,15 @@ public:
 
     TLockFeatures& GetLockFeaturesForTxVerified(const ui64 txId) {
         auto lockId = GetLockForTxOptional(txId);
-        AFL_VERIFY(lockId)("tx_id", txId);
+        AFL_VERIFY(lockId,
+            {"txId", txId});
         return GetLockVerified(*lockId);
     }
 
     ui64 GetLockForTxVerified(const ui64 txId) const {
         auto result = GetLockForTxOptional(txId);
-        AFL_VERIFY(result)("tx_id", txId);
+        AFL_VERIFY(result,
+            {"txId", txId});
         return *result;
     }
 
@@ -313,7 +326,8 @@ public:
 
     TLockFeatures& GetLockVerified(const ui64 lockId) {
         auto result = GetLockOptional(lockId);
-        AFL_VERIFY(result)("lock_id", lockId);
+        AFL_VERIFY(result,
+            {"lockId", lockId});
         return *result;
     }
 

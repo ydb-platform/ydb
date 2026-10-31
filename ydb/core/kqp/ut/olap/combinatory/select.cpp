@@ -43,16 +43,26 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
     const ui32 hApproves = controller->GetHeadersApprovedOnSelect().Val() - headerApproveStart;
     Cerr << "HEADER:" << hNoData << "/" << hSkip << "/" << hApproves << Endl;
     if (ExpectIndexSkip) {
-        AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("ireal", iSkip)("hreal", hSkip)(
-                                    "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
+        AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip,
+            {"expect", ExpectIndexSkip},
+            {"ireal", iSkip},
+            {"hreal", hSkip},
+            {"current", controller->GetIndexesSkippingOnSelect().Val()},
+            {"pred", indexSkipStart});
     }
     if (ExpectIndexNoData) {
-        AFL_VERIFY(iNoData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", iNoData)(
-                                "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
+        AFL_VERIFY(iNoData == *ExpectIndexNoData,
+            {"expect", ExpectIndexNoData},
+            {"real", iNoData},
+            {"current", controller->GetIndexesSkippedNoData().Val()},
+            {"pred", indexNoDataStart});
     }
     if (ExpectIndexApprove) {
-        AFL_VERIFY(iApproves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", iApproves)(
-                                  "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
+        AFL_VERIFY(iApproves == *ExpectIndexApprove,
+            {"expect", ExpectIndexApprove},
+            {"real", iApproves},
+            {"current", controller->GetIndexesApprovedOnSelect().Val()},
+            {"pred", indexApproveStart});
     }
     return TConclusionStatus::Success();
 }
@@ -70,20 +80,25 @@ TConclusionStatus TSelectCommand::DoDeserializeProperties(const TPropertiesColle
     }
     if (auto indexChecker = props.GetOptional("IDX_ND_SKIP_APPROVE")) {
         auto idxExpectations = StringSplitter(*indexChecker).SplitBySet(" ,.;").SkipEmpty().ToList<TString>();
-        AFL_VERIFY(idxExpectations.size() == 3)("size", idxExpectations.size())("string", indexChecker);
+        AFL_VERIFY(idxExpectations.size() == 3,
+            {"size", idxExpectations.size()},
+            {"string", indexChecker});
         if (idxExpectations[0] != "{}") {
             ui32 res;
-            AFL_VERIFY(TryFromString<ui32>(idxExpectations[0], res))("string", indexChecker);
+            AFL_VERIFY(TryFromString<ui32>(idxExpectations[0], res),
+                {"string", indexChecker});
             ExpectIndexNoData = res;
         }
         if (idxExpectations[1] != "{}") {
             ui32 res;
-            AFL_VERIFY(TryFromString<ui32>(idxExpectations[1], res))("string", indexChecker);
+            AFL_VERIFY(TryFromString<ui32>(idxExpectations[1], res),
+                {"string", indexChecker});
             ExpectIndexSkip = res;
         }
         if (idxExpectations[2] != "{}") {
             ui32 res;
-            AFL_VERIFY(TryFromString<ui32>(idxExpectations[2], res))("string", indexChecker);
+            AFL_VERIFY(TryFromString<ui32>(idxExpectations[2], res),
+                {"string", indexChecker});
             ExpectIndexApprove = res;
         }
     }

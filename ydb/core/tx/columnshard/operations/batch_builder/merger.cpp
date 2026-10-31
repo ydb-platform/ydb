@@ -84,8 +84,9 @@ NKikimr::NOlap::IMerger::TYdbConclusionStatus IMerger::MergeExistsDataOrdered(co
 NKikimr::NOlap::IMerger::TYdbConclusionStatus TUpdateMerger::OnEqualKeys(
     const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) {
     auto rGuard = Builder.StartRecord();
-    AFL_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size())
-    ("index", Schema->GetIndexInfo().GetColumnIds(false).size())("exists", exists.GetData().GetColumns().size());
+    AFL_VERIFY(Schema->GetIndexInfo().GetColumnIds(false).size() == exists.GetData().GetColumns().size(),
+        {"index", Schema->GetIndexInfo().GetColumnIds(false).size()},
+        {"exists", exists.GetData().GetColumns().size()});
     for (i32 columnIdx = 0; columnIdx < Schema->GetIndexInfo().ArrowSchema().num_fields(); ++columnIdx) {
         const std::optional<ui32>& incomingColumnIdx = IncomingColumnRemap[columnIdx];
         if (incomingColumnIdx && HasIncomingDataFlags[*incomingColumnIdx]->GetView(incoming.GetPosition())) {
@@ -129,8 +130,9 @@ TUpdateMerger::TUpdateMerger(const NArrow::TContainerWithIndexes<arrow::RecordBa
 
 NArrow::TContainerWithIndexes<arrow::RecordBatch> TUpdateMerger::BuildResultBatch() {
     auto resultBatch = Builder.Finalize();
-    AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::SpecialColumnsCount)("schema", Schema->GetColumnsCount())(
-                                              "result", resultBatch->num_columns());
+    AFL_VERIFY(Schema->GetColumnsCount() == (ui32)resultBatch->num_columns() + IIndexInfo::SpecialColumnsCount,
+        {"schema", Schema->GetColumnsCount()},
+        {"result", resultBatch->num_columns()});
     return NArrow::TContainerWithIndexes<arrow::RecordBatch>(resultBatch);
 }
 

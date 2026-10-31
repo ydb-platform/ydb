@@ -36,7 +36,11 @@ bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
         {"event", "allocated"},
         {"allocationId", Identifier},
         {"stage", Stage->GetName()});
-    AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName());
+    AFL_VERIFY(Allocation,
+        {"status", GetAllocationStatus()},
+        {"volume", AllocatedVolume},
+        {"id", Identifier},
+        {"stage", Stage->GetName()});
     auto allocationResult = Stage->Allocate(AllocatedVolume);
     if (allocationResult.IsFail()) {
         AllocationFailed = true;
@@ -73,7 +77,9 @@ bool TAllocationInfo::NeverFitsUnrestricted() const {
 }
 
 void TAllocationInfo::Fail(const TString& errorMessage) {
-    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Waiting)("status", GetAllocationStatus())("id", Identifier);
+    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Waiting,
+        {"status", GetAllocationStatus()},
+        {"id", Identifier});
     YDB_LOG_DEBUG("",
         {"event", "allocation_failed"},
         {"allocationId", Identifier},

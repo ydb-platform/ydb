@@ -20,7 +20,8 @@ public:
     }
 
     void RegisterPreset(const ui64 presetId) {
-        AFL_VERIFY(PresetVersionedIndex.emplace(presetId, std::make_shared<TVersionedIndex>()).second)("preset_id", presetId);
+        AFL_VERIFY(PresetVersionedIndex.emplace(presetId, std::make_shared<TVersionedIndex>()).second,
+            {"presetId", presetId});
     }
 
     const TVersionedIndex& GetDefaultVersionedIndex() const {

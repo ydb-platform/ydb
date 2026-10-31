@@ -90,7 +90,8 @@ private:
         while (TMonotonic::Now() - start < ExecutionTime) {
         }
         if (PerWorker) {
-            AFL_VERIFY(AssignedWorker < PerWorker->size())("worker", AssignedWorker);
+            AFL_VERIFY(AssignedWorker < PerWorker->size(),
+                {"worker", AssignedWorker});
             (*PerWorker)[AssignedWorker].Inc();
         }
         Counter->Inc();
@@ -291,7 +292,8 @@ public:
         };
 
         bool result = DoWithRetryOnRetCode(checkCount, TRetryOptions{retries, sleep});
-        AFL_VERIFY(result)("count", getCount());
+        AFL_VERIFY(result,
+            {"count", getCount()});
 
         actorSystem.Stop();
         actorSystem.Cleanup();

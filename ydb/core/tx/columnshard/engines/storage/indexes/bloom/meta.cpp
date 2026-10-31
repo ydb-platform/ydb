@@ -77,7 +77,8 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std
     const std::shared_ptr<arrow::Scalar>& value, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     const ui32 hashesCount = Request.ResolvedHashesCount();
     std::set<ui64> hashes;
-    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
+    AFL_VERIFY(op.GetOperation() == EOperation::Equals,
+        {"op", op.DebugString()});
     const ui32 bitsCount = data.GetBitsCount();
     if (!!category) {
         for (ui64 hashSeed = 0; hashSeed < hashesCount; ++hashSeed) {

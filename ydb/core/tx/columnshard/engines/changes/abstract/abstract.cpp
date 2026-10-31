@@ -33,8 +33,8 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
     YDB_LOG_CREATE_CONTEXT(
         {"taskId", GetTaskIdentifier()},
         {"taskClass", TypeString()});
-    AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started)(
-                                                                               "actual_stage", StateGuard.GetStage());
+    AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started,
+        {"actualStage", StateGuard.GetStage()});
 
     context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());
     const TMonotonic start = TMonotonic::Now();
@@ -88,8 +88,10 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
     YDB_LOG_WARN("",
         {"event", "Abort"},
         {"reason", context.ErrorMessage});
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted)(
-                                              "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
+    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted,
+        {"stage", StateGuard.GetStage()},
+        {"reason", context.ErrorMessage},
+        {"prevReason", AbortedReason});
     SetStage(NChanges::EStage::Aborted);
     AbortedReason = context.ErrorMessage;
     OnFinish(self, context);

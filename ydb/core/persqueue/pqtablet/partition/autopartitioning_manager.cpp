@@ -335,7 +335,8 @@ protected:
         auto partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
             return v.GetPartitionId() == PartitionId;
         });
-        AFL_ENSURE(partition)("p", PartitionId);
+        AFL_ENSURE(partition,
+            {"p", PartitionId});
         return partition;
     }
 

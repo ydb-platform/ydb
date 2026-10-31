@@ -135,7 +135,8 @@ struct TItemDeserializer<TSnapshotMessage> {
         if (data == end) {
             return false;
         }
-        AFL_ENSURE(data < end)("d", std::distance(end, data));
+        AFL_ENSURE(data < end,
+            {"d", std::distance(end, data)});
 
         memcpy(&msg.Common.Value, data, sizeof(TSnapshotMessage::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TSnapshotMessage::Common.Value);
@@ -201,7 +202,8 @@ struct TItemDeserializer<TMessageChange> {
         if (data == end) {
             return false;
         }
-        AFL_ENSURE(data < end)("d", std::distance(end, data));
+        AFL_ENSURE(data < end,
+            {"d", std::distance(end, data)});
 
         memcpy(&msg.Common.Value, data, sizeof(TMessageChange::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TMessageChange::Common.Value);
@@ -341,7 +343,8 @@ void DeserializeMetrics(TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedM
 }
 
 bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
-    AFL_ENSURE(snapshot.GetFormatVersion() == 1)("v", snapshot.GetFormatVersion());
+    AFL_ENSURE(snapshot.GetFormatVersion() == 1,
+        {"v", snapshot.GetFormatVersion()});
 
     auto& meta = snapshot.GetMeta();
     FirstOffset = meta.GetFirstOffset();
@@ -436,7 +439,8 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 }
 
 void TStorage::BuildAndLinkMessageGroups() {
-    AFL_ENSURE(MessageGroups.Groups.empty())("size", MessageGroups.Groups.size()); // multiple calls?
+    AFL_ENSURE(MessageGroups.Groups.empty(),
+        {"size", MessageGroups.Groups.size()}); // multiple calls?
     auto linkMessage = [this](ui64 offset, TMessage& message) {
         UpdateMessageGroupForNewMessage(offset, message);
     };
@@ -444,7 +448,8 @@ void TStorage::BuildAndLinkMessageGroups() {
 }
 
 bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
-    AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
+    AFL_ENSURE(wal.GetFormatVersion() == 1,
+        {"v", wal.GetFormatVersion()});
 
     DeserializeMetrics(Metrics, wal.GetMetrics());
 
@@ -479,13 +484,15 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
 
             auto [message, slowZone] = GetMessageInt(offset);
             if (message) {
-                AFL_ENSURE(!slowZone)("o", offset);
+                AFL_ENSURE(!slowZone,
+                    {"o", offset});
                 SlowMessages.insert_or_assign(offset, *message);
                 continue;
             }
 
             auto it = newMessages.find(offset);
-            AFL_ENSURE(it != newMessages.end())("o", offset);
+            AFL_ENSURE(it != newMessages.end(),
+                {"o", offset});
             auto& msg = it->second;
             TMessageData msgData = TMessageData{
                 .Status = static_cast<ui32>(EMessageStatus::Unprocessed),
@@ -568,7 +575,8 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         for (auto diff : wal.GetDeletedFromSlowZone()) {
             offset += diff;
             auto it = SlowMessages.find(offset);
-            AFL_ENSURE(it != SlowMessages.end())("o", offset);
+            AFL_ENSURE(it != SlowMessages.end(),
+                {"o", offset});
             UpdateMessageGroupForRemovedMessage(offset, it->second);
             removeMessage(it->second);
             SlowMessages.erase(it);

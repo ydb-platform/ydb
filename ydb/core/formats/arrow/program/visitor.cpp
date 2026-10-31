@@ -26,7 +26,9 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TExecutionVisitor::DoOnExit(
 }
 
 TConclusionStatus TExecutionVisitor::DoOnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) {
-    AFL_VERIFY(!ExecutionNode)("id", node.GetIdentifier())("ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs)));
+    AFL_VERIFY(!ExecutionNode,
+        {"id", node.GetIdentifier()},
+        {"ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs))});
     if (SkipActivity.empty() && node.GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
         const TStreamLogicProcessor* streamProc = static_cast<const TStreamLogicProcessor*>(node.GetProcessor().get());
         for (auto&& i : readyInputs) {

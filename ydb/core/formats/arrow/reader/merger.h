@@ -99,13 +99,15 @@ private:
             //                {"keySkip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             auto& anotherIterator = SortHeap.Current();
             if (PossibleSameVersionFlag) {
-                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)
-                ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
-                    "key", startSorting->BuildCursor(startPosition).DebugJson());
+                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater,
+                    {"r", startVersion->BuildCursor(startPosition).DebugJson()},
+                    {"a", anotherIterator.GetVersionColumns().DebugJson()},
+                    {"key", startSorting->BuildCursor(startPosition).DebugJson()});
             } else {
-                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less)
-                ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
-                    "key", startSorting->BuildCursor(startPosition).DebugJson());
+                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less,
+                    {"r", startVersion->BuildCursor(startPosition).DebugJson()},
+                    {"a", anotherIterator.GetVersionColumns().DebugJson()},
+                    {"key", startSorting->BuildCursor(startPosition).DebugJson()});
             }
             SortHeap.Next();
         }
@@ -170,7 +172,9 @@ public:
         if (!batch || (i64)batch->num_rows() == (i64)order.GetStart()) {
             return;
         }
-        AFL_VERIFY((i64)order.GetStart() < (i64)batch->num_rows())("start", order.GetStart())("num_rows", batch->num_rows());
+        AFL_VERIFY((i64)order.GetStart() < (i64)batch->num_rows(),
+            {"start", order.GetStart()},
+            {"numRows", batch->num_rows()});
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;

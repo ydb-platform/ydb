@@ -17,12 +17,14 @@ protected:
         const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& /*counters*/) override;
 
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override {
-        AFL_VERIFY(false)("problem", "unimplemented method");
+        AFL_VERIFY(false,
+            {"problem", "unimplemented method"});
         return nullptr;
     };
 
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override {
-        AFL_VERIFY(false)("problem", "unimplemented method");
+        AFL_VERIFY(false,
+            {"problem", "unimplemented method"});
         return nullptr;
     };
 
@@ -31,7 +33,8 @@ protected:
     }
 
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& /*action*/) const override {
-        AFL_VERIFY(false)("problem", "unimplemented method");
+        AFL_VERIFY(false,
+            {"problem", "unimplemented method"});
     };
 
     virtual bool DoLoad(IBlobManagerDb& /*dbBlobs*/) override {

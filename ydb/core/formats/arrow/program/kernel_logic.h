@@ -318,8 +318,7 @@ public:
                 using enum TIndexCheckOperation::EOperation;
 
                 AFL_VERIFY(op == Less || op == LessOrEqual ||
-                    op == Greater || op == GreaterOrEqual || op == Equals
-                );
+                    op == Greater || op == GreaterOrEqual || op == Equals);
             }
 
             switch(op) {

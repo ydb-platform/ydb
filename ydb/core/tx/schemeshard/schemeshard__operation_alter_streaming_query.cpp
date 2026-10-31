@@ -144,7 +144,9 @@ class TAlterStreamingQuery : public TSubOperation {
 
     TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
-        AFL_ENSURE(oldStreamingQueryInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
+        AFL_ENSURE(oldStreamingQueryInfo,
+            {"path", dstPath.PathString()},
+            {"pathId", dstPath->PathId});
 
         const auto& info = Transaction.GetCreateStreamingQuery();
         auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{

@@ -87,8 +87,12 @@ public:
         , SourceId(sourceId)
         , Filter(filter) {
         AFL_VERIFY(batch);
-        AFL_VERIFY(KeyColumns.IsSameSortingSchema(keySchema))("batch", KeyColumns.DebugJson())("schema", keySchema.ToString());
-        AFL_VERIFY(KeyColumns.IsSameDataSchema(dataSchema))("batch", KeyColumns.DebugJson())("schema", dataSchema.ToString());
+        AFL_VERIFY(KeyColumns.IsSameSortingSchema(keySchema),
+            {"batch", KeyColumns.DebugJson()},
+            {"schema", keySchema});
+        AFL_VERIFY(KeyColumns.IsSameDataSchema(dataSchema),
+            {"batch", KeyColumns.DebugJson()},
+            {"schema", dataSchema});
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetPosition(order.GetStart())));
         Y_ABORT_UNLESS(VersionColumns.InitPosition(GetPosition(order.GetStart())));
         if (Filter) {

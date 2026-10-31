@@ -86,7 +86,9 @@ TEngineLogsCounters::TEngineLogsCounters()
 }
 
 void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const {
-    AFL_VERIFY(evictCount * removeCount == 0)("evict", evictCount)("remove", removeCount);
+    AFL_VERIFY(evictCount * removeCount == 0,
+        {"evict", evictCount},
+        {"remove", removeCount});
     AFL_VERIFY(evictCount + removeCount);
     if (evictCount) {
         ActualizationTaskSizeEvict->Collect(evictCount);

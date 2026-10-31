@@ -365,7 +365,8 @@ public:
     }
 
     virtual void InitializeProcessing() override {
-        AFL_VERIFY(HasPortionAccessor())("type", GetType());
+        AFL_VERIFY(HasPortionAccessor(),
+            {"type", GetType()});
         TBase::InitializeProcessing();
     }
 
@@ -590,7 +591,8 @@ public:
     }
 
     virtual NArrow::TSimpleRow GetLastPK() const override {
-        AFL_VERIFY(false)("error", "GetLastPK not implemented");
+        AFL_VERIFY(false,
+            {"error", "GetLastPK not implemented"});
         return NArrow::TSimpleRow(nullptr, 0);
     }
 

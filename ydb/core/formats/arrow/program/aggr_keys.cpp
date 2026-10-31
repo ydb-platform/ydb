@@ -331,7 +331,8 @@ private:
         for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
             auto& source = sources[sourceIdx];
             const auto& acc = source->GetAccessorVerified(aggr.GetColumnInfo().GetColumnId());
-            AFL_VERIFY(acc->GetRecordsCount() == decoder[sourceIdx].size())("count", acc->GetRecordsCount());
+            AFL_VERIFY(acc->GetRecordsCount() == decoder[sourceIdx].size(),
+                {"count", acc->GetRecordsCount()});
             arrays.emplace_back(acc.get());
             if (!type) {
                 type = acc->GetDataType()->id();

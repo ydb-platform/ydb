@@ -65,11 +65,13 @@ void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpda
 
 
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    AFL_ENSURE(ev->Get()->ClustersList)("local_cluster", LocalCluster)("enabled", Enabled);
-    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size())
-        ("clusters", ev->Get()->ClustersList->Clusters.size())
-        ("local_cluster", LocalCluster)
-        ("enabled", Enabled);
+    AFL_ENSURE(ev->Get()->ClustersList,
+        {"localCluster", LocalCluster},
+        {"enabled", Enabled});
+    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size(),
+        {"clusters", ev->Get()->ClustersList->Clusters.size()},
+        {"localCluster", LocalCluster},
+        {"enabled", Enabled});
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 

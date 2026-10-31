@@ -289,7 +289,8 @@ std::set<NColumnShard::TUnifiedPathId> IPathIdTranslator::GetUnifiedPathIdsByInt
 std::set<NColumnShard::TSchemeShardLocalPathId> IPathIdTranslator::ResolveSchemeShardLocalPathIdsVerified(
     const TInternalPathId internalPathId) const {
     auto result = ResolveSchemeShardLocalPathIds(internalPathId);
-    AFL_VERIFY(result)("path_id", internalPathId.DebugString());
+    AFL_VERIFY(result,
+        {"pathId", internalPathId.DebugString()});
     return *result;
 }
 

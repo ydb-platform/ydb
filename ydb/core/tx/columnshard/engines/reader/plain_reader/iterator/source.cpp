@@ -103,7 +103,9 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
+        AFL_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", Portion->GetRecordsCount()});
     }
     YDB_LOG_DEBUG("",
         {"event", "chunks_stats"},

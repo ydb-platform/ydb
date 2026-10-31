@@ -22,7 +22,9 @@ public:
         , Schemas(std::move(schemas))
     {
         if (Schemas.size() > 1) {
-            AFL_VERIFY(GetStart() < GetFinish())("start", GetStart().DebugString())("finish", GetFinish().DebugString());
+            AFL_VERIFY(GetStart() < GetFinish(),
+                {"start", GetStart().DebugString()},
+                {"finish", GetFinish().DebugString()});
         }
     }
 

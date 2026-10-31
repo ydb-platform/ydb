@@ -86,8 +86,9 @@ public:
             StartExecution = TMonotonic::Now();
 
             LastCompletedTx = NOlap::TSnapshot(step, txId);
-            AFL_VERIFY(LastCompletedTx > Self->LastCompletedTx)("self.last_completed_tx", Self->LastCompletedTx)(
-                "last_completed_step", LastCompletedTx);
+            AFL_VERIFY(LastCompletedTx > Self->LastCompletedTx,
+                {"lastCompletedTx", Self->LastCompletedTx},
+                {"lastCompletedStep", LastCompletedTx});
             NIceDb::TNiceDb db(txc.DB);
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedStep, LastCompletedTx->GetPlanStep());
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());

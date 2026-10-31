@@ -24,7 +24,8 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     private:
         using TBase = NOlap::NGroupedMemoryManager::IAllocation;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-            AFL_VERIFY(false)("error", errorMessage);
+            AFL_VERIFY(false,
+                {"error", errorMessage});
         }
 
         virtual bool DoOnAllocated(std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard>&& guard,

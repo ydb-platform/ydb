@@ -165,7 +165,8 @@ public:
         : Stats(stats)
         , Records(records) {
         AFL_VERIFY(Records);
-        AFL_VERIFY(Records->num_columns() == 3)("count", Records->num_columns());
+        AFL_VERIFY(Records->num_columns() == 3,
+            {"count", Records->num_columns()});
         AFL_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
         AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());
         AFL_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::binary()->id());

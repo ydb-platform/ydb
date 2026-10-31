@@ -2742,7 +2742,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
-            AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            AFL_VERIFY(!rb || rb->num_rows() == 0,
+                {"count", rb->num_rows()});
             UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), numRows);
         }
         {

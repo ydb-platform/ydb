@@ -80,14 +80,16 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
     Normalizers.clear();
     if (HasAppData()) {
         for (auto&& i : AppDataVerified().ColumnShardConfig.GetRepairs()) {
-            AFL_VERIFY(i.GetDescription())("error", "repair normalization have to has unique description");
+            AFL_VERIFY(i.GetDescription(),
+                {"error", "repair normalization have to has unique description"});
             if (FinishedNormalizers.contains(TNormalizerFullId(i.GetClassName(), i.GetDescription()))) {
                 YDB_LOG_WARN("",
                     {"warning", "repair already processed"},
                     {"description", i.GetDescription()});
             } else {
                 auto component = INormalizerComponent::TFactory::MakeHolder(i.GetClassName(), ctx);
-                AFL_VERIFY(component)("class_name", i.GetClassName());
+                AFL_VERIFY(component,
+                    {"className", i.GetClassName()});
                 auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(component.Release()));
                 normalizer->SetIsRepair(true).SetIsDryRun(i.GetDryRun()).SetUniqueDescription(i.GetDescription());
             }
@@ -115,10 +117,13 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
             continue;
         }
         auto component = INormalizerComponent::TFactory::MakeHolder(::ToString(nType), ctx);
-        AFL_VERIFY(component)("class_name", ::ToString(nType));
+        AFL_VERIFY(component,
+            {"className", ::ToString(nType)});
         auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(component.Release()));
         AFL_VERIFY(normalizer->GetEnumSequentialIdVerified() == nType);
-        AFL_VERIFY(lastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(lastRegisteredNormalizer));
+        AFL_VERIFY(lastRegisteredNormalizer <= nType,
+            {"current", ToString(nType)},
+            {"last", ToString(lastRegisteredNormalizer)});
         lastRegisteredNormalizer = nType;
     }
 

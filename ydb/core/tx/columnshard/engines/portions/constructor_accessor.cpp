@@ -106,8 +106,9 @@ void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuild
     BlobIds = buildInfo.DetachBlobIds();
     for (auto&& rec : buildInfo.DetachRecords()) {
         AFL_VERIFY(rec.GetBlobRange().GetBlobIdxVerified() < GetBlobIdsCount());
-        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))("blobs", JoinSeq(",", GetBlobIds()))(
-            "range", rec.GetBlobRange().ToString());
+        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())),
+            {"blobs", JoinSeq(",", GetBlobIds())},
+            {"range", rec.GetBlobRange()});
         Records.push_back(std::move(rec));
     }
 }

@@ -169,7 +169,9 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     TWriteId MakeDeferredWriteIdFromOpts() const {
-        AFL_ENSURE(Opts.DeferredPublish)("topic", Opts.TopicPath)("tablet_id", TabletId);
+        AFL_ENSURE(Opts.DeferredPublish,
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId});
         NKikimrPQ::TWriteId proto;
         auto* deferred = proto.MutableDeferredPublicationApi();
         deferred->SetIntPublicationId(Opts.DeferredPublish->IntPublicationId);
@@ -392,7 +394,9 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void AbortDeferredStaging() {
-        AFL_ENSURE(HasWriteId())("topic", Opts.TopicPath)("tablet_id", TabletId);
+        AFL_ENSURE(HasWriteId(),
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId});
 
         auto ev = MakeRequest(PartitionId, PipeClient);
         auto& request = *ev->Record.MutablePartitionRequest();
@@ -489,8 +493,12 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void StartUpsertDestination() {
-        AFL_ENSURE(IsDeferredPublishWriter())("topic", Opts.TopicPath)("tablet_id", TabletId);
-        AFL_ENSURE(!Opts.Database.empty())("topic", Opts.TopicPath)("tablet_id", TabletId);
+        AFL_ENSURE(IsDeferredPublishWriter(),
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId});
+        AFL_ENSURE(!Opts.Database.empty(),
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId});
 
         auto* event = new TEvPartitionWriter::TEvRequestDeferredDestinationUpsert;
         event->IntPublicationId = Opts.DeferredPublish->IntPublicationId;
@@ -529,8 +537,12 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
-        AFL_ENSURE(HasWriteId())("topic", Opts.TopicPath)("tablet_id", TabletId);
-        AFL_ENSURE(HasSupportivePartitionId())("topic", Opts.TopicPath)("tablet_id", TabletId);
+        AFL_ENSURE(HasWriteId(),
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId});
+        AFL_ENSURE(HasSupportivePartitionId(),
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId});
 
         LOG_D("Start of a request to KQP to save PartitionId",
             {"sessionId", Opts.SessionId},
@@ -619,7 +631,11 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
             }
         }
 
-        AFL_ENSURE(sourceIdInfo.GetSeqNo() >= 0)("topic", Opts.TopicPath)("tablet_id", TabletId)("source_id", SourceId)("seq_no", sourceIdInfo.GetSeqNo());
+        AFL_ENSURE(sourceIdInfo.GetSeqNo() >= 0,
+            {"topic", Opts.TopicPath},
+            {"tabletId", TabletId},
+            {"sourceId", SourceId},
+            {"seqNo", sourceIdInfo.GetSeqNo()});
         if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
             sourceIdInfo.SetSeqNo(Opts.InitialSeqNo.value());
         }

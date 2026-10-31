@@ -344,7 +344,8 @@ private:
                     }
                 }
 
-                AFL_ENSURE(sinkOrTransformOutputsCount <= 1)("SinkOrTransformOutputsCount", sinkOrTransformOutputsCount);
+                AFL_ENSURE(sinkOrTransformOutputsCount <= 1,
+                    {"sinkOrTransformOutputsCount", sinkOrTransformOutputsCount});
             }
 
             return true;

@@ -16,8 +16,10 @@ public:
 
 public:
     TCodecImpl() {
-        AFL_ENSURE(TCoder::Sig() == TDecoder::Sig())("description", "Codecs signatures mismatch")
-            ("cd", ui16(TCoder::Sig()))("dc", ui16(TDecoder::Sig()));
+        AFL_ENSURE(TCoder::Sig() == TDecoder::Sig(),
+            {"description", "Codecs signatures mismatch"},
+            {"cd", ui16(TCoder::Sig())},
+            {"dc", ui16(TDecoder::Sig())});
     }
 
     TCodecSig Signature() const override {

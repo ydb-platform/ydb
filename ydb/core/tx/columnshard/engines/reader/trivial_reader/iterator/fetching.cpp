@@ -309,8 +309,9 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(NCommon::ID
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
     } else {
         AFL_VERIFY(StartIndex == 0);
-        AFL_VERIFY(RecordsCount == source.GetStageResult().GetBatch()->num_rows())("records_count", RecordsCount)(
-                                     "batch", source.GetStageResult().GetBatch()->num_rows());
+        AFL_VERIFY(RecordsCount == source.GetStageResult().GetBatch()->num_rows(),
+            {"recordsCount", RecordsCount},
+            {"batch", source.GetStageResult().GetBatch()->num_rows()});
     }
     contextTableConstruct.SetFilter(source.GetStageResult().GetNotAppliedFilter());
     if (source.GetStageResult().IsEmpty()) {
@@ -413,8 +414,9 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
     if (source.GetContext()->IsAborted()) {
         return;
     }
-    AFL_VERIFY(filter.GetRecordsCountVerified() == source.GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
-                                                     "source", source.GetRecordsCount());
+    AFL_VERIFY(filter.GetRecordsCountVerified() == source.GetRecordsCount(),
+        {"filter", filter.GetRecordsCountVerified()},
+        {"source", source.GetRecordsCount()});
 
     ReportTracing(source);
 

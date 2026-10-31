@@ -72,7 +72,9 @@ public:
                 result.append(i->GetData());
             }
             ChunksOrdered.clear();
-            AFL_VERIFY(result.size() == Size)("result", result.size())("expected", Size);
+            AFL_VERIFY(result.size() == Size,
+                {"result", result.size()},
+                {"expected", Size});
             return result;
         }
     };
@@ -88,7 +90,9 @@ private:
     }
 
     TBlobInfo& MutableBlobInfoVerified(const ui32 blobIndex) {
-        AFL_VERIFY(blobIndex < Blobs.size())("index", blobIndex)("size", Blobs.size());
+        AFL_VERIFY(blobIndex < Blobs.size(),
+            {"index", blobIndex},
+            {"size", Blobs.size()});
         return Blobs[blobIndex];
     }
 

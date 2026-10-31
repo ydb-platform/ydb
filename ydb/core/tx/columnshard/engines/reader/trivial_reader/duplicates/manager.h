@@ -89,7 +89,8 @@ private:
             hFunc(TEvMergeBordersResult, Handle);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
             default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+                AFL_VERIFY(false,
+                    {"unexpectedEvent", ev->GetTypeName()});
         }
     }
 

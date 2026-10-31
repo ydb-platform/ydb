@@ -167,7 +167,9 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 
-    AFL_VERIFY(ev->Get()->Generation == ScanGen)("ev_gen", ev->Get()->Generation)("scan_gen", ScanGen);
+    AFL_VERIFY(ev->Get()->Generation == ScanGen,
+        {"evGen", ev->Get()->Generation},
+        {"scanGen", ScanGen});
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
     AFL_VERIFY(ev->Get()->MaxChunksCount == 1);
@@ -397,9 +399,13 @@ bool TColumnShardScan::ProduceResults() noexcept {
         auto pNew = result.GetScanCursor()->GetPKCursor();
         auto pOld = CurrentLastReadKey->GetPKCursor();
         if (ReadMetadataRange->IsAscSorted()) {
-            AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
+            AFL_VERIFY(*pOld <= *pNew,
+                {"old", pOld->DebugString()},
+                {"new", pNew->DebugString()});
         } else if (ReadMetadataRange->IsDescSorted()) {
-            AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
+            AFL_VERIFY(*pNew <= *pOld,
+                {"old", pOld->DebugString()},
+                {"new", pNew->DebugString()});
         }
     }
     CurrentLastReadKey = result.GetScanCursor();

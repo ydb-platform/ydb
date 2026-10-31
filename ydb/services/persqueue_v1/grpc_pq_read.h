@@ -129,7 +129,9 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         return;
     } else {
 
-        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
+        AFL_ENSURE(TopicsHandler != nullptr,
+            {"localCluster", LocalCluster},
+            {"haveClusters", HaveClusters});
         const ui64 cookie = NextCookie();
 
         LOG_D("New session created cookie",

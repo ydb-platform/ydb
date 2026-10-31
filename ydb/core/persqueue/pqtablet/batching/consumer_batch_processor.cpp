@@ -111,16 +111,17 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     HasCurrentCPUUsagePartitionId = true;
 
     auto* event = context.Event.Get();
-    AFL_ENSURE(event)("description", "Unexpected empty event in TConsumerBatchProcessor");
-    AFL_ENSURE(event->Type() == TEvPQ::EvProxyResponse)
-        ("description", "Unexpected event type in TConsumerBatchProcessor")
-        ("eventType", event->Type());
+    AFL_ENSURE(event,
+        {"description", "Unexpected empty event in TConsumerBatchProcessor"});
+    AFL_ENSURE(event->Type() == TEvPQ::EvProxyResponse,
+        {"description", "Unexpected event type in TConsumerBatchProcessor"},
+        {"eventType", event->Type()});
 
     auto* nativeEvent = static_cast<TEvPQ::TEvProxyResponse*>(event);
-    AFL_ENSURE(nativeEvent->Response->HasPartitionResponse())
-        ("description", "Unexpected TEvProxyResponse without PartitionResponse in TConsumerBatchProcessor");
-    AFL_ENSURE(nativeEvent->Response->GetPartitionResponse().HasCmdReadResult())
-        ("description", "Unexpected TEvProxyResponse without CmdReadResult in TConsumerBatchProcessor");
+    AFL_ENSURE(nativeEvent->Response->HasPartitionResponse(),
+        {"description", "Unexpected TEvProxyResponse without PartitionResponse in TConsumerBatchProcessor"});
+    AFL_ENSURE(nativeEvent->Response->GetPartitionResponse().HasCmdReadResult(),
+        {"description", "Unexpected TEvProxyResponse without CmdReadResult in TConsumerBatchProcessor"});
 
     auto* readResult = nativeEvent->Response->MutablePartitionResponse()->MutableCmdReadResult();
     auto* results = readResult->MutableResult();

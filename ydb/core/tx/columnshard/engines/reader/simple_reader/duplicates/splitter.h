@@ -170,8 +170,11 @@ public:
     }
 
     bool IsDone() const {
-        AFL_VERIFY(Portions.empty() == (NextInterval == Intervals.size()))("portions", Portions.size())("current", CurrentPortions.size())(
-                                         "next", NextInterval)("intervals", Intervals.size());
+        AFL_VERIFY(Portions.empty() == (NextInterval == Intervals.size()),
+            {"portions", Portions.size()},
+            {"current", CurrentPortions.size()},
+            {"next", NextInterval},
+            {"intervals", Intervals.size()});
         return NextInterval == Intervals.size();
     }
 };
@@ -184,9 +187,9 @@ private:
 
 public:
     void AppendInterval(const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& portions) {
-        AFL_VERIFY(Intervals.empty() || Intervals.back().GetEnd().IsEquivalent(begin) || Intervals.back().GetEnd() < begin)(
-                                                                                         "last", Intervals.back().GetEnd().DebugString())(
-                                                                                         "new", begin.DebugString());
+        AFL_VERIFY(Intervals.empty() || Intervals.back().GetEnd().IsEquivalent(begin) || Intervals.back().GetEnd() < begin,
+            {"last", Intervals.back().GetEnd().DebugString()},
+            {"new", begin.DebugString()});
         const ui64 currentIntervalIdx = Intervals.size();
         Intervals.emplace_back(begin, end, portions);
 
@@ -240,8 +243,9 @@ public:
         };
 
         splitter.ForEachIntersectingInterval(callback, basePortionId);
-        AFL_VERIFY(builder.NumIntervals() == intervalIdxs.size())("builder", builder.NumIntervals())(
-                                               "intervals", TStringBuilder() << '[' << JoinSeq(',', intervalIdxs) << ']');
+        AFL_VERIFY(builder.NumIntervals() == intervalIdxs.size(),
+            {"builder", builder.NumIntervals()},
+            {"intervals", TStringBuilder() << '[' << JoinSeq(',', intervalIdxs) << ']'});
         return builder.Build();
     }
 

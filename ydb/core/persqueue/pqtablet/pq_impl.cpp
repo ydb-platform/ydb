@@ -103,7 +103,9 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
 
     if (graph) {
         auto* node = graph.GetPartition(partitionId);
-        AFL_ENSURE(node)("partition_id", partitionId)("graph", graph.DebugString());
+        AFL_ENSURE(node,
+            {"partitionId", partitionId},
+            {"graph", graph.DebugString()});
         for (const auto& p : partitionsData.GetPartition()) {
             if (node->IsParent(p.GetPartitionId())) {
                 for (const auto& g : p.GetMessageGroup()) {
@@ -1251,7 +1253,8 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                                                   config.GetLocalDC());
     topicConverter = converterFactory->MakeTopicConverter(config);
     AFL_ENSURE(topicConverter);
-    AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
+    AFL_ENSURE(topicConverter->IsValid(),
+        {"reason", topicConverter->GetReason()});
 }
 
 void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
@@ -3584,7 +3587,8 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::MovePendingDeferredReadSetAcks()
 {
-    AFL_ENSURE(DeferredReadSetAcks.empty())("DeferredReadSetAcks", DeferredReadSetAcks.size());
+    AFL_ENSURE(DeferredReadSetAcks.empty(),
+        {"deferredReadSetAcks", DeferredReadSetAcks.size()});
     DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
     PendingDeferredReadSetAcks.clear();
 }

@@ -39,7 +39,8 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 return false;
 
             while (!dataRowset.EndOfSet()) { //found out topic info
-                AFL_ENSURE(!Self->Inited)("tablet_id", Self->TabletID());
+                AFL_ENSURE(!Self->Inited,
+                    {"tabletId", Self->TabletID()});
                 Self->PathId  = dataRowset.GetValue<Schema::Data::PathId>();
                 Self->Topic   = dataRowset.GetValue<Schema::Data::Topic>();
                 Self->Path    = dataRowset.GetValue<Schema::Data::Path>();
@@ -56,7 +57,10 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
                 if (!config.empty()) {
                     bool res = Self->TabletConfig.ParseFromString(config);
-                    AFL_ENSURE(res)("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
+                    AFL_ENSURE(res,
+                        {"tabletId", Self->TabletID()},
+                        {"path", Self->Path},
+                        {"topic", Self->Topic});
 
                     Migrate(Self->TabletConfig);
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
@@ -117,9 +121,12 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
         } catch (const TNotReadyTabletException&) {
             return false;
         } catch (...) {
-            AFL_ENSURE(false)("reason", "there must be no leaked exceptions")
-                ("exception", CurrentExceptionMessage())
-                ("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
+            AFL_ENSURE(false,
+                {"reason", "there must be no leaked exceptions"},
+                {"exception", CurrentExceptionMessage()},
+                {"tabletId", Self->TabletID()},
+                {"path", Self->Path},
+                {"topic", Self->Topic});
         }
         return true;
     }

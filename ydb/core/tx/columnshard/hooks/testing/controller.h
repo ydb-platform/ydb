@@ -149,8 +149,10 @@ private:
 
         void Check() const {
             AFL_VERIFY(OwnerTabletId);
-            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)("blob_id", BlobId.ToStringNew())(
-                "shared", JoinSeq(",", SharedTabletIdsFromShared))("owned", JoinSeq(",", SharedTabletIdsFromOwner));
+            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner,
+                {"blobId", BlobId.ToStringNew()},
+                {"shared", JoinSeq(",", SharedTabletIdsFromShared)},
+                {"owned", JoinSeq(",", SharedTabletIdsFromOwner)});
         }
 
         void DebugString(const TString& delta, TStringBuilder& sb) const {
@@ -389,12 +391,14 @@ public:
 
     void RegisterLock(const TString& name, const std::shared_ptr<NOlap::NDataLocks::ILock>& lock) {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(ExternalLocks.emplace(name, lock).second)("name", name);
+        AFL_VERIFY(ExternalLocks.emplace(name, lock).second,
+            {"name", name});
     }
 
     void UnregisterLock(const TString& name) {
         TGuard<TMutex> g(Mutex);
-        AFL_VERIFY(ExternalLocks.erase(name))("name", name);
+        AFL_VERIFY(ExternalLocks.erase(name),
+            {"name", name});
     }
 
     bool HasPKSortingOnly() const;

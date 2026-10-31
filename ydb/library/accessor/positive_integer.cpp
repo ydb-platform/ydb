@@ -9,18 +9,26 @@ TPositiveControlInteger::TPositiveControlInteger(const i64 value)
 }
 
 TPositiveControlInteger::TPositiveControlInteger(const ui64 value): Value(value) {
-	AFL_VERIFY(Value.Val() >= 0)("value", Value.Val())("init", value);
+	AFL_VERIFY(Value.Val() >= 0,
+		{"value", Value.Val()},
+		{"init", value});
 }
 
 ui64 TPositiveControlInteger::Add(const ui64 value) {
 	const i64 result = Value.Add(value);
-	AFL_VERIFY(result >= 0)("base", Value.Val())("delta", value)("result", result);
+	AFL_VERIFY(result >= 0,
+		{"base", Value.Val()},
+		{"delta", value},
+		{"result", result});
 	return result;
 }
 
 ui64 TPositiveControlInteger::Sub(const ui64 value) {
 	i64 valDelta = Value.Sub(value);
-	AFL_VERIFY(valDelta >= 0)("base", Value.Val())("delta", value)("sub", valDelta);
+	AFL_VERIFY(valDelta >= 0,
+		{"base", Value.Val()},
+		{"delta", value},
+		{"sub", valDelta});
 	return valDelta;
 }
 
@@ -36,7 +44,9 @@ ui64 TPositiveControlInteger::Val() const {
 
 TPositiveIncreasingControlInteger& TPositiveIncreasingControlInteger::operator=(const TPositiveIncreasingControlInteger& v) {
 	if (&v != this) {
-		AFL_VERIFY(Value < v.Value)("from", Value)("to", v.Value);
+		AFL_VERIFY(Value < v.Value,
+			{"from", Value},
+			{"to", v.Value});
 		Value = v.Value;
 	}
 	return *this;

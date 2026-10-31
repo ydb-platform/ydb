@@ -696,9 +696,9 @@ void TPartition::BlobsForCompactionWereWrite()
     CompactionBlobEncoder.SyncHeadKeys();
     CompactionBlobEncoder.SyncNewHeadKey();
 
-    AFL_ENSURE(CompactionBlobEncoder.EndOffset == CompactionBlobEncoder.Head.GetNextOffset())
-        ("EndOffset", CompactionBlobEncoder.EndOffset)
-        ("NextOffset", CompactionBlobEncoder.Head.GetNextOffset());
+    AFL_ENSURE(CompactionBlobEncoder.EndOffset == CompactionBlobEncoder.Head.GetNextOffset(),
+        {"endOffset", CompactionBlobEncoder.EndOffset},
+        {"nextOffset", CompactionBlobEncoder.Head.GetNextOffset()});
 
     if (!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0) { //has compactedkeys or head is already empty
         CompactionBlobEncoder.SyncHeadFromNewHead();
@@ -734,11 +734,11 @@ void TPartition::TryProcessGetWriteInfoRequest(const TActorContext& ctx)
 void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)
 {
     if (CompactionBlobEncoder.HeadCleared) {
-        AFL_ENSURE(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0)
-            ("CompactedKeys.size", CompactionBlobEncoder.CompactedKeys.size())
-            ("Head.Offset", CompactionBlobEncoder.Head.Offset)
-            ("Head.PartNo", CompactionBlobEncoder.Head.PartNo)
-            ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize);
+        AFL_ENSURE(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0,
+            {"compactedKeysSize", CompactionBlobEncoder.CompactedKeys.size()},
+            {"headOffset", CompactionBlobEncoder.Head.Offset},
+            {"headPartNo", CompactionBlobEncoder.Head.PartNo},
+            {"headPackedSize", CompactionBlobEncoder.Head.PackedSize});
         for (ui32 i = 0; i < TotalLevels; ++i) {
             CompactionBlobEncoder.DataKeysHead[i].Clear();
         }
@@ -819,16 +819,16 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(const bool headCl
             ("res.second", res.second)
             ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize);
     }
-    AFL_ENSURE(res.second <= MaxBlobSize)
-        ("headCleared", headCleared)
-        ("needCompaction", needCompaction)
-        ("headSize", headSize)
-        ("Head.PackedSize", CompactionBlobEncoder.Head.PackedSize)
-        ("NewHead.PackedSize", CompactionBlobEncoder.NewHead.PackedSize)
-        ("key", res.first.ToString())
-        ("size", res.second)
-        ("MaxBlobSize", MaxBlobSize)
-        ("MaxSizeCheck", MaxSizeCheck);
+    AFL_ENSURE(res.second <= MaxBlobSize,
+        {"headCleared", headCleared},
+        {"needCompaction", needCompaction},
+        {"headSize", headSize},
+        {"headPackedSize", CompactionBlobEncoder.Head.PackedSize},
+        {"newHeadPackedSize", CompactionBlobEncoder.NewHead.PackedSize},
+        {"key", res.first},
+        {"size", res.second},
+        {"maxBlobSize", MaxBlobSize},
+        {"maxSizeCheck", MaxSizeCheck});
 
     return res;
 }
@@ -875,10 +875,10 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
 
     if (!key.IsHead()) {
         if (!CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.CompactedKeys.empty()) {
-            AFL_ENSURE(CompactionBlobEncoder.DataKeysBody.back().Key.GetOffset() + CompactionBlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset())
-                ("LAST KEY", CompactionBlobEncoder.DataKeysBody.back().Key.ToString())
-                ("HeadOffset", CompactionBlobEncoder.Head.Offset)
-                ("NEW KEY", key.ToString());
+            AFL_ENSURE(CompactionBlobEncoder.DataKeysBody.back().Key.GetOffset() + CompactionBlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
+                {"lastKey", CompactionBlobEncoder.DataKeysBody.back().Key},
+                {"headOffset", CompactionBlobEncoder.Head.Offset},
+                {"newKey", key});
         }
 
         CompactionBlobEncoder.CompactedKeys.push_back(res);

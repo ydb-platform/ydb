@@ -36,7 +36,9 @@ public:
         , PackSize(packSize)
         , ObjectsCount(objectsCount)
     {
-        AFL_VERIFY(objectsCount >= packsCount)("objects_count", objectsCount)("packs_count", packsCount);
+        AFL_VERIFY(objectsCount >= packsCount,
+            {"objectsCount", objectsCount},
+            {"packsCount", packsCount});
         AFL_VERIFY(PackSize);
         AFL_VERIFY(PacksCount);
     }

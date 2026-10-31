@@ -64,9 +64,11 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
             if (idx) {
                 const ui32 predKeyIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx - 1]];
                 AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
-                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex))(
-                                                                   "r1", arrRecordIndexValue->Value(idx - 1))(
-                                                                   "r2", arrRecordIndexValue->Value(idx))("k1", predKeyIndex)("k2", newIndex);
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex),
+                    {"r1", arrRecordIndexValue->Value(idx - 1)},
+                    {"r2", arrRecordIndexValue->Value(idx)},
+                    {"k1", predKeyIndex},
+                    {"k2", newIndex});
             }
         }
     } else {
@@ -74,9 +76,11 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
             TStatusValidator::Validate(KeyIndex->Append(RTKeyIndexes[idx]));
             if (idx) {
                 AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
-                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && RTKeyIndexes[idx - 1] < RTKeyIndexes[idx]))("r1",
-                                                                   arrRecordIndexValue->Value(idx - 1))("r2", arrRecordIndexValue->Value(idx))(
-                                                                   "k1", RTKeyIndexes[idx - 1])("k2", RTKeyIndexes[idx]);
+                (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && RTKeyIndexes[idx - 1] < RTKeyIndexes[idx]),
+                    {"r1", arrRecordIndexValue->Value(idx - 1)},
+                    {"r2", arrRecordIndexValue->Value(idx)},
+                    {"k1", RTKeyIndexes[idx - 1]},
+                    {"k2", RTKeyIndexes[idx]});
             }
         }
     }
@@ -151,15 +155,21 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
                 AFL_VERIFY(false);
             } else if (itOthersData.GetRecordIndex() < filterIntervalStart + *it) {
                 if (currentAcceptance) {
-                    AFL_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex())("shift", shiftSkippedCount)(
-                                                      "record_index", itOthersData.GetRecordIndex());
+                    AFL_VERIFY(shiftSkippedCount <= itOthersData.GetRecordIndex(),
+                        {"shift", shiftSkippedCount},
+                        {"recordIndex", itOthersData.GetRecordIndex()});
                     const ui32 filteredRecordIndex = itOthersData.GetRecordIndex() - shiftSkippedCount;
                     if (predRecordIndex) {
-                        AFL_VERIFY(*predRecordIndex <= filteredRecordIndex)("pred", predRecordIndex)("index", filteredRecordIndex);
+                        AFL_VERIFY(*predRecordIndex <= filteredRecordIndex,
+                            {"pred", predRecordIndex},
+                            {"index", filteredRecordIndex});
                     }
                     predRecordIndex = filteredRecordIndex;
-                    AFL_VERIFY(filteredRecordIndex < resultRecordsCount)("new_record_index", filteredRecordIndex)("count", resultRecordsCount)(
-                        "shift", shiftSkippedCount)("record_index", itOthersData.GetRecordIndex());
+                    AFL_VERIFY(filteredRecordIndex < resultRecordsCount,
+                        {"newRecordIndex", filteredRecordIndex},
+                        {"count", resultRecordsCount},
+                        {"shift", shiftSkippedCount},
+                        {"recordIndex", itOthersData.GetRecordIndex()});
                     NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, filteredRecordIndex);
                     NArrow::Append<arrow::BinaryType>(*valuesBuilder, arrow::util::string_view(itOthersData.GetRawValue().data(), itOthersData.GetRawValue().size()));
                     originalKeys.emplace_back(itOthersData.GetKeyIndex());

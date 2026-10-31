@@ -150,10 +150,14 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         return TConclusionStatus::Fail("Incorrect proto cursor PackIdx value: " + proto.DebugString());
     }
     if (proto.HasNextPathId()) {
-        AFL_VERIFY(proto.GetNextPathId() == NextPathId->GetRawValue())("next_local", *NextPathId)("proto", proto.GetNextPathId());
+        AFL_VERIFY(proto.GetNextPathId() == NextPathId->GetRawValue(),
+            {"nextLocal", *NextPathId},
+            {"proto", proto.GetNextPathId()});
     }
     if (proto.HasNextPortionId()) {
-        AFL_VERIFY(proto.GetNextPortionId() == *NextPortionId)("next_local", *NextPortionId)("proto", proto.GetNextPortionId());
+        AFL_VERIFY(proto.GetNextPortionId() == *NextPortionId,
+            {"nextLocal", *NextPortionId},
+            {"proto", proto.GetNextPortionId()});
     }
     if (proto.HasAckReceivedForPackIdx()) {
         AckReceivedForPackIdx = proto.GetAckReceivedForPackIdx();

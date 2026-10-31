@@ -54,7 +54,8 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     }
     TBlobAddress bAddress(ev->Cookie, ev->Get()->Channel);
     auto itGroup = ListsByGroupId.find(bAddress);
-    AFL_VERIFY(itGroup != ListsByGroupId.end())("address", bAddress.DebugString());
+    AFL_VERIFY(itGroup != ListsByGroupId.end(),
+        {"address", bAddress.DebugString()});
     ListsByGroupId.erase(itGroup);
 }
 

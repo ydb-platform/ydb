@@ -44,7 +44,9 @@ bool TSyncPointLimitControl::DrainToLimit() {
 }
 
 std::unique_ptr<NCommon::TDataSourceLease> TSyncPointLimitControl::OnAddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
-    AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
+    AFL_VERIFY(FetchedCount < Limit,
+        {"fetched", FetchedCount},
+        {"limit", Limit});
     UnfilledIterators.emplace_back(TSourceIterator(lease->ShareReadOnly()));
 
     return TBase::OnAddSource(std::move(lease));
@@ -79,19 +81,28 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
         if (FindIf(UnfilledIterators, [&](const auto& item) {
                 return item.GetSourceIdx() == source.GetSourceIdx();
             }) != UnfilledIterators.end()) {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx())("issue #28037", "portion is in UnfilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source.GetAs<IDataSource>()->GetFirstPK().DebugString())(
-                    "source_idx", source.GetSourceIdx());
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
+                {"#_issue #28037", "portion is in UnfilledIterators"},
+                {"front", UnfilledIterators.front().DebugString()},
+                {"back", UnfilledIterators.back().DebugString()},
+                {"source", source.GetAs<IDataSource>()->GetFirstPK().DebugString()},
+                {"sourceIdx", source.GetSourceIdx()});
         } else if (FindIf(FilledIterators, [&](const auto& item) {
                        return item.GetSourceIdx() == source.GetSourceIdx();
                    }) != FilledIterators.end()) {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx())("issue #28037", "portion is in FilledIterators")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source.GetAs<IDataSource>()->GetFirstPK().DebugString())(
-                    "source_idx", source.GetSourceIdx());
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
+                {"#_issue #28037", "portion is in FilledIterators"},
+                {"front", UnfilledIterators.front().DebugString()},
+                {"back", UnfilledIterators.back().DebugString()},
+                {"source", source.GetAs<IDataSource>()->GetFirstPK().DebugString()},
+                {"sourceIdx", source.GetSourceIdx()});
         } else {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx())("issue #28037", "unknown portion")("front", UnfilledIterators.front().DebugString())(
-                    "back", UnfilledIterators.back().DebugString())("source", source.GetAs<IDataSource>()->GetFirstPK().DebugString())(
-                    "source_idx", source.GetSourceIdx());
+            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
+                {"#_issue #28037", "unknown portion"},
+                {"front", UnfilledIterators.front().DebugString()},
+                {"back", UnfilledIterators.back().DebugString()},
+                {"source", source.GetAs<IDataSource>()->GetFirstPK().DebugString()},
+                {"sourceIdx", source.GetSourceIdx()});
         }
     }
 
@@ -113,7 +124,9 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
         if (!PKPrefixSize) {
             PKPrefixSize = arrs.size();
         } else {
-            AFL_VERIFY(*PKPrefixSize == arrs.size())("prefix", PKPrefixSize)("arr", arrs.size());
+            AFL_VERIFY(*PKPrefixSize == arrs.size(),
+                {"prefix", PKPrefixSize},
+                {"arr", arrs.size()});
         }
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"event", "DoOnSourceCheckLimitFillIterator"},

@@ -40,7 +40,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         }
                         return true;
                     }
-                    AFL_VERIFY(false)("message", "Unsupported arrow type for building an index");
+                    AFL_VERIFY(false,
+                        {"message", "Unsupported arrow type for building an index"});
                     return false;
                 });
             }

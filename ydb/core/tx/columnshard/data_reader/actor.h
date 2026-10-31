@@ -71,7 +71,10 @@ private:
 
     void SwitchStage(const std::optional<EStage> from, const EStage to) {
         if (from) {
-            AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
+            AFL_VERIFY(Stage == *from,
+                {"from", (ui32)*from},
+                {"real", (ui32)Stage},
+                {"to", (ui32)to});
         }
         Stage = to;
     }
@@ -110,7 +113,8 @@ public:
                 hFunc(NActors::TEvents::TEvUndelivered, HandleExecute);
                 hFunc(NActors::TEvents::TEvWakeup, HandleExecute);
                 default:
-                    AFL_VERIFY(false)("type", ev->GetTypeName());
+                    AFL_VERIFY(false,
+                        {"type", ev->GetTypeName()});
             }
         } catch (...) {
             AFL_VERIFY(false);

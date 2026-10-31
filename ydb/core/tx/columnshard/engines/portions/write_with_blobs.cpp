@@ -22,7 +22,9 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
 
 void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
     AFL_VERIFY(!BlobId);
-    AFL_VERIFY(blobId.BlobSize() == ResultBlob.size())("blob_id", blobId.BlobSize())("data", ResultBlob.size());
+    AFL_VERIFY(blobId.BlobSize() == ResultBlob.size(),
+        {"blobId", blobId.BlobSize()},
+        {"data", ResultBlob.size()});
     BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
@@ -82,7 +84,9 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TWritePortionInfoWithBlobsConstr
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
+        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size(),
+            {"idx", i.second->GetChunkIdxVerified()},
+            {"size", result.size()});
         result.emplace_back(i.second);
     }
     return result;

@@ -4733,7 +4733,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )");
 
-            AFL_VERIFY(rows.size() == 4)("count", rows.size());
+            AFL_VERIFY(rows.size() == 4,
+                {"count", rows.size()});
             if (GetUint64(rows[0].at("sum_records_count")) == 0 && GetUint64(rows[1].at("sum_records_count")) == 0 &&
                 GetUint64(rows[2].at("sum_records_count")) == 0 && GetUint64(rows[3].at("sum_records_count")) == 70000) {
                 break;

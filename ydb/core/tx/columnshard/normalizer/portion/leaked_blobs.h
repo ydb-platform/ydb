@@ -146,7 +146,8 @@ public:
                 }
                 break;
             case TProcessPortionsStep::Finished:
-                AFL_VERIFY(false)("error", "cannot advance from the finished step");
+                AFL_VERIFY(false,
+                    {"error", "cannot advance from the finished step"});
         }
     }
 
@@ -167,12 +168,14 @@ public:
     }
 
     TPortionToProcess& GetCurrentPortion() {
-        AFL_VERIFY(!Portions.empty())("error", "no current portion");
+        AFL_VERIFY(!Portions.empty(),
+            {"error", "no current portion"});
         return Portions.front();
     }
 
     std::pair<TInternalPathId, ui64> GetCurrentPortionKey() const {
-        AFL_VERIFY(!Portions.empty())("error", "no current portion");
+        AFL_VERIFY(!Portions.empty(),
+            {"error", "no current portion"});
         return { Portions.front().GetPathId(), Portions.front().GetPortionId() };
     }
 
@@ -188,7 +191,8 @@ public:
     bool NeedToSkip(TInternalPathId pathId, ui64 portionId) const {
         std::pair<TInternalPathId, ui64> cur = GetCurrentPortionKey();
         std::pair<TInternalPathId, ui64> key = { pathId, portionId };
-        AFL_VERIFY(key <= cur)("error", "key is greater than current portion");
+        AFL_VERIFY(key <= cur,
+            {"error", "key is greater than current portion"});
         return key < cur;
     }
 
@@ -207,7 +211,8 @@ private:
     }
 
     void AdvanceCurrentPortion() {
-        AFL_VERIFY(PortionCountToProcess > 0)("error", "no portion to advance");
+        AFL_VERIFY(PortionCountToProcess > 0,
+            {"error", "no portion to advance"});
         PortionCountToProcess--;
         auto front = Portions.front();
         Portions.pop_front();

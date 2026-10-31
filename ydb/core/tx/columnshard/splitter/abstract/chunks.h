@@ -44,7 +44,8 @@ protected:
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const = 0;
 
     virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& /*portionInfo*/) const {
-        AFL_VERIFY(false)("problem", "implemented only in index chunks");
+        AFL_VERIFY(false,
+            {"problem", "implemented only in index chunks"});
     }
 
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const ui32 /*rawBytes*/,

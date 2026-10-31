@@ -59,7 +59,9 @@ public:
                     {"packed", i->GetPackedSize()});
             }
         }
-        AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
+        AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady],
+            {"check", checkRecordsCount},
+            {"split", ChunkRecordsCount[ChunksReady]});
         ++ChunksReady;
     }
 };
@@ -113,7 +115,9 @@ public:
         auto it = Columns.emplace(columnId, TColumnSplitInfo(columnId, stats, settings));
         AFL_VERIFY(it.second);
         it.first->second.SetChunks(std::move(chunks));
-        AFL_VERIFY(RecordsCount == it.first->second.GetRecordsCount())("new", it.first->second.GetRecordsCount())("control", RecordsCount);
+        AFL_VERIFY(RecordsCount == it.first->second.GetRecordsCount(),
+            {"new", it.first->second.GetRecordsCount()},
+            {"control", RecordsCount});
     }
 };
 
@@ -186,7 +190,10 @@ public:
         }();
         ui32 recordsCountCursor = 0;
         for (auto&& p : recordsCount) {
-            AFL_VERIFY(recordsCountCursor + p <= Remapper->num_rows())("cursor", recordsCountCursor)("size", p)("length", Remapper->num_rows());
+            AFL_VERIFY(recordsCountCursor + p <= Remapper->num_rows(),
+                {"cursor", recordsCountCursor},
+                {"size", p},
+                {"length", Remapper->num_rows()});
             Portions.emplace_back(p, Remapper->Slice(recordsCountCursor, p));
             recordsCountCursor += p;
             for (auto&& c : resultFiltered->GetColumnIds()) {
@@ -212,7 +219,9 @@ public:
                 Portions.back().AddColumnSplitting(c, std::move(chunks), colStatsOpt, settings);
             }
         }
-        AFL_VERIFY(recordsCountCursor == Remapper->num_rows())("cursor", recordsCountCursor)("length", Remapper->num_rows());
+        AFL_VERIFY(recordsCountCursor == Remapper->num_rows(),
+            {"cursor", recordsCountCursor},
+            {"length", Remapper->num_rows()});
     }
 };
 
@@ -326,8 +335,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
 
         THolder<IColumnMerger> merger =
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
-        AFL_VERIFY(!!merger)("problem", "cannot create merger")(
-            "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
+        AFL_VERIFY(!!merger,
+            {"problem", "cannot create merger"},
+            {"className", commonContext.GetLoader()->GetAccessorConstructor().GetClassName()});
         merger->Start(std::move(columnData), mergingContext);
 
         for (auto&& batchResult : splitInfo.MutableSplittedBatches()) {

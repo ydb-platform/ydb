@@ -45,7 +45,8 @@ protected:
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
-        AFL_VERIFY(false)("problem", "cannot use method");
+        AFL_VERIFY(false,
+            {"problem", "cannot use method"});
         return nullptr;
     }
     virtual std::optional<ui64> DoGetRawSize() const override {

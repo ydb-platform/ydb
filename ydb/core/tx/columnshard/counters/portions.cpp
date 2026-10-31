@@ -54,7 +54,8 @@ void TFullPortionsGroupInfo::RemovePortion(const TPortionDataAccessor& p) {
     Blobs.Sub(p.GetBlobIdsCount());
     for (const auto& blob : p.GetBlobIds()) {
         auto findChannel = BytesByChannel.find(blob.Channel());
-        AFL_VERIFY(!findChannel.IsEnd())("blob", blob.ToStringLegacy());
+        AFL_VERIFY(!findChannel.IsEnd(),
+            {"blob", blob.ToStringLegacy()});
         findChannel->second -= blob.BlobSize();
         AFL_VERIFY(findChannel->second >= 0);
         if (!findChannel->second) {

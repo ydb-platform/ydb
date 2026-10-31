@@ -7,19 +7,24 @@ ui32 GetMaxDenseEncodingVersion() {
 }
 
 TEncodingParams TEncodingParams::FromVersion(const ui32 version) {
-    AFL_VERIFY(version && version <= GetMaxDenseEncodingVersion())("version", version);
+    AFL_VERIFY(version && version <= GetMaxDenseEncodingVersion(),
+        {"version", version});
     return TEncodingParams{ .UseDenseEncoder = true };
 }
 
 TSettings::TColumnsDistributor::EColumnType TSettings::TColumnsDistributor::TakeAndDetect(const ui64 columnSize, const ui32 columnValuesCount) {
     if (!!PredSize) {
-        AFL_VERIFY(columnSize <= *PredSize)("col", columnSize)("pred", PredSize);
+        AFL_VERIFY(columnSize <= *PredSize,
+            {"col", columnSize},
+            {"pred", PredSize});
     }
     PredSize = columnSize;
     if (Settings.GetColumnsLimit() <= SeparatedCount) {
         return EColumnType::Other;
     }
-    AFL_VERIFY(SumSize >= CurrentColumnsSize)("sum", SumSize)("columns", CurrentColumnsSize);
+    AFL_VERIFY(SumSize >= CurrentColumnsSize,
+        {"sum", SumSize},
+        {"columns", CurrentColumnsSize});
     if (!SumSize || 1.0 * CurrentColumnsSize / SumSize < 1 - Settings.GetOthersAllowedFraction()) {
         CurrentColumnsSize += columnSize;
         ++SeparatedCount;

@@ -12,7 +12,8 @@ TPartitioningKeysManager::TPartitioningKeysManager(size_t numSketches, TDuration
       Rng(std::random_device{}()),
       InitialWeight(initialWeight)
 {
-    AFL_ENSURE(numSketches > 0)("reason", "numSketches must be greater than 0");
+    AFL_ENSURE(numSketches > 0,
+        {"reason", "numSketches must be greater than 0"});
     SketchWindowSize = Max(Min(TDuration::Seconds(1), windowSize), windowSize / numSketches);
 }
 

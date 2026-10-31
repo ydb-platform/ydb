@@ -125,7 +125,8 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Settings.Path);
-        AFL_ENSURE(it != ev->Get()->Topics.end())("path", Settings.Path);
+        AFL_ENSURE(it != ev->Get()->Topics.end(),
+            {"path", Settings.Path});
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::Success) {
             return HandleDescribeError(topicInfo);

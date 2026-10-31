@@ -42,9 +42,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     {
         std::vector<std::shared_ptr<IChunkedArray>> columns;
         auto schema = headerConclusion->GetColumnStats().BuildColumnsSchema();
-        AFL_VERIFY(headerConclusion->GetColumnStats().GetColumnsCount() == (ui32)proto.GetKeyColumns().size())(
-                                                                             "schema", headerConclusion->GetColumnStats().GetColumnsCount())(
-                                                                             "proto", proto.GetKeyColumns().size());
+        AFL_VERIFY(headerConclusion->GetColumnStats().GetColumnsCount() == (ui32)proto.GetKeyColumns().size(),
+            {"schema", headerConclusion->GetColumnStats().GetColumnsCount()},
+            {"proto", proto.GetKeyColumns().size()});
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
             std::shared_ptr<TColumnLoader> columnLoader =
                 std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
@@ -71,7 +71,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto result = std::make_shared<TSubColumnsArray>(
         std::move(columnData), std::move(otherData), externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
     result->StoreSourceString(originalData);
-    AFL_VERIFY(currentIndex == originalData.size())("index", currentIndex)("size", originalData.size());
+    AFL_VERIFY(currentIndex == originalData.size(),
+        {"index", currentIndex},
+        {"size", originalData.size()});
     return result;
 }
 
@@ -103,8 +105,9 @@ TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
 TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContainer(const TStringBuf data,
     const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize) {
     std::vector<std::shared_ptr<IChunkedArray>> columns;
-    AFL_VERIFY(TOthersData::GetSchema()->num_fields() == proto.GetOtherColumns().size())("proto", proto.GetOtherColumns().size())(
-                                                           "schema", TOthersData::GetSchema()->num_fields());
+    AFL_VERIFY(TOthersData::GetSchema()->num_fields() == proto.GetOtherColumns().size(),
+        {"proto", proto.GetOtherColumns().size()},
+        {"schema", TOthersData::GetSchema()->num_fields()});
     auto schema = TOthersData::GetSchema();
     ui32 currentIndex = 0;
     for (ui32 i = 0; i < (ui32)proto.GetOtherColumns().size(); ++i) {

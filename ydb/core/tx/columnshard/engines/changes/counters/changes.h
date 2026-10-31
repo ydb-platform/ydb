@@ -67,7 +67,9 @@ private:
         StagesByConsumer;
 
     std::shared_ptr<NCounters::TStateSignalsOperator<EStage>> GetStageCountersImpl(const NBlobOperations::EConsumer consumerId) {
-        AFL_VERIFY((ui64)consumerId < StagesByConsumer.size())("index", consumerId)("size", StagesByConsumer.size());
+        AFL_VERIFY((ui64)consumerId < StagesByConsumer.size(),
+            {"index", consumerId},
+            {"size", StagesByConsumer.size()});
         return StagesByConsumer[(ui64)consumerId];
     }
 

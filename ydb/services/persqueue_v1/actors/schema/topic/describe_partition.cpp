@@ -92,7 +92,8 @@ private:
         auto* p = FindIfPtr(ev->Get()->TopicInfo.Info->Description.GetPartitions(), [partitionId](const auto& part) {
             return part.GetPartitionId() == partitionId;
         });
-        AFL_ENSURE(p)("partitionId", partitionId);
+        AFL_ENSURE(p,
+            {"partitionId", partitionId});
 
         auto& partition = *result.mutable_partition();
         partition.set_partition_id(p->GetPartitionId());

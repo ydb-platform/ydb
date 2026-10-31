@@ -462,7 +462,8 @@ public:
 
     void RemoveInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
-        AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
+        AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end(),
+            {"pathId", pathId});
         auto& intervals = itIntervals->second;
         auto itFrom = intervals.GetPointIterator(from);
         auto itTo = intervals.GetPointIterator(to);

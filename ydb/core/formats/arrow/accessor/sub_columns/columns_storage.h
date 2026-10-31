@@ -163,10 +163,13 @@ public:
     TColumnsData(const TDictStats& dict, const std::shared_ptr<TGeneralContainer>& data)
         : Stats(dict)
         , Records(data) {
-        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
+        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount(),
+            {"records", Records->num_columns()},
+            {"stats", Stats.GetColumnsCount()});
         for (ui32 i = 0; i < (ui32)Records->num_columns(); ++i) {
-            AFL_VERIFY(Records->GetColumnVerified(i)->GetDataType()->id() == Stats.GetField(i)->type()->id())(
-                "column", Records->GetColumnVerified(i)->GetDataType()->ToString())("stats", Stats.GetField(i)->type()->ToString());
+            AFL_VERIFY(Records->GetColumnVerified(i)->GetDataType()->id() == Stats.GetField(i)->type()->id(),
+                {"column", Records->GetColumnVerified(i)->GetDataType()->ToString()},
+                {"stats", Stats.GetField(i)->type()->ToString()});
         }
     }
 };

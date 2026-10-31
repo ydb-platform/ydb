@@ -67,7 +67,9 @@ public:
     }
 
     bool operator[](const ui32 idx) const {
-        AFL_VERIFY(CurrentIdx + 1 == idx)("current_idx", CurrentIdx)("idx", idx);
+        AFL_VERIFY(CurrentIdx + 1 == idx,
+            {"currentIdx", CurrentIdx},
+            {"idx", idx});
         CurrentIdx = idx;
         const bool result = std::less_equal<TSnapshot>()(TSnapshot(Steps.GetValue(), Ids.GetValue()), Snapshot);
         const bool sNext = Steps.Next();

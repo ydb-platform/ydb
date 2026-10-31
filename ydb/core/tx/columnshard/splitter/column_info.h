@@ -40,7 +40,9 @@ public:
         for (auto&& i : Chunks) {
             result += i->GetPackedSize();
         }
-        AFL_VERIFY(Size == result)("size", Size)("result", result);
+        AFL_VERIFY(Size == result,
+            {"size", Size},
+            {"result", result});
         return result;
     }
 
@@ -160,7 +162,9 @@ public:
                 if (checkImpl->GetPackedSize() < sizeLimit) {
                     result.emplace_back(checkImpl);
                 } else {
-                    AFL_VERIFY(checkImpl->IsSplittable())("p_size", checkImpl->GetPackedSize())("c_impl", checkImpl->GetRecordsCountVerified());
+                    AFL_VERIFY(checkImpl->IsSplittable(),
+                        {"pSize", checkImpl->GetPackedSize()},
+                        {"cImpl", checkImpl->GetRecordsCountVerified()});
                     auto parts = predSplit(checkImpl);
                     dqParts.insert(dqParts.begin(), parts.begin(), parts.end());
                 }
@@ -283,7 +287,9 @@ public:
 
         void AddChunk(TBlobChunk&& chunk) {
             Size.Add(chunk.GetSize());
-            AFL_VERIFY(chunk.GetSize() < MaxSize)("size", chunk.GetSize())("max", MaxSize);
+            AFL_VERIFY(chunk.GetSize() < MaxSize,
+                {"size", chunk.GetSize()},
+                {"max", MaxSize});
             if (chunk.GetSize() < MinSize) {
                 Small.emplace_back(std::move(chunk));
             } else {
@@ -439,7 +445,9 @@ public:
         if (RecordsCount) {
             *RecordsCount += *c.RecordsCount;
         }
-        AFL_VERIFY(EntityId == c.EntityId)("self", EntityId)("c", c.EntityId);
+        AFL_VERIFY(EntityId == c.EntityId,
+            {"self", EntityId},
+            {"c", c.EntityId});
         Y_ABORT_UNLESS(c.EntityId);
         for (auto&& i : c.Chunks) {
             Chunks.emplace_back(std::move(i));

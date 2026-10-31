@@ -5,7 +5,8 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 ui64 TIdsControl::ExtractInternalIdVerified(const ui64 externalId) {
     auto it = ExternalIdIntoInternalId.find(externalId);
-    AFL_VERIFY(it != ExternalIdIntoInternalId.end())("external_id", externalId);
+    AFL_VERIFY(it != ExternalIdIntoInternalId.end(),
+        {"externalId", externalId});
     const ui64 result = it->second;
     InternalIdIntoExternalId.erase(result);
     ExternalIdIntoInternalId.erase(it);
@@ -43,12 +44,14 @@ ui64 TIdsControl::GetMinExternalIdVerified() const {
 
 ui64 TIdsControl::GetInternalIdVerified(const ui64 externalId) const {
     auto it = ExternalIdIntoInternalId.find(externalId);
-    AFL_VERIFY(it != ExternalIdIntoInternalId.end())("external_id", externalId);
+    AFL_VERIFY(it != ExternalIdIntoInternalId.end(),
+        {"externalId", externalId});
     return it->second;
 }
 
 ui64 TIdsControl::RegisterExternalId(const ui64 externalId) {
-    AFL_VERIFY(ExternalIdIntoInternalId.emplace(externalId, ++CurrentInternalId).second)("ext_id", externalId);
+    AFL_VERIFY(ExternalIdIntoInternalId.emplace(externalId, ++CurrentInternalId).second,
+        {"extId", externalId});
     InternalIdIntoExternalId.emplace(CurrentInternalId, externalId);
     return CurrentInternalId;
 }

@@ -112,8 +112,9 @@ std::shared_ptr<TDataContainer> ExtractImpl(const TColumnOperator::EAbsentFieldP
     auto result = ExtractColumnsValidateImpl(incoming, columnNames);
     switch (policy) {
         case TColumnOperator::EAbsentFieldPolicy::Verify:
-            AFL_VERIFY((ui32)result->num_columns() == columnNames.size())("schema", incoming->schema()->ToString())(
-                                                          "required", TColumnNameAccessor<TStringContainer>::DebugString(columnNames));
+            AFL_VERIFY((ui32)result->num_columns() == columnNames.size(),
+                {"schema", incoming->schema()->ToString()},
+                {"required", TColumnNameAccessor<TStringContainer>::DebugString(columnNames)});
             break;
         case TColumnOperator::EAbsentFieldPolicy::Error:
             if ((ui32)result->num_columns() != columnNames.size()) {
@@ -267,8 +268,11 @@ TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TData
                         return TConclusionStatus::Fail("incompatible column types");
                     }
                     case TColumnOperator::ECheckFieldTypesPolicy::Verify: {
-                        AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                            "column_type", (*itDst)->ToString(true))("incoming_type", (*itSrc)->ToString(true));
+                        AFL_VERIFY(false,
+                            {"event", "cannot_use_incoming_batch"},
+                            {"reason", "invalid_column_type"},
+                            {"columnType", (*itDst)->ToString(true)},
+                            {"incomingType", (*itSrc)->ToString(true)});
                     }
                     case TColumnOperator::ECheckFieldTypesPolicy::Ignore:
                         AFL_VERIFY(false);
@@ -317,8 +321,11 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
             const auto& dstField = dstSchema.GetFieldByIndexVerified(dstIndex);
             switch (differentColumnTypesPolicy) {
                 case TColumnOperator::ECheckFieldTypesPolicy::Verify:
-                    AFL_VERIFY(dstField->type()->Equals(srcField->type()))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                        "dst_column", dstField->ToString(true))("src_column", srcField->ToString(true));
+                    AFL_VERIFY(dstField->type()->Equals(srcField->type()),
+                        {"event", "cannot_use_incoming_batch"},
+                        {"reason", "invalid_column_type"},
+                        {"dstColumn", dstField->ToString(true)},
+                        {"srcColumn", srcField->ToString(true)});
                     break;
                 case TColumnOperator::ECheckFieldTypesPolicy::Error:
                     if (!dstField->type()->Equals(srcField->type())) {
@@ -341,7 +348,10 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
             resultColumns.emplace_back(TFieldData{ .Index = (ui32)dstIndex, .Column = incoming->column(idx) });
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Skip) {
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Verify) {
-            AFL_VERIFY(false)("event", "cannot_use_incoming_batch")("reason", "absent_field")("dst_column", srcField->ToString(true));
+            AFL_VERIFY(false,
+                {"event", "cannot_use_incoming_batch"},
+                {"reason", "absent_field"},
+                {"dstColumn", srcField->ToString(true)});
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Error) {
             YDB_LOG_ERROR("",
                 {"event", "cannot_use_incoming_batch"},

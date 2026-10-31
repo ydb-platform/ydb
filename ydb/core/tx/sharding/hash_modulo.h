@@ -134,7 +134,9 @@ public:
             orderedTabletIdsLocal.emplace_back(i.GetTabletId());
             ++idx;
         }
-        AFL_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount)("ordered", orderedTabletIdsLocal.size())("summary", summaryShardsCount);
+        AFL_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount,
+            {"ordered", orderedTabletIdsLocal.size()},
+            {"summary", summaryShardsCount});
         std::swap(orderedTabletIdsLocal, orderedShardIds);
         return true;
     }
@@ -155,7 +157,9 @@ public:
         std::set<ui32> modsWrite;
         for (auto&& i : SpecialSharding) {
             for (auto&& n : i.GetAppropriateMods()) {
-                AFL_VERIFY(n < PartsCount)("n", n)("parts_count", PartsCount);
+                AFL_VERIFY(n < PartsCount,
+                    {"n", n},
+                    {"partsCount", PartsCount});
                 if (!closedWriteIds.contains(i.GetTabletId())) {
                     modsWrite.emplace(n);
                 }

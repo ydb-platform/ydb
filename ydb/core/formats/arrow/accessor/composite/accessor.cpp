@@ -48,7 +48,9 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
         } else {
             const ui32 localStart = std::max<ui32>(offset, currentIndex);
             const ui32 localFinish = std::min<ui32>(offset + count, currentIndex + arr->GetRecordsCount());
-            AFL_VERIFY(localStart < localFinish)("start", localStart)("finish", localFinish);
+            AFL_VERIFY(localStart < localFinish,
+                {"start", localStart},
+                {"finish", localFinish});
             chunks.emplace_back(arrAddress->GetArray()->ISlice(localStart - currentIndex, localFinish - localStart));
         }
         currentIndex += arr->GetRecordsCount();

@@ -36,13 +36,16 @@ struct LastLevel: ICompactionUnit<TPortion> {
         const ui64 portionId = p->GetPortionId();
         const ui64 measure = Measure(p);
         this->Counters.Portions->AddWidth(measure);
-        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
+        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second,
+            {"portionId", portionId});
         if (measure == 0) {
-            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            AFL_VERIFY(PortionIds.insert(portionId).second,
+                {"portionId", portionId});
             p->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
             Portions.insert(Portions.end(), p);   // on startup the portions come sorted by end key
         } else {
-            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
+            AFL_VERIFY(CandidateIds.insert(portionId).second,
+                {"portionId", portionId});
             Candidates.insert(p);
         }
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
@@ -56,12 +59,15 @@ struct LastLevel: ICompactionUnit<TPortion> {
         const ui64 portionId = p->GetPortionId();
         const ui64 measure = Measure(p);
         this->Counters.Portions->AddWidth(measure);
-        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
+        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second,
+            {"portionId", portionId});
         if (!Portions.size()) {
-            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            AFL_VERIFY(PortionIds.insert(portionId).second,
+                {"portionId", portionId});
             Portions.insert(p);
         } else {
-            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
+            AFL_VERIFY(CandidateIds.insert(portionId).second,
+                {"portionId", portionId});
             Candidates.insert(p);
         }
         this->Counters.Portions->SetHeight(CandidateIds.size());
@@ -70,16 +76,20 @@ struct LastLevel: ICompactionUnit<TPortion> {
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         const ui64 portionId = p->GetPortionId();
         const auto wit = WidthByPortionId.find(portionId);
-        AFL_VERIFY(wit != WidthByPortionId.end())("portion_id", portionId);
+        AFL_VERIFY(wit != WidthByPortionId.end(),
+            {"portionId", portionId});
         this->Counters.Portions->RemoveWidth(wit->second);
         WidthByPortionId.erase(wit);
         // Route the bucket choice via identity-keyed presence sets, not via border-sorted membership.
         if (PortionIds.erase(portionId)) {
-            AFL_VERIFY(Portions.erase(p))("portion_id", portionId);
+            AFL_VERIFY(Portions.erase(p),
+                {"portionId", portionId});
         } else if (CandidateIds.erase(portionId)) {
-            AFL_VERIFY(Candidates.erase(p))("portion_id", portionId);
+            AFL_VERIFY(Candidates.erase(p),
+                {"portionId", portionId});
         } else {
-            AFL_VERIFY(false)("portion_id", portionId);
+            AFL_VERIFY(false,
+                {"portionId", portionId});
         }
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(CandidateIds.size());
@@ -207,13 +217,15 @@ struct Accumulator: ICompactionUnit<TPortion> {
     }
 
     void DoAddPortion(typename TPortion::TPtr p) override {
-        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
+        AFL_VERIFY(Portions.insert(p).second,
+            {"portionId", p->GetPortionId()});
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Portions.size());
     }
 
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
-        AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
+        AFL_VERIFY(Portions.erase(p),
+            {"portionId", p->GetPortionId()});
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Portions.size());
     }
@@ -282,14 +294,16 @@ struct MiddleLevel: ICompactionUnit<TPortion> {
     THashMap<ui64, ui64> WidthByPortionId;
 
     void RegisterRoutingWidth(ui64 portionId, ui64 width) {
-        AFL_VERIFY(!WidthByPortionId.contains(portionId))("portion_id", portionId);
+        AFL_VERIFY(!WidthByPortionId.contains(portionId),
+            {"portionId", portionId});
         WidthByPortionId.emplace(portionId, width);
         this->Counters.Portions->AddWidth(width);
     }
 
     void UnregisterRoutingWidth(ui64 portionId) {
         const auto it = WidthByPortionId.find(portionId);
-        AFL_VERIFY(it != WidthByPortionId.end())("portion_id", portionId);
+        AFL_VERIFY(it != WidthByPortionId.end(),
+            {"portionId", portionId});
         this->Counters.Portions->RemoveWidth(it->second);
         WidthByPortionId.erase(it);
     }
@@ -305,7 +319,8 @@ struct MiddleLevel: ICompactionUnit<TPortion> {
     void DoRemovePortion(typename TPortion::TConstPtr p) override {
         const ui64 id = p->GetPortionId();
         Intersections.Remove(id);
-        AFL_VERIFY(PortionById.erase(id))("portion_id", id);
+        AFL_VERIFY(PortionById.erase(id),
+            {"portionId", id});
         this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
         this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
     }

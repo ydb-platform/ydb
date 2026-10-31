@@ -19,7 +19,8 @@ std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorOptional(con
 
 std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) const {
     auto result = GetOperatorOptional(storageId);
-    AFL_VERIFY(result)("storage_id", storageId);
+    AFL_VERIFY(result,
+        {"storageId", storageId});
     return result;
 }
 
@@ -82,7 +83,8 @@ bool IStoragesManager::HasBlobsToDelete() const {
 
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::BuildOperator(const TString& storageId) {
     auto result = DoBuildOperator(storageId);
-    AFL_VERIFY(result)("storage_id", storageId);
+    AFL_VERIFY(result,
+        {"storageId", storageId});
     return result;
 }
 

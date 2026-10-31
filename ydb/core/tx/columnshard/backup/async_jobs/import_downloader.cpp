@@ -154,8 +154,9 @@ public:
                 totalBytes += cell.Size();
             }
 
-            AFL_VERIFY(allCells.size() == rowSchemaOrder.size())
-            ("all_cells_size", allCells.size())("schema_size", rowSchemaOrder.size());
+            AFL_VERIFY(allCells.size() == rowSchemaOrder.size(),
+                {"allCellsSize", allCells.size()},
+                {"schemaSize", rowSchemaOrder.size()});
 
             batchBuilder.AddRow(TConstArrayRef<TCell>(allCells.data(), allCells.size()));
             allCells.clear();

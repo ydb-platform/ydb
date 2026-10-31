@@ -63,7 +63,9 @@ NKikimrColumnShardColumnDefaults::TColumnDefault TColumnDefaultScalarValue::Seri
             break;
         }
         default:
-            AFL_VERIFY(false)("problem", "incorrect type for statistics usage")("type", scalar.type->ToString());
+            AFL_VERIFY(false,
+                {"problem", "incorrect type for statistics usage"},
+                {"type", scalar.type->ToString()});
     }
     return result;
 }

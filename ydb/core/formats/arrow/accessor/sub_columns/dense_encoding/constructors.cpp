@@ -54,9 +54,11 @@ std::shared_ptr<arrow::Array> DecodeDenseDictionaryValues(
 
 TBlobWithAdditionalAccessorData TBinaryDenseConstructor::DoSerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Array)("array_type", columnData->GetType());
+    AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Array,
+        {"arrayType", columnData->GetType()});
     const auto* trivial = static_cast<const TTrivialArray*>(columnData.get());
-    AFL_VERIFY(arrow::is_binary_like(trivial->GetArray()->type_id()))("element_type", trivial->GetArray()->type()->ToString());
+    AFL_VERIFY(arrow::is_binary_like(trivial->GetArray()->type_id()),
+        {"elementType", trivial->GetArray()->type()->ToString()});
     const auto& binary = static_cast<const arrow::BinaryArray&>(*trivial->GetArray());
     return { SerializeBinaryLikeArray(binary, GetCompressionCodec(externalInfo)),
         std::make_shared<TEmptyAdditionalData>() };
@@ -71,23 +73,28 @@ TConclusion<std::shared_ptr<IChunkedArray>> TBinaryDenseConstructor::DoDeseriali
 
 TBlobWithAdditionalAccessorData TDictionaryDenseConstructor::DoSerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Dictionary)("type", columnData->GetType());
+    AFL_VERIFY(columnData->GetType() == IChunkedArray::EType::Dictionary,
+        {"type", columnData->GetType()});
     const auto* dict = static_cast<const TDictionaryArray*>(columnData.get());
     const auto& dictionary = dict->GetDictionary();
-    AFL_VERIFY(arrow::is_binary_like(dictionary->type_id()))("element_type", dictionary->type()->ToString());
+    AFL_VERIFY(arrow::is_binary_like(dictionary->type_id()),
+        {"elementType", dictionary->type()->ToString()});
     const auto& dictBinary = static_cast<const arrow::BinaryArray&>(*dictionary);
     const auto codec = GetCompressionCodec(externalInfo);
     const TString dictBlob = SerializeBinaryLikeArray(dictBinary, codec);
 
-    AFL_VERIFY(dictBinary.length() <= Max<ui32>())("length", dictBinary.length());
+    AFL_VERIFY(dictBinary.length() <= Max<ui32>(),
+        {"length", dictBinary.length()});
     const ui32 dictLength = static_cast<ui32>(dictBinary.length());
     const TString positionsBlob = SerializeIndices(
         dict->GetPositions(), NDictionary::TConstructor::GetTypeByVariantsCount(dictLength), codec);
 
     // [dictionary length][dictionary blob][positions blob]. The metadata stores the dictionary boundary.
 
-    AFL_VERIFY(sizeof(ui32) + dictBlob.size() <= Max<ui32>())("size", dictBlob.size());
-    AFL_VERIFY(positionsBlob.size() <= Max<ui32>())("size", positionsBlob.size());
+    AFL_VERIFY(sizeof(ui32) + dictBlob.size() <= Max<ui32>(),
+        {"size", dictBlob.size()});
+    AFL_VERIFY(positionsBlob.size() <= Max<ui32>(),
+        {"size", positionsBlob.size()});
     const ui32 dictionaryBlobSize = static_cast<ui32>(sizeof(ui32) + dictBlob.size());
     TString result;
     result.reserve(sizeof(ui32) + dictBlob.size() + positionsBlob.size());
@@ -101,10 +108,12 @@ TBlobWithAdditionalAccessorData TDictionaryDenseConstructor::DoSerializeToBlobAn
 TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
     auto parsedConclusion = ParseDenseDictionaryPrefix(originalData, externalInfo);
-    AFL_VERIFY(parsedConclusion.IsSuccess())("error", parsedConclusion.GetErrorMessage());
+    AFL_VERIFY(parsedConclusion.IsSuccess(),
+        {"error", parsedConclusion.GetErrorMessage()});
     const auto& parsed = parsedConclusion.GetResult();
-    AFL_VERIFY(originalData.size() - parsed.Meta->DictionaryBlobSize == parsed.Meta->PositionsBlobSize)
-        ("computed", originalData.size() - parsed.Meta->DictionaryBlobSize)("meta", parsed.Meta->PositionsBlobSize);
+    AFL_VERIFY(originalData.size() - parsed.Meta->DictionaryBlobSize == parsed.Meta->PositionsBlobSize,
+        {"computed", originalData.size() - parsed.Meta->DictionaryBlobSize},
+        {"meta", parsed.Meta->PositionsBlobSize});
 
     const TStringBuf positionsBlob(
         originalData.data() + parsed.Meta->DictionaryBlobSize, originalData.size() - parsed.Meta->DictionaryBlobSize);

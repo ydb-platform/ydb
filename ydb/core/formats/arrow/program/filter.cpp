@@ -76,8 +76,9 @@ TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
     AFL_VERIFY(inputColumns.size() == 1);
     TFilterVisitor filterVisitor;
     for (auto& arr : inputColumns) {
-        AFL_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount())("arr", arr->GetRecordsCount())(
-                                               "first", inputColumns.front()->GetRecordsCount());
+        AFL_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount(),
+            {"arr", arr->GetRecordsCount()},
+            {"first", inputColumns.front()->GetRecordsCount()});
         std::shared_ptr<arrow::Scalar> monoValue;
         const auto isMonoValue = arr->CheckOneValueAccessor(monoValue);
         if (isMonoValue && *isMonoValue) {
@@ -101,8 +102,9 @@ TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
         }
     }
     NArrow::TColumnFilter filter = filterVisitor.ExtractColumnFilter();
-    AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
-                                                     "input", inputColumns.front()->GetRecordsCount());
+    AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount(),
+        {"filter", filter.GetRecordsCountVerified()},
+        {"input", inputColumns.front()->GetRecordsCount()});
     if (context.GetLimit()) {
         context.MutableResources().AddFilter(filter);
         context.MutableResources().CutFilter(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());

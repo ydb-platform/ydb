@@ -306,7 +306,9 @@ TPlanStep ProposeCommit(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     const auto now = runtime.GetTimeProvider()->Now();
     return ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
-        AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
+        AFL_VERIFY(res.GetTxId() == txId,
+            {"txId", txId},
+            {"res", res.GetTxId()});
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
         UNIT_ASSERT_LE(now.MilliSeconds(), res.GetMinStep());
         UNIT_ASSERT_UNEQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());

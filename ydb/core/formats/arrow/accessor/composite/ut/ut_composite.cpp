@@ -47,32 +47,38 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         {
             auto slice = arr->ISlice(0, 10);
             const TString arrString = PrepareToCompare(slice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([[null,"a1",null,"a3",null,null,null,"a7",null,null]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([[null,"a1",null,"a3",null,null,null,"a7",null,null]])",
+                {"string", arrString});
         }
         {
             auto slice = arr->ISlice(3, 8);
             const TString arrString = PrepareToCompare(slice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([["a3",null,null,null,"a7",null,null],[null]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([["a3",null,null,null,"a7",null,null],[null]])",
+                {"string", arrString});
         }
         {
             auto slice = arr->ISlice(3, 16);
             const TString arrString = PrepareToCompare(slice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([["a3",null,null,null,"a7",null,null],[null,"b1","b2","b3",null],["c0",null,"c2","c3"]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([["a3",null,null,null,"a7",null,null],[null,"b1","b2","b3",null],["c0",null,"c2","c3"]])",
+                {"string", arrString});
         }
         {
             auto slice = arr->ISlice(8, 11);
             const TString arrString = PrepareToCompare(slice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([[null,null],[null,"b1","b2","b3",null],["c0",null,"c2","c3"]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([[null,null],[null,"b1","b2","b3",null],["c0",null,"c2","c3"]])",
+                {"string", arrString});
         }
         {
             auto slice = arr->ISlice(8, 2);
             const TString arrString = PrepareToCompare(slice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([[null,null]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([[null,null]])",
+                {"string", arrString});
         }
         {
             auto slice = arr->ISlice(9, 3);
             const TString arrString = PrepareToCompare(slice->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([[null],[null,"b1"]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([[null],[null,"b1"]])",
+                {"string", arrString});
         }
     }
 
@@ -120,21 +126,24 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
 
             auto filtered = arr->ApplyFilter(filter, arr);
             const TString arrString = PrepareToCompare(filtered->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([[null,"a3",null,null],[null,"b1","b2","b3",null]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([[null,"a3",null,null],[null,"b1","b2","b3",null]])",
+                {"string", arrString});
         }
         {
             const TColumnFilter filter = TColumnFilter::BuildConstFilter(false, { 1, 2, 3, 4, 5, 4 });
 
             auto filtered = arr->ApplyFilter(filter, arr);
             const TString arrString = PrepareToCompare(filtered->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([["a1",null,null,"a7",null,null],["c0",null,"c2","c3"]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([["a1",null,null,"a7",null,null],["c0",null,"c2","c3"]])",
+                {"string", arrString});
         }
         {
             const TColumnFilter filter = TColumnFilter::BuildConstFilter(false, { 3, 1, 3, 1, 3, 1, 3, 1, 3 });
 
             auto filtered = arr->ApplyFilter(filter, arr);
             const TString arrString = PrepareToCompare(filtered->GetChunkedArray()->ToString());
-            AFL_VERIFY(arrString == R"([["a3","a7"],["b1"],["c0"]])")("string", arrString);
+            AFL_VERIFY(arrString == R"([["a3","a7"],["b1"],["c0"]])",
+                {"string", arrString});
         }
     }
 

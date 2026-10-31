@@ -190,7 +190,8 @@ TSourceIdInfo TSourceIdInfo::Updated(TSchemaChangeInfo&& schemaChange) const {
 }
 
 TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
-    AFL_ENSURE(data.size() >= 2 * sizeof(ui64))("description", "Data must contain at least SeqNo & Offset");
+    AFL_ENSURE(data.size() >= 2 * sizeof(ui64),
+        {"description", "Data must contain at least SeqNo & Offset"});
     ui32 pos = 0;
 
     TSourceIdInfo result;
@@ -200,8 +201,12 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
     result.CreateTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
     result.ProducerEpoch = ReadAs<TMaybe<i16>>(data, pos);
 
-    AFL_ENSURE(result.SeqNo <= (ui64)Max<i64>())("description", "SeqNo is too big")("seqNo", result.SeqNo);
-    AFL_ENSURE(result.Offset <= (ui64)Max<i64>())("description", "Offset is too big")("offset", result.Offset);
+    AFL_ENSURE(result.SeqNo <= (ui64)Max<i64>(),
+        {"description", "SeqNo is too big"},
+        {"seqNo", result.SeqNo});
+    AFL_ENSURE(result.Offset <= (ui64)Max<i64>(),
+        {"description", "Offset is too big"},
+        {"offset", result.Offset});
 
     return result;
 }
@@ -411,7 +416,9 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
     case TKeyPrefix::MarkProtoSourceId:
         return LoadProtoSourceIdInfo(key, data);
     default:
-        AFL_ENSURE(false)("reason", "Unexpected mark")("mark", (char)mark);
+        AFL_ENSURE(false,
+            {"reason", "Unexpected mark"},
+            {"mark", (char)mark});
     }
 }
 

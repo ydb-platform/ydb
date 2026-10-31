@@ -303,9 +303,9 @@ bool TTopicSqsMetricsHandler::IsApplicable(const NKikimrPQ::TPQTabletConfig& tab
 }
 
 TTopicSqsMetricsHandler::TTopicSqsMetricsHandler(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
-    AFL_ENSURE(IsApplicable(tabletConfig))
-        ("sqs_queue", tabletConfig.GetSqsQueueName())
-        ("sqs_export_metrics", tabletConfig.GetSqsExportMetrics());
+    AFL_ENSURE(IsApplicable(tabletConfig),
+        {"sqsQueue", tabletConfig.GetSqsQueueName()},
+        {"sqsExportMetrics", tabletConfig.GetSqsExportMetrics()});
 
     const TString& account = tabletConfig.GetSqsAccountName();
     const TString& queueName = tabletConfig.GetSqsQueueName();

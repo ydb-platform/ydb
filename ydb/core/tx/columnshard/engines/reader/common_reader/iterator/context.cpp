@@ -90,7 +90,7 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
             YDB_LOG_DEBUG("",
                 {"ffModified", FFColumns->DebugString()});
         } else {
-            //            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
+            // AFL_VERIFY(!FFColumns->Contains(*SpecColumns), {"info", FFColumns->DebugString()});
             YDB_LOG_DEBUG("",
                 {"ffFirst", FFColumns->DebugString()});
         }

@@ -308,7 +308,8 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
 
 const std::shared_ptr<TFetchingStepSignals>& TProgramStep::GetSignals(const ui32 nodeId) const {
     auto it = Signals.find(nodeId);
-    AFL_VERIFY(it != Signals.end())("node_id", nodeId);
+    AFL_VERIFY(it != Signals.end(),
+        {"nodeId", nodeId});
     return it->second;
 }
 

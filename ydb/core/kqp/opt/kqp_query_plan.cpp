@@ -3650,7 +3650,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         auto stageGuid = stageIdToGuid.at(input.first);
                         auto planNodeIdIt = guidToPlaneId.find(stageGuid);
                         if (planNodeIdIt == guidToPlaneId.end()) {
-                            AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                            AFL_ENSURE(newRboEnabled,
+                                {"stageGuid", stageGuid});
                             continue;
                         }
                         auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
@@ -3677,7 +3678,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             auto stageGuid = stageIdToGuid.at(output.first);
                             auto planNodeIdIt = guidToPlaneId.find(stageGuid);
                             if (planNodeIdIt == guidToPlaneId.end()) {
-                                AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                                AFL_ENSURE(newRboEnabled,
+                                    {"stageGuid", stageGuid});
                                 continue;
                             }
                             auto planNodeId = planNodeIdIt->second;

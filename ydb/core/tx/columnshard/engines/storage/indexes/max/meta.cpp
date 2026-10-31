@@ -14,7 +14,8 @@ namespace NKikimr::NOlap::NIndexes::NMax {
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::shared_ptr<arrow::Scalar> result;
-    AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
+    AFL_VERIFY(reader.GetColumnsCount() == 1,
+        {"count", reader.GetColumnsCount()});
     {
         TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {

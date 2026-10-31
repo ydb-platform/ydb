@@ -22,10 +22,13 @@ NKikimr::TConclusionStatus TInStoreSchemaUpdate::DoInitializeImpl(const TUpdateI
     {
         const auto& originalTableInfo = originalTable.GetTableInfoVerified();
         const auto& storeInfo = originalTable.GetStoreInfo();
-        AFL_VERIFY(!!storeInfo)("problem", "Unexpected schema preset without olap store");
+        AFL_VERIFY(!!storeInfo,
+            {"problem", "Unexpected schema preset without olap store"});
         AFL_VERIFY(originalTableInfo.Description.HasSchemaPresetId());
         const ui32 presetId = originalTableInfo.Description.GetSchemaPresetId();
-        AFL_VERIFY(storeInfo->SchemaPresets.contains(presetId))("problem", "Failed to find schema preset in an olap store")("id", presetId);
+        AFL_VERIFY(storeInfo->SchemaPresets.contains(presetId),
+            {"problem", "Failed to find schema preset in an olap store"},
+            {"id", presetId});
         auto& preset = storeInfo->SchemaPresets.at(presetId);
         size_t presetIndex = preset.GetProtoIndex();
         SchemaPreset = storeInfo->GetDescription().GetSchemaPresets(presetIndex);

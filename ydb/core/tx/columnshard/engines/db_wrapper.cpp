@@ -19,7 +19,8 @@ std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard:
     std::unique_ptr<NOlap::TPortionInfoConstructor> portion;
     NKikimrTxColumnShard::TIndexPortionMeta metaProto;
     const TString metadata = rowset.template GetValue<IndexPortions::Metadata>();
-    AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()),
+        {"event", "cannot parse metadata as protobuf"});
 
     if (rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
         auto portionImpl =

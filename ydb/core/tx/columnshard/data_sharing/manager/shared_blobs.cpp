@@ -23,9 +23,11 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::SharedBlobIds::StorageId>();
             auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::SharedBlobIds::BlobId>(), nullptr);
-            AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
-            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second)(
-                "blob_id", *unifiedBlobId)("storage_id", storageId);
+            AFL_VERIFY(!!unifiedBlobId,
+                {"error", unifiedBlobId.GetErrorMessage()});
+            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second,
+                {"blobId", *unifiedBlobId},
+                {"storageId", storageId});
             if (!rowset.Next()) {
                 return false;
             }
@@ -43,8 +45,11 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::BorrowedBlobIds::StorageId>();
             auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::BorrowedBlobIds::BlobId>(), nullptr);
-            AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
-            AFL_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
+            AFL_VERIFY(!!unifiedBlobId,
+                {"error", unifiedBlobId.GetErrorMessage()});
+            AFL_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second,
+                {"blobId", *unifiedBlobId},
+                {"storageId", storageId});
             if (!rowset.Next()) {
                 return false;
             }
@@ -102,7 +107,8 @@ void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransa
             AFL_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
             db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Delete();
         } else {
-            AFL_VERIFY(it != BorrowedBlobIds.end())("blob_id", i.ToStringNew());
+            AFL_VERIFY(it != BorrowedBlobIds.end(),
+                {"blobId", i.ToStringNew()});
             db.Table<NColumnShard::Schema::BorrowedBlobIds>()
                 .Key(StorageId, i.ToStringNew())
                 .Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));

@@ -72,7 +72,8 @@ public:
             hFunc(TEvSessionControl, Handle);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
             default:
-                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+                AFL_VERIFY(false,
+                    {"unexpectedEvent", ev->GetTypeName()});
         }
     }
 

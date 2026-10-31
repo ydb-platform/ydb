@@ -78,11 +78,13 @@ public:
         , DictionaryUniqueFraction(dictionaryUniqueFraction)
         , DataExtractor(dataExtractor) {
         AFL_VERIFY(!!DataExtractor);
-        AFL_VERIFY(OthersAllowedFraction >= 0 && OthersAllowedFraction <= 1)("others_fraction", OthersAllowedFraction);
+        AFL_VERIFY(OthersAllowedFraction >= 0 && OthersAllowedFraction <= 1,
+            {"othersFraction", OthersAllowedFraction});
     }
 
     TSettings& SetOthersAllowedFraction(const double value) {
-        AFL_VERIFY(value >= 0 && value <= 1)("others_fraction_value", value);
+        AFL_VERIFY(value >= 0 && value <= 1,
+            {"othersFractionValue", value});
         OthersAllowedFraction = value;
         return *this;
     }

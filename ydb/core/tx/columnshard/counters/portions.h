@@ -53,7 +53,9 @@ public:
     ui64 GetDataBlobBytes() const {
         const ui64 blob = BlobBytes.Val();
         const ui64 index = IndexBlobBytes.Val();
-        AFL_VERIFY(blob >= index)("blob", blob)("index", index);
+        AFL_VERIFY(blob >= index,
+            {"blob", blob},
+            {"index", index});
         return blob - index;
     }
 
@@ -111,10 +113,14 @@ public:
 
     bool IsEmpty() const {
         if (!Count.Val()) {
-            AFL_VERIFY(!BlobBytes.Val())("this", DebugString());
-            AFL_VERIFY(!IndexBlobBytes.Val())("this", DebugString());
-            AFL_VERIFY(!RawBytes.Val())("this", DebugString());
-            AFL_VERIFY(!RecordsCount.Val())("this", DebugString());
+            AFL_VERIFY(!BlobBytes.Val(),
+                {"this", DebugString()});
+            AFL_VERIFY(!IndexBlobBytes.Val(),
+                {"this", DebugString()});
+            AFL_VERIFY(!RawBytes.Val(),
+                {"this", DebugString()});
+            AFL_VERIFY(!RecordsCount.Val(),
+                {"this", DebugString()});
             return true;
         }
         return false;
@@ -170,8 +176,10 @@ public:
 
     bool IsEmpty() const {
         if (TBase::IsEmpty()) {
-            AFL_VERIFY(!Blobs)("this", DebugString());
-            AFL_VERIFY(BytesByChannel.empty())("this", DebugString());
+            AFL_VERIFY(!Blobs,
+                {"this", DebugString()});
+            AFL_VERIFY(BytesByChannel.empty(),
+                {"this", DebugString()});
             return true;
         }
         return false;

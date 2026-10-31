@@ -82,7 +82,9 @@ private:
     }
 
     virtual ui32 GetRecordsCountVirtual() const override {
-        AFL_VERIFY(HasPortionAccessor())("tablet_id", GetTabletId())("source_id", GetSourceIdx());
+        AFL_VERIFY(HasPortionAccessor(),
+            {"tabletId", GetTabletId()},
+            {"sourceId", GetSourceIdx()});
         return GetPortionAccessor().GetRecordsVerified().size() + GetPortionAccessor().GetIndexesVerified().size();
     }
 

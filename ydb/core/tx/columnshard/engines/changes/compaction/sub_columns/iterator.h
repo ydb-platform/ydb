@@ -89,7 +89,9 @@ public:
             finishRecordActor();
             return;
         }
-        AFL_VERIFY(CurrentChunkStartPosition <= recordIndex)("pred", CurrentChunkStartPosition)("record", recordIndex);
+        AFL_VERIFY(CurrentChunkStartPosition <= recordIndex,
+            {"pred", CurrentChunkStartPosition},
+            {"record", recordIndex});
         if (recordIndex - CurrentChunkStartPosition >= CurrentChunk->GetArray()->GetRecordsCount()) {
             InitArray(recordIndex);
         }

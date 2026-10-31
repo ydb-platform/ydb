@@ -35,7 +35,8 @@ TString GetSelectSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            AFL_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -49,7 +50,8 @@ TString GetSelectSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
                     generation
             );
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            AFL_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -79,7 +81,8 @@ TString GetUpdateSourceIdQueryFromPath(const TString& path, ESourceIdTableGenera
                     << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition, SeqNo) VALUES "
                                               "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition, $SeqNo);";
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            AFL_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -108,7 +111,8 @@ TString GetUpdateAccessTimeQueryFromPath(const TString& path, ESourceIdTableGene
                    "SET AccessTime = $AccessTime "
                    "WHERE Hash = $Hash AND Topic = $Topic AND ProducerId = $SourceId AND Partition = $Partition;";
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            AFL_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -122,7 +126,8 @@ TString GetUpdateSourceIdQuery(const TString& root, ESourceIdTableGeneration gen
                     generation
             );
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            AFL_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 
@@ -136,7 +141,8 @@ TString GetUpdateAccessTimeQuery(const TString& root, ESourceIdTableGeneration g
                     generation
             );
         default:
-            AFL_ENSURE(false)("generation", static_cast<int>(generation));
+            AFL_ENSURE(false,
+                {"generation", static_cast<int>(generation)});
     }
 }
 

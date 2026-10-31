@@ -19,8 +19,8 @@ std::unique_ptr<TResponse> MakeErrorResponse(const TRequest& request, const Aws:
     constexpr bool hasKey = requires { request.GetRequest().GetKey(); };
     if constexpr (std::is_same_v<TResponse, TEvGetObjectResponse>) {
         std::pair<ui64, ui64> range;
-        AFL_VERIFY(TResponse::TryParseRange(TString(request.GetRequest().GetRange()), range))(
-            "original", request.GetRequest().GetRange());
+        AFL_VERIFY(TResponse::TryParseRange(TString(request.GetRequest().GetRange()), range),
+            {"original", request.GetRequest().GetRange()});
         return std::make_unique<TResponse>(TString(request.GetRequest().GetKey()), range, error);
     } else if constexpr (hasKey) {
         return std::make_unique<TResponse>(TString(request.GetRequest().GetKey()), error);

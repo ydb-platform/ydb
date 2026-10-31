@@ -44,7 +44,8 @@ inline NKikimrKqp::TEvKqpScanCursor::ESourcesSorting SourcesSortingToProto(const
         case ESourcesSorting::LastPkDesc:
             return NKikimrKqp::TEvKqpScanCursor::LAST_PK_DESC;
     }
-    AFL_VERIFY(false)("sources_sorting", (ui64)sorting);
+    AFL_VERIFY(false,
+        {"sourcesSorting", (ui64)sorting});
     return NKikimrKqp::TEvKqpScanCursor::SOURCE_ID_ASC;
 }
 
@@ -112,7 +113,9 @@ private:
                         break;
                 }
         }
-        AFL_VERIFY(false)("request_sorting", (ui64)RequestSorting)("reader_class", (ui64)ReaderClass);
+        AFL_VERIFY(false,
+            {"requestSorting", (ui64)RequestSorting},
+            {"readerClass", (ui64)ReaderClass});
         return ESourcesSorting::SourceIdAsc;
     }
 

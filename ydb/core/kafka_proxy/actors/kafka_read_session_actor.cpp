@@ -374,7 +374,11 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
     for (auto& [topicName, partitions] : TopicPartitions) {
         auto topicInfoIt = TopicsInfo.find(topicName);
 
-        AFL_ENSURE(topicInfoIt != TopicsInfo.end())("topic", topicName)("session", Session)("group", GroupId)("database", Context->DatabasePath);
+        AFL_ENSURE(topicInfoIt != TopicsInfo.end(),
+            {"topic", topicName},
+            {"session", Session},
+            {"group", GroupId},
+            {"database", Context->DatabasePath});
 
         THashSet<ui64> finalPartitionsToRead;
 
@@ -555,9 +559,20 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
         {"topic", record.GetTopic()},
         {"partition", record.GetPartition()});
 
-    AFL_ENSURE(record.GetSession() == Session)("expected", Session)("actual", record.GetSession())("topic", record.GetTopic())("database", Context->DatabasePath);
-    AFL_ENSURE(record.GetClientId() == GroupId)("expected", GroupId)("actual", record.GetClientId())("topic", record.GetTopic())("database", Context->DatabasePath);
-    AFL_ENSURE(record.GetGeneration() > 0)("topic", record.GetTopic())("partition", record.GetPartition())("database", Context->DatabasePath);
+    AFL_ENSURE(record.GetSession() == Session,
+        {"expected", Session},
+        {"actual", record.GetSession()},
+        {"topic", record.GetTopic()},
+        {"database", Context->DatabasePath});
+    AFL_ENSURE(record.GetClientId() == GroupId,
+        {"expected", GroupId},
+        {"actual", record.GetClientId()},
+        {"topic", record.GetTopic()},
+        {"database", Context->DatabasePath});
+    AFL_ENSURE(record.GetGeneration() > 0,
+        {"topic", record.GetTopic()},
+        {"partition", record.GetPartition()},
+        {"database", Context->DatabasePath});
 
     auto path = record.GetPath();
     if (path.empty()) {
@@ -598,14 +613,28 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
         {"topic", record.GetTopic()},
         {"group", group});
 
-    AFL_ENSURE(record.GetSession() == Session)("expected", Session)("actual", record.GetSession())("topic", record.GetTopic())("database", Context->DatabasePath);
-    AFL_ENSURE(record.GetClientId() == GroupId)("expected", GroupId)("actual", record.GetClientId())("topic", record.GetTopic())("database", Context->DatabasePath);
+    AFL_ENSURE(record.GetSession() == Session,
+        {"expected", Session},
+        {"actual", record.GetSession()},
+        {"topic", record.GetTopic()},
+        {"database", Context->DatabasePath});
+    AFL_ENSURE(record.GetClientId() == GroupId,
+        {"expected", GroupId},
+        {"actual", record.GetClientId()},
+        {"topic", record.GetTopic()},
+        {"database", Context->DatabasePath});
 
     auto pathIt = FullPathToConverter.find(NPersQueue::NormalizeFullPath(record.GetPath()));
-    AFL_ENSURE(pathIt != FullPathToConverter.end())("path", record.GetPath())("topic", record.GetTopic())("database", Context->DatabasePath);
+    AFL_ENSURE(pathIt != FullPathToConverter.end(),
+        {"path", record.GetPath()},
+        {"topic", record.GetTopic()},
+        {"database", Context->DatabasePath});
 
     auto topicInfoIt = TopicsInfo.find(pathIt->second->GetInternalName());
-    AFL_ENSURE(topicInfoIt != TopicsInfo.end())("topic", pathIt->second->GetInternalName())("path", record.GetPath())("database", Context->DatabasePath);
+    AFL_ENSURE(topicInfoIt != TopicsInfo.end(),
+        {"topic", pathIt->second->GetInternalName()},
+        {"path", record.GetPath()},
+        {"database", Context->DatabasePath});
 
     if (topicInfoIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient())) {
         YDB_LOG_INFO("Ignored ev release topic is unknown",
@@ -618,7 +647,10 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     auto newPartitionsToLockCount = newPartitionsToLockIt == NewPartitionsToLockOnTime.end() ? 0 : newPartitionsToLockIt->second.size();
 
     auto topicPartitionsIt = TopicPartitions.find(pathIt->second->GetInternalName());
-    AFL_ENSURE(1 <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount)("topic", record.GetTopic())("path", record.GetPath())("database", Context->DatabasePath);
+    AFL_ENSURE(1 <= (topicPartitionsIt.IsEnd() ? 0 : topicPartitionsIt->second.ToLock.size() + topicPartitionsIt->second.ReadingNow.size()) + newPartitionsToLockCount,
+        {"topic", record.GetTopic()},
+        {"path", record.GetPath()},
+        {"database", Context->DatabasePath});
 
     auto partitionToRelease = record.GetGroup() - 1;
 
@@ -671,7 +703,11 @@ void TKafkaReadSessionActor::InformBalancerAboutPartitionRelease(const TString& 
     auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
 
     auto topicIt = TopicsInfo.find(topic);
-    AFL_ENSURE(topicIt != TopicsInfo.end())("topic", topic)("partition", partition)("session", Session)("database", Context->DatabasePath);
+    AFL_ENSURE(topicIt != TopicsInfo.end(),
+        {"topic", topic},
+        {"partition", partition},
+        {"session", Session},
+        {"database", Context->DatabasePath});
 
     auto& req = request->Record;
     req.SetSession(Session);

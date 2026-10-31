@@ -427,8 +427,9 @@ TResult AddConsumer(
     }
 
     auto serviceTypeIt = supportedClientServiceTypes.find(serviceType);
-    AFL_ENSURE(serviceTypeIt != supportedClientServiceTypes.end())
-        ("service_type", serviceType)("consumer", consumerConfig.name());
+    AFL_ENSURE(serviceTypeIt != supportedClientServiceTypes.end(),
+        {"serviceType", serviceType},
+        {"consumer", consumerConfig.name()});
 
     const TClientServiceType& clientServiceType = serviceTypeIt->second;
 

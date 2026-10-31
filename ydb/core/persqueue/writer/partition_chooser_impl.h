@@ -100,9 +100,9 @@ const typename TBoundaryChooser<THasher>::TPartitionInfo* TBoundaryChooser<THash
     const auto keyHash = Hasher(sourceId);
     auto result = std::upper_bound(Partitions.begin(), Partitions.end(), keyHash,
                     [](const TString& value, const TPartitionInfo& partition) { return !partition.ToBound || value < partition.ToBound; });
-    AFL_ENSURE(result != Partitions.end())
-        ("d", "Partition not found. Maybe wrong partitions bounds")
-        ("Topic", TopicName);
+    AFL_ENSURE(result != Partitions.end(),
+        {"d", "Partition not found. Maybe wrong partitions bounds"},
+        {"topic", TopicName});
     return result;
 }
 

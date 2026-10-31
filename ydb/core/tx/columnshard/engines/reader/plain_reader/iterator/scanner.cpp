@@ -234,7 +234,8 @@ void TScanHead::OnSourceReady(std::unique_ptr<NCommon::TDataSourceLease> lease) 
         {"sourceIdx", sourceIdx});
     for (const ui32 intervalIdx : intervalIdxs) {
         auto it = FetchingIntervals.find(intervalIdx);
-        AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", intervalIdx);
+        AFL_VERIFY(it != FetchingIntervals.end(),
+            {"intervalIdx", intervalIdx});
         it->second->OnSourceFetchStageReady(sourceIdx);
     }
 }
@@ -253,7 +254,9 @@ void TScanHead::OnSentDataFromInterval(const TPartialSourceAddress& address) con
         return;
     }
     auto it = FetchingIntervals.find(address.GetSourceIdx());
-    AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", address.GetSourceIdx())("count", FetchingIntervals.size());
+    AFL_VERIFY(it != FetchingIntervals.end(),
+        {"intervalIdx", address.GetSourceIdx()},
+        {"count", FetchingIntervals.size()});
     it->second->OnPartSendingComplete();
 }
 

@@ -804,7 +804,8 @@ public:
 
         for (const auto& tier : tableInfo->GetUsedTiers()) {
             auto tierPath = TPath::Resolve(tier, context.SS);
-            AFL_VERIFY(tierPath.IsResolved())("path", tier);
+            AFL_VERIFY(tierPath.IsResolved(),
+                {"path", tier});
             context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
         }
 

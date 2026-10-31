@@ -77,7 +77,8 @@ std::string_view TDictStats::GetColumnName(const ui32 index) const {
 
 TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     : Original(original) {
-    AFL_VERIFY(Original->num_columns() == 4 || Original->num_columns() == 5)("count", Original->num_columns());
+    AFL_VERIFY(Original->num_columns() == 4 || Original->num_columns() == 5,
+        {"count", Original->num_columns()});
     AFL_VERIFY(Original->column(0)->type()->id() == arrow::binary()->id());
     AFL_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
@@ -98,7 +99,8 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     ColumnIndexes.reserve(DataNames->length());
     for (ui32 i = 0; i < DataNames->length(); ++i) {
         const auto insertResult = ColumnIndexes.emplace(GetColumnName(i), i);
-        AFL_VERIFY(insertResult.second)("name", GetColumnName(i));
+        AFL_VERIFY(insertResult.second,
+            {"name", GetColumnName(i)});
     }
 }
 
@@ -124,7 +126,8 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex,
         case IChunkedArray::EType::SubColumnsArray:
         case IChunkedArray::EType::SubColumnsPartialArray:
         case IChunkedArray::EType::ChunkedArray:
-            AFL_VERIFY(false)("type", type);
+            AFL_VERIFY(false,
+                {"type", type});
             return TConstructorContainer();
     }
 }
@@ -141,7 +144,8 @@ TDictStats TDictStats::DeserializeFromBlob(const TString& blob) {
         return TDictStats(*result);
     }
     auto legacy = serializer.Deserialize(blob, GetStatsSchemaLegacy());
-    AFL_VERIFY(legacy.ok())("error", legacy.status().ToString());
+    AFL_VERIFY(legacy.ok(),
+        {"error", legacy.status()});
     return TDictStats(*legacy);
 }
 
@@ -185,11 +189,14 @@ void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, con
     if (!LastKeyName) {
         LastKeyName = name;
     } else {
-        AFL_VERIFY(*LastKeyName < name)("last", LastKeyName)("name", name);
+        AFL_VERIFY(*LastKeyName < name,
+            {"last", LastKeyName},
+            {"name", name});
     }
     AFL_VERIFY(recordsCount);
     AFL_VERIFY(accessorType == IChunkedArray::EType::Array || accessorType == IChunkedArray::EType::SparsedArray ||
-               accessorType == IChunkedArray::EType::Dictionary)("type", accessorType);
+               accessorType == IChunkedArray::EType::Dictionary,
+        {"type", accessorType});
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
     TStatusValidator::Validate(Records->Append(recordsCount));
     TStatusValidator::Validate(DataSize->Append(dataSize));

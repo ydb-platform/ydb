@@ -12,7 +12,8 @@ namespace NKikimr::NColumnShard {
 NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFlightRequest(
     ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
     auto it = RequestsMeta.find(cookie);
-    AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
+    AFL_VERIFY(it != RequestsMeta.end(),
+        {"cookie", cookie});
     AFL_VERIFY(ActorIds.erase(cookie));
     const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
 

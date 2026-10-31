@@ -32,7 +32,8 @@ public:
     void AddPortions(const std::vector<std::shared_ptr<TPortionInfo>>& portions) {
         for (auto&& i : portions) {
             AFL_VERIFY(i);
-            AFL_VERIFY(Portions.emplace(i->GetAddress(), i).second)("portion_id", i->GetPortionId());
+            AFL_VERIFY(Portions.emplace(i->GetAddress(), i).second,
+                {"portionId", i->GetPortionId()});
         }
     }
 

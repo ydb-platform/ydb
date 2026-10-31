@@ -43,7 +43,8 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
     if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
-        AFL_VERIFY(Accessors.emplace(columnId, filtered).second)("id", columnId);
+        AFL_VERIFY(Accessors.emplace(columnId, filtered).second,
+            {"id", columnId});
     } else {
         if (Filter->IsTotalAllowFilter()) {
             RecordsCountActual = data->GetRecordsCount();
@@ -110,7 +111,9 @@ std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::GetAccessors(c
         if (!recordsCount) {
             recordsCount = accessor->GetRecordsCount();
         } else {
-            AFL_VERIFY(*recordsCount == accessor->GetRecordsCount())("rc", recordsCount)("accessor", accessor->GetRecordsCount());
+            AFL_VERIFY(*recordsCount == accessor->GetRecordsCount(),
+                {"rc", recordsCount},
+                {"accessor", accessor->GetRecordsCount()});
         }
         result.emplace_back(accessor);
     }
@@ -175,7 +178,8 @@ std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const u
 
 const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
-    AFL_VERIFY(it != Constants.end())("id", columnId);
+    AFL_VERIFY(it != Constants.end(),
+        {"id", columnId});
     return it->second;
 }
 
@@ -331,7 +335,8 @@ TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& dat
             Data = std::make_shared<TTrivialChunkedArray>(data.chunked_array());
         }
     } else {
-        AFL_VERIFY(false)("kind", data.ToString());
+        AFL_VERIFY(false,
+            {"kind", data});
     }
 }
 

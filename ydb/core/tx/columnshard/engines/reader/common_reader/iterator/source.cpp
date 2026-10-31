@@ -356,14 +356,16 @@ void IDataSource::InitStageData(std::unique_ptr<TFetchedData>&& data) {
 }
 
 std::unique_ptr<TFetchedData> IDataSource::ExtractStageData() {
-    AFL_VERIFY(StageData)("source_idx", SourceIdx);
+    AFL_VERIFY(StageData,
+        {"sourceIdx", SourceIdx});
     auto result = std::move(StageData);
     StageData.reset();
     return std::move(result);
 }
 
 const TFetchedData& IDataSource::GetStageData() const {
-    AFL_VERIFY(StageData)("source_idx", SourceIdx);
+    AFL_VERIFY(StageData,
+        {"sourceIdx", SourceIdx});
     return *StageData;
 }
 

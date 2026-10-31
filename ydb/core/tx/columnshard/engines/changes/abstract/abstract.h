@@ -238,7 +238,8 @@ public:
         {
             seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {
-                AFL_VERIFY(seqDataColumnIds.erase(i))("id", i);
+                AFL_VERIFY(seqDataColumnIds.erase(i),
+                    {"id", i});
             }
         }
         return resultFiltered;

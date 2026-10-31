@@ -55,7 +55,8 @@ public:
         AFL_ENSURE(NeedAck);
         NeedAck = false;
         AFL_ENSURE(ActorId);
-        AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flight_count", DataChunksInFlightCount);
+        AFL_ENSURE(!DataChunksInFlightCount,
+            {"dataChunksInFlightCount", DataChunksInFlightCount});
         ui32 flags = IEventHandle::FlagTrackDelivery;
         if (!TracingStarted) {
             flags |= IEventHandle::FlagSubscribeOnSession;
@@ -163,7 +164,8 @@ public:
 
     void FinishWaitSendData() {
         --DataChunksInFlightCount;
-        AFL_ENSURE(DataChunksInFlightCount >= 0)("data_chunks_in_flight_count", DataChunksInFlightCount);
+        AFL_ENSURE(DataChunksInFlightCount >= 0,
+            {"dataChunksInFlightCount", DataChunksInFlightCount});
         if (!DataChunksInFlightCount && !!ActorId) {
             DoAck();
         }
@@ -350,7 +352,8 @@ public:
             {"event", "ack"},
             {"computeActorId", computeActorId});
         auto it = ComputeActorsById.find(computeActorId);
-        AFL_ENSURE(it != ComputeActorsById.end())("compute_actor_id", computeActorId);
+        AFL_ENSURE(it != ComputeActorsById.end(),
+            {"computeActorId", computeActorId});
         it->second->IncTotalAcksFromCompute();
         if (it->second->IsFree()) {
             return false;
@@ -378,7 +381,8 @@ public:
             sendTask->Info->IncPending();
             UndefinedShardTaskData.emplace_back(std::move(sendTask));
         } else {
-            AFL_ENSURE(*computeShardId < ComputeActors.size())("compute_shard_id", *computeShardId);
+            AFL_ENSURE(*computeShardId < ComputeActors.size(),
+                {"computeShardId", *computeShardId});
             ComputeActors[*computeShardId].AddDataToSend(std::move(sendTask));
         }
     }
@@ -421,7 +425,8 @@ public:
 
     const std::shared_ptr<TShardState>& GetShardStateVerified(const ui64 tabletId) const {
         auto it = Shards.find(tabletId);
-        AFL_ENSURE(it != Shards.end())("tablet_id", tabletId);
+        AFL_ENSURE(it != Shards.end(),
+            {"tabletId", tabletId});
         return it->second;
     }
 
@@ -453,8 +458,11 @@ public:
             {"generation", state->Generation},
             {"shardActor", state->ActorId});
 
-        AFL_ENSURE(state->State == NComputeActor::EShardState::Starting)("state", state->State)("tablet_id", tabletId);
-        AFL_ENSURE(!state->ActorId)("actor_id", state->ActorId);
+        AFL_ENSURE(state->State == NComputeActor::EShardState::Starting,
+            {"state", state->State},
+            {"tabletId", tabletId});
+        AFL_ENSURE(!state->ActorId,
+            {"actorId", state->ActorId});
 
         state->State = NComputeActor::EShardState::Running;
         state->ActorId = scanActorId;
@@ -472,9 +480,11 @@ public:
             {"tabletId", state.TabletId},
             {"generation", state.Generation});
 
-        AFL_ENSURE(state.State == NComputeActor::EShardState::Initial)("state", state.State);
+        AFL_ENSURE(state.State == NComputeActor::EShardState::Initial,
+            {"state", state.State});
         AFL_ENSURE(state.TabletId);
-        AFL_ENSURE(!state.ActorId)("actor_id", state.ActorId);
+        AFL_ENSURE(!state.ActorId,
+            {"actorId", state.ActorId});
         state.State = NComputeActor::EShardState::Starting;
         auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider, TraceId);
         AFL_ENSURE(ShardScanners.emplace(state.TabletId, newScanner).second);
@@ -499,7 +509,8 @@ public:
             state->Generation++;
 
             auto it = ShardScanners.find(tabletId);
-            AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);
+            AFL_ENSURE(it != ShardScanners.end(),
+                {"tabletId", tabletId});
             it->second->Stop(true, "");
             ShardScanners.erase(it);
         } else {
@@ -513,7 +524,8 @@ public:
 
     const std::shared_ptr<TShardScannerInfo>& GetShardScannerVerified(const ui64 tabletId) const {
         auto it = ShardScanners.find(tabletId);
-        AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);
+        AFL_ENSURE(it != ShardScanners.end(),
+            {"tabletId", tabletId});
         return it->second;
     }
 

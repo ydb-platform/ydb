@@ -67,7 +67,8 @@ bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexReq
     if (indexSchema.HasInheritPortionStorage()) {
         InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
-    AFL_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
+    AFL_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema),
+        {"incorrectProto", indexSchema.DebugString()});
     return true;
 }
 

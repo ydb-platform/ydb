@@ -233,7 +233,10 @@ TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMetering
     }
 
     default:
-        AFL_ENSURE(false)("type", static_cast<int>(type))("tablet_id", Parameters_.TabletId)("stream", Parameters_.StreamName);
+        AFL_ENSURE(false,
+            {"type", static_cast<int>(type)},
+            {"tabletId", Parameters_.TabletId},
+            {"stream", Parameters_.StreamName});
     };
 }
 

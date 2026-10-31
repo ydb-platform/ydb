@@ -11,6 +11,20 @@ namespace NKikimr {
 
 // Write acknowledgement and FULL use W; absence checks use Ensured (E).
 class TMirror3dcWriteQuorumChecker {
+    enum class EReplicaRole {
+        Main,
+        Handoff1,
+        Handoff2,
+    };
+
+    static constexpr EReplicaRole GetReplicaRole(ui32 idxInSubgroup) {
+        return static_cast<EReplicaRole>(idxInSubgroup / 3);
+    }
+
+    static constexpr ui32 GetReplicaMask(ui32 realm, EReplicaRole role) {
+        return 1u << (realm + 3 * static_cast<ui32>(role));
+    }
+
     std::array<EMirror3dcFailRealmState, 3> Realms; // In subgroup part order.
     EMirror3dcLayout WriteLayout;
     EMirror3dcLayout EnsuredLayout;
@@ -228,16 +242,35 @@ public:
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        Y_ABORT_UNLESS(idxInSubgroup < 9);
         const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
         Y_ABORT_UNLESS(state);
-        const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
+        return GetPartsToResurrect(parts, idxInSubgroup, GetMirror3dcGroupLayouts(*state)->Durability);
+    }
+
+    ui32 GetPartsToReinforce(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
+        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
+        Y_ABORT_UNLESS(state);
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const bool hasExcludedRealm = Realms[0] == TFailRealm::F || Realms[1] == TFailRealm::F || Realms[2] == TFailRealm::F;
+        Y_DEBUG_ABORT_UNLESS(hasExcludedRealm);
+        if (!hasExcludedRealm) {
+            return 0;
+        }
+        // Reinforcement establishes the stronger write layout without changing
+        // the durability target or the guarantees already published by the group.
+        return GetPartsToResurrect(parts, idxInSubgroup, GetMirror3dcGroupLayouts(*state)->Write);
+    }
+
+private:
+    ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup, EMirror3dcLayout durability) const {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        Y_ABORT_UNLESS(idxInSubgroup < 9);
         const std::array<ui32, 3> copies = CountParts(parts);
         const ui32 localRealm = idxInSubgroup % 3;
+        const EReplicaRole localRole = GetReplicaRole(idxInSubgroup);
         const bool localRealmIsFailed = Realms[localRealm] == TFailRealm::F;
         const bool durabilitySatisfied = CheckCounts(copies, durability);
-        const bool localPartAlreadyPresent = (parts.GetDisksWithPart(localRealm) & (1u << idxInSubgroup)) != 0;
+        const bool localPartAlreadyPresent = (parts.GetDisksWithPart(localRealm) & GetReplicaMask(localRealm, localRole)) != 0;
         if (localRealmIsFailed || durabilitySatisfied || localPartAlreadyPresent) {
             return 0;
         }
@@ -284,9 +317,19 @@ public:
         if (!hasActiveSource || skipRecoveringRealm) {
             return 0;
         }
-        return copies[localRealm] < requiredCopies ? 1u << localRealm : 0;
+        if (copies[localRealm] >= requiredCopies || localRole == EReplicaRole::Handoff2) {
+            return 0;
+        }
+        const ui32 localCopies = parts.GetDisksWithPart(localRealm);
+        const bool handoff2Present = (localCopies & GetReplicaMask(localRealm, EReplicaRole::Handoff2)) != 0;
+        // Prefer Main as the additional copy when Handoff2 already holds one.
+        if (localRole == EReplicaRole::Handoff1 && handoff2Present) {
+            return 0;
+        }
+        return 1u << localRealm;
     }
 
+public:
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.
     // R participates only in layout alternatives that need it; F never contributes.
     // For E > 0, uncertainty that can hide E takes precedence over known copies.

@@ -44,11 +44,13 @@ namespace NKikimr {
         TSaviour(const TIntrusivePtr<THullCtx> &hullCtx,
                  TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
                  TLogoBlobsSnapshot &&snapshot,
-                 const std::shared_ptr<TFilter> &filter)
+                 const std::shared_ptr<TFilter> &filter,
+                 EOsirisMode mode)
             : HullCtx(hullCtx)
             , GroupInfo(std::move(groupInfo))
             , Snapshot(std::move(snapshot))
             , Filter(filter)
+            , Mode(mode)
             , CurIt(HullCtx, &Snapshot)
         {
             CurIt.SeekToFirst();
@@ -83,6 +85,7 @@ namespace NKikimr {
         const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         TLogoBlobsSnapshot Snapshot;
         const std::shared_ptr<TFilter> Filter;
+        const EOsirisMode Mode;
 
         // As an iterator we position at some element, below are data extracted from this element
         TIndexForwardIterator CurIt; // current iterator we have
@@ -106,7 +109,11 @@ namespace NKikimr {
             if (GroupInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
                 const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(*GroupInfo, CurKey.Hash());
                 Y_VERIFY_S(checker, HullCtx->VCtx->VDiskLogPrefix << "Unsupported mirror-3-dc realm states");
-                partsMask = checker->GetPartsToResurrect(layout, idxInSubgroup);
+                if (Mode == EOsirisMode::Reinforcement) {
+                    partsMask = checker->GetPartsToReinforce(layout, idxInSubgroup);
+                } else {
+                    partsMask = checker->GetPartsToResurrect(layout, idxInSubgroup);
+                }
             } else {
                 partsMask = topology.GetQuorumChecker().GetPartsToResurrect(layout, idxInSubgroup);
             }
@@ -153,6 +160,7 @@ namespace NKikimr {
         std::shared_ptr<TLogoBlobFilterForOsiris> LogoBlobFilter;
         TSaviour<TLogoBlobFilterForOsiris> Saviour;
         ui64 InFly = 0;
+        NKikimrProto::EReplyStatus ResultStatus = NKikimrProto::OK;
         ui64 BlobsResurrected = 0;
         ui64 PartsResurrected = 0;
         const ui64 MaxInFly;
@@ -196,11 +204,21 @@ namespace NKikimr {
         }
 
         void Handle(TEvAnubisOsirisPutResult::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY_S(ev->Get()->Status == NKikimrProto::OK,
-                HullCtx->VCtx->VDiskLogPrefix << "Status# " << ev->Get()->Status);
+            if (ev->Get()->Status != NKikimrProto::OK) {
+                YDB_LOG_ERROR_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix,
+                    "THullOsirisActor: local write failed: Status# %s",
+                    NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()));
+                // A terminal error takes precedence over a space shortage.
+                if (ResultStatus == NKikimrProto::OK || ResultStatus == NKikimrProto::OUT_OF_SPACE) {
+                    ResultStatus = ev->Get()->Status;
+                }
+            }
             --InFly;
-            // scan and send messages up to MaxInFly
-            ScanAndSend(ctx);
+            // Drain admitted writes on failure and release the snapshot so that
+            // compaction can reclaim space before the owner starts a fresh pass.
+            if (ResultStatus == NKikimrProto::OK) {
+                ScanAndSend(ctx);
+            }
             // check if we need to finish
             FinishIfRequired(ctx);
         }
@@ -208,7 +226,7 @@ namespace NKikimr {
         void FinishIfRequired(const TActorContext& ctx) {
             if (InFly == 0) {
                 YDB_LOG_ERROR_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "THullOsirisActor: FINISH: BlobsResurrected# %" PRIu64 " PartsResurrected# %" PRIu64, BlobsResurrected, PartsResurrected));
-                ctx.Send(NotifyId, new TEvOsirisDone(ConfirmedLsn));
+                ctx.Send(NotifyId, new TEvOsirisDone(ConfirmedLsn, ResultStatus));
                 ctx.Send(ParentId, new TEvents::TEvGone);
                 Die(ctx);
             }
@@ -235,7 +253,8 @@ namespace NKikimr {
                 TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
                 THullDsSnap &&fullSnap,
                 ui64 confirmedLsn,
-                ui64 anubisOsirisMaxInFly)
+                ui64 anubisOsirisMaxInFly,
+                EOsirisMode mode)
             : TActorBootstrapped<THullOsirisActor>()
             , HullCtx(fullSnap.HullCtx)
             , ConfirmedLsn(confirmedLsn)
@@ -243,7 +262,7 @@ namespace NKikimr {
             , ParentId(parentId)
             , SkeletonId(skeletonId)
             , LogoBlobFilter(std::make_shared<TLogoBlobFilterForOsiris>(HullCtx, std::move(fullSnap.BarriersSnap)))
-            , Saviour(HullCtx, std::move(groupInfo), std::move(fullSnap.LogoBlobsSnap), LogoBlobFilter)
+            , Saviour(HullCtx, std::move(groupInfo), std::move(fullSnap.LogoBlobsSnap), LogoBlobFilter, mode)
             , MaxInFly(anubisOsirisMaxInFly)
         {}
     };
@@ -259,8 +278,9 @@ namespace NKikimr {
             TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
             THullDsSnap &&fullSnap,
             ui64 confirmedLsn,
-            ui64 maxInFly) {
-        return new THullOsirisActor(notifyId, parentId, skeletonId, std::move(groupInfo), std::move(fullSnap), confirmedLsn, maxInFly);
+            ui64 maxInFly,
+            EOsirisMode mode) {
+        return new THullOsirisActor(notifyId, parentId, skeletonId, std::move(groupInfo), std::move(fullSnap), confirmedLsn, maxInFly, mode);
     }
 
 } // NKikimr

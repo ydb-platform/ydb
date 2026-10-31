@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.h>
 #include <ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h>
@@ -10,6 +11,8 @@ enum class ERestartPoint {
     FullSync,
     OsirisWriteReply,
     OsirisDone,
+    OsirisOutOfSpace,
+    OsirisTerminalError,
     RecoveryCommitted,
     GuidPublicationBeforeLost,
     GuidPublicationWithLost,
@@ -92,6 +95,8 @@ void TestRestart(ERestartPoint point) {
     bool restarted = false;
     ui32 osirisCallsAfterRestart = 0;
     ui32 osirisWrites = 0;
+    ui32 osirisCallsBeforeRestart = 0;
+    bool recoveryCommitted = false;
     std::optional<ui64> dbBirthLsnAfterRestart;
     std::optional<NSyncer::EDecision> decisionAfterRestart;
     env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
@@ -111,6 +116,21 @@ void TestRestart(ERestartPoint point) {
         }
         if (type == TEvBlobStorage::EvAnubisOsirisPut) {
             ++osirisWrites;
+            if (!stopped && (point == ERestartPoint::OsirisOutOfSpace || point == ERestartPoint::OsirisTerminalError)) {
+                stopped = true;
+                NKikimrProto::EReplyStatus status = NKikimrProto::ERROR;
+                if (point == ERestartPoint::OsirisOutOfSpace) {
+                    status = NKikimrProto::OUT_OF_SPACE;
+                }
+                env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvAnubisOsirisPutResult(status, env.Runtime->GetClock(), nullptr, nullptr), 0, ev->Cookie),
+                    recoveringNode);
+                return false;
+            }
+        } else if (type == TEvBlobStorage::EvCallOsiris) {
+            ++osirisCallsBeforeRestart;
+        } else if (type == TEvBlobStorage::EvSyncerLostDataRecovered) {
+            recoveryCommitted = true;
         }
         const bool stopAfterPublication = point == ERestartPoint::GuidPublicationBeforeLost || prepareLost || prepareFinal;
         if (stopAfterPublication && type == TEvBlobStorage::EvVDiskGuidObtained) {
@@ -137,6 +157,19 @@ void TestRestart(ERestartPoint point) {
         env.RestartNode(recoveringNode);
     }
     waitUntil([&] { return stopped; }, "The recovery must reach the requested restart point");
+    if (point == ERestartPoint::OsirisOutOfSpace || point == ERestartPoint::OsirisTerminalError) {
+        env.Sim(TDuration::Minutes(4));
+        UNIT_ASSERT_VALUES_EQUAL(osirisCallsBeforeRestart, 1);
+        UNIT_ASSERT(!recoveryCommitted);
+        env.Sim(TDuration::Minutes(2));
+        if (point == ERestartPoint::OsirisOutOfSpace) {
+            UNIT_ASSERT_VALUES_EQUAL(osirisCallsBeforeRestart, 2);
+            UNIT_ASSERT(recoveryCommitted);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(osirisCallsBeforeRestart, 1);
+            UNIT_ASSERT(!recoveryCommitted);
+        }
+    }
     if (point == ERestartPoint::OsirisWriteReply || point == ERestartPoint::OsirisDone ||
             point == ERestartPoint::RecoveryCommitted) {
         UNIT_ASSERT_C(osirisWrites, "Osiris must actually resurrect the lost part's ingress");
@@ -146,7 +179,7 @@ void TestRestart(ERestartPoint point) {
     restarted = true;
     env.RestartNode(recoveringNode);
     waitUntil([&] { return decisionAfterRestart.has_value(); }, "GUID recovery must finish after restart");
-    const bool expectGood = point == ERestartPoint::RecoveryCommitted || prepareFinal;
+    const bool expectGood = point == ERestartPoint::RecoveryCommitted || point == ERestartPoint::OsirisOutOfSpace || prepareFinal;
     const auto expectedDecision = expectGood
         ? NSyncer::EDecision::Good : NSyncer::EDecision::LostData;
     Cerr << "decisionAfterRestart# " << NSyncer::EDecisionToStr(*decisionAfterRestart)
@@ -181,6 +214,8 @@ Y_UNIT_TEST_SUITE(RecoverLostDataRestart) {
     Y_UNIT_TEST(DuringFullSync) { TestRestart(ERestartPoint::FullSync); }
     Y_UNIT_TEST(DuringOsiris) { TestRestart(ERestartPoint::OsirisWriteReply); }
     Y_UNIT_TEST(AfterOsirisBeforeFinalCommit) { TestRestart(ERestartPoint::OsirisDone); }
+    Y_UNIT_TEST(AfterOsirisOutOfSpace) { TestRestart(ERestartPoint::OsirisOutOfSpace); }
+    Y_UNIT_TEST(AfterTerminalOsirisError) { TestRestart(ERestartPoint::OsirisTerminalError); }
     Y_UNIT_TEST(AfterFinalCommitBeforeReplication) { TestRestart(ERestartPoint::RecoveryCommitted); }
     Y_UNIT_TEST(DuringGuidPublicationBeforeLostCommit) { TestRestart(ERestartPoint::GuidPublicationBeforeLost); }
     Y_UNIT_TEST(DuringGuidPublicationWithPersistedLost) { TestRestart(ERestartPoint::GuidPublicationWithLost); }

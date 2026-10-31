@@ -218,12 +218,21 @@ namespace NKikimr {
 
         void Handle(TEvOsirisDone::TPtr &ev, const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvOsirisDone"));
+            if (ev->Get()->Status != NKikimrProto::OK) {
+                // Never publish the final recovery GUID after an incomplete scan.
+                // Only space pressure is retryable; a dead VDisk must not be polled.
+                if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
+                    ctx.Schedule(OsirisRetryInterval, new TEvents::TEvWakeup);
+                }
+                return;
+            }
             DbBirthLsn = ev->Get()->DbBirthLsn;
             WriteFinalLocally(ctx);
         }
 
         STRICT_STFUNC(WaitOsirisStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            CFunc(TEvents::TSystem::Wakeup, CallOsiris)
             HFunc(TEvOsirisDone, Handle)
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
             HFunc(TEvVGenerationChange, Handle)

@@ -15,12 +15,18 @@
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
 
+#include <set>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncer;
 
 namespace NKikimr {
+
+    TEvReinforcementSyncDone::TEvReinforcementSyncDone(ui32 groupGeneration)
+        : GroupGeneration(groupGeneration)
+    {}
 
     ////////////////////////////////////////////////////////////////////////////
     // TSyncerSchedulerHttpActor
@@ -227,6 +233,7 @@ namespace NKikimr {
         bool Scheduled;
         THashSet<ui32> StartupDataSyncPeers;
         THashSet<ui32> FullSyncRequested;
+        std::set<ui32> ReinforcementSyncPeers;
         bool StartupDataSyncDoneReported = false;
         std::shared_ptr<TSjCtx> JobCtx;
 
@@ -267,7 +274,28 @@ namespace NKikimr {
             SyncerContext->MonGroup.SyncerUnsyncedDisks() = unsyncedDisks;
         }
 
+        void ResetReinforcementSync() {
+            ReinforcementSyncPeers.clear();
+            if (GInfo->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+                return;
+            }
+            bool hasExcludedRealm = false;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                hasExcludedRealm |= GInfo->IsFailedFailRealm(realm);
+            }
+            if (!hasExcludedRealm) {
+                return;
+            }
+            for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
+                const ui32 realm = GInfo->GetVDiskId(peer.OrderNumber).FailRealm;
+                if (!peer.Myself && !GInfo->IsFailedFailRealm(realm)) {
+                    ReinforcementSyncPeers.insert(peer.OrderNumber);
+                }
+            }
+        }
+
         void Bootstrap(const TActorContext &ctx) {
+            ResetReinforcementSync();
             const ui32 localRealm = SyncerContext->VCtx->ShortSelfVDisk.FailRealm;
             const bool localRealmRecovering = GInfo->IsRecoveringFailRealm(localRealm);
             // NodeWarden restarts a returning VDisk, so its new scheduler starts directly in R.
@@ -328,6 +356,14 @@ namespace NKikimr {
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
             const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
+            // A successful job in this generation has persisted all received metadata.
+            // Older jobs, failed attempts and the transition into full recovery cannot
+            // establish the inventory used by reinforcement.
+            if (vDiskId.GroupGeneration == GInfo->GroupGeneration && !fullRecovery
+                    && NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)
+                    && ReinforcementSyncPeers.erase(orderNumber) && ReinforcementSyncPeers.empty()) {
+                ctx.Send(SyncerContext->SkeletonId, new TEvReinforcementSyncDone(GInfo->GroupGeneration));
+            }
             if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
                 ReportStartupDataSyncDone(ctx);
             }
@@ -519,6 +555,7 @@ namespace NKikimr {
             }
             GInfo = msg->NewInfo;
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
+            ResetReinforcementSync();
 
             // Running jobs finish first; queued peers can start full sync immediately.
             TVector<TVDiskInfoPtr> queued;

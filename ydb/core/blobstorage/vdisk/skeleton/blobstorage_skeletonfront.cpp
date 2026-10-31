@@ -1209,7 +1209,7 @@ namespace NKikimr {
             // skeleton state
             const auto state = VDiskMonGroup.VDiskState();
             // replicated?
-            bool replicated = !ReplMonGroup.ReplUnreplicatedVDisks() && !HasUnreadableBlobs;
+            const bool replicated = ReplMonGroup.ReplRecoveryDone() && !HasUnreadableBlobs;
             bool unreplicatedPhantoms = ReplMonGroup.ReplUnreplicatedPhantoms();
             bool unreplicatedNonPhantoms = ReplMonGroup.ReplUnreplicatedNonPhantoms();
             // unsynced VDisks
@@ -1231,10 +1231,15 @@ namespace NKikimr {
                 } else {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::InProgress;
                 }
+            } else if (ReplMonGroup.ReplReinforcing()) {
+                replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::Reinforcing;
             }
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
                 replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light, HasUnreadableBlobs);
+            const bool reinforced = ReplMonGroup.ReplReinforced() && !HasUnreadableBlobs;
+            ev->Record.SetReinforced(reinforced);
+            ev->Record.SetReinforcementGeneration(SelfVDiskId.GroupGeneration);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();

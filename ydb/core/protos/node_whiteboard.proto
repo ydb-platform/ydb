@@ -219,6 +219,7 @@ message TVDiskDetailedReplicationStatus {
         WaitingForToken = 1;    // Replication is waiting for a token from the broker
         InProgress = 2;         // Replication is in progress, data is being transferred to VDisk
         PhantomsOnly = 3;       // Replication cannot finish due to phantom blobs
+        Reinforcing = 4;      // Additional copies are being made after realm exclusion
     }
 }
 
@@ -284,6 +285,8 @@ message TVDiskStateInfo {
     optional double VDiskRawUsage = 35; // 100.0 * Owner.Used / Owner.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 36;
     optional bool HasWhiteboardData = 38; // filled by viewer
+    optional bool Reinforced = 39 [default = false, (DefaultField) = true];
+    optional uint32 ReinforcementGeneration = 40 [(DefaultField) = true];
 }
 
 message TEvVDiskStateRequest {

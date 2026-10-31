@@ -905,6 +905,10 @@ message TEvVStatusResult {
     optional float ApproximateFreeSpaceShare = 12; // must contain valid value if set
     optional bool IsReadOnly = 13 [default = false];
     optional fixed64 IncarnationGuid = 30;
+    // Local reinforcement work is complete for this configuration; realm guarantees
+    // require collecting reports from all participating VDisks.
+    optional bool Reinforced = 31 [default = false];
+    optional uint32 ReinforcementGeneration = 32;
     optional NKikimrBlobStorage.TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 

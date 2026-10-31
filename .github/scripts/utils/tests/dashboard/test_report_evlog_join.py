@@ -20,6 +20,7 @@ from tests_resource_dashboard import (
     parse_evlog_runs,
     parse_report_chunks,
 )
+from dashboard_html_payload import build_dashboard_payload
 from dashboard_html_series import downsample_active_series
 
 
@@ -320,6 +321,43 @@ def test_active_series_downsampling_preserves_short_peak():
     assert max(sampled_ys) == 77.0
 
 
+def test_payload_keeps_exact_active_series_past_former_8k_cap():
+    # Large (~x4) runs exceed the old silent 8000-point exact→downsampled swap.
+    # Click-table counts must stay on the full undownsampled series.
+    n_runs = 4500  # 9000 start/end events
+    runs = [
+        {
+            "suite_path": f"s{i % 3}",
+            "chunk": i,
+            "start_us": float(i * 1_000_000),
+            "end_us": float(i * 1_000_000 + 500_000),
+            "dur_us": 500_000.0,
+            "cpu_sec_report": 0.5,
+            "ram_kb_report": 1024.0,
+        }
+        for i in range(n_runs)
+    ]
+    payload = build_dashboard_payload(
+        suite_filter=None,
+        runs=runs,
+        stats={},
+        top_n=10,
+        max_points=1000,
+        by_chunk=False,
+    )
+    exact_xs = payload["xs_active_exact"]
+    exact_ys = payload["ys_active_exact"]
+    chart_xs = payload["xs_active"]
+    assert len(exact_xs) == 2 * n_runs
+    assert len(exact_xs) > 8000
+    assert len(exact_ys) == len(exact_xs)
+    assert len(chart_xs) <= 1000
+    assert exact_xs != chart_xs
+    # Chart series for test_report is downsampled, but reuse source matches exact.
+    report = payload["ya_activity"]["test_report"]
+    assert max(report["ys"] or [0]) == max(exact_ys)
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     for fn in (
@@ -332,6 +370,7 @@ def load_tests(loader, tests, pattern):
         test_evlog_activity_drains_truncated_open_at_last_ts,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
         test_active_series_downsampling_preserves_short_peak,
+        test_payload_keeps_exact_active_series_past_former_8k_cap,
     ):
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite
@@ -347,4 +386,5 @@ if __name__ == "__main__":
     test_evlog_activity_drains_truncated_open_at_last_ts()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
     test_active_series_downsampling_preserves_short_peak()
+    test_payload_keeps_exact_active_series_past_former_8k_cap()
     print("OK")

@@ -1110,6 +1110,27 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
     }
 
+    Y_UNIT_TEST(UnrelatedDataCenterUpdatePreservesExplicitFailedRealm) {
+        using TFailRealm = TDataCenterStatesEnv::TFailRealm;
+        using TDataCenter = TDataCenterStatesEnv::TDataCenter;
+        TDataCenterStatesEnv env;
+        ui32 groupId = 0;
+        for (const auto& [id, group] : env.ReadGroups()) {
+            if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                groupId = id;
+                break;
+            }
+        }
+        UNIT_ASSERT(groupId);
+        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId,
+            {TFailRealm::N0, TFailRealm::N0, TFailRealm::F})).GetSuccess());
+        const NKikimrBlobStorage::TGroupInfo before = env.ReadGroups().at(groupId);
+        UNIT_ASSERT(env.Invoke(env.Define({{"unrelated-dc", TDataCenter::EXCLUDED}})).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), before.SerializeAsString());
+        UNIT_ASSERT(env.Invoke(env.Define({})).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), before.SerializeAsString());
+    }
+
     Y_UNIT_TEST(FailRealmStatesOnlyUpdatesRequestedGroups) {
         using Definition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
         TDataCenterStatesEnv env;

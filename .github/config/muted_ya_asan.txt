@@ -1,7 +1,6 @@
 ydb/apps/bridge_skipper/ydbd_mock/tests test_replication.py.StaleReplicaTest.test_disconnected_pile_is_not_pulled_to_and_rejoin_brings_it_back
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeDataKind.InterpilePutResultKeepsResultFields
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeKeepFlags.PutBeyondBarrierReported
-ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13

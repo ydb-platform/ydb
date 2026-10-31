@@ -176,6 +176,10 @@ public:
         return ActualizationIndex->CollectMetadataRequests(Portions);
     }
 
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(NActualizer::TMoveDataMetadataBudget& budget) {
+        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, InsertedPortionsById, budget);
+    }
+
     TInsertWriteId BuildNextInsertWriteId() {
         return (TInsertWriteId)AtomicIncrement(LastInsertWriteId);
     }
@@ -267,6 +271,19 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    void StartMoveData(THashSet<ui32> targetGroups) {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->StartMoveData(std::move(targetGroups), context, InsertedPortionsById);
+    }
+
+    void StopMoveData() {
+        ActualizationIndex->StopMoveData();
+    }
+
+    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes() {
+        return ActualizationIndex->UpdateMoveDataQueueSizes(Portions, InsertedPortionsById);
+    }
+
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         context.SetPortionExclusiveGuarantee(false);
@@ -289,7 +306,8 @@ public:
         return OptimizerPlanner->GetBucketPositions();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
+    void BuildActualizationTasks(
+        NActualizer::TTieringProcessContext& context, const TDuration tieringDelay, NActualizer::EActualizationScope scope) const;
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

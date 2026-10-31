@@ -1482,6 +1482,12 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
+    // Unregistered names fall through to the unknown task config, so this entry is required.
+    task->SetName("CS::MOVE_DATA");
+    task->SetQueueName(NLocalDb::ColumnShardCompactionTtlQueue);
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
     task->SetName("CS::INDEXATION");
     task->SetQueueName(NLocalDb::ColumnShardCompactionIndexationQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());

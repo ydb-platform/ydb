@@ -189,7 +189,6 @@ inline bool ConvertOlapIndexToRequested(
             }
             return true;
         }
-        case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
             YDB_LOG_ERROR("ConvertOlapIndexToRequested: unimplemented olap index type",
                 {"className", src.GetClassName()},
@@ -264,7 +263,6 @@ inline bool ConvertRequestedIndexToCreationConfig(
             return true;
         }
         case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
-        case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
             YDB_LOG_ERROR("ConvertRequestedIndexToCreationConfig: unimplemented olap index type",
                 {"className", indexProto.GetClassName()},
             );

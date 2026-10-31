@@ -4,13 +4,15 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/transactions/operators/backup.h>
 #include <ydb/core/tx/columnshard/transactions/operators/restore.h>
@@ -510,11 +512,12 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         if (!specials.NeedTestStatistics(pk)) {
             continue;
         }
-        if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
-            *schema->AddIndexes() =
-                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
-                                                         1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
-                    .SerializeToProto();
+        const auto arrowType = NArrow::GetArrowType(columns[i].GetType());
+        if (arrowType.ok() && arrow::is_primitive((*arrowType)->id())) {
+            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMinMax::TIndexMeta>(1000 + i, "MIN_MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA",
+                    false, i + 1, NOlap::NIndexes::TReadDataExtractorContainer(std::make_shared<NOlap::NIndexes::TDefaultDataExtractor>())))
+                                        .SerializeToProto();
         }
     }
 

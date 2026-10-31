@@ -1131,10 +1131,18 @@ protected:
     const TActorId Sender;
     const ui64 Cookie;
     TIntrusivePtr<TStateStorageInfo> Info;
-    TList<TActorId> AllReplicas;
+    ui32 Sent = 0;
     ui32 Count;
     ui32 UndeliveredCount;
     ui64 TabletID;
+    // the delete goes to the replicas of every ring group but the disconnected ones, with the index of the group
+    // plus one for a cookie; it succeeds with the majority of each group taking part in quorums
+    TVector<ui32> GroupReplicas;
+    TVector<ui32> GroupAcks;
+    // the ring group of the replicas of each node, or Max when the node has replicas of several groups; a replica of
+    // an older version replies without the cookie, and its node tells its group then, if it can
+    THashMap<ui32, ui32> NodeGroup;
+    bool ConfigMismatch = false; // a replica has a newer configuration, so the replicas asked may be outdated
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1150,17 +1158,50 @@ public:
         , TabletID(tabletId)
     {}
 
+    bool QuorumReached() const {
+        if (ConfigMismatch) {
+            return false;
+        }
+        bool anyGroup = false;
+        for (ui32 idx : xrange(Info->RingGroups.size())) {
+            const auto& ringGroup = Info->RingGroups[idx];
+            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.WriteOnly) {
+                continue;
+            }
+            anyGroup = true;
+            if (GroupAcks[idx] <= GroupReplicas[idx] / 2) {
+                return false;
+            }
+        }
+        return anyGroup;
+    }
+
     void SendResponse() {
-        Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, Count > AllReplicas.size() / 2 ? NKikimrProto::OK : NKikimrProto::ERROR), 0, Cookie);
+        Send(Sender, new TEvStateStorage::TEvDeleteResult(TabletID, QuorumReached() ? NKikimrProto::OK : NKikimrProto::ERROR), 0, Cookie);
         PassAway();
     }
 
     void Bootstrap() {
-        AllReplicas = Info->SelectAllReplicas();
-        if (!AllReplicas.empty()) {
-            for (const TActorId &replica : AllReplicas) {
-                Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid), IEventHandle::FlagTrackDelivery);
+        GroupReplicas.assign(Info->RingGroups.size(), 0);
+        GroupAcks.assign(Info->RingGroups.size(), 0);
+        for (ui32 idx : xrange(Info->RingGroups.size())) {
+            const auto& ringGroup = Info->RingGroups[idx];
+            if (ringGroup.State == ERingGroupState::DISCONNECTED) {
+                continue;
             }
+            for (const auto& ring : ringGroup.Rings) {
+                for (const TActorId& replica : ring.Replicas) {
+                    Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid), IEventHandle::FlagTrackDelivery, idx + 1);
+                    ++GroupReplicas[idx];
+                    ++Sent;
+                    auto [it, inserted] = NodeGroup.emplace(replica.NodeId(), idx);
+                    if (!inserted && it->second != idx) {
+                        it->second = Max<ui32>();
+                    }
+                }
+            }
+        }
+        if (Sent) {
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
             Become(&TThis::StateRequestedDelete);
         } else {
@@ -1177,7 +1218,7 @@ public:
     }
 
     void OnResponseReceived() {
-        if (Count + UndeliveredCount >= AllReplicas.size())
+        if (Count + UndeliveredCount >= Sent)
             SendResponse();
     }
 
@@ -1188,6 +1229,12 @@ public:
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         ++Count;
+        if (ev->Cookie && ev->Cookie <= GroupAcks.size()) {
+            ++GroupAcks[ev->Cookie - 1];
+        } else if (const auto it = NodeGroup.find(ev->Sender.NodeId()); it != NodeGroup.end() && it->second != Max<ui32>()) {
+            ++GroupAcks[it->second];
+        } // else the reply counts for no group: a quorum of a group can't be established with it
+
         auto &record = ev->Get()->Record;
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
@@ -1195,6 +1242,7 @@ public:
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
+            ConfigMismatch = true;
             SendResponse();
             return;
         }

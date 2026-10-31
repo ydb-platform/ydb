@@ -14,7 +14,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:32 cpu:2)
+REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(
     ydb/apps/ydb

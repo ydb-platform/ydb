@@ -115,6 +115,7 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("function syncChartGroupXRange(ids)", source)
         self.assertIn("function fullEvlogRangeMs()", source)
         self.assertIn('id="testsBySuiteDetails"', source)
+        self.assertIn('id="activeBySuiteDetails"', source)
         self.assertIn("Tests in parallel by suite", source)
         self.assertIn("Active chunks by suite", source)
         self.assertIn("CPU by suite · estimated cores", source)
@@ -133,13 +134,26 @@ class JsScriptJsonTest(unittest.TestCase):
             ".chart-tile-meta {{\n      display: none;",
             source,
         )
-        # Tests chart stays under a closed <details>, not in the main suite grid.
+        # Suite grid → tests кат → active кат → pies. Both secondary charts
+        # sit under closed <details>, not in the main suite grid.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')
+        active_details_idx = source.find('id="activeBySuiteDetails"')
         tests_pane_idx = source.find('id="testsLayerSuite"')
+        active_pane_idx = source.find('id="activeLayerSuite"')
+        pies_idx = source.find('id="cpuPieSuite"')
         self.assertGreater(suite_grid_idx, 0)
         self.assertGreater(tests_details_idx, suite_grid_idx)
+        self.assertGreater(active_details_idx, tests_details_idx)
+        self.assertGreater(pies_idx, active_details_idx)
         self.assertGreater(tests_pane_idx, tests_details_idx)
+        self.assertLess(tests_pane_idx, active_details_idx)
+        self.assertGreater(active_pane_idx, active_details_idx)
+        self.assertLess(active_pane_idx, pies_idx)
+        # Active must not remain a tile inside the main suite grid.
+        suite_grid_block = source[suite_grid_idx:tests_details_idx]
+        self.assertNotIn('data-pane="activeLayerSuite"', suite_grid_block)
+        self.assertNotIn('id="activeLayerSuite"', suite_grid_block)
 
 
 if __name__ == "__main__":

@@ -598,17 +598,6 @@ def build_html_dashboard(
   </div>
   <div id="suiteTab" class="tab">
     <div class="chart-grid" id="suiteChartGrid">
-      <div class="chart-tile" data-pane="activeLayerSuite">
-        <div class="chart-tile-head">
-          <span class="chart-tile-title">Active chunks by suite<span class="chart-tile-sub">how many suite runs are alive at each moment</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)">expand</button>
-        </div>
-        <div id="activeLayerSuite" class="chart-pane"></div>
-        <div class="chart-tile-meta">
-          <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-          <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
-        </div>
-      </div>
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU by suite · estimated cores<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
@@ -658,6 +647,21 @@ def build_html_dashboard(
           <div class="chart-tile-meta">
             <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
             <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="chart-secondary" id="activeBySuiteDetails">
+      <summary>Active chunks by suite</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="activeLayerSuite">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Active chunks by suite<span class="chart-tile-sub">how many suite runs are alive at each moment</span></span>
+          </div>
+          <div id="activeLayerSuite" class="chart-pane"></div>
+          <div class="chart-tile-meta">
+            <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
+            <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
           </div>
         </div>
       </div>
@@ -750,15 +754,20 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    (function wireTestsBySuiteDetails() {{
-      const details = document.getElementById('testsBySuiteDetails');
-      if (!details) return;
-      details.addEventListener('toggle', () => {{
-        if (!details.open) return;
-        setTimeout(() => {{
-          resizeChartPanes(['testsLayerSuite']);
-          if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
-        }}, 0);
+    (function wireCollapsedSuiteDetails() {{
+      [
+        ['testsBySuiteDetails', 'testsLayerSuite'],
+        ['activeBySuiteDetails', 'activeLayerSuite'],
+      ].forEach(([detailsId, paneId]) => {{
+        const details = document.getElementById(detailsId);
+        if (!details) return;
+        details.addEventListener('toggle', () => {{
+          if (!details.open) return;
+          setTimeout(() => {{
+            resizeChartPanes([paneId]);
+            if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+          }}, 0);
+        }});
       }});
     }})();
 

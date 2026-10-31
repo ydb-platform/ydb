@@ -266,8 +266,11 @@ private:
                 }
             } else {
                 for (auto& t : Topics) {
+                    const auto& account = t->GetAccount_();
                     if (DbRoot == "/Root/logbroker-federation"
-                        && t->GetOriginalTopic() == "SourceIdMeta2/replication")
+                        && account.Defined()
+                        && *account == "SourceIdMeta2"
+                        && t->GetFullModernName() == "replication")
                     {
                         ret.emplace_back(
                             "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication",

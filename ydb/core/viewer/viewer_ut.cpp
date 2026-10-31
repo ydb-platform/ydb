@@ -1193,7 +1193,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     void CheckStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize, bool cluster = false,
-            std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false)
+            std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false,
+            ui64 tablesSize = 0, ui64 topicsSize = 0)
     {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
@@ -1231,6 +1232,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         auto* pool = domain->AddStoragePools();
                         pool->SetName(kind);
                         pool->SetKind(kind);
+                    }
+                    if (tablesSize || topicsSize) {
+                        auto* diskSpaceUsage = domain->MutableDiskSpaceUsage();
+                        auto* poolUsage = diskSpaceUsage->AddStoragePoolsUsage();
+                        poolUsage->SetPoolKind("ssd");
+                        poolUsage->SetTotalSize(tablesSize);
+                        diskSpaceUsage->MutableTopics()->SetDataSize(topicsSize);
                     }
                     break;
                 }
@@ -1361,6 +1369,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(usage["Limit"].GetString(), expectedLimit);
             UNIT_ASSERT_VALUES_EQUAL(usage["Size"].GetString(), type == "SSD" ? "20" : "30");
         }
+        if (tablesSize || topicsSize) {
+            const auto& tablesStorage = tenant["TablesStorage"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(tablesStorage.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Type"].GetString(), "SSD");
+            UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Size"].GetString(), ToString(tablesSize + topicsSize));
+        }
     }
 
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnits)
@@ -1371,6 +1385,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
     {
         CheckStorageLimitWithGroupSizeInUnits(true);
+    }
+
+    Y_UNIT_TEST(TenantInfoTablesStorageIncludesTopicsWithPoolUsage)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200);
     }
 
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)

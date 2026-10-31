@@ -987,8 +987,12 @@ public:
 
                         if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
                             tablesStorageByType[GuessStorageType(domainDescription)] =
-                                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
-                                + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
+                                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize();
+                        }
+
+                        if (domainDescription.HasDiskSpaceUsage()) {
+                            tablesStorageByType[GuessStorageType(domainDescription)] +=
+                                domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 
                         if (storageQuotasByType.empty()) {

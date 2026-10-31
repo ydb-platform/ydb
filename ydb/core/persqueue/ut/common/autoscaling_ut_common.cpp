@@ -236,6 +236,7 @@ struct TTestReadSession : public ITestReadSession {
     std::unordered_map<TString, std::set<size_t>> GetPartitionsA() override;
     std::vector<MsgInfo> GetReceivedMessages() override;
     std::vector<EvEndMsg> GetEndedPartitionEvents() override;
+    std::unordered_map<ui64, ui64> GetCommittedOffsets() override;
 
     void SetOffset(ui32 partitionId, std::optional<ui64> offset) override;
 
@@ -260,6 +261,7 @@ struct TTestReadSession : public ITestReadSession {
 
         std::set<size_t> EndedPartitions;
         std::vector<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
+        std::unordered_map<ui64, ui64> CommittedOffsets;
 
         TMutex Lock;
         TSemaphore Semaphore;
@@ -294,7 +296,8 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
     auto readSettings = TReadSessionSettings()
         .ConsumerName(TEST_CONSUMER)
         .AutoPartitioningSupport(settings.AutoPartitioningSupport)
-        .MaxLag(settings.ReadLag);
+        .MaxLag(settings.ReadLag)
+        .ReadFromTimestamp(settings.ReadFromTimestamp);
     for (auto& topic : settings.Topics) {
         readSettings.AppendTopics(topic);
     }
@@ -405,6 +408,17 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
                 ev.Confirm();
     });
 
+    readSettings.EventHandlers_.CommitOffsetAcknowledgementHandler(
+            [impl=Impl](NYdb::NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent& ev) {
+                auto partitionId = ev.GetPartitionSession()->GetPartitionId();
+                auto committedOffset = ev.GetCommittedOffset();
+                Cerr << ">>>>> " << impl->Name << " CommitAcknowledgement partitionId=" << partitionId
+                        << " committedOffset=" << committedOffset << Endl << Flush;
+                with_lock (impl->Lock) {
+                    ui64& stored = impl->CommittedOffsets[partitionId];
+                    stored = Max(stored, committedOffset);
+                }
+            });
 
     return settings.Setup.MakeClient().CreateReadSession(readSettings);
 }
@@ -622,7 +636,7 @@ std::vector<EvEndMsg> TTestReadSession<Sdk>::GetEndedPartitionEvents() {
     with_lock(Impl->Lock) {
         std::vector<EvEndMsg> result;
         for (auto& e : Impl->EndedPartitionEvents) {
-            result.push_back({e.GetAdjacentPartitionIds(), e.GetChildPartitionIds()});
+            result.push_back({e.GetAdjacentPartitionIds(), e.GetChildPartitionIds(), static_cast<ui32>(e.GetPartitionSession()->GetPartitionId())});
         }
         return result;
     }
@@ -633,7 +647,14 @@ std::vector<MsgInfo> TTestReadSession<Sdk>::GetReceivedMessages() {
     with_lock(Impl->Lock) {
         return Impl->ReceivedMessages;
     }
-};
+}
+
+template<SdkVersion Sdk>
+std::unordered_map<ui64, ui64> TTestReadSession<Sdk>::GetCommittedOffsets() {
+    with_lock (Impl->Lock) {
+        return Impl->CommittedOffsets;
+    }
+}
 
 template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::TImpl::Modify(std::function<void (std::unordered_map<TString, std::set<size_t>>&)> modifier) {

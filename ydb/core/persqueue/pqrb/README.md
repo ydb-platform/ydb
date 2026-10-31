@@ -50,8 +50,8 @@ A child partition is given out for reading only after **all of its parents
 have been processed**, except when a session listed that child explicitly
 (see [Explicit partitions](#explicit-partitions)). If Finish carried
 `ScaleAwareSDK`, **Finish** or **Commit** is enough. For the old SDK, Finish
-alone is not enough: it also needs `StartedReadingFromEndOffset` (reading
-started at the end) or **Commit**. Otherwise the children are not readable
+alone is not enough: it also needs `StartedReadingFromEndOffset` (the
+partition delivered no data to the session) or **Commit**. Otherwise the children are not readable
 and the delay heuristic kicks in (see below).
 
 If a read session dies, **Finish** is cleared on every partition it was
@@ -131,12 +131,24 @@ are not readable and the heuristic runs:
 
 1. After **Finish** the partition is taken from the session after a short
    delay and given to another session.
-2. If the other session starts reading from the end (the partition has no
-   data), the partition is treated as fully read
+2. If the other session finishes the partition without getting any data
+   from it, the partition is treated as fully read
    (`StartedReadingFromEndOffset`).
 3. If reading did not start from the end, after the partition is finished
    again it is taken from the session after a delay. Repeat, doubling the
    delay each time.
+
+## Skipped parents
+
+A partition is skipped when its Finish carried `StartedReadingFromEndOffset`
+and it has no Commit: reading started at the end, or `read_from` filtered
+out every remaining message. The client never gets data from it, so it never
+commits it, while the first commit of a child requires every parent to be
+committed to the end.
+
+`TEvLockPartition` of a child lists its skipped ancestors
+(`SkippedParentPartitions`). The first commit of the child commits them to
+the end in the same transaction, even if another session holds the parent.
 
 ## Common assignment
 

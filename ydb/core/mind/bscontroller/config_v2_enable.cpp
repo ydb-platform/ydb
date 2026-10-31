@@ -6,10 +6,12 @@ namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxUpdateEnableConfigV2 : public TTransactionBase<TBlobStorageController> {
         bool Value;
+        std::function<void()> OnComplete;
     public:
-        TTxUpdateEnableConfigV2(TBlobStorageController *self, bool value)
+        TTxUpdateEnableConfigV2(TBlobStorageController *self, bool value, std::function<void()> onComplete)
             : TTransactionBase(self)
             , Value(value)
+            , OnComplete(std::move(onComplete))
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -22,11 +24,14 @@ namespace NKikimr::NBsController {
 
         void Complete(const TActorContext&) override {
             Self->EnableConfigV2 = Value;
+            if (OnComplete) {
+                OnComplete();
+            }
         }
     };
 
-    ITransaction* TBlobStorageController::CreateTxUpdateEnableConfigV2(bool value) {
-        return new TTxUpdateEnableConfigV2(this, value);
+    ITransaction* TBlobStorageController::CreateTxUpdateEnableConfigV2(bool value, std::function<void()> onComplete) {
+        return new TTxUpdateEnableConfigV2(this, value, std::move(onComplete));
     }
 
 } // NKikimr::NBsController

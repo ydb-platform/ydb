@@ -206,6 +206,7 @@ bool CopyToConfigRequest(const Ydb::Config::ReplaceConfigRequest &from, NKikimrB
     auto shim = ConvertConfigReplaceRequest(from);
 
     to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(shim.MainConfig.value_or(TString{})));
+    to->SetRollback(from.dry_run()); // the dry run only checks the commands
     return true;
 }
 
@@ -283,7 +284,9 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TRpcBase::Bootstrap(ctx);
         auto *self = Self();
-        self->OnBootstrap();
+        if (!self->OnBootstrap()) {
+            return;
+        }
         const auto& request = *GetProtoRequest();
         auto shim = ConvertConfigReplaceRequest(request);
         if (shim.MainConfig) {
@@ -409,6 +412,8 @@ public:
 
             auto& req = *request->Record.MutableRequest();
             req.set_config(*DatabaseConfig);
+            req.set_dry_run(GetProtoRequest()->dry_run());
+            req.set_allow_unknown_fields(GetProtoRequest()->allow_unknown_fields() || GetProtoRequest()->bypass_checks());
 
             request->Record.SetBypassAuth(true);
             NTabletPipe::SendData(SelfId(), ConsolePipe, request.release());
@@ -427,7 +432,15 @@ private:
     std::optional<TString> TargetDatabase;
 
     bool ResolveTargetDatabase() {
-        const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+        NYamlConfig::TDatabaseMetadata metadata;
+        try {
+            metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
+        } catch (const std::exception& ex) {
+            // e.g. the version is not a number
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid config metadata: " << ex.what(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return false;
+        }
 
         if (metadata.Database) {
             TargetDatabase = CanonizePath(*metadata.Database);
@@ -517,7 +530,9 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TRpcBase::Bootstrap(ctx);
         auto *self = Self();
-        self->OnBootstrap();
+        if (!self->OnBootstrap()) {
+            return;
+        }
 
         if (const auto& databaseName = self->Request_->GetDatabaseName()) {
             // Database YAML config (Ydb::DynamicConfig::ConfigIdentity::TypeCase::kDatabase)

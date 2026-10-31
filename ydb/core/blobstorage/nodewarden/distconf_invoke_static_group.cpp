@@ -503,14 +503,22 @@ namespace NKikimr::NStorage {
                     continue;
                 }
 
+                // dropping all the donors of the position comes with the location of the acceptor, while each donor
+                // has a slot of its own
+                const bool dropAllDonors = isDropDonor && !vdiskId.GroupGeneration && vdisk.HasDonorMode();
                 const auto& loc = vdisk.GetVDiskLocation();
-                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
-                        loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
+                if (!dropAllDonors && (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
+                        loc.GetVDiskSlotID() != vslotId.GetVSlotId())) {
                     continue; // doesn't match our pdisk
                 }
 
                 if (groupRemoved && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
                     continue; // VDisk of the removed group can only be a destroyed one
+                }
+
+                if (!isDropDonor && currentVDiskId != vdiskId) {
+                    // the slot is taken by another VDisk since: the report came late, the VDisk it is about is gone
+                    continue;
                 }
 
                 // this must be the obsolete disk (donor has generation from the past, destroyed disks too)

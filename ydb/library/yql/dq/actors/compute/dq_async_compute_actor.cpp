@@ -298,9 +298,7 @@ private:
             return;
         }
 
-        outputChannel.PopStarted = true;
-        ProcessOutputsState.Inflight++;
-        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvOutputChannelDataRequest(channelId, wasFinished, peerState.GetFreeMemory()));
+        RequestOutputChannelData(outputChannel, wasFinished, peerState.GetFreeMemory());
     }
 
     void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& sinkInfo) override {
@@ -347,18 +345,25 @@ private:
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
         CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
+        YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
         outputChannel->Finished = true;
         outputChannel->EarlyFinish = true;
-        YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
         if (outputChannel->PopStarted) { // There may be another in-flight message here
             return;
         }
 
-        outputChannel->PopStarted = true;
-        ProcessOutputsState.Inflight++;
-        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(channelId, /* wasFinished = */ true, 0));  // finish channel
+        RequestOutputChannelData(*outputChannel, /*wasFinished=*/true, 0);
         DoExecute();
+    }
+
+    void RequestOutputChannelData(TOutputChannelInfo& outputChannel, bool wasFinished, i64 size) {
+        if (outputChannel.EarlyFinish && wasFinished) {
+            EarlyFinishRequestedChannels.insert(outputChannel.ChannelId);
+        }
+        outputChannel.PopStarted = true;
+        ProcessOutputsState.Inflight++;
+        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvOutputChannelDataRequest>(outputChannel.ChannelId, wasFinished, size));
     }
 
     void TakeInputChannelData(TChannelDataOOB&& channelDataOOB, bool ack) override {
@@ -581,6 +586,15 @@ private:
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_ABORT_UNLESS(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
+        if (outputChannel.EarlyFinish && !EarlyFinishRequestedChannels.contains(outputChannel.ChannelId)) {
+            // The peer finished while this read was in flight. Its response does not
+            // acknowledge closing the task runner's channel; send that request now.
+            outputChannel.PopStarted = false;
+            ProcessOutputsState.Inflight--;
+            RequestOutputChannelData(outputChannel, /*wasFinished=*/true, 0);
+            DoExecute();
+            return;
+        }
         // This condition was already checked in ProcessOutputsImpl, but since then
         // RetryState could've been changed. Recheck it once again:
         if (!Channels->ShouldSkipData(outputChannel.ChannelId) && !Channels->CanSendChannelData(outputChannel.ChannelId)) {
@@ -902,6 +916,7 @@ private:
     NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
 
     THashSet<ui64> FinishedOutputChannels;
+    THashSet<ui64> EarlyFinishRequestedChannels;
     THashSet<ui64> FinishedSinks;
     struct TProcessSourcesState {
         int Inflight = 0;

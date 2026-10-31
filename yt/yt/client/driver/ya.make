@@ -8,6 +8,7 @@ SRCS(
     bundle_controller_commands.cpp
     chaos_commands.cpp
     command.cpp
+    command_memory_estimate.cpp
     config.cpp
     cypress_commands.cpp
     distributed_table_commands.cpp

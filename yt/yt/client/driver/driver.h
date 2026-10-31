@@ -10,6 +10,8 @@
 
 #include <yt/yt/client/signature/public.h>
 
+#include <yt/yt/core/actions/public.h>
+
 #include <yt/yt/core/concurrency/async_stream.h>
 
 #include <yt/yt/core/misc/error.h>
@@ -168,12 +170,13 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! If |heavyCommandInvoker| is non-null, heavy commands are executed via it instead of the connection invoker.
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
     TDriverConfigPtr config,
-    NSignature::ISignatureValidatorPtr signatureValidator);
+    NSignature::ISignatureValidatorPtr signatureValidator,
+    IInvokerPtr heavyCommandInvoker = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

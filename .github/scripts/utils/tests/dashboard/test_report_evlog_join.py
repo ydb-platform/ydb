@@ -16,6 +16,7 @@ add_product_paths(TEST_METRICS)
 from tests_resource_dashboard import (
     _build_resources_overlay,
     parse_evlog_activity,
+    parse_evlog_activity_deltas,
     parse_evlog_runs,
     parse_report_chunks,
 )
@@ -255,6 +256,37 @@ def test_evlog_activity_zero_length_close_stays_balanced():
     assert activity == [{"kind": "build", "start_us": 20.0, "end_us": 30.0}]
 
 
+def test_evlog_activity_drains_truncated_open_at_last_ts():
+    # B without E/Result — must not leave concurrency stuck after last event.
+    events = [
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 1,
+            "ts": 10.0,
+            "name": "CC",
+            "args": {"name": "Compile(open.cpp)"},
+        },
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 2,
+            "ts": 20.0,
+            "name": "CC",
+            "args": {"name": "Compile(closed.cpp)"},
+        },
+        {"ph": "E", "pid": 1, "tid": 2, "ts": 40.0},
+    ]
+    deltas = parse_evlog_activity_deltas(events=events)
+    build = sorted(deltas["build"])
+    assert build == [(10.0, 1), (20.0, 1), (40.0, -1), (40.0, -1)]
+    activity = parse_evlog_activity(events=events)
+    assert activity == [
+        {"kind": "build", "start_us": 10.0, "end_us": 40.0},
+        {"kind": "build", "start_us": 20.0, "end_us": 40.0},
+    ]
+
+
 def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
     enriched_runs = [
         {
@@ -297,6 +329,7 @@ def load_tests(loader, tests, pattern):
         test_evlog_activity_chrome_trace_uses_event_name_as_tag,
         test_evlog_activity_closes_tm_on_result_without_e,
         test_evlog_activity_zero_length_close_stays_balanced,
+        test_evlog_activity_drains_truncated_open_at_last_ts,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
         test_active_series_downsampling_preserves_short_peak,
     ):
@@ -311,6 +344,7 @@ if __name__ == "__main__":
     test_evlog_activity_chrome_trace_uses_event_name_as_tag()
     test_evlog_activity_closes_tm_on_result_without_e()
     test_evlog_activity_zero_length_close_stays_balanced()
+    test_evlog_activity_drains_truncated_open_at_last_ts()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
     test_active_series_downsampling_preserves_short_peak()
     print("OK")

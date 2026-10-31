@@ -312,8 +312,8 @@ def build_dashboard_payload(
     deltas_by_kind = ya_activity_deltas or {}
     for kind in ("build", "archive", "cache", "link", "test_report", "test_tm"):
         if kind == "test_report":
-            # Report-backed chunk spans stay as start/end rows (already epoch-aligned).
-            activity_xs, activity_ys = build_active_series(enriched)
+            # Same series as click-table exact counts (already epoch-aligned).
+            activity_xs, activity_ys = xs_active_exact, ys_active_exact
         else:
             activity_xs, activity_ys = build_active_series_from_deltas(
                 deltas_by_kind.get(kind) or []
@@ -548,9 +548,10 @@ def build_dashboard_payload(
         "tests_tracks_suite": tests_tracks_suite,
         "xs_active": xs_active,
         "ys_active": ys_active,
-        # Cap exact series to avoid re-bloating the fetched JSON on huge runs.
-        "xs_active_exact": xs_active_exact if len(xs_active_exact) <= 8000 else xs_active,
-        "ys_active_exact": ys_active_exact if len(xs_active_exact) <= 8000 else ys_active,
+        # Keep undownsampled series for click-table counts. On large (~x4) runs
+        # this is still small vs suite tracks (cold ~7k pts / ~0.1MB; x4 ~0.5MB).
+        "xs_active_exact": xs_active_exact,
+        "ys_active_exact": ys_active_exact,
         "ya_activity": activity_series,
         "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
         "pie_cpu_vals": [cpu_by_label.get(lb, 0.0) for lb in top_cpu]

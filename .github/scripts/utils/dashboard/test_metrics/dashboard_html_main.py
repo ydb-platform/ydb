@@ -1445,18 +1445,27 @@ def build_html_dashboard(
     }}
     const cfg = data.run_config || {{}};
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
+    const prTitle = cfg.pr_title != null && String(cfg.pr_title).trim() !== '' ? String(cfg.pr_title).trim() : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
     const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
       const artifactsUrl = (cfg.artifacts_url || '').trim();
     const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
-    const hasCiData = pr || branch || commit || artifactsUrl;
+    const hasCiData = pr || prTitle || branch || commit || artifactsUrl;
     const repo = escapeHtml((cfg.repo || 'ydb-platform/ydb').trim());
-    if (pr) {{
+    if (pr || prTitle) {{
       const el = document.getElementById('headerPr');
-      const prSafe = escapeHtml(pr);
-      el.textContent = 'PR #' + pr;
       el.style.display = '';
-      el.innerHTML = '<a href="https://github.com/' + repo + '/pull/' + prSafe + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + prSafe + '</a>';
+      let html = '';
+      if (pr) {{
+        const prSafe = escapeHtml(pr);
+        html += '<a href="https://github.com/' + repo + '/pull/' + prSafe + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + prSafe + '</a>';
+      }} else {{
+        html += '<span style="color:#2563eb;font-weight:600;">PR</span>';
+      }}
+      if (prTitle) {{
+        html += ' <span style="color:#0f172a;font-weight:600;">' + escapeHtml(prTitle) + '</span>';
+      }}
+      el.innerHTML = html;
     }}
     if (branch) {{
       const el = document.getElementById('headerBranch');
@@ -1472,6 +1481,14 @@ def build_html_dashboard(
       const shortSafe = escapeHtml(short);
       el.innerHTML = '<a href="https://github.com/' + repo + '/commit/' + commitSafe + '" target="_blank" rel="noopener" style="color:#0f172a;text-decoration:none;">' + shortSafe + '</a>';
       el.style.display = '';
+    }}
+    // Browser tab title: make it obvious which PR/dashboard this is.
+    if (pr && prTitle) {{
+      document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard';
+    }} else if (prTitle) {{
+      document.title = prTitle + ' · Resource dashboard';
+    }} else if (pr) {{
+      document.title = 'PR #' + pr + ' · Resource dashboard';
     }}
     const linksEl = document.getElementById('headerLinks');
     const artifactsBase = safeHttpBase(artifactsUrl);

@@ -169,6 +169,9 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertGreater(ya_idx, 0)
         self.assertLess(ya_idx, footer_idx)
         self.assertNotIn("How CPU/RAM chart metrics are calculated", source[0:ya_idx])
+        self.assertIn("cfg.pr_title", source)
+        self.assertIn("Resource dashboard", source)
+        self.assertIn("document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard'", source)
         self.assertIn("CPU by suite · estimated cores", source)
         self.assertIn("chart-tile-sub", source)
         # Expand matches the ya-activity full-row slot (same as .span-2).

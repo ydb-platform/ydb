@@ -1544,6 +1544,7 @@ def main() -> None:
     )
     p.add_argument("--runner", type=str, default=None, help="Runner name (e.g. GitHub Actions runner) for monitoring link")
     p.add_argument("--pr", type=str, default=None, help="PR number for dashboard header")
+    p.add_argument("--pr-title", type=str, default=None, help="PR title for dashboard header and page title")
     p.add_argument("--branch", type=str, default=None, help="Target branch for dashboard header")
     p.add_argument("--commit", type=str, default=None, help="Commit SHA for dashboard header")
     p.add_argument("--artifacts-url", type=str, default=None, help="Base URL for artifacts (index.html, try links)")
@@ -1890,6 +1891,7 @@ def main() -> None:
         run_config = {
             "runner": args.runner,
             "pr": args.pr,
+            "pr_title": args.pr_title,
             "branch": args.branch,
             "commit": args.commit,
             "artifacts_url": args.artifacts_url,

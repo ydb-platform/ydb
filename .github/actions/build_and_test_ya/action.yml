@@ -430,7 +430,8 @@ runs:
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         # Comparison draft PRs: always run the complete small/medium set with --retest
-        # (skip graph_compare incremental filter). Same mode as prior telemetry A/B PRs.
+        # (skip graph_compare incremental filter). Force increment=false regardless of
+        # pr_check.yml input. Same mode as prior telemetry A/B PRs.
         if false; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
@@ -475,16 +476,12 @@ runs:
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
-        if [ ! -z "${{ fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}")
-        fi
-
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}")
-          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
-        fi
+        # Comparison draft PRs: disable remote build cache (read+write), same as
+        # pr_like_test_benchmark (--no-bazel-remote-store, no put). Local ~/.ya is
+        # already wiped earlier in this action; tests still forced via --retest.
+        params+=(--no-bazel-remote-store)
+        # Intentionally skip --bazel-remote-store / --bazel-remote-put even when
+        # REMOTE_CACHE_URL / put_build_results_to_cache are set by pr_check.yml.
 
         analytics track runner_info --kind info --runner
         analytics flush

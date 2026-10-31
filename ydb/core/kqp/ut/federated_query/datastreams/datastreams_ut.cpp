@@ -2463,7 +2463,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(WriteLargeMessageIntoTopic, TStreamingTestFixture) {
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateScopedTopic(outputTopic);
+        CreateTopic(outputTopic);
+        Y_DEFER {
+            DropTopic(outputTopic);
+        };
         CreatePqSource(pqSourceName);
 
         ExecQuery(fmt::format(R"(

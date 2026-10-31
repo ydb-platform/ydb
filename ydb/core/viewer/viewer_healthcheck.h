@@ -20,7 +20,6 @@ class TJsonHealthCheck : public TViewerPipeClient {
     using TThis = TJsonHealthCheck;
     using TBase = TViewerPipeClient;
     HealthCheckResponseFormat Format;
-    TString Database;
     bool Cache = true;
     bool MergeRecords = false;
     TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> MetadataCacheEndpointsLookup;
@@ -91,10 +90,6 @@ public:
                     break;
                 }
             }
-        }
-        Database = Params.Get("database");
-        if (Database.empty()) {
-            Database = Params.Get("tenant");
         }
         if (!CheckAccess()) {
             return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));

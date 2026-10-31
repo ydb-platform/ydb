@@ -2,6 +2,7 @@
 #include "log.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/path.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -163,6 +164,10 @@ TString TViewerPipeClient::RestorePath(const TString& path, TStringBuf parameter
     const TString& canonical = Params.Get(parameter);
     if (!original.empty() && !canonical.empty() && path.StartsWith(canonical)
         && (path.size() == canonical.size() || path[canonical.size()] == '/')) {
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()
+            && (parameter == "database" || parameter == "database_path" || parameter == "tenant")) {
+            original = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, original);
+        }
         if (parameter != "path" || original.StartsWith('/')) {
             original = CanonizePath(original);
         }
@@ -1474,6 +1479,9 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
     CheckDatabase = checkDatabaseAuth;
     if (NeedRedirect && request) {
         NeedRedirect = false;
+        if (AppData()->FeatureFlags.GetEnableRelativePaths()) {
+            Database = PrependDomainIfNeeded("/" + AppData()->DomainsInfo->GetDomain()->Name, Database);
+        }
         Direct |= !request.GetHeader("X-Forwarded-From-Node").empty(); // we're already forwarding
         Direct |= (Database == AppData()->TenantName) || Database.empty(); // we're already on the right node or don't use database filter
         if (Database) {

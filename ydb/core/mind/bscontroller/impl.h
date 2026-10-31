@@ -1670,7 +1670,8 @@ public:
     struct TConfigValidationInfo {
         enum class ESource {
             Distconf,
-            ConsoleInteraction
+            ConsoleInteraction,
+            ConsoleInteractionApply, // not a validation, but the application of the storage config committed for Console
         };
 
         TActorId Sender;
@@ -2015,7 +2016,8 @@ private:
     void Handle(TEvents::TEvUndelivered::TPtr ev);
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
     void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
-    void ApplyStorageConfig(bool ignoreDistconf = false);
+    // returns true if a config command is sent; its response comes to the controller with the cookie
+    bool ApplyStorageConfig(bool ignoreDistconf = false, ui64 cookie = 0);
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
 
@@ -2198,7 +2200,7 @@ private:
     ITransaction* CreateTxInitScheme();
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
-    ITransaction* CreateTxUpdateEnableConfigV2(bool value);
+    ITransaction* CreateTxUpdateEnableConfigV2(bool value, std::function<void()> onComplete = {});
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
     ITransaction* CreateTxCleanupStaleStorageEntries();
     // validate addition of the pile against the storage config being proposed, then send the response

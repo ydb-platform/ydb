@@ -39,5 +39,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    control_plane
     with_offset_ranges_mode_ut
 )

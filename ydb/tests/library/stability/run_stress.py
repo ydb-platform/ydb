@@ -7,7 +7,7 @@ import random
 import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Union
+from typing import NamedTuple, Optional, Union
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 from ydb.tests.library.stability.utils.results_models import (
@@ -20,11 +20,29 @@ from ydb.tests.library.stability.utils.results_models import (
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 
 from ydb.tests.library.stability.utils.remote_execution import execute_command
+from ydb.tests.library.stability.utils.workload_logs import (
+    build_redirected_workload_command,
+    make_log_id,
+    parse_workload_trailer,
+)
 
 
 _FAILED_RUN_RETRY_DELAY_SECONDS = 10
 _WORKLOAD_TIMEOUT_GRACE_SECONDS = 60
 _PRE_POST_COMMAND_TIMEOUT_SECONDS = 300
+
+
+class WorkloadRunOutcome(NamedTuple):
+    """One workload iteration. Log text stays in files on the executing host."""
+
+    success: bool
+    execution_time: float
+    is_timeout: bool
+    stdout_path: Optional[str] = None
+    stderr_path: Optional[str] = None
+    stdout_bytes: Optional[int] = None
+    stderr_bytes: Optional[int] = None
+    error: Optional[str] = None
 
 
 class StressRunExecutor:
@@ -210,36 +228,37 @@ class StressRunExecutor:
                                 node_host  # Thread identifier - node host
                             )
 
-                            # Execute one run
-                            success, execution_time, stdout, stderr, is_timeout = (
-                                self._execute_single_workload_run(
-                                    deployed_binary_path,
-                                    node['node'],
-                                    run_name,
-                                    ' '.join(workload_config['args']),
-                                    '--duration',
-                                    run_config_copy,
-                                )
+                            # Execute one run. Full logs stay on the node;
+                            # the result keeps only a bounded tail.
+                            outcome = self._execute_single_workload_run(
+                                deployed_binary_path,
+                                node['node'],
+                                run_name,
+                                ' '.join(workload_config['args']),
+                                '--duration',
+                                run_config_copy,
                             )
 
                             # Save run result
                             run_result = StressUtilRunResult()
                             run_result.run_config = run_config_copy
                             run_result.iteration_number = current_iteration
-                            run_result.is_success = success
-                            run_result.is_timeout = is_timeout
-                            run_result.execution_time = execution_time
+                            run_result.is_success = outcome.success
+                            run_result.is_timeout = outcome.is_timeout
+                            run_result.execution_time = outcome.execution_time
                             run_result.start_time = start_time
                             run_result.end_time = time_module.time()
-                            run_result.stdout = stdout
-                            run_result.stderr = stderr
+                            run_result.stdout_path = outcome.stdout_path
+                            run_result.stderr_path = outcome.stderr_path
+                            run_result.stdout_bytes = outcome.stdout_bytes
+                            run_result.stderr_bytes = outcome.stderr_bytes
 
                             start_time = time_module.time()
                             node_result.runs.append(run_result)
 
                             # Update node statistics
-                            node_result.total_execution_time += execution_time
-                            if success:
+                            node_result.total_execution_time += outcome.execution_time
+                            if outcome.success:
                                 logging.info(
                                     f"Run {current_iteration} on {node_host} completed successfully"
                                 )
@@ -253,7 +272,7 @@ class StressRunExecutor:
                             if remaining_time > 0:
                                 retry_delay = (
                                     remaining_time
-                                    if success
+                                    if outcome.success
                                     else min(
                                         _FAILED_RUN_RETRY_DELAY_SECONDS,
                                         remaining_time,
@@ -363,7 +382,7 @@ class StressRunExecutor:
             }
             run_name = f"{name}_{node_host}_pre_nemesis"
             with allure.step(f"Execute pre-nemesis for workload {name} on {node_host}"):
-                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                outcome = self._execute_single_workload_run(
                     node['binary_path'],
                     node['node'],
                     run_name,
@@ -373,17 +392,17 @@ class StressRunExecutor:
                 )
                 result_dict = {
                     "name": name, "host": node_host,
-                    "success": success, "execution_time": round(execution_time, 2),
-                    "is_timeout": is_timeout,
+                    "success": outcome.success, "execution_time": round(outcome.execution_time, 2),
+                    "is_timeout": outcome.is_timeout,
                     "command": run_config.get("run_command", ""),
-                    "stdout": stdout, "stderr": stderr,
+                    "stdout_path": outcome.stdout_path, "stderr_path": outcome.stderr_path,
                 }
                 allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
                               attachment_type=allure.attachment_type.JSON)
-                if not success:
+                if not outcome.success:
                     raise RuntimeError(
                         f"Pre-nemesis command for {name} on {node_host} failed "
-                        f"(timeout={is_timeout}): {stderr[:200]}"
+                        f"(timeout={outcome.is_timeout}): {outcome.error or outcome.stderr_path}"
                     )
                 else:
                     logging.info(f"Pre-nemesis command for {name} on {node_host} succeeded")
@@ -435,7 +454,7 @@ class StressRunExecutor:
             }
             run_name = f"{name}_{node_host}_post_nemesis"
             with allure.step(f"Execute post-nemesis for workload {name} on {node_host}"):
-                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                outcome = self._execute_single_workload_run(
                     node['binary_path'],
                     node['node'],
                     run_name,
@@ -445,17 +464,17 @@ class StressRunExecutor:
                 )
                 result_dict = {
                     "name": name, "host": node_host,
-                    "success": success, "execution_time": round(execution_time, 2),
-                    "is_timeout": is_timeout,
+                    "success": outcome.success, "execution_time": round(outcome.execution_time, 2),
+                    "is_timeout": outcome.is_timeout,
                     "command": run_config.get("run_command", ""),
-                    "stdout": stdout, "stderr": stderr,
+                    "stdout_path": outcome.stdout_path, "stderr_path": outcome.stderr_path,
                 }
                 allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
                               attachment_type=allure.attachment_type.JSON)
-                if not success:
+                if not outcome.success:
                     raise RuntimeError(
                         f"Post-nemesis command for {name} on {node_host} failed "
-                        f"(timeout={is_timeout}): {stderr[:200]}"
+                        f"(timeout={outcome.is_timeout}): {outcome.error or outcome.stderr_path}"
                     )
                 else:
                     logging.info(f"Post-nemesis command for {name} on {node_host} succeeded")
@@ -479,9 +498,13 @@ class StressRunExecutor:
         command_args_template: str,
         duration_param: str,
         run_config: dict,
-    ) -> tuple[bool, float, str, str, bool]:
+    ) -> WorkloadRunOutcome:
         """
-        Executes a single workload run with detailed logging and timeout handling
+        Executes a single workload run with detailed logging and timeout handling.
+
+        Workload stdout and stderr are redirected to files on ``target_node``.
+        The test process receives only a short trailer (paths and sizes).
+        A clean success deletes those files.
 
         Args:
             deployed_binary_path: Path to workload binary on target node
@@ -497,17 +520,8 @@ class StressRunExecutor:
                 - thread_id: Worker thread identifier
 
         Returns:
-            Tuple containing:
-            - success: Boolean indicating if run succeeded
-            - execution_time: Actual run duration in seconds
-            - stdout: Standard output from command
-            - stderr: Standard error from command
-            - is_timeout: Boolean indicating if run timed out
-
-        Note:
-            - Automatically adds buffer time to timeout
-            - Attaches full execution details to Allure report
-            - Handles command output buffering properly
+            WorkloadRunOutcome. ``stdout_path`` and ``stderr_path`` are set only
+            when the log files were kept on the node (failed or timed out run).
         """
         # Substitute variables in command_args_template for unique paths
         command_args = self.__substitute_variables_in_template(
@@ -526,9 +540,11 @@ class StressRunExecutor:
             )
 
         run_start_time = time_module.time()
+        stdout_path = None
+        stderr_path = None
 
         try:
-            # Disable buffering to ensure output capture
+            # Disable buffering so a killed run still leaves a partial file.
             env_exports = ['export YDB_STRESS_EXTENDED_RETRIES=1']
             if self.event_process_mode is not None:
                 env_exports.append(
@@ -537,39 +553,67 @@ class StressRunExecutor:
             env_prefix = ''.join(f'{e};' for e in env_exports)
             cmd = f"{env_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
             run_config['run_command'] = cmd
+            wrapped, stdout_path, stderr_path = build_redirected_workload_command(
+                cmd, make_log_id(run_name)
+            )
             run_timeout = (
                 run_config["duration"] + _WORKLOAD_TIMEOUT_GRACE_SECONDS
             )  # Add buffer for completion
 
             execution_result = execute_command(
                 target_node.host,
-                cmd,
+                wrapped,
                 raise_on_error=False,
                 timeout=int(run_timeout),
                 raise_on_timeout=False,
             )
 
-            stdout = execution_result.stdout
-            stderr = execution_result.stderr
+            info = parse_workload_trailer(execution_result.stdout)
             is_timeout = execution_result.is_timeout
-
+            exit_code = execution_result.exit_code
+            # A missing trailer means we could not prove stderr was empty.
+            stderr_nonempty = True if not info.parsed else info.stderr_nonempty
             if self._ignore_stderr_content:
-                success = not is_timeout and execution_result.exit_code == 0
+                success = not is_timeout and exit_code == 0
             else:
-                # success=True only if stderr is empty (excluding SSH
-                # warnings) AND no timeout
-                success = not bool(stderr.strip()) and not is_timeout and execution_result.exit_code == 0
+                success = (not stderr_nonempty) and not is_timeout and exit_code == 0
+
+            logs_kept = (not info.parsed) or info.logs_kept
+            if info.parsed and info.logs_kept:
+                # Trailer paths are expanded on the host ($HOME/tmp/...).
+                stdout_path = info.stdout_path or stdout_path
+                stderr_path = info.stderr_path or stderr_path
+            elif not logs_kept:
+                stdout_path = None
+                stderr_path = None
 
             execution_time = time_module.time() - run_start_time
+            if success:
+                logging.info("%s completed in %.1fs", run_name, execution_time)
+            else:
+                logging.warning(
+                    "%s failed in %.1fs timeout=%s stdout=%s stderr=%s",
+                    run_name, execution_time, is_timeout, stdout_path, stderr_path,
+                )
 
-            logging.info(
-                f"{run_name} completed in {
-                    execution_time: .1f}s, success: {success}, timeout: {is_timeout}"
+            return WorkloadRunOutcome(
+                success=success,
+                execution_time=execution_time,
+                is_timeout=is_timeout,
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+                stdout_bytes=None if info.stdout_bytes is None or info.stdout_bytes < 0 else info.stdout_bytes,
+                stderr_bytes=None if info.stderr_bytes is None or info.stderr_bytes < 0 else info.stderr_bytes,
             )
-
-            return success, execution_time, stdout, stderr, is_timeout
         except Exception as e:
             execution_time = time_module.time() - run_start_time
             error_msg = f"Exception in {run_name}: {e}"
             logging.error(error_msg)
-            return False, execution_time, "", error_msg, False
+            return WorkloadRunOutcome(
+                success=False,
+                execution_time=execution_time,
+                is_timeout=False,
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+                error=error_msg,
+            )

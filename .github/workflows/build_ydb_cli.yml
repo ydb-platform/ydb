@@ -81,7 +81,7 @@ jobs:
       build-target: ydb/apps/ydb
       binary-name: ydb
       additional-ya-make-args: "-DUSE_SSE4=no -DYDB_CLI_AI_INCLUDE_DOCS=yes"
-      ref: ${{ needs.prepare-release.outputs.branch-name }}
+      ref: ${{ needs.prepare-release.outputs.release-commit-sha }}
       build-linux-amd: ${{ inputs.build-linux-amd }}
       build-linux-arm: ${{ inputs.build-linux-arm }}
       build-darwin-amd: ${{ inputs.build-darwin-amd }}
@@ -96,7 +96,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: ${{ needs.prepare-release.outputs.branch-name }}
+          ref: ${{ needs.prepare-release.outputs.release-commit-sha }}
       - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
         run: echo ${{ needs.prepare-release.outputs.new-version }}
       - name: Gather and upload to S3

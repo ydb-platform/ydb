@@ -261,19 +261,34 @@ bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx);
 bool ValidateDateTimeFormatName(std::string_view formatName, TExprContext& ctx);
 bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx);
 
+bool TransformSqlSetItemOption(
+    const NNodes::TExprBase& sqlSelect,
+    TStringBuf optionName,
+    std::function<void(const NNodes::TExprBase&)> lambda);
+
+// FIXME: Remove the Pg wrappers once contrib/ydb callers use the Sql helpers.
 bool TransformPgSetItemOption(
     const NNodes::TCoPgSelect& pgSelect,
     TStringBuf optionName,
     std::function<void(const NNodes::TExprBase&)> lambda);
 
-TExprNode::TPtr GetSetItemOption(const NNodes::TCoPgSelect& pgSelect, TStringBuf optionName);
-
-TExprNode::TPtr GetSetItemOptionValue(const NNodes::TExprBase& setItemOption);
-
 bool NeedToRenamePgSelectColumns(const NNodes::TCoPgSelect& pgSelect);
 
 bool RenamePgSelectColumns(
     const NNodes::TCoPgSelect& node,
+    TExprNode::TPtr& output,
+    const TMaybe<TColumnOrder>& tableColumnOrder,
+    TExprContext& ctx,
+    TTypeAnnotationContext& types);
+
+TExprNode::TPtr GetSetItemOption(const NNodes::TExprBase& sqlSelect, TStringBuf optionName);
+
+TExprNode::TPtr GetSetItemOptionValue(const NNodes::TExprBase& setItemOption);
+
+bool NeedToRenameSqlSelectColumns(const NNodes::TExprBase& sqlSelect);
+
+bool RenameSqlSelectColumns(
+    const NNodes::TExprBase& node,
     TExprNode::TPtr& output,
     const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,

@@ -285,17 +285,14 @@ namespace NTest {
         {
             InitPart(part);
 
-            auto* partStore = CheckedCast<const TPartStore*>(part);
-
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
                 Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
-            const auto room = (lob == ELargeObj::Extern)
-                ? partStore->Store->GetExternRoom()
-                : partStore->Store->GetOuterRoom();
+            // Queues are: groups, outer, extern, historic groups
+            const ui32 queueIndex = part->GroupsCount + (lob == ELargeObj::Extern ? 1 : 0);
 
-            return Get(part, room).DoLoad(TPageOffset::FromPageIndex(ref), EPage::Opaque, AheadLo, AheadHi);
+            return Get(part, queueIndex).DoLoad(TPageOffset::FromPageIndex(ref), EPage::Opaque, AheadLo, AheadHi);
         }
 
         const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
@@ -317,11 +314,9 @@ namespace NTest {
         {
             InitPart(part);
 
-            auto* partStore = CheckedCast<const TPartStore*>(part);
+            Y_ENSURE(groupId.Index < part->GroupsCount);
 
-            Y_ENSURE(groupId.Index < partStore->Store->GetGroupCount());
-
-            ui32 queueIndex = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
+            ui32 queueIndex = (groupId.Historic ? part->GroupsCount + 2 : 0) + groupId.Index;
 
             return Get(part, queueIndex).DoLoad(location.Offset, location.Type, AheadLo, AheadHi).Page;
         }
@@ -360,20 +355,20 @@ namespace NTest {
                         groupPageCollection, indexPageCollection);
                 };
 
-                partGroupQueues.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
-                for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
-                    if (room < partStore->Store->GetGroupCount()) {
-                        partGroupQueues.push_back(makeGroupQueue(NPage::TGroupId(room), partStore->Slices));
-                        continue;
-                    }
+                // Queues are: groups, outer, extern, historic groups
+                partGroupQueues.reserve(part->GroupsCount + 2 + part->HistoricGroupsCount);
+                for (ui32 group : xrange(part->GroupsCount)) {
+                    partGroupQueues.push_back(makeGroupQueue(NPage::TGroupId(group), partStore->Slices));
+                }
+                {
+                    const ui32 room = partStore->Store->GetOuterRoom();
                     auto pageCollection = makeCollection(room);
-                    if (room == partStore->Store->GetOuterRoom()) {
-                        partGroupQueues.push_back(Settle(partStore, room, room, MakeOuter(partStore, pageCollection), pageCollection, pageCollection));
-                    } else if (room == partStore->Store->GetExternRoom()) {
-                        partGroupQueues.push_back(Settle(partStore, room, room, MakeExtern(partStore, pageCollection), pageCollection, pageCollection));
-                    } else {
-                        Y_TABLET_ERROR("Don't know how to work with room " << room);
-                    }
+                    partGroupQueues.push_back(Settle(partStore, room, room, MakeOuter(partStore, pageCollection), pageCollection, pageCollection));
+                }
+                {
+                    const ui32 room = partStore->Store->GetExternRoom();
+                    auto pageCollection = makeCollection(room);
+                    partGroupQueues.push_back(Settle(partStore, room, room, MakeExtern(partStore, pageCollection), pageCollection, pageCollection));
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
                     partGroupQueues.push_back(makeGroupQueue(NPage::TGroupId(group, true), nullptr));

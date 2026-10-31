@@ -94,6 +94,9 @@ void DispatchStatRequests(TActorSystem* actorSystem, TVector<NThreading::TFuture
                 if (stat.EqWidthHistogram.Data) {
                     columnStatistics.EqWidthHistogramEstimator = std::make_shared<NKikimr::TEqWidthHistogramEstimator>(stat.EqWidthHistogram.Data);
                 }
+                if (stat.SimpleColumn.Data && stat.SimpleColumn.Data->HasCountDistinct()) {
+                    columnStatistics.HyperLogLog = static_cast<double>(stat.SimpleColumn.Data->GetCountDistinct());
+                }
             } else if (const auto* multiTags = stat.Req.ColumnTags.AsMulti()) {
                 TVector<TString> columns;
                 TVector<TString> types;

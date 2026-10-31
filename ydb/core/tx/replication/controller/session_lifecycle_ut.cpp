@@ -185,6 +185,20 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             Sync();
         }
 
+        void ExpectLagCounters(TDuration lag, ui64 unavailable) {
+            const auto response = Env.Send<TEvTablet::TEvGetCountersResponse>(
+                ControllerId, new TEvTablet::TEvGetCounters());
+            THashMap<TString, ui64> counters;
+            for (const auto& counter : response->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                counters.emplace(counter.GetName(), counter.GetValue());
+            }
+
+            UNIT_ASSERT(counters.contains("ReplicationController/DataLag"));
+            UNIT_ASSERT_VALUES_EQUAL(counters.at("ReplicationController/DataLag"), lag.MilliSeconds());
+            UNIT_ASSERT(counters.contains("ReplicationController/DataLagUnavailableReplications"));
+            UNIT_ASSERT_VALUES_EQUAL(counters.at("ReplicationController/DataLagUnavailableReplications"), unavailable);
+        }
+
         void ExpectLag(std::optional<TDuration> lag) {
             const auto desc = Describe();
             UNIT_ASSERT_VALUES_EQUAL(desc.TargetsSize(), 1);
@@ -195,6 +209,8 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 UNIT_ASSERT_VALUES_EQUAL(desc.GetTargets(0).GetLagMilliSeconds(), lag->MilliSeconds());
                 UNIT_ASSERT_VALUES_EQUAL(desc.GetState().GetStandBy().GetLagMilliSeconds(), lag->MilliSeconds());
             }
+
+            ExpectLagCounters(lag.value_or(TDuration::Zero()), lag ? 0 : 1);
         }
 
         void Status(ui32 node, bool hasWorker = true) {
@@ -259,6 +275,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
     Y_UNIT_TEST(LagUnavailableAfterStopWhileWaitingInBootQueue) {
         TSetup s(1);
         auto& runtime = s.Env.GetRuntime();
+        s.ExpectLag(std::nullopt);
         s.ReportLag(0, TDuration::Seconds(5));
         s.ExpectLag(TDuration::Seconds(5));
         runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
@@ -269,6 +286,97 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.ProcessQueues();
         s.ExpectRun(0);
         s.ExpectLag(std::nullopt); // Starting alone cannot revive the previous sample.
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLag(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(LagCountersAggregateReplicationsAndTrackRemoval) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Seconds(5));
+
+        // SchemeShard normally allocates separate tablets. Create another
+        // replication directly to exercise the controller's shared counters.
+        const TPathId otherPath(s.PathId.OwnerId, s.PathId.LocalPathId + 1);
+        auto create = MakeHolder<TEvController::TEvCreateReplication>();
+        otherPath.ToProto(create->Record.MutablePathId());
+        create->Record.SetDatabase("/Root");
+        auto* config = create->Record.MutableConfig();
+        config->MutableSrcConnectionParams()->SetEndpoint(s.Env.GetEndpoint());
+        config->MutableSrcConnectionParams()->SetDatabase("/Root");
+        config->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("");
+        config->MutableConsistencySettings()->MutableRow();
+        auto* target = config->MutableSpecific()->AddTargets();
+        target->SetSrcPath("/Root/table");
+        target->SetDstPath("/Root/other_replica");
+        const auto created = s.Env.Send<TEvController::TEvCreateReplicationResult>(s.Controller, std::move(create));
+        UNIT_ASSERT_C(created->Get()->Record.GetStatus() == NKikimrReplication::TEvCreateReplicationResult::SUCCESS,
+            created->Get()->Record.ShortDebugString());
+        s.ExpectLagCounters(TDuration::Seconds(5), 1);
+
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0]);
+        const auto otherWorker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        UNIT_ASSERT(otherWorker.ReplicationId() != s.Worker.ReplicationId());
+        const auto report = [&](TDuration lag) {
+            runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+                new TEvService::TEvWorkerStatus(otherWorker, lag)));
+            s.Sync();
+        };
+        report(TDuration::Seconds(2));
+        s.ExpectLagCounters(TDuration::Seconds(5), 0);
+        report(TDuration::Seconds(9));
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLagCounters(TDuration::Seconds(9), 0);
+        report(TDuration::Seconds(1)); // Equal lag values still represent two replications.
+        s.ExpectLagCounters(TDuration::Seconds(1), 0);
+
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(otherWorker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        s.ExpectLagCounters(TDuration::Seconds(1), 1);
+        s.ProcessQueues();
+        const auto restarted = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(restarted->Get()->Record.GetWorker()), otherWorker);
+        report(TDuration::Seconds(9));
+        s.ExpectLagCounters(TDuration::Seconds(9), 0);
+
+        auto drop = MakeHolder<TEvController::TEvDropReplication>();
+        otherPath.ToProto(drop->Record.MutablePathId());
+        s.Env.SendAsync(s.Controller, std::move(drop));
+        s.Sync();
+        s.ProcessQueues();
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), otherWorker);
+        s.ExpectLagCounters(TDuration::Seconds(1), 1);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(otherWorker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        const auto dropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(s.Env.GetSender());
+        UNIT_ASSERT_C(dropped->Get()->Record.GetStatus() == NKikimrReplication::TEvDropReplicationResult::SUCCESS,
+            dropped->Get()->Record.ShortDebugString());
+        s.ExpectLagCounters(TDuration::Seconds(1), 0);
+
+        auto dropLast = MakeHolder<TEvController::TEvDropReplication>();
+        s.PathId.ToProto(dropLast->Record.MutablePathId());
+        s.Env.SendAsync(s.Controller, std::move(dropLast));
+        s.ProcessQueues();
+        s.ExpectStop(0);
+        s.ExpectLagCounters(TDuration::Zero(), 1);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        const auto lastDropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(s.Env.GetSender());
+        UNIT_ASSERT_C(lastDropped->Get()->Record.GetStatus() == NKikimrReplication::TEvDropReplicationResult::SUCCESS,
+            lastDropped->Get()->Record.ShortDebugString());
+        s.ExpectLagCounters(TDuration::Zero(), 0);
+    }
+
+    Y_UNIT_TEST(LagCountersUnavailableAfterControllerRestart) {
+        TSetup s(1);
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.ExpectLag(TDuration::Seconds(5));
+        s.Reboot();
+        s.ExpectLag(std::nullopt);
+        s.Status(0);
+        s.ExpectLag(std::nullopt);
         s.ReportLag(0, TDuration::Seconds(1));
         s.ExpectLag(TDuration::Seconds(1));
     }
@@ -286,6 +394,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT(desc.GetState().HasError());
         UNIT_ASSERT_VALUES_EQUAL(desc.TargetsSize(), 1);
         UNIT_ASSERT(!desc.GetTargets(0).HasLagMilliSeconds());
+        s.ExpectLagCounters(TDuration::Zero(), 1);
     }
 
     Y_UNIT_TEST(LagStaysUnavailableWhileBootQueueHasNoReadySession) {
@@ -887,9 +996,12 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         auto& runtime = s.Env.GetRuntime();
         const auto nodeId = s.Edges[0].NodeId();
 
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.ExpectLagCounters(TDuration::Seconds(5), 0);
         s.AlterState("Paused");
         s.ProcessQueues();
         s.ExpectStop(0);
+        s.ExpectLagCounters(TDuration::Zero(), 1);
 
         // The node restarts: the acknowledgement is lost, the new process has no workers.
         s.Disconnect(0);
@@ -898,6 +1010,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvHandshake>(s.Edges[0]));
         s.Status(0, false);
         s.ProcessQueues();
+        s.ExpectLagCounters(TDuration::Zero(), 1);
 
         s.AlterState("StandBy");
         for (ui32 i = 0; i < 50; ++i) {
@@ -907,6 +1020,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(10));
         UNIT_ASSERT_C(run, "worker does not start after resume");
+        s.ExpectLagCounters(TDuration::Zero(), 1);
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLagCounters(TDuration::Seconds(1), 0);
     }
 
     Y_UNIT_TEST(TransferResumeAfterPauseWithLostStopAcknowledgement) {

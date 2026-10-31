@@ -46,6 +46,12 @@ message TFile {
     string ContentMd5 = 7;
 }
 
+message TDownloadGroup {
+    string UploadPrefix = 1;
+    string UploadClusterAddress = 2;
+    repeated TFile Files = 3;
+}
+
 message TWorkerInfo {
     // TGuid Guid = 1; // reserved
     uint32 NodeId = 2;
@@ -94,6 +100,8 @@ message ExecuteGraphRequest {
     NYql.NDqProto.EDqStatsMode StatsMode = 17;
     uint64 ExecutionTimeout = 18; // in milliseconds
     uint64 QuerySeqNo = 19;
+    string UploadPrefix = 20;
+    string UploadClusterAddress = 21;
 }
 
 message ExecuteGraphResponse {
@@ -204,6 +212,8 @@ message RegisterNodeRequest {
 
     bool Full = 23; // If Full == false only Guid? present
     uint32 Pid = 24;
+
+    repeated TDownloadGroup DownloadGroups = 27;
 }
 
 message RegisterNodeResponse {
@@ -218,6 +228,7 @@ message RegisterNodeResponse {
     repeated TFile DownloadList = 3;
 
     string Revision = 4;
+    repeated TDownloadGroup DownloadGroups = 5;
 }
 
 message JobStopRequest {

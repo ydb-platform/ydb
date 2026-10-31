@@ -2321,8 +2321,8 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
 
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
-        : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
+    explicit TDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+        : TAsyncReplication(pos, id, mode, context)
     {
     }
 
@@ -2333,8 +2333,8 @@ protected:
 
 }; // TDropAsyncReplication
 
-TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
-    return new TDropAsyncReplication(pos, id, cascade, context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context) {
+    return new TDropAsyncReplication(pos, id, mode, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {

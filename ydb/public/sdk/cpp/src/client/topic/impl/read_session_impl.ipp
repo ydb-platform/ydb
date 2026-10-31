@@ -9,6 +9,7 @@
 // #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/replication.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
@@ -28,6 +29,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -1436,6 +1438,24 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         for (const auto& batch : partitionData.batches()) {
             // Validate messages.
             for (const auto& messageData : batch.message_data()) {
+                if (firstOffset == std::numeric_limits<i64>::max()) {
+                    firstOffset = messageData.offset();
+                }
+                const ui64 logicalMessageCount = GetReadMessageCount(messageData, batch.codec());
+                const i64 messageSize = static_cast<i64>(messageData.data().size());
+                CompressedDataSize += messageSize;
+                *Settings.Counters_->BytesInflightTotal += messageSize;
+                *Settings.Counters_->BytesInflightCompressed += messageSize;
+                *Settings.Counters_->MessagesInflight += logicalMessageCount;
+
+                // Deliver control payloads to the client without making their dummy
+                // offset part of the read position or the ranges awaiting a commit.
+                if (IsReplicationServiceMessage(messageData.offset(), messageData.metadata_items(), [](const auto& item) {
+                        return std::pair<std::string_view, std::string_view>{item.key(), item.value()};
+                    })) {
+                    continue;
+                }
+
                 // Check offsets continuity.
                 // A message may start below the desired offset when a multi-message batch
                 // is redelivered as a whole blob after restarting from an offset inside it.
@@ -1444,18 +1464,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                     Y_ABORT_UNLESS(res);
                 }
 
-                if (firstOffset == std::numeric_limits<i64>::max()) {
-                    firstOffset = messageData.offset();
-                }
                 currentOffset = messageData.offset();
-                const ui64 logicalMessageCount = GetReadMessageCount(messageData, batch.codec());
                 desiredOffset = Max(desiredOffset, currentOffset + static_cast<i64>(logicalMessageCount));
                 partitionStream->UpdateMaxReadOffset(currentOffset + static_cast<i64>(logicalMessageCount) - 1);
-                const i64 messageSize = static_cast<i64>(messageData.data().size());
-                CompressedDataSize += messageSize;
-                *Settings.Counters_->BytesInflightTotal += messageSize;
-                *Settings.Counters_->BytesInflightCompressed += messageSize;
-                *Settings.Counters_->MessagesInflight += logicalMessageCount;
             }
         }
         if (firstOffset == std::numeric_limits<i64>::max()) {

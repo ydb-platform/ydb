@@ -11,17 +11,22 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-IF (ARCH_X86_64 AND OS_LINUX)
 SRCS(
     accumulator_ut.cpp
     scalar_layout_converter_ut.cpp
     scalar_layout_converter_test_enums.h
     block_layout_converter_ut.cpp
     block_layout_converter_sliced_blocks_ut.cpp
-    hash_table_ut.cpp
-    packed_tuple_ut.cpp
     deep_copy_ut.cpp
 )
+
+# These sources also test concrete x86 SIMD implementations.
+IF (ARCH_X86_64 AND OS_LINUX)
+    SRCS(
+        hash_table_ut.cpp
+        packed_tuple_ut.cpp
+    )
+ENDIF()
 
 PEERDIR(
     yql/essentials/public/udf
@@ -33,8 +38,6 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins
     yql/essentials/sql/pg_dummy
 )
-
-ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(scalar_layout_converter_test_enums.h)
 

@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/jaeger_tracing)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     sampler_ut.cpp

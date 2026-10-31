@@ -5,11 +5,11 @@ TEST_SRCS(
     test.py
 )
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:2)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

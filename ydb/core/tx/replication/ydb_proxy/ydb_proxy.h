@@ -147,6 +147,11 @@ struct TEvYdbProxy {
 
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
         FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
+<<<<<<< HEAD
+=======
+        FLUENT_SETTING_DEFAULT(bool, RetryOnSchemeError, false);
+        FLUENT_SETTING_DEFAULT(bool, FailOnDataLoss, false);
+>>>>>>> 86755d19db1 (Detect data loss when reader session is created and report it via DATA_LOSS status. (#56576))
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \

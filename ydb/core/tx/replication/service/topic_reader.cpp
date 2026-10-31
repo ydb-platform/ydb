@@ -115,6 +115,18 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         auto& response = ResponseQueue.front();
         auto& result = response.DataEv->Get()->Result;
+        if (Settings.FailOnDataLoss_) {
+            for (const auto& msg : result.Messages) {
+                if (msg.GetOffset() != NextReadOffset) {
+                    Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                        << "Unexpected message offset in topic " << Settings.GetBase().Topics_.at(0).Path_
+                        << ", partition " << result.PartitionId << ", consumer " << Settings.GetBase().ConsumerName_
+                        << ": expected offset " << NextReadOffset << ", got " << msg.GetOffset());
+                    return;
+                }
+                NextReadOffset += msg.GetLogicalMessageCount();
+            }
+        }
         const auto msgCount = result.Messages.size();
         TVector<TTopicMessage> records(::Reserve(msgCount));
         const ui64 maxOffset = result.Messages.back().GetOffset();
@@ -154,6 +166,11 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
+<<<<<<< HEAD
+=======
+        NextReadOffset = ev->Get()->Result.CommittedOffset;
+        Send(Worker, new TEvWorker::TEvReaderStarted(NextReadOffset));
+>>>>>>> 86755d19db1 (Detect data loss when reader session is created and report it via DATA_LOSS status. (#56576))
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
@@ -309,6 +326,12 @@ private:
     TActorId ReadSession;
     TString ReadSessionId;
     ui64 CommittedOffset = 0;
+<<<<<<< HEAD
+=======
+    ui64 NextReadOffset = 0;
+    TMaybe<ui64> CommitInFlight;
+    TMaybe<ui64> PendingCommit;
+>>>>>>> 86755d19db1 (Detect data loss when reader session is created and report it via DATA_LOSS status. (#56576))
 
     bool CreatingReadSessionInProgress = false;
     bool StoppingInProgress = false;

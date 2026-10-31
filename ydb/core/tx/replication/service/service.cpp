@@ -599,7 +599,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
-        bool autoCommit, bool reportStats
+        bool autoCommit, bool reportStats, bool failOnDataLoss
     ) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
@@ -622,6 +622,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             .ConsumerName(settings.GetConsumerName())
             .AutoCommit(autoCommit)
             .ReportStats(reportStats)
+            .FailOnDataLoss(failOnDataLoss)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
@@ -736,8 +737,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         const auto actorId = session.RegisterWorker(this, id,
             CreateWorker(
                 SelfId(),
+<<<<<<< HEAD
                 ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
                 std::move(writerFn)),
+=======
+                ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats,
+                    cmd.HasLocalTableWriter() && AppData()->ReplicationConfig.GetEnableDataLossDetection()),
+                std::move(writerFn), cmd.GetTrackSourceOffsets(),
+                cmd.HasProcessedSourceOffset() ? TMaybe<ui64>(cmd.GetProcessedSourceOffset()) : Nothing()),
+>>>>>>> 86755d19db1 (Detect data loss when reader session is created and report it via DATA_LOSS status. (#56576))
             poolId,
             cmd.GetReplicationLocation(),
             cmd.GetMetricsLevel()
@@ -955,6 +963,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     static NKikimrReplication::TEvWorkerStatus::EReason ToReason(TEvWorker::TEvGone::EStatus status) {
         switch (status) {
         case TEvWorker::TEvGone::SCHEME_ERROR:
+<<<<<<< HEAD
+=======
+        case TEvWorker::TEvGone::DATA_ERROR:
+        case TEvWorker::TEvGone::DATA_LOSS:
+>>>>>>> 86755d19db1 (Detect data loss when reader session is created and report it via DATA_LOSS status. (#56576))
             return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
         default:
             return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;

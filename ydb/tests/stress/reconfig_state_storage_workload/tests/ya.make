@@ -1,6 +1,7 @@
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload")
+ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 TEST_SRCS(
     reconfig_state_storage_workload_test.py

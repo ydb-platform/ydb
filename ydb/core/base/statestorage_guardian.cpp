@@ -117,13 +117,17 @@ protected:
         if (ReplicaMissingReported < value) {
             const TMonotonic now = TActivationContext::Monotonic();
             if (LastReplicaMissing == TMonotonic::Max()) {
-                // this if the first time in row we report replica missing
+                // this if the first time in row we report replica missing; the grace period starts now, and the
+                // replica is not reported missing yet
                 LastReplicaMissing = now;
+                value = false;
             } else {
                 // make it actually "missing" only after a specific amount of time
                 value = LastReplicaMissing + TDuration::Seconds(3) < now;
             }
-        } else if (value < ReplicaMissingReported) {
+        } else if (!value) {
+            // the replica is there, so a failure later starts a grace period of its own, whether or not this one has
+            // ended with a report
             LastReplicaMissing = TMonotonic::Max();
         }
         if (value != ReplicaMissingReported) {
@@ -189,6 +193,10 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
     TIntrusiveConstPtr<TGuardedInfo> Info;
 
     ui64 Signature;
+    // the replica sends follower changes to the guardian it has registered; a guardian made in place of a gone one
+    // registers itself even if the record of the leader matches, keeping the step the replica has
+    bool Registered = false;
+    ui32 ProposedStep = 0;
 
     friend class TBaseGuardian;
 
@@ -212,9 +220,10 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader());
         ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet());
         req->Record.SetProposedGeneration(Info->Generation);
-        req->Record.SetProposedStep(0);
+        req->Record.SetProposedStep(std::exchange(ProposedStep, 0));
         req->Record.SetSignature(Signature);
         req->Record.SetIsGuardian(true);
+        Registered = true;
 
         Send(Replica, req.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateUpdate);
@@ -251,6 +260,9 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
                     return UpdateInfo();
                 } else if (leader != Info->Leader || tabletLeader != Info->TabletLeader) {
                     return Demoted(); // hack around cluster restarts
+                } else if (!Registered) {
+                    ProposedStep = record.GetCurrentStep();
+                    return UpdateInfo();
                 } else {
                     Become(&TThis::StateCalm);
                     Send(Guard, ev->Release().Release());
@@ -356,7 +368,9 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
     }
 
     void Ping() {
+        // the replica has registered the follower, so it is not missing any more, as with the info of a leader
         DowntimeFrom = TInstant::Max();
+        ReplicaMissing(false);
     }
 
 public:
@@ -435,12 +449,19 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
+        // a kept child sends its followers again only when they change, so what it has reported goes to the new
+        // tracker; the reports of the children going away do not
+        auto followerTracker = MakeHolder<TFollowerTracker>(replicaSz);
 
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
             bool found = false;
-            for (auto& p : ReplicaGuardians)
-                if (p.first == replica && p.second) {
+            for (ui32 oldIdx : xrange(ReplicaGuardians.size()))
+                if (auto& p = ReplicaGuardians[oldIdx]; p.first == replica && p.second) {
+                    if (FollowerTracker) {
+                        TVector<TActorId> reported = FollowerTracker->GetReported(oldIdx);
+                        followerTracker->Merge(idx, reported);
+                    }
                     updatedReplicaGuardians.emplace_back(p);
                     Send(p.second, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
                     p.second = TActorId();
@@ -462,7 +483,18 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-        FollowerTracker.Reset(new TFollowerTracker(replicaSz));
+        const bool followersChanged = Info && FollowerTracker
+            && FollowerTracker->GetMerged() != followerTracker->GetMerged();
+        FollowerTracker = std::move(followerTracker);
+        if (followersChanged) {
+            // the followers known only from the children gone are gone too
+            TVector<TActorId> followers;
+            followers.reserve(FollowerTracker->GetMerged().size());
+            for (const auto& xpair : FollowerTracker->GetMerged()) {
+                followers.emplace_back(xpair.first);
+            }
+            Send(Launcher(), new TEvTablet::TEvFollowerListRefresh(std::move(followers)));
+        }
 
         Become(&TThis::StateCalm);
     }

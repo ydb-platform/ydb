@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/services/scheme_secret)
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ELSE()
     REQUIREMENTS(cpu:1)
 ENDIF()

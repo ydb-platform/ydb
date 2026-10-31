@@ -361,35 +361,23 @@ def build_html_dashboard(
       </span>
     </span>
   </div>
-  <div class="chart-grid" id="yaActivityGrid">
-    <div class="chart-tile span-2" data-pane="yaActivity">
-      <div class="chart-tile-head">
-        <span class="chart-tile-title">ya make<span class="chart-tile-sub">active jobs by phase</span></span>
-      </div>
-      <div id="yaActivity" class="chart-pane"></div>
-    </div>
-  </div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
   </div>
   <div id="chunkTab" class="tab active" style="display: none;">
     <div class="chart-grid" id="chunkChartGrid">
-      <div class="chart-tile" data-pane="activeLayerChunk">
+      <div class="chart-tile" data-pane="yaActivityChunk">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">suite+chunk processes over time</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <span class="chart-tile-title">ya make<span class="chart-tile-sub">active jobs by phase</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
-        <div id="activeLayerChunk" class="chart-pane"></div>
-        <div class="chart-tile-meta">
-          <div id="activeHoverChunk" class="hoverbox"></div>
-          <div id="activeClickChunk" class="clickbox"></div>
-        </div>
+        <div id="yaActivityChunk" class="chart-pane"></div>
       </div>
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU<span class="chart-tile-sub">cores by suite+chunk · red = host</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -400,7 +388,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM<span class="chart-tile-sub">GB by suite+chunk · red = host</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -411,11 +399,26 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk I/O<span class="chart-tile-sub">MB/s · write up, read down</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
       </div>
     </div>
+    <details class="chart-secondary" id="activeByChunkDetails">
+      <summary>Active chunks</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="activeLayerChunk">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">suite+chunk processes over time</span></span>
+          </div>
+          <div id="activeLayerChunk" class="chart-pane"></div>
+          <div class="chart-tile-meta">
+            <div id="activeHoverChunk" class="hoverbox"></div>
+            <div id="activeClickChunk" class="clickbox"></div>
+          </div>
+        </div>
+      </div>
+    </details>
     <div class="row">
       <div id="cpuPie" class="chart"></div>
       <div id="ramPie" class="chart"></div>
@@ -426,10 +429,17 @@ def build_html_dashboard(
   </div>
   <div id="suiteTab" class="tab">
     <div class="chart-grid" id="suiteChartGrid">
+      <div class="chart-tile" data-pane="yaActivity">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">ya make<span class="chart-tile-sub">active jobs by phase</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="yaActivity" class="chart-pane"></div>
+      </div>
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">CPU<span class="chart-tile-sub">cores by suite · red = host</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -440,7 +450,7 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
           <span class="chart-tile-title">RAM<span class="chart-tile-sub">GB by suite · red = host</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
@@ -451,20 +461,9 @@ def build_html_dashboard(
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
           <span class="chart-tile-title">Disk I/O<span class="chart-tile-sub">MB/s · write up, read down</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
-      </div>
-      <div class="chart-tile" data-pane="activeLayerSuite">
-        <div class="chart-tile-head">
-          <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">by suite over time</span></span>
-          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
-        </div>
-        <div id="activeLayerSuite" class="chart-pane"></div>
-        <div class="chart-tile-meta">
-          <div id="activeHoverSuite" class="hoverbox"></div>
-          <div id="activeClickSuite" class="clickbox"></div>
-        </div>
       </div>
     </div>
     <details class="chart-secondary" id="testsBySuiteDetails">
@@ -478,6 +477,21 @@ def build_html_dashboard(
           <div class="chart-tile-meta">
             <div id="testsHoverSuite" class="hoverbox"></div>
             <div id="testsClickSuite" class="clickbox"></div>
+          </div>
+        </div>
+      </div>
+    </details>
+    <details class="chart-secondary" id="activeBySuiteDetails">
+      <summary>Active chunks</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="activeLayerSuite">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">by suite over time</span></span>
+          </div>
+          <div id="activeLayerSuite" class="chart-pane"></div>
+          <div class="chart-tile-meta">
+            <div id="activeHoverSuite" class="hoverbox"></div>
+            <div id="activeClickSuite" class="clickbox"></div>
           </div>
         </div>
       </div>
@@ -643,8 +657,8 @@ def build_html_dashboard(
       // Hidden-tab Plotly charts need explicit resize after becoming visible.
       setTimeout(() => {{
         const ids = id === 'suiteTab'
-          ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
-          : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
+          ? ['yaActivity', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
+          : ['yaActivityChunk', 'activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
         resizeChartPanes(ids);
         // Re-apply markers after resize (charts lose shapes on hidden→visible transition).
         applyMarkersToCharts();
@@ -1184,7 +1198,7 @@ def build_html_dashboard(
         }});
       }}
     }}
-    const ALL_TIME_CHART_IDS = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+    const ALL_TIME_CHART_IDS = ['yaActivity', 'yaActivityChunk', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
     function applyTimezoneToAllCharts() {{
       for (const id of ALL_TIME_CHART_IDS) {{
         const el = document.getElementById(id);
@@ -1402,7 +1416,7 @@ def build_html_dashboard(
     setupMonitoringLink();
 
     // Marker state lives at top scope so all functions can access it.
-    const _markerChartIds = ['yaActivity', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+    const _markerChartIds = ['yaActivity', 'yaActivityChunk', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
     // Each entry: {{ shapes: [...], annotations: [...] }} by suite_path.
     const _suiteMarkerData = {{}};
 
@@ -2502,24 +2516,11 @@ def build_html_dashboard(
           hovertemplate: name + ': %{{y:.0f}}<extra></extra>',
         }});
       }}
-      const el = document.getElementById('yaActivity');
-      if (!traces.length) {{
-        const tile = el && el.closest ? el.closest('.chart-tile') : null;
-        if (tile) tile.style.display = 'none';
-        else if (el) el.style.display = 'none';
-        return;
-      }}
       const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
-      // Put clock warning into the tile label when needed; keep the plot clean.
-      const titleEl = document.querySelector('#yaActivityGrid .chart-tile-title');
-      if (titleEl) {{
-        const main = activityUnaligned ? 'ya make (clock unaligned)' : 'ya make';
-        titleEl.innerHTML = main + '<span class="chart-tile-sub">active jobs by phase</span>';
-      }}
-      const ax = axisLayout(allX, true);
-      Plotly.newPlot('yaActivity', traces, {{
+      const mainTitle = activityUnaligned ? 'ya make (clock unaligned)' : 'ya make';
+      const yaLayout = {{
         title: false,
-        xaxis: Object.assign(ax, {{
+        xaxis: Object.assign(axisLayout(allX, true), {{
           titlefont: {{size: 11, color: '#8c959f'}},
           tickfont: {{size: 10, color: '#656d76'}},
           gridcolor: '#eef1f4',
@@ -2540,13 +2541,32 @@ def build_html_dashboard(
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: '#fcfcfd',
         margin: {{l: 48, r: 8, t: 8, b: 72}},
-      }}, {{responsive: true, displayModeBar: 'hover', displaylogo: false}});
+      }};
+      const yaOpts = {{responsive: true, displayModeBar: 'hover', displaylogo: false}};
+      // Same series in suite + chunk 2×2 grids (ya / CPU / RAM / Disk).
+      for (const plotId of ['yaActivity', 'yaActivityChunk']) {{
+        const el = document.getElementById(plotId);
+        if (!el) continue;
+        const tile = el.closest ? el.closest('.chart-tile') : null;
+        if (!traces.length) {{
+          if (tile) tile.style.display = 'none';
+          else el.style.display = 'none';
+          continue;
+        }}
+        const titleEl = tile ? tile.querySelector('.chart-tile-title') : null;
+        if (titleEl) {{
+          titleEl.innerHTML = mainTitle + '<span class="chart-tile-sub">active jobs by phase</span>';
+        }}
+        Plotly.newPlot(plotId, traces, yaLayout, yaOpts);
+      }}
     }})();
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
-      stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);
-      attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
-      attachSortedClick('activeLayerChunk', 'activeClickChunk', 'active');
+      ensureDetailsPlot('activeByChunkDetails', 'activeLayerChunk', () => {{
+        stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);
+        attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
+        attachSortedClick('activeLayerChunk', 'activeClickChunk', 'active');
+      }});
       stackedArea('cpuLayer', data.xs_cpu, data.cpu_tracks, 'Layered CPU (estimated cores) by suite+chunk', 'cores');
       stackedArea('ramLayer', data.xs_ram, data.ram_tracks, 'Layered RAM by suite+chunk', 'GB');
       if (data.resources_overlay) {{
@@ -2610,12 +2630,14 @@ def build_html_dashboard(
       attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
       attachSortedClick('testsLayerSuite', 'testsClickSuite', 'tests');
     }});
+    ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite', () => {{
+      stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
+      attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
+      attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
+    }});
 
     stackedArea('cpuLayerSuite', data.xs_cpu_suite, data.cpu_tracks_suite, 'Layered CPU (estimated cores) by suite', 'cores');
     stackedArea('ramLayerSuite', data.xs_ram_suite, data.ram_tracks_suite, 'Layered RAM by suite', 'GB');
-    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
-    attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
-    attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
     if (data.resources_overlay) {{
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));

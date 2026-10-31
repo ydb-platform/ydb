@@ -15,6 +15,7 @@ private:
     TString RequestId;
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
     bool RequireAdminAccess = false;
+    bool AllowMissingToken = false;
     bool UserAdmin = false;
     TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> Entries;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
@@ -40,6 +41,12 @@ private:
     }
 
     bool IsTokenRequired() const {
+        // EnableAnonymousDiscovery may omit credentials for ChooseProxy and ListEndpoints.
+        // Database and rate-limit checks still run.
+        if (AllowMissingToken) {
+            return false;
+        }
+
         if (GetEnforceUserTokenRequirement()) {
             return true;
         }
@@ -132,6 +139,10 @@ public:
 
     void SetRequireAdminAccess(bool requireAdminAccess) {
         RequireAdminAccess = requireAdminAccess;
+    }
+
+    void SetAllowMissingToken() {
+        AllowMissingToken = true;
     }
 
     void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
@@ -250,6 +261,12 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
+        // Runs on actor activation, before the token requirement is checked.
+        // Derived code that needs AppData belongs here: the constructor may run
+        // without an activation context.
+        if constexpr (requires(TDerived& self) { self.PrepareAuthentication(); }) {
+            static_cast<TDerived*>(this)->PrepareAuthentication();
+        }
         TSecureRequestActor<TActorBootstrapped<TActorBootstrappedSecureRequest<TDerived>>, TDerived>::Bootstrap(ctx);
     }
 };

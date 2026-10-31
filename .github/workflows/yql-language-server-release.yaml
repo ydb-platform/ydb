@@ -1,0 +1,322 @@
+name: Release YQL Language Server
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        working-directory: yql/essentials/tools/yql_language_server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build Version
+        id: version
+        run: |
+          set -euo pipefail
+
+          version=$(python3 ci/version.py < CHANGELOG.md)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - name: Test Version
+        if: false # Temporarily allow rebuilding the already published version while debugging Windows.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          latest_n=$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' |
+              sed -n 's#^yql/language-server/v0\.\([1-9][0-9]*\)\.0$#\1#p' |
+              sort -n |
+              tail -n 1
+          )
+          latest_n=${latest_n:-0}
+          expected="0.$((latest_n + 1)).0"
+
+          if [[ "$VERSION" != "$expected" ]]; then
+            echo "Expected release version '$expected', got '$VERSION'" >&2
+            exit 1
+          fi
+
+          echo "Version: $VERSION"
+
+      - name: Build Release Notes
+        run: |
+          set -euo pipefail
+
+          python3 ci/release_notes.py \
+            < CHANGELOG.md \
+            > "$RUNNER_TEMP/RELEASE_NOTES.md"
+
+      - name: Test Release Notes
+        run: |
+          set -euo pipefail
+
+          echo "RELEASE_NOTES"
+          echo "-------------"
+          cat "$RUNNER_TEMP/RELEASE_NOTES.md"
+          echo "-------------"
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 1
+
+  build-unix:
+    needs:
+      - prepare
+    strategy:
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+            suffix: ''
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+            suffix: ''
+          - platform: darwin-arm64
+            runner: macos-latest
+            suffix: '-unsigned'
+          - platform: darwin-x86_64
+            runner: macos-26-intel
+            suffix: '-unsigned'
+    name: Build (${{ matrix.platform }})
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      SUFFIX: ${{ matrix.suffix }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 200
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install libidn
+        run: |
+          set -euo pipefail
+
+          case "$PLATFORM" in
+            linux-*)
+              sudo apt-get update
+              sudo apt-get install -y libidn12
+              ;;
+            darwin-*) brew install libidn ;;
+            *) echo "Unsupported platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
+      - name: Build
+        run: |
+          set -euo pipefail
+
+          output="$RUNNER_TEMP/yql-language-server-$PLATFORM"
+          mkdir -p "$output"
+
+          case "$PLATFORM" in
+            linux-*) idn_library="$(dpkg-query -L libidn12 | grep -E '/libidn\.so\.12$')" ;;
+            darwin-*) idn_library="$(brew --prefix libidn)/lib/libidn.dylib" ;;
+            *) echo "Unsupported platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
+          idn_include="$GITHUB_WORKSPACE/contrib/libs/libidn/include"
+
+          ./ya make \
+            --build=release \
+            --target-platform="default-$PLATFORM" \
+            -DUSE_IDN=local \
+            -DUSE_ICONV=local \
+            "-DUSE_LOCAL_IDN_CFLAGS=-I$idn_include" \
+            "-DUSE_LOCAL_IDN_LDFLAGS=$idn_library" \
+            -DYQL_LANGUAGE_SERVER_VERSION="$VERSION" \
+            --output="$output" \
+            --stat \
+            --ignore-recurses \
+            yql/essentials/tools/yql_language_server
+
+      - name: Show Dynamic Libraries
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yql-language-server-$PLATFORM"
+          cd yql/essentials/tools/yql_language_server
+          case "$PLATFORM" in
+            linux-*) ldd ./yql_language_server ;;
+            darwin-*) otool -L ./yql_language_server ;;
+            *) echo "Unsupported platform: $PLATFORM" >&2; exit 1 ;;
+          esac
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/yql-language-server-$PLATFORM"
+          cd yql/essentials/tools/yql_language_server
+          ./yql_language_server --help
+
+      - name: Package
+        run: |
+          set -euo pipefail
+
+          cd "$RUNNER_TEMP/yql-language-server-$PLATFORM"
+          cp -L \
+            yql/essentials/tools/yql_language_server/yql_language_server \
+            "$RUNNER_TEMP/yql-language-server"
+
+          cd "$RUNNER_TEMP"
+          tar \
+            -czf "yql-language-server-$VERSION-$PLATFORM$SUFFIX.tar.gz" \
+            yql-language-server
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}
+          path: ${{ runner.temp }}/yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  build-windows:
+    if: false
+    needs:
+      - prepare
+    strategy:
+      matrix:
+        include:
+          - platform: win-x86_64
+            runner: windows-latest
+            suffix: '-unsigned'
+    name: Build (${{ matrix.platform }})
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      SUFFIX: ${{ matrix.suffix }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Build
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS_PATH=%%i"
+          if not defined VS_PATH (
+            echo Visual Studio with C++ tools was not found
+            exit /b 1
+          )
+
+          if not exist "%VS_PATH%\Common7\Tools\VsDevCmd.bat" (
+            echo VsDevCmd.bat was not found at "%VS_PATH%\Common7\Tools\VsDevCmd.bat"
+            exit /b 1
+          )
+          call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=amd64
+          if errorlevel 1 exit /b 1
+
+          for /f "delims=" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set "TOOLCHAIN_PATH=%%i"
+          if not defined TOOLCHAIN_PATH (
+            echo YaTool C++ toolchain was not found
+            exit /b 1
+          )
+          set "COMPILER=%TOOLCHAIN_PATH%\bin\clang-cl.exe"
+          if not exist "%COMPILER%" (
+            echo Compiler was not found: %COMPILER%
+            exit /b 1
+          )
+
+          call .\ya.bat make ^
+            --build=release ^
+            -DUSE_IDN=static ^
+            -DUSE_ICONV=static ^
+            -DUSE_MSVC_LINKER=yes ^
+            --host-platform-flag=USE_MSVC_LINKER=yes ^
+            -DYQL_LANGUAGE_SERVER_VERSION=%VERSION% ^
+            --output="%RUNNER_TEMP%\yql-language-server-%PLATFORM%" ^
+            --stat ^
+            --ignore-recurses ^
+            --c-compiler "%COMPILER%" ^
+            --cxx-compiler "%COMPILER%" ^
+            yql/essentials/tools/yql_language_server
+          if errorlevel 1 exit /b 1
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = Join-Path $env:RUNNER_TEMP "yql-language-server-$env:PLATFORM"
+          $binary = Join-Path $output 'yql/essentials/tools/yql_language_server/yql_language_server.exe'
+          if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
+            throw "Built binary was not found: $binary"
+          }
+
+          $staged = Join-Path $env:RUNNER_TEMP 'yql-language-server.exe'
+          Copy-Item -LiteralPath $binary -Destination $staged
+          & $staged --help
+          if ($LASTEXITCODE -ne 0) { throw 'The packaged executable did not start' }
+
+          $archive = Join-Path $env:RUNNER_TEMP "yql-language-server-$env:VERSION-$env:PLATFORM$env:SUFFIX.tar.gz"
+          tar -C $env:RUNNER_TEMP -czf $archive yql-language-server.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create archive' }
+
+          $entries = @(tar -tzf $archive)
+          if ($LASTEXITCODE -ne 0 -or $entries.Count -ne 1 -or $entries[0] -ne 'yql-language-server.exe') {
+            throw "Unexpected archive contents: $entries"
+          }
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}
+          path: ${{ runner.temp }}/yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs:
+      - prepare
+      - build-unix
+      # - build-windows  # Re-enable after switching libidn and libiconv to dynamic linkage.
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          gh release create "yql/language-server/v${VERSION}" \
+            dist/yql-language-server-* \
+            --target "$GITHUB_SHA" \
+            --title "YQL Language Server $VERSION" \
+            --notes-file dist/RELEASE_NOTES.md \
+            --latest=false

@@ -11,19 +11,15 @@ from ydb.tests.fq.streaming_common.common import set_test_env
 def kikimr(request):
     param = getattr(request, "param", {})
     set_test_env(request)
-<<<<<<< HEAD
-    kikimr = Kikimr(get_ydb_config(request), enable_discovery=param.get("enable_discovery", True))
-=======
+
     config = get_ydb_config(request)
     if max_message_size := param.get("max_message_size"):
         config.yaml_config["grpc_config"]["max_message_size"] = max_message_size
         config.yaml_config["pqconfig"]["max_message_size_bytes"] = max_message_size
     kikimr = Kikimr(
         config,
-        enable_discovery=param.get("enable_discovery", True),
-        tenant_database="/Root/my_tenant",
+        enable_discovery=param.get("enable_discovery", True)
     )
->>>>>>> 95446e4dcbc (YQ-5796 fix big message topic processing (#57672))
     yield kikimr
     kikimr.stop()
 

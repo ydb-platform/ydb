@@ -91,117 +91,86 @@ def build_html_dashboard(
   <link rel="icon" type="image/svg+xml" href="{favicon_href}" />
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 16px; }}
-    .toolbar {{ position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; margin: 8px 0 10px 0; padding: 8px 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(2px); }}
-    .toolbar input[type="text"] {{ min-width: 340px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
-    .toolbar button {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
-    .cpu-help {{ margin-top: 6px; padding: 8px 10px; border-radius: 8px; border: 1px solid #eaeef2; background: #fff; font-size: 12px; line-height: 1.45; color: #57606a; }}
+    :root {{
+      --fg:#1f2328; --muted:#656d76; --line:#e6e8eb; --soft:#f6f8fa;
+      --accent:#0969da; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0 auto; padding: 16px 20px 28px; max-width: 1400px;
+      color: var(--fg); background: #fff;
+      font: 14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    }}
+    a {{ color: var(--accent); text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    button, .tabbtn, .help-btn, select, input[type="text"] {{
+      font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 4px;
+      background: #fff; padding: 5px 9px;
+    }}
+    button, .tabbtn, .help-btn {{ cursor: pointer; background: var(--soft); }}
+    button:hover, .tabbtn:hover, .help-btn:hover {{ background: #eef1f4; }}
+    input[type="text"] {{ background: #fff; min-width: 280px; }}
+    .dash-header {{
+      margin: 0 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--line);
+    }}
+    .dash-header-row {{
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+    }}
+    .dash-header-meta {{ margin-top: 6px; font-size: 13px; color: var(--muted); }}
+    .dash-header-meta + .dash-header-meta {{ margin-top: 2px; }}
+    .mono {{ font-family: var(--mono); font-size: 12px; }}
+    .toolbar {{
+      position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap;
+      gap: 8px; align-items: center; margin: 8px 0 12px; padding: 8px 0;
+      background: rgba(255,255,255,.94);
+    }}
+    .toolbar-group {{
+      display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+      font-size: 12px; color: var(--muted);
+    }}
+    .cpu-help {{ margin-top: 6px; padding: 8px 0; font-size: 12px; color: var(--muted); }}
     .cpu-help ol, .cpu-help ul {{ margin: 6px 0 6px 18px; padding: 0; }}
-    /* Secondary collapses: quiet chrome, not H2. */
-    details.aux-fold {{
-      margin: 4px 0 8px 0;
-    }}
-    details.aux-fold > summary {{
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      color: #656d76;
-      list-style: none;
-    }}
-    details.aux-fold > summary::-webkit-details-marker {{ display: none; }}
-    details.aux-fold > summary::before {{
-      content: "▸ ";
-      color: #8c959f;
-      font-weight: 400;
-    }}
-    details.aux-fold[open] > summary::before {{ content: "▾ "; }}
-    .section-label {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 8px 0;
-      font-size: 13px;
-      font-weight: 600;
-      color: #57606a;
-      line-height: 1.3;
-    }}
-    .section-label .help-btn {{
-      padding: 0 7px;
-      min-width: auto;
-      font-size: 12px;
-      font-weight: 600;
-      color: #57606a;
-    }}
-    /* Closed: one muted line; hidden entirely when empty (via .is-visible). */
-    details.quiet-link-fold {{
-      display: none;
-      margin: 2px 0 0 0;
-      border: 0;
-      padding: 0;
-      background: transparent;
-    }}
-    details.quiet-link-fold.is-visible {{ display: block; }}
-    details.quiet-link-fold > summary {{
-      cursor: pointer;
-      list-style: none;
-      font-size: 11px;
-      font-weight: 400;
-      color: #8c959f;
-      line-height: 1.4;
-    }}
-    details.quiet-link-fold > summary::-webkit-details-marker {{ display: none; }}
-    details.quiet-link-fold > summary::before {{
-      content: "▸ ";
-      color: #afb8c1;
-    }}
-    details.quiet-link-fold[open] > summary::before {{ content: "▾ "; }}
-    details.quiet-link-fold[open] > summary {{ color: #656d76; }}
-    details.quiet-link-fold .clickbox {{
-      margin: 6px 0 0 0;
-      max-height: 280px;
-    }}
-    .dash-footer {{
-      margin: 28px 0 8px 0;
-      padding-top: 12px;
-      border-top: 1px solid #eaeef2;
-    }}
+    details.aux-fold {{ margin: 4px 0 8px; }}
+    details.aux-fold > summary,
+    details.quiet-link-fold > summary,
+    .chart-secondary > summary,
     .dash-footer > summary {{
-      cursor: pointer;
-      list-style: none;
-      font-size: 12px;
-      font-weight: 500;
-      color: #8c959f;
+      cursor: pointer; list-style: none; font-size: 12px; font-weight: 500; color: var(--muted);
     }}
+    details.aux-fold > summary::-webkit-details-marker,
+    details.quiet-link-fold > summary::-webkit-details-marker,
+    .chart-secondary > summary::-webkit-details-marker,
     .dash-footer > summary::-webkit-details-marker {{ display: none; }}
-    .dash-footer > summary::before {{
-      content: "▸ ";
-      color: #afb8c1;
-    }}
+    details.aux-fold > summary::before,
+    details.quiet-link-fold > summary::before,
+    .chart-secondary > summary::before,
+    .dash-footer > summary::before {{ content: "▸ "; color: #8c959f; font-weight: 400; }}
+    details.aux-fold[open] > summary::before,
+    details.quiet-link-fold[open] > summary::before,
+    .chart-secondary[open] > summary::before,
     .dash-footer[open] > summary::before {{ content: "▾ "; }}
-    .dash-footer-body {{
-      margin-top: 8px;
-      padding: 8px 10px;
-      border: 1px solid #eaeef2;
-      border-radius: 8px;
-      background: #fafbfc;
+    .section-label {{
+      display: flex; align-items: center; gap: 8px; margin: 0 0 8px;
+      font-size: 13px; font-weight: 600; color: var(--fg);
     }}
-    .dash-footer-body .cpu-help {{
-      display: block;
-      margin-top: 6px;
-    }}
-    .dash-footer-body .box {{
-      background: #fff;
-      border: 1px solid #eaeef2;
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 12px;
-      line-height: 1.45;
-      color: #57606a;
-    }}
+    .section-label .help-btn {{ padding: 0 6px; min-width: auto; font-size: 12px; color: var(--muted); }}
+    details.quiet-link-fold {{ display: none; margin: 2px 0 0; }}
+    details.quiet-link-fold.is-visible {{ display: block; }}
+    details.quiet-link-fold > summary {{ font-weight: 400; font-size: 11px; color: #8c959f; }}
+    details.quiet-link-fold[open] > summary {{ color: var(--muted); }}
+    details.quiet-link-fold .clickbox {{ margin: 6px 0 0; max-height: 280px; }}
+    .dash-footer {{ margin: 28px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }}
+    .dash-footer-body {{ margin-top: 8px; font-size: 12px; color: var(--muted); }}
+    .dash-footer-body .cpu-help {{ display: block; margin-top: 6px; }}
+    .dash-footer-body .box {{ padding: 8px 0; font-size: 12px; line-height: 1.45; }}
     .dash-footer-body ul {{ margin: 6px 0 0 18px; padding: 0; }}
-    .tabs {{ display: flex; gap: 8px; margin: 8px 0 12px 0; }}
-    .tabbtn {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
-    .tabbtn.active {{ background: #e7f3ff; border-color: #8cc8ff; }}
+    .tabs {{ display: flex; gap: 2px; margin: 4px 0 12px; border-bottom: 1px solid var(--line); }}
+    .tabbtn {{
+      border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+      background: transparent; padding: 7px 12px; color: var(--muted);
+    }}
+    .tabbtn:hover {{ background: transparent; color: var(--fg); }}
+    .tabbtn.active {{ color: var(--fg); border-bottom-color: var(--fg); font-weight: 600; }}
     .tab {{ display: none; }}
     .tab.active {{ display: block; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
@@ -209,324 +178,137 @@ def build_html_dashboard(
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
     .chart-grid {{
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px 28px;
-      margin: 4px 0 18px 0;
-      align-items: start;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px;
+      margin: 4px 0 18px; align-items: start;
     }}
-    @media (max-width: 1100px) {{
-      .chart-grid {{ grid-template-columns: 1fr; gap: 18px; }}
-    }}
+    @media (max-width: 1100px) {{ .chart-grid {{ grid-template-columns: 1fr; gap: 18px; }} }}
     .chart-tile {{
-      min-width: 0;
-      background: transparent;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      border: 0;
-      box-shadow: none;
+      min-width: 0; display: flex; flex-direction: column;
+      background: transparent; border: 0; box-shadow: none; padding: 0;
     }}
     .chart-tile-head {{
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      margin: 0 0 2px 2px;
-      min-height: 22px;
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin: 0 0 4px; min-height: 22px;
     }}
-    .chart-tile-title {{
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      color: #0f172a;
-      text-transform: none;
-    }}
-    .chart-tile-sub {{
-      display: block;
-      margin-top: 2px;
-      font-size: 12px;
-      font-weight: 400;
-      color: #656d76;
-    }}
+    .chart-tile-title {{ font-size: 14px; font-weight: 600; color: var(--fg); }}
+    .chart-tile-sub {{ display: block; margin-top: 1px; font-size: 12px; font-weight: 400; color: var(--muted); }}
     .chart-tile-expand {{
-      padding: 0;
-      border: 0;
-      background: transparent;
-      cursor: pointer;
-      font-size: 11px;
-      line-height: 1;
-      color: #0969da;
-      opacity: 0.72;
+      padding: 0; border: 0; background: transparent; cursor: pointer;
+      font-size: 11px; color: var(--accent); opacity: .75;
     }}
     .chart-tile-expand:hover {{ opacity: 1; text-decoration: underline; }}
-    .chart-pane {{
-      width: 100%;
-      height: 280px;
-      min-width: 0;
-      border-radius: 6px;
-      overflow: hidden;
-    }}
-    /*
-     * Reference width/height = ya make concurrency (.span-2).
-     * Expand promotes a tile to that same full-row slot; expand all ⇒ old
-     * vertical stack of wide charts.
-     */
+    .chart-pane {{ width: 100%; height: 280px; min-width: 0; overflow: hidden; }}
+    /* Expand = same full-row slot as ya make concurrency (.span-2). */
     .chart-tile.span-2,
-    .chart-tile.expanded {{
-      grid-column: 1 / -1;
-      width: 100%;
-    }}
+    .chart-tile.expanded {{ grid-column: 1 / -1; width: 100%; }}
     .chart-tile.span-2 .chart-pane,
-    .chart-tile.expanded .chart-pane {{
-      height: 520px;
-    }}
+    .chart-tile.expanded .chart-pane {{ height: 520px; }}
     /* Hover/click detail panels stay visible in tile mode too — expand only
        changes chart width/height, not whether drill-down UI exists. */
-    .chart-tile-meta {{
-      display: block;
-      margin-top: 8px;
-    }}
+    .chart-tile-meta {{ display: block; margin-top: 8px; }}
     .chart-tile-meta .hoverbox,
-    .chart-tile-meta .clickbox {{
-      margin: 6px 0 12px 0;
-      max-height: 180px;
-      border-color: #eaeef2;
-      background: #fafbfc;
-    }}
-    .chart-tile.expanded .chart-tile-meta .hoverbox {{
-      max-height: 220px;
-    }}
-    .chart-tile.expanded .chart-tile-meta .clickbox {{
-      max-height: 320px;
-    }}
+    .chart-tile-meta .clickbox {{ margin: 6px 0 12px; max-height: 180px; }}
+    .chart-tile.expanded .chart-tile-meta .hoverbox {{ max-height: 220px; }}
+    .chart-tile.expanded .chart-tile-meta .clickbox {{ max-height: 320px; }}
     .chart-secondary {{
-      margin: 0 0 16px 0;
-      border: 0;
-      border-top: 1px solid #eaeef2;
-      border-radius: 0;
-      padding: 10px 0 0 0;
-      background: transparent;
+      margin: 0 0 16px; border: 0; border-top: 1px solid var(--line);
+      padding: 10px 0 0; background: transparent;
     }}
-    .chart-secondary > summary {{
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 12px;
-      color: #57606a;
-      list-style: none;
-    }}
-    .chart-secondary > summary::-webkit-details-marker {{ display: none; }}
-    .chart-secondary > summary::before {{
-      content: "▸ ";
-      color: #8c959f;
-      font-weight: 400;
-    }}
-    .chart-secondary[open] > summary::before {{ content: "▾ "; }}
-    .chart-secondary .chart-grid {{
-      margin: 12px 0 0 0;
-    }}
+    .chart-secondary > summary {{ font-weight: 600; }}
+    .chart-secondary .chart-grid {{ margin: 12px 0 0; }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
-    #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
-    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; }}
-    .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
+    #chartTip {{
+      position: fixed; z-index: 40; display: none; pointer-events: none;
+      background: #fff; border: 1px solid var(--line); padding: 6px 8px;
+      font: 12px/1.35 var(--mono); white-space: pre;
+    }}
+    .hoverbox, .clickbox {{
+      background: var(--soft); border: 0; border-top: 1px solid var(--line);
+      border-radius: 0; padding: 8px 0; margin: 6px 0 16px;
+      max-height: 220px; overflow: auto; font-size: 12px;
+    }}
+    .hoverbox {{ white-space: pre-wrap; }}
+    .clickbox {{ background: transparent; max-height: 320px; margin-bottom: 20px; }}
     /* Empty until hover/click fills them — no instructional placeholders. */
-    .hoverbox:empty,
-    .clickbox:empty {{ display: none; margin: 0; padding: 0; border: 0; }}
-    .chart-tile-meta:not(:has(.hoverbox:not(:empty), .clickbox:not(:empty))) {{
-      display: none;
-    }}
+    .hoverbox:empty, .clickbox:empty {{ display: none; margin: 0; padding: 0; border: 0; }}
+    .chart-tile-meta:not(:has(.hoverbox:not(:empty), .clickbox:not(:empty))) {{ display: none; }}
     .clickbox table {{ width: 100%; border-collapse: collapse; }}
-    .clickbox th, .clickbox td {{ border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; vertical-align: top; }}
-    .clickbox th {{ position: sticky; top: 0; background: #fafafa; }}
-    .clickbox thead tr:first-child th {{ background: #f2f4f7; }}
-    .clickbox thead tr:nth-child(2) th {{ background: #f8fafc; }}
-    /* Visual separators between logical column groups in CPU suggestions. */
+    .clickbox th, .clickbox td {{
+      border-bottom: 1px solid var(--line); padding: 4px 6px;
+      text-align: left; vertical-align: top;
+    }}
+    .clickbox th {{ position: sticky; top: 0; background: #fff; color: var(--muted); font-weight: 600; }}
     #cpuSuggestionsInner td.group-end, #cpuSuggestionsInner th.group-end {{
-      position: relative;
-      border-right: 1px solid #c9d1db;
+      border-right: 1px solid var(--line);
     }}
-    #cpuSuggestionsInner td.group-end::after, #cpuSuggestionsInner th.group-end::after {{
-      content: "";
-      position: absolute;
-      top: -1px;
-      right: -10px;
-      width: 10px;
-      height: calc(100% + 2px);
-      pointer-events: none;
-      background: linear-gradient(to right, rgba(144, 158, 176, 0.28), rgba(144, 158, 176, 0.0));
-    }}
-    pre {{ background: #f6f8fa; padding: 12px; border-radius: 8px; }}
-    .time-link {{ cursor: pointer; color: #2563eb; text-decoration: underline dotted; white-space: nowrap; }}
-    .time-link:hover {{ color: #e53e3e; }}
-    .monitor-box {{
-      display: none;
-      margin-top: 6px;
-      font-size: 12px;
-      line-height: 1.4;
-      color: #475569;
-    }}
-    .monitor-box a {{
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: 500;
-    }}
-    .monitor-box a:hover {{ text-decoration: underline; }}
-    .monitor-url {{
-      margin-left: 8px;
-      color: #6b7280;
-      font-size: 11px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      word-break: break-all;
-    }}
-    .headline-stats {{
-      margin-bottom: 12px;
-      padding: 10px 12px;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
-      background: #f8fafc;
-    }}
+    pre {{ background: var(--soft); padding: 10px 12px; border-radius: 4px; overflow: auto; }}
+    .time-link {{ cursor: pointer; color: var(--accent); text-decoration: underline dotted; white-space: nowrap; }}
+    .time-link:hover {{ color: #cf222e; }}
+    .monitor-box {{ display: none; margin-top: 6px; font-size: 12px; color: var(--muted); }}
+    .monitor-box a {{ font-weight: 500; }}
+    .monitor-url {{ margin-left: 8px; color: #8c959f; font-size: 11px; font-family: var(--mono); word-break: break-all; }}
+    .headline-stats {{ margin: 0 0 16px; padding: 0 0 14px; border-bottom: 1px solid var(--line); }}
     .headline-stats-title {{
-      font-size: 11px;
-      font-weight: 500;
-      color: #656d76;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
+      font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px;
     }}
     .headline-run {{
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 12px;
-      font-size: 13px;
-      line-height: 1.45;
-      color: #57606a;
+      display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+      font-size: 13px; color: var(--muted);
     }}
-    .headline-run-row {{
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      column-gap: 0;
-      row-gap: 6px;
-    }}
+    .headline-run-row {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 0; }}
     .headline-run b {{
-      font-variant-numeric: tabular-nums;
-      font-size: 16px;
-      font-weight: 700;
-      color: #0f172a;
-      margin-right: 0.3em;
+      font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600;
+      color: var(--fg); margin-right: .3em;
     }}
-    .headline-run .muted {{ color: #64748b; font-weight: 400; }}
-    .headline-run .group {{
-      white-space: nowrap;
-      padding: 0 14px;
-      border-right: 1px solid #cbd5e1;
-    }}
+    .headline-run .muted {{ color: #8c959f; font-weight: 400; }}
+    .headline-run .group {{ white-space: nowrap; padding: 0 14px; border-right: 1px solid var(--line); }}
     .headline-run .group:first-child {{ padding-left: 0; }}
-    .headline-run .group:last-child {{
-      border-right: 0;
-      padding-right: 0;
-    }}
-    .headline-tables {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px 28px;
-      align-items: flex-start;
-    }}
-    .headline-block {{
-      margin-top: 0;
-    }}
-    .headline-block h4 {{
-      margin: 0 0 4px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #475569;
-    }}
+    .headline-run .group:last-child {{ border-right: 0; padding-right: 0; }}
+    .headline-tables {{ display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-start; }}
+    .headline-block h4 {{ margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }}
     .headline-table {{
-      width: auto;
-      border-collapse: collapse;
-      background: #fff;
-      font-size: 12px;
+      width: auto; border-collapse: collapse; font-size: 12px;
       font-variant-numeric: tabular-nums;
     }}
     .headline-table th, .headline-table td {{
-      border: 1px solid #e2e8f0;
-      padding: 4px 10px;
-      text-align: right;
-      white-space: nowrap;
+      border: 0; border-bottom: 1px solid var(--line); padding: 5px 12px 5px 0;
+      text-align: right; white-space: nowrap;
     }}
-    .headline-table th:first-child, .headline-table td:first-child {{
-      text-align: left;
-      font-weight: 600;
-    }}
-    .headline-table th {{
-      background: #fff;
-      color: #64748b;
-      font-weight: 600;
-    }}
-    .headline-card {{
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background: #fff;
-      padding: 8px 10px;
-      font-size: 12px;
-      line-height: 1.45;
-    }}
-    .headline-card-name {{
-      color: #334155;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }}
+    .headline-table th:first-child, .headline-table td:first-child {{ text-align: left; font-weight: 600; padding-right: 16px; }}
+    .headline-table th {{ color: var(--muted); font-weight: 500; }}
+    .headline-card {{ padding: 0; font-size: 12px; line-height: 1.45; }}
+    .headline-card-name {{ color: var(--fg); font-weight: 600; margin-bottom: 4px; }}
     .btn-primary {{
-      padding: 7px 12px;
-      border: 1px solid #1d4ed8;
-      border-radius: 7px;
-      background: #2563eb;
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
+      border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600;
     }}
-    .btn-primary:hover {{ background: #1d4ed8; }}
-    .btn-primary:active {{ background: #1e40af; }}
-    .layer-toggle-box {{
-      display: inline-flex;
-      align-items: flex-start;
-      gap: 10px;
-    }}
-    .layer-toggle-list {{
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }}
+    .btn-primary:hover {{ background: #0550ae; border-color: #0550ae; }}
+    .layer-toggle-box {{ display: inline-flex; align-items: flex-start; gap: 10px; }}
+    .layer-toggle-list {{ display: flex; flex-direction: column; gap: 4px; }}
     .layer-toggle-item {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-width: 160px;
-      white-space: nowrap;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; min-width: 160px; white-space: nowrap;
     }}
-    .layer-toggle-item input {{
-      margin: 0;
-      flex: 0 0 auto;
+    .layer-toggle-item input {{ margin: 0; flex: 0 0 auto; }}
+    #dashboardLoadError {{
+      display: none; margin: 0 0 12px; padding: 10px 12px;
+      border: 1px solid #ffbeba; background: #ffebe9; border-radius: 4px;
+      color: #a40e26; font-size: 13px;
     }}
   </style>
 </head>
 <body>
-  <div id="dashboardLoadError" style="display:none;margin:16px;padding:12px 16px;border:1px solid #fca5a5;background:#fef2f2;border-radius:8px;color:#991b1b;font-size:14px;"></div>
+  <div id="dashboardLoadError"></div>
   <div id="chartTip"></div>
-  <div id="dashboardHeader" style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border-radius:8px;border:1px solid #e2e8f0;">
-    <div id="headerRow1" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;font-size:14px;line-height:1.5;">
+  <div id="dashboardHeader" class="dash-header">
+    <div id="headerRow1" class="dash-header-row">
       <span id="headerPr" style="display:none;"></span>
       <span id="headerBranch" style="display:none;"></span>
-      <span id="headerCommit" style="display:none;font-family:ui-monospace,monospace;font-size:13px;"></span>
-      <span style="flex:1;min-width:80px;"></span>
-      <span id="headerLinks" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></span>
+      <span id="headerCommit" class="mono" style="display:none;"></span>
+      <span style="flex:1;min-width:48px;"></span>
+      <span id="headerLinks" class="dash-header-row"></span>
     </div>
-    <div style="margin-top:8px;font-size:13px;color:#64748b;">
-      Suite filter: {suite_filter_html}
-    </div>
-    <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
+    <div class="dash-header-meta">Suite filter: {suite_filter_html}</div>
+    <div id="overlayStatus" class="dash-header-meta"></div>
     <div id="monitoringLinkWrap" class="monitor-box">
       <span>Runner monitoring:</span>
       <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
@@ -537,13 +319,13 @@ def build_html_dashboard(
     <div class="headline-stats-title">Resource summary</div>
     <div id="headlineStatsGrid" class="headline-stats-grid"></div>
   </div>
-  <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
+  <div id="cpuSuggestionsSection" style="display:none;margin:16px 0;">
     <div class="section-label">
       <span>CPU suggestions</span>
       <button id="cpuHelpToggle" class="help-btn" type="button" title="Open recommendation docs in footer">?</button>
     </div>
-    <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
-    <p style="font-size:12px;color:#64748b;margin:4px 0 8px 0;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
+    <p id="syntheticNote" style="display:none;font-size:12px;color:#9a6700;margin:4px 0;"></p>
+    <p class="dash-header-meta" style="margin:4px 0 8px;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
     <details id="heavyTestsDetails" class="quiet-link-fold">
       <summary>Long/heavy near timeout (0)</summary>
@@ -551,18 +333,18 @@ def build_html_dashboard(
     </details>
   </div>
   <div class="toolbar">
-    <label for="suiteSearch">Search suite:</label>
+    <label for="suiteSearch">Search suite</label>
     <input id="suiteSearch" type="text" placeholder="e.g. ydb/core/tx/schemeshard/ut_cdc_stream_reboots" />
-    <button onclick="clearSuiteSearch()">Clear</button>
-    <label for="tzSelect">Timezone:</label>
-    <select id="tzSelect" onchange="applyTimezoneToAllCharts()" style="padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;">
+    <button type="button" onclick="clearSuiteSearch()">Clear</button>
+    <label for="tzSelect">Timezone</label>
+    <select id="tzSelect" onchange="applyTimezoneToAllCharts()">
       <option value="Europe/Moscow">MSK</option>
       <option value="UTC">UTC</option>
       <option value="local" selected>Local</option>
     </select>
-    <button onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
-    <span style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:3px 6px;background:#fff;color:#57606a;">
-      <span>Marker types:</span>
+    <button type="button" onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
+    <span class="toolbar-group">
+      <span>Markers</span>
       <label><input type="checkbox" id="mkStart" checked onchange="applyMarkersToCharts()">start</label>
       <label><input type="checkbox" id="mkEnd" checked onchange="applyMarkersToCharts()">end</label>
       <label><input type="checkbox" id="mkPar" onchange="applyMarkersToCharts()">par</label>
@@ -572,27 +354,22 @@ def build_html_dashboard(
       <label><input type="checkbox" id="mkError" onchange="applyMarkersToCharts()">errors</label>
       <label><input type="checkbox" id="mkTimeout" onchange="applyMarkersToCharts()">timeouts</label>
     </span>
-    <span id="markersLegend" style="display:none;font-size:11px;line-height:1.5;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fafafa;color:#57606a;">
-      <span>Markers:</span>
-      <span style="margin-left:6px;">&#9135;&#9135; start</span>
-      <span style="margin-left:6px;">&#8209;&#8209;&#8209; end</span>
-      <span style="margin-left:6px;">&#183;&#183;&#183; par/others peak</span>
-      <span style="margin-left:6px;">&#8209;&#183;&#8209; CPU/RAM peak</span>
-      <span style="margin-left:6px;color:#b00020;">&#9473;&#9473; errors</span>
-      <span style="margin-left:6px;color:#e65100;">&#9473;&#9473; timeouts</span>
-      &nbsp;|&nbsp;
+    <span id="markersLegend" class="toolbar-group" style="display:none;font-size:11px;">
+      <span>&#9135;&#9135; start</span>
+      <span>&#8209;&#8209;&#8209; end</span>
+      <span>&#183;&#183;&#183; par/others</span>
+      <span>&#8209;&#183;&#8209; CPU/RAM</span>
+      <span style="color:#cf222e;">&#9473;&#9473; errors</span>
+      <span style="color:#bc4c00;">&#9473;&#9473; timeouts</span>
       <span id="markersLegendSuites"></span>
-      <span id="markersLegendStats" style="margin-left:6px;color:#586069;"></span>
+      <span id="markersLegendStats"></span>
     </span>
-    <span id="syntheticCheckboxWrap" style="margin-left: 16px;" title="When enabled, suites without report CPU/RAM use ya.make REQUIREMENTS as estimated chart values.">
-      <label style="display:flex;align-items:center;gap:6px;">
-        <input type="checkbox" id="includeSyntheticCb" checked />
-        <span>Include estimated (from ya.make) CPU/RAM</span>
-      </label>
+    <span id="syntheticCheckboxWrap" class="toolbar-group" title="When enabled, suites without report CPU/RAM use ya.make REQUIREMENTS as estimated chart values.">
+      <label><input type="checkbox" id="includeSyntheticCb" checked /> Include estimated CPU/RAM</label>
     </span>
-    <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:8px;padding:6px 10px;background:#fff;">
+    <span id="layerTogglesWrap" class="toolbar-group" style="display:none;">
       <span class="layer-toggle-box">
-        <span>Layers:</span>
+        <span>Layers</span>
         <span class="layer-toggle-list">
           <label class="layer-toggle-item"><span>Metrics by suite</span><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()"></label>
           <label class="layer-toggle-item"><span>System CPU</span><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()"></label>

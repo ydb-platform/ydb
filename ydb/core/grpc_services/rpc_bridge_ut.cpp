@@ -7,6 +7,8 @@
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -184,6 +186,201 @@ void TestCompletion(ECompletion completion) {
     UNIT_ASSERT_VALUES_EQUAL(setup.Finished, 1);
 }
 
+}
+
+namespace {
+
+using TModeRpc = TGrpcRequestOperationCall<Ydb::Bridge::SetDatabaseBridgeModeRequest,
+    Ydb::Bridge::SetDatabaseBridgeModeResponse>;
+
+struct TModeSetup {
+    TTestBasicRuntime Runtime;
+    TActorId Edge;
+    TActorId Rpc;
+
+    TModeSetup() {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Edge = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(MakeTxProxyID(), Edge);
+        Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& event) {
+            if (event->Type == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                event->Rewrite(event->Type, Edge);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+    }
+
+    auto Start(std::optional<bool> bridged = true, const TString& database = "/Root/db", const TString& retain = "",
+            const TString& connectionDatabase = "/Root") {
+        Ydb::Bridge::SetDatabaseBridgeModeRequest request;
+        NRpcService::SetRequestSyncOperationMode(request);
+        if (bridged) {
+            request.set_bridge_mode(*bridged);
+        }
+        request.set_retain_pile_name(retain);
+        request.set_database_path(database);
+        auto promise = NThreading::NewPromise<TModeRpc::TResponse>();
+        using TCb = NRpcService::TPromiseWrapper<TModeRpc::TResponse>;
+        auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TModeRpc, TCb>>(
+            std::move(request), TCb(promise), connectionDatabase, Nothing(), Nothing(), false);
+        Runtime.Register(new TStartRequest(std::move(ctx), DoSetDatabaseBridgeMode));
+        return promise.GetFuture();
+    }
+
+    void Describe(bool serverless = false, bool directory = false) {
+        const auto navigate = Runtime.GrabEdgeEvent<TEvTxUserProxy::TEvNavigate>(Edge);
+        Rpc = navigate->Sender;
+        UNIT_ASSERT_VALUES_EQUAL(navigate->Get()->Record.GetDescribePath().GetPath(), "/Root/db");
+        UNIT_ASSERT_VALUES_EQUAL(navigate->Get()->Record.GetDatabaseName(), "/Root/db");
+        auto reply = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        auto& record = reply->Record;
+        record.SetStatus(NKikimrScheme::StatusSuccess);
+        auto* description = record.MutablePathDescription();
+        description->MutableSelf()->SetPathType(directory ? NKikimrSchemeOp::EPathTypeDir : NKikimrSchemeOp::EPathTypeSubDomain);
+        auto* domain = description->MutableDomainDescription();
+        domain->MutableDomainKey()->SetSchemeShard(100);
+        domain->MutableDomainKey()->SetPathId(2);
+        domain->MutableResourcesDomainKey()->CopyFrom(domain->GetDomainKey());
+        if (serverless) {
+            domain->MutableResourcesDomainKey()->SetPathId(3);
+        }
+        domain->AddStoragePools()->SetName("pool-a");
+        domain->AddStoragePools()->SetName("pool-b");
+        Runtime.Send(new IEventHandle(Rpc, Edge, reply.release()), 0, true);
+    }
+
+    auto GrabBscRequest() {
+        return Runtime.GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigRequest>(Edge);
+    }
+
+    void ReplyWithPools(std::initializer_list<TString> names = {"pool-a", "pool-b"}) {
+        const auto read = GrabBscRequest();
+        const auto& commands = read->Get()->Record.GetRequest().GetCommand();
+        UNIT_ASSERT_VALUES_EQUAL(commands.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(commands.Get(0).GetReadStoragePool().NameSize(), 2);
+        auto reply = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+        auto* response = reply->Record.MutableResponse();
+        response->SetSuccess(true);
+        auto* status = response->AddStatus();
+        status->SetSuccess(true);
+        ui64 id = 10;
+        for (const auto& name : names) {
+            auto* pool = status->AddStoragePool();
+            pool->SetName(name);
+            pool->SetBoxId(1);
+            pool->SetStoragePoolId(id++);
+            pool->SetItemConfigGeneration(42);
+        }
+        Runtime.Send(new IEventHandle(Rpc, Edge, reply.release()), 0, true);
+    }
+};
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(BridgeDatabaseMode) {
+    Y_UNIT_TEST(RequiresTargetDatabaseAndExplicitMode) {
+        TModeSetup setup;
+        for (const auto& database : {TString(""), TString("/"), TString("relative/db")}) {
+            auto future = setup.Start(true, database);
+            UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        }
+        auto future = setup.Start(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(ConnectionDatabaseDoesNotSupplyTarget) {
+        TModeSetup setup;
+        auto future = setup.Start(true, "", "", "/Root/db");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(RequiresAdministrator) {
+        TModeSetup setup;
+        setup.Runtime.GetAppData().AdministrationAllowedSIDs = {"admin"};
+        auto future = setup.Start();
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+    }
+
+    Y_UNIT_TEST(RetainPileRequiresOrdinaryStorage) {
+        TModeSetup setup;
+        auto future = setup.Start(true, "/Root/db", "secondary");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(RejectsServerlessAndNonDatabasePaths) {
+        for (bool serverless : {false, true}) {
+            TModeSetup setup;
+            auto future = setup.Start();
+            setup.Describe(serverless, !serverless);
+            UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(),
+                serverless ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::BAD_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(RejectsMissingAmbiguousAndUnexpectedPools) {
+        for (const auto& names : {std::initializer_list<TString>{"pool-a"}, {"pool-a", "pool-a"}, {"pool-a", "other-db"}}) {
+            TModeSetup setup;
+            auto future = setup.Start();
+            setup.Describe();
+            setup.ReplyWithPools(names);
+            UNIT_ASSERT_VALUES_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::PRECONDITION_FAILED);
+        }
+    }
+
+    Y_UNIT_TEST(ChangesAllPoolsInOneRequestAndPropagatesFailure) {
+        for (bool bridged : {false, true}) {
+            for (bool success : {false, true}) {
+                TModeSetup setup;
+                auto future = setup.Start(bridged, "/Root/db", bridged ? "" : "secondary");
+                setup.Describe();
+                setup.ReplyWithPools();
+                const auto change = setup.GrabBscRequest();
+                const auto& commands = change->Get()->Record.GetRequest().GetCommand();
+                UNIT_ASSERT_VALUES_EQUAL(commands.size(), 2);
+                for (int i = 0; i < commands.size(); ++i) {
+                    const auto& command = commands.Get(i).GetChangeStoragePoolBridgeMode();
+                    UNIT_ASSERT_VALUES_EQUAL(command.GetBoxId(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(command.GetStoragePoolId(), 10 + i);
+                    UNIT_ASSERT_VALUES_EQUAL(command.GetItemConfigGeneration(), 42);
+                    UNIT_ASSERT_VALUES_EQUAL(command.GetBridgeMode(), bridged);
+                    UNIT_ASSERT_VALUES_EQUAL(command.GetRetainPileName(), bridged ? "" : "secondary");
+                }
+                auto reply = std::make_unique<TEvBlobStorage::TEvControllerConfigResponse>();
+                auto* response = reply->Record.MutableResponse();
+                response->SetSuccess(success);
+                response->AddStatus()->SetSuccess(true);
+                auto* status = response->AddStatus();
+                status->SetSuccess(success);
+                if (!success) {
+                    status->SetFailReason(NKikimrBlobStorage::TConfigResponse::TStatus::kItemConfigGenerationMismatch);
+                    status->SetErrorDescription("generation mismatch");
+                }
+                setup.Runtime.Send(new IEventHandle(setup.Rpc, setup.Edge, reply.release()), 0, true);
+                const auto result = setup.Runtime.WaitFuture(future);
+                UNIT_ASSERT_VALUES_EQUAL(result.operation().status(), success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED);
+                if (!success) {
+                    UNIT_ASSERT_STRING_CONTAINS(result.DebugString(), "generation mismatch");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CancellationWhileReadingPools) {
+        for (bool timeout : {false, true}) {
+            TModeSetup setup;
+            auto future = setup.Start(true, "/Root/db", "", "");
+            setup.Describe();
+            setup.GrabBscRequest();
+            if (timeout) {
+                setup.Runtime.Send(new IEventHandle(setup.Rpc, {}, new TEvents::TEvWakeup(TRpcRequestWithOperationParamsActor<
+                    TStartRequest, TModeRpc, true>::WakeupTagTimeout)), 0, true);
+            } else {
+                setup.Runtime.Send(new IEventHandle(setup.Rpc, {}, new TRpcServices::TEvForgetOperation()), 0, true);
+            }
+            setup.Runtime.WaitFuture(future);
+            UNIT_ASSERT(!setup.Runtime.FindActor(setup.Rpc));
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {

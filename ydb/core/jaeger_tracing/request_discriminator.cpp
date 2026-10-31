@@ -104,6 +104,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Bridge.ConvertToBridge", ERequestType::BRIDGE_CONVERTTOBRIDGE},
     {"Bridge.AddPile", ERequestType::BRIDGE_ADDPILE},
     {"Bridge.RemovePile", ERequestType::BRIDGE_REMOVEPILE},
+    {"Bridge.SetDatabaseBridgeMode", ERequestType::BRIDGE_SETDATABASEBRIDGEMODE},
 
     {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
     {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},

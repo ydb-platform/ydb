@@ -21,6 +21,7 @@ PEERDIR(
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
+REQUIREMENTS(cpu:2)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:10 cpu:16)
 ELSE()

@@ -12,7 +12,6 @@ EXECTEST()
 
 IF (SANITIZER_TYPE == "memory")
     SIZE(LARGE)
-    REQUIREMENTS(cpu:2)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     TIMEOUT(2400)
 ELSE()

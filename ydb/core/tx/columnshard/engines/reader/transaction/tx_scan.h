@@ -17,19 +17,17 @@ private:
 
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
+    static const TVersionedPresetSchemas& GetPresetSchemas(NColumnShard::TColumnShard& self);
+
     // Properties of the request. Each reads the request and the tablet, and nothing else.
-    TSnapshot GetSnapshot(const NColumnShard::TSchemeShardLocalPathId& ssPathId) const;
     ERequestSorting GetRequestSorting() const;
     bool GetDeduplicationEnabled(const TSnapshot& snapshot) const;
     TString GetReaderName() const;
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
     std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> GetSchedulerPool() const;
-    const TVersionedPresetSchemas& GetPresetSchemas() const;
     std::optional<ESourcesSorting> GetCursorSourcesSorting() const;
 
     // Steps building the read description
-    TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(
-        const NColumnShard::TSchemeShardLocalPathId& ssPathId, const TSnapshot& snapshot) const;
     TReadDescription MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
         const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
         const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
@@ -38,7 +36,6 @@ private:
         const TScannerConstructorContext& context, const TString& readerName) const;
     TConclusionStatus InitScanCursor(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
     TConclusionStatus InitProgram(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
-    TConclusionStatus InitPKRangesFilter(TReadDescription& read) const;
 
     // Null when diagnostics are disabled.
     std::unique_ptr<TDiagnosticsEvent> MakeDiagnosticsEvent(const TReadDescription& read) const;
@@ -48,9 +45,15 @@ private:
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
-    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev)
+    static TSnapshot GetSnapshot(const NColumnShard::TColumnShard& self, const NKikimrTxDataShard::TEvKqpScan& request,
+        const NColumnShard::TSchemeShardLocalPathId& ssPathId);
+    static TConclusion<std::shared_ptr<TPKRangesFilter>> MakeRanges(
+        NColumnShard::TColumnShard& self, const NKikimrTxDataShard::TEvKqpScan& request, const ITableMetadataAccessor& tableMetadataAccessor);
+
+    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev, TScanTarget&& target)
         : TBase(self)
         , Ev(ev)
+        , Target(std::move(target))
     {
     }
 
@@ -63,6 +66,7 @@ public:
 
 private:
     TEvDataShard::TEvKqpScan::TPtr Ev;
+    const TScanTarget Target;
 };
 
 }   // namespace NKikimr::NOlap::NReader

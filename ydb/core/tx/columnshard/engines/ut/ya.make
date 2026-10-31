@@ -56,6 +56,7 @@ SRCS(
     ut_index_info_schema_diff.cpp
     ut_shared_schema_cache.cpp
     ut_bloom_ngram_size.cpp
+    ut_loaded_key_ranges.cpp
     helper.cpp
 )
 

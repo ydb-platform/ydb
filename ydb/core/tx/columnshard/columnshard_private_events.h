@@ -8,6 +8,7 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/loaded_key_ranges.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -98,6 +99,7 @@ struct TEvPrivate {
         EvContinueFindEmptyHistoryIntervals,
         EvFindEmptyHistoryIntervalsPortionsReady,
         EvPrefetchPortionsMetadata,
+        EvSetLoadedKeyRanges,
         EvEnd
     };
 
@@ -381,6 +383,18 @@ struct TEvPrivate {
     };
 
     struct TEvPrefetchPortionsMetadata: public TEventLocal<TEvPrefetchPortionsMetadata, EvPrefetchPortionsMetadata> {};
+
+    // only tests move the loaded key ranges until portions are loaded after the start
+    struct TEvSetLoadedKeyRanges: public TEventLocal<TEvSetLoadedKeyRanges, EvSetLoadedKeyRanges> {
+        const TInternalPathId PathId;
+        NOlap::TLoadedKeyRanges LoadedKeyRanges;
+
+        TEvSetLoadedKeyRanges(const TInternalPathId pathId, NOlap::TLoadedKeyRanges&& loadedKeyRanges)
+            : PathId(pathId)
+            , LoadedKeyRanges(std::move(loadedKeyRanges))
+        {
+        }
+    };
 
     struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
         const ui32 Channel;

@@ -427,6 +427,7 @@ bool TColumnEngineForLogs::FinishLoading() {
                 AddCleanupPortion(portionInfo);
             }
         }
+        spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
     }
 
     Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
@@ -808,6 +809,21 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
     return TPortionsSelector(granuleMeta, dataLocksManager, pathId, readDescription).Select();
 }
 
+bool TColumnEngineForLogs::ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const {
+    const auto granule = GetGranuleOptional(pathId);
+    return !granule || granule->GetLoadedKeyRanges().Covers(ranges);
+}
+
+bool TColumnEngineForLogs::AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const {
+    if (pathId) {
+        const auto granule = GetGranuleOptional(*pathId);
+        return !granule || granule->GetLoadedKeyRanges().IsEverythingLoaded();
+    }
+    return std::all_of(GetTables().begin(), GetTables().end(), [](const auto& table) {
+        return table.second->GetLoadedKeyRanges().IsEverythingLoaded();
+    });
+}
+
 bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {
     if (ActualizationStarted) {
         return false;
@@ -851,8 +867,9 @@ void TColumnEngineForLogs::OnTieringModified(const THashMap<TInternalPathId, NOl
     }
 }
 
-void TColumnEngineForLogs::DoRegisterTable(const TInternalPathId pathId) {
+void TColumnEngineForLogs::DoRegisterTable(const TInternalPathId pathId, TLoadedKeyRanges&& loadedKeyRanges) {
     std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), GetVersionedIndex());
+    g->SetLoadedKeyRanges(std::move(loadedKeyRanges));
     if (ActualizationStarted) {
         g->StartActualizationIndex();
         g->RefreshScheme();

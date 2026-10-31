@@ -482,6 +482,17 @@ TSerializedTableRange MakeTestRange(
     return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), inclusiveFrom, TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk) {
+    NArrow::TArrowBatchBuilder batchBuilder;
+    const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(pk));
+    UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
+    std::vector<TString> mem;
+    std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(pk);
+    std::vector<TCell> cells = MakeTestCells(types, value, mem);
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
+    return NArrow::TSimpleRow(batchBuilder.FlushBatch(false), 0);
+}
+
 THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     if (specials.Tiers.empty()) {
         return {};

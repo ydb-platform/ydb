@@ -1525,7 +1525,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
 void TPartitionActor::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    if (Protocol != EProtocol::Topic || record.GetSession() != Session
+    if (UseMigrationProtocol || record.GetSession() != Session
         || record.GetPartitionId() != Partition.Partition
         || record.GetGeneration() != Generation || record.GetStep() != Step) {
         return;

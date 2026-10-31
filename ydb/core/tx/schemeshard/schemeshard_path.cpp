@@ -1926,6 +1926,7 @@ bool TPath::IsSupportedInExports() const {
         case NKikimrSchemeOp::EPathTypeSysView:
             return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypeKesus:
         case NKikimrSchemeOp::EPathTypeTable:
             return true;
         default:

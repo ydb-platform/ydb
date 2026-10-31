@@ -60,6 +60,8 @@ namespace TEvPrivate {
         EvPeriodicTableStatsParsed,
         EvRevisitSplitMerge,
         EvExportCompletionUploadResult,
+        EvExportKesusTimeout,
+        EvKesusResourcesDescribeResult,
         EvEnd
     };
 
@@ -178,6 +180,20 @@ namespace TEvPrivate {
             , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
+        {}
+    };
+
+    struct TEvExportKesusTimeout: public TEventLocal<TEvExportKesusTimeout, EvExportKesusTimeout> {};
+
+    struct TEvKesusResourcesDescribeResult: public TEventLocal<TEvKesusResourcesDescribeResult, EvKesusResourcesDescribeResult> {
+        const bool Success;
+        TString Content;
+        const TString Error;
+
+        TEvKesusResourcesDescribeResult(bool success, TString content, TString error)
+            : Success(success)
+            , Content(std::move(content))
+            , Error(std::move(error))
         {}
     };
 

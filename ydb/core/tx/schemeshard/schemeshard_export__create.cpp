@@ -44,6 +44,7 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     switch (item.SourcePathType) {
     case NKikimrSchemeOp::EPathTypeView:
     case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeKesus:
     case NKikimrSchemeOp::EPathTypeReplication:
     case NKikimrSchemeOp::EPathTypeTransfer:
     case NKikimrSchemeOp::EPathTypeExternalDataSource:

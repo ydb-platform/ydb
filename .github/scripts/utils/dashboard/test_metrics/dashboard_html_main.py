@@ -395,25 +395,37 @@ def build_html_dashboard(
     }}
     .headline-run {{
       display: flex;
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: 6px 16px;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
       font-size: 13px;
       line-height: 1.45;
-      margin-bottom: 12px;
       color: #57606a;
+    }}
+    .headline-run-row {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 0;
+      row-gap: 6px;
     }}
     .headline-run b {{
       font-variant-numeric: tabular-nums;
       font-size: 16px;
       font-weight: 700;
       color: #0f172a;
+      margin-right: 0.3em;
     }}
     .headline-run .muted {{ color: #64748b; font-weight: 400; }}
-    .headline-run .group {{ white-space: nowrap; }}
-    .headline-run .group + .group {{
-      padding-left: 16px;
-      border-left: 1px solid #cbd5e1;
+    .headline-run .group {{
+      white-space: nowrap;
+      padding: 0 14px;
+      border-right: 1px solid #cbd5e1;
+    }}
+    .headline-run .group:first-child {{ padding-left: 0; }}
+    .headline-run .group:last-child {{
+      border-right: 0;
+      padding-right: 0;
     }}
     .headline-tables {{
       display: flex;
@@ -1056,21 +1068,25 @@ def build_html_dashboard(
         : 'From the first build/archive/cache/link activity to the last test end';
       const runLine =
         '<div class="headline-run">' +
-          '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites</span>' +
-          '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks</span>' +
-          '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests</span>' +
-          '<span class="group" title="' + totalTip + '">' +
-            '<b>' + wallExact + '</b> total duration</span>' +
-          '<span class="group" title="' + buildTip + '">' +
-            '<b>' + buildExact + '</b> build duration</span>' +
-          '<span class="group" title="' + testTip + '">' +
-            '<b>' + testExact + '</b> test duration</span>' +
-          filterScopeNote +
-          '<span class="group">tests <b>' + String(failedTotal) + '</b> failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
-            ' · <b>' + String(timeoutTotal) + '</b> timeout · <b>' + String(skippedTotal) + '</b> skipped</span>' +
-          '<span class="group">chunks <b>' + String(cFailedTotal) + '</b> failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
-            ' · <b>' + String(cTimeoutTotal) + '</b> timeout</span>' +
-          unalignedNote +
+          '<div class="headline-run-row">' +
+            '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b>suites</span>' +
+            '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b>chunks</span>' +
+            '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b>tests</span>' +
+            '<span class="group" title="' + totalTip + '">' +
+              '<b>' + wallExact + '</b>total</span>' +
+            '<span class="group" title="' + buildTip + '">' +
+              '<b>' + buildExact + '</b>build</span>' +
+            '<span class="group" title="' + testTip + '">' +
+              '<b>' + testExact + '</b>test</span>' +
+            filterScopeNote +
+          '</div>' +
+          '<div class="headline-run-row">' +
+            '<span class="group">tests <b>' + String(failedTotal) + '</b>failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
+              ' · <b>' + String(timeoutTotal) + '</b>timeout · <b>' + String(skippedTotal) + '</b>skipped</span>' +
+            '<span class="group">chunks <b>' + String(cFailedTotal) + '</b>failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
+              ' · <b>' + String(cTimeoutTotal) + '</b>timeout</span>' +
+            unalignedNote +
+          '</div>' +
         '</div>';
       function statCell(metric, stats, field) {{
         const s = (stats && typeof stats === 'object') ? stats : {{}};

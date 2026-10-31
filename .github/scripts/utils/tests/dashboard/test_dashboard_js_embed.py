@@ -129,8 +129,11 @@ class JsScriptJsonTest(unittest.TestCase):
         header_block = source[header_idx:headline_idx]
         self.assertIn('id="monitoringLinkWrap"', header_block)
         self.assertIn("Runner monitoring:", header_block)
-        self.assertIn("build duration", source)
-        self.assertIn("test duration", source)
+        self.assertIn("build duration", source)  # filter-scope tip text
+        self.assertIn("'</b>total</span>'", source)
+        self.assertIn("'</b>build</span>'", source)
+        self.assertIn("'</b>test</span>'", source)
+        self.assertIn("headline-run-row", source)
         self.assertIn("function resolvePhaseDurations(hs)", source)
         self.assertIn('rel="icon"', source)
         self.assertIn("data:image/svg+xml,", source)

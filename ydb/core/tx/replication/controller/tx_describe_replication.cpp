@@ -6,6 +6,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/algorithm.h>
@@ -226,6 +227,44 @@ public:
         } else if (!replication->GetConfig().HasTransferSpecific()) {
             Result->Record.MutableAvailabilityPeriod()->MutableDuration()->set_seconds(
                 AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
+        }
+        if (replication->GetConfig().GetConsistencySettings().HasGlobal() && Self->GetSingle() == replication) {
+            auto* transactions = Result->Record.MutableTransactions();
+            // CommittingTxId is already included in AssignedTxIds. Entries are
+            // removed by TTxCommitChanges and restored from Schema::TxIds on restart.
+            for (const auto& [version, txId] : Self->AssignedTxIds) {
+                auto* item = transactions->add_assigned();
+                item->mutable_upper_bound_barrier()->set_plan_step(version.Step);
+                item->mutable_upper_bound_barrier()->set_tx_id(version.TxId);
+                item->set_write_tx_id(txId);
+            }
+            for (const auto& [version, _] : Self->PendingTxId) {
+                auto* item = transactions->add_pending();
+                item->set_plan_step(version.Step);
+                item->set_tx_id(version.TxId);
+            }
+        }
+
+        if (replication->GetConfig().GetConsistencySettings().HasRow()) {
+            auto* status = Result->Record.MutableApplyStatus();
+            ui64 workers = 0;
+            ui64 inflight = 0;
+            ui64 unknown = 0;
+            for (const auto* target : replication->GetTargets()) {
+                for (const auto workerId : target->GetWorkers()) {
+                    ++workers;
+                    const TWorkerId id(replication->GetId(), target->GetId(), workerId);
+                    const auto it = Self->Workers.find(id);
+                    if (it == Self->Workers.end() || !it->second.InflightBatch.Defined()) {
+                        ++unknown;
+                    } else if (*it->second.InflightBatch) {
+                        ++inflight;
+                    }
+                }
+            }
+            status->set_workers(workers);
+            status->set_inflight_workers(inflight);
+            status->set_unknown_workers(unknown);
         }
 
         using TInitialScanProgress = NYdb::NTable::TChangefeedDescription::TInitialScanProgress;

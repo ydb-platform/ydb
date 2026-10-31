@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 
@@ -62,6 +63,32 @@ message AvailabilityPeriod {
 }
 
 message DescribeReplicationResult {
+    message Transactions {
+        message Assigned {
+            // Exclusive upper source version of the replication commit interval.
+            VirtualTimestamp upper_bound_barrier = 1;
+            // Assigned write transaction ID on the destination.
+            uint64 write_tx_id = 2;
+        }
+
+        // Assigned transactions whose commit has not yet completed.
+        repeated Assigned assigned = 1;
+        // Distinct versions queued for transaction-ID assignment, not transaction IDs.
+        // This in-memory queue is rebuilt from worker requests after restart.
+        repeated VirtualTimestamp pending = 2;
+    }
+
+    // Last reported application activity in ROW consistency mode.
+    // Reports are asynchronous; these counts do not indicate source catch-up.
+    message ApplyStatus {
+        // Number of registered workers, including workers without a recent report.
+        uint64 workers = 1;
+        // Workers that reported a received batch not yet fully applied.
+        uint64 inflight_workers = 2;
+        // Workers with missing or expired reports, including after restart.
+        uint64 unknown_workers = 3;
+    }
+
     message Stats {
         optional google.protobuf.Duration lag = 1;
         optional float initial_scan_progress = 2;
@@ -105,6 +132,12 @@ message DescribeReplicationResult {
         DoneState done = 6;
         PausedState paused = 9;
     }
+    // Current global-consistency transaction state, ordered by interval version.
+    // Reported independently of include_stats; absent when unavailable or in row mode.
+    // Empty lists do not prove that replication caught up with the source.
+    Transactions transactions = 11;
+    // Reported in ROW mode independently of include_stats; absent when unsupported.
+    ApplyStatus apply_status = 12;
 }
 
 message DescribeTransferRequest {

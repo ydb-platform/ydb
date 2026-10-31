@@ -139,6 +139,7 @@ struct TEvWorker {
         TDuration Lag;
         TString SourceOffsetMismatch;
         TMaybe<ui64> SourceCommittedOffset;
+        TMaybe<bool> InflightBatch;
         std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);

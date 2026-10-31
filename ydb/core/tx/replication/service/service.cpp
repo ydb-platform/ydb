@@ -1082,7 +1082,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             } else if (ev->Get()->DetailedStats) {
                 session->ApplyWorkerStats(workerId, std::move(ev->Get()->DetailedStats));
             } else {
-                session->SendWorkerStatus(this, workerId, ev->Get()->Lag);
+                session->SendWorkerStatus(this, workerId, ev->Get()->Lag, ev->Get()->InflightBatch);
             }
         }
     }

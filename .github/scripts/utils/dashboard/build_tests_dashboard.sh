@@ -5,7 +5,8 @@
 #
 # Expects env: CURRENT_PUBLIC_DIR, CURRENT_REPORT, RESOURCES_JSONL, RETRY, YA_MAKE_OUT_DIR,
 # DASHBOARD_SANITIZER (optional), BUILD_PRESET, RUNNER_NAME, PR_NUMBER,
-# BRANCH_NAME, ORIGINAL_HEAD, PUBLIC_DIR_URL, GITHUB_REPOSITORY.
+# PR_TITLE (optional), BRANCH_NAME, ORIGINAL_HEAD, PUBLIC_DIR_URL, GITHUB_REPOSITORY.
+# Optional: GITHUB_TOKEN — used to resolve PR_TITLE when missing.
 
 TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
 mkdir -p "$TESTS_METRICS_DIR"
@@ -30,6 +31,22 @@ TRY_LINKS=""
 for i in $(seq 1 "$RETRY"); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
 TRY_LINKS="${TRY_LINKS%,}"
 
+# Resolve PR title when CI only passed the number (e.g. workflow_dispatch).
+if [ -z "${PR_TITLE:-}" ] && [ -n "${PR_NUMBER:-}" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  PR_TITLE="$(
+    curl --retry 3 --retry-delay 2 --fail -sS \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin).get("title") or "")' \
+      2>/dev/null || true
+  )"
+fi
+if [ -n "${PR_TITLE:-}" ]; then
+  DASHBOARD_ARGS+=(--pr-title "$PR_TITLE")
+fi
+
 if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
   --report "$CURRENT_REPORT" \
   --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
@@ -44,6 +61,7 @@ if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resour
   --branch "${BRANCH_NAME}" \
   --commit "${ORIGINAL_HEAD}" \
   --artifacts-url "${PUBLIC_DIR_URL}" \
+  --report-url "${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
   --try-links "$TRY_LINKS" \
   --repo "${GITHUB_REPOSITORY}" \
   --repo-root . \

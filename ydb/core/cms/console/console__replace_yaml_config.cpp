@@ -7,6 +7,8 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+
+#include <util/generic/algorithm.h>
 #include <ydb/core/base/appdata.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
@@ -49,6 +51,15 @@ public:
         TEvConsole::TEvSetYamlConfigRequest::TPtr &ev)
             : TTxReplaceYamlConfigBase(self, ev, true)
     {
+        if (ev->Get()->Record.HasControllerSessionEpoch()) {
+            ControllerSessionEpoch = ev->Get()->Record.GetControllerSessionEpoch();
+        }
+    }
+
+    // the commit of a controller session replaced since it was accepted
+    bool IsObsoleteControllerCommit() const {
+        // epochs are unique across the slots, so the epoch of the commit is current only in its own slot
+        return ControllerSessionEpoch && !IsIn(Self->ControllerSessionEpochs, *ControllerSessionEpoch);
     }
 
     THolder<NActors::IEventHandle> FillResponse(const TUpdateConfigOpBaseContext& opCtx, auto& ev, auto errorLevel, const TActorContext &ctx) {
@@ -95,6 +106,7 @@ protected:
     TMaybe<TString> IngressDatabase;
     bool WarnDatabaseBypass = false;
     bool SkipAuditLog = false;
+    std::optional<ui64> ControllerSessionEpoch;
 };
 
 class TConfigsManager::TTxReplaceMainYamlConfig
@@ -131,6 +143,11 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+
+        if (IsObsoleteControllerCommit()) {
+            HandleError("the controller session of the commit is replaced", ctx);
+            return true;
+        }
 
         TUpdateConfigOpContext opCtx;
         Self->ReplaceMainConfigMetadata(Config, Force, opCtx);

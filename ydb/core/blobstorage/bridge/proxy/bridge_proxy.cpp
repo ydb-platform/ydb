@@ -198,8 +198,8 @@ namespace NKikimr {
             NKikimrBlobStorage::EGetHandleClass GetHandleClass = NKikimrBlobStorage::FastRead;
             // the deadline of the original read, which restoration is done on behalf of
             TInstant Deadline = TInstant::Max();
-            // Once queued for routing, retries retain the original bound even when they reach a pile and race again.
-            std::optional<TMonotonic> RoutingDeadline;
+            // the routing wait left for this request, if it has already been queued; time spent in piles doesn't count
+            std::optional<TDuration> RoutingBudget;
 
             TDynBitMap Processed; // a set of piles we already got main reply from
 
@@ -959,9 +959,9 @@ namespace NKikimr {
         }
 
         void QueuePending(TPendingQueue& queue, std::unique_ptr<IEventHandle> ev,
-                std::optional<TMonotonic> routingDeadline = {}) {
+                std::optional<TDuration> routingBudget = {}) {
             const auto now = TActivationContext::Monotonic();
-            auto deadline = routingDeadline.value_or(now + TDuration::Seconds(2));
+            auto deadline = now + routingBudget.value_or(TDuration::Seconds(2));
             const auto callerDeadline = GetRequestDeadline(*ev->GetBase());
             if (callerDeadline != TInstant::Max()) {
                 const auto wallNow = TActivationContext::Now();
@@ -981,7 +981,7 @@ namespace NKikimr {
 #define RETRY_REQUEST(TYPE) \
                     case TYPE::EventType: { \
                         TYPE::TPtr request(static_cast<TEventHandle<TYPE>*>(ev.release())); \
-                        HandleProxyRequest(request, deadline); \
+                        HandleProxyRequest(request, deadline - TActivationContext::Monotonic()); \
                         break; \
                     }
                     DSPROXY_ENUM_EVENTS(RETRY_REQUEST)
@@ -1084,8 +1084,8 @@ namespace NKikimr {
         }
 
         template<typename TEvent>
-        void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev, std::optional<TMonotonic> routingDeadline = {}) {
-            if (routingDeadline && *routingDeadline <= TActivationContext::Monotonic()) {
+        void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev, std::optional<TDuration> routingBudget = {}) {
+            if (routingBudget == TDuration::Zero()) {
                 ReplyWithError(*ev, "bridge request timed out");
                 return;
             }
@@ -1128,7 +1128,7 @@ namespace NKikimr {
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB05, "request waits for newer cluster state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (ClusterStateGeneration, generation),
                     (BridgeGroupState, state));
-                QueuePending(PendingForClusterState, MakePendingHandle(*ev), routingDeadline);
+                QueuePending(PendingForClusterState, MakePendingHandle(*ev), routingBudget);
                 return;
             }
 
@@ -1168,7 +1168,7 @@ namespace NKikimr {
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
                     (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingDeadline);
+                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingBudget);
                 return;
             }
             if (authorityPileId && std::ranges::none_of(subrequests, [&](const auto& item) {
@@ -1177,7 +1177,7 @@ namespace NKikimr {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
                 STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
                     (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
-                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingDeadline);
+                QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingBudget);
                 return;
             }
 
@@ -1186,7 +1186,7 @@ namespace NKikimr {
             auto request = std::make_shared<TRequest>(ev->Sender, ev->Cookie, std::move(evPtr), Info, *this,
                     ev->GetTypeRewrite(), std::move(ev->TraceId));
             request->BridgeInfo = BridgeInfo;
-            request->RoutingDeadline = routingDeadline;
+            request->RoutingBudget = routingBudget;
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
                 (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
@@ -1352,7 +1352,7 @@ namespace NKikimr {
                     if (common->RestartCounter >= 100) {
                         ReplyWithError(*handle, "too many restarts of the request racing with group configuration");
                     } else if (myGeneration < msg->RacingGeneration) {
-                        QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingDeadline);
+                        QueuePending(PendingForNextGeneration, std::move(handle), request->RoutingBudget);
                     } else if (msg->RacingGeneration < myGeneration) {
                         // when the group is decommitted, its service id points to the BlobDepot agent, which would take
                         // restarted request for its client's one; restart it right here then

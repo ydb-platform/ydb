@@ -5,6 +5,7 @@
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
+#include "schemeshard_replication_bootstrap.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
@@ -175,7 +176,18 @@ bool ShouldDelayQueryExecutionOnError(
 
 }
 
-bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain) {
+bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain, ui64 importId) {
+    for (const auto& [id, import] : ss->Imports) {
+        if (id == importId || import->IsFinished()) {
+            continue;
+        }
+        for (const auto& item : import->Items) {
+            if (CanonizePath(item.DstPathName) == CanonizePath(dstPath)) {
+                explain = "Another import is using destination: " + dstPath;
+                return false;
+            }
+        }
+    }
     const TPath path = TPath::Resolve(dstPath, ss);
     TPath::TChecker checks = path.Check();
     checks
@@ -184,7 +196,9 @@ bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& ex
         .FailOnRestrictedCreateInTempZone();
 
     if (path.IsResolved()) {
-        if (path->IsSysView()) {
+        if (IsWaitingImportTable(path, ss)) {
+            checks.NotDeleted().NotUnderOperation();
+        } else if (path->IsSysView()) {
             checks
                 .IsResolved()
                 .NotDeleted()
@@ -627,6 +641,84 @@ private:
         Y_ABORT_UNLESS(propose);
 
         Send(Self->SelfId(), std::move(propose));
+    }
+
+    bool IsImportingTable(const TPath& path) const {
+        return IsReplicationBootstrapTable(path, Self);
+    }
+
+    // Reconcile the destination inside CreateSchemeObject. DstPathId identifies
+    // the old placeholder until DROP completes. New imports cannot accept IMPORTING tables.
+    bool PrepareReplicaTable(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        auto& item = importInfo->Items.at(itemIdx);
+        NIceDb::TNiceDb db(txc.DB);
+        TString error;
+
+        const auto subscribe = [&](TTxId waitTxId) {
+            item.WaitTxId = waitTxId;
+            Self->TxIdToImport[waitTxId] = {importInfo->Id, itemIdx};
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+            SubscribeTx(*importInfo, itemIdx);
+        };
+
+        if (item.DstPathId) {
+            const auto previous = TPath::Init(item.DstPathId, Self);
+            // Recover a DROP whose propose response was lost, including a
+            // completed DROP. Its notification returns us to reconciliation.
+            if (previous.IsResolved() && previous.Base()->DropTxId != InvalidTxId) {
+                subscribe(previous.Base()->DropTxId);
+                return false;
+            }
+        }
+
+        const auto path = TPath::Resolve(item.DstPathName, Self);
+        if (path.IsResolved() && !path.IsDeleted()) {
+            if (IsImportingTable(path)) {
+                item.DstPathId = path.Base()->PathId;
+                Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+                // CREATE may have succeeded before the import persisted its reply.
+                // Wait for the whole scheme operation, including index tables.
+                subscribe(path.Base()->CreateTxId);
+                return false;
+            }
+            if (item.DstPathId && item.DstPathId != path.Base()->PathId) {
+                CancelAndPersist(db, importInfo, itemIdx, "Import destination was replaced", "destination changed");
+                return false;
+            }
+            item.DstPathId = path.Base()->PathId;
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+            if (!DropReplicaPlaceholder(*importInfo, itemIdx, txId, error)) {
+                CancelAndPersist(db, importInfo, itemIdx, error, "placeholder changed");
+                return false;
+            }
+        } else {
+            item.DstPathId = {};
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+            CreateTable(*importInfo, itemIdx, txId);
+        }
+        return true;
+    }
+
+    bool DropReplicaPlaceholder(TImportInfo& importInfo, ui32 itemIdx, TTxId txId, TString& error) {
+        auto& item = importInfo.Items.at(itemIdx);
+        item.SubState = ESubState::Proposed;
+        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), Self->TabletID());
+        auto* tx = propose->Record.AddTransaction();
+        tx->SetInternal(true);
+        tx->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        const auto path = TPath::Init(item.DstPathId, Self);
+        if (!IsWaitingImportTable(path, Self)) {
+            error = "Import placeholder was changed";
+            return false;
+        }
+        tx->SetWorkingDir(path.Parent().PathString());
+        tx->MutableDrop()->SetName(path.LeafName());
+        tx->MutableDrop()->SetId(item.DstPathId.LocalPathId);
+        auto* condition = tx->AddApplyIf();
+        condition->SetPathId(item.DstPathId.LocalPathId);
+        condition->SetPathVersion(Self->GetPathVersion(path).GetGeneralVersion());
+        Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     void ProcessSysViewRestore(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
@@ -1132,6 +1224,39 @@ private:
         }
     }
 
+    void CompleteImport(TImportInfo& importInfo) {
+        importInfo.State = EState::Done;
+        importInfo.EndTime = TAppData::TimeProvider->Now();
+    }
+
+    void CompleteReplicaItem(NIceDb::TNiceDb& db, TImportInfo& importInfo, ui32 itemIdx) {
+        const auto& completed = importInfo.Items.at(itemIdx);
+        const auto& item = completed.ParentIdx == Max<ui32>()
+            ? completed : importInfo.Items.at(completed.ParentIdx);
+        if (!item.ReplicationConfig.HasBootstrapInfo() || item.State != EState::Done) {
+            return;
+        }
+        for (const auto childIdx : item.ChildItems) {
+            if (importInfo.Items.at(childIdx).State != EState::Done) {
+                return;
+            }
+        }
+        // A materialized index must not attach before its base table or siblings
+        // finish importing. Update the whole group in the item completion transaction.
+        const auto complete = [&](const TPathId& pathId) {
+            const auto it = Self->Tables.find(pathId);
+            if (it != Self->Tables.end() && IsReplicationBootstrapConfig(it->second->ReplicationConfig())) {
+                it->second->MutableReplicationConfig().MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTED);
+                Self->PersistTable(db, pathId);
+                Self->ClearDescribePathCaches(Self->PathsById.at(pathId));
+            }
+        };
+        complete(item.DstPathId);
+        for (const auto childIdx : item.ChildItems) {
+            complete(importInfo.Items.at(childIdx).DstPathId);
+        }
+    }
+
     void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf issue, TStringBuf marker) {
         if (itemIdx != ui32(-1)) {
             Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
@@ -1404,6 +1529,15 @@ private:
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         } else if (item.Table) {
             TString error;
+            if (!ValidateImportDstPath(item.DstPathName, Self, error, importInfo->Id)) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "destination changed");
+            }
+            const auto path = TPath::Resolve(item.DstPathName, Self);
+            if (IsWaitingImportTable(path, Self)) {
+                item.ReplicationConfig = Self->Tables.at(path.Base()->PathId)->ReplicationConfig();
+                item.DstPathId = path.Base()->PathId;
+                Self->PersistImportItemDstPathId(db, *importInfo, msg.ItemIdx);
+            }
             TVector<TString> indexesToBuild;
             if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error, indexesToBuild)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
@@ -1480,8 +1614,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            importInfo->State = EState::Done;
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+            CompleteImport(*importInfo);
         }
 
         Self->PersistImportState(db, *importInfo);
@@ -1642,7 +1775,7 @@ private:
 
         TMaybe<ui32> itemIdx;
         for (ui32 i : xrange(importInfo->Items.size())) {
-            const auto& item = importInfo->Items.at(i);
+            auto& item = importInfo->Items.at(i);
 
             if (item.SubState != ESubState::AllocateTxId) {
                 continue;
@@ -1682,7 +1815,13 @@ private:
                 if (!Self->TableProfilesLoaded) {
                     Self->WaitForTableProfiles(id, i);
                 } else if (item.Table) {
-                    CreateTable(*importInfo, i, txId);
+                    if (item.ReplicationConfig.HasBootstrapInfo()) {
+                        if (!PrepareReplicaTable(txc, importInfo, i, txId)) {
+                            return;
+                        }
+                    } else {
+                        CreateTable(*importInfo, i, txId);
+                    }
                     itemIdx = i;
                 }
                 break;
@@ -1779,6 +1918,26 @@ private:
             }
         }
 
+        if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists
+            && item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()) {
+            const auto path = TPath::Resolve(item.DstPathName, Self);
+            if (!IsImportingTable(path)) {
+                Self->TxIdToImport.erase(txId);
+                return CancelAndPersist(db, importInfo, itemIdx, "Import destination was replaced", "destination changed");
+            }
+        }
+
+        if (record.GetStatus() == NKikimrScheme::StatusSuccess
+            && item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()) {
+            Self->TxIdToImport.erase(txId);
+            item.WaitTxId = InvalidTxId;
+            item.DstPathId = {};
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+            Self->PersistImportItemState(db, *importInfo, itemIdx);
+            AllocateTxId(*importInfo, itemIdx);
+            return;
+        }
+
         if (record.GetStatus() == NKikimrScheme::StatusSuccess) {
             Self->TxIdToImport.erase(txId);
             txId = InvalidTxId;
@@ -1790,7 +1949,10 @@ private:
             if (IsIn({ NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists },
                 record.GetStatus()
             )) {
-                if (record.GetPathCreateTxId()) {
+                if (item.State == EState::CreateSchemeObject && item.ReplicationConfig.HasBootstrapInfo()
+                    && record.GetPathDropTxId()) {
+                    txId = TTxId(record.GetPathDropTxId());
+                } else if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::CreateSchemeObject) {
                     // In case dependency object is being created
@@ -1834,7 +1996,9 @@ private:
             return;
         }
 
-        if (item.State == EState::Done || item.State == EState::CreateSchemeObject) {
+        if (item.State == EState::Done || (item.State == EState::CreateSchemeObject
+            && (!item.ReplicationConfig.HasBootstrapInfo()
+                || IsImportingTable(TPath::Resolve(item.DstPathName, Self))))) {
             UpdateItemDstPathId(db, *importInfo, itemIdx);
             for (auto childIdx : item.ChildItems) {
                 UpdateItemDstPathId(db, *importInfo, childIdx);
@@ -1847,8 +2011,7 @@ private:
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            importInfo->State = EState::Done;
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+            CompleteImport(*importInfo);
         }
 
         Self->PersistImportState(db, *importInfo);
@@ -1991,6 +2154,21 @@ private:
 
         switch (item.State) {
         case EState::CreateSchemeObject:
+            if (item.ReplicationConfig.HasBootstrapInfo()) {
+                const auto path = TPath::Resolve(item.DstPathName, Self);
+                if (!IsImportingTable(path) || path.Base()->CreateTxId != txId) {
+                    // DROP completed (or another scheme operation we waited for).
+                    // Reconcile again instead of starting data transfer.
+                    item.DstPathId = {};
+                    Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
+                    AllocateTxId(*importInfo, itemIdx);
+                    break;
+                }
+                UpdateItemDstPathId(db, *importInfo, itemIdx);
+                for (auto childIdx : item.ChildItems) {
+                    UpdateItemDstPathId(db, *importInfo, childIdx);
+                }
+            }
             if (IsCreatedByQuery(item)) {
                 item.State = EState::Done;
                 break;
@@ -2078,10 +2256,10 @@ private:
             return SendNotificationsIfFinished(importInfo);
         }
 
+        CompleteReplicaItem(db, *importInfo, itemIdx);
         const auto stateCounts = CountItemsByState(importInfo->Items);
         if (AllDone(stateCounts)) {
-            importInfo->State = EState::Done;
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+            CompleteImport(*importInfo);
         } else if (AllDoneOrWaiting(stateCounts)) {
             RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }

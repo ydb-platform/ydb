@@ -21,7 +21,8 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool restore = false);
+    bool restore = false,
+    bool internal = false);
 
 void DoCreateStreamImpl(
     TVector<ISubOperation::TPtr>& result,
@@ -29,7 +30,8 @@ void DoCreateStreamImpl(
     const TOperationId& opId,
     const TPath& tablePath,
     const bool acceptExisted,
-    const bool initialScan);
+    const bool initialScan,
+    const bool internal = false);
 
 void DoCreateStream(
     TVector<ISubOperation::TPtr>& result,
@@ -38,7 +40,8 @@ void DoCreateStream(
     const TPath& workingDirPath,
     const TPath& tablePath,
     const bool acceptExisted,
-    const bool initialScan);
+    const bool initialScan,
+    const bool internal = false);
 
 struct TCdcPqPartParams {
     ui32 TotalGroupCount = 0;

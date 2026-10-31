@@ -40,7 +40,8 @@ bool RetryPausedBootstrap(
     // Restrict config-only recovery to source preparation. An ordinary PAUSE
     // can retain attached destinations and unrelated errors that must survive.
     for (const auto* target : replication.GetTargets()) {
-        if (target->GetDstState() != TReplication::EDstState::Creating
+        if ((target->GetDstState() != TReplication::EDstState::Creating
+                && target->GetDstState() != TReplication::EDstState::Paused)
             || target->GetDstPathId()
             || target->GetPendingDstPathId()
             || !target->GetWorkers().empty())

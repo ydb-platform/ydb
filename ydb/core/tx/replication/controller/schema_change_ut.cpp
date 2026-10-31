@@ -1376,7 +1376,7 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
-    Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
+    Y_UNIT_TEST(InitialScanDisabledCreatesEmptyReplica) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         CreateSourceTable(env, "bootstrap");
@@ -1400,6 +1400,16 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         };
 
         bool streamCreated = false;
+        bool destinationCreated = false;
+        auto destinationObserver = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() != TEvPrivate::TEvCreateDstResult::EventType || !ev->HasEvent()) {
+                return;
+            }
+            if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                UNIT_ASSERT_C(result->IsSuccess(), result->ToString());
+                destinationCreated = true;
+            }
+        });
         auto streamObserver = runtime.AddObserver(
             [&](IEventHandle::TPtr& ev) {
                 if (ev->GetTypeRewrite() != TEvPrivate::EvCreateStreamResult || !ev->HasEvent()) {
@@ -1425,16 +1435,20 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         const auto targetId = state->Get()->Record.GetTargets(0).GetId();
         // The committed stream capability proves source setup has completed.
         UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
-        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+        runtime.WaitFor("empty replica creation", [&] { return destinationCreated; }, TDuration::Seconds(60));
+        UNIT_ASSERT(env.GetDescription(destination).GetPathDescription().GetTable()
+            .GetReplicationConfig().GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
+        UNIT_ASSERT(destinationCreators >= 1);
 
         // Reloading the ready source stream also exercises target progress during startup.
         RestartController(env, info.ControllerId);
         const auto restarted = DescribeReplication(env, info);
         UNIT_ASSERT_C(restarted->Get()->Record.GetState().HasPaused(), restarted->Get()->Record.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(restarted->Get()->Record.TargetsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+        runtime.WaitFor("empty replica creation", [&] { return destinationCreated; }, TDuration::Seconds(60));
+        UNIT_ASSERT(env.GetDescription(destination).GetPathDescription().GetTable()
+            .GetReplicationConfig().GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
+        UNIT_ASSERT(destinationCreators >= 1);
     }
 
     Y_UNIT_TEST_TWIN(InitialScan, ConfigInitialScan) {
@@ -2511,18 +2525,19 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
                 (return (AsList (SetResult 'Target (SelectRow 'Targets key '('DstState 'Issue)))))
                 ))",
                 worker.TargetId());
-            UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, query, target), NKikimrProto::OK);
+            runtime.WaitFor("empty replica ready while paused", [&] {
+                target.Clear();
+                UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, query, target), NKikimrProto::OK);
+                return target.GetValue().GetStruct(0).GetOptional().GetOptional()
+                    .GetStruct(0).GetOptional().GetUint32() == static_cast<ui32>(TReplication::EDstState::Paused);
+            }, TDuration::Seconds(60));
             const auto& row = target.GetValue().GetStruct(0).GetOptional().GetOptional();
-            UNIT_ASSERT_VALUES_EQUAL(
-                row.GetStruct(0).GetOptional().GetUint32(),
-                static_cast<ui32>(TReplication::EDstState::Creating));
             UNIT_ASSERT_VALUES_EQUAL(row.GetStruct(1).GetOptional().GetText(), "");
             UNIT_ASSERT_VALUES_EQUAL(readStream(TReplication::EStreamState::Ready), stream);
-            UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
+            UNIT_ASSERT(destinationCreators >= 1);
             UNIT_ASSERT_VALUES_EQUAL(workerStarts, 0);
-            UNIT_ASSERT_VALUES_EQUAL(
-                env.GetDescription("/Root/replica1").GetSchemeStatus(),
-                static_cast<int>(NKikimrScheme::StatusPathDoesNotExist));
+            UNIT_ASSERT(env.GetDescription("/Root/replica1").GetPathDescription().GetTable()
+                .GetReplicationConfig().GetBootstrapInfo().GetStatus() == NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
             UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription()
                 .GetReplicationDescription().GetState().HasPaused());
         };
@@ -2605,6 +2620,7 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
             destinationFailed = true;
         });
         UNIT_ASSERT(alter("STATE = \"PAUSED\"").IsSuccess());
+        runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
         SendWorkerStopped(env, info.ControllerId, worker);
         runtime.WaitFor(
             "destination error",

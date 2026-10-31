@@ -138,10 +138,7 @@ class JsScriptJsonTest(unittest.TestCase):
         # Typography: secondary collapses stay quiet; chart titles stay primary.
         self.assertIn("details.aux-fold", source)
         self.assertIn(".section-label", source)
-        self.assertIn('<details class="aux-fold">', source)
-        self.assertIn("<summary>Run stats</summary>", source)
         self.assertIn('<div class="section-label">', source)
-        self.assertNotIn("<summary><b>Run stats</b></summary>", source)
         self.assertNotIn(
             '<h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">',
             source,
@@ -153,6 +150,25 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("build = whole job", source)
         self.assertIn("aria-expanded", source)
         self.assertIn("from urllib.parse import quote", source)
+        # Long prose / debug dumps live in one footer, not scattered mid-page.
+        self.assertIn('id="docsFooter"', source)
+        self.assertIn("Docs &amp; debug", source)
+        footer_idx = source.find('id="docsFooter"')
+        stats_idx = source.find('id="stats"')
+        run_config_idx = source.find('id="runConfig"')
+        cpu_help_idx = source.find('id="cpuHelpText"')
+        self.assertGreater(footer_idx, 0)
+        self.assertGreater(stats_idx, footer_idx)
+        self.assertGreater(run_config_idx, footer_idx)
+        self.assertGreater(cpu_help_idx, footer_idx)
+        self.assertIn('class="quiet-link-fold"', source)
+        self.assertIn('id="heavyTestsDetails"', source)
+        # Mid-page walls of help text should be gone.
+        self.assertNotIn('class="metrics-help"', source)
+        ya_idx = source.find('id="yaActivityGrid"')
+        self.assertGreater(ya_idx, 0)
+        self.assertLess(ya_idx, footer_idx)
+        self.assertNotIn("How CPU/RAM chart metrics are calculated", source[0:ya_idx])
         self.assertIn("CPU by suite · estimated cores", source)
         self.assertIn("chart-tile-sub", source)
         # Expand matches the ya-activity full-row slot (same as .span-2).

@@ -95,33 +95,26 @@ def build_html_dashboard(
     .toolbar {{ position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; margin: 8px 0 10px 0; padding: 8px 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(2px); }}
     .toolbar input[type="text"] {{ min-width: 340px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
     .toolbar button {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
-    .cpu-help {{ display: none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d0d7de; background: #f6f8fa; font-size: 12px; line-height: 1.45; }}
+    .cpu-help {{ margin-top: 6px; padding: 8px 10px; border-radius: 8px; border: 1px solid #eaeef2; background: #fff; font-size: 12px; line-height: 1.45; color: #57606a; }}
     .cpu-help ol, .cpu-help ul {{ margin: 6px 0 6px 18px; padding: 0; }}
-    /* Secondary collapses (Run stats / Config / help): quiet chrome, not H2. */
+    /* Secondary collapses: quiet chrome, not H2. */
     details.aux-fold {{
       margin: 4px 0 8px 0;
     }}
-    details.aux-fold > summary,
-    .metrics-help > summary {{
+    details.aux-fold > summary {{
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
       color: #656d76;
       list-style: none;
     }}
-    details.aux-fold > summary::-webkit-details-marker,
-    .metrics-help > summary::-webkit-details-marker {{ display: none; }}
-    details.aux-fold > summary::before,
-    .metrics-help > summary::before {{
+    details.aux-fold > summary::-webkit-details-marker {{ display: none; }}
+    details.aux-fold > summary::before {{
       content: "▸ ";
       color: #8c959f;
       font-weight: 400;
     }}
-    details.aux-fold[open] > summary::before,
-    .metrics-help[open] > summary::before {{ content: "▾ "; }}
-    .metrics-help {{ margin: 6px 0 10px 0; }}
-    .metrics-help .box {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.45; color: #57606a; }}
-    .metrics-help ul {{ margin: 6px 0 0 18px; padding: 0; }}
+    details.aux-fold[open] > summary::before {{ content: "▾ "; }}
     .section-label {{
       display: flex;
       align-items: center;
@@ -139,6 +132,73 @@ def build_html_dashboard(
       font-weight: 600;
       color: #57606a;
     }}
+    /* Closed: one muted line; hidden entirely when empty (via .is-visible). */
+    details.quiet-link-fold {{
+      display: none;
+      margin: 2px 0 0 0;
+      border: 0;
+      padding: 0;
+      background: transparent;
+    }}
+    details.quiet-link-fold.is-visible {{ display: block; }}
+    details.quiet-link-fold > summary {{
+      cursor: pointer;
+      list-style: none;
+      font-size: 11px;
+      font-weight: 400;
+      color: #8c959f;
+      line-height: 1.4;
+    }}
+    details.quiet-link-fold > summary::-webkit-details-marker {{ display: none; }}
+    details.quiet-link-fold > summary::before {{
+      content: "▸ ";
+      color: #afb8c1;
+    }}
+    details.quiet-link-fold[open] > summary::before {{ content: "▾ "; }}
+    details.quiet-link-fold[open] > summary {{ color: #656d76; }}
+    details.quiet-link-fold .clickbox {{
+      margin: 6px 0 0 0;
+      max-height: 280px;
+    }}
+    .dash-footer {{
+      margin: 28px 0 8px 0;
+      padding-top: 12px;
+      border-top: 1px solid #eaeef2;
+    }}
+    .dash-footer > summary {{
+      cursor: pointer;
+      list-style: none;
+      font-size: 12px;
+      font-weight: 500;
+      color: #8c959f;
+    }}
+    .dash-footer > summary::-webkit-details-marker {{ display: none; }}
+    .dash-footer > summary::before {{
+      content: "▸ ";
+      color: #afb8c1;
+    }}
+    .dash-footer[open] > summary::before {{ content: "▾ "; }}
+    .dash-footer-body {{
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid #eaeef2;
+      border-radius: 8px;
+      background: #fafbfc;
+    }}
+    .dash-footer-body .cpu-help {{
+      display: block;
+      margin-top: 6px;
+    }}
+    .dash-footer-body .box {{
+      background: #fff;
+      border: 1px solid #eaeef2;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #57606a;
+    }}
+    .dash-footer-body ul {{ margin: 6px 0 0 18px; padding: 0; }}
     .tabs {{ display: flex; gap: 8px; margin: 8px 0 12px 0; }}
     .tabbtn {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
     .tabbtn.active {{ background: #e7f3ff; border-color: #8cc8ff; }}
@@ -459,44 +519,16 @@ def build_html_dashboard(
     <div class="headline-stats-title">Resource summary</div>
     <div id="headlineStatsGrid" class="headline-stats-grid"></div>
   </div>
-  <details class="aux-fold">
-    <summary>Run stats</summary>
-    <pre id="stats"></pre>
-  </details>
-  <details class="aux-fold">
-    <summary>Config</summary>
-    <pre id="runConfig"></pre>
-  </details>
   <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
     <div class="section-label">
       <span>CPU suggestions</span>
-      <button id="cpuHelpToggle" class="help-btn" type="button" title="Show recommendation logic">?</button>
-    </div>
-    <div id="cpuHelpText" class="cpu-help">
-      <ol>
-        <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
-        <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
-        <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>. It reflects <b>only observed per-chunk core usage</b>. <code>REQUIREMENTS(cpu)</code> is a per-chunk scheduler slot (reserved cores that cap how many chunks run in parallel), not a request for more raw CPU.</li>
-        <li>Long test duration and timeouts drive <b>recommended_split</b>, <b>not</b> CPU. A single long test at/above the size threshold (<b>SMALL=60s, MEDIUM=600s, LARGE=3600s</b>) is flagged as a split hint only; it no longer bumps the CPU tier.</li>
-        <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
-        <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help. In that case, if the test is only marginally over budget <b>and the runner was CPU-saturated</b> during the suite window (<code>single_test_contention_suspected</code>, from <code>resources_monitor.jsonl</code>), it is likely contention-inflated — TRY raising <code>REQUIREMENTS(cpu)</code> (fewer parallel chunks → decontention) before a test-level fix; otherwise (genuinely long) the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
-        <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
-        <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (provisioned runner ≈ <b>{rf_vcpu} cores / {rf_ram} GB</b>, per-suite budget ≈ <b>{rf_budget} GB</b>). Purple dashed lines on system charts mark provisioned limits from <code>.github/config/runners_footprints.yml</code>; the red monitor line is actual <code>/proc</code> usage (may be lower). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
-      </ol>
-      <ul>
-        <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
-        <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests, suite aggregate row excluded). <b>total</b> = all such rows, <b>passed</b> = status OK/PASS.</li>
-        <li><b>timeouts</b>: <code>error_type == TIMEOUT</code> (fallback: status contains <code>timeout</code>).</li>
-        <li><b>muted</b>: <code>muted/is_muted</code> or status <code>MUTE</code>.</li>
-        <li><b>skipped</b>: status <code>SKIP</code> or <code>SKIPPED</code>.</li>
-        <li><b>fails_total</b>: <code>errors + timeouts</code>.</li>
-      </ul>
+      <button id="cpuHelpToggle" class="help-btn" type="button" title="Open recommendation docs in footer">?</button>
     </div>
     <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
     <p style="font-size:12px;color:#64748b;margin:4px 0 8px 0;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
     <div id="cpuSuggestionsTable" class="clickbox"></div>
-    <details id="heavyTestsDetails" class="aux-fold">
-      <summary>Long/heavy tests near timeout</summary>
+    <details id="heavyTestsDetails" class="quiet-link-fold">
+      <summary>Long/heavy near timeout (0)</summary>
       <div id="cpuHeavyTestsTable" class="clickbox"></div>
     </details>
   </div>
@@ -551,50 +583,6 @@ def build_html_dashboard(
       </span>
     </span>
   </div>
-  <details class="metrics-help aux-fold">
-    <summary>How CPU/RAM chart metrics are calculated</summary>
-    <div class="box">
-      <ul>
-        <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
-        <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-        <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
-        <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
-        <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
-        <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
-        <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
-        <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
-        <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
-        <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
-        <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is the <b>effective</b> split from ya.make (with <code>FORK_TEST_FILES</code>: <code>TEST_SRCS count × SPLIT_FACTOR(N)</code>). Column <code>chunks</code> is real runtime chunk count. Hover cells for details. Highlight on <code>chunks</code> means mismatch with ya.make.</li>
-        <li><b>Recommended split formula:</b>
-          let <code>T = size_timeout_sec</code> (from SIZE), <code>B = 0.98 * T</code> (chunk timeout budget),
-          and <code>L = 0.5 * T</code> (target chunk load). For each chunk we compute
-          <code>sum_duration_sec(chunk)</code> from test durations in that chunk.
-          Overloaded chunks are those with <code>sum_duration_sec &gt; B</code>.
-          Then:
-          <code>overloaded_total = Σ sum_duration_sec(overloaded chunks)</code>,
-          <code>needed = ceil(overloaded_total / L)</code>,
-          <code>extra = max(0, needed - overloaded_chunks_count)</code>.
-          A single heavy chunk also forces <code>single_chunk_extra = ceil(max_chunk_load / L) - 1</code>,
-          and <code>recommended_split = chunks_real + max(extra, single_chunk_extra)</code>.
-          Overloaded chunks are detected regardless of timeouts: <code>split_severity</code> is
-          <code>at_risk</code> when a chunk is over budget without a timeout, <code>timeout</code> once a
-          timeout occurs. If no chunk exceeds the budget, split is not raised.
-        </li>
-      </ul>
-      <details class="aux-fold" style="margin-top:8px;">
-        <summary>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</summary>
-        <div style="margin:6px 0;">
-          <p><b>Per run</b> (we use <code>dur_sec = max(duration_report_sec, duration_evlog_sec)</code> so cores are not inflated when evlog span is short):</p>
-          <p><code>cpu_cores_est<sub>run</sub> = cpu_sec_report / dur_sec</code></p>
-          <p><b>Chart value at time t</b> (we use all runs, not one chunk):</p>
-          <p><code>value(t) = Σ cpu_cores_est<sub>run</sub></code> over all runs of this suite where <code>start_us ≤ t &lt; end_us</code>.</p>
-          <p>So at each moment we sum estimated cores of every run that is active. If a suite has many parallel runs (e.g. part0..part19), the chart shows the sum of all of them at that time.</p>
-          <p><b>Table columns total_cpu_sec / total_dur_sec</b> are from the <i>deduplicated</i> set (one run per suite+chunk for recommendations). So e.g. total_cpu_sec=89.4 and total_dur_sec=135.3 refer to one representative run; 89.4/135.3 ≈ 0.66 cores is the average for that run. The chart value (e.g. 373 cores) is <i>not</i> 89.4/135.3 — it is the sum of <code>cpu_sec_report/dur_sec</code> over all runs of the suite active at the cursor time (e.g. 40 runs × ~9.3 cores ≈ 373).</p>
-        </div>
-      </details>
-    </div>
-  </details>
   <div class="chart-grid" id="yaActivityGrid">
     <div class="chart-tile span-2" data-pane="yaActivity">
       <div class="chart-tile-head">
@@ -669,14 +657,6 @@ def build_html_dashboard(
         <div class="chart-tile-meta">
           <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
           <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
-          <details class="metrics-help" style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">
-            <summary>How the CPU value at cursor is calculated</summary>
-            <div style="margin:4px 0;">
-              <p><b>Per run:</b> <code>cpu_cores_est = cpu_sec_report / dur_sec</code> (we have real report for every run).</p>
-              <p><b>At time t:</b> value = Σ <code>cpu_cores_est</code> over all runs of this suite with <code>start_us ≤ t &lt; end_us</code>. We do not use one chunk — we sum over all active runs.</p>
-              <p><b>Why value (e.g. 373) ≠ total_cpu_sec/total_dur_sec (e.g. 89.4/135.3):</b> The table totals are from the deduplicated run (one row per suite); the chart value is the instantaneous sum over all runs active at that moment (e.g. many parts in parallel).</p>
-            </div>
-          </details>
         </div>
       </div>
       <div class="chart-tile" data-pane="ramLayerSuite">
@@ -737,6 +717,76 @@ def build_html_dashboard(
       <div id="testsPieSuite" class="chart"></div>
     </div>
   </div>
+  <details class="dash-footer" id="docsFooter">
+    <summary>Docs &amp; debug</summary>
+    <div class="dash-footer-body">
+      <details class="aux-fold" id="cpuHelpDetails">
+        <summary>CPU recommendation logic</summary>
+        <div id="cpuHelpText" class="cpu-help">
+          <ol>
+            <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
+            <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
+            <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>. It reflects <b>only observed per-chunk core usage</b>. <code>REQUIREMENTS(cpu)</code> is a per-chunk scheduler slot (reserved cores that cap how many chunks run in parallel), not a request for more raw CPU.</li>
+            <li>Long test duration and timeouts drive <b>recommended_split</b>, <b>not</b> CPU. A single long test at/above the size threshold (<b>SMALL=60s, MEDIUM=600s, LARGE=3600s</b>) is flagged as a split hint only; it no longer bumps the CPU tier.</li>
+            <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
+            <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help. In that case, if the test is only marginally over budget <b>and the runner was CPU-saturated</b> during the suite window (<code>single_test_contention_suspected</code>, from <code>resources_monitor.jsonl</code>), it is likely contention-inflated — TRY raising <code>REQUIREMENTS(cpu)</code> (fewer parallel chunks → decontention) before a test-level fix; otherwise (genuinely long) the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
+            <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
+            <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (provisioned runner ≈ <b>{rf_vcpu} cores / {rf_ram} GB</b>, per-suite budget ≈ <b>{rf_budget} GB</b>). Purple dashed lines on system charts mark provisioned limits from <code>.github/config/runners_footprints.yml</code>; the red monitor line is actual <code>/proc</code> usage (may be lower). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
+          </ol>
+          <ul>
+            <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
+            <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests, suite aggregate row excluded). <b>total</b> = all such rows, <b>passed</b> = status OK/PASS.</li>
+            <li><b>timeouts</b>: <code>error_type == TIMEOUT</code> (fallback: status contains <code>timeout</code>).</li>
+            <li><b>muted</b>: <code>muted/is_muted</code> or status <code>MUTE</code>.</li>
+            <li><b>skipped</b>: status <code>SKIP</code> or <code>SKIPPED</code>.</li>
+            <li><b>fails_total</b>: <code>errors + timeouts</code>.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="aux-fold">
+        <summary>How charts are calculated</summary>
+        <div class="box">
+          <ul>
+            <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
+            <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
+            <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
+            <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
+            <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
+            <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+            <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
+            <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+            <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
+            <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
+            <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is the <b>effective</b> split from ya.make (with <code>FORK_TEST_FILES</code>: <code>TEST_SRCS count × SPLIT_FACTOR(N)</code>). Column <code>chunks</code> is real runtime chunk count. Hover cells for details. Highlight on <code>chunks</code> means mismatch with ya.make.</li>
+            <li><b>Recommended split formula:</b>
+              let <code>T = size_timeout_sec</code> (from SIZE), <code>B = 0.98 * T</code> (chunk timeout budget),
+              and <code>L = 0.5 * T</code> (target chunk load). For each chunk we compute
+              <code>sum_duration_sec(chunk)</code> from test durations in that chunk.
+              Overloaded chunks are those with <code>sum_duration_sec &gt; B</code>.
+              Then:
+              <code>overloaded_total = Σ sum_duration_sec(overloaded chunks)</code>,
+              <code>needed = ceil(overloaded_total / L)</code>,
+              <code>extra = max(0, needed - overloaded_chunks_count)</code>.
+              A single heavy chunk also forces <code>single_chunk_extra = ceil(max_chunk_load / L) - 1</code>,
+              and <code>recommended_split = chunks_real + max(extra, single_chunk_extra)</code>.
+              Overloaded chunks are detected regardless of timeouts: <code>split_severity</code> is
+              <code>at_risk</code> when a chunk is over budget without a timeout, <code>timeout</code> once a
+              timeout occurs. If no chunk exceeds the budget, split is not raised.
+            </li>
+            <li><b>CPU at cursor vs table totals:</b> chart value at time <code>t</code> is Σ <code>cpu_sec_report / dur_sec</code> over all runs of the suite active at <code>t</code>. Table <code>total_cpu_sec / total_dur_sec</code> is from one deduplicated run — so e.g. 89.4/135.3 ≈ 0.66 cores is not the same as a stacked chart reading of hundreds of cores from many parallel parts.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="aux-fold">
+        <summary>Run stats</summary>
+        <pre id="stats"></pre>
+      </details>
+      <details class="aux-fold">
+        <summary>Config</summary>
+        <pre id="runConfig"></pre>
+      </details>
+    </div>
+  </details>
   <script>
     // Stubs so inline onclick/onchange stay defined even if data fetch fails.
     window.showTab = function() {{}};
@@ -1826,21 +1876,26 @@ def build_html_dashboard(
         const heavyDetails = document.getElementById('heavyTestsDetails');
         const heavySummaryLabel = document.querySelector('#heavyTestsDetails summary');
         const heavyMarker = (col) => (col === heavySortCol ? (heavySortAsc ? ' ▲' : ' ▼') : '');
+        const heavyCount = heavyTestsFlat.length;
         if (heavySummaryLabel) {{
-          heavySummaryLabel.textContent = 'Long/heavy tests near timeout (' + heavyTestsFlat.length + ')';
+          heavySummaryLabel.textContent = 'Long/heavy near timeout (' + heavyCount + ')';
         }}
-        if (heavyDetails && !heavyDetails.dataset.initCollapsed) {{
-          heavyDetails.open = false;
-          heavyDetails.dataset.initCollapsed = '1';
+        if (heavyDetails) {{
+          // Stay invisible when empty so the closed row does not eat vertical space.
+          heavyDetails.classList.toggle('is-visible', heavyCount > 0);
+          if (!heavyDetails.dataset.initCollapsed) {{
+            heavyDetails.open = false;
+            heavyDetails.dataset.initCollapsed = '1';
+          }}
+          if (!heavyCount) heavyDetails.open = false;
         }}
         if (heavyWrap) {{
-          if (!heavyTestsFlat.length) {{
-            heavyWrap.innerHTML = '<div style=\"color:#64748b;\">No tests at >=97% of the chunk timeout budget in current filter.</div>';
-            if (heavyDetails) heavyDetails.open = false;
+          if (!heavyCount) {{
+            heavyWrap.innerHTML = '';
           }} else {{
             heavyWrap.innerHTML =
-              '<div style=\"font-size:12px;color:#656d76;margin-bottom:4px;\">&gt;=97% of the chunk timeout budget</div>' +
-              '<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">' +
+              '<div style=\"font-size:11px;color:#8c959f;margin-bottom:4px;\">&gt;=97% of the chunk timeout budget</div>' +
+              '<table style=\"width:100%;border-collapse:collapse;margin-top:4px;\">' +
               '<thead><tr><th>#</th><th data-hcol=\"1\" style=\"cursor:pointer;user-select:none;\">suite_path' + heavyMarker(1) + '</th><th data-hcol=\"2\" style=\"cursor:pointer;user-select:none;\">ya_size' + heavyMarker(2) + '</th><th data-hcol=\"3\" style=\"cursor:pointer;user-select:none;\">threshold' + heavyMarker(3) + '</th><th data-hcol=\"4\" style=\"cursor:pointer;user-select:none;\">test' + heavyMarker(4) + '</th><th data-hcol=\"5\" style=\"cursor:pointer;user-select:none;\">duration' + heavyMarker(5) + '</th><th data-hcol=\"6\" style=\"cursor:pointer;user-select:none;\">chunk' + heavyMarker(6) + '</th></tr></thead>' +
               '<tbody>' + heavyBody + '</tbody></table>';
             const hths = heavyWrap.querySelectorAll('thead th[data-hcol]');
@@ -1890,10 +1945,13 @@ def build_html_dashboard(
       }}
 
       const helpBtn = document.getElementById('cpuHelpToggle');
-      const helpBox = document.getElementById('cpuHelpText');
-      if (helpBtn && helpBox) {{
+      if (helpBtn) {{
         helpBtn.addEventListener('click', () => {{
-          helpBox.style.display = helpBox.style.display === 'block' ? 'none' : 'block';
+          const footer = document.getElementById('docsFooter');
+          const cpuHelp = document.getElementById('cpuHelpDetails');
+          if (footer) footer.open = true;
+          if (cpuHelp) cpuHelp.open = true;
+          (cpuHelp || footer)?.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
         }});
       }}
       window.renderSuggestionsTable = renderSuggestionsTable;

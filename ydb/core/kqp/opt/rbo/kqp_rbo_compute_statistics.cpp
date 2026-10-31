@@ -420,6 +420,7 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata = TRBOMetadata();
 
     Props.Metadata->Type = inputMetadata.Type;
+    Props.Metadata->LogicalCard = inputMetadata.LogicalCard;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     Props.Metadata->ColumnsCount = GetOutputIUs().Size();
     // A Map only appends: the input rows, their keys and distribution survive.

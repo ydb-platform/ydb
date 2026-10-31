@@ -96,6 +96,34 @@ Y_UNIT_TEST_SUITE(ScanCursorCompatibility) {
             CheckFails<NPlain::TIndexScannerConstructor>(sorting, NKikimrKqp::TEvKqpScanCursor::kColumnShardNotSortedSimple);
         }
     }
+
+    Y_UNIT_TEST(LegacyIndexCoordinatesRoundTrip) {
+        auto proto = MakeCursorProto(NKikimrKqp::TEvKqpScanCursor::kColumnShardSimple);
+        proto.SetSourcesSorting(NKikimrKqp::TEvKqpScanCursor::FIRST_PK_ASC);
+        UNIT_ASSERT(!proto.HasIndexMaybeInDictionaryCoordinates());
+        UNIT_ASSERT(proto.GetIndexMaybeInDictionaryCoordinates());
+
+        TSourceIndexScanCursor cursor;
+        auto status = cursor.DeserializeFromProto(proto);
+        UNIT_ASSERT_C(!status.IsFail(), status.GetErrorMessage());
+        UNIT_ASSERT(cursor.GetIndexMaybeInDictionaryCoordinates());
+
+        const auto relayed = cursor.SerializeToProto();
+        UNIT_ASSERT(relayed.HasIndexMaybeInDictionaryCoordinates());
+        UNIT_ASSERT(relayed.GetIndexMaybeInDictionaryCoordinates());
+    }
+
+    Y_UNIT_TEST(NewIndexCoordinatesRoundTrip) {
+        TSourceIndexScanCursor cursor(NKikimrKqp::TEvKqpScanCursor::FIRST_PK_ASC, {}, 3, 7, {});
+        const auto proto = cursor.SerializeToProto();
+        UNIT_ASSERT(proto.HasIndexMaybeInDictionaryCoordinates());
+        UNIT_ASSERT(!proto.GetIndexMaybeInDictionaryCoordinates());
+
+        TSourceIndexScanCursor restored;
+        auto status = restored.DeserializeFromProto(proto);
+        UNIT_ASSERT_C(!status.IsFail(), status.GetErrorMessage());
+        UNIT_ASSERT(!restored.GetIndexMaybeInDictionaryCoordinates());
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader

@@ -15,14 +15,4 @@ TMetaWriter::TValueWriter::TValueWriter(TMetaWriter& writer)
     : TBaseValueWriter<TMetaWriter>(writer)
 {}
 
-void TMetaWriter::TValueWriter::operator()(const TString& value) const {
-    TStringBuilder metakeyName;
-    metakeyName << "meta";
-    for (const auto& keyItem : *KeyName) {
-        metakeyName << ".";
-        metakeyName << keyItem.ToString();
-    }
-    Writer.MetaFlags->push_back({metakeyName, TTypesMapping::ToString(value)});
-}
-
 }  // namespace NActors::NStructuredLog

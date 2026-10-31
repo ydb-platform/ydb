@@ -933,13 +933,10 @@ def build_html_dashboard(
       }}
       grid.innerHTML =
         runLine +
-        '<details class="aux-fold" id="headlineTablesDetails">' +
-          '<summary>Resource tables</summary>' +
-          '<div class="headline-tables">' +
-            '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
-            hostBlock +
-          '</div>' +
-        '</details>';
+        '<div class="headline-tables">' +
+          '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
+          hostBlock +
+        '</div>';
       wrap.style.display = 'block';
     }}
     renderHeadlineStats();

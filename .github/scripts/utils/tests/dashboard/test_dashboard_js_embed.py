@@ -210,6 +210,11 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertNotIn("Move cursor over chart to see sorted contributors", source)
         self.assertIn(".hoverbox:empty,", source)
         self.assertIn('id="cpuHover" class="hoverbox"></div>', source)
+        # Shared bottom margin keeps 2×2 plot areas aligned when only ya/disk
+        # show interactive legends (CPU/RAM keep the empty legend slot).
+        self.assertEqual(source.count("margin: {{l: 48, r: 8, t: 8, b: 72}}"), 4)
+        self.assertIn("Same bottom margin as ya/disk", source)
+        self.assertIn("itemsizing: 'constant'", source)
         # Suite 2×2: ya make → CPU → RAM → Disk; Tests + Active under details.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')

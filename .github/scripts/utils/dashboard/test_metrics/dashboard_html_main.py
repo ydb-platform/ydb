@@ -2244,7 +2244,8 @@ def build_html_dashboard(
         showlegend: false,
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: '#fcfcfd',
-        margin: {{l: 48, r: 8, t: 8, b: 36}},
+        // Same bottom margin as ya/disk (which keep legends) so 2×2 plot areas align.
+        margin: {{l: 48, r: 8, t: 8, b: 72}},
       }}, {{responsive: true, displayModeBar: 'hover', displaylogo: false}});
     }}
 
@@ -2534,7 +2535,12 @@ def build_html_dashboard(
           linecolor: '#d8dee4',
         }},
         hovermode: 'x unified',
-        legend: {{orientation: 'h', x: 0, y: -0.28, xanchor: 'left', yanchor: 'top', font: {{size: 11}}}},
+        // Interactive legend (toggle phases). Bottom margin matches CPU/RAM tiles.
+        showlegend: true,
+        legend: {{
+          orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
+          font: {{size: 10}}, itemsizing: 'constant', tracegroupgap: 4,
+        }},
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: '#fcfcfd',
         margin: {{l: 48, r: 8, t: 8, b: 72}},
@@ -2609,7 +2615,11 @@ def build_html_dashboard(
             }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
-            legend: {{orientation: 'h', x: 0, y: -0.28, xanchor: 'left', yanchor: 'top', font: {{size: 11}}}},
+            showlegend: true,
+            legend: {{
+              orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
+              font: {{size: 10}}, itemsizing: 'constant', tracegroupgap: 4,
+            }},
             paper_bgcolor: 'rgba(0,0,0,0)',
             plot_bgcolor: '#fcfcfd',
             margin: {{l: 48, r: 8, t: 8, b: 72}},
@@ -2678,7 +2688,11 @@ def build_html_dashboard(
           }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},
-          legend: {{orientation: 'h', x: 0, y: -0.28, xanchor: 'left', yanchor: 'top', font: {{size: 11}}}},
+          showlegend: true,
+          legend: {{
+            orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
+            font: {{size: 10}}, itemsizing: 'constant', tracegroupgap: 4,
+          }},
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: '#fcfcfd',
           margin: {{l: 48, r: 8, t: 8, b: 72}},

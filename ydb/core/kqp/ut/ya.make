@@ -10,6 +10,7 @@ RECURSE_FOR_TESTS(
     discovery
     effects
     federated_query
+    generated_columns
     indexes
     idx_test
     join

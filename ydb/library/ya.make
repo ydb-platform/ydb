@@ -15,6 +15,7 @@ RECURSE(
     folder_service
     formats
     fyamlcpp
+    generated_columns
     global_plugins
     grpc
     http

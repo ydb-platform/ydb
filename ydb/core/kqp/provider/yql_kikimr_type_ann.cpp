@@ -3,12 +3,14 @@
 #include "yql_kikimr_settings.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
+#include <ydb/library/generated_columns/generated_column_dependencies.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -240,8 +242,13 @@ IGraphTransformer::TStatus CoerceGeneratedLambdaToColumnType(TExprNode::TPtr& la
 IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription& table, const TString& cluster,
     TKikimrSessionContext& sessionCtx, TTypeAnnotationContext& typeCtx, TExprContext& ctx)
 {
+    const auto* graph = table.GetGeneratedColumnGraph({}, ctx);
+    if (!graph) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
     for (auto& [name, col] : table.Metadata->Columns) {
-        if (!col.DefaultExpression || col.DefaultExpression->Expr) {
+        if (!IsGeneratedColumn(&col) || col.DefaultExpression->Expr) {
             continue;
         }
 
@@ -252,6 +259,12 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
 
         auto lambda = CompileGeneratedExpr(generatedQuery, name, ctx, settingsBuilder, typeCtx.Modules);
         if (!lambda) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (CollectGeneratedColumnRefs(*lambda) != graph->Dependencies.at(name)) {
+            ctx.AddError(TIssue(TStringBuilder() << "Generated column " << name
+                << " has inconsistent dependencies in loaded metadata"));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -643,15 +656,6 @@ namespace {
         return true;
     }
 
-    void CollectGeneratedColumnRefs(const TExprNode& body, const TExprNode* rowArg, THashSet<TString>& refs) {
-        VisitExpr(body, [&](const TExprNode& node) {
-            if (node.IsCallable("Member") && node.ChildrenSize() == 2 && node.Child(0) == rowArg && node.Child(1)->IsAtom()) {
-                refs.insert(TString(node.Child(1)->Content()));
-            }
-            return true;
-        });
-    }
-
     IGraphTransformer::TStatus ValidateGeneratedExprType(const TString& columnName, const TTypeAnnotationNode& columnType,
         const TExprNode& lambda, TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
     {
@@ -695,10 +699,8 @@ namespace {
         TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
     {
         THashSet<TString> generatedColumns;
-        THashSet<TString> allColumns;
 
         for (const auto& [name, col] : meta.Columns) {
-            allColumns.insert(name);
             if (col.IsDefaultFromExpression()) {
                 generatedColumns.insert(name);
             }
@@ -733,6 +735,7 @@ namespace {
 
         const TTypeAnnotationNode* rowType = ctx.MakeType<TStructExprType>(rowTypeItems);
 
+        THashMap<TString, TExprNode::TPtr> compiledExpressions;
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto columnName = TString(columnTuple.Item(0).Cast<TCoAtom>().Value());
@@ -772,32 +775,24 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            THashSet<TString> refs;
-            CollectGeneratedColumnRefs(lambda->Tail(), &lambda->Head().Head(), refs);
+            columnMeta.DefaultExpression->Dependencies = CollectGeneratedColumnRefs(*lambda);
+            compiledExpressions.emplace(columnName, std::move(lambda));
+        }
 
-            for (const auto& ref : refs) {
-                if (ref == columnName) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "Generated column " << columnName << " can not reference itself"));
-                    return IGraphTransformer::TStatus::Error;
-                }
+        NKikimr::NGeneratedColumns::TGeneratedColumnDependencyGraph graph;
+        TString error;
+        if (!BuildGeneratedColumnGraph(meta, graph, error)) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), error));
+            return IGraphTransformer::TStatus::Error;
+        }
 
-                if (!allColumns.contains(ref)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "Generated column " << columnName << " references an unknown column: " << ref));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (generatedColumns.contains(ref)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
-                        << "Generated column " << columnName << " references another generated column: " << ref));
-                    return IGraphTransformer::TStatus::Error;
-                }
+        for (auto item : create.Columns()) {
+            auto columnTuple = item.Cast<TExprList>();
+            const auto columnName = TString(columnTuple.Item(0).Cast<TCoAtom>().Value());
+            if (!generatedColumns.contains(columnName)) {
+                continue;
             }
-
-            // Persist the dependency columns
-            columnMeta.DefaultExpression->Dependencies.assign(refs.begin(), refs.end());
-            Sort(columnMeta.DefaultExpression->Dependencies);
+            auto lambda = compiledExpressions.at(columnName);
 
             // Type the expression against the row struct
             if (!UpdateLambdaAllArgumentsTypes(lambda, {rowType}, ctx)) {
@@ -833,7 +828,6 @@ namespace {
                 }
             }
 
-            columnMeta.DefaultExpression->Expr = lambda;
         }
 
         return IGraphTransformer::TStatus::Ok;

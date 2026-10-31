@@ -704,7 +704,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         const auto checkStateAfterReboot = [&](TConfig::EImportState state) {
             RebootTablet(runtime, shards.front(), sender);
             const auto tables = GetTables(server, shards.front()).first;
-            UNIT_ASSERT_VALUES_EQUAL(tables.at("table-1").GetDescription().GetReplicationConfig().GetImportState(), state);
+            const auto& config = tables.at("table-1").GetDescription().GetReplicationConfig();
+            UNIT_ASSERT_VALUES_EQUAL_C(config.GetImportState(), state, config.ShortDebugString());
         };
         const auto rejectUpload = [&](NTxProxy::EUploadRowsMode mode) {
             DoUploadRows(runtime, "/Root", "/Root/table-1", {{1, 20}, {2, 30}}, mode, Ydb::StatusIds::GENERIC_ERROR);

@@ -426,8 +426,12 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
-    ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
-    IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    // These configs share a protobuf oneof: serializing both clears the first one.
+    if (IsReplicated()) {
+        ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+    } else {
+        IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    }
 
     // Keep the persisted schema in sync with the parsed level, so that a restart
     // does not resurrect an override, which an alter has just dropped

@@ -245,6 +245,14 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
     Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
+    // A request admitted before Freeze may resume after it completes.
+    if (self->IsStateFrozen()) {
+        ChangeCollector.Reset();
+        Result->Record.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+        Result->Record.SetErrorDescription("Can't erase rows at frozen table");
+        return true;
+    }
+
     const auto params = TExecuteParams::ForExecute(this, &txc, mvccVersion, globalTxId, &volatileReadDependencies);
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
     TString error;

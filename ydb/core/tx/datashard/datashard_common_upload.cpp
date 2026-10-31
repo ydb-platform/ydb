@@ -44,6 +44,13 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const auto& record = Ev->Get()->Record;
     Result = MakeHolder<TEvResponse>(self->TabletID());
 
+    // A request admitted before Freeze may resume after it completes.
+    if (self->IsStateFrozen()) {
+        ChangeCollector.Reset();
+        SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, "Can't upload rows at frozen table");
+        return true;
+    }
+
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
     if (deadline && deadline < AppData()->TimeProvider->Now()) {
         SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");

@@ -115,11 +115,7 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-    if (Stage == EStage::WaitData) {
-        Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
-    } else if (Stage == EStage::WaitWriting) {
-        Counters.OnWriteFinished(TInstant::Now() - WriteStartTime, false);
-    }
+    Counters.OnOperationsCancelled();
     Stage = EStage::WaitSaveCursor;
     StageStartTime = TInstant::Now();
     Counters.OnSaveProgressStarted();
@@ -132,7 +128,6 @@ void TImportActor::PassAway() {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
     }
-    Counters.OnActorDead();
     TBase::PassAway();
 }
 

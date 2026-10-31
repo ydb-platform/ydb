@@ -5,6 +5,18 @@
 
 namespace NKikimr::NBlobDepot {
 
+    namespace {
+        TInstant GetReadDeadline(IEventHandle& ev) {
+            switch (ev.GetTypeRewrite()) {
+                case TEvBlobStorage::EvGet: return ev.Get<TEvBlobStorage::TEvGet>()->Deadline;
+                case TEvBlobStorage::EvRange: return ev.Get<TEvBlobStorage::TEvRange>()->Deadline;
+                case TEvBlobStorage::EvDiscover: return ev.Get<TEvBlobStorage::TEvDiscover>()->Deadline;
+                case TEvBlobStorage::EvCheckIntegrity: return ev.Get<TEvBlobStorage::TEvCheckIntegrity>()->Deadline;
+                default: return TInstant::Max();
+            }
+        }
+    }
+
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<0>(std::unique_ptr<IEventHandle> ev, TMonotonic received) {
         switch (ev->GetTypeRewrite()) {
@@ -151,7 +163,7 @@ namespace NKikimr::NBlobDepot {
             {"name", query->GetName()});
         if (!TabletId) {
             query->EndWithError(NKikimrProto::ERROR, "group is in error state");
-        } else {
+        } else if (!query->CheckDeadline(TActivationContext::Monotonic())) {
             query->Initiate();
         }
     }
@@ -203,7 +215,10 @@ namespace NKikimr::NBlobDepot {
         , Received(received)
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
-        , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(StartTime + WatchdogDuration, this))
+        , Deadline(GetReadDeadline(*Event))
+        , DeadlineMonotonic(Deadline == TInstant::Max() ? TMonotonic::Max()
+            : StartTime + (Deadline - TActivationContext::Now()))
+        , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(Min(StartTime + WatchdogDuration, DeadlineMonotonic), this))
         , Span(TWilsonBlobDepot::AgentQuery, std::move(Event->TraceId), "BlobDepotAgent.Query",
                 NWilson::EFlags::AUTO_END)
     {
@@ -221,6 +236,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::CheckQueryExecutionTime(TMonotonic now) {
+        if (CheckDeadline(now)) {
+            return;
+        }
         const auto prio = std::exchange(WatchdogPriority, NLog::PRI_NOTICE);
         YDB_LOG(prio, "Query is still executing",
             {"marker", "BDA23"},
@@ -228,12 +246,20 @@ namespace NKikimr::NBlobDepot {
             {"queryId", GetQueryId()},
             {"duration", now - StartTime});
         auto nh = Agent.QueryWatchdogMap.extract(QueryWatchdogMapIter);
-        nh.key() = now + WatchdogDuration;
+        nh.key() = Min(now + WatchdogDuration, DeadlineMonotonic);
         QueryWatchdogMapIter = Agent.QueryWatchdogMap.insert(std::move(nh));
         for (const auto& cookie : SubrequestRelays) {
             Y_VERIFY_S(!cookie.expired(), "AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
                 << " subrequest got stuck");
         }
+    }
+
+    bool TBlobDepotAgent::TQuery::CheckDeadline(TMonotonic now) {
+        if (now < DeadlineMonotonic) {
+            return false;
+        }
+        EndWithError(NKikimrProto::TIMEOUT, "request deadline exceeded");
+        return true;
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,

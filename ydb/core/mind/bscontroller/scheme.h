@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
@@ -138,6 +139,7 @@ struct Schema : NIceDb::Schema {
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
+        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -145,7 +147,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor, DataCenterStates>;
     };
 
     struct VSlot : Table<5> {

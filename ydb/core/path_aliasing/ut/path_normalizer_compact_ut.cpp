@@ -20,6 +20,27 @@ namespace NKikimr::NPathAliasing {
     } // namespace
 
     Y_UNIT_TEST_SUITE(PathNormalizerCompact) {
+        Y_UNIT_TEST(CountsRewritesBySourcePrefix) {
+            NKikimrConfig::TPathRewriteConfig config;
+            AddRule(config, "/alias/nested/", "/Root/nested");
+            AddRule(config, "/alias", "/Root/base");
+            NMonitoring::TDynamicCounterPtr root = new NMonitoring::TDynamicCounters;
+            const TPathNormalizer normalizer(config, root);
+            const auto copy = normalizer;
+
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/alias/nested/table"), "/Root/nested/table");
+            UNIT_ASSERT_VALUES_EQUAL(copy.NormalizePath("/alias/one"), "/Root/base/one");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/alias/two"), "/Root/base/two");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/aliasOther/table"), "/aliasOther/table");
+
+            auto group = root->GetSubgroup("counters", "ydb");
+            auto nested = group->GetSubgroup("prefix", "/alias/nested")->FindNamedCounter("name", "path_aliasing.rewrite_count");
+            auto alias = group->GetSubgroup("prefix", "/alias")->FindNamedCounter("name", "path_aliasing.rewrite_count");
+            UNIT_ASSERT(nested && alias);
+            UNIT_ASSERT_VALUES_EQUAL(nested->Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(alias->Val(), 2);
+        }
+
         Y_UNIT_TEST(DisabledEmptyAndUnmatchedInputsArePreservedByteForByte) {
             const TPathNormalizer disabled;
             const TPathNormalizer empty{NKikimrConfig::TPathRewriteConfig{}};

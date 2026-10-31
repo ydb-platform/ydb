@@ -8,6 +8,7 @@ PY3_LIBRARY()
         upload_results.py
         results_models.py
         summary_writer.py
+        workload_logs.py
     )
 
     PEERDIR (

@@ -14,8 +14,6 @@
 #include <type_traits>
 #include <vector>
 
-#include <util/system/cpu_id.h>
-
 using namespace NYql::NUdf;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -249,17 +247,15 @@ using TBoolTag = TFixedTag<bool>;
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest) {
-
 #define DECL_TEST(NAME, SLOT, TAG)    \
     Y_UNIT_TEST(Test_##NAME##_Full) { \
-        if (!NX86::HaveAVX2()) { \
-            return; \
-        } \
         RunCase<TAG>(SLOT);           \
     }
 
+Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest) {
+
 ALL_CASES(DECL_TEST)
-#undef DECL_TEST
 
 } // Y_UNIT_TEST_SUITE(TBlockLayoutConverterSlicedBlocksTest)
+
+#undef DECL_TEST

@@ -1,4 +1,9 @@
-/* syntax version 1 */
+$input = [
+    <|TestField: Just("{}")|>,
+    <|TestField: Just(@@{"inner": {"l": 25}}@@)|>,
+    <|TestField: Just(@@{"inner": {"l": "B"}}@@)|>,
+    <|TestField: Just(@@{"inner": {"alphabet": [0, 1, 25]}@@)|>,
+];
 
 /*
 message Test {
@@ -20,5 +25,4 @@ $config = @@{"name":"Test","view":{"enum":"full_name"},"syntax":{"aware":true},"
 $udf = Udf(Protobuf::Parse, $config as TypeConfig);
 
 SELECT $udf(TestField) AS Profile
-FROM plato.Input;
-
+FROM AS_TABLE($input);

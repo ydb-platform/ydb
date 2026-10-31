@@ -48,6 +48,7 @@ SRCS(
     ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp
+    ut_part_layout.cpp
     ut_part_multi.cpp
     ut_proto.cpp
     ut_pages.cpp

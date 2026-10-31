@@ -13,6 +13,8 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <set>
+#include <utility>
 
 namespace NKikimr::NKqp {
 
@@ -3012,9 +3014,72 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         )sql"), "must return a numeric score");
     }
 
-    // Note: the composite-primary-key guard in the optimizer is defensive only. A fulltext-relevance
-    // index cannot be created on a composite-PK table at all, so a hybrid query never reaches it
-    // (auto-detect fails to find a fulltext index first); there is no valid setup to exercise it here.
+    // Composite primary keys are fused and looked up as a whole key: each branch emits every key column,
+    // the fusion aggregates by all of them, and the final stream lookup joins on the full PK. Exercise
+    // both the built-in RRF path and the custom-lambda path, since they assemble the key fields separately.
+    Y_UNIT_TEST(CompositePrimaryKeyFuses) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+
+        ExecOk(db, R"sql(
+            CREATE TABLE `/Root/CompositeDocs` (
+                Region Uint64 NOT NULL,
+                Id Utf8 NOT NULL,
+                Text Utf8,
+                Embedding String,
+                PRIMARY KEY (Region, Id)
+            );
+        )sql");
+        ExecOk(db, Sprintf(R"sql(
+            UPSERT INTO `/Root/CompositeDocs` (Region, Id, Text, Embedding) VALUES
+                (1u, "a", "cats cats cats love", %s),
+                (1u, "b", "dogs and foxes run",  %s),
+                (2u, "a", "cats sleep",          %s),
+                (2u, "b", "birds fly high",      %s);
+        )sql", Emb(1).c_str(), Emb(2).c_str(), Emb(3).c_str(), Emb(4).c_str()));
+        AddFulltextIndex(db, "/Root/CompositeDocs");
+        AddVectorIndex(db, "/Root/CompositeDocs");
+
+        using TKey = std::pair<ui64, TString>;
+        const auto run = [&](const TString& hybridArgs) {
+            auto result = db.ExecuteQuery(TargetDecl + Sprintf(R"sql(
+                SELECT Region, Id FROM `/Root/CompositeDocs`
+                ORDER BY HybridRank(%s)
+                LIMIT 4;
+            )sql", hybridArgs.c_str()), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            std::vector<TKey> keys;
+            TResultSetParser parser(result.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                keys.emplace_back(parser.ColumnParser("Region").GetUint64(),
+                    TString{parser.ColumnParser("Id").GetUtf8()});
+            }
+            return keys;
+        };
+
+        const TString builtinArgs = R"sql(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))sql";
+        const TString lambdaArgs = builtinArgs + R"sql(,
+            ($ranks) -> {
+                RETURN 1.0 / (60 + COALESCE($ranks[0], 100000))
+                     + 1.0 / (60 + COALESCE($ranks[1], 100000));
+            } AS RankLambda)sql";
+
+        const std::set<TKey> allKeys{
+            {1u, TString("a")}, {1u, TString("b")},
+            {2u, TString("a")}, {2u, TString("b")},
+        };
+        const std::set<TKey> leadingKeys{{1u, TString("a")}, {2u, TString("a")}};
+
+        for (const auto& args : {builtinArgs, lambdaArgs}) {
+            const auto keys = run(args);
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 4u);
+            UNIT_ASSERT_C((std::set<TKey>(keys.begin(), keys.end()) == allKeys),
+                "a composite-key hybrid query must return the union of both branches");
+            UNIT_ASSERT_C((std::set<TKey>{keys[0], keys[1]} == leadingKeys),
+                "fulltext-relevant documents must lead the fused order");
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

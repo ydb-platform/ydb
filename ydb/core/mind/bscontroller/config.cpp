@@ -642,6 +642,9 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+            }
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
@@ -1027,6 +1030,9 @@ namespace NKikimr::NBsController {
                 TActivationContext::Send(std::make_unique<IEventHandle>(Self.SelfHealId, Self.SelfId(), UpdateSelfHealInfoMsg.Release()));
             }
 
+            for (ui32 groupId : GroupStateUpdates) {
+                Self.UpdateGroupStateActor(TGroupId::FromValue(groupId));
+            }
             for (auto& fn : Callbacks) {
                 fn();
             }
@@ -1572,6 +1578,12 @@ namespace NKikimr::NBsController {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
+            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
+                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                }
+            }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {
                 Serialize(pb->AddVSlotId(), vslot->VSlotId);
             }

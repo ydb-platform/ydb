@@ -165,6 +165,7 @@ RECURSE(
     generated
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
@@ -173,3 +174,4 @@ RECURSE_FOR_TESTS(
     ut_http_database_param
     ut_statestorage_proxy
 )
+ENDIF()

@@ -82,6 +82,8 @@ message VectorIndexSettings {
         VECTOR_TYPE_FLOAT = 1;
         VECTOR_TYPE_FLOAT16 = 5;
         VECTOR_TYPE_BFLOAT16 = 6;
+        VECTOR_TYPE_FLOAT8_E4M3 = 7; // E4M3FN, no scale factor.
+        VECTOR_TYPE_FLOAT8_E5M2 = 8; // E5M2, no scale factor.
         VECTOR_TYPE_UINT8 = 2;
         VECTOR_TYPE_INT8 = 3;
         VECTOR_TYPE_BIT = 4;

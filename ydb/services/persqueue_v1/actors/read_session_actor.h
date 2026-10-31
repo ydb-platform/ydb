@@ -52,6 +52,7 @@ struct TPartitionActorInfo {
     ui64 Generation;
     ui64 NodeId;
     bool ReadingFinished;
+    bool StartedFromEnd; // The partition finished without delivering any data to this session.
     ui64 EndOffset;
 
 
@@ -87,13 +88,14 @@ struct TPartitionActorInfo {
         , Generation(0)
         , NodeId(0)
         , ReadingFinished(false)
+        , StartedFromEnd(false)
     {
         AFL_ENSURE(partition.DiscoveryConverter != nullptr)
             ("partition", partition.Partition)("assign_id", partition.AssignId);
     }
 
     bool IsLastOffsetCommitted() const {
-        return ReadingFinished && EndOffset == Offset;
+        return ReadingFinished && (EndOffset == Offset || StartedFromEnd);
     }
 };
 

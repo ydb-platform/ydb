@@ -630,7 +630,7 @@ struct TEvPQProxy {
 
         TString Topic;
         ui32 PartitionId;
-        bool FirstMessage;
+        bool FirstMessage; // The partition delivered no data to the session.
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;

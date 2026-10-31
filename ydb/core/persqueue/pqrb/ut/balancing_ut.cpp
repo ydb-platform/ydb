@@ -467,6 +467,47 @@ Y_UNIT_TEST(OldSdkFinishFromEndKeepsChildrenInSeparateFamilies) {
     env.AssertEvenDistribution(3, 2);
 }
 
+Y_UNIT_TEST(ChildLockListsParentFinishedWithoutData) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    const auto [left, right] = env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertSkippedParents(left, {0});
+    env.AssertSkippedParents(right, {0});
+}
+
+Y_UNIT_TEST(ChildLockDoesNotListParentThatDeliveredData) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    const auto [left, right] = env.Split(0);
+    env.Finish("session-0", 0, /*scaleAware=*/true, /*fromEnd=*/false);
+    env.AssertSkippedParents(left, {});
+    env.AssertSkippedParents(right, {});
+}
+
+Y_UNIT_TEST(ChildLockDoesNotListCommittedParent) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    const auto [left, right] = env.Split(0);
+    env.Commit(0);
+    env.AssertSkippedParents(left, {});
+    env.AssertSkippedParents(right, {});
+}
+
+Y_UNIT_TEST(ChildLockListsSkippedGrandparent) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    const ui32 child = env.Split(0).first;
+    env.Finish("session-0", 0, /*scaleAware=*/false, /*fromEnd=*/true);
+    const ui32 grandchild = env.Split(child).first;
+    env.Finish("session-0", child, /*scaleAware=*/false, /*fromEnd=*/true);
+    env.AssertSkippedParents(grandchild, {0, child});
+}
+
 Y_UNIT_TEST(RereadLonelyParentWithoutCommitUnlocksChildren) {
     TScaleEnv env;
     env.CreateParents(1);

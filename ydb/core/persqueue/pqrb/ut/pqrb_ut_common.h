@@ -10,7 +10,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/mapfindptr.h>
 #include <util/generic/vector.h>
+#include <util/string/join.h>
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
@@ -177,6 +180,8 @@ struct TScaleEnv {
     TTestContext tc;
     absl::flat_hash_map<TString, TActorId> Pipes;
     absl::flat_hash_map<ui32, TString> LockedBy;
+    // SkippedParentPartitions of the last lock of the partition.
+    absl::flat_hash_map<ui32, TVector<ui32>> SkippedParents;
     absl::flat_hash_map<ui32, TVector<ui32>> ParentPartitionIds;
     absl::flat_hash_map<ui32, TVector<ui32>> ChildPartitionIds;
     ui32 NextPartitionId = 0;
@@ -347,6 +352,7 @@ struct TScaleEnv {
             if (lock) {
                 const TString session = lock->Record.GetSession();
                 const ui32 partition = lock->Record.GetPartition();
+                SkippedParents[partition] = {lock->Record.GetSkippedParentPartitions().begin(), lock->Record.GetSkippedParentPartitions().end()};
                 if (Pipes.contains(session)) {
                     LockedBy[partition] = session;
                 } else {
@@ -402,6 +408,16 @@ struct TScaleEnv {
         if (!expectedSession.empty()) {
             UNIT_ASSERT_VALUES_EQUAL_C(expectedSession, session, "partition " << partition);
         }
+    }
+
+    void AssertSkippedParents(ui32 partition, TVector<ui32> expected) {
+        AssertLocked(partition);
+        const TVector<ui32>* actual = MapFindPtr(SkippedParents, partition);
+        UNIT_ASSERT_C(actual, "no lock of partition " << partition);
+        TVector<ui32> sorted = *actual;
+        Sort(sorted);
+        Sort(expected);
+        UNIT_ASSERT_VALUES_EQUAL_C(JoinSeq(",", sorted), JoinSeq(",", expected), "skipped parents of partition " << partition);
     }
 
     void AssertSameSession(const std::vector<ui32>& partitions) {

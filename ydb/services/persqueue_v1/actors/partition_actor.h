@@ -78,7 +78,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, const std::unordered_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -293,9 +293,11 @@ private:
     EProtocol Protocol;
 
     bool FirstRead;
+    bool DataDelivered = false;
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
+    const std::unordered_set<ui64> SkippedParents; // Ancestors that finished without delivering any data to the consumer
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

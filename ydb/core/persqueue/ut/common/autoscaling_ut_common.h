@@ -97,6 +97,7 @@ struct MsgInfo {
 struct EvEndMsg {
     std::vector<ui32> AdjacentPartitionIds;
     std::vector<ui32> ChildPartitionIds;
+    ui32 PartitionId = 0;
 };
 
 struct TestReadSessionSettings {
@@ -110,6 +111,7 @@ struct TestReadSessionSettings {
     bool AutoPartitioningSupport = true;
     std::vector<std::string> Topics = {TEST_TOPIC};
     std::optional<TDuration> ReadLag;
+    std::optional<TInstant> ReadFromTimestamp;
     bool WithoutConsumer = false;
 };
 
@@ -131,6 +133,7 @@ struct ITestReadSession {
     virtual std::unordered_map<TString, std::set<size_t>> GetPartitionsA() = 0;
     virtual std::vector<MsgInfo> GetReceivedMessages() = 0;
     virtual std::vector<EvEndMsg> GetEndedPartitionEvents() = 0;
+    virtual std::unordered_map<ui64, ui64> GetCommittedOffsets() = 0;
 
     virtual void SetOffset(ui32 partitionId, std::optional<ui64> offset) = 0;
     virtual ~ITestReadSession() = default;

@@ -117,6 +117,8 @@ private:
 
 public:
 
+    NKikimrPQ::TPQTabletConfig::EConsumerType Type = NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING;
+
     bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message
     TInstant WriteTimestamp;

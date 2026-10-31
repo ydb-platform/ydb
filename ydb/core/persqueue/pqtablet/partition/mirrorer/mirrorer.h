@@ -52,6 +52,7 @@ private:
             HFuncTraced(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -70,7 +71,11 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+<<<<<<< HEAD
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
+=======
+            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
+>>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -117,6 +122,7 @@ private:
 
     TString GetCurrentState() const;
 
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
@@ -134,10 +140,12 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void TryToSplitMerge(const TActorContext& ctx);
+    void TryToSendReplicationData(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -164,6 +172,7 @@ private:
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
+    bool ReplicationDataInFlight = false;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
@@ -200,6 +209,9 @@ private:
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
+
+    y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
+    TMaybe<ui64> MirroredOffsetToSend;
 };
 
 bool AppendToWriteRequest(

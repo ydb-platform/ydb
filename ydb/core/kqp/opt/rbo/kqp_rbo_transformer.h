@@ -101,10 +101,16 @@ private:
     NActors::TActorSystem* ActorSystem;
     std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
+
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
     THashMap<TString, THashSet<TString>> SimpleColumnsByTableName;
     THashMap<TString, THashMap<TString, TVector<TString>>> EqHeightHistTuplesByTableName;
+
+    THashMap<TString, THashSet<TString>> RequestedCMColumns;
+    THashMap<TString, THashSet<TString>> RequestedHistColumns;
+    THashMap<TString, THashSet<TString>> RequestedSimpleColumns;
+    THashMap<TString, THashSet<TString>> RequestedEqHeightTuples;
 
     // Flag to reset the check of original type for multiple statement queries
     bool ResetTypes = false;

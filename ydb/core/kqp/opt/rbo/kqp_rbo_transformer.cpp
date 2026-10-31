@@ -26,6 +26,37 @@ using namespace NYql::NDq;
 
 namespace {
 
+THashMap<TString, THashSet<TString>> TakeNotRequested(
+    const THashMap<TString, THashSet<TString>>& columnsByTableName,
+    THashMap<TString, THashSet<TString>>& requestedByTableName)
+{
+    THashMap<TString, THashSet<TString>> notRequested;
+    for (const auto& [table, columns] : columnsByTableName) {
+        auto& requested = requestedByTableName[table];
+        for (const auto& column : columns) {
+            if (requested.insert(column).second) {
+                notRequested[table].insert(column);
+            }
+        }
+    }
+    return notRequested;
+}
+
+THashMap<TString, THashMap<TString, TVector<TString>>> TakeNotRequested(
+    const THashMap<TString, THashMap<TString, TVector<TString>>>& tuplesByTableName,
+    THashMap<TString, THashSet<TString>>& requestedByTableName) {
+    THashMap<TString, THashMap<TString, TVector<TString>>> notRequested;
+    for (const auto& [table, tuples] : tuplesByTableName) {
+        auto& requested = requestedByTableName[table];
+        for (const auto& [tupleKey, columns] : tuples) {
+            if (requested.insert(tupleKey).second) {
+                notRequested[table].emplace(tupleKey, columns);
+            }
+        }
+    }
+    return notRequested;
+}
+
 NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
     const auto& cboStats = kqpCtx.CBOStats;
 
@@ -265,7 +296,6 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
         switch (item.PredicateType) {
             case TUsedMember::EEquality:
                 CMColumnsByTableName[tableName].insert(colName);
-                SimpleColumnsByTableName[tableName].insert(colName);
                 break;
             case TUsedMember::EInequality:
                 HistColumnsByTableName[tableName].insert(colName);
@@ -409,13 +439,17 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
     CollectTablesAndColumnsNames(ctx);
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH,
+                   TakeNotRequested(CMColumnsByTableName, RequestedCMColumns),
                    [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM,
+                   TakeNotRequested(HistColumnsByTableName, RequestedHistColumns),
                    [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::SIMPLE_COLUMN, SimpleColumnsByTableName,
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::SIMPLE_COLUMN,
+                   TakeNotRequested(SimpleColumnsByTableName, RequestedSimpleColumns),
                    [](const NYql::TColumnStatistics& stats) { return stats.HyperLogLog.has_value(); });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM,
+                   TakeNotRequested(EqHeightHistTuplesByTableName, RequestedEqHeightTuples),
                    [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
 
     if (futures.empty()) {

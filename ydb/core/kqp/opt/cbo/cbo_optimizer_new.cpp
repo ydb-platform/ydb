@@ -303,7 +303,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         }
 
         if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {
-            newCard = leftStats.Nrows * rightStats.Nrows / std::max(*lhsUniqueVals, *rhsUniqueVals);
+            newCard = leftStats.Nrows * rightStats.Nrows / std::max(std::max(*lhsUniqueVals, *rhsUniqueVals), 1.0);
         } else {
             newCard = 0.2 * leftStats.Nrows * rightStats.Nrows;
         }

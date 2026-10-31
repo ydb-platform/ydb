@@ -56,7 +56,7 @@ struct TColumnStatistics {
         , Type(yqlStats.Type)
     {}
     std::optional<double> GetDistinctCount() const {
-        return HyperLogLog ? HyperLogLog : NumUniqueVals;
+        return (HyperLogLog && *HyperLogLog > 0) ? HyperLogLog : NumUniqueVals;
     }
 };
 

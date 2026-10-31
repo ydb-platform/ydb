@@ -69,8 +69,7 @@ def build_html_dashboard(
     suggestions_label = html_lib.escape(suggestions_name)
     suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
 
-    # Inline SVG favicon (data URI) so the browser tab is recognizable without
-    # shipping a separate .ico next to the HTML artifact.
+    # Inline SVG favicon (data URI).
     favicon_svg = (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
         "<rect width='32' height='32' rx='6' fill='#0f172a'/>"
@@ -193,13 +192,10 @@ def build_html_dashboard(
     }}
     .chart-tile-expand:hover {{ opacity: 1; text-decoration: underline; }}
     .chart-pane {{ width: 100%; height: 280px; min-width: 0; overflow: hidden; }}
-    /* Expand = same full-row slot as ya make concurrency (.span-2). */
     .chart-tile.span-2,
     .chart-tile.expanded {{ grid-column: 1 / -1; width: 100%; }}
     .chart-tile.span-2 .chart-pane,
     .chart-tile.expanded .chart-pane {{ height: 520px; }}
-    /* Hover/click detail panels stay visible in tile mode too — expand only
-       changes chart width/height, not whether drill-down UI exists. */
     .chart-tile-meta {{ display: block; margin-top: 8px; }}
     .chart-tile-meta .hoverbox,
     .chart-tile-meta .clickbox {{ margin: 6px 0 12px; max-height: 180px; }}
@@ -586,7 +582,7 @@ def build_html_dashboard(
     </div>
   </details>
   <script>
-    // Stubs so inline onclick/onchange stay defined even if data fetch fails.
+    // Stubs for inline handlers before/without a successful data fetch.
     window.showTab = function() {{}};
     window.clearSuiteSearch = function() {{}};
     window.clearAllMarkers = function() {{}};
@@ -627,12 +623,9 @@ def build_html_dashboard(
       if (!tile) return;
       const open = tile.classList.toggle('expanded');
       btn.textContent = open ? 'collapse' : 'expand';
-      btn.title = open
-        ? 'Collapse to half-width tile'
-        : 'Expand to full width (same as ya make concurrency)';
+      btn.title = open ? 'Collapse to half-width tile' : 'Expand to full width';
       btn.setAttribute('aria-expanded', open ? 'true' : 'false');
       const paneId = tile.getAttribute('data-pane');
-      // Resize this pane and neighbours — grid reflow changes sibling widths too.
       const grid = tile.parentElement;
       const panes = grid
         ? Array.from(grid.querySelectorAll('.chart-pane')).map(el => el.id).filter(Boolean)
@@ -665,13 +658,9 @@ def build_html_dashboard(
       }}, 0);
     }}
 
-    // Charts inside closed <details> plot with width≈0 if drawn on load.
-    // Defer first Plotly.newPlot until the section is opened; later opens
-    // only resize + re-apply markers.
+    // Defer Plotly until <details> opens (closed panes have width≈0).
     const _plottedDetailPanes = new Set();
-    const _detailPlotFns = {{}};
     function ensureDetailsPlot(detailsId, paneId, plotFn) {{
-      _detailPlotFns[paneId] = plotFn;
       const details = document.getElementById(detailsId);
       const run = () => {{
         if (_plottedDetailPanes.has(paneId)) {{
@@ -750,7 +739,6 @@ def build_html_dashboard(
       const hasBuild = Number.isFinite(Number(hs.build_duration_sec));
       const hasTest = Number.isFinite(Number(hs.test_duration_sec));
       const hasTotal = Number.isFinite(Number(hs.total_duration_sec));
-      // New payloads already ship all three; keep them as-is.
       if (hasBuild && hasTest && hasTotal) {{
         return {{
           totalSec: Math.max(0, Number(hs.total_duration_sec)),
@@ -758,8 +746,7 @@ def build_html_dashboard(
           testSec: Math.max(0, Number(hs.test_duration_sec)),
         }};
       }}
-      // Older JSON only had total_duration_sec (= test wall). Derive the rest
-      // from ya_activity so the summary still shows build/test/total.
+      // Legacy payload: only total_duration_sec (= test wall); derive the rest.
       let testSec = hasTest ? Math.max(0, Number(hs.test_duration_sec))
         : (hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0);
       let buildSec = hasBuild ? Math.max(0, Number(hs.build_duration_sec)) : 0;
@@ -781,7 +768,7 @@ def build_html_dashboard(
       const ends = [];
       if (buildSpan) {{ starts.push(buildSpan.start); ends.push(buildSpan.end); }}
       if (testSpan) {{ starts.push(testSpan.start); ends.push(testSpan.end); }}
-      if (starts.length && ends.length && buildSec > 0) {{
+      if (starts.length && ends.length) {{
         totalSec = Math.max(0, Math.max.apply(null, ends) - Math.min.apply(null, starts));
       }} else if (!totalSec) {{
         totalSec = Math.max(buildSec, 0) + Math.max(testSec, 0);
@@ -1118,8 +1105,6 @@ def build_html_dashboard(
         ticktext: tickText || undefined,
         hoverformat: '',
       }};
-      // Prefer the full evlog / ya-make window so suite tiles line up with
-      // the top concurrency chart (build starts before tests).
       if (useFullMakeRange) {{
         const full = fullEvlogRangeMs();
         if (full) {{
@@ -1163,9 +1148,6 @@ def build_html_dashboard(
       return xs;
     }}
     function syncChartGroupXRange(ids) {{
-      // Intentional: all time-series tiles share the full evlog window
-      // (build → tests), matching ya make concurrency. A long build compresses
-      // the test segment — that alignment is preferred over per-chart spans.
       if (!window.Plotly) return;
       let span = fullEvlogRangeMs();
       if (!span) {{
@@ -1285,7 +1267,6 @@ def build_html_dashboard(
       el.innerHTML = '<a href="https://github.com/' + repo + '/commit/' + commitSafe + '" target="_blank" rel="noopener" style="color:#0f172a;text-decoration:none;">' + shortSafe + '</a>';
       el.style.display = '';
     }}
-    // Browser tab title: make it obvious which PR/dashboard this is.
     if (pr && prTitle) {{
       document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard';
     }} else if (prTitle) {{
@@ -1310,7 +1291,6 @@ def build_html_dashboard(
     if (artifactsBase) {{
       appendHeaderLink(artifactsBase + '/index.html', 'Artifacts');
     }}
-    // Test report (ya-test.html): explicit URL, else try_N/ya-test.html next to dashboard.
     let testsReportHref = '';
     try {{
       if (reportUrlRaw) {{
@@ -1330,8 +1310,7 @@ def build_html_dashboard(
     if (testsReportHref) {{
       appendHeaderLink(testsReportHref, 'Test report');
     }}
-    // try_N = CI attempt / retry of the test job. Skip when only one — that
-    // link would just point at the dashboard you're already viewing.
+    // Hide lone try self-link; show only when there are multiple attempts.
     if (artifactsBase && tryLinks.length > 1) {{
       tryLinks.forEach((path, i) => {{
         if (!linksEl) return;
@@ -1429,7 +1408,6 @@ def build_html_dashboard(
     }}
 
     if (data.cpu_suggestions && data.cpu_suggestions.length > 0) {{
-      // Lives under Docs & debug; keep closed — only reveal the fold entry.
       const sugSection = document.getElementById('cpuSuggestionsSection');
       if (sugSection) sugSection.style.display = '';
       const nSyn = (data.stats && data.stats.runs_with_synthetic_metrics) ? Number(data.stats.runs_with_synthetic_metrics) : 0;
@@ -1732,7 +1710,6 @@ def build_html_dashboard(
           heavySummaryLabel.textContent = 'Long/heavy near timeout (' + heavyCount + ')';
         }}
         if (heavyDetails) {{
-          // Stay invisible when empty so the closed row does not eat vertical space.
           heavyDetails.classList.toggle('is-visible', heavyCount > 0);
           if (!heavyDetails.dataset.initCollapsed) {{
             heavyDetails.open = false;
@@ -2219,8 +2196,6 @@ def build_html_dashboard(
           hoverinfo: 'none',
         }};
       }});
-      // Tile header names the chart; skip Plotly title to avoid double headings.
-      // Full evlog window so suite/chunk tiles match the yaActivity build chart.
       const ax = axisLayout(xDisp, true);
       Plotly.newPlot(divId, traces, {{
         title: false,
@@ -2244,7 +2219,7 @@ def build_html_dashboard(
         showlegend: false,
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: '#fcfcfd',
-        // Same bottom margin as ya/disk (which keep legends) so 2×2 plot areas align.
+        // Match ya/disk bottom margin so 2×2 plot areas align.
         margin: {{l: 48, r: 8, t: 8, b: 72}},
       }}, {{responsive: true, displayModeBar: 'hover', displaylogo: false}});
     }}
@@ -2535,7 +2510,6 @@ def build_html_dashboard(
           linecolor: '#d8dee4',
         }},
         hovermode: 'x unified',
-        // Interactive legend (toggle phases). Bottom margin matches CPU/RAM tiles.
         showlegend: true,
         legend: {{
           orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
@@ -2546,7 +2520,6 @@ def build_html_dashboard(
         margin: {{l: 48, r: 8, t: 8, b: 72}},
       }};
       const yaOpts = {{responsive: true, displayModeBar: 'hover', displaylogo: false}};
-      // Same series in suite + chunk 2×2 grids (ya / CPU / RAM / Disk).
       for (const plotId of ['yaActivity', 'yaActivityChunk']) {{
         const el = document.getElementById(plotId);
         if (!el) continue;
@@ -2560,7 +2533,9 @@ def build_html_dashboard(
         if (titleEl) {{
           titleEl.innerHTML = mainTitle + '<span class="chart-tile-sub">active jobs by phase</span>';
         }}
-        Plotly.newPlot(plotId, traces, yaLayout, yaOpts);
+        // Clone per plot — Plotly mutates traces/layout in place.
+        const clone = (obj) => JSON.parse(JSON.stringify(obj));
+        Plotly.newPlot(plotId, clone(traces), clone(yaLayout), yaOpts);
       }}
     }})();
 
@@ -2836,7 +2811,7 @@ def build_html_dashboard(
     }}
     applySuiteSearch();
 
-    // onclick/onchange handlers in the HTML markup need globals.
+    // Export handlers used by inline HTML attributes.
     window.showTab = showTab;
     window.clearSuiteSearch = clearSuiteSearch;
     window.clearAllMarkers = clearAllMarkers;

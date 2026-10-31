@@ -105,7 +105,8 @@ def _first_last_active_sec(
     count = 0
     first: Optional[float] = None
     last: Optional[float] = None
-    for t_us, sign in sorted(deltas, key=lambda p: float(p[0])):
+    # Same (ts, sign) order as build_active_series_from_deltas (closes first).
+    for t_us, sign in sorted(deltas, key=lambda p: (float(p[0]), int(p[1]))):
         try:
             t = float(t_us) / 1_000_000.0
             step = int(sign)
@@ -547,9 +548,9 @@ def build_dashboard_payload(
         "tests_tracks_suite": tests_tracks_suite,
         "xs_active": xs_active,
         "ys_active": ys_active,
-        # Undownsampled active series for click-table exact concurrency counts.
-        "xs_active_exact": xs_active_exact,
-        "ys_active_exact": ys_active_exact,
+        # Cap exact series to avoid re-bloating the fetched JSON on huge runs.
+        "xs_active_exact": xs_active_exact if len(xs_active_exact) <= 8000 else xs_active,
+        "ys_active_exact": ys_active_exact if len(xs_active_exact) <= 8000 else ys_active,
         "ya_activity": activity_series,
         "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
         "pie_cpu_vals": [cpu_by_label.get(lb, 0.0) for lb in top_cpu]

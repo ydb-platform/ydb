@@ -44,7 +44,8 @@ if [ -z "${PR_TITLE:-}" ] && [ -n "${PR_NUMBER:-}" ] && [ -n "${GITHUB_TOKEN:-}"
   )"
 fi
 if [ -n "${PR_TITLE:-}" ]; then
-  DASHBOARD_ARGS+=(--pr-title "$PR_TITLE")
+  # Equals form so titles starting with '-' are not parsed as options.
+  DASHBOARD_ARGS+=(--pr-title="$PR_TITLE")
 fi
 
 if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \

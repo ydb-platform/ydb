@@ -183,8 +183,6 @@ def parse_evlog_activity_deltas(
             deltas[kind].append((start_us, +1))
 
     def _close(kind: str, end_us: float) -> None:
-        # Always emit the matching close (including zero-length) so +1/-1 stays
-        # balanced; zero-length cancels out when sweeping the step series.
         if kind:
             deltas[kind].append((end_us, -1))
 
@@ -233,8 +231,9 @@ def parse_evlog_activity_deltas(
                         if stack[i][2] == uid:
                             stack.pop(i)
                             break
-                    if kind and ts >= start_us:
-                        _close(kind, ts)
+                    if kind:
+                        # Clamp so +1/-1 stays balanced on out-of-order timestamps.
+                        _close(kind, max(ts, start_us))
                     completed_uids.add(uid)
                 continue
             # Chrome-trace worker type lives in event name (CC/LD/AR/TM).
@@ -258,8 +257,8 @@ def parse_evlog_activity_deltas(
         if uid:
             open_by_uid.pop(uid, None)
             completed_uids.add(uid)
-        if kind and ts >= start_us:
-            _close(kind, ts)
+        if kind:
+            _close(kind, max(ts, start_us))
 
     return dict(deltas)
 

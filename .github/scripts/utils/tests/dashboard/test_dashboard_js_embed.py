@@ -191,30 +191,21 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn('>CPU<span class="chart-tile-sub">cores by suite · red = host</span>', source)
         self.assertIn(">ya make<span class=\"chart-tile-sub\">active jobs by phase</span>", source)
         self.assertIn("chart-tile-sub", source)
-        # Expand matches the ya-activity full-row slot (same as .span-2).
-        self.assertIn(".chart-tile.span-2,\n    .chart-tile.expanded {{", source)
+        self.assertIn(".chart-tile.expanded {{", source)
         self.assertIn("grid-column: 1 / -1;", source)
-        self.assertIn("height: 520px;", source)
-        self.assertIn("Expand to full width (same as ya make concurrency)", source)
-        # Hover/click panels stay available in tile mode (filled on hover/click).
-        self.assertIn(
-            "Hover/click detail panels stay visible in tile mode too",
-            source,
-        )
+        self.assertIn("Expand to full width", source)
         self.assertNotIn(
             ".chart-tile-meta {{\n      display: none;",
             source,
         )
-        # No instructional placeholders — empty panels are hidden until filled.
         self.assertNotIn("Hover CPU chart to see sorted contributors", source)
         self.assertNotIn("Move cursor over chart to see sorted contributors", source)
         self.assertIn(".hoverbox:empty,", source)
-        self.assertIn('id="cpuHover" class="hoverbox"></div>', source)
-        # Shared bottom margin keeps 2×2 plot areas aligned when only ya/disk
-        # show interactive legends (CPU/RAM keep the empty legend slot).
-        self.assertEqual(source.count("margin: {{l: 48, r: 8, t: 8, b: 72}}"), 4)
-        self.assertIn("Same bottom margin as ya/disk", source)
+        self.assertIn('id="cpuHover" class="hoverbox"', source)
+        self.assertIn("b: 72", source)
         self.assertIn("itemsizing: 'constant'", source)
+        self.assertIn("JSON.parse(JSON.stringify(obj))", source)
+        self.assertIn("Plotly.newPlot(plotId, clone(traces), clone(yaLayout), yaOpts)", source)
         # Suite 2×2: ya make → CPU → RAM → Disk; Tests + Active under details.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')

@@ -1962,12 +1962,8 @@ i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEv
     return diff;
 }
 
-<<<<<<< HEAD
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
-=======
-template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (!SupportsReplicationMessages) {
         return;
     }
@@ -1975,7 +1971,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr&
     if (!ActualPartitionActors.contains(ev->Sender) || !Partitions.contains(record.GetPartitionSessionId())) {
         return;
     }
-    if constexpr (Protocol == EProtocol::Topic) {
+    if constexpr (!UseMigrationProtocol) {
         TServerMessage response;
         response.set_status(Ydb::StatusIds::SUCCESS);
         auto* partitionData = response.mutable_read_response()->add_partition_data();
@@ -1995,9 +1991,8 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvReplicationData::TPtr&
     }
 }
 
-template <EProtocol Protocol>
-void TReadSessionActor<Protocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
->>>>>>> 65b0603b069 (LOGBROKER-10371 Add consumer offsets mirroring)
+template <bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;
     }

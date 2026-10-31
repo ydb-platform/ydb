@@ -271,12 +271,8 @@ message TMirrorPartitionConfig {
     optional TCredentials Credentials = 7;
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
-<<<<<<< HEAD
     optional bool SyncWriteTime = 10 [default = false];
-=======
-    reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
     optional bool MirrorConsumerOffsets = 11 [default = false];
->>>>>>> 65b0603b069 (LOGBROKER-10371 Add consumer offsets mirroring)
 }
 
 message TPartitionConfig {

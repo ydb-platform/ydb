@@ -1927,13 +1927,9 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
-<<<<<<< HEAD
+            pipeIter->second.ClientActor = sender;
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created session",
                 {"logPrefix", LogPrefix()},
-=======
-            pipeIter->second.ClientActor = sender;
-            LOG_D("Created session",
->>>>>>> 46c00faa68f (LOGBROKER-10731 Fix after review)
                 {"sessionId", cmd.GetSessionId()},
                 {"onPipe", pipeIter->first});
             ctx.Send(MakePQDReadCacheServiceActorId(),

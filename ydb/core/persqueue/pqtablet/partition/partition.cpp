@@ -3804,14 +3804,14 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             {"head", BlobEncoder.Head},
             {"newHead", BlobEncoder.NewHead});
 
-        const auto oldHeadOffset = BlobEncoder.NewHead.Offset;
+        auto oldHeadOffset = BlobEncoder.NewHead.Offset;
 
         if (!t.WriteInfo->BodyKeys.empty()) {
             bool needCompactHead =
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
             BlobEncoder.NewPartitionedBlob(Partition,
-                                    BlobEncoder.NewHead.Offset,
+                                           BlobEncoder.NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
                                            0,  // TotalParts

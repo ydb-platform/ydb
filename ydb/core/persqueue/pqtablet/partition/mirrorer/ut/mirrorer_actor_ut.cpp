@@ -433,6 +433,7 @@ struct TMirrorerEnv {
         auto converter = MakeTopicConverter();
         auto mirrorConfig = MakeMirrorConfig();
         mirrorConfig.SetMirrorConsumerOffsets(options.MirrorConsumerOffsets);
+        mirrorConfig.SetSyncWriteTime(true);
         Mirrorer = Runtime.Register(CreateMirrorer(
             TabletId,
             Tablet,

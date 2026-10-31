@@ -248,13 +248,8 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
-<<<<<<< HEAD
-=======
-        EvResetOffsetRequest,
-        EvResetOffsetResponse,
         EvReplicationData,
         EvReplicationDataAck,
->>>>>>> 65b0603b069 (LOGBROKER-10371 Add consumer offsets mirroring)
         EvEnd,
     };
 

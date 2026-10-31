@@ -8,11 +8,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
-<<<<<<< HEAD
-=======
 #include <ydb/public/sdk/cpp/src/client/topic/common/replication.h>
-#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
->>>>>>> e4f7a045ad1 (LOGBROKER-10731 Fix)
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 

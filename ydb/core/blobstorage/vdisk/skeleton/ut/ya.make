@@ -16,6 +16,7 @@ PEERDIR(
 
 SRCS(
     skeleton_oos_logic_ut.cpp
+    skeleton_log_counters_ut.cpp
     skeleton_vpatch_actor_ut.cpp
 )
 

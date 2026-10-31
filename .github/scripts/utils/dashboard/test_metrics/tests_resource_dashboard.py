@@ -143,11 +143,9 @@ def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
     if tag_upper == "TM":
         return "test_tm"
     if "test-results" in name:
-        suite, _group, chunk, is_aux = classify_evlog_run_name(name)
-        if is_aux or suite is None or chunk is None or "/chunk" not in name:
-            # Packaging (meta.json, traces, archives) is not a test worker job.
-            return None
-        return "test"
+        # Non-TM test-results Runs are shown via report-backed test_report, not
+        # a separate evlog kind — skip so we do not build+discard "test" deltas.
+        return None
     path = name.split("(", 1)[1]
     if "$(BUILD_ROOT)" in path:
         path = path.split("$(BUILD_ROOT)", 1)[1]
@@ -259,6 +257,28 @@ def parse_evlog_activity_deltas(
             completed_uids.add(uid)
         if kind:
             _close(kind, max(ts, start_us))
+
+    # Truncated traces: close leftover opens so concurrency does not stick high.
+    last_ts = 0.0
+    for kind_deltas in deltas.values():
+        for ts, _sign in kind_deltas:
+            if ts > last_ts:
+                last_ts = ts
+    for key, stack in list(stacks.items()):
+        while stack:
+            start_us, kind, uid = stack.pop()
+            if uid:
+                open_by_uid.pop(uid, None)
+                completed_uids.add(uid)
+            if kind:
+                _close(kind, max(last_ts, start_us))
+    for uid, (_key, start_us, kind) in list(open_by_uid.items()):
+        if uid in completed_uids:
+            continue
+        if kind:
+            _close(kind, max(last_ts, start_us))
+        completed_uids.add(uid)
+    open_by_uid.clear()
 
     return dict(deltas)
 
@@ -1282,24 +1302,31 @@ def _build_resources_overlay(
     ram_total_gb = _first_positive("ram_total_gb")
     if not xs_evlog:
         return None
-    timeline_starts = [min(xs_evlog)]
-    timeline_ends = [max(xs_evlog)]
+    range_lo = min(xs_evlog)
+    range_hi = max(xs_evlog)
     if activity_deltas:
         for kind_deltas in activity_deltas.values():
             for ts, _sign in kind_deltas:
                 sec = float(ts) / 1_000_000.0
-                timeline_starts.append(sec)
-                timeline_ends.append(sec)
+                if sec < range_lo:
+                    range_lo = sec
+                if sec > range_hi:
+                    range_hi = sec
     elif activity:
-        timeline_starts.extend(float(row.get("start_us", 0) or 0) / 1_000_000.0 for row in activity)
-        timeline_ends.extend(float(row.get("end_us", 0) or 0) / 1_000_000.0 for row in activity)
+        for row in activity:
+            start = float(row.get("start_us", 0) or 0) / 1_000_000.0
+            end = float(row.get("end_us", 0) or 0) / 1_000_000.0
+            if start and start < range_lo:
+                range_lo = start
+            if end and end > range_hi:
+                range_hi = end
     return {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
         "ram_gb": ram_gb,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
-        "evlog_range_sec": [min(timeline_starts), max(timeline_ends)],
+        "evlog_range_sec": [range_lo, range_hi],
         "cpu_cores": cpu_cores,
         "ram_total_gb": ram_total_gb,
     }
@@ -1646,7 +1673,6 @@ def main() -> None:
         print(f"WARNING: evlog activity parse failed: {exc}", file=sys.stderr)
         activity_deltas = {}
     del evlog_events
-    activity_deltas.pop("test", None)
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))

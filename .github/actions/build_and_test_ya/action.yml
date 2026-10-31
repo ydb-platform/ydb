@@ -227,11 +227,11 @@ runs:
       run: |
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start setup_cache
-        export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        export BAZEL_REMOTE_PASSWORD_FILE="$TMP_DIR/bazel_remote_password"
         echo -n "${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
-        export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
+        export TELEGRAM_BOT_TOKEN_FILE="$TMP_DIR/telegram_bot_token"
         echo -n "${{ fromJSON( inputs.secs ).YDBOT_TELEGRAM_BOT_TOKEN || '' }}" > $TELEGRAM_BOT_TOKEN_FILE
         echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
         analytics end setup_cache --conclusion success
@@ -422,8 +422,10 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           analytics start graph_compare
+          GRAPH_COMPARE_WORKDIR="$TMP_DIR/graph_compare"
+          mkdir -p "$GRAPH_COMPARE_WORKDIR"
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --workdir="$GRAPH_COMPARE_WORKDIR" --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
           analytics end graph_compare --rc "$RC"
@@ -995,9 +997,5 @@ runs:
       run: |
         set +e
         set -x
-        if [ -n "${TMP_DIR:-}" ]; then
-          rm -rf "$TMP_DIR"
-        fi
-        # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
-        rm -rf /tmp/tmp*
+        rm -rf "$TMP_DIR"
         df -h / || true

@@ -355,11 +355,9 @@ struct Schema : NIceDb::Schema {
         struct ReadCentric : Column<5, HostConfigDrive::ReadCentric::ColumnType> {};
         struct Kind : Column<6, HostConfigDrive::Kind::ColumnType> {};
 
-        // Serialized TNodeLocation; null preserves filters written before location support.
-        struct Location : Column<7, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, Location>;
-        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, Location>;
+        // Keep the legacy key unchanged: older controllers use its length for prefix scans.
+        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
     };
 
     struct GroupStoragePool : Table<123> {
@@ -479,6 +477,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
     };
 
+    struct BoxStoragePoolPDiskFilterV2 : Table<136> {
+        using BoxId = BoxStoragePoolPDiskFilter::BoxId;
+        using StoragePoolId = BoxStoragePoolPDiskFilter::StoragePoolId;
+        // A protobuf key allows adding filter properties without extending the table key.
+        struct Filter : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TPDiskFilter; };
+
+        using TKey = TableKey<BoxId, StoragePoolId, Filter>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
+    };
+
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -504,7 +513,8 @@ struct Schema : NIceDb::Schema {
         DriveSerial,
         BlobDepotDeleteQueue,
         BridgeSyncState,
-        DirectBlockGroupClaims
+        DirectBlockGroupClaims,
+        BoxStoragePoolPDiskFilterV2
     >;
 
     using TSettings = SchemaSettings<

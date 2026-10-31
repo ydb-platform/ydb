@@ -28,7 +28,6 @@
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 
@@ -37,6 +36,8 @@
 #include <unistd.h>
 
 #include <utility>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -61,11 +62,8 @@ TPartitionActor::TPartitionActor(
     , LogTitle{GetCycleCount(), TLogTitle::TPartitionDirect{.TabletId = TabletID()}}
     , StorageConfig(GetNbsService()->StorageConfig)
 {
-    LOG_INFO(
-        NActors::TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s initialization started",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(NActors::TActivationContext::AsActorContext(), "Initialization started",
+        {"withTime", LogTitle.GetWithTime()});
 }
 
 TPartitionActor::~TPartitionActor()
@@ -90,11 +88,8 @@ TPartitionActor::~TPartitionActor()
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
-    LOG_INFO(
-        NActors::TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s OnDetach",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(NActors::TActivationContext::AsActorContext(), "OnDetach",
+        {"withTime", LogTitle.GetWithTime()});
 
     DetachEndpointAddDie(ctx);
 }
@@ -105,12 +100,9 @@ void TPartitionActor::OnTabletDead(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        NActors::TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s OnTabletDead %s",
-        LogTitle.GetWithTime().c_str(),
-        TEvTablet::TEvTabletDead::Str(msg->Reason));
+    YDB_LOG_INFO_CTX(NActors::TActivationContext::AsActorContext(), "OnTabletDead",
+        {"withTime", LogTitle.GetWithTime()},
+        {"reason", TEvTablet::TEvTabletDead::Str(msg->Reason)});
 
     DetachEndpointAddDie(ctx);
 }
@@ -120,11 +112,8 @@ void TPartitionActor::PassAway()
 {
     const auto& ctx = NActors::TActivationContext::AsActorContext();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s PassAway",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "PassAway",
+        {"withTime", LogTitle.GetWithTime()});
 
     // Do not call Die() here: Die() invokes PassAway() again.
     CleanupResources(ctx);
@@ -135,18 +124,12 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Started NBS partition: actor id %s",
-        LogTitle.GetWithTime().c_str(),
-        SelfId().ToString().data());
+    YDB_LOG_INFO_CTX(ctx, "Started NBS partition: actor id",
+        {"withTime", LogTitle.GetWithTime()},
+        {"selfId", SelfId()});
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Executing InitSchema transaction",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Executing InitSchema transaction",
+        {"withTime", LogTitle.GetWithTime()});
     ExecuteTx(ctx, CreateTx<TInitSchema>());
 }
 
@@ -223,22 +206,16 @@ void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
         blockStoreFacade->UnregisterVolume(
             VolumeConfig.GetDiskId(),
             Session->GetRegistrationId());
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Frontend unregister requested: registrationId=%s",
-            LogTitle.GetWithTime().c_str(),
-            Session->GetRegistrationId().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Frontend unregister requested",
+            {"withTime", LogTitle.GetWithTime()},
+            {"registrationId", Session->GetRegistrationId()});
     }
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s DetachEndpointAddDie",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "DetachEndpointAddDie",
+        {"withTime", LogTitle.GetWithTime()});
 
     CleanupResources(ctx);
     Die(ctx);
@@ -263,13 +240,10 @@ void TPartitionActor::HandleConnect(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Client %s %s connected to volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Client connected to volume",
+        {"withTime", LogTitle.GetWithTime()},
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TPartitionActor::HandleDisconnect(
@@ -278,13 +252,10 @@ void TPartitionActor::HandleDisconnect(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Client %s %s destroyed",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Client destroyed",
+        {"withTime", LogTitle.GetWithTime()},
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TPartitionActor::HandleServerConnected(
@@ -293,13 +264,10 @@ void TPartitionActor::HandleServerConnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Pipe client %s server %s connected to volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server connected to volume",
+        {"withTime", LogTitle.GetWithTime()},
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TPartitionActor::HandleServerDisconnected(
@@ -308,13 +276,10 @@ void TPartitionActor::HandleServerDisconnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Pipe client %s server %s disconnected from volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server disconnected from volume",
+        {"withTime", LogTitle.GetWithTime()},
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TPartitionActor::HandleServerDestroyed(
@@ -323,13 +288,10 @@ void TPartitionActor::HandleServerDestroyed(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Pipe client %s server %s got destroyed for volume",
-        LogTitle.GetWithTime().c_str(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_INFO_CTX(ctx, "Pipe client server got destroyed for volume",
+        {"withTime", LogTitle.GetWithTime()},
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -489,11 +451,8 @@ void TPartitionActor::Start(
     DiskDescription.TabletId = TabletID();
     DiskDescription.Generation = Executor()->Generation();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Starting",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Starting",
+        {"withTime", LogTitle.GetWithTime()});
 
     DirectBlockGroupsConnections = std::move(directBlockGroupsConnections);
     VChunkConfigs = vChunkConfigs;
@@ -521,33 +480,24 @@ void TPartitionActor::HandleFastPathServiceReady(
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ev);
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s All DBGs reached initial locked quorum, opening endpoint",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "All DBGs reached initial locked quorum, opening endpoint",
+        {"withTime", LogTitle.GetWithTime()});
 
     // Re-send the BSC request for a membership op in flight at the last
     // restart (no live op can be in flight this early). Both are idempotent.
     if (AddHostInFlight.has_value()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Replaying in-flight AddHost dbgId=%lu liveHostCount=%u",
-            LogTitle.GetWithTime().c_str(),
-            AddHostInFlight->DirectBlockGroupId,
-            AddHostInFlight->LiveHostCount);
+        YDB_LOG_INFO_CTX(ctx, "Replaying in-flight AddHost",
+            {"withTime", LogTitle.GetWithTime()},
+            {"dbgId", AddHostInFlight->DirectBlockGroupId},
+            {"liveHostCount", AddHostInFlight->LiveHostCount});
         SendAllocateDDiskForAddHost(ctx, AddHostInFlight->DirectBlockGroupId);
     }
 
     if (RemoveHostInFlight.has_value()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Replaying in-flight RemoveHost dbgId=%lu ddisk=%s",
-            LogTitle.GetWithTime().c_str(),
-            RemoveHostInFlight->DirectBlockGroupId,
-            RemoveHostInFlight->DDiskId.ShortDebugString().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Replaying in-flight RemoveHost",
+            {"withTime", LogTitle.GetWithTime()},
+            {"dbgId", RemoveHostInFlight->DirectBlockGroupId},
+            {"ddisk", RemoveHostInFlight->DDiskId.ShortDebugString()});
         SendRemoveHostRequest(ctx);
     }
 
@@ -576,16 +526,11 @@ void TPartitionActor::HandleFastPathServiceReady(
             LogTitle.GetWithTime().c_str(),
             FormatError(registration.GetError()).c_str());
 
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Frontend backend published: registrationId=%s "
-            "blockSize=%u blocksCount=%llu",
-            LogTitle.GetWithTime().c_str(),
-            registration.GetResult().c_str(),
-            VolumeConfig.GetBlockSize(),
-            static_cast<unsigned long long>(
-                VolumeConfig.GetPartitions(0).GetBlockCount()));
+        YDB_LOG_INFO_CTX(ctx, "Frontend backend published",
+            {"withTime", LogTitle.GetWithTime()},
+            {"registrationId", registration.GetResult()},
+            {"blockSize", VolumeConfig.GetBlockSize()},
+            {"blocksCount", static_cast<unsigned long long>(VolumeConfig.GetPartitions(0).GetBlockCount())});
     }
 
     {
@@ -608,12 +553,9 @@ void TPartitionActor::HandleFastPathServiceReady(
             options);
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Started NBS LoadActorAdapter: %s",
-        LogTitle.GetWithTime().c_str(),
-        LoadActorAdapter.ToString().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Started NBS",
+        {"withTime", LogTitle.GetWithTime()},
+        {"loadActorAdapter", LoadActorAdapter});
 }
 
 void TPartitionActor::HandleFastPathServiceShutdown(
@@ -625,11 +567,8 @@ void TPartitionActor::HandleFastPathServiceShutdown(
     UnregisterFrontendVolume(ctx);
 
     if (!FastPathService) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s FastPathService is not started",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "FastPathService is not started",
+            {"withTime", LogTitle.GetWithTime()});
         Send(
             ctx.SelfID,
             std::make_unique<
@@ -682,11 +621,8 @@ void TPartitionActor::HandleFastPathServiceStopped(
 {
     Y_UNUSED(ev);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s FastPathService stopped",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "FastPathService stopped",
+        {"withTime", LogTitle.GetWithTime()});
 }
 
 void TPartitionActor::HandlePoisonByBlockedGeneration(
@@ -695,12 +631,9 @@ void TPartitionActor::HandlePoisonByBlockedGeneration(
 {
     const auto* msg = ev->Get();
 
-    LOG_CRIT(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s SUICIDE by BLOCKED generation. Reason: %s",
-        LogTitle.GetWithTime().c_str(),
-        msg->Reason.c_str());
+    YDB_LOG_CRIT_CTX(ctx, "SUICIDE by BLOCKED generation",
+        {"withTime", LogTitle.GetWithTime()},
+        {"reason", msg->Reason});
 
     ctx.Send(Tablet(), std::make_unique<TEvents::TEvPoisonPill>().release());
 }
@@ -709,22 +642,16 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s HandleControllerAllocateDDiskBlockGroupResult record is: %s",
-        LogTitle.GetWithTime().c_str(),
-        ev->Get()->Record.DebugString().data());
+    YDB_LOG_INFO_CTX(ctx, "HandleControllerAllocateDDiskBlockGroupResult record",
+        {"withTime", LogTitle.GetWithTime()},
+        {"is", ev->Get()->Record.DebugString().data()});
 
     // The cookie identifies the operation that sent this request.
     const auto request = BscRequestsInFlight.find(ev->Cookie);
     if (request == BscRequestsInFlight.end()) {
-        LOG_WARN(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s BSC reply for unknown cookie %lu, dropped",
-            LogTitle.GetWithTime().c_str(),
-            ev->Cookie);
+        YDB_LOG_WARN_CTX(ctx, "BSC reply for unknown cookie dropped",
+            {"withTime", LogTitle.GetWithTime()},
+            {"cookie", ev->Cookie});
         return;
     }
 
@@ -749,12 +676,8 @@ void TPartitionActor::HandleInitialAllocationResult(
     const NActors::TActorContext& ctx)
 {
     if (DDiskBlockGroupAllocated) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Ignore initial allocation result, the group is already "
-            "allocated",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Ignore initial allocation result, the group is already allocated",
+            {"withTime", LogTitle.GetWithTime()});
         return;
     }
 
@@ -778,14 +701,10 @@ void TPartitionActor::HandleInitialAllocationResult(
         DDiskBlockGroupAllocated = true;
         ExecuteTx(ctx, CreateTx<TStorePartitionIds>(std::move(ids)));
     } else {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s HandleControllerAllocateDDiskBlockGroupResult finished with "
-            "error: %d, reason: %s",
-            LogTitle.GetWithTime().c_str(),
-            msg->Record.GetStatus(),
-            msg->Record.GetErrorReason().data());
+        YDB_LOG_ERROR_CTX(ctx, "HandleControllerAllocateDDiskBlockGroupResult finished with",
+            {"withTime", LogTitle.GetWithTime()},
+            {"error", msg->Record.GetStatus()},
+            {"reason", msg->Record.GetErrorReason().data()});
     }
 }
 
@@ -812,12 +731,9 @@ void TPartitionActor::ReplyUpdateVolumeConfig(
     response->Record.SetOrigin(TabletID());
     response->Record.SetStatus(status);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Sending UpdateVolumeConfig response %s",
-        LogTitle.GetWithTime().c_str(),
-        NKikimrBlockStore::EStatus_Name(status).c_str());
+    YDB_LOG_INFO_CTX(ctx, "Sending UpdateVolumeConfig response",
+        {"withTime", LogTitle.GetWithTime()},
+        {"status", NKikimrBlockStore::EStatus_Name(status)});
 
     ctx.Send(ev->Sender, response.release());
 }
@@ -828,12 +744,9 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVolumeConfig request. Version: %d",
-        LogTitle.GetWithTime().c_str(),
-        msg->Record.GetVolumeConfig().GetVersion());
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVolumeConfig request",
+        {"withTime", LogTitle.GetWithTime()},
+        {"version", msg->Record.GetVolumeConfig().GetVersion()});
 
     if (DDiskBlockGroupAllocated) {
         // The config is already applied. SchemeShard aborts on any status
@@ -845,14 +758,10 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         const ui64 requestedVersion =
             msg->Record.GetVolumeConfig().GetVersion();
 
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Already has ddisk connections, applied version %lu, "
-            "requested version %lu, status OK",
-            LogTitle.GetWithTime().c_str(),
-            appliedVersion,
-            requestedVersion);
+        YDB_LOG_INFO_CTX(ctx, "Already has ddisk connections, applied version requested version status OK",
+            {"withTime", LogTitle.GetWithTime()},
+            {"appliedVersion", appliedVersion},
+            {"requestedVersion", requestedVersion});
 
         ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
@@ -862,23 +771,17 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
 
     if (!IsSupportedBlockSize(volumeConfig.GetBlockSize())) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Unsupported block size: %u",
-            LogTitle.GetWithTime().c_str(),
-            volumeConfig.GetBlockSize());
+        YDB_LOG_ERROR_CTX(ctx, "Unsupported block",
+            {"withTime", LogTitle.GetWithTime()},
+            {"size", volumeConfig.GetBlockSize()});
 
         ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::ERROR);
         return;
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVolumeConfig request VolumeConfig: %s",
-        LogTitle.GetWithTime().c_str(),
-        volumeConfig.DebugString().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVolumeConfig request",
+        {"withTime", LogTitle.GetWithTime()},
+        {"volumeConfig", volumeConfig.DebugString()});
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
@@ -891,11 +794,8 @@ void TPartitionActor::HandleStatVolume(
     const NActors::TActorContext& ctx)
 {
     if (VolumeConfig.PartitionsSize() == 0) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Reject StatVolume: volume config is not loaded",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Reject StatVolume: volume config is not loaded",
+            {"withTime", LogTitle.GetWithTime()});
 
         auto response = std::make_unique<TEvStatVolumeResponse>(
             MakeError(E_REJECTED, "volume config is not loaded"));
@@ -903,12 +803,9 @@ void TPartitionActor::HandleStatVolume(
         return;
     }
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle StatVolume for %s",
-        LogTitle.GetWithTime().c_str(),
-        VolumeConfig.GetDiskId().c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle StatVolume",
+        {"withTime", LogTitle.GetWithTime()},
+        {"diskId", VolumeConfig.GetDiskId()});
 
     auto response = std::make_unique<TEvStatVolumeResponse>();
     *response->Record.MutableVolume() = MakeClassicVolume(VolumeConfig);
@@ -950,13 +847,10 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateVChunkConfig %s %s",
-        LogTitle.GetWithTime().c_str(),
-        msg->VChunkConfig.DebugPrint().c_str(),
-        ExecutingUpdateVChunkState ? "later" : "now");
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateVChunkConfig",
+        {"withTime", LogTitle.GetWithTime()},
+        {"VChunkConfig", msg->VChunkConfig.DebugPrint()},
+        {"state", ExecutingUpdateVChunkState ? "later" : "now"});
 
     const ui32 vChunkIndex = msg->VChunkConfig.GetVChunkIndex();
     EnqueueUpdateVChunkState(
@@ -973,13 +867,10 @@ void TPartitionActor::HandleUpdateDirtyMapState(
 {
     auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle UpdateDirtyMapState vchunk %u %s",
-        LogTitle.GetWithTime().c_str(),
-        msg->VChunkIndex,
-        ExecutingUpdateVChunkState ? "later" : "now");
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateDirtyMapState vchunk",
+        {"withTime", LogTitle.GetWithTime()},
+        {"VChunkIndex", msg->VChunkIndex},
+        {"state", ExecutingUpdateVChunkState ? "later" : "now"});
 
     EnqueueUpdateVChunkState(
         {.VChunkIndex = msg->VChunkIndex,
@@ -1026,11 +917,8 @@ void TPartitionActor::SendToBsc(
     THolder<IEventBase> request)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Skip BSC send during delete",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Skip BSC send during delete",
+            {"withTime", LogTitle.GetWithTime()});
         return;
     }
 
@@ -1071,13 +959,10 @@ void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
             HandlePoisonByBlockedGeneration);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_ERROR(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "%s Unhandled event type: %u event %s ",
-                    LogTitle.GetWithTime().c_str(),
-                    ev->GetTypeRewrite(),
-                    ev->ToString().c_str());
+                YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
+                    {"withTime", LogTitle.GetWithTime()},
+                    {"type", ev->GetTypeRewrite()},
+                    {"ev", ev->ToString()});
             }
             break;
     }
@@ -1085,13 +970,10 @@ void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 
 STFUNC(TPartitionActor::StateWork)
 {
-    LOG_DEBUG(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Processing event: %s from sender: %lu",
-        LogTitle.GetWithTime().c_str(),
-        ev->GetTypeName().data(),
-        ev->Sender.LocalId());
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing",
+        {"withTime", LogTitle.GetWithTime()},
+        {"event", ev->GetTypeName().data()},
+        {"sender", ev->Sender.LocalId()});
 
     switch (ev->GetTypeRewrite()) {
         HFunc(

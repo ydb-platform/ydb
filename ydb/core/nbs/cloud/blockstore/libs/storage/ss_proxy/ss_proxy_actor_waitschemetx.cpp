@@ -1,5 +1,7 @@
 #include "ss_proxy_actor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_SS_PROXY
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -97,22 +99,16 @@ void TSSProxyActor::SendWaitTxRequest(
 {
     auto& state = SchemeShardStates[schemeShard];
     if (!state.ReplyProxy) {
-        LOG_DEBUG(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Creating reply proxy actor for schemeshard %lu",
-            schemeShard);
+        YDB_LOG_DEBUG_CTX(ctx, "Creating reply proxy actor for schemeshard",
+            {"schemeShard", schemeShard});
 
         state.ReplyProxy =
             NYdb::NBS::Register<TReplyProxyActor>(ctx, ctx.SelfID, schemeShard);
     }
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Sending NotifyTxCompletion to %lu for txId# %lu",
-        schemeShard,
-        txId);
+    YDB_LOG_DEBUG_CTX(ctx, "Sending NotifyTxCompletion to",
+        {"schemeShard", schemeShard},
+        {"txId", txId});
 
     TActorId clientId = ClientCache->Prepare(ctx, schemeShard);
     NTabletPipe::SendData(
@@ -130,12 +126,9 @@ void TSSProxyActor::HandleTxRegistered(
     const auto* msg = ev->Get();
     ui64 txId = msg->Record.GetTxId();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Received NotifyTxCompletionRegistered from %lu for txId# %lu",
-        schemeShard,
-        txId);
+    YDB_LOG_DEBUG_CTX(ctx, "Received NotifyTxCompletionRegistered from",
+        {"schemeShard", schemeShard},
+        {"txId", txId});
 }
 
 void TSSProxyActor::HandleTxResult(
@@ -148,12 +141,9 @@ void TSSProxyActor::HandleTxResult(
     const auto* msg = ev->Get();
     ui64 txId = msg->Record.GetTxId();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Received NotifyTxCompletionResult from %lu for txId# %lu",
-        schemeShard,
-        txId);
+    YDB_LOG_DEBUG_CTX(ctx, "Received NotifyTxCompletionResult from",
+        {"schemeShard", schemeShard},
+        {"txId", txId});
 
     auto it = state.TxToRequests.find(txId);
     if (it != state.TxToRequests.end()) {

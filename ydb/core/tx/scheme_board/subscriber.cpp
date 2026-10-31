@@ -513,6 +513,11 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             {"delay", Delay});
 
         ReplicaSubscriber = TActorId();
+        // the replica subscriber is gone with the sync request it had; the parent waits for an answer to it
+        if (CurrentSyncRequest) {
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
+            CurrentSyncRequest = 0;
+        }
         this->Send(Parent, new NInternalEvents::TEvNotifyBuilder(Path, true));
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
         Delay = Min(Delay * 2, MaxDelay);
@@ -588,11 +593,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     void Handle(TEvents::TEvGone::TPtr& ev) {
         if (ev->Sender != ReplicaSubscriber) {
             return;
-        }
-
-        if (CurrentSyncRequest) {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
-            CurrentSyncRequest = 0;
         }
 
         Sleep();

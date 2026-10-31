@@ -60,9 +60,8 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
     return true;
 }
 
-// Returns column names whose NOT NULL constraint is required by the index:
-// row-id document identifiers and document identifiers in compact posting lists
-// cannot represent NULL.
+// Returns column names whose NOT NULL constraint is required by the index.
+// Fulltext and JSON readers require non-null document identifiers in all storage formats.
 THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& index, const TTableInfo& table) {
     const auto* fulltext = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index.SpecializedIndexDescription);
 
@@ -74,7 +73,11 @@ THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& i
 
     // Without row-id mode, these indexes require exactly one integer PK column,
     // as validated when the index is created.
-    if (NTableIndex::IsCompactFulltextIndex(index.Type)) {
+    if (NTableIndex::IsCompactFulltextIndex(index.Type)
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalJson)
+    {
         for (const auto columnId : table.KeyColumnIds) {
             columns.insert(table.Columns.at(columnId).Name);
         }

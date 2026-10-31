@@ -39,7 +39,7 @@ PY3TEST()
 
     SIZE(MEDIUM)
     IF (SANITIZER_TYPE)
-        REQUIREMENTS(cpu:4)
+        REQUIREMENTS(cpu:2)
     ELSE()
         REQUIREMENTS(cpu:2)
     ENDIF()

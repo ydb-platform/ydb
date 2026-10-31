@@ -455,6 +455,17 @@ def build_html_dashboard(
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
       </div>
+      <div class="chart-tile" data-pane="activeLayerSuite">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">by suite over time</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
+        </div>
+        <div id="activeLayerSuite" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="activeHoverSuite" class="hoverbox"></div>
+          <div id="activeClickSuite" class="clickbox"></div>
+        </div>
+      </div>
     </div>
     <details class="chart-secondary" id="testsBySuiteDetails">
       <summary>Tests in parallel</summary>
@@ -467,21 +478,6 @@ def build_html_dashboard(
           <div class="chart-tile-meta">
             <div id="testsHoverSuite" class="hoverbox"></div>
             <div id="testsClickSuite" class="clickbox"></div>
-          </div>
-        </div>
-      </div>
-    </details>
-    <details class="chart-secondary" id="activeBySuiteDetails">
-      <summary>Active chunks</summary>
-      <div class="chart-grid">
-        <div class="chart-tile span-2 expanded" data-pane="activeLayerSuite">
-          <div class="chart-tile-head">
-            <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">by suite over time</span></span>
-          </div>
-          <div id="activeLayerSuite" class="chart-pane"></div>
-          <div class="chart-tile-meta">
-            <div id="activeHoverSuite" class="hoverbox"></div>
-            <div id="activeClickSuite" class="clickbox"></div>
           </div>
         </div>
       </div>
@@ -1321,14 +1317,22 @@ def build_html_dashboard(
       }}
     }}
     if (testsReportHref) {{
-      appendHeaderLink(testsReportHref, 'Tests');
+      appendHeaderLink(testsReportHref, 'Test report');
     }}
-    if (artifactsBase && tryLinks.length) {{
+    // try_N = CI attempt / retry of the test job. Skip when only one — that
+    // link would just point at the dashboard you're already viewing.
+    if (artifactsBase && tryLinks.length > 1) {{
       tryLinks.forEach((path, i) => {{
-        appendHeaderLink(
-          artifactsBase + '/' + String(path || '').split('/').filter(Boolean).join('/'),
-          'try ' + (i + 1),
-        );
+        if (!linksEl) return;
+        if (linksEl.childNodes.length) linksEl.appendChild(document.createTextNode(' · '));
+        const a = document.createElement('a');
+        a.href = artifactsBase + '/' + String(path || '').split('/').filter(Boolean).join('/');
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = 'try ' + (i + 1);
+        a.title = 'Resource dashboard for CI try ' + (i + 1) + ' (retry attempt)';
+        a.style.cssText = linkStyle;
+        linksEl.appendChild(a);
       }});
     }}
     document.getElementById('headerRow1').style.display = hasCiData ? 'flex' : 'none';
@@ -2601,11 +2605,6 @@ def build_html_dashboard(
       attachSortedClick('ramLayer', 'ramClick', 'GB');
     }}
 
-    ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite', () => {{
-      stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
-      attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
-      attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
-    }});
     ensureDetailsPlot('testsBySuiteDetails', 'testsLayerSuite', () => {{
       stackedArea('testsLayerSuite', data.xs_tests_suite, data.tests_tracks_suite, 'Layered tests running by suite', 'tests', true);
       attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
@@ -2614,6 +2613,9 @@ def build_html_dashboard(
 
     stackedArea('cpuLayerSuite', data.xs_cpu_suite, data.cpu_tracks_suite, 'Layered CPU (estimated cores) by suite', 'cores');
     stackedArea('ramLayerSuite', data.xs_ram_suite, data.ram_tracks_suite, 'Layered RAM by suite', 'GB');
+    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
+    attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
+    attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
     if (data.resources_overlay) {{
       const ro = data.resources_overlay;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));

@@ -115,9 +115,9 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("function syncChartGroupXRange(ids)", source)
         self.assertIn("function fullEvlogRangeMs()", source)
         self.assertIn('id="testsBySuiteDetails"', source)
-        self.assertIn('id="activeBySuiteDetails"', source)
         self.assertIn("<summary>Tests in parallel</summary>", source)
-        self.assertIn("<summary>Active chunks</summary>", source)
+        self.assertIn('data-pane="activeLayerSuite"', source)
+        self.assertNotIn('id="activeBySuiteDetails"', source)
         # Runner monitoring lives inside the dashboard header.
         header_idx = source.find('id="dashboardHeader"')
         monitoring_idx = source.find('id="monitoringLinkWrap"')
@@ -146,8 +146,8 @@ class JsScriptJsonTest(unittest.TestCase):
         )
         self.assertIn("function ensureDetailsPlot(detailsId, paneId, plotFn)", source)
         self.assertIn("_plottedDetailPanes", source)
-        self.assertIn("ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite'", source)
         self.assertIn("ensureDetailsPlot('testsBySuiteDetails', 'testsLayerSuite'", source)
+        self.assertIn("stackedArea('activeLayerSuite'", source)
         self.assertIn("build = whole job", source)
         self.assertIn("aria-expanded", source)
         self.assertIn("from urllib.parse import quote", source)
@@ -179,7 +179,8 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("cfg.pr_title", source)
         self.assertIn("cfg.report_url", source)
         self.assertIn("ya-test.html", source)
-        self.assertIn("appendHeaderLink(testsReportHref, 'Tests')", source)
+        self.assertIn("appendHeaderLink(testsReportHref, 'Test report')", source)
+        self.assertIn("tryLinks.length > 1", source)
         self.assertIn("Resource dashboard", source)
         self.assertIn("--report-url", (_DIR / "tests_resource_dashboard.py").read_text(encoding="utf-8"))
         self.assertIn('report_url": args.report_url', (_DIR / "tests_resource_dashboard.py").read_text(encoding="utf-8"))
@@ -206,26 +207,23 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertNotIn("Move cursor over chart to see sorted contributors", source)
         self.assertIn(".hoverbox:empty,", source)
         self.assertIn('id="cpuHover" class="hoverbox"></div>', source)
-        # Suite grid → tests кат → active кат → pies. Both secondary charts
-        # sit under closed <details>, not in the main suite grid.
+        # Suite grid (CPU/RAM/Disk/Active) → tests кат → pies.
+        # Active fills the 2×2 slot next to Disk; only Tests stays under details.
         suite_grid_idx = source.find('id="suiteChartGrid"')
         tests_details_idx = source.find('id="testsBySuiteDetails"')
-        active_details_idx = source.find('id="activeBySuiteDetails"')
         tests_pane_idx = source.find('id="testsLayerSuite"')
         active_pane_idx = source.find('id="activeLayerSuite"')
         pies_idx = source.find('id="cpuPieSuite"')
         self.assertGreater(suite_grid_idx, 0)
         self.assertGreater(tests_details_idx, suite_grid_idx)
-        self.assertGreater(active_details_idx, tests_details_idx)
-        self.assertGreater(pies_idx, active_details_idx)
+        self.assertGreater(pies_idx, tests_details_idx)
         self.assertGreater(tests_pane_idx, tests_details_idx)
-        self.assertLess(tests_pane_idx, active_details_idx)
-        self.assertGreater(active_pane_idx, active_details_idx)
-        self.assertLess(active_pane_idx, pies_idx)
-        # Active must not remain a tile inside the main suite grid.
+        self.assertLess(tests_pane_idx, pies_idx)
+        self.assertGreater(active_pane_idx, suite_grid_idx)
+        self.assertLess(active_pane_idx, tests_details_idx)
         suite_grid_block = source[suite_grid_idx:tests_details_idx]
-        self.assertNotIn('data-pane="activeLayerSuite"', suite_grid_block)
-        self.assertNotIn('id="activeLayerSuite"', suite_grid_block)
+        self.assertIn('data-pane="activeLayerSuite"', suite_grid_block)
+        self.assertIn('id="activeLayerSuite"', suite_grid_block)
 
 
 if __name__ == "__main__":

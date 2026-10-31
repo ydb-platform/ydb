@@ -30,6 +30,7 @@ SRCS(
     path_ut.cpp
     state_storage_follower_ids_ut.cpp
     statestorage_guardian_impl_ut.cpp
+    statestorage_guardian_ut.cpp
     statestorage_ut.cpp
     table_index_ut.cpp
 )

@@ -715,6 +715,11 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
         InitStartReading(ctx);
     }
 
+    // The parent must send StartPartitionSessionRequest before any replication data.
+    for (auto& event : PendingReplicationData) {
+        ctx.Send(ParentId, event.Release());
+    }
+    PendingReplicationData.clear();
     MakeCommit(ctx);
 }
 
@@ -1516,6 +1521,21 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
+}
+
+void TPartitionActor::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (UseMigrationProtocol || record.GetSession() != Session
+        || record.GetPartitionId() != Partition.Partition
+        || record.GetGeneration() != Generation || record.GetStep() != Step) {
+        return;
+    }
+    ev->Get()->Record.SetPartitionSessionId(Partition.AssignId);
+    if (!InitDone) {
+        PendingReplicationData.emplace_back(ev->Release().Release());
+        return;
+    }
+    ctx.Send(ParentId, ev->Release().Release());
 }
 
 void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {

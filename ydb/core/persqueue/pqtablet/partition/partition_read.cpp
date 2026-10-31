@@ -1093,22 +1093,28 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
             {"readingForOffset", ReadingForOffset},
             {"userInfoOffset", userInfo->Offset},
             {"responseDebugString", ev->Get()->Response->DebugString()});
+        bool timestampAvailable = false;
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&
-            ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0 &&
-            (i64)ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().GetResult(0).GetOffset() >= userInfo->Offset) {
-                //offsets is inside gap - return timestamp of first record after gap
+            ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0) {
             const auto& res = ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().GetResult(0);
-            userInfo->WriteTimestamp = TInstant::MilliSeconds(res.GetWriteTimestampMS());
-            userInfo->CreateTimestamp = TInstant::MilliSeconds(res.GetCreateTimestampMS());
-            userInfo->ActualTimestamps = true;
-            if (userInfo->ReadOffset + 1 < userInfo->Offset) {
-                userInfo->ReadOffset = userInfo->Offset - 1;
-                userInfo->ReadWriteTimestamp = userInfo->WriteTimestamp;
-                userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
+            // Use the first record after a gap, or the batch containing the requested offset.
+            if ((i64)res.GetOffset() >= userInfo->Offset ||
+                (res.GetLogicalMessageCount() > 0 &&
+                 ui64(userInfo->Offset) - res.GetOffset() < ui64(res.GetLogicalMessageCount()))) {
+                userInfo->WriteTimestamp = TInstant::MilliSeconds(res.GetWriteTimestampMS());
+                userInfo->CreateTimestamp = TInstant::MilliSeconds(res.GetCreateTimestampMS());
+                userInfo->ActualTimestamps = true;
+                timestampAvailable = true;
+                if (userInfo->ReadOffset + 1 < userInfo->Offset) {
+                    userInfo->ReadOffset = userInfo->Offset - 1;
+                    userInfo->ReadWriteTimestamp = userInfo->WriteTimestamp;
+                    userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
+                }
             }
-        } else {
+        }
+        if (!timestampAvailable) {
             UpdateUserInfoTimestamp.push_back(std::make_pair(ReadingForUser, ReadingForUserReadRuleGeneration));
             userInfo->ReadScheduled = true;
         }

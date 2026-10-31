@@ -181,6 +181,10 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     }
                     break;
                 }
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+                    (*settings->mutable_attributes())["_ydb_replication_consumer"] = consumerName;
+                    break;
+                }
             }
 
             NJson::TJsonValue customMonitoringSettings;
@@ -199,6 +203,8 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
 
         if (NPQ::MirroringEnabled(config)) {
+            (*settings->mutable_attributes())["_ydb_mirror_consumer_offsets"] =
+                partConfig.GetMirrorFrom().GetMirrorConsumerOffsets() ? "true" : "false";
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {

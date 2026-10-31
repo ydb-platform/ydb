@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/replication.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -486,6 +487,30 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     EndPartitionSessionEvent = std::nullopt;
 }
 
+void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (ReplicationDataInFlight || (OffsetsByConsumers.empty() && !MirroredOffsetToSend)) {
+        return;
+    }
+
+    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+        if (offset > EndOffset) {
+            return;
+        }
+    }
+    ReplicationDataInFlight = true;
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+        (event->OffsetsByConsumers)[consumer] = offset;
+    }
+    OffsetsByConsumers.clear();
+    if (MirroredOffsetToSend) {
+        event->MirroredOffset = *MirroredOffsetToSend;
+        MirroredOffsetToSend = Nothing();
+    }
+
+    ctx.Send(PartitionActor, event.Release());
+}
+
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
@@ -556,6 +581,7 @@ void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
     TryToSplitMerge(ctx);
+    TryToSendReplicationData(ctx);
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
@@ -685,6 +711,19 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
+        if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(msg.GetData())) {
+                for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
+                    auto& pendingOffset = OffsetsByConsumers[consumer];
+                    pendingOffset = Max(pendingOffset, offset);
+                }
+            } else {
+                LOG_E("Failed to parse replication service message, payloadSize: " << msg.GetData().size());
+            }
+            continue;
+        }
+
         PQ_ENSURE(OffsetToRead <= offset);
         LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();
@@ -908,6 +947,7 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status), newEndOffset)));
         }
     );
+
     return true;
 }
 
@@ -923,7 +963,19 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
         return;
     }
     EndOffset = ev->Get()->EndOffset;
+    if (!WasSuccessfulRecording) {
+        MirroredOffsetToSend = Max(MirroredOffsetToSend.GetOrElse(0), EndOffset);
+        TryToSendReplicationData(ctx);
+    }
     ScheduleConsumerCreation(ctx);
+}
+
+void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
+    if (ev->Sender != PartitionActor || !ReplicationDataInFlight) {
+        return;
+    }
+    ReplicationDataInFlight = false;
+    Send(SelfId(), new TEvents::TEvWakeup());
 }
 
 NActors::IActor* CreateMirrorer(const ui64 tabletId,

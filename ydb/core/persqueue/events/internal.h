@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -30,6 +31,7 @@
 
 #include <ydb/core/persqueue/events/internal/protos/events.pb.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/maybe.h>
 #include <expected>
 
@@ -246,6 +248,8 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
+        EvReplicationData,
+        EvReplicationDataAck,
         EvEnd,
     };
 
@@ -1346,6 +1350,14 @@ struct TEvPQ {
         TString Consumer;
         ui32 PartitionId;
         ui64 Cookie;
+    };
+
+    struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
+        THashMap<TString, ui64> OffsetsByConsumers;
+        TMaybe<ui64> MirroredOffset;
+    };
+
+    struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {

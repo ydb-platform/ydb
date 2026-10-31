@@ -1,3 +1,7 @@
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+* Fixed Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
 * Driver now supports async credentials initialisation: the first request is delayed until they are ready.
 
 * Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)

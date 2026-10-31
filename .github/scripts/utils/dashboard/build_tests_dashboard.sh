@@ -48,24 +48,34 @@ if [ -n "${PR_TITLE:-}" ]; then
   DASHBOARD_ARGS+=(--pr-title="$PR_TITLE")
 fi
 
-if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
-  --report "$CURRENT_REPORT" \
-  --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-  --top-n 500 \
-  --out-html "$TESTS_METRICS_DIR/dashboard.html" \
-  --out-trace "$TESTS_METRICS_DIR/trace.json" \
-  --out-stats "$TESTS_METRICS_DIR/stats.json" \
-  --resources-jsonl "$RESOURCES_JSONL" \
-  --build-preset "$BUILD_PRESET" \
-  --runner "${RUNNER_NAME}" \
-  --pr "${PR_NUMBER}" \
-  --branch "${BRANCH_NAME}" \
-  --commit "${ORIGINAL_HEAD}" \
-  --artifacts-url "${PUBLIC_DIR_URL}" \
-  --report-url "${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
-  --try-links "$TRY_LINKS" \
-  --repo "${GITHUB_REPOSITORY}" \
-  --repo-root . \
+# Large Regression-run_Large evlogs are ~100MB / 12h; 120s is too tight and also
+# must survive missing report.json (disk-full / aborted ya make).
+DASHBOARD_TIMEOUT_SEC="${DASHBOARD_TIMEOUT_SEC:-900}"
+DASHBOARD_CMD=(
+  python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py
+  --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
+  --top-n 500
+  --out-html "$TESTS_METRICS_DIR/dashboard.html"
+  --out-trace "$TESTS_METRICS_DIR/trace.json"
+  --out-stats "$TESTS_METRICS_DIR/stats.json"
+  --resources-jsonl "$RESOURCES_JSONL"
+  --build-preset "$BUILD_PRESET"
+  --runner "${RUNNER_NAME}"
+  --pr "${PR_NUMBER}"
+  --branch "${BRANCH_NAME}"
+  --commit "${ORIGINAL_HEAD}"
+  --artifacts-url "${PUBLIC_DIR_URL}"
+  --report-url "${CURRENT_PUBLIC_DIR_URL}/ya-test.html"
+  --try-links "$TRY_LINKS"
+  --repo "${GITHUB_REPOSITORY}"
+  --repo-root .
+)
+# Pass --report only when the file exists; otherwise the builder falls back to
+# evlog-only timeline (still useful for host overlays + activity).
+if [ -n "${CURRENT_REPORT:-}" ] && [ -f "$CURRENT_REPORT" ]; then
+  DASHBOARD_CMD+=(--report "$CURRENT_REPORT")
+fi
+if timeout "$DASHBOARD_TIMEOUT_SEC" "${DASHBOARD_CMD[@]}" \
   "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
   rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
 else

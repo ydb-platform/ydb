@@ -817,7 +817,7 @@ def parse_report_chunks(
 
 
 def build_test_event_times_direct(
-    report_path: Path,
+    report_path: Optional[Path],
     suite_filter: Optional[str],
     enriched_runs: list[dict[str, Any]],
     evlog_path: Optional[Path] = None,
@@ -826,6 +826,8 @@ def build_test_event_times_direct(
     Build test-level error/timeout marker times directly from report rows (chunk=false),
     mapping test chunk_hid -> run end_us. Falls back to suite/chunk index mapping.
     """
+    if report_path is None or not report_path.exists():
+        return {}
     suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
@@ -1532,7 +1534,12 @@ def build_trace(
 def main() -> None:
     p = argparse.ArgumentParser(description="Build tests resource dashboard from evlog + report")
     p.add_argument("--suite-path", default=None, help="Suite path to filter; omit for ALL suites")
-    p.add_argument("--report", required=True, type=Path, help="Path to report.json")
+    p.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="Path to report.json (optional: when missing, timeline falls back to evlog runs)",
+    )
     p.add_argument("--evlog", required=True, type=Path, help="Path to ya evlog json/jsonl")
     p.add_argument("--out-html", type=Path, default=None, help="Output HTML dashboard (also sets default paths for sibling outputs)")
     p.add_argument("--out-trace", type=Path, default=None, help="Output trace JSON (default: <html-stem>_trace.json next to --out-html)")
@@ -1604,20 +1611,26 @@ def main() -> None:
         args.out_csv = args.out_trace.parent / (base + "_chunks.csv")
 
     # Prevent accidental overwrite of inputs by outputs.
-    report_r = args.report.resolve()
+    report_path = args.report if args.report and args.report.exists() else None
+    if args.report and report_path is None:
+        print(
+            f"WARNING: --report not found ({args.report}); building timeline from evlog only",
+            file=sys.stderr,
+        )
+    report_r = report_path.resolve() if report_path else None
     evlog_r = args.evlog.resolve()
     out_trace_r = args.out_trace.resolve()
     out_stats_r = args.out_stats.resolve() if args.out_stats else None
     out_html_r = args.out_html.resolve() if args.out_html else None
     out_cpu_sugg_r = args.out_cpu_suggestions.resolve() if args.out_cpu_suggestions else None
 
-    if report_r == out_trace_r:
+    if report_r is not None and report_r == out_trace_r:
         raise SystemExit("Invalid args: --report and --out-trace must be different files")
-    if out_stats_r and report_r == out_stats_r:
+    if report_r is not None and out_stats_r and report_r == out_stats_r:
         raise SystemExit("Invalid args: --report and --out-stats must be different files")
-    if out_html_r and report_r == out_html_r:
+    if report_r is not None and out_html_r and report_r == out_html_r:
         raise SystemExit("Invalid args: --report and --out-html must be different files")
-    if out_cpu_sugg_r and report_r == out_cpu_sugg_r:
+    if report_r is not None and out_cpu_sugg_r and report_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --report and --out-cpu-suggestions must be different files")
     if out_stats_r and out_trace_r == out_stats_r:
         raise SystemExit("Invalid args: --out-trace and --out-stats must be different files")
@@ -1626,7 +1639,9 @@ def main() -> None:
     if out_cpu_sugg_r and out_trace_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --out-trace and --out-cpu-suggestions must be different files")
     out_csv_r = args.out_csv.resolve() if args.out_csv else None
-    protected = {report_r, evlog_r}
+    protected = {evlog_r}
+    if report_r is not None:
+        protected.add(report_r)
     for label, path in (
         ("--out-trace", out_trace_r),
         ("--out-stats", out_stats_r),
@@ -1637,21 +1652,30 @@ def main() -> None:
         if path in protected:
             raise SystemExit(f"Invalid args: {label} must not overwrite --report or --evlog")
 
-    report_obj = json.loads(args.report.read_text(encoding="utf-8", errors="replace"))
-    effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, args.report)
-
-    (
-        chunks,
-        report_status_by_suite,
-        tests_per_chunk,
-        tests_per_suite,
-        max_test_duration_sec_by_suite,
-        test_duration_stats_by_suite,
-        issues_summary,
-        suite_chunk_issues_summary,
-    ) = parse_report_chunks(
-        args.report, args.suite_path
-    )
+    if report_path is not None:
+        report_obj = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+        effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, report_path)
+        (
+            chunks,
+            report_status_by_suite,
+            tests_per_chunk,
+            tests_per_suite,
+            max_test_duration_sec_by_suite,
+            test_duration_stats_by_suite,
+            issues_summary,
+            suite_chunk_issues_summary,
+        ) = parse_report_chunks(report_path, args.suite_path)
+    else:
+        report_obj = {}
+        effective_sanitizer = args.sanitizer
+        chunks = {}
+        report_status_by_suite = {}
+        tests_per_chunk = {}
+        tests_per_suite = {}
+        max_test_duration_sec_by_suite = {}
+        test_duration_stats_by_suite = {}
+        issues_summary = {}
+        suite_chunk_issues_summary = {}
     tests_per_chunk_by_label: dict[str, int] = {}
     for (suite_raw, group, idx), count in tests_per_chunk.items():
         suite_norm = normalize_suite_path(suite_raw)
@@ -1673,6 +1697,16 @@ def main() -> None:
         print(f"WARNING: evlog activity parse failed: {exc}", file=sys.stderr)
         activity_deltas = {}
     del evlog_events
+    # Large / aborted ya make may leave no report.json (disk full, kill). Keep a
+    # usable dashboard from evlog chunk runs alone (CPU/RAM then synthetic).
+    report_missing_fallback = False
+    if not report_runs and evlog_runs:
+        report_runs = [dict(er) for er in evlog_runs]
+        report_missing_fallback = True
+        print(
+            f"WARNING: no report chunk timeline; using {len(report_runs)} evlog run(s)",
+            file=sys.stderr,
+        )
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
@@ -1690,6 +1724,11 @@ def main() -> None:
             out["duration_evlog_sec"] = float(best.get("dur_us", 0) or 0) / 1_000_000.0
             out["uid"] = best.get("uid")
             out["raw_name"] = best.get("raw_name") or out.get("raw_name")
+            # Prefer evlog wall clock when report was missing / fallback.
+            if report_missing_fallback:
+                out["start_us"] = float(best.get("start_us", 0) or 0)
+                out["end_us"] = float(best.get("end_us", 0) or 0)
+                out["dur_us"] = float(best.get("dur_us", 0) or 0)
             enriched_by_evlog += 1
             activity_offsets_us.append(
                 float(rr.get("start_us", 0) or 0)
@@ -1727,9 +1766,10 @@ def main() -> None:
         ]
 
     trace, stats, enriched_runs = build_trace(runs, chunks, args.suite_path, requirements_cache)
-    stats["runs_from_report"] = len(report_runs)
+    stats["runs_from_report"] = 0 if report_missing_fallback else len(report_runs)
     stats["runs_from_evlog"] = len(evlog_runs)
     stats["runs_enriched_by_evlog"] = enriched_by_evlog
+    stats["report_missing_evlog_fallback"] = report_missing_fallback
     stats["evlog_activity_offset_sec"] = activity_offset_us / 1_000_000.0
     stats["evlog_activity_offset_unaligned"] = activity_offset_unaligned
     stats["repo_root"] = str(repo_root) if repo_root else None
@@ -1806,7 +1846,7 @@ def main() -> None:
         runner_footprint=runner_footprint,
     )
     suite_test_event_times = build_test_event_times_direct(
-        args.report, args.suite_path, enriched_runs, args.evlog
+        report_path, args.suite_path, enriched_runs, args.evlog
     )
     if args.out_cpu_suggestions:
         args.out_cpu_suggestions.write_text(json.dumps(cpu_suggestions, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1884,9 +1924,11 @@ def main() -> None:
                 path_match = '.path == $path or (.path | startswith($path + "/"))'
                 # When chunk_group is set, restrict to that group (e.g. only "[test_base.py 0/10] chunk" not all 0/10)
                 group_cond = '(if $group != "" then (.subtest_name | contains($group)) else true end)'
-                report_jq = shlex.quote(args.report.name)
+                report_jq = shlex.quote(report_path.name) if report_path is not None else ""
                 evlog_jq = shlex.quote(args.evlog.name)
-                if chunk_idx == 0:
+                if report_path is None:
+                    jq_report = ""
+                elif chunk_idx == 0:
                     jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | ascii_downcase | test("^\\\\s*sole\\\\s+chunk\\\\s*$")) or ((.subtest_name | test("\\\\b0/")) and {group_cond})))]\' {report_jq}'
                 else:
                     jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | test("\\\\b{chunk_idx}/")) and {group_cond}))]\' {report_jq}'
@@ -1930,7 +1972,7 @@ def main() -> None:
             "try_links": [s.strip() for s in (args.try_links or "").split(",") if s.strip()],
             "repo": args.repo,
             "suite_path": args.suite_path,
-            "report": str(args.report),
+            "report": str(report_path) if report_path is not None else None,
             "evlog": str(args.evlog),
             "out_trace": str(args.out_trace),
             "out_stats": str(args.out_stats) if args.out_stats else None,

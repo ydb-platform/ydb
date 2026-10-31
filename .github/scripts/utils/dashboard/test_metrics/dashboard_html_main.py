@@ -68,11 +68,26 @@ def build_html_dashboard(
     suggestions_label = html_lib.escape(suggestions_name)
     suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
 
+    # Inline SVG favicon (data URI) so the browser tab is recognizable without
+    # shipping a separate .ico next to the HTML artifact.
+    favicon_svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+        "<rect width='32' height='32' rx='6' fill='#0f172a'/>"
+        "<rect x='5' y='18' width='5' height='9' rx='1' fill='#38bdf8'/>"
+        "<rect x='13' y='11' width='5' height='16' rx='1' fill='#34d399'/>"
+        "<rect x='21' y='7' width='5' height='20' rx='1' fill='#fbbf24'/>"
+        "<path d='M5 14l6-5 5 3 8-7' fill='none' stroke='#e2e8f0' stroke-width='2' "
+        "stroke-linecap='round' stroke-linejoin='round'/>"
+        "</svg>"
+    )
+    favicon_href = "data:image/svg+xml," + favicon_svg.replace("'", "%27").replace("<", "%3C").replace(">", "%3E").replace("#", "%23").replace(" ", "%20")
+
     html = f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Chunk Resource Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="{favicon_href}" />
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     body {{ font-family: Arial, sans-serif; margin: 16px; }}

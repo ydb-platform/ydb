@@ -132,6 +132,9 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("build duration", source)
         self.assertIn("test duration", source)
         self.assertIn("function resolvePhaseDurations(hs)", source)
+        self.assertIn('rel="icon"', source)
+        self.assertIn("data:image/svg+xml,", source)
+        self.assertIn("<title>Chunk Resource Dashboard</title>", source)
         self.assertIn("CPU by suite · estimated cores", source)
         self.assertIn("chart-tile-sub", source)
         # Expand matches the ya-activity full-row slot (same as .span-2).

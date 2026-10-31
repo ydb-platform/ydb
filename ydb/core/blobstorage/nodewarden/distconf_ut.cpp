@@ -3945,6 +3945,64 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 0);
     }
 
+    // the static group of the fixture at the generation, its VDisk too
+    void SetStaticGroupGeneration(NKikimrBlobStorage::TStorageConfig& config, ui32 generation) {
+        auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(generation);
+        for (auto& vdisk : *ss->MutableVDisks()) {
+            vdisk.MutableVDiskID()->SetGroupGeneration(generation);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+    }
+
+    void SetMetadataDiskGuid(ui32 nodeId, IEventHandle& ev); // defined below, with the other event helpers
+
+    // send the command to the root and wait for its result
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeStaticGroupCommand(TCommitConfirmationFixture& fixture,
+            std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
+        auto& runtime = fixture.Runtime;
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> result;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetRecipientRewrite() == edge
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                return false;
+            }
+            return true;
+        };
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return result.has_value(); }), "no reply to the command");
+        runtime.FilterFunction = {};
+        return *result;
+    }
+
+    // The VDisk of generation 1 reports its slot slain late: the static group is at generation 3 by now, and its
+    // VDisk of that generation took the same slot. The report is about a VDisk gone; the one in the slot must stay.
+    Y_UNIT_TEST(LateSlainReportKeepsNewOccupantOfSlot) {
+        TCommitConfirmationFixture fixture(false);
+        SetStaticGroupGeneration(fixture.Config, 3);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Start();
+        const auto& vdisk = fixture.Config.GetBlobStorageConfig().GetServiceSet().GetVDisks(0);
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *cmd = request->Record.MutableStaticVDiskSlain();
+        cmd->MutableVDiskId()->CopyFrom(vdisk.GetVDiskID());
+        cmd->MutableVDiskId()->SetGroupGeneration(1);
+        cmd->MutableVSlotId()->SetNodeId(vdisk.GetVDiskLocation().GetNodeID());
+        cmd->MutableVSlotId()->SetPDiskId(vdisk.GetVDiskLocation().GetPDiskID());
+        cmd->MutableVSlotId()->SetVSlotId(vdisk.GetVDiskLocation().GetVDiskSlotID());
+        const auto result = InvokeStaticGroupCommand(fixture, std::move(request));
+        UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, result.DebugString());
+
+        const auto committed = QueryKeeper(fixture.Runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(committed.GetBlobStorageConfig().GetServiceSet().VDisksSize(), 1);
+    }
+
     Y_UNIT_TEST(SelfHealRefreshStartsAfterQuorumRecovery) {
         TCommitConfirmationFixture fixture(true);
         ui32 requests = 0;

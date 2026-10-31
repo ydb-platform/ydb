@@ -513,6 +513,11 @@ namespace NKikimr::NStorage {
                     continue; // VDisk of the removed group can only be a destroyed one
                 }
 
+                if (!isDropDonor && currentVDiskId != vdiskId) {
+                    // the slot is taken by another VDisk since: the report came late, the VDisk it is about is gone
+                    continue;
+                }
+
                 // this must be the obsolete disk (donor has generation from the past, destroyed disks too)
                 Y_ABORT_UNLESS(groupRemoved || currentVDiskId.GroupGeneration < actualGroupGeneration);
 

@@ -24,6 +24,7 @@ namespace NKikimr::NStorage {
         EReconfigurationStep StateStorageReconfigurationStep;
         const TActorId Sender;
         const ui64 Cookie;
+        const TActorId SessionId;
         NKikimrBlobStorage::TStateStorageConfig CurrentConfig;
         NKikimrBlobStorage::TStateStorageConfig TargetConfig;
         bool AllowNextStep = true;
@@ -41,7 +42,7 @@ namespace NKikimr::NStorage {
     public:
         TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
             , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig,
-            bool prepareCurrentConfig = false);
+            bool prepareCurrentConfig = false, TActorId sessionId = {});
 
         void Bootstrap(TActorId parentId);
 
@@ -52,6 +53,7 @@ namespace NKikimr::NStorage {
         const TDuration WaitForConfigStep;
         const TActorId Sender;
         const ui64 Cookie;
+        const TActorId SessionId;
         bool AllowNextStep = false;
         bool FinishReassign = false;
         ui32 NodeFrom;
@@ -69,7 +71,8 @@ namespace NKikimr::NStorage {
 
     public:
         TStateStorageReassignNodeSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
-            , ui32 nodeFrom, ui32 nodeTo, bool needReconfigSS, bool needReconfigSSB, bool needReconfigSB);
+            , ui32 nodeFrom, ui32 nodeTo, bool needReconfigSS, bool needReconfigSSB, bool needReconfigSB
+            , TActorId sessionId = {});
 
         void Bootstrap(TActorId parentId);
 

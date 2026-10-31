@@ -11,6 +11,7 @@ TEST_SRCS(
     test_mixed_storage.py
     test_sdk_cleanup.py
     test_sdk_reconnect.py
+    test_snapshot_subscription.py
     test_state_storage_selfheal.py
     test_state_storage_selfheal_piles.py
     test_state_storage_selfheal_root_restart.py

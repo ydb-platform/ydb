@@ -419,3 +419,7 @@ message TCutHistoryRequest {
     optional uint32 ToGeneration = 7;
     optional uint32 SendingGeneration = 8;
 }
+
+message TCutHistoryRequests {
+    repeated TCutHistoryRequest Requests = 1;
+}

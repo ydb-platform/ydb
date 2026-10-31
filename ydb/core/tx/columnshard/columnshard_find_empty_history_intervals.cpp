@@ -1,9 +1,11 @@
+#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_impl.h"
+
+#include "find_empty_history_intervals/portions.h"
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
-#include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
@@ -12,319 +14,372 @@
 #include <util/generic/algorithm.h>
 #include <util/random/random.h>
 
-#include <iterator>
-#include <utility>
-
 namespace NKikimr::NColumnShard {
+
+bool IsCutHistoryEnabled() {
+    return AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->FeatureFlags.GetEnableColumnshardCutHistory();
+}
+
 namespace {
 
-void ScheduleFindEmptyHistoryIntervalsContinuation(const NKikimrConfig::TColumnShardConfig& shardConfig, const TActorContext& ctx) {
-    const auto& config = shardConfig.GetCutHistory();
+using TCachePolicy = NOlap::NGeneralCache::TPortionsMetadataCachePolicy;
+using TAddress = TCachePolicy::TAddress;
+using TCache = NGeneralCache::TServiceOperator<TCachePolicy>;
+
+TDuration ComputeContinuationDelay(const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config) {
     const ui64 jitter = config.GetContinuationJitterMs();
-    const ui64 delay = Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0);
-    ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueFindEmptyHistoryIntervals());
+    return TDuration::MilliSeconds(Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0));
 }
 
-bool CanCutHistoryInterval(const TColumnShard& owner, const THistoryIntervalKey& key, const THistoryInterval& interval) {
-    if (key.Channel >= owner.Info()->Channels.size() || !owner.LauncherID()) {
-        return false;
-    }
-    const auto& history = owner.Info()->Channels[key.Channel].History;
-    const auto entry = FindIf(history, [&](const auto& item) {
-        return item.FromGeneration == key.From;
-    });
-    if (entry == history.end() || entry->GroupID != interval.Group) {
-        return false;
-    }
-    const auto next = std::next(entry);
-    if (next == history.end() || next->FromGeneration != interval.To) {
-        return false;
-    }
-    const auto storage =
-        std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(owner.GetStoragesManager()->GetDefaultOperator());
-    AFL_VERIFY(storage);
-    return !storage->GetSharedBlobs()->HasBlobsInRange(key.Channel, key.From, interval.To);
-}
+struct TEvAccessorsReady: NActors::TEventLocal<TEvAccessorsReady, TEvColumnShard::EvFindEmptyHistoryIntervalsAccessorsReady> {
+    THashMap<TAddress, TCachePolicy::TObject> Accessors;
+    bool Failed;
 
-class TFindEmptyHistoryIntervalsPreparationActor: public NActors::TActorBootstrapped<TFindEmptyHistoryIntervalsPreparationActor> {
-    const TActorId Owner;
-    std::vector<std::pair<TInternalPathId, ui64>> Portions;
+    TEvAccessorsReady(THashMap<TAddress, TCachePolicy::TObject>&& accessors, bool failed)
+        : Accessors(std::move(accessors))
+        , Failed(failed)
+    {
+    }
+};
+
+class TMetadataCallback: public TCache::ICallback {
+    TActorId Owner;
+    std::shared_ptr<TAtomicCounter> Aborted;
+
+    bool DoIsAborted() const override {
+        return Aborted->Val();
+    }
+
+    void DoOnResultReady(THashMap<TCachePolicy::TAddress, TCachePolicy::TObject>&& accessors, THashSet<TCachePolicy::TAddress>&& removed,
+        NGeneralCache::NPublic::TErrorAddresses<TCachePolicy>&& errors) override {
+        TActivationContext::Send(Owner, std::make_unique<TEvAccessorsReady>(std::move(accessors), !removed.empty() || errors.HasErrors()));
+    }
 
 public:
-    TFindEmptyHistoryIntervalsPreparationActor(const TActorId owner, std::vector<std::pair<TInternalPathId, ui64>>&& portions)
+    TMetadataCallback(TActorId owner, const std::shared_ptr<TAtomicCounter>& aborted)
         : Owner(owner)
-        , Portions(std::move(portions))
+        , Aborted(aborted)
+    {
+    }
+};
+
+class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHistoryIntervalsActor> {
+    TActorId Owner;
+    NKikimrConfig::TColumnShardConfig::TCutHistoryConfig Config;
+    std::vector<TFindEmptyHistoryIntervalsContext::TPortion> Portions;
+    NFindEmptyHistoryIntervals::THistoryIntervals HistoryIntervals;
+    THashMap<TAddress, NOlap::ISnapshotSchema::TPtr> BatchPortionSchemas;
+    std::shared_ptr<TAtomicCounter> Aborted = std::make_shared<TAtomicCounter>(0);
+    size_t Position = 0;
+    TInstant Started;
+    TCSCounters Counters;
+
+    void Finish(bool aborted = false) {
+        TEmptyHistoryIntervalsScanResult result;
+        result.Intervals = HistoryIntervals.ExtractIntervals();
+        result.Started = Started;
+        result.Finished = TActivationContext::Now();
+        result.Aborted = aborted;
+        Send(Owner, new TEvFindEmptyHistoryIntervals::TEvScanFinished(std::move(result)));
+        PassAway();
+    }
+
+    void ScheduleNext() {
+        Schedule(ComputeContinuationDelay(Config), new TEvFindEmptyHistoryIntervals::TEvContinue());
+    }
+
+    void Handle(TEvFindEmptyHistoryIntervals::TEvContinue::TPtr&) {
+        if (Position == Portions.size() || HistoryIntervals.Empty()) {
+            Finish();
+            return;
+        }
+        ui64 memory = 0;
+        size_t end = Position + Min<size_t>(Max<ui32>(1, Config.GetScanBatchSize()), Portions.size() - Position);
+        while (Position < end && (BatchPortionSchemas.empty() || memory < Max<ui64>(1, Config.GetScanMemoryLimitBytes()))) {
+            auto& portion = Portions[Position++];
+            memory += portion.AccessorMemory;
+            AFL_VERIFY(BatchPortionSchemas.emplace(TAddress(Owner, NOlap::TPortionAddress(portion.PathId, portion.PortionId)), std::move(portion.Schema)).second);
+        }
+        THashSet<TAddress> addresses;
+        addresses.reserve(BatchPortionSchemas.size());
+        for (const auto& [address, _] : BatchPortionSchemas) {
+            addresses.emplace(address);
+        }
+        TCache::AskObjects(TCachePolicy::EConsumer::SCAN, std::move(addresses), std::make_shared<TMetadataCallback>(SelfId(), Aborted));
+    }
+
+    void Handle(TEvAccessorsReady::TPtr& ev) {
+        if (ev->Get()->Failed || ev->Get()->Accessors.size() != BatchPortionSchemas.size() || !IsCutHistoryEnabled()) {
+            Finish(true);
+            return;
+        }
+        for (const auto& [address, accessor] : ev->Get()->Accessors) {
+            const auto* schema = BatchPortionSchemas.FindPtr(address);
+            AFL_VERIFY(schema);
+            NFindEmptyHistoryIntervals::ExcludePortionBlobs(*accessor, (*schema)->GetIndexInfo(), [this](const auto& blob) {
+                HistoryIntervals.Exclude(blob.GetLogoBlobId(), blob.GetDsGroup(), [this] {
+                    Counters.OnCutHistoryBlobGroupMismatch();
+                });
+            });
+        }
+        BatchPortionSchemas.clear();
+        if (HistoryIntervals.Empty() || Position == Portions.size()) {
+            Finish();
+        } else {
+            ScheduleNext();
+        }
+    }
+
+    void PassAway() override {
+        Aborted->Inc();
+        TActorBootstrapped::PassAway();
+    }
+
+public:
+    TFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context,
+        const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config, const TCSCounters& counters, TInstant started)
+        : Owner(context.TabletActorId)
+        , Config(config)
+        , Portions(std::move(context.Portions))
+        , HistoryIntervals(context.TabletId, std::move(context.Intervals))
+        , Started(started)
+        , Counters(counters)
     {
     }
 
     void Bootstrap() {
-        SortBy(Portions, [](const auto& address) {
-            return std::make_pair(address.second, address.first);
+        SortBy(Portions, [](const auto& portion) {
+            return portion.PortionId;
         });
-        Send(Owner, new TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady(std::move(Portions)));
-        PassAway();
+        Become(&TThis::StateWork);
+        ScheduleNext();
     }
+
+    STRICT_STFUNC(StateWork, hFunc(TEvFindEmptyHistoryIntervals::TEvContinue, Handle);
+                  hFunc(TEvAccessorsReady, Handle); cFunc(TEvents::TEvPoisonPill::EventType, PassAway);)
 };
+
+template <class TTable>
+bool ExcludePersistedBlobs(
+    NIceDb::TNiceDb& db, const NOlap::IBlobGroupSelector& selector, NFindEmptyHistoryIntervals::THistoryIntervals& historyIntervals) {
+    if (historyIntervals.Empty()) {
+        return true;
+    }
+    auto rows = [&] {
+        if constexpr (requires { typename TTable::StorageId; }) {
+            return db.Table<TTable>().Prefix(NOlap::NBlobOperations::TGlobal::DefaultStorageId).template Select<typename TTable::BlobId>();
+        } else {
+            return db.Table<TTable>().template Select<typename TTable::BlobId>();
+        }
+    }();
+    if (!rows.IsReady()) {
+        return false;
+    }
+    while (!rows.EndOfSet()) {
+        const auto serialized = rows.template GetValue<typename TTable::BlobId>();
+        TString error;
+        const auto blob = NOlap::TUnifiedBlobId::ParseFromString(serialized, &selector, error);
+        AFL_VERIFY(blob.IsValid())("error", error)("blob", serialized);
+        historyIntervals.Exclude(blob.GetLogoBlobId());
+        if (historyIntervals.Empty()) {
+            return true;
+        }
+        if (!rows.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }   // namespace
 
 class TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
-    const std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
+    enum class EReadStage {
+        SharedBlobs,
+        BorrowedBlobs,
+        BlobsToDelete,
+        BlobsToDeleteWT,
+        Journal,
+    };
+
+    EReadStage ReadStage = EReadStage::SharedBlobs;
+    NFindEmptyHistoryIntervals::THistoryIntervals HistoryIntervals;
+    const TInstant ScanFinished;
+    NKikimrTxColumnShard::TCutHistoryRequests Requests;
 
 public:
-    TTxSaveCutHistoryRequests(TColumnShard* self, std::vector<NKikimrTxColumnShard::TCutHistoryRequest>&& requests)
+    TTxSaveCutHistoryRequests(TColumnShard* self, NFindEmptyHistoryIntervals::THistoryIntervals::TIntervals&& intervals, TInstant scanFinished)
         : TBase(self)
-        , ReadyToSendRequests(std::move(requests))
+        , HistoryIntervals(self->TabletID(), std::move(intervals))
+        , ScanFinished(scanFinished)
     {
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        using T = Schema::CutHistoryRequests;
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Self->FindEmptyHistoryIntervals.reset();
+        if (!IsCutHistoryEnabled()) {
+            return true;
+        }
         NIceDb::TNiceDb db(txc.DB);
+        TBlobGroupSelector selector(Self->Info());
+        switch (ReadStage) {
+            case EReadStage::SharedBlobs:
+                if (!ExcludePersistedBlobs<Schema::SharedBlobIds>(db, selector, HistoryIntervals)) {
+                    return false;
+                }
+                ReadStage = EReadStage::BorrowedBlobs;
+                [[fallthrough]];
+            case EReadStage::BorrowedBlobs:
+                if (!ExcludePersistedBlobs<Schema::BorrowedBlobIds>(db, selector, HistoryIntervals)) {
+                    return false;
+                }
+                ReadStage = EReadStage::BlobsToDelete;
+                [[fallthrough]];
+            case EReadStage::BlobsToDelete:
+                if (!ExcludePersistedBlobs<Schema::BlobsToDelete>(db, selector, HistoryIntervals)) {
+                    return false;
+                }
+                ReadStage = EReadStage::BlobsToDeleteWT;
+                [[fallthrough]];
+            case EReadStage::BlobsToDeleteWT:
+                if (!ExcludePersistedBlobs<Schema::BlobsToDeleteWT>(db, selector, HistoryIntervals)) {
+                    return false;
+                }
+                ReadStage = EReadStage::Journal;
+                [[fallthrough]];
+            case EReadStage::Journal:
+                break;
+        }
+        if (HistoryIntervals.Empty()) {
+            return true;
+        }
+        using T = Schema::CutHistoryRequests;
         auto last = db.Table<T>().Reverse().Range().Select<T::Sequence>();
         if (!last.IsReady()) {
             return false;
         }
-        ui64 sequence = last.EndOfSet() ? 0 : last.GetValue<T::Sequence>();
-        for (const auto& request : ReadyToSendRequests) {
-            db.Table<T>().Key(++sequence).Update(NIceDb::TUpdate<T::RequestProto>(request.SerializeAsString()));
-            if (sequence > CutHistoryRequestLimit) {
-                db.Table<T>().Key(sequence - CutHistoryRequestLimit).Delete();
-            }
+        const ui64 sequence = last.EndOfSet() ? 1 : last.GetValue<T::Sequence>() + 1;
+        for (const auto& [key, interval] : HistoryIntervals.GetIntervals()) {
+            auto& request = *Requests.AddRequests();
+            request.SetTabletID(Self->TabletID());
+            request.SetChannel(key.Channel);
+            request.SetFromGeneration(key.From);
+            request.SetToGeneration(interval.To);
+            request.SetGroupID(interval.Group);
+            request.SetTimestampUs(ctx.Now().MicroSeconds());
+            request.SetSendingGeneration(Self->Generation());
+            ActorIdToProto(Self->LauncherID(), request.MutableRecipient());
+        }
+        db.Table<T>().Key(sequence).Update(NIceDb::TUpdate<T::RequestsProto>(Requests.SerializeAsString()));
+        if (sequence > CutHistoryJournalLimit) {
+            db.Table<T>().Key(sequence - CutHistoryJournalLimit).Delete();
         }
         return true;
     }
 
-    void Complete(const TActorContext& /*ctx*/) override {
-        // Hive sending stays disabled until the pending-GC checks land.
-        if (Self->SharingSessionsManager->CanCutHistory()) {
-            for (const auto& request : ReadyToSendRequests) {
+    void Complete(const TActorContext& ctx) override {
+        if (Requests.RequestsSize()) {
+            Self->Counters.GetCSCounters().OnCuttableHistoryIntervalsFound(Requests.RequestsSize());
+        }
+        if (IsCutHistoryEnabled()) {
+            for (const auto& request : Requests.GetRequests()) {
                 auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
                 event->Record.SetTabletID(Self->TabletID());
                 event->Record.SetChannel(request.GetChannel());
                 event->Record.SetFromGeneration(request.GetFromGeneration());
                 event->Record.SetGroupID(request.GetGroupID());
-                // Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *Self->EmptyHistoryIntervalsScan->Finished);
-                // ctx.Send(Self->LauncherID(), event.release());
+                ctx.Send(Self->LauncherID(), event.release());
+                Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - ScanFinished);
             }
         }
-        Self->EmptyHistoryIntervalsScan.reset();
     }
 };
 
-class TFindEmptyHistoryIntervalsResultProcessor: public NOlap::IMetadataAccessorResultProcessor {
-    TColumnShard* const Owner;
-
-    void DoApplyResult(
-        NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result, NOlap::TColumnEngineForLogs&) override {
-        Owner->FinishFindEmptyHistoryIntervalsBatch(result.GetValue());
-    }
-
-public:
-    explicit TFindEmptyHistoryIntervalsResultProcessor(TColumnShard* owner)
-        : Owner(owner)
-    {
-    }
-};
-
-void TColumnShard::InitFindEmptyHistoryIntervals() {
-    if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory()) {
-        return;
-    }
-    TEmptyHistoryIntervalsScan scan;
-    for (ui32 channel = FirstDataChannel; channel < Info()->Channels.size(); ++channel) {
-        const auto& history = Info()->Channels[channel].History;
+TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TTabletStorageInfo& storageInfo, ui32 generation,
+    ui32 requiredBarrierGeneration, const NOlap::TColumnEngineForLogs* index, TActorId tabletActorId) {
+    TFindEmptyHistoryIntervalsContext result;
+    result.TabletId = storageInfo.TabletID;
+    result.TabletActorId = tabletActorId;
+    for (ui32 channel = FirstDataChannel; channel < storageInfo.Channels.size(); ++channel) {
+        const auto& history = storageInfo.Channels[channel].History;
         for (size_t i = 0; i + 1 < history.size(); ++i) {
             AFL_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration)("channel", channel);
-            if (history[i + 1].FromGeneration >= Generation()) {
+            const ui32 to = history[i + 1].FromGeneration;
+            if (to >= generation || to > requiredBarrierGeneration) {
                 break;
             }
-            scan.Intervals.emplace(THistoryIntervalKey{ channel, history[i].FromGeneration },
-                THistoryInterval{ history[i + 1].FromGeneration, history[i].GroupID });
+            result.Intervals.emplace(NFindEmptyHistoryIntervals::THistoryIntervalKey{ channel, history[i].FromGeneration },
+                NFindEmptyHistoryIntervals::THistoryInterval{ to, history[i].GroupID });
         }
     }
-    if (scan.Intervals.empty()) {
-        return;
+    if (result.Intervals.empty() || !index) {
+        return result;
     }
-    EmptyHistoryIntervalsScan = std::move(scan);
-}
-
-void TColumnShard::StartFindEmptyHistoryIntervals(const TActorContext& ctx) {
-    if (!EmptyHistoryIntervalsScan) {
-        return;
-    }
-    if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory() ||
-        !SharingSessionsManager->CanCutHistory()) {
-        EmptyHistoryIntervalsScan.reset();
-        return;
-    }
-    const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    AFL_VERIFY(storage);
-    auto& scan = *EmptyHistoryIntervalsScan;
-    std::erase_if(scan.Intervals, [&](const auto& entry) {
-        const auto& [key, interval] = entry;
-        return storage->GetSharedBlobs()->HasBlobsInRange(key.Channel, key.From, interval.To);
-    });
-    if (scan.Intervals.empty()) {
-        EmptyHistoryIntervalsScan.reset();
-        return;
-    }
-    scan.Started = ctx.Now();
-    if (HasIndex()) {
-        const auto& tables = GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables();
-        size_t portionCount = 0;
-        for (const auto& [_, granule] : tables) {
-            portionCount += granule->GetPortions().size() + granule->GetInsertedPortions().size();
+    const auto add = [&](const auto& portion) {
+        const auto schema = portion->GetSchema(index->GetVersionedIndex());
+        if (portion->HasBlobsInBlobStorage(schema->GetIndexInfo())) {
+            result.Portions.push_back({ portion->GetPathId(), portion->GetPortionId(), schema, portion->PredictAccessorsMemory(schema) });
         }
-        std::vector<std::pair<TInternalPathId, ui64>> portions;
-        portions.reserve(portionCount);
-        for (const auto& [pathId, granule] : tables) {
-            for (const auto& [portionId, _] : granule->GetPortions()) {
-                portions.emplace_back(pathId, portionId);
-            }
-            for (const auto& [_, portion] : granule->GetInsertedPortions()) {
-                portions.emplace_back(pathId, portion->GetPortionId());
-            }
+    };
+    for (const auto& [_, granule] : index->GetTables()) {
+        for (const auto& [_, portion] : granule->GetPortions()) {
+            add(portion);
         }
-        scan.PreparationActor = ctx.Register(
-            new TFindEmptyHistoryIntervalsPreparationActor(SelfId(), std::move(portions)), TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
-        ActorsToStop.push_back(scan.PreparationActor);
-        return;
-    }
-    ScheduleFindEmptyHistoryIntervalsContinuation(*ColumnShardConfig, ctx);
-}
-
-void TColumnShard::AbortFindEmptyHistoryIntervals() {
-    if (EmptyHistoryIntervalsScan->PreparationActor) {
-        Send(EmptyHistoryIntervalsScan->PreparationActor, new TEvents::TEvPoisonPill());
-    }
-    Counters.GetCSCounters().OnCutHistoryScanAborted();
-    EmptyHistoryIntervalsScan.reset();
-}
-
-void TColumnShard::Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx) {
-    if (!EmptyHistoryIntervalsScan || !EmptyHistoryIntervalsScan->PreparationActor ||
-        ev->Sender != EmptyHistoryIntervalsScan->PreparationActor) {
-        return;
-    }
-    if (!SharingSessionsManager->CanCutHistory()) {
-        AbortFindEmptyHistoryIntervals();
-        return;
-    }
-    EmptyHistoryIntervalsScan->PreparationActor = {};
-    EmptyHistoryIntervalsScan->Portions = std::move(ev->Get()->Portions);
-    ScheduleFindEmptyHistoryIntervalsContinuation(*ColumnShardConfig, ctx);
-}
-
-void TColumnShard::Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr&, const TActorContext& ctx) {
-    if (!EmptyHistoryIntervalsScan || EmptyHistoryIntervalsScan->Pending || EmptyHistoryIntervalsScan->Finished) {
-        return;
-    }
-    if (!SharingSessionsManager->CanCutHistory()) {
-        AbortFindEmptyHistoryIntervals();
-        return;
-    }
-    auto& scan = *EmptyHistoryIntervalsScan;
-    if (scan.PreparationActor) {
-        return;
-    }
-    if (scan.Position == scan.Portions.size()) {
-        scan.Finished = ctx.Now();
-        std::vector<std::pair<TInternalPathId, ui64>>().swap(scan.Portions);
-        Counters.GetCSCounters().OnCutHistoryScanFinished(*scan.Finished - scan.Started);
-        TryCutHistory(ctx);
-        return;
-    }
-    auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    auto request = std::make_shared<NOlap::TDataAccessorsRequest>(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
-    const auto& config = ColumnShardConfig->GetCutHistory();
-    const size_t end = scan.Position + Min<size_t>(Max<ui32>(1, config.GetScanBatchSize()), scan.Portions.size() - scan.Position);
-    ui64 memory = 0;
-    while (scan.Position < end && (request->IsEmpty() || memory < Max<ui64>(1, config.GetScanMemoryLimitBytes()))) {
-        const auto [pathId, portionId] = scan.Portions[scan.Position++];
-        const auto granule = index.GetGranuleOptional(pathId);
-        const auto portion = granule ? granule->GetPortionOptional(portionId, false) : nullptr;
-        // In-memory absence follows cleanup Complete and publication of its GC bookkeeping.
-        if (portion) {
-            memory += portion->PredictAccessorsMemory(portion->GetSchema(index.GetVersionedIndex()));
-            request->AddPortion(portion);
+        for (const auto& [_, portion] : granule->GetInsertedPortions()) {
+            add(portion);
         }
     }
-    if (request->IsEmpty()) {
-        ScheduleFindEmptyHistoryIntervalsContinuation(*ColumnShardConfig, ctx);
-        return;
-    }
-    scan.Pending = request->GetSize();
-    SubmitMetadataRequest(NOlap::TCSMetadataRequest(request, std::make_shared<TFindEmptyHistoryIntervalsResultProcessor>(this)));
+    return result;
 }
 
-void TColumnShard::FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result) {
-    if (!EmptyHistoryIntervalsScan) {
-        return;
-    }
-    auto& scan = *EmptyHistoryIntervalsScan;
-    if (!SharingSessionsManager->CanCutHistory() || result.HasErrors() || result.HasRemovedData() ||
-        result.GetPortions().size() != scan.Pending) {
-        AbortFindEmptyHistoryIntervals();
-        return;
-    }
-    const auto& ctx = TActivationContext::AsActorContext();
-    for (const auto& [_, accessor] : result.GetPortions()) {
-        for (const auto& blob : accessor->GetBlobIds()) {
-            const auto& id = blob.GetLogoBlobId();
-            if (id.TabletID() != TabletID()) {
-                continue;
-            }
-            auto it = scan.Intervals.upper_bound({ id.Channel(), id.Generation() });
-            if (it != scan.Intervals.begin()) {
-                --it;
-                const auto [key, interval] = *it;
-                if (key.Channel == id.Channel() && id.Generation() < interval.To) {
-                    if (blob.GetDsGroup() != interval.Group) {
-                        Counters.GetCSCounters().OnCutHistoryBlobGroupMismatch();
-                    }
-                    scan.Intervals.erase(it);
-                    if (scan.Intervals.empty()) {
-                        Counters.GetCSCounters().OnCutHistoryScanFinished(ctx.Now() - scan.Started);
-                        EmptyHistoryIntervalsScan.reset();
-                        return;
-                    }
-                }
-            }
-        }
-    }
-    scan.Pending = 0;
-    ScheduleFindEmptyHistoryIntervalsContinuation(*ColumnShardConfig, ctx);
+IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context,
+    const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config, const TCSCounters& counters, TInstant started) {
+    return new TFindEmptyHistoryIntervalsActor(std::move(context), config, counters, started);
 }
 
-void TColumnShard::TryCutHistory(const TActorContext& ctx) {
-    if (!EmptyHistoryIntervalsScan || !EmptyHistoryIntervalsScan->Finished) {
-        return;
+TActorId TFindEmptyHistoryIntervals::Start(ui32 completedBarrierGeneration, const TStartContext& context, const TActorContext& ctx) {
+    auto scanContext = BuildFindEmptyHistoryIntervalsContext(
+        context.StorageInfo, context.Generation, completedBarrierGeneration, context.Index, context.TabletActorId);
+    if (scanContext.Intervals.empty()) {
+        return {};
     }
-    if (!SharingSessionsManager->CanCutHistory()) {
-        EmptyHistoryIntervalsScan.reset();
-        return;
+    ScanActor = ctx.Register(CreateFindEmptyHistoryIntervalsActor(std::move(scanContext), context.Config, context.Counters, ctx.Now()),
+        TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
+    return ScanActor;
+}
+
+std::optional<TEmptyHistoryIntervalsScanResult> TFindEmptyHistoryIntervals::HandleFinish(
+    TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, bool canCutHistory, const TCSCounters& counters) {
+    AFL_VERIFY(ScanActor && ev->Sender == ScanActor);
+    auto& result = ev->Get()->Result;
+    if (result.Aborted || !canCutHistory) {
+        counters.OnCutHistoryScanAborted();
+        return {};
     }
-    std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
-    for (const auto& [key, interval] : EmptyHistoryIntervalsScan->Intervals) {
-        if (!CanCutHistoryInterval(*this, key, interval)) {
-            continue;
-        }
-        auto& request = requests.emplace_back();
-        request.SetTabletID(TabletID());
-        request.SetChannel(key.Channel);
-        request.SetFromGeneration(key.From);
-        request.SetGroupID(interval.Group);
-        request.SetTimestampUs(ctx.Now().MicroSeconds());
-        ActorIdToProto(LauncherID(), request.MutableRecipient());
-        request.SetToGeneration(interval.To);
-        request.SetSendingGeneration(Generation());
+    counters.OnCutHistoryScanFinished(result.Finished - result.Started);
+    if (result.Intervals.empty()) {
+        return {};
     }
-    EmptyHistoryIntervalsScan->Intervals.clear();
-    if (!requests.empty()) {
-        Counters.GetCSCounters().OnCuttableHistoryIntervalsFound(requests.size());
-        Execute(new TTxSaveCutHistoryRequests(this, std::move(requests)), ctx);
+    return std::move(result);
+}
+
+void TColumnShard::StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx) {
+    const TFindEmptyHistoryIntervals::TStartContext context{ *Info(), Generation(),
+        HasIndex() ? &GetIndexAs<NOlap::TColumnEngineForLogs>() : nullptr, SelfId(), ColumnShardConfig->GetCutHistory(),
+        Counters.GetCSCounters() };
+    if (const auto actorId = FindEmptyHistoryIntervals->Start(completedBarrierGeneration, context, ctx)) {
+        ActorsToStop.push_back(actorId);
     } else {
-        EmptyHistoryIntervalsScan.reset();
+        FindEmptyHistoryIntervals.reset();
+    }
+}
+
+void TColumnShard::Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx) {
+    AFL_VERIFY(FindEmptyHistoryIntervals);
+    if (auto result = FindEmptyHistoryIntervals->HandleFinish(ev, IsCutHistoryEnabled(), Counters.GetCSCounters())) {
+        Execute(new TTxSaveCutHistoryRequests(this, std::move(result->Intervals), result->Finished), ctx);
+    } else {
+        FindEmptyHistoryIntervals.reset();
     }
 }
 

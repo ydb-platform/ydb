@@ -665,15 +665,25 @@ bool FillCutHistoryMonitoringReport(NTabletFlatExecutor::TTransactionContext& tx
     report.clear();
     using T = Schema::CutHistoryRequests;
     NIceDb::TNiceDb db(txc.DB);
-    auto row = db.Table<T>().Range().Select<T::RequestProto>();
+    auto row = db.Table<T>().Range().Select<T::RequestsProto>();
     if (!row.IsReady()) {
         return false;
     }
     while (!row.EndOfSet()) {
-        NKikimrTxColumnShard::TCutHistoryRequest request;
-        Y_ABORT_UNLESS(request.ParseFromString(row.GetValue<T::RequestProto>()));
-        report += request.DebugString();
-        report += "\n";
+        NKikimrTxColumnShard::TCutHistoryRequests requests;
+        Y_ABORT_UNLESS(requests.ParseFromString(row.GetValue<T::RequestsProto>()));
+        for (const auto& request : requests.GetRequests()) {
+            report += TStringBuilder() << "<tr>"
+                                       << "<td>" << request.GetTabletID() << "</td>"
+                                       << "<td>" << request.GetChannel() << "</td>"
+                                       << "<td>" << request.GetGroupID() << "</td>"
+                                       << "<td>" << request.GetFromGeneration() << "</td>"
+                                       << "<td>" << request.GetToGeneration() << "</td>"
+                                       << "<td>" << TInstant::MicroSeconds(request.GetTimestampUs()).ToString() << "</td>"
+                                       << "<td>" << TEscapeHtml(NActors::ActorIdFromProto(request.GetRecipient()).ToString()) << "</td>"
+                                       << "<td>" << request.GetSendingGeneration() << "</td>"
+                                       << "</tr>";
+        }
         if (!row.Next()) {
             return false;
         }
@@ -834,11 +844,18 @@ TString TTxMonitoring::RenderCutHistoryPage() {
     html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
-            html << "Persisted CutHistory request intents (latest " << CutHistoryRequestLimit << "; Hive confirmation is not tracked)";
+            html << "Persisted CutHistory request intents (latest " << CutHistoryJournalLimit
+                 << " request sets; Hive confirmation is not tracked)";
         }
-        html << "Diagnostic candidates only: GC queues are not checked and requests are not sent.";
-        PRE() {
-            html << TEscapeHtml(CutHistoryReport);
+        TABLE_CLASS("table table-bordered table-striped") {
+            TABLEHEAD() {
+                html << "<tr><th>Tablet ID</th><th>Channel</th><th>Group ID</th>"
+                        "<th>From generation (inclusive)</th><th>To generation (exclusive)</th>"
+                        "<th>Recorded at (UTC)</th><th>Recipient</th><th>Sending generation</th></tr>";
+            }
+            TABLEBODY() {
+                html << CutHistoryReport;
+            }
         }
     }
 

@@ -90,7 +90,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
-        StartFindEmptyHistoryIntervals(ctx);
         SignalTabletActive(ctx);
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
@@ -120,6 +119,13 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     }
     StartupTimeline.OnSwitchedToWork(portionsCount);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
+}
+
+void TColumnShard::OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx) {
+    if (IsCutHistoryEnabled()) {
+        FindEmptyHistoryIntervals = std::make_unique<TFindEmptyHistoryIntervals>();
+        StartFindEmptyHistoryIntervals(completedBarrierGeneration, ctx);
+    }
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {

@@ -95,26 +95,11 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
         EvUpdateChannelApproximateFreeSpace,
 
-        EvContinueFindEmptyHistoryIntervals,
-        EvFindEmptyHistoryIntervalsPortionsReady,
         EvPrefetchPortionsMetadata,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvContinueFindEmptyHistoryIntervals
-        : NActors::TEventLocal<TEvContinueFindEmptyHistoryIntervals, EvContinueFindEmptyHistoryIntervals> {};
-
-    struct TEvFindEmptyHistoryIntervalsPortionsReady
-        : NActors::TEventLocal<TEvFindEmptyHistoryIntervalsPortionsReady, EvFindEmptyHistoryIntervalsPortionsReady> {
-        std::vector<std::pair<TInternalPathId, ui64>> Portions;
-
-        explicit TEvFindEmptyHistoryIntervalsPortionsReady(std::vector<std::pair<TInternalPathId, ui64>>&& portions)
-            : Portions(std::move(portions))
-        {
-        }
-    };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:

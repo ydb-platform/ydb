@@ -129,7 +129,6 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ProposeDestSession(
     NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
-    OnSharingAdmission();
     AFL_VERIFY(session);
     return std::make_unique<TTxProposeFromInitiator>(self, session, DestSessions, "tx_propose_from_initiator");
 }
@@ -142,7 +141,6 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ConfirmDest
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(
     NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
-    OnSharingAdmission();
     AFL_VERIFY(session);
     return std::make_unique<TTxStartToSource>(self, session, SourceSessions, "tx_start_to_source");
 }

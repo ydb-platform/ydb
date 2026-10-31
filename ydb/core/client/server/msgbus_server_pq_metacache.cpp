@@ -231,10 +231,7 @@ private:
                     if (!account.Defined() || account->empty()) {
                         continue;
                     }
-                    const TString database = Topics[index]->GetOriginalTopic() == "SourceIdMeta2/replication"
-                        ? "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2"
-                        : NKikimr::JoinPath({DbRoot, *account});
-                    Topics[index]->SetDatabase(database);
+                    Topics[index]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
                     if (!Topics[index]->GetSecondaryPath("").Defined()) {
                         continue;
                     }

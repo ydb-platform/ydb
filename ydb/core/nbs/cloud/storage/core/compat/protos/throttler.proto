@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package NCloud.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Message tablet throttler information.
+
+message TThrottlerInfo
+{
+    // Time spent by a request in the throttler queue in us.
+    uint64 Delay = 1;
+
+    // Time spent by a request in the shaping queue in us.
+    uint64 ShapingDelay = 2;
+}

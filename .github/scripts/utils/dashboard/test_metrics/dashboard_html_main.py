@@ -239,13 +239,10 @@ def build_html_dashboard(
     .time-link:hover {{ color: #e53e3e; }}
     .monitor-box {{
       display: none;
-      margin: -4px 0 12px 0;
-      padding: 8px 10px;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
-      background: #f8fafc;
-      font-size: 13px;
-      line-height: 1.35;
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #475569;
     }}
     .monitor-box a {{
       color: #2563eb;
@@ -256,8 +253,9 @@ def build_html_dashboard(
     .monitor-url {{
       margin-left: 8px;
       color: #6b7280;
-      font-size: 12px;
+      font-size: 11px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      word-break: break-all;
     }}
     .headline-stats {{
       margin-bottom: 12px;
@@ -387,6 +385,11 @@ def build_html_dashboard(
       Suite filter: {suite_filter_html}
     </div>
     <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
+    <div id="monitoringLinkWrap" class="monitor-box">
+      <b>Runner monitoring:</b>
+      <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
+      <span id="monitoringLinkMeta" class="monitor-url"></span>
+    </div>
   </div>
   <div id="headlineStats" class="headline-stats" style="display:none;">
     <div class="headline-stats-title">Resource summary</div>
@@ -400,11 +403,6 @@ def build_html_dashboard(
     <summary><b>Config</b></summary>
     <pre id="runConfig"></pre>
   </details>
-  <div id="monitoringLinkWrap" class="monitor-box">
-    <b>Runner monitoring:</b>
-    <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
-    <span id="monitoringLinkMeta" class="monitor-url"></span>
-  </div>
   <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
     <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
       <span>CPU suggestions (recommended_cpu for runner)</span>
@@ -787,7 +785,7 @@ def build_html_dashboard(
       if (metric === 'ram') return n.toFixed(3) + ' GB';
       if (metric === 'ram_host') return n.toFixed(1) + ' GB';
       if (metric === 'disk') return n.toFixed(1) + ' MB/s';
-      if (metric === 'total_duration_sec') {{
+      if (metric === 'total_duration_sec' || metric === 'build_duration_sec' || metric === 'test_duration_sec') {{
         const sec = Math.max(0, Math.round(n));
         const h = Math.floor(sec / 3600);
         const m = Math.floor((sec % 3600) / 60);
@@ -798,6 +796,67 @@ def build_html_dashboard(
         return hh + ':' + mm + ':' + ss + ' (' + sec + 's)';
       }}
       return String(Math.round(n));
+    }}
+    function activitySpanSec(kinds) {{
+      const activity = data.ya_activity || {{}};
+      let lo = Number.POSITIVE_INFINITY;
+      let hi = Number.NEGATIVE_INFINITY;
+      (kinds || []).forEach((kind) => {{
+        const series = activity[kind] || {{}};
+        const xs = Array.isArray(series.xs) ? series.xs : [];
+        const ys = Array.isArray(series.ys) ? series.ys : [];
+        for (let i = 0; i < xs.length; i++) {{
+          const x = Number(xs[i]);
+          const y = Number(ys[i]);
+          if (!Number.isFinite(x) || !Number.isFinite(y) || y <= 0) continue;
+          if (x < lo) lo = x;
+          if (x > hi) hi = x;
+        }}
+      }});
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi < lo) return null;
+      return {{ start: lo, end: hi }};
+    }}
+    function resolvePhaseDurations(hs) {{
+      const hasBuild = Number.isFinite(Number(hs.build_duration_sec));
+      const hasTest = Number.isFinite(Number(hs.test_duration_sec));
+      const hasTotal = Number.isFinite(Number(hs.total_duration_sec));
+      // New payloads already ship all three; keep them as-is.
+      if (hasBuild && hasTest && hasTotal) {{
+        return {{
+          totalSec: Math.max(0, Number(hs.total_duration_sec)),
+          buildSec: Math.max(0, Number(hs.build_duration_sec)),
+          testSec: Math.max(0, Number(hs.test_duration_sec)),
+        }};
+      }}
+      // Older JSON only had total_duration_sec (= test wall). Derive the rest
+      // from ya_activity so the summary still shows build/test/total.
+      let testSec = hasTest ? Math.max(0, Number(hs.test_duration_sec))
+        : (hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0);
+      let buildSec = hasBuild ? Math.max(0, Number(hs.build_duration_sec)) : 0;
+      let totalSec = hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0;
+      const buildSpan = activitySpanSec(['build', 'archive', 'cache', 'link']);
+      const testSpan = activitySpanSec(['test_tm', 'test_report']);
+      if (!hasBuild && buildSpan) {{
+        const testStart = testSpan ? testSpan.start : null;
+        if (testStart != null && testStart > buildSpan.start) {{
+          buildSec = Math.max(0, testStart - buildSpan.start);
+        }} else {{
+          buildSec = Math.max(0, buildSpan.end - buildSpan.start);
+        }}
+      }}
+      if (!hasTest && testSpan) {{
+        testSec = Math.max(0, testSpan.end - testSpan.start);
+      }}
+      const starts = [];
+      const ends = [];
+      if (buildSpan) {{ starts.push(buildSpan.start); ends.push(buildSpan.end); }}
+      if (testSpan) {{ starts.push(testSpan.start); ends.push(testSpan.end); }}
+      if (starts.length && ends.length && buildSec > 0) {{
+        totalSec = Math.max(0, Math.max.apply(null, ends) - Math.min.apply(null, starts));
+      }} else if (!totalSec) {{
+        totalSec = Math.max(buildSec, 0) + Math.max(testSec, 0);
+      }}
+      return {{ totalSec, buildSec, testSec }};
     }}
     function renderHeadlineStats() {{
       const wrap = document.getElementById('headlineStats');
@@ -829,7 +888,10 @@ def build_html_dashboard(
       const cRegularMuted = cRegularMutedBase + cMutedOther;
       const cFailedTotal = cTimeoutTotal + cRegularTotal;
       const cFailedMuted = cTimeoutMuted + cRegularMuted;
-      const wallExact = formatHeadlineValue('total_duration_sec', hs.total_duration_sec).split(' (')[0];
+      const phases = resolvePhaseDurations(hs);
+      const wallExact = formatHeadlineValue('total_duration_sec', phases.totalSec).split(' (')[0];
+      const buildExact = formatHeadlineValue('build_duration_sec', phases.buildSec).split(' (')[0];
+      const testExact = formatHeadlineValue('test_duration_sec', phases.testSec).split(' (')[0];
       const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
       const unalignedNote = activityUnaligned
         ? ('<span class="group" style="color:#b45309;" title="No report↔evlog chunk matches; '
@@ -842,8 +904,12 @@ def build_html_dashboard(
           '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites</span>' +
           '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks</span>' +
           '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests</span>' +
-          '<span class="group" title="From the first test start to the last test end">' +
+          '<span class="group" title="From the first build/archive/cache/link activity to the last test end">' +
             '<b>' + wallExact + '</b> total duration</span>' +
+          '<span class="group" title="From the first build/archive/cache/link activity to the first test start">' +
+            '<b>' + buildExact + '</b> build duration</span>' +
+          '<span class="group" title="From the first test start to the last test end">' +
+            '<b>' + testExact + '</b> test duration</span>' +
           '<span class="group">tests <b>' + String(failedTotal) + '</b> failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
             ' · <b>' + String(timeoutTotal) + '</b> timeout · <b>' + String(skippedTotal) + '</b> skipped</span>' +
           '<span class="group">chunks <b>' + String(cFailedTotal) + '</b> failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +

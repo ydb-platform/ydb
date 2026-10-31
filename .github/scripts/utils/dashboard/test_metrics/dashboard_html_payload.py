@@ -96,6 +96,94 @@ def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[st
     return out
 
 
+def _first_last_active_sec(
+    deltas: list[tuple[float, int]],
+) -> Optional[tuple[float, float]]:
+    """Return (first_active_sec, last_active_sec) from (+1/-1) activity deltas."""
+    if not deltas:
+        return None
+    count = 0
+    first: Optional[float] = None
+    last: Optional[float] = None
+    for t_us, sign in sorted(deltas, key=lambda p: float(p[0])):
+        try:
+            t = float(t_us) / 1_000_000.0
+            step = int(sign)
+        except (TypeError, ValueError):
+            continue
+        prev = count
+        count += step
+        if prev <= 0 and count > 0 and first is None:
+            first = t
+        if count > 0:
+            last = t
+        elif prev > 0 and count <= 0:
+            last = t
+    if first is None or last is None or last < first:
+        return None
+    return (first, last)
+
+
+def _phase_durations_sec(
+    runs: list[dict[str, Any]],
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
+) -> dict[str, float]:
+    """Wall clocks for the whole job, build phase, and test phase.
+
+    - test: first suite/chunk start → last end (report/evlog runs)
+    - build: first build/archive/cache/link activity → test start (or last
+      build-related activity when there are no tests yet)
+    - total: earliest of build/test start → latest of build/test end
+    """
+    starts = [
+        float(r.get("start_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("start_us", 0.0) or 0.0) > 0.0
+    ]
+    ends = [
+        float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("end_us", 0.0) or 0.0) > 0.0
+    ]
+    test_start = min(starts) if starts else None
+    test_end = max(ends) if ends else None
+    test_duration = (
+        max(0.0, float(test_end) - float(test_start))
+        if test_start is not None and test_end is not None
+        else 0.0
+    )
+
+    deltas_by_kind = ya_activity_deltas or {}
+    build_points: list[float] = []
+    for kind in ("build", "archive", "cache", "link"):
+        span = _first_last_active_sec(list(deltas_by_kind.get(kind) or []))
+        if span is None:
+            continue
+        build_points.extend(span)
+    build_start = min(build_points) if build_points else None
+    build_end = max(build_points) if build_points else None
+
+    if build_start is not None and test_start is not None and test_start > build_start:
+        build_duration = max(0.0, float(test_start) - float(build_start))
+    elif build_start is not None and build_end is not None:
+        build_duration = max(0.0, float(build_end) - float(build_start))
+    else:
+        build_duration = 0.0
+
+    phase_starts = [t for t in (build_start, test_start) if t is not None]
+    phase_ends = [t for t in (build_end, test_end) if t is not None]
+    if phase_starts and phase_ends:
+        total_duration = max(0.0, max(phase_ends) - min(phase_starts))
+    else:
+        total_duration = test_duration
+
+    return {
+        "total_duration_sec": float(total_duration),
+        "build_duration_sec": float(build_duration),
+        "test_duration_sec": float(test_duration),
+    }
+
+
 def _build_headline_stats(
     cpu_tracks_suite: dict[str, list[float]],
     ram_tracks_suite: dict[str, list[float]],
@@ -106,13 +194,8 @@ def _build_headline_stats(
     issues_summary: Optional[dict[str, int]],
     suite_chunk_issues_summary: Optional[dict[str, int]],
     resources_overlay: Optional[dict[str, Any]] = None,
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> dict[str, Any]:
-    starts = [float(r.get("start_us", 0.0) or 0.0) for r in runs if float(r.get("start_us", 0.0) or 0.0) > 0.0]
-    ends = [float(r.get("end_us", 0.0) or 0.0) for r in runs if float(r.get("end_us", 0.0) or 0.0) > 0.0]
-    duration_sec = 0.0
-    if starts and ends:
-        duration_sec = max(0.0, (max(ends) - min(starts)) / 1_000_000.0)
-
     suite_total = len(set(str(r.get("suite_path") or "") for r in runs if str(r.get("suite_path") or "")))
     chunk_labels = set()
     for r in runs:
@@ -159,7 +242,7 @@ def _build_headline_stats(
         "ram": _describe_distribution(_series_total_values(ram_tracks_suite)),
         "active_chunks": _describe_distribution([float(v or 0.0) for v in ys_active]),
         "tests": _describe_distribution(_series_total_values(tests_tracks_suite)),
-        "total_duration_sec": duration_sec,
+        **_phase_durations_sec(runs, ya_activity_deltas),
         **_host_resource_stats(resources_overlay),
     }
 
@@ -249,6 +332,7 @@ def build_dashboard_payload(
         issues_summary=issues_summary,
         suite_chunk_issues_summary=suite_chunk_issues_summary,
         resources_overlay=resources_overlay,
+        ya_activity_deltas=deltas_by_kind,
     )
 
     xs_cpu_suite, cpu_tracks_suite = downsample_step_series(xs_cpu_suite, cpu_tracks_suite, max_points)

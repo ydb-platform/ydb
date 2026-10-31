@@ -11,7 +11,7 @@ from _paths import TEST_METRICS, add_product_paths
 
 add_product_paths(TEST_METRICS)
 
-from dashboard_html_payload import _build_headline_stats
+from dashboard_html_payload import _build_headline_stats, _phase_durations_sec
 
 
 class HeadlineHostStatsTest(unittest.TestCase):
@@ -42,6 +42,9 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertEqual(stats["ram_host"]["max"], 200.0)
         self.assertEqual(stats["disk_read_host"]["max"], 100.0)
         self.assertEqual(stats["disk_write_host"]["samples"], 5.0)
+        self.assertEqual(stats["test_duration_sec"], 1.0)
+        self.assertEqual(stats["total_duration_sec"], 1.0)
+        self.assertEqual(stats["build_duration_sec"], 0.0)
 
     def test_missing_monitor_omits_host_keys(self):
         stats = _build_headline_stats(
@@ -57,6 +60,23 @@ class HeadlineHostStatsTest(unittest.TestCase):
         )
         self.assertNotIn("cpu_host", stats)
         self.assertNotIn("disk_read_host", stats)
+
+    def test_phase_durations_split_build_and_test(self):
+        # Build 0..5s, tests 5..15s → build=5, test=10, total=15.
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 5_000_000, "end_us": 15_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (4_000_000, -1)],
+                "archive": [(1_000_000, 1), (4_500_000, -1)],
+                "cache": [],
+                "link": [],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 10.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 15.0)
 
 
 if __name__ == "__main__":

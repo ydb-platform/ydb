@@ -118,6 +118,20 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn('id="activeBySuiteDetails"', source)
         self.assertIn("Tests in parallel by suite", source)
         self.assertIn("Active chunks by suite", source)
+        # Runner monitoring lives inside the dashboard header, not as a
+        # standalone box between Config and CPU suggestions.
+        header_idx = source.find('id="dashboardHeader"')
+        monitoring_idx = source.find('id="monitoringLinkWrap"')
+        headline_idx = source.find('id="headlineStats"')
+        self.assertGreater(header_idx, 0)
+        self.assertGreater(monitoring_idx, header_idx)
+        self.assertGreater(headline_idx, monitoring_idx)
+        header_block = source[header_idx:headline_idx]
+        self.assertIn('id="monitoringLinkWrap"', header_block)
+        self.assertIn("Runner monitoring:", header_block)
+        self.assertIn("build duration", source)
+        self.assertIn("test duration", source)
+        self.assertIn("function resolvePhaseDurations(hs)", source)
         self.assertIn("CPU by suite · estimated cores", source)
         self.assertIn("chart-tile-sub", source)
         # Expand matches the ya-activity full-row slot (same as .span-2).

@@ -19,6 +19,8 @@ items:
     href: auth-env.md
   - name: С помощью логина и пароля
     href: auth-static.md
+  - name: С помощью OIDC
+    href: auth-oidc.md
 - name: Балансировка
   items:
   - name: Обзор
@@ -29,7 +31,7 @@ items:
     href: balancing-prefer-local.md
   - name: Предпочитать конкретную зону доступности
     href: balancing-prefer-location.md
-  - name: Предпочитать пайл c конкретным состоянием
+  - name: Предпочитать пайл с конкретным состоянием
     href: balancing-prefer-pile.md
 - name: Выполнение повторных запросов
   href: retry.md

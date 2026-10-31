@@ -1,5 +1,10 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+>>>>>>> 47d39c9ecd9 (LOGBROKER-10731 Fix)
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
 
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.

@@ -27,16 +27,16 @@ PY_SRCS(
     conftest.py
 )
 
-REQUIREMENTS(cpu:4)
-REQUIREMENTS(ram:16)
+REQUIREMENTS(cpu:1)
+REQUIREMENTS(ram:16 cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:20)
+    REQUIREMENTS(ram:20 cpu:1)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:1)
     SPLIT_FACTOR(20)
 ENDIF()
 

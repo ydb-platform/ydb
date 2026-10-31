@@ -18,7 +18,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-REQUIREMENTS(ram:16 cpu:1)
+REQUIREMENTS(ram:16 cpu:9)
 TIMEOUT(600)
 
 PEERDIR(

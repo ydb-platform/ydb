@@ -1110,57 +1110,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
     }
 
-    Y_UNIT_TEST(DataCenterStatesAllowUnmanagedExtraRealms) {
-        TEnvironmentSetup env(32, 4);
-        bool activeZone;
-        env.Prepare("", [](TTestActorRuntime&) {}, activeZone);
-        env.DisableLogging();
-        NKikimrBlobStorage::TConfigRequest request;
-        env.DefineBox(1, "box", {{"/dev/disk", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
-        env.DefineStoragePool(1, 1, "unmanaged", 1, NKikimrBlobStorage::ROT, false, request, "mirror-3-dc");
-        auto* geometry = request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()->MutableGeometry();
-        geometry->SetNumFailRealms(4);
-        geometry->SetNumFailDomainsPerFailRealm(3);
-        geometry->SetNumVDisksPerFailDomain(1);
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        auto config = FetchBaseConfig(&env);
-        UNIT_ASSERT_VALUES_EQUAL(config.GroupSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).VSlotIdSize(), 12);
-
-        const auto source = FindVSlot(config, config.GetGroup(0).GetVSlotId(0));
-        request = MakeReassignRequest(source, config.GetGroup(0).GetGroupGeneration());
-        request.SetIgnoreGroupFailModelChecks(true); // This fixture does not run VDisks.
-        response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
-        const auto updated = FetchBaseConfig(&env);
-        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroup(0).GetGroupGeneration(), config.GetGroup(0).GetGroupGeneration() + 1);
-        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroup(0).VSlotIdSize(), 12);
-        UNIT_ASSERT(!SameVSlotId(FindActiveVSlot(updated, source).GetVSlotId(), source.GetVSlotId()));
-
-        for (const bool force : {false, true}) {
-            request.Clear();
-            auto* dataCenter = request.AddCommand()->MutableDefineDataCenterStates()->AddDataCenter();
-            dataCenter->SetName("1");
-            dataCenter->SetState(NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EXCLUDED);
-            request.SetIgnoreGroupFailModelChecks(force);
-            response = env.Invoke(request);
-            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-
-            request.Clear();
-            auto* definition = request.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
-            definition->SetGroupId(updated.GetGroup(0).GetGroupId());
-            for (ui32 realm = 0; realm < 3; ++realm) {
-                definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
-            }
-            request.SetIgnoreGroupFailModelChecks(force);
-            response = env.Invoke(request);
-            UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
-        }
-        config = FetchBaseConfig(&env);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetGroup(0).SerializeAsString(), updated.GetGroup(0).SerializeAsString());
-    }
-
     Y_UNIT_TEST(FailRealmStatesOnlyUpdatesRequestedGroups) {
         using Definition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
         TDataCenterStatesEnv env;

@@ -10,11 +10,13 @@ namespace NTable {
     struct TPageCollectionComponents {
         // fully identified by this LargeGlobId
         NPageCollection::TLargeGlobId LargeGlobId;
-        // raw serialized meta blob (parsed by StageParseMeta)
-        TSharedData RawMeta;
         // Optional pre-populated pages (compaction path only)
         TVector<NPageCollection::TLoadedPage> RegularPages;
         TVector<NPageCollection::TLoadedPage> StickyPages;
+        // Parsed metadata, replaced with the shared-cache instance before building the part.
+        TAtomicSharedPtr<const NPageCollection::TMeta> SharedMeta;
+
+        void SetMeta(TSharedData raw);
     };
 
     struct TPartComponents {

@@ -111,6 +111,8 @@ namespace NKikimr::NSharedCache {
     struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TIntrusivePtr<TPage>> Pages;
+        // Globs buffer shared with its prebuilt page for allocation accounting
+        TSharedData GlobsPageData;
 
         TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
             : PageCollection(std::move(pageCollection))
@@ -119,11 +121,13 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
-        TEvRequest(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageLocation> pages, ui64 cookie = 0)
+        TEvRequest(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection,
+            TVector<TPageLocation> pages, ui64 cookie = 0, bool metaOnly = false)
             : Priority(priority)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
             , Cookie(cookie)
+            , MetaOnly(metaOnly)
         { }
 
         const EPriority Priority;
@@ -132,6 +136,8 @@ namespace NKikimr::NSharedCache {
         TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
         NWilson::TTraceId TraceId;
         const ui64 Cookie;
+        // Read-only metadata lookup; ownership is established by ordinary requests/attachment.
+        const bool MetaOnly;
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
@@ -175,6 +181,8 @@ namespace NKikimr::NSharedCache {
         const EStatus Status;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TLoaded> Pages;
+        // Metadata-only replies still echo the request's PageCollection for correlation.
+        TAtomicSharedPtr<const NPageCollection::TMeta> SharedMeta;
         TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
         const ui64 Cookie;
     };

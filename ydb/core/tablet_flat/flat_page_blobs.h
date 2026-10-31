@@ -118,6 +118,18 @@ namespace NPage {
             return Raw.size();
         }
 
+        i64 GetMetadataMemoryUsage() const noexcept override {
+            return sizeof(TExtBlobs) + Raw.GetAllocationSize();
+        }
+
+        const TSharedData* GetMetadataBuffer() const noexcept override {
+            return &Raw;
+        }
+
+        TAtomicSharedPtr<const NPageCollection::TMeta> GetSharedMeta() const noexcept override {
+            return {};
+        }
+
     public:
         const TSharedData Raw;
 

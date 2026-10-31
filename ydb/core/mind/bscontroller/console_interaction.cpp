@@ -246,12 +246,17 @@ namespace NKikimr::NBsController {
         }
     }
 
-    void TBlobStorageController::TConsoleInteraction::OnConfigCommit() {
+    void TBlobStorageController::TConsoleInteraction::OnConfigCommit(bool mainConfigChanged) {
         CommitInProgress = false;
         if (!Working) {
             return;
         }
         if (ConsolePipe) {
+            if (!mainConfigChanged) {
+                // A storage-only replacement must not advance the main config version in Console.
+                OnConsoleCommit();
+                return;
+            }
             Y_ABORT_UNLESS(Self.YamlConfig);
             if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
                 NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
@@ -294,14 +299,18 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:
-                MaybeDisableConfigV2();
-                if (ClientId) {
-                    IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
-                }
+                OnConsoleCommit();
                 break;
 
             default:
                 Y_FAIL("Unexpected console commit config response status: %d", status);
+        }
+    }
+
+    void TBlobStorageController::TConsoleInteraction::OnConsoleCommit() {
+        MaybeDisableConfigV2();
+        if (ClientId) {
+            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }
     }
 
@@ -314,17 +323,24 @@ namespace NKikimr::NBsController {
 
         const bool reasonOngoingCommit = CommitInProgress || (ClientId && ClientId != ev->Sender);
         if (!ConsolePipe || reasonOngoingCommit || (!Self.EnableConfigV2 && !record.GetSwitchEnableConfigV2())) {
-            // reply to newly came query
-            const TActorId temp = std::exchange(ClientId, ev->Sender);
+            // reply to newly came query; the state of the request going on, if any, stays as it is
+            auto reject = [&](NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status, TString errorReason,
+                    bool disabledConfigV2 = false) {
+                auto resp = std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigResponse>(status,
+                    std::move(errorReason));
+                if (disabledConfigV2) {
+                    resp->Record.SetDisabledConfigV2(true);
+                }
+                Self.Send(ev->Sender, resp.release());
+            };
             if (!ConsolePipe) {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
                     "connection to Console tablet terminated");
             } else if (reasonOngoingCommit) {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
             } else {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
             }
-            ClientId = temp;
             return;
         }
 
@@ -473,11 +489,11 @@ namespace NKikimr::NBsController {
         }
 
         if (record.GetSkipConsoleValidation() || !record.HasClusterYaml()) {
-            // TODO(alexvru): INCORRECT!!!
-            Y_DEBUG_ABORT();
+            // nothing for Console to validate: the replacement goes on in BSC as if Console had found it valid
             auto validateConfigResponse = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
             validateConfigResponse->Record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid);
-            Self.Send(ev->Sender, validateConfigResponse.release());
+            TActivationContext::Send(new IEventHandle(Self.SelfId(), Self.SelfId(), validateConfigResponse.release(), 0,
+                ExpectedValidationTimeoutCookie));
             return;
         }
 
@@ -494,7 +510,9 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"marker", "BSC36"},
             {"consolePipe", ConsolePipe});
-        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
+        // the reply comes with the cookie of the request, so a late one is told from the reply to a newer request
+        ValidationRequestCookie = ExpectedValidationTimeoutCookie;
+        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release(), ExpectedValidationTimeoutCookie);
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
@@ -531,13 +549,20 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::HandleValidationTimeout(TAutoPtr<IEventHandle>& ev) {
         Y_ABORT_UNLESS(ValidationTimeout); // sanity check
-        ValidationTimeout = {};
 
-        if (ev->Cookie == ExpectedValidationTimeoutCookie) {
+        // the replacement going on still waits for Console to validate it
+        const bool pending = ClientId && ValidationRequestCookie == ExpectedValidationTimeoutCookie;
+        if (ev->Cookie == ExpectedValidationTimeoutCookie || (pending && ValidationTimeout <= TActivationContext::Now())) {
+            // the timer of a finished request may come late, after the deadline of the one going on
+            ValidationTimeout = {};
             IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::ValidationTimeout, "validation timeout");
-        } else if (ValidationTimeout) {
+        } else if (pending) {
+            // the timer of a finished request; the one going on now relies on it for its deadline, as no timer of
+            // its own was scheduled while this one was
             TActivationContext::Schedule(ValidationTimeout, new IEventHandle(TEvPrivate::EvValidationTimeout, 0,
                 Self.SelfId(), TActorId(), nullptr, ExpectedValidationTimeoutCookie));
+        } else {
+            ValidationTimeout = {};
         }
     }
 
@@ -574,6 +599,14 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Console validate config response",
             {"marker", "BSC27"},
             {"response", ev->Get()->Record});
+        if (ev->Cookie != ExpectedValidationTimeoutCookie || !ClientId) {
+            // the request it replies to has timed out, a newer one may be going on
+            YDB_LOG_DEBUG("Late console validate config response ignored",
+                {"marker", "BSC56"},
+                {"cookie", ev->Cookie},
+                {"expectedCookie", ExpectedValidationTimeoutCookie});
+            return;
+        }
         ++ExpectedValidationTimeoutCookie; // spoil validation timeout cookie to prevent event from firing
         using TResponseProto = NKikimrBlobStorage::TEvControllerReplaceConfigResponse;
         auto& record = ev->Get()->Record;

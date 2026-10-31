@@ -24,7 +24,7 @@ IF (SANITIZER_TYPE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:20)
 ELSE()
-    REQUIREMENTS(ram:12)
+    REQUIREMENTS(ram:12 cpu:2)
 ENDIF()
 
 PEERDIR(

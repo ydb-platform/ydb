@@ -1,72 +1,89 @@
-
 # Serial data types
 
-Serial data types are integers with an additional value-generation mechanism. They are used for auto-increment columns: each new row inserted into the table automatically gets a unique value in such a column (similar to the [SERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) type in PostgreSQL or [AUTO_INCREMENT](https://dev.mysql.com/doc/refman/9.0/en/example-auto-increment.html) in MySQL).
+Serial data types are integers with automatic value generation. If a column value is omitted when adding a row, {{ ydb-short-name }} obtains it from the [sequence](../../../concepts/datamodel/sequence.md) associated with that column.
 
-{% note info %}
+Serial types are supported for both key and non-key columns in [row-oriented tables](../../../concepts/datamodel/table.md#row-oriented-tables). Column-oriented tables do not support this mechanism.
 
-Using serial types as a primary key is not recommended: monotonically increasing values lead to uneven data distribution and hot partitions. For details, see [{#T}](../../../dev/primary-key/row-oriented.md).
+## Types and value ranges {#types-and-value-ranges}
 
-{% endnote %}
+A sequence is created automatically for each serial column when you [create a table](../syntax/create_table/index.md). By default, generation starts at 1 with an increment of 1. You can change the start value, increment, and generator position using [ALTER SEQUENCE](../syntax/alter-sequence.md).
 
-## Usage example
+| Type          | Maximum value | Value type |
+|---------------|---------------|------------|
+| `SmallSerial` | $2^{15}-1$    | `Int16`    |
+| `Serial2`     | $2^{15}-1$    | `Int16`    |
+| `Serial`      | $2^{31}-1$    | `Int32`    |
+| `Serial4`     | $2^{31}-1$    | `Int32`    |
+| `Serial8`     | $2^{63}-1$    | `Int64`    |
+| `BigSerial`   | $2^{63}-1$    | `Int64`    |
 
-``` yql
-CREATE TABLE users (
-    user_id Serial,
-    name Utf8,
-    email Utf8,
-    PRIMARY KEY (user_id)
-);
-```
-
-``` yql
-UPSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
-INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com');
-REPLACE INTO users (name, email) VALUES ('John', 'john@example.com');
-```
-
-``` yql
-SELECT * FROM users;
-```
-
-| email               | name  | user_id |
-|---------------------|-------|---------|
-| `alice@example.com` | Alice | 1       |
-| `bob@example.com`   | Bob   | 2       |
-|  `john@example.com` | John  | 3       |
-
-You can supply a value for a `Serial` column explicitly on insert; the row is then handled like a plain integer column, and the `Sequence` is not affected:
-
-``` yql
-UPSERT INTO users (user_id, name, email) VALUES (4, 'Peter', 'peter@example.com');
-```
-
-## Description
-
-Only columns that participate in a table's primary key may use the `Serial` type.
-
-Defining this type on a column creates a separate schema object, `Sequence`, bound to that column and used as a generator of sequence values. This object is private and hidden from the user. The `Sequence` is destroyed together with the table.
-
-Sequence values start at 1, increment by 1, and are bounded according to the type used.
-
-| Type           | Maximum value | Value type |
-|----------------|---------------|------------|
-| `SmallSerial`  | $2^{15}–1$    | `Int16`    |
-| `Serial2`      | $2^{15}–1$    | `Int16`    |
-| `Serial`       | $2^{31}–1$    | `Int32`    |
-| `Serial4`      | $2^{31}–1$    | `Int32`    |
-| `Serial8`      | $2^{63}–1$    | `Int64`    |
-|  `BigSerial`   | $2^{63}–1$    | `Int64`    |
-
-If the sequence overflows on insert, an error is returned:
+If the sequence has no more values available, a write that requires an automatically generated value fails:
 
 ```text
 Error: Failed to get next val for sequence: /dev/test/users/_serial_column_user_id, status: SCHEME_ERROR
     <main>: Error: sequence [OwnerId: <some>, LocalPathId: <some>] doesn't have any more values available, code: 200503
 ```
 
-The next value is allocated by the generator before the row is actually inserted and is considered consumed even if the row is not successfully written (for example, when the transaction rolls back). Therefore the set of values in such a column may have gaps and consist of several disjoint ranges.
+The generator allocates a value before the row is written. A failed write or transaction rollback does not return the allocated value to the generator, so the column can have gaps. For details on allocation and table operations, see [{#T}](../../../concepts/datamodel/sequence.md).
 
-For tables with auto-increment columns, the [copy](../../../reference/ydb-cli/tools-copy.md), [dump](../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../reference/ydb-cli/export-import/import-file.md), and [import](../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../reference/ydb-cli/export-import/export-s3.md) operations are supported.
+## Changing columns
 
+A serial column automatically has the `NOT NULL` constraint. The current [ALTER TABLE](../syntax/alter_table/columns.md) restrictions for these columns are:
+
+* You cannot add a serial column to an existing table using `ADD COLUMN`. Specify the serial type when creating the table.
+* You cannot change nullability or the column family (`FAMILY`), or set or drop a default value (`DEFAULT`). Change the generator parameters separately using [ALTER SEQUENCE](../syntax/alter-sequence.md).
+* You can drop a non-key serial column using `DROP COLUMN`. Its sequence is dropped with it. You cannot drop a column that is part of the primary key, just as with other key columns.
+
+## Usage example {#usage-example}
+
+{% note info %}
+
+A monotonically increasing primary key can distribute load unevenly across partitions. For recommendations on using serial columns in a key, see [{#T}](../../../dev/primary-key/row-oriented.md#monotonic-serial).
+
+{% endnote %}
+
+Create a users table with a composite primary key. The application calculates `user_hash`, for example, by hashing the `email` address. The example uses illustrative hash values.
+
+```yql
+CREATE TABLE users (
+    user_hash Uint64,
+    user_id Serial,
+    name Utf8,
+    email Utf8,
+    PRIMARY KEY (user_hash, user_id)
+);
+```
+
+When you write using [UPSERT](../syntax/upsert_into.md), [INSERT](../syntax/insert_into.md), or [REPLACE](../syntax/replace_into.md) without specifying `user_id`, this column's value is generated automatically:
+
+```yql
+UPSERT INTO users (user_hash, name, email) VALUES (123456789, 'Alice', 'alice@example.com');
+INSERT INTO users (user_hash, name, email) VALUES (987654321, 'Bob', 'bob@example.com');
+REPLACE INTO users (user_hash, name, email) VALUES (111111111, 'John', 'john@example.com');
+```
+
+Read the rows using [SELECT](../syntax/select/index.md):
+
+```yql
+SELECT * FROM users ORDER BY user_id;
+```
+
+If the statements run sequentially on a new table with no other requests to the generator, the result is:
+
+| user_hash | email               | name  | user_id |
+|-----------|---------------------|-------|---------|
+| 123456789 | `alice@example.com` | Alice | 1       |
+| 987654321 | `bob@example.com`   | Bob   | 2       |
+| 111111111 | `john@example.com`  | John  | 3       |
+
+## Explicit values {#explicit-values}
+
+You can specify a serial column's value explicitly, for example, when restoring data:
+
+```yql
+UPSERT INTO users (user_hash, user_id, name, email) VALUES (222222222, 10, 'Peter', 'peter@example.com');
+```
+
+This write is handled like a regular integer value and does not change the sequence position. The generator does not check or skip values already in the table. As a result, subsequent automatic generation or `ALTER SEQUENCE RESTART` can produce a value that has already been written.
+
+For a non-key serial column, equal values do not by themselves violate primary key uniqueness. If the serial column is part of the key, a conflict depends on the **entire** primary key matching: `INSERT` fails, `UPSERT` updates the existing row, and `REPLACE` replaces it. When mixing explicit and automatically generated values, align the sequence position with existing data using [ALTER SEQUENCE](../syntax/alter-sequence.md).

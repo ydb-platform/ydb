@@ -4564,6 +4564,53 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ShouldSucceedOnIndexedTable(1, EnableDataShardDirectPartImport, "");
     }
 
+    Y_UNIT_TEST_TWIN(ShouldFailOnColumnTableWithMissingTier, EnableDependencyRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTieringInColumnShard(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTableImportDependencyRetry(EnableDependencyRetry);
+
+        const auto data = GenerateTestData(TTypedScheme(EPathTypeColumnTable, R"(
+            columns {
+                name: "ts"
+                type { type_id: TIMESTAMP }
+                not_null: true
+            }
+            primary_key: "ts"
+            store_type: STORE_TYPE_COLUMN
+            ttl_settings {
+                tiered_ttl {
+                    tiers {
+                        date_type_column {
+                            column_name: "ts"
+                            expire_after_seconds: 86400
+                        }
+                        evict_to_external_storage { storage: "/MyRoot/MissingTier" }
+                    }
+                }
+            }
+        )"), {{"", 0}});
+
+        ui32 createAttempts = 0;
+        const ui32 expectedAttempts = EnableDependencyRetry ? 2 : 1;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateColumnTable) {
+                    ++createAttempts;
+                    UNIT_ASSERT_C(createAttempts <= expectedAttempts,
+                        "Column table import keeps retrying without progress");
+                }
+            }
+        });
+
+        const ui64 id = Run(runtime, env, ConvertTestData(data), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(createAttempts, expectedAttempts);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+            "Object not found: /MyRoot/MissingTier");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST_QUAD(ImportStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject, EnableDataShardDirectPartImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

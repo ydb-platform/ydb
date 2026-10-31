@@ -1,6 +1,7 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
 
@@ -39,6 +40,7 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -4716,6 +4718,143 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         UNIT_ASSERT_STRINGS_EQUAL(FetchShowCreateTableDdl(session, table), originalDdl);
         CompareResults(GetTableContent(session, table, "pk"), originalContent);
+    }
+
+    Y_UNIT_TEST(OlapTieringPreservedThroughExportImport) {
+        std::atomic<ui64> s3Writes = 0;
+        TPortManager portManager;
+        const auto s3Port = portManager.GetPort();
+        NWrappers::NTestHelpers::TS3Mock::TSettings s3Settings(s3Port);
+        s3Settings.ErrorResponse = [&](TStringBuf method, TStringBuf path) {
+            if (method == "PUT" && path.StartsWith("/tiering-bucket/")) {
+                ++s3Writes;
+            }
+            return TString{};
+        };
+        NWrappers::NTestHelpers::TS3Mock s3Mock(s3Settings);
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSkipSpecialCheckForEvict(true);
+        csController->SetOverrideTasksActualizationLag(TDuration::Zero());
+        TS3TestEnv testEnv;
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableTieringInColumnShard(true);
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableColumnTableImportDependencyRetry(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", testEnv.GetServer().GetPort()))
+            .SetDatabase("/Root").SetAuthToken("root@builtin"));
+        TTableClient tableClient(driver);
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        constexpr const char* table = "/Root/olap_tiering_backup";
+
+        TSchemeClient schemeClient(driver);
+        const auto permissionsResult = schemeClient.ModifyPermissions("/Root",
+            TModifyPermissionsSettings().AddGrantPermissions(TPermissions("root@builtin", {"ydb.generic.full"}))
+        ).GetValueSync();
+        UNIT_ASSERT_C(permissionsResult.IsSuccess(), permissionsResult.GetIssues().ToString());
+
+        ExecuteQuery(session, R"(
+            CREATE SECRET `/Root/tiering_access_key` WITH (value = "test_key");
+            CREATE SECRET `/Root/tiering_secret_key` WITH (value = "test_secret");
+        )", true);
+        for (const auto* tier : {"/Root/tier1", "/Root/tier2"}) {
+            ExecuteQuery(session, std::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "http://localhost:{}/tiering-bucket",
+                    AUTH_METHOD = "AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_PATH = "/Root/tiering_access_key",
+                    AWS_SECRET_ACCESS_KEY_SECRET_PATH = "/Root/tiering_secret_key",
+                    AWS_REGION = "ru-central1"
+                );
+            )", tier, s3Port), true);
+        }
+        ExecuteQuery(session, std::format(R"(
+            CREATE TABLE `{}` (
+                ts Timestamp NOT NULL,
+                value Utf8,
+                PRIMARY KEY (ts)
+            ) PARTITION BY HASH(ts) WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = 1,
+                TTL = Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                      Interval("P7D") TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                      Interval("P36500D") DELETE ON ts
+            );
+        )", table), true);
+        ExecuteQuery(session, std::format(R"(
+            UPSERT INTO `{}` (ts, value) VALUES
+                (Timestamp("2020-01-01T00:00:00Z"), "first"),
+                (Timestamp("2020-01-02T00:00:00Z"), "second");
+        )", table));
+        const auto originalContent = GetTableContent(session, table, "ts");
+        const auto originalDdl = FetchShowCreateTableDdl(session, table);
+        UNIT_ASSERT_STRING_CONTAINS(originalDdl, "/Root/tier1");
+        UNIT_ASSERT_STRING_CONTAINS(originalDdl, "/Root/tier2");
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+        const auto originalTier1 = DescribeExternalDataSource(tableSession, "/Root/tier1");
+        const auto originalTier2 = DescribeExternalDataSource(tableSession, "/Root/tier2");
+
+        const auto waitForEviction = [&](ui64 writesBefore, TStringBuf stage) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            ui64 tierRows = 0;
+            ui64 otherRows = 0;
+            do {
+                tierRows = 0;
+                otherRows = 0;
+                auto stream = tableClient.StreamExecuteScanQuery(std::format(R"(
+                    SELECT COALESCE(TierName, "") AS TierName, COALESCE(SUM(Rows), 0ul) AS Rows
+                    FROM `{}/.sys/primary_index_portion_stats`
+                    WHERE Activity = 1
+                    GROUP BY TierName;
+                )", table)).GetValueSync();
+                UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+                for (;;) {
+                    auto part = stream.ReadNext().GetValueSync();
+                    if (!part.IsSuccess()) {
+                        UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                        break;
+                    }
+                    if (!part.HasResultSet()) {
+                        continue;
+                    }
+                    TResultSetParser parser(part.GetResultSet());
+                    while (parser.TryNextRow()) {
+                        const auto rows = parser.ColumnParser("Rows").GetUint64();
+                        if (parser.ColumnParser("TierName").GetUtf8() == "/Root/tier2") {
+                            tierRows += rows;
+                        } else {
+                            otherRows += rows;
+                        }
+                    }
+                }
+                if (tierRows == 2 && otherRows == 0 && s3Writes.load() > writesBefore) {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            } while (TInstant::Now() < deadline);
+            UNIT_FAIL(stage << ": eviction to S3 did not finish: tier rows=" << tierRows
+                << ", other rows=" << otherRows << ", S3 writes=" << s3Writes.load()
+                << ", writes before=" << writesBefore);
+        };
+
+        waitForEviction(0, "Before export");
+        CompareResults(GetTableContent(session, table, "ts"), originalContent);
+
+        CreateBackupLambda(driver, testEnv.GetS3Port())();
+        ExecuteQuery(session, std::format("DROP TABLE `{}`;", table), true);
+        ExecuteQuery(session, R"(
+            DROP EXTERNAL DATA SOURCE `/Root/tier1`;
+            DROP EXTERNAL DATA SOURCE `/Root/tier2`;
+        )", true);
+        const auto writesBeforeImport = s3Writes.load();
+        CreateRestoreLambda(driver, testEnv.GetS3Port(), {"olap_tiering_backup", "tier1", "tier2"})();
+
+        waitForEviction(writesBeforeImport, "After import");
+        CompareResults(GetTableContent(session, table, "ts"), originalContent);
+        UNIT_ASSERT_STRINGS_EQUAL(FetchShowCreateTableDdl(session, table), originalDdl);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/tier1"), originalTier1);
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "/Root/tier2"), originalTier2);
     }
 
     Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {

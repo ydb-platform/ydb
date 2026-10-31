@@ -14,14 +14,11 @@ def kikimr(request):
     param = getattr(request, "param", {})
     set_test_env(request)
     config = get_ydb_config(request)
-<<<<<<< HEAD
     if "enable_htap_tx" in param:
         config.yaml_config["table_service_config"]["enable_htap_tx"] = param["enable_htap_tx"]
-=======
     if max_message_size := param.get("max_message_size"):
         config.yaml_config["grpc_config"]["max_message_size"] = max_message_size
         config.yaml_config["pqconfig"]["max_message_size_bytes"] = max_message_size
->>>>>>> 95446e4dcbc (YQ-5796 fix big message topic processing (#57672))
     kikimr = Kikimr(
         config,
         enable_discovery=param.get("enable_discovery", True),

@@ -137,39 +137,16 @@ namespace {
 
     std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
         NYdb::TDriverConfig cfg;
+        constexpr ui64 maxMessageSize = 136314880;   //  logbroker default grpc max message size
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
         cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+        cfg.SetMaxMessageSize(maxMessageSize);
 
         auto driver = std::make_unique<NYdb::TDriver>(cfg);
 
-<<<<<<< HEAD
         if (const auto& patchPrefix = config.GetDiscoveryCommonHostnamePrefixPatch()) {
             driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams([patchPrefix](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
-=======
-std::shared_ptr<NYdb::TDriver> TYdbExternalResources::GetDriver(bool useTls) {
-    return Impl_->GetDriver(useTls);
-}
-
-std::shared_ptr<NYql::IYdbExternalMetadataClientCache> TYdbExternalResources::GetMetadataClientCache() {
-    return Impl_->GetMetadataClientCache();
-}
-
-std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr,
-    const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
-    constexpr ui64 maxMessageSize = 136314880;   //  logbroker default grpc max message size
-    NYdb::TDriverConfig cfg;
-    cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
-    cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
-    cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
-    cfg.SetMaxMessageSize(maxMessageSize);
-
-    auto driver = std::make_unique<NYdb::TDriver>(cfg);
-
-    if (const auto& patchPrefix = config.GetDiscoveryCommonHostnamePrefixPatch()) {
-        driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams(
-            [patchPrefix](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
->>>>>>> 95446e4dcbc (YQ-5796 fix big message topic processing (#57672))
                 if (!aux.DiscoveryEndpoint.starts_with(patchPrefix) || !proto) {
                     return status;
                 }

@@ -38,6 +38,8 @@ struct TBackup {
         Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
         auto table = context.SS->ColumnTables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
+        // Derive this on every proposal, including after a SchemeShard restart.
+        backup.SetSourceDatabase(TPath::Init(pathId, context.SS).GetDomainPathString());
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
 

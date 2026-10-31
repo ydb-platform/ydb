@@ -239,6 +239,61 @@ struct TStorageFullTest : public TSpillTest {
     }
 };
 
+// A producer can remain blocked at SoftLimit after the storage has lifted HardLimit.
+// Draining below the low watermark must wake it again, even without another push or finish check.
+struct TSpillSoftLimitWakeupTest : public TSpillTest {
+    void Run() override {
+        Window = ColdWindow = 200;
+        WaitTimeout = TDuration::Seconds(5);
+        Prepare();
+        Init();
+
+        auto producer = Runtime->AllocateEdgeActor(NodeIndex0);
+        auto consumer = Runtime->AllocateEdgeActor(NodeIndex1);
+        TChannelFullInfo info(1, producer, consumer, 0, 1, TCollectStatsLevel::Profile);
+        auto output = Service0->GetOutputBuffer(info, OutputQuotaManager, Storage);
+        auto input = Service1->GetInputBuffer(info, InputQuotaManager);
+        Storage->SetFull(true);
+
+        auto drained = std::make_shared<std::atomic<bool>>(false);
+        RunInActor(NodeIndex0, [output, input, storage = Storage, local = Local, drained] {
+            for (ui32 i = 0; i < 3; ++i) {
+                output->Push(TProducerActor::BuildData(i, 100));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::HardLimit);
+
+            storage->SetFull(false);
+            storage->WakeUp();
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::SoftLimit);
+
+            if (local) {
+                TDataChunk chunk;
+                UNIT_ASSERT(input->Pop(chunk));
+                UNIT_ASSERT(input->Pop(chunk));
+            } else {
+                auto buffer = std::dynamic_pointer_cast<TOutputBuffer>(output);
+                UNIT_ASSERT(buffer);
+                // The remote consumer acknowledges the same two chunks.
+                for (ui64 bytes : {100, 200}) {
+                    buffer->Descriptor->UpdatePopBytes(bytes, buffer->NodeState.get(), buffer->Descriptor);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(output->GetFillLevel(), EDqFillLevel::NoLimit);
+            drained->store(true);
+        });
+        UNIT_ASSERT(WaitFor([&] { return drained->load(); }, TDuration::Seconds(5)));
+
+        auto storageWakeup = Runtime->GrabEdgeEvent<TEvDqCompute::TEvResumeExecution>(producer, TDuration::Seconds(1));
+        UNIT_ASSERT_C(storageWakeup, "No notification when the storage released HardLimit");
+        auto bufferWakeup = Runtime->GrabEdgeEvent<TEvDqCompute::TEvResumeExecution>(producer, TDuration::Seconds(1));
+        UNIT_ASSERT_C(bufferWakeup, "No notification when the buffer released SoftLimit");
+
+        input.reset();
+        output.reset();
+        Finish();
+    }
+};
+
 // The consumer lets go of the channel while most of it is still in the storage: the data there is never
 // read again, the control chunks - checkpoints and the finish - are
 struct TSpillEarlyFinishTest : public TSpillTest {
@@ -414,6 +469,18 @@ struct TSpillQuotaTest : public TSpillTest {
 };
 
 Y_UNIT_TEST_SUITE(Channels20Spilling) {
+
+    Y_UNIT_TEST(SpillSoftLimitWakeup1n) {
+        TSpillSoftLimitWakeupTest test;
+        test.Local = true;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(SpillSoftLimitWakeup2n) {
+        TSpillSoftLimitWakeupTest test;
+        test.Local = false;
+        test.Run();
+    }
 
     Y_UNIT_TEST(RemoteSpillAndReload2n) {
         TSpillAndReloadTest test;

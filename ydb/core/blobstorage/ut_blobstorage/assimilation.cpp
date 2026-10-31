@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/util/lz4_data_generator.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
 
@@ -533,7 +534,7 @@ void RunVDiskGoesAwayTest() {
 }
 
 Y_UNIT_TEST_SUITE(VDiskAssimilation) {
-    Y_UNIT_TEST(SilentResponseHasBoundedAttempt) {
+    Y_UNIT_TEST_TWIN(SilentAssimilationIsBounded, sameQueueTraffic) {
         TEnvironmentSetup env{{.NodeCount = 1, .Erasure = TBlobStorageGroupType::ErasureNone}};
         env.CreateBoxAndPool(1, 1);
         env.Sim(TDuration::Seconds(30));
@@ -559,7 +560,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
             }
             if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvVAssimilateResult) {
                 if (auto *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
-                        TypeName(*actor).Contains("TBlobStorageGroupAssimilateRequest")) {
+                        TypeName(*actor).Contains("TVDiskBackpressureClientActor")) {
                     held.push_back(std::move(ev));
                     return false;
                 }
@@ -576,23 +577,24 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
         env.Sim(TDuration::Seconds(1));
         UNIT_ASSERT(!held.empty());
         UNIT_ASSERT(!result);
-        // Other work on the same live storage continues, so a connection watchdog cannot supply this bound.
-        for (ui32 i = 0; i < 36 && !result; ++i) {
+        // Reads keep the VDisk visibly alive. Async ones share the queue with the assimilation and keep its watchdog
+        // barrier moving, so the request must be bounded by its own age as well.
+        for (ui32 i = 0; i < 18 && !result; ++i) {
             env.Runtime->WrapInActorContext(reader, [&] {
                 SendToBSProxy(reader, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
-                    NKikimrBlobStorage::FastRead));
+                    sameQueueTraffic ? NKikimrBlobStorage::AsyncRead : NKikimrBlobStorage::FastRead));
             });
             auto get = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(reader, false);
             UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Status, NKikimrProto::OK);
             env.Sim(TDuration::Seconds(10));
         }
         UNIT_ASSERT_C(result, "assimilation kept waiting for a live silent dependency");
-        UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvBlobStorage::TEvAssimilateResult>()->Status, NKikimrProto::DEADLINE);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvBlobStorage::TEvAssimilateResult>()->Status, NKikimrProto::ERROR);
         hold = false;
         for (auto& ev : held) {
             env.Runtime->Send(ev.release(), 1);
         }
-        env.Sim(TDuration::Seconds(1)); // a late completion must not generate another terminal reply
+        env.Sim(TDuration::Seconds(5)); // the late completion must be ignored, and the queue may be reconnecting
         result.reset();
         scan();
         for (ui32 i = 0; i < 100 && !result; ++i) {

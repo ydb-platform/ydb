@@ -466,6 +466,40 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
         UNIT_ASSERT(simplified.Config.Simplified);
     }
 
+    Y_UNIT_TEST(ReadRangesExpressionIsRendered) {
+        const TString plan = R"({"SimplifiedPlan":{"Plans":[{
+            "Node Type":"ResultSet","PlanNodeId":2,"Plans":[{
+                "Node Type":"TableRangeScan","PlanNodeId":1,"Operators":[{
+                    "Name":"TableRangeScan","Table":"/Root/t","ReadColumns":["a"],
+                    "ReadRangesExpression":"a ∈ (-∞, $hi) ∪ {\"<&\"}"
+                }]
+            }]
+        }]}})";
+        TPlanVisualizer viz;
+        viz.LoadPlans(plan, true);
+        const auto svg = viz.PrintSvg();
+        AssertWellFormed(svg, "range expression");
+        UNIT_ASSERT_C(svg.Contains("a ∈ (-∞, $hi) ∪ {\"&lt;&amp;\"}"), svg);
+    }
+
+    Y_UNIT_TEST(ReadRangesTakePrecedenceOverExpression) {
+        for (const TStringBuf field : {"ReadRanges", "ReadRange"}) {
+            const TString plan = TStringBuilder() << R"({"Plan":{"Plans":[{
+                "Node Type":"ResultSet","PlanNodeId":2,"Plans":[{
+                    "Node Type":"TableRangeScan","PlanNodeId":1,"Operators":[{
+                        "Name":"TableRangeScan","Table":"/Root/t","ReadColumns":["a"],
+                        ")" << field << R"(":["[{a: 7}, {a: 7}]"],"ReadRangesExpression":"unused fallback"
+                    }]
+                }]
+            }]}})";
+            TPlanVisualizer viz;
+            viz.LoadPlans(plan);
+            const auto svg = viz.PrintSvg();
+            UNIT_ASSERT_C(svg.Contains("[{a: 7}, {a: 7}]"), svg);
+            UNIT_ASSERT_C(!svg.Contains("unused fallback"), svg);
+        }
+    }
+
     // A plan node the loader does not understand is rejected rather than drawn wrong.
     static TString UnsupportedPlan() {
         return R"({"Plan":{"Plans":[{"Node Type":"R","Plans":[

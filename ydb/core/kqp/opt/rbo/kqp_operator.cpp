@@ -3,6 +3,7 @@
 #include "kqp_rbo_utils.h"
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <algorithm>
@@ -376,11 +377,6 @@ static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
     return std::nullopt;
 }
 
-TString StripAliasPrefix(const TString& column) {
-    const auto dot = column.rfind('.');
-    return (dot != TString::npos) ? column.substr(dot + 1) : column;
-}
-
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto res = IOperator::ToJson(explainFlags, registry);
 
@@ -414,7 +410,6 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     }
 
     // Build ReadColumns: for range scans, list ranged key columns first, then remaining columns.
-    // This mirrors the old RBO which embeds key range descriptions into ReadColumns.
     NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
     THashSet<TString> addedColumns;
     if (RangeInfo) {
@@ -422,17 +417,25 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         TVector<TString> rangedKeys;
         rangedKeys.reserve(usedLen);
         for (size_t i = 0; i < usedLen; ++i) {
-            rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
+            rangedKeys.push_back(SplitAliasedMemberName(RangeInfo->KeyColumns[i]).second);
         }
 
-        const auto descriptions = NOpt::BuildReadRangeDescriptions(RangeInfo->ComputeNode, RangeInfo->KeyColumns, usedLen);
-        for (const auto& label : descriptions.empty() ? rangedKeys : descriptions) {
-            readColumns.AppendValue(label);
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->ComputeNode,
+                                                          RangeInfo->KeyColumns, RangeInfo->ExpectedMaxRanges);
+        if (description.Ranges) {
+            NJson::TJsonValue readRanges(NJson::EJsonValueType::JSON_ARRAY);
+            for (const auto& range : *description.Ranges) {
+                readRanges.AppendValue(range);
+            }
+            res["ReadRanges"] = std::move(readRanges);
+        } else if (description.Expression) {
+            res["ReadRangesExpression"] = *description.Expression;
         }
 
         NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);
         for (const auto& key : rangedKeys) {
             addedColumns.insert(key);
+            readColumns.AppendValue(key);
             rangeKeys.AppendValue(key);
         }
         res["ReadRangesKeys"] = std::move(rangeKeys);
@@ -449,7 +452,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         }
     }
     res["ReadColumns"] = std::move(readColumns);
-    // ReadColumns names storage fields/ranges; Columns names the produced row.
+    // ReadColumns names storage fields; Columns names the produced row.
     res["Columns"] = TStringBuilder() << "{" << FormatIds(Columns_, &registry) << "}";
 
     return res;
@@ -474,11 +477,16 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
         }
         res << " OlapFilter: (" << PrintRBOExpression(NOpt::TOlapFilterInspector::RenameColumns(OlapFilterLambda, names, ctx), ctx) << ")";
     }
-    if (const auto ranges = GetRanges()) {
-        res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
-    }
-    if (const auto literalRange = GetLiteralRange()) {
-        res << " Literal range: (" << PrintRBOExpression(literalRange, ctx) << ")";
+    if (RangeInfo) {
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->ComputeNode,
+                                                          RangeInfo->KeyColumns, RangeInfo->ExpectedMaxRanges);
+        if (description.Ranges) {
+            res << " Ranges: [" << JoinSeq(", ", *description.Ranges) << "]";
+        } else if (description.Expression) {
+            res << " Ranges expression: (" << *description.Expression << ")";
+        } else if (RangeInfo->ComputeNode) {
+            res << " Ranges: (" << PrintRBOExpression(RangeInfo->ComputeNode, ctx) << ")";
+        }
     }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");

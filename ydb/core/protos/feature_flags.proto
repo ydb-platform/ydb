@@ -131,7 +131,8 @@ message TFeatureFlags {
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = true];
     optional bool EnableStatistics = 106 [default = true];
     optional bool EnableUuidAsPrimaryKey = 107 [default = true];
-    optional bool EnableTablePgTypes = 108 [default = false];
+    reserved 108; // EnableTablePgTypes
+    reserved "EnableTablePgTypes";
     optional bool EnableLocalDBBtreeIndex = 109 [default = true];
     optional bool EnablePDiskHighHDDInFlight = 110 [default = false];
     reserved 111; // UseVDisksBalancing

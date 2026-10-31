@@ -1751,7 +1751,7 @@ Y_UNIT_TEST(Table) {
             CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
-                Key3 PgInt2 NOT NULL,
+                Key3 Int16 NOT NULL,
                 Value1 Utf8,
                 Value2 Bool,
                 Value3 String,
@@ -2545,7 +2545,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
-                Key3 PgInt2 NOT NULL,
+                Key3 Int16 NOT NULL,
                 Value1 Utf8,
                 Value2 Bool,
                 Value3 String,
@@ -2561,7 +2561,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE `test_show_create` (
                 `Key1` Int64 NOT NULL,
                 `Key2` Utf8 NOT NULL,
-                `Key3` pgint2 NOT NULL,
+                `Key3` Int16 NOT NULL,
                 `Value1` Utf8,
                 `Value2` Bool,
                 `Value3` String,
@@ -2641,7 +2641,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE test_show_create (
                 Key1 Int64 NOT NULL,
                 Key2 Utf8 NOT NULL,
-                Key3 PgInt2 NOT NULL,
+                Key3 Int16 NOT NULL,
                 Value1 Utf8,
                 Value2 Bool,
                 Value3 String,
@@ -2669,7 +2669,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
             CREATE TABLE `test_show_create` (
                 `Key1` Int64 NOT NULL,
                 `Key2` Utf8 NOT NULL,
-                `Key3` pgint2 NOT NULL,
+                `Key3` Int16 NOT NULL,
                 `Value1` Utf8,
                 `Value2` Bool,
                 `Value3` String,

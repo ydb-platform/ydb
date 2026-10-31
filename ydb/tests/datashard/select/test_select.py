@@ -3,7 +3,6 @@ import binascii
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
-from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import (
     cleanup_type_name,
     format_sql_value,
@@ -18,9 +17,6 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
-    pk_pg_types_mixed,
-    pk_pg_types_no_bool_mixed,
-    non_pk_pg_types_mixed,
 )
 
 unsupported_distinct_types = [
@@ -461,33 +457,3 @@ class TestSelect(TestSelectBase):
 
     def test_as_table(self):
         self.do_test_as_table({**pk_types, **non_pk_types})
-
-
-class TestPgSelect(TestPgBase, TestSelectBase):
-    @pytest.mark.parametrize(
-        "table_name, pk_types, all_types, index, ttl, unique, sync",
-        [
-            ("table_index_0_UNIQUE_SYNC", pk_pg_types_mixed, {}, pk_pg_types_no_bool_mixed, "", "UNIQUE", "SYNC"),
-            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
-            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
-            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
-            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
-            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
-            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
-        ],
-    )
-    def test_select(
-        self,
-        table_name: str,
-        pk_types: dict[str, str],
-        all_types: dict[str, str],
-        index: dict[str, str],
-        ttl: str,
-        unique: str,
-        sync: str,
-    ):
-        self.do_test_select(table_name, pk_types, all_types, index, ttl, unique, sync)
-
-    def test_as_table(self):
-        self.do_test_as_table({**pk_pg_types_mixed, **non_pk_pg_types_mixed})

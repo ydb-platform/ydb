@@ -12,6 +12,34 @@ using namespace NYdb::NScripting;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpYql) {
+    Y_UNIT_TEST(PgComputationWithoutPgColumns) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/PgComputation` (
+                Key Int32,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+        auto write = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/PgComputation` (Key) VALUES (41);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(write.GetStatus(), EStatus::SUCCESS, write.GetIssues().ToString());
+
+        auto params = TParamsBuilder()
+            .AddParam("$value").Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4"))).Build()
+            .Build();
+        auto result = session.ExecuteDataQuery(R"(
+            DECLARE $value AS PgInt4;
+            $increment = ($x) -> { RETURN $x + $value; };
+            SELECT $increment(ToPg(Key)) AS Result FROM `/Root/PgComputation`;
+        )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([["42"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(RefSelect) {
         auto kikimr = DefaultKikimrRunner();
         TScriptingClient client(kikimr.GetDriver());
@@ -987,68 +1015,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         }
     }
 
-    Y_UNIT_TEST(PgIntPrimaryKey) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
-        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
-
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        TVector<TMaybe<ui64>> testKeys = {
-            Nothing(),
-            0,
-            308794346358062113,
-            5914002261229509558,
-            1349805057304957886,
-            493702609046240998,
-        };
-
-        {
-            const auto query = Q_(R"(
-                CREATE TABLE test(
-                    key pgint8,
-                    val int,
-                    PRIMARY KEY (key)
-                );
-            )");
-            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            int val = 0;
-            for (const auto& key : testKeys) {
-                const auto query = key
-                    ? Sprintf("\
-                        INSERT INTO test (key, val)\n\
-                        VALUES (%lupb, %u);\n\
-                    ", *key, val)
-                    : Sprintf("\
-                        INSERT INTO test (key, val)\n\
-                        VALUES (NULL, %u);\n\
-                    ", val);
-                ++val;
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            }
-        }
-        {
-            int val = 0;
-            for (const auto& key : testKeys) {
-                const auto query = key
-                    ? Sprintf("SELECT * FROM test WHERE key=%lupb;", *key)
-                    : "SELECT * FROM test WHERE key IS NULL;";
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-                TResultSetParser parser(result.GetResultSetParser(0));
-                UNIT_ASSERT(parser.TryNextRow());
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("val").GetOptionalInt32().value(), val++);
-                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
-            }
-        }
-    }
 }
 
 } // namespace NKqp

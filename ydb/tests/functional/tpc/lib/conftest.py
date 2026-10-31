@@ -25,7 +25,6 @@ class FunctionalTestBase:
         flags = [
             "enable_resource_pools",
             "enable_resource_pools_counters",
-            "enable_table_pg_types",
             "enable_forced_compactions",
         ]
         if extra_feature_flags:

@@ -981,7 +981,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableChangefeedDebeziumJsonFormat(true)
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
-                .SetEnableTablePgTypes(true)
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true);
 
@@ -2366,15 +2365,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"datetime64_value", "Datetime64", false, false},
                 {"timestamp64_value", "Timestamp64", false, false},
                 {"interval64_value", "Interval64", false, false},
-                {"pgint2_value", "pgint2", false, false},
-                {"pgint4_value", "pgint4", false, false},
-                {"pgint8_value", "pgint8", false, false},
-                {"pgfloat4_value", "pgfloat4", false, false},
-                {"pgfloat8_value", "pgfloat8", false, false},
-                {"pgbytea_value", "pgbytea", false, false},
-                {"pgtext_value", "pgtext", false, false},
-                {"pgtimestamp_value", "pgtimestamp", false, false},
-                {"pgdate_value", "pgdate", false, false},
             });
         TopicRunner::Read(table, Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {
             R"(UPSERT INTO `/Root/Table` (key, int32_value) VALUES (1, -100500);)",
@@ -2401,15 +2391,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"(UPSERT INTO `/Root/Table` (key, datetime64_value) VALUES (21, CAST(1597235696 AS Datetime64));)",
             R"(UPSERT INTO `/Root/Table` (key, timestamp64_value) VALUES (22, CAST(1597235696123456 AS Timestamp64));)",
             R"(UPSERT INTO `/Root/Table` (key, interval64_value) VALUES (23, CAST(-300500 AS Interval64));)",
-            R"(UPSERT INTO `/Root/Table` (key, pgint2_value) VALUES (24, -42ps);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgint4_value) VALUES (25, -420p);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgint8_value) VALUES (26, -4200pb);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgfloat4_value) VALUES (27, 3.1415pf4);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgfloat8_value) VALUES (28, 2.718pf8);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgbytea_value) VALUES (29, 'lorem "ipsum"'pb);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgtext_value) VALUES (30, 'lorem "ipsum"'p);)",
-            R"(UPSERT INTO `/Root/Table` (key, pgtimestamp_value) VALUES (31, pgtimestamp('2020-01-01T23:30:10Z'));)",
-            R"(UPSERT INTO `/Root/Table` (key, pgdate_value) VALUES (32, pgdate('2020-03-01T20:30:10Z'));)",
         }, {
             R"({"key":[1],"update":{"int32_value":-100500}})",
             R"({"key":[2],"update":{"uint32_value":100500}})",
@@ -2435,15 +2416,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"key":[21],"update":{"datetime64_value":1597235696}})",
             R"({"key":[22],"update":{"timestamp64_value":1597235696123456}})",
             R"({"key":[23],"update":{"interval64_value":-300500}})",
-            R"({"key":[24],"update":{"pgint2_value":"-42"}})",
-            R"({"key":[25],"update":{"pgint4_value":"-420"}})",
-            R"({"key":[26],"update":{"pgint8_value":"-4200"}})",
-            R"({"key":[27],"update":{"pgfloat4_value":"3.1415"}})",
-            R"({"key":[28],"update":{"pgfloat8_value":"2.718"}})",
-            R"({"key":[29],"update":{"pgbytea_value":"\\x6c6f72656d2022697073756d22"}})",
-            R"({"key":[30],"update":{"pgtext_value":"lorem \"ipsum\""}})",
-            R"({"key":[31],"update":{"pgtimestamp_value":"2020-01-01 23:30:10"}})",
-            R"({"key":[32],"update":{"pgdate_value":"2020-03-01"}})",
         });
     }
 

@@ -22,6 +22,7 @@ private:
     const TDuration CONSUMER_INIT_INTERVAL_START = TDuration::Seconds(1);
 
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
+    const TDuration REPLICATION_FINISHED_RETRY_INTERVAL = TDuration::Seconds(5);
 
     const TDuration LOG_STATE_INTERVAL = TDuration::Minutes(1);
     const TDuration INIT_TIMEOUT = TDuration::Minutes(2);
@@ -46,6 +47,8 @@ private:
             HFuncTraced(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -64,6 +67,8 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_MIRRORER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFuncTraced(TEvPQ::TEvPartitionReplicationFinishedAck, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -104,6 +109,8 @@ private:
 
     TString GetCurrentState() const;
 
+    bool IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
@@ -121,10 +128,14 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext& ctx);
+    void TryToFinishReplication(const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void TryToSplitMerge(const TActorContext& ctx);
+    void TryToSendReplicationData(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -151,6 +162,8 @@ private:
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
+    TDeque<NKikimrPQ::TReplicationDataPayload> ReplicationDataQueue;
+    TDeque<NKikimrPQ::TReplicationDataPayload> ReplicationDataInFlight;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
@@ -170,6 +183,13 @@ private:
 
     bool WaitNextReaderEventInFlight = false;
     bool CredentialsRequestInFlight = false;
+
+    bool ReplicationDataFinished = false;
+    bool ReplicationDataPersisted = false;
+    bool ReadWritesInSourceTopicDisabled = false;
+    
+    TInstant LastReplicationDataNotification;
+    ui64 ReplicationDataNotificationCookie = 1;
 
     bool WasSuccessfulRecording = false;
     TInstant LastStateLogTimestamp;

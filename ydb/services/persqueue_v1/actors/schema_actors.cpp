@@ -51,6 +51,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
 
         const auto &config = pqDescr.GetPQTabletConfig();
+        (*settings->mutable_attributes())["_ydb_topic_replication_status"] = ToString(static_cast<ui32>(config.GetReplicationStatus()));
         if (!config.GetRequireAuthWrite()) {
             (*settings->mutable_attributes())["_allow_unauthenticated_write"] = "true";
         }
@@ -196,6 +197,10 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                     }
                     break;
                 }
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION: {
+                    (*settings->mutable_attributes())["_ydb_replication_consumer"] = consumerName;
+                    break;
+                }
             }
 
             // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
@@ -224,6 +229,8 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
 
         if (NPQ::MirroringEnabled(config)) {
+            (*settings->mutable_attributes())["_ydb_is_for_topic_replication"] =
+                partConfig.GetMirrorFrom().GetIsForTopicReplication() ? "true" : "false";
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {

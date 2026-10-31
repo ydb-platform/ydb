@@ -579,6 +579,12 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan.End();
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
+    CompleteReplicationDataWrite(ctx);
+    if (ReplicationDataFinishedWriteInProgress) {
+        ReplicationDataFinishedWriteInProgress = false;
+        ReplicationDataFinished = true;
+        ForwardReplicationFinished(ctx);
+    }
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
@@ -748,6 +754,12 @@ bool TPartition::ShouldUseDeduplicationQueue() const {
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Received TPartition::TEvWrite");
+
+    if (IsWriteAndReadDisabled(Config, *AppData(ctx))) {
+        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
+            "Write to topic is disabled");
+        return;
+    }
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,

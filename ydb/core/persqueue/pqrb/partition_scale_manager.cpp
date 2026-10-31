@@ -55,6 +55,11 @@ void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKi
     }
 }
 
+bool TPartitionScaleManager::HasPendingScaleRequests() const {
+    return RequestInflight || !PartitionsToSplit.empty()
+        || (RootPartitionsToCreate && !RootPartitionsToCreate->empty());
+}
+
 void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     TInstant delayDeadline = LastResponseTime + RequestTimeout;
     if (DatabasePath.empty() || RequestInflight || delayDeadline > ctx.Now()) {

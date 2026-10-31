@@ -45,6 +45,11 @@ public:
         }
     }
 
+    virtual NYdb::NTopic::TTopicClient GetTopicClient(
+        const NKikimrPQ::TMirrorPartitionConfig& config,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory
+    ) const;
+
     virtual std::shared_ptr<NYdb::NTopic::IReadSession> GetReadSession(
         const NKikimrPQ::TMirrorPartitionConfig& config,
         ui32 partition,
@@ -111,18 +116,6 @@ protected:
         }
     }
 
-    NYdb::NTopic::TTopicClient GetTopicClient(const NKikimrPQ::TMirrorPartitionConfig& config, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const {
-        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .CredentialsProviderFactory(std::move(credentialsProviderFactory))
-            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
-        if (config.HasDatabase()) {
-            clientSettings.Database(config.GetDatabase());
-        }
-        return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
-    }
-
 public:
     std::shared_ptr<NYdb::NTopic::IReadSession> GetReadSession(
         const NKikimrPQ::TMirrorPartitionConfig& config,
@@ -136,6 +129,7 @@ public:
             .MaxMemoryUsageBytes(maxMemoryUsageBytes)
             .Decompress(false)
             .AutoPartitioningSupport(true)
+            .Header({{"x-ydb-supports-replication-messages", "true"}})
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy());
         if (logger) {
             settings.Log(logger.GetRef());
@@ -176,18 +170,6 @@ protected:
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& /*cred*/
     ) const override {
         return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
-    }
-
-        NYdb::NTopic::TTopicClient GetTopicClient(const NKikimrPQ::TMirrorPartitionConfig& config, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const {
-        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
-            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .CredentialsProviderFactory(std::move(credentialsProviderFactory))
-            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
-        if (config.HasDatabase()) {
-            clientSettings.Database(config.GetDatabase());
-        }
-        return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
     }
 };
 } // namespace NKikimr::NSQS

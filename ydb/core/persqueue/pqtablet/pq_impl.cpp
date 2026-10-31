@@ -1170,6 +1170,10 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     PQ_ENSURE(!partition.InitDone);
     partition.InitDone = true;
 
+    if (ReadBalancerActorId) {
+        ctx.Send(partition.Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+    }
+
     if (partitionId.IsSupportivePartition()) {
         for (auto& request : partition.PendingRequests) {
             HandleEventForSupportivePartition(request.Cookie,
@@ -1329,6 +1333,21 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
                                                                                         ev->Get()->Record.GetClientId() : "");
         ctx.Send(p.second.Actor, event.Release());
     }
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    auto partition = Partitions.find(TPartitionId(record.GetPartitionId()));
+    if (partition == Partitions.end() || partition->second.Actor != ev->Sender) {
+        return;
+    }
+    auto pipe = PipesInfo.find(ActorIdFromProto(record.GetPipeClient()));
+    if (pipe == PipesInfo.end() || !pipe->second.ClientActor
+        || pipe->second.SessionId != record.GetSession()
+        || pipe->second.PartitionSessionId != record.GetPartitionSessionId()) {
+        return;
+    }
+    ctx.Send(pipe->second.ClientActor, ev->Release().Release());
 }
 
 void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx)
@@ -1564,7 +1583,10 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, NWilson
     PQ_ENSURE(req.HasCmdSetClientOffset());
     const auto& cmd = req.GetCmdSetClientOffset();
 
-    if (!cmd.HasClientId()) {
+    if (IsReadDisabled(Config, cmd.GetClientId(), *AppData(ctx))) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+            "Commit to topic is disabled");
+    } else if (!cmd.HasClientId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no clientId in SetClientOffset request: " << ToString(req).data());
     } else if (!cmd.HasOffset()) {
@@ -1637,6 +1659,11 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
     auto& pqConfig = AppData(ctx)->PQConfig;
 
     PQ_ENSURE(req.CmdWriteSize());
+    if (IsWriteAndReadDisabled(Config, *AppData(ctx))) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+            "Write to topic is disabled");
+        return;
+    }
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
     if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
         MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
@@ -2010,7 +2037,10 @@ void TPersQueue::HandleReadRequest(
     PQ_ENSURE(req.HasCmdRead());
 
     auto cmd = req.GetCmdRead();
-    if (!cmd.HasOffset()) {
+    if (IsReadDisabled(Config, cmd.GetClientId(), *AppData(ctx))) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled");
+    } else if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no offset in read request: " << ToString(req).data());
     } else if (cmd.GetOffset() < 0) {
@@ -2573,6 +2603,9 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
     auto& req = request.GetPartitionRequest();
     TActorId pipeClient = ActorIdFromProto(req.GetPipeClient());
+    if (auto pipe = PipesInfo.find(pipeClient); pipe != PipesInfo.end()) {
+        pipe->second.ClientActor = ev->Sender;
+    }
 
     if (request.GetPartitionRequest().HasCmdRead() && s != TMP_REQUEST_MARKER) {
         auto pipeIter = PipesInfo.find(pipeClient);
@@ -5421,12 +5454,16 @@ NTabletPipe::TClientConfig TPersQueue::GetPipeClientConfig()
 
 void TPersQueue::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx)
 {
+    const bool readBalancerChanged = ReadBalancerActorId != ev->Sender;
     ReadBalancerActorId = ev->Sender;
 
     const TEvPQ::TEvSubDomainStatus& event = *ev->Get();
     SubDomainOutOfSpace = event.SubDomainOutOfSpace();
 
     for (auto& p : Partitions) {
+        if (readBalancerChanged) {
+            ctx.Send(p.second.Actor, new TEvPQ::TEvReadBalancerActorIdChanged(ReadBalancerActorId));
+        }
         ctx.Send(p.second.Actor, new TEvPQ::TEvSubDomainStatus(event.SubDomainOutOfSpace()));
     }
 }
@@ -5750,10 +5787,20 @@ void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext
 }
 
 void TPersQueue::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
+    if (IsReadDisabled(Config, ev->Get()->GetConsumer(), *AppData())) {
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(ev->Get()->GetPartitionId(),
+            Ydb::StatusIds::UNAVAILABLE, "Read from topic is disabled"), 0, ev->Cookie);
+        return;
+    }
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
 void TPersQueue::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
+    if (IsReadDisabled(Config, ev->Get()->GetConsumer(), *AppData())) {
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(ev->Get()->GetPartitionId(),
+            Ydb::StatusIds::UNAVAILABLE, "Commit to topic is disabled"), 0, ev->Cookie);
+        return;
+    }
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
@@ -5872,6 +5919,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvPartitionUpdateReadMetrics, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
+        HFuncTraced(TEvPersQueue::TEvReplicationData, Handle);
         HFuncTraced(TEvPersQueue::TEvStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);

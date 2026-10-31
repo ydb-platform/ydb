@@ -16,6 +16,7 @@
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -30,6 +31,7 @@
 
 #include <ydb/core/persqueue/events/internal/protos/events.pb.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/maybe.h>
 #include <expected>
 
@@ -248,6 +250,14 @@ struct TEvPQ {
         EvProcessBatchKeysResult,
         EvResetOffsetRequest,
         EvResetOffsetResponse,
+        EvReadBalancerActorIdChanged,
+        EvPartitionReplicationFinished,
+        EvPartitionReplicationFinishedAck,
+        EvPartitionConsumerOffsets, // reserved: legacy event removed
+        EvPartitionConsumerOffsetsAck, // reserved: legacy event removed
+        EvTopicConfigurationReplicationFinished,
+        EvReplicationData,
+        EvReplicationDataAck,
         EvEnd,
     };
 
@@ -1112,6 +1122,14 @@ struct TEvPQ {
         NWilson::TSpan Span;
     };
 
+    struct TEvReadBalancerActorIdChanged : public TEventLocal<TEvReadBalancerActorIdChanged, EvReadBalancerActorIdChanged> {
+        explicit TEvReadBalancerActorIdChanged(const TActorId& readBalancerActorId)
+            : ReadBalancerActorId(readBalancerActorId)
+        {}
+
+        const TActorId ReadBalancerActorId;
+    };
+
     struct TEvSubDomainStatus : public TEventPB<TEvSubDomainStatus, NKikimrPQ::TEvSubDomainStatus, EvSubDomainStatus> {
         TEvSubDomainStatus() {
         }
@@ -1366,6 +1384,29 @@ struct TEvPQ {
         TString Consumer;
         ui32 PartitionId;
         ui64 Cookie;
+    };
+
+    struct TEvPartitionReplicationFinished : public TEventPB<TEvPartitionReplicationFinished, NKikimrPQ::TEvPartitionReplicationFinished, EvPartitionReplicationFinished> {
+        TEvPartitionReplicationFinished() = default;
+
+        explicit TEvPartitionReplicationFinished(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
+    struct TEvPartitionReplicationFinishedAck : public TEventPB<TEvPartitionReplicationFinishedAck, NKikimrPQ::TEvPartitionReplicationFinishedAck, EvPartitionReplicationFinishedAck> {
+        TEvPartitionReplicationFinishedAck() = default;
+
+        explicit TEvPartitionReplicationFinishedAck(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
+    };
+
+    struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
+        TDeque<NKikimrPQ::TReplicationDataPayload> Data;
+    };
+
+    struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {

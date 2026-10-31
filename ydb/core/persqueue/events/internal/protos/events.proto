@@ -30,6 +30,17 @@ message TEvReadingPartitionStatusRequest {
     optional uint64 DelayedMessageCount = 7;
 };
 
+// From the mirrorer through the partition to PQRB after persisting source data.
+message TEvPartitionReplicationFinished {
+    optional uint32 PartitionId = 1;
+    optional TPartitionScaleParticipants ParticipatingPartitions = 2;
+}
+
+// From the partition after persisting TEvPartitionReplicationFinished.
+message TEvPartitionReplicationFinishedAck {
+    optional uint32 PartitionId = 1;
+}
+
 message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;

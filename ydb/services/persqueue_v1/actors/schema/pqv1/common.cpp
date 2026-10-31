@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
@@ -258,7 +259,13 @@ TResult ApplyChangesInt( // create and alter
     pqTabletConfig->SetRequireAuthRead(true);
 
     TConsumersAdvancedMonitoringSettings consumersAdvancedMonitoringSettings;
-    if (auto r = ProcessTopicAttributes(settings.attributes(), pqDescr, operation, pqConfig.GetTopicsAreFirstClassCitizen(), consumersAdvancedMonitoringSettings); !r) {
+    auto attributes = settings.attributes();
+    // PQv1 replication settings are applied below, after consumers and mirror rules are built.
+    for (const auto* name : {"_ydb_replication_consumer", "_ydb_is_for_topic_replication", "_ydb_topic_replication_status",
+             "_ydb_start_replication_in_dest_topic", "_ydb_finish_replication_in_src_topic"}) {
+        attributes.erase(name);
+    }
+    if (auto r = ProcessTopicAttributes(attributes, pqDescr, operation, pqConfig.GetTopicsAreFirstClassCitizen(), consumersAdvancedMonitoringSettings); !r) {
         return r;
     }
 
@@ -548,6 +555,39 @@ TResult ApplyChangesInt( // create and alter
         if (settings.remote_mirror_rule().database()) {
             mirrorFrom->SetDatabase(settings.remote_mirror_rule().database());
         }
+    }
+
+    if (auto it = settings.attributes().find("_ydb_replication_consumer"); it != settings.attributes().end() && !it->second.empty()) {
+        const auto name = NPersQueue::ConvertNewConsumerName(it->second, pqConfig);
+        auto* consumer = NPQ::GetConsumer(*pqTabletConfig, name);
+        if (!consumer) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown _ydb_replication_consumer: " << it->second};
+        }
+        if (consumer->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            return {Ydb::StatusIds::BAD_REQUEST, "_ydb_replication_consumer cannot be a shared consumer"};
+        }
+        consumer->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    }
+
+    if (auto it = settings.attributes().find("_ydb_is_for_topic_replication"); it != settings.attributes().end()) {
+        bool enabled = false;
+        if (!it->second.empty() && !TryFromString(it->second, enabled)) {
+            return {Ydb::StatusIds::BAD_REQUEST, "Attribute _ydb_is_for_topic_replication must be bool"};
+        }
+        if (enabled && !partConfig->HasMirrorFrom()) {
+            return {Ydb::StatusIds::BAD_REQUEST, "Attribute _ydb_is_for_topic_replication requires remote_mirror_rule"};
+        }
+        if (partConfig->HasMirrorFrom()) {
+            partConfig->MutableMirrorFrom()->SetIsForTopicReplication(enabled);
+        }
+    }
+
+    if (auto it = settings.attributes().find("_ydb_start_replication_in_dest_topic"); it != settings.attributes().end() && it->second == "true") {
+        pqTabletConfig->SetReplicationStatus(NKikimrPQ::ETopicReplicationStatus::ReplicationData);
+    }
+
+    if (auto it = settings.attributes().find("_ydb_finish_replication_in_src_topic"); it != settings.attributes().end() && it->second == "true") {
+        pqTabletConfig->SetWriteAndReadDisabled(true);
     }
 
     if (settings.has_metrics_level()) {

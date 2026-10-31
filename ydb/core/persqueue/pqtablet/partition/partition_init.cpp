@@ -353,6 +353,10 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
 
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
+        Partition()->ReplicationDataFinished = meta.GetReplicationDataFinished();
+        if (meta.HasReplicationDataFinishedParticipants()) {
+            Partition()->ReplicationDataFinishedParticipants = meta.GetReplicationDataFinishedParticipants();
+        }
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         Partition()->MessageIdDeduplicator.NextMessageIdDeduplicatorWAL = meta.GetNextMessageIdDeduplicatorWAL();
         if (Partition()->IsSupportive()) {

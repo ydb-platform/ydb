@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     mirror_describer.cpp
+    replication_status_request.cpp
     partition_scale_request.cpp
     partition_scale_manager.cpp
     partition_scale_manager_graph_cmp.cpp
@@ -26,6 +27,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common
+    ydb/core/persqueue/common/proxy
 )
 
 END()

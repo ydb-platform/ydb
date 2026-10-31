@@ -2,6 +2,7 @@
 
 The `PersQueueReadBalancer` tablet assigns topic partitions to a consumer's
 read sessions. The rules below describe ordering across split/merge.
+Both `STREAMING` and `REPLICATION` consumers use this read-session balancer.
 Implementation:
 [`read_balancer__balancing.cpp`](read_balancer__balancing.cpp),
 [`read_balancer__balancing.h`](read_balancer__balancing.h). Tests:
@@ -35,8 +36,10 @@ Implementation:
 
 **Finish** and **Commit** exist only for a partition that has children
 (new messages can no longer land in it). A partition without children cannot
-get these events: `ReadingFinished` and `Commited` are always false. This
-holds even without auto-partitioning: every partition is then a leaf.
+enter these states: `ReadingFinished` and `Commited` are always false. A
+`REPLICATION` consumer can report Finish for a leaf when its source topic is
+frozen; the balancer ignores this notification. This holds even without
+auto-partitioning: every partition is then a leaf.
 
 A topic may have auto-partitioning on or off. The balancing algorithm does
 not change, but with auto-partitioning off some of its branches are unused.

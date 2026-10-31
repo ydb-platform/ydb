@@ -149,10 +149,11 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         ctx.Send(request.Sender, response.Release());
     };
 
-    if (!IsActive()) {
+    if (!IsActive() || IsTopicReplicationFinishing(request.ClientId)) {
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
         } else {
+            SendOffsetsToReplicationConsumer(ctx);
             sendResponse(0, true);
 
             auto now = ctx.Now();
@@ -872,6 +873,13 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
+    // Cookie 0 is used for timestamp reads; internal reads also serve compaction.
+    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, read->ClientId, *AppData(ctx))) {
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled", read->ReplyTo);
+        return;
+    }
+
     // Pass unresolved read->ReplyTo: ReplyError uses !!replyTo as IsInternal (see TEvRead::IsInternal).
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
@@ -957,6 +965,12 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
     userInfo->ReadsInQuotaQueue--;
+    if (read->Cookie != 0 && !read->IsInternal() && IsReadDisabled(Config, user, *AppData(ctx))) {
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled", read->ReplyTo);
+        OnReadRequestFinished(read->Cookie, 0, 0, user, ctx);
+        return;
+    }
     ui64 offset = read->Offset;
 
     auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
@@ -1170,22 +1184,28 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
                     {"responseDebugString",
             ev->Get()->Response->DebugString()}
         );
+        bool timestampAvailable = false;
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&
-            ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0 &&
-            (i64)ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().GetResult(0).GetOffset() >= userInfo->Offset) {
-                //offsets is inside gap - return timestamp of first record after gap
+            ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().ResultSize() > 0) {
             const auto& res = ev->Get()->Response->GetPartitionResponse().GetCmdReadResult().GetResult(0);
-            userInfo->WriteTimestamp = TInstant::MilliSeconds(res.GetWriteTimestampMS());
-            userInfo->CreateTimestamp = TInstant::MilliSeconds(res.GetCreateTimestampMS());
-            userInfo->ActualTimestamps = true;
-            if (userInfo->ReadOffset + 1 < userInfo->Offset) {
-                userInfo->ReadOffset = userInfo->Offset - 1;
-                userInfo->ReadWriteTimestamp = userInfo->WriteTimestamp;
-                userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
+            // Use the first record after a gap, or the batch containing the requested offset.
+            if ((i64)res.GetOffset() >= userInfo->Offset ||
+                (res.GetLogicalMessageCount() > 0 &&
+                 ui64(userInfo->Offset) - res.GetOffset() < ui64(res.GetLogicalMessageCount()))) {
+                userInfo->WriteTimestamp = TInstant::MilliSeconds(res.GetWriteTimestampMS());
+                userInfo->CreateTimestamp = TInstant::MilliSeconds(res.GetCreateTimestampMS());
+                userInfo->ActualTimestamps = true;
+                timestampAvailable = true;
+                if (userInfo->ReadOffset + 1 < userInfo->Offset) {
+                    userInfo->ReadOffset = userInfo->Offset - 1;
+                    userInfo->ReadWriteTimestamp = userInfo->WriteTimestamp;
+                    userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
+                }
             }
-        } else {
+        }
+        if (!timestampAvailable) {
             UpdateUserInfoTimestamp.push_back(std::make_pair(ReadingForUser, ReadingForUserReadRuleGeneration));
             userInfo->ReadScheduled = true;
         }
@@ -1223,6 +1243,13 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     if (subscription) {
         userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
+    }
+
+    if (info.Destination != 0 && !info.IsInternal && IsReadDisabled(Config, info.User, *AppData(ctx))) {
+        ReplyError(ctx, info.Destination, NPersQueue::NErrorCode::ERROR,
+            "Read from topic is disabled", info.ReplyTo);
+        OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);
+        return;
     }
 
     TVector<TRequestedBlob> blobs;

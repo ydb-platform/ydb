@@ -303,6 +303,7 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
+    TryToFinishReplication(ctx);
     ctx.Send(PartitionActor, new TEvPQ::TEvMirrorerCounters(Counters));
     Counters.Cumulative().ResetCounters();
     Counters.Percentile().ResetCounters();
@@ -412,6 +413,11 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
     );
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
+        ReplicationDataFinished = false;
+        ReplicationDataPersisted = false;
+        LastReplicationDataNotification = TInstant::Zero();
+        ++ReplicationDataNotificationCookie;
+        EndPartitionSessionEvent.reset();
         LOG_N("Changing config");
 
         StartInit(ctx);
@@ -456,14 +462,14 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 }
 
 void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
-    if (!EndPartitionSessionEvent) {
+    if (Config.GetIsForTopicReplication() || !EndPartitionSessionEvent) {
+        return;
+    }
+    if (WriteRequestInFlight || !WriteInFlight.empty() || !Queue.empty()) {
+        LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
     if (!AppData(ctx)->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
-        return;
-    }
-    if (WriteRequestInFlight || !Queue.empty()) {
-        LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
     if (!EndPartitionSessionEvent->GetAdjacentPartitionIds().empty()) {
@@ -483,6 +489,28 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     }
     Send(PartitionActor, std::move(request));
     EndPartitionSessionEvent = std::nullopt;
+}
+
+void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (!ReplicationDataInFlight.empty() || ReplicationDataQueue.empty()) {
+        return;
+    }
+
+    while (!ReplicationDataQueue.empty()) {
+        const auto& data = ReplicationDataQueue.front();
+        // Applying these boundaries must not make unwritten source messages look persisted.
+        if (data.GetEndOffset() > Max(EndOffset, data.GetStartOffset())) {
+            break;
+        }
+        ReplicationDataInFlight.emplace_back(std::move(ReplicationDataQueue.front()));
+        ReplicationDataQueue.pop_front();
+    }
+    if (ReplicationDataInFlight.empty()) {
+        return;
+    }
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->Data = ReplicationDataInFlight;
+    ctx.Send(PartitionActor, event.Release());
 }
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -554,7 +582,9 @@ void TMirrorer::HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& /*ev*/, const TActo
 void TMirrorer::HandleWakeup(const TActorContext& ctx) {
     TryToRead(ctx);
     TryToWrite(ctx);
+    TryToFinishReplication(ctx);
     TryToSplitMerge(ctx);
+    TryToSendReplicationData(ctx);
 }
 
 void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorContext& ctx) {
@@ -567,6 +597,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
 
     LastInitStageTimestamp = ctx.Now();
     LOG_N("Creating new read session");
+    ReadWritesInSourceTopicDisabled = false;
 
     if (!Queue.empty()) {
         OffsetToRead = Queue.front().GetOffset();
@@ -678,9 +709,32 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
+bool TMirrorer::IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const {
+    if (message.GetOffset() != 0) {
+        return false;
+    }
+
+    const auto& messageMeta = message.GetMessageMeta();
+    for (const auto& attribute : messageMeta->Fields) {
+        if (attribute.first == "_ydb_service_replication_message") {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
+        if (IsServiceReplicationMessage(msg)) {
+            NKikimrPQ::TReplicationDataPayload replicationData;
+            if (replicationData.ParseFromString(msg.GetData())) {
+                ReadWritesInSourceTopicDisabled = replicationData.GetSourceTopicIsClosedForReadWrites();
+                ReplicationDataQueue.emplace_back(std::move(replicationData));
+                continue;
+            }
+        }
+
         PQ_ENSURE(OffsetToRead <= offset);
         LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();
@@ -931,6 +985,49 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
     }
     EndOffset = ev->Get()->EndOffset;
     ScheduleConsumerCreation(ctx);
+}
+
+void TMirrorer::Handle(TEvPQ::TEvPartitionReplicationFinishedAck::TPtr& ev, const TActorContext&) {
+    if (ReplicationDataFinished && ev->Sender == PartitionActor
+        && ev->Cookie == ReplicationDataNotificationCookie
+        && ev->Get()->Record.HasPartitionId() && ev->Get()->Record.GetPartitionId() == Partition) {
+        ReplicationDataPersisted = true;
+    }
+}
+
+void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
+    if (ev->Sender != PartitionActor || ReplicationDataInFlight.empty()) {
+        return;
+    }
+    ReplicationDataInFlight.clear();
+    Send(SelfId(), new TEvents::TEvWakeup());
+}
+
+void TMirrorer::TryToFinishReplication(const TActorContext& ctx) {
+    if (!Config.GetIsForTopicReplication() || !EndPartitionSessionEvent || ReplicationDataPersisted) {
+        return;
+    }
+    if (!ReadWritesInSourceTopicDisabled || WriteRequestInFlight || !WriteInFlight.empty() || !Queue.empty()
+        || !ReplicationDataQueue.empty() || !ReplicationDataInFlight.empty()) {
+        return;
+    }
+    ReplicationDataFinished = true;
+    if (LastReplicationDataNotification != TInstant::Zero()
+        && ctx.Now() - LastReplicationDataNotification < REPLICATION_FINISHED_RETRY_INTERVAL) {
+        return;
+    }
+    auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(Partition);
+    if (!EndPartitionSessionEvent->GetChildPartitionIds().empty()) {
+        auto* participants = event->Record.MutableParticipatingPartitions();
+        for (const auto child : EndPartitionSessionEvent->GetChildPartitionIds()) {
+            participants->AddChildPartitionIds(child);
+        }
+        for (const auto adjacent : EndPartitionSessionEvent->GetAdjacentPartitionIds()) {
+            participants->AddAdjacentPartitionIds(adjacent);
+        }
+    }
+    ctx.Send(PartitionActor, event.Release(), 0, ReplicationDataNotificationCookie);
+    LastReplicationDataNotification = ctx.Now();
 }
 
 NActors::IActor* CreateMirrorer(const ui64 tabletId,

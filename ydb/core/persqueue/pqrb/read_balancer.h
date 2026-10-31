@@ -106,6 +106,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     struct TTxWriteReceiveAttemptPartitions;
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx);
+    void ScheduleWaitingReplicationData(const TActorContext& ctx);
+    void CheckReplicationDataFinished(const TActorContext& ctx);
+    void RequestReplicationDone(const TActorContext& ctx);
+    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
 
     void Die(const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -185,6 +189,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
@@ -229,6 +234,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 public:
     struct TPartitionInfo {
         ui64 TabletId;
+        bool ReplicationDataFinished = false;
     };
 
 private:
@@ -296,6 +302,11 @@ private:
 
     static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
     static constexpr TDuration PARTITIONS_LOCATION_WAKEUP_QUANTUM = TDuration::MilliSeconds(25);
+
+    static constexpr ui64 WAITING_REPLICATION_DATA_WAKEUP_TAG = 12;
+    bool WaitingReplicationDataScheduled = false;
+    TActorId ReplicationStatusRequestActor;
+    TInstant ReplicationStatusUpdateDeadline;
 
     struct TPartitionsLocationRequest {
         TActorId Sender;

@@ -15,6 +15,7 @@ SRCS(
     graph_cmp_ut.cpp
     metrics_ut.cpp
     mlp_ut.cpp
+    replication_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
     partition_scale_manager_ut.cpp
     partitions_location_queue_ut.cpp

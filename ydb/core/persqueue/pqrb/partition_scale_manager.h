@@ -70,6 +70,7 @@ public:
     std::expected<void, std::string> HandleMirrorTopicDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
     void TrySendScaleRequest(const TActorContext& ctx);
+    bool HasPendingScaleRequests() const;
     void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
     void UpdateDatabasePath(const TString& dbPath, const TActorContext& ctx);
     void Die(const TActorContext& ctx);

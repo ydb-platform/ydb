@@ -229,6 +229,19 @@ bool TPartition::IsActive() const {
     return PartitionConfig == nullptr || PartitionConfig->GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active;
 }
 
+bool TPartition::IsTopicReplicationFinishing(const TString& consumer) const {
+    bool consumerForTopicReplication = false;
+    for (const auto& consumerConfig : Config.GetConsumers()) {
+        if (consumerConfig.GetName() == consumer) {
+            consumerForTopicReplication =
+                consumerConfig.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
+            break;
+        }
+    }
+
+    return consumerForTopicReplication && IsWriteAndReadDisabled(Config, *AppData());
+}
+
 bool TPartition::CanWrite() const {
     if (PartitionConfig == nullptr) {
         // Old format without AllPartitions configuration field.
@@ -747,6 +760,10 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
+    meta.SetReplicationDataFinished(ReplicationDataFinished || ReplicationDataFinishedWriteInProgress);
+    if (meta.GetReplicationDataFinished() && ReplicationDataFinishedParticipants) {
+        meta.MutableReplicationDataFinishedParticipants()->CopyFrom(*ReplicationDataFinishedParticipants);
+    }
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();
@@ -1076,6 +1093,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
         PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS_TOTAL] = Config.PartitionsSize();
+        PartitionCountersLabeled->GetCounters()[METRIC_REPLICATION_FINISHED] = ReplicationDataFinished;
         ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
@@ -1085,6 +1103,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
     }
+    ForwardReplicationFinished(ctx);
     if (PartitionConfig != nullptr && PartitionConfig->ParentPartitionIdsSize() > 0 && !IsSupportive()) {
         TCreateDeduplicationWriteQueueActorResult writeQueue = CreateDeduplicationWriteQueueActor(
             this->TabletId,
@@ -2579,6 +2598,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     bool haveChanges = false;
 
+    SET_METRIC(PartitionCountersLabeled, METRIC_REPLICATION_FINISHED, ReplicationDataFinished);
+
     {
         auto count = SourceIdStorage.GetInMemorySourceIds().size();
 
@@ -3247,8 +3268,15 @@ void TPartition::RunPersist() {
         Compacter->TryCompactionIfPossible();
     }
 
+    UpdatePendingUsersFromReplicationData();
+
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
-    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
+    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig || PendingReplicationData.has_value();
+    if (ReplicationDataFinishedPending) {
+        ReplicationDataFinishedPending = false;
+        ReplicationDataFinishedWriteInProgress = true;
+        haveChanges = true;
+    }
 
     if (haveChanges) {
         WriteCycleStartTime = now;
@@ -4116,11 +4144,21 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         PendingExplicitMessageGroups.reset();
     }
 
+    bool replicationSessionEstablished = false;
+    TVector<const TUserInfo*> changedUsers;
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
             bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+            if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                && !actual->Session.empty() && actual->PipeClient
+                && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
+                    || userInfo.Step != actual->Step || userInfo.PipeClient != actual->PipeClient)) {
+                replicationSessionEstablished = true;
+            }
 
+            userInfo.PipeClient = actual->PipeClient;
+            userInfo.PartitionSessionId = actual->PartitionSessionId;
             userInfo.Session = actual->Session;
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
@@ -4153,6 +4191,9 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
             }
+            if (offsetHasChanged && userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+                changedUsers.push_back(&userInfo);
+            }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
             // Consumer may already have been removed by an earlier write cycle
             // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).
@@ -4183,6 +4224,11 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
+    if (replicationSessionEstablished) {
+        SendOffsetsToReplicationConsumer(ctx);
+    } else {
+        SendOffsetsToReplicationConsumer(ctx, changedUsers);
+    }
     ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
@@ -4208,6 +4254,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
+
+    for (const auto& consumer : Config.GetConsumers()) {
+        if (auto* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName())) {
+            userInfo->Type = consumer.GetType();
+        }
+    }
 
     if (explicitMessageGroups) {
         for (const auto& [id, group] : *explicitMessageGroups) {
@@ -4240,6 +4292,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     CreateCompacter();
     InitializeMLPConsumers();
 
+    ReplicationFinishedMirrorerCookie.reset();
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
@@ -4532,6 +4585,10 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
     const TString& user = act.ClientId;
     RemoveUserAct(user);
     const auto& ctx = ActorContext();
+    if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && IsReadDisabled(Config, user, *AppData(ctx))) {
+        ScheduleReplyError(act, NPersQueue::NErrorCode::ERROR, "Commit to topic is disabled");
+        return;
+    }
     if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
         switch (act.Type) {
         case TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE:
@@ -5202,9 +5259,58 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const 
 }
 
 void TPartition::CreateMirrorerActor() {
+    ReplicationFinishedMirrorerCookie.reset();
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
+}
+
+void TPartition::Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx) {
+    ReadBalancerActorId = ev->Get()->ReadBalancerActorId;
+    ForwardReplicationFinished(ctx);
+}
+
+void TPartition::Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx) {
+    if (!Mirrorer || ev->Sender != Mirrorer->Actor || !ev->Get()->Record.HasPartitionId()
+        || ev->Get()->Record.GetPartitionId() != Partition.InternalPartitionId) {
+        return;
+    }
+    if (ev->Get()->Record.HasParticipatingPartitions() && !ReplicationDataFinishedParticipants) {
+        ReplicationDataFinishedParticipants = ev->Get()->Record.GetParticipatingPartitions();
+        ReplicationDataFinished = false;
+    }
+    if (!ReplicationFinishedMirrorerCookie || *ReplicationFinishedMirrorerCookie != ev->Cookie) {
+        ReplicationFinishedMirrorerCookie = ev->Cookie;
+        ++ReplicationFinishedForwardCookie;
+    }
+    if (ReplicationDataFinished) {
+        ForwardReplicationFinished(ctx);
+    } else {
+        if (!ReplicationDataFinishedWriteInProgress) {
+            ReplicationDataFinishedPending = true;
+        }
+        if (InitDone) {
+            ProcessTxsAndUserActs(ctx);
+        }
+    }
+}
+
+void TPartition::ForwardReplicationFinished(const TActorContext& ctx) {
+    if (!InitDone || !ReplicationDataFinished) {
+        return;
+    }
+    if (Mirrorer && ReplicationFinishedMirrorerCookie) {
+        ctx.Send(Mirrorer->Actor, new TEvPQ::TEvPartitionReplicationFinishedAck(Partition.InternalPartitionId),
+            0, *ReplicationFinishedMirrorerCookie);
+        ReplicationFinishedMirrorerCookie.reset();
+    }
+    if (ReadBalancerActorId && Config.GetPartitionConfig().GetMirrorFrom().GetIsForTopicReplication()) {
+        auto event = MakeHolder<TEvPQ::TEvPartitionReplicationFinished>(Partition.OriginalPartitionId);
+        if (ReplicationDataFinishedParticipants) {
+            event->Record.MutableParticipatingPartitions()->CopyFrom(*ReplicationDataFinishedParticipants);
+        }
+        ctx.Send(ReadBalancerActorId, event.Release(), 0, ReplicationFinishedForwardCookie);
+    }
 }
 
 bool TPartition::IsQuotingEnabled() const

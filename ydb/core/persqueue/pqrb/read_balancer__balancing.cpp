@@ -1520,8 +1520,12 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     auto& partition = Partitions[partitionId];
 
-    Y_DEBUG_ABORT_UNLESS(PartitionHasChildren(GetPartitionGraph(), partitionId),
-        "Finish of a leaf partition %u, consumer %s", partitionId, ConsumerName.data());
+    if (!PartitionHasChildren(GetPartitionGraph(), partitionId)) {
+        // Topic replication can finish a leaf; it has no children to unlock for balancing.
+        LOG_D("Ignore reading finished for a leaf partition", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
 
     const bool wasInactive = partition.IsInactive();
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
@@ -2136,7 +2140,8 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     }
 
     auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
-    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING
+        && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
         auto response = std::make_unique<TEvPersQueue::TEvError>();
         response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
         response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" is not streaming");

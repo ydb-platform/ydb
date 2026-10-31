@@ -32,6 +32,8 @@ message TPartitionMeta {
     optional uint64 EndWriteTimestamp = 5;
     optional uint64 FirstUncompactedOffset = 6; //deprecated
     optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
+    optional bool ReplicationDataFinished = 8 [default = false];
+    optional TPartitionScaleParticipants ReplicationDataFinishedParticipants = 9;
 }
 
 message TPartitionTxMeta {
@@ -264,6 +266,7 @@ message TMirrorPartitionConfig {
     optional string Database = 8;
     optional bool UseSecureConnection = 9 [default = false];
     reserved 10; // was SyncWriteTime; mirrored topics always sync source write time (PQv1 API)
+    optional bool IsForTopicReplication = 11 [default = false];
 }
 
 message TPartitionConfig {
@@ -363,6 +366,14 @@ message TOffloadConfig {
     }
 }
 
+enum ETopicReplicationStatus {
+    Unspecified = 0;
+    ReplicationData = 1;
+    reserved 2;
+    reserved "ReplicationConfiguration";
+    ReplicationDone = 3;
+}
+
 message TPQTabletConfig {
     message TTopicId {
         // Id is the schemeshard PathId for FirstClass topics, or CM-provided OwnerId for federation topics.
@@ -409,6 +420,7 @@ message TPQTabletConfig {
     enum EConsumerType {
         CONSUMER_TYPE_STREAMING = 0;
         CONSUMER_TYPE_MLP = 1;
+        CONSUMER_TYPE_REPLICATION = 2;
     }
 
     enum EDeadLetterPolicy {
@@ -445,6 +457,8 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+        // When true, consumer reads and offset commits are disabled.
+        optional bool IsReadDisabled = 23 [default = false];
     }
 
     repeated TConsumer Consumers = 37;
@@ -532,6 +546,10 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    optional ETopicReplicationStatus ReplicationStatus = 50;
+
+    optional bool WriteAndReadDisabled = 51 [default = false];
 }
 
 message THeartbeat {

@@ -201,6 +201,7 @@ private:
                      TAutoPtr<TEvPQ::TEvGetWriteInfoError>>;
 
     bool IsActive() const;
+    bool IsTopicReplicationFinishing(const TString& consumer) const;
     bool CanWrite() const;
     bool CanEnqueue() const;
 
@@ -272,6 +273,12 @@ private:
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReadBalancerActorIdChanged::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPartitionReplicationFinished::TPtr& ev, const TActorContext& ctx);
+    void ForwardReplicationFinished(const TActorContext& ctx);
+    void Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
+    void UpdatePendingUsersFromReplicationData();
+    void CompleteReplicationDataWrite(const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
@@ -655,6 +662,9 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionReplicationFinished, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationData, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
@@ -742,6 +752,9 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(TEvPQ::TEvReadBalancerActorIdChanged, Handle);
+            HFuncTraced(TEvPQ::TEvPartitionReplicationFinished, Handle);
+            HFuncTraced(TEvPQ::TEvReplicationData, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
             HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
@@ -1030,7 +1043,14 @@ private:
     bool InitDone;
     bool NewPartition;
     ui64 PQRBCookie = 0;
-
+    TActorId ReadBalancerActorId;
+    std::optional<ui64> ReplicationFinishedMirrorerCookie;
+    ui64 ReplicationFinishedForwardCookie = 0;
+    bool ReplicationDataFinished = false; // Committed in the partition's KV metadata.
+    TMaybe<NKikimrPQ::TPartitionScaleParticipants> ReplicationDataFinishedParticipants;
+    bool ReplicationDataFinishedPending = false;
+    bool ReplicationDataFinishedWriteInProgress = false;
+    std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;
 
@@ -1203,6 +1223,8 @@ private:
     void ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction& event);
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
+
+    void SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos = {});
 
     void OnHandleWriteResponse(const TActorContext& ctx);
 

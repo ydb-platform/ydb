@@ -40,6 +40,21 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().HasMirrorFrom();
 }
 
+bool IsWriteAndReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TAppData& appData) {
+    return config.GetWriteAndReadDisabled() || appData.FeatureFlags.GetDisableTopicWriteAndRead();
+}
+
+bool IsReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName, const TAppData& appData) {
+    const auto* consumer = GetConsumer(config, consumerName);
+    if (consumer && consumer->GetIsReadDisabled()) {
+        return true;
+    }
+    if (!IsWriteAndReadDisabled(config, appData)) {
+        return false;
+    }
+    return !consumer || consumer->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION;
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }

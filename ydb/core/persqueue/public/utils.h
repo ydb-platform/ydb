@@ -25,6 +25,8 @@ ui64 TopicPartitionReserveSize(const NKikimrPQ::TPQTabletConfig& config);
 ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config);
 
 bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config);
+bool IsWriteAndReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TAppData& appData);
+bool IsReadDisabled(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName, const TAppData& appData);
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
 size_t CountActivePartitions(const ::google::protobuf::RepeatedPtrField< ::NKikimrPQ::TPQTabletConfig_TPartition >& partitions);

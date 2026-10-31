@@ -168,7 +168,7 @@ namespace NKikimr::NBsController {
                         std::move(storageConfig), std::nullopt, nullptr, std::nullopt,
                         std::nullopt));
                     CommitInProgress = true;
-                    MaybeDisableConfigV2();
+                    // the migration check reads the YAML adopted here, so it goes once the commit is complete
                 }
             } catch (const std::exception& ex) {
                 YDB_LOG_ERROR("Failed to parse config obtained from Console",
@@ -223,7 +223,14 @@ namespace NKikimr::NBsController {
                 if (PendingReplaceRequest) {
                     YDB_LOG_DEBUG("ReverseCommit status received when BSC has PendingReplaceRequest",
                         {"marker", "BSC47"});
-                    ExpectedYamlConfigVersion.emplace(record.GetConsoleConfigVersion());
+                    if (Self.YamlConfig && record.GetConsoleConfigVersion() == GetVersion(*Self.YamlConfig) + 1
+                            && record.GetYAML() == std::get<2>(*Self.YamlConfig)) {
+                        // Console still has the YAML retained by BSC; an unchanged replacement may only switch the mode.
+                        ExpectedYamlConfigVersion.reset();
+                    } else {
+                        // Configuration v1 can replace or drop and recreate the Console YAML independently of BSC.
+                        ExpectedYamlConfigVersion.emplace(record.GetConsoleConfigVersion());
+                    }
                     Handle(PendingReplaceRequest);
                     PendingReplaceRequest.Reset();
                 } else if (!Self.YamlConfig && !Self.StorageYamlConfig) {
@@ -246,12 +253,21 @@ namespace NKikimr::NBsController {
         }
     }
 
-    void TBlobStorageController::TConsoleInteraction::OnConfigCommit() {
+    void TBlobStorageController::TConsoleInteraction::OnConfigCommit(bool mainConfigChanged, std::optional<ui64> storageApplyCookie) {
         CommitInProgress = false;
+        ConsoleCommitted = false;
+        StorageApplyCookie = storageApplyCookie;
+        StorageApplyError.reset();
+        MaybeDisableConfigV2(); // the committed YAML is in place now
         if (!Working) {
             return;
         }
         if (ConsolePipe) {
+            if (!mainConfigChanged) {
+                // A storage-only replacement must not advance the main config version in Console.
+                OnConsoleCommit();
+                return;
+            }
             Y_ABORT_UNLESS(Self.YamlConfig);
             if (const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig; yaml) {
                 NTabletPipe::SendData(Self.SelfId(), ConsolePipe, new TEvBlobStorage::TEvControllerConsoleCommitRequest(yaml));
@@ -294,14 +310,45 @@ namespace NKikimr::NBsController {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:
-                MaybeDisableConfigV2();
-                if (ClientId) {
-                    IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
-                }
+                OnConsoleCommit();
                 break;
 
             default:
                 Y_FAIL("Unexpected console commit config response status: %d", status);
+        }
+    }
+
+    void TBlobStorageController::TConsoleInteraction::OnConsoleCommit() {
+        MaybeDisableConfigV2();
+        ConsoleCommitted = true;
+        MaybeFinishCommittedReplacement();
+    }
+
+    void TBlobStorageController::TConsoleInteraction::ProcessApplyResponse(ui64 cookie, bool success, TString errorReason) {
+        if (StorageApplyCookie != cookie) {
+            return; // this storage application is not awaited by the current replacement
+        }
+        StorageApplyCookie.reset();
+        if (!success) {
+            StorageApplyError.emplace(std::move(errorReason));
+        }
+        MaybeFinishCommittedReplacement();
+    }
+
+    void TBlobStorageController::TConsoleInteraction::MaybeFinishCommittedReplacement() {
+        if (!ConsoleCommitted || StorageApplyCookie) {
+            return;
+        }
+        ConsoleCommitted = false;
+        if (!ClientId) {
+            StorageApplyError.reset();
+        } else if (auto error = std::exchange(StorageApplyError, std::nullopt)) {
+            // the YAML is committed already, so the client has to learn the storage config didn't apply
+            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Aborted,
+                TStringBuilder() << "configuration is committed, but storage configuration failed to apply: "
+                    << *error);
+        } else {
+            IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }
     }
 
@@ -314,19 +361,32 @@ namespace NKikimr::NBsController {
 
         const bool reasonOngoingCommit = CommitInProgress || (ClientId && ClientId != ev->Sender);
         if (!ConsolePipe || reasonOngoingCommit || (!Self.EnableConfigV2 && !record.GetSwitchEnableConfigV2())) {
-            // reply to newly came query
-            const TActorId temp = std::exchange(ClientId, ev->Sender);
+            // reply to newly came query; the state of the request going on, if any, stays as it is
+            auto reject = [&](NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status, TString errorReason,
+                    bool disabledConfigV2 = false) {
+                auto resp = std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigResponse>(status,
+                    std::move(errorReason));
+                if (disabledConfigV2) {
+                    resp->Record.SetDisabledConfigV2(true);
+                }
+                Self.Send(ev->Sender, resp.release());
+            };
             if (!ConsolePipe) {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::SessionClosed,
                     "connection to Console tablet terminated");
             } else if (reasonOngoingCommit) {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::OngoingCommit, "ongoing commit");
             } else {
-                IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
+                reject(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest, "configuration v2 is disabled", true);
             }
-            ClientId = temp;
             return;
         }
+
+        // An earlier replacement may have lost its client while its storage application was still pending.
+        // Its result must not complete the replacement accepted here.
+        ConsoleCommitted = false;
+        StorageApplyCookie.reset();
+        StorageApplyError.reset();
 
         ClientId = ev->Sender;
         ++ExpectedValidationTimeoutCookie;
@@ -422,7 +482,9 @@ namespace NKikimr::NBsController {
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
 
-            if (Self.YamlConfig && PendingYamlConfig == std::get<0>(*Self.YamlConfig)) {
+            // Keep unchanged YAML pending when configuration v1 changed Console independently of BSC.
+            if (Self.YamlConfig && PendingYamlConfig == std::get<0>(*Self.YamlConfig)
+                    && !ExpectedYamlConfigVersion) {
                 PendingYamlConfig.reset(); // no cluster yaml config changed
             }
         } else {
@@ -434,6 +496,17 @@ namespace NKikimr::NBsController {
         }
 
         if (!PendingYamlConfig && !PendingStorageYamlConfig) {
+            if (SwitchEnableConfigV2 && *SwitchEnableConfigV2 != Self.EnableConfigV2 && !IsDryRun) {
+                // the YAML stays as it is, but the configuration mode is switched; commit just the mode
+                CommitInProgress = true;
+                Self.Execute(Self.CreateTxUpdateEnableConfigV2(*SwitchEnableConfigV2, [this, clientId = ClientId] {
+                    CommitInProgress = false;
+                    if (ClientId == clientId) {
+                        IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
+                    }
+                }));
+                return;
+            }
             // nothing changes -- finish request now
             return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }
@@ -444,7 +517,17 @@ namespace NKikimr::NBsController {
             if (!NYamlConfig::IsMainConfig(*PendingYamlConfig)) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
                     "cluster YAML config is not of MainConfig kind");
-            } else if (const auto& meta = NYamlConfig::GetMainMetadata(*PendingYamlConfig); meta.Version != expected) {
+            }
+
+            if (record.GetBypassMetadataChecks()) {
+                // the administrator replaces wrong metadata with the right one: the version and cluster expected here
+                PendingYamlConfig = NYamlConfig::ReplaceMetadata(*PendingYamlConfig, NYamlConfig::TMainMetadata{
+                    .Version = expected,
+                    .Cluster = AppData()->ClusterName,
+                });
+            }
+
+            if (const auto& meta = NYamlConfig::GetMainMetadata(*PendingYamlConfig); meta.Version != expected) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
                      TStringBuilder() << "cluster YAML config version mismatch got# " << meta.Version
                          << " expected# " << expected);
@@ -461,7 +544,17 @@ namespace NKikimr::NBsController {
             if (!NYamlConfig::IsStorageConfig(**PendingStorageYamlConfig)) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
                     "storage YAML config is not of StorageConfig kind");
-            } else if (const auto& meta = NYamlConfig::GetStorageMetadata(**PendingStorageYamlConfig); meta.Version != expected) {
+            }
+
+            if (record.GetBypassMetadataChecks()) {
+                PendingStorageYamlConfig.emplace(NYamlConfig::ReplaceMetadata(**PendingStorageYamlConfig,
+                    NYamlConfig::TStorageMetadata{
+                        .Version = expected,
+                        .Cluster = AppData()->ClusterName,
+                    }));
+            }
+
+            if (const auto& meta = NYamlConfig::GetStorageMetadata(**PendingStorageYamlConfig); meta.Version != expected) {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
                     TStringBuilder() << "storage YAML config version mismatch got# " << meta.Version
                         << " expected# " << expected);
@@ -473,11 +566,11 @@ namespace NKikimr::NBsController {
         }
 
         if (record.GetSkipConsoleValidation() || !record.HasClusterYaml()) {
-            // TODO(alexvru): INCORRECT!!!
-            Y_DEBUG_ABORT();
+            // nothing for Console to validate: the replacement goes on in BSC as if Console had found it valid
             auto validateConfigResponse = std::make_unique<TEvBlobStorage::TEvControllerValidateConfigResponse>();
             validateConfigResponse->Record.SetStatus(NKikimrBlobStorage::TEvControllerValidateConfigResponse::ConfigIsValid);
-            Self.Send(ev->Sender, validateConfigResponse.release());
+            TActivationContext::Send(new IEventHandle(Self.SelfId(), Self.SelfId(), validateConfigResponse.release(), 0,
+                ExpectedValidationTimeoutCookie));
             return;
         }
 
@@ -494,7 +587,9 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"marker", "BSC36"},
             {"consolePipe", ConsolePipe});
-        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
+        // the reply comes with the cookie of the request, so a late one is told from the reply to a newer request
+        ValidationRequestCookie = ExpectedValidationTimeoutCookie;
+        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release(), ExpectedValidationTimeoutCookie);
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
@@ -509,10 +604,12 @@ namespace NKikimr::NBsController {
         } else if (!Self.ConfigLock.empty() || Self.SelfManagementEnabled) {
             response->Record.SetErrorReason("configuration is locked by distconf");
         } else if (Self.StorageYamlConfig) {
-            if (record.GetDedicatedStorageSection()) {
+            // a request selecting no section, as the fetch of all the configuration does, gets both of them
+            const bool all = !record.GetDedicatedStorageSection() && !record.GetDedicatedClusterSection();
+            if (all || record.GetDedicatedStorageSection()) {
                 response->Record.SetStorageYaml(*Self.StorageYamlConfig);
             }
-            if (record.GetDedicatedClusterSection() && Self.YamlConfig) {
+            if ((all || record.GetDedicatedClusterSection()) && Self.YamlConfig) {
                 const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
                 response->Record.SetClusterYaml(yaml);
             }
@@ -531,13 +628,20 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::HandleValidationTimeout(TAutoPtr<IEventHandle>& ev) {
         Y_ABORT_UNLESS(ValidationTimeout); // sanity check
-        ValidationTimeout = {};
 
-        if (ev->Cookie == ExpectedValidationTimeoutCookie) {
+        // the replacement going on still waits for Console to validate it
+        const bool pending = ClientId && ValidationRequestCookie == ExpectedValidationTimeoutCookie;
+        if (ev->Cookie == ExpectedValidationTimeoutCookie || (pending && ValidationTimeout <= TActivationContext::Now())) {
+            // the timer of a finished request may come late, after the deadline of the one going on
+            ValidationTimeout = {};
             IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::ValidationTimeout, "validation timeout");
-        } else if (ValidationTimeout) {
+        } else if (pending) {
+            // the timer of a finished request; the one going on now relies on it for its deadline, as no timer of
+            // its own was scheduled while this one was
             TActivationContext::Schedule(ValidationTimeout, new IEventHandle(TEvPrivate::EvValidationTimeout, 0,
                 Self.SelfId(), TActorId(), nullptr, ExpectedValidationTimeoutCookie));
+        } else {
+            ValidationTimeout = {};
         }
     }
 
@@ -559,6 +663,21 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConsoleInteraction::ProcessDryRunResponse(bool success, TString errorReason) {
+        // the validation resolves the hosts of the box with the node list of the new config, but the commit applies the
+        // box with the node list the controller has now; reject a host this list does not know yet, otherwise the
+        // commit would persist the YAML and then fail to resolve it
+        if (success && PendingCommitState && PendingCommitState->StorageConfig && Self.Boxes.size() <= 1
+                && PendingCommitState->StorageConfig->HasBlobStorageConfig()) {
+            for (const auto& host : PendingCommitState->StorageConfig->GetBlobStorageConfig().GetDefineBox().GetHost()) {
+                const ui32 nodeId = host.GetEnforcedNodeId();
+                if (!Self.HostRecords || !Self.HostRecords->GetHostId(nodeId)) {
+                    success = false;
+                    errorReason = TStringBuilder() << "host with node id " << nodeId
+                        << " is not known to BS controller yet";
+                    break;
+                }
+            }
+        }
         if (success) {
             if (IsDryRun) {
                 IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
@@ -574,6 +693,14 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Console validate config response",
             {"marker", "BSC27"},
             {"response", ev->Get()->Record});
+        if (ev->Cookie != ExpectedValidationTimeoutCookie || !ClientId) {
+            // the request it replies to has timed out, a newer one may be going on
+            YDB_LOG_DEBUG("Late console validate config response ignored",
+                {"marker", "BSC56"},
+                {"cookie", ev->Cookie},
+                {"expectedCookie", ExpectedValidationTimeoutCookie});
+            return;
+        }
         ++ExpectedValidationTimeoutCookie; // spoil validation timeout cookie to prevent event from firing
         using TResponseProto = NKikimrBlobStorage::TEvControllerReplaceConfigResponse;
         auto& record = ev->Get()->Record;
@@ -631,10 +758,20 @@ namespace NKikimr::NBsController {
             std::optional<TYamlConfig> yamlConfig;
             if (PendingYamlConfig) {
                 parseConfig(*PendingYamlConfig, clusterAppConfig.emplace(), yamlConfigVersion);
-                if (!effectiveConfig && !Self.StorageYamlConfig) {
-                    effectiveConfig = &clusterAppConfig.value(); // use cluster config if we employ single-config mode
-                }
                 yamlConfig.emplace(std::move(*PendingYamlConfig), yamlConfigVersion, record.GetYAML());
+            } else if (PendingStorageYamlConfig && !*PendingStorageYamlConfig && Self.YamlConfig) {
+                // Turning the dedicated section off changes the source of storage settings even when the main YAML
+                // stays byte-for-byte the same. Parse it for storage validation and application without committing it anew.
+                parseConfig(std::get<0>(*Self.YamlConfig), clusterAppConfig.emplace(), yamlConfigVersion);
+            }
+
+            // The mode is the one this replacement leaves: an engaged empty PendingStorageYamlConfig turns the
+            // dedicated storage section off, so the controller goes on with the cluster config only.
+            const bool singleConfigMode = PendingStorageYamlConfig
+                ? !PendingStorageYamlConfig->has_value()
+                : !Self.StorageYamlConfig;
+            if (!effectiveConfig && singleConfigMode && clusterAppConfig) {
+                effectiveConfig = &clusterAppConfig.value(); // use cluster config if we employ single-config mode
             }
 
             // check if we are changing StorageConfig here

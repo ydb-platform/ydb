@@ -3,7 +3,9 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
@@ -678,17 +680,53 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
+        Y_UNUSED(tableId);
+        using TConfig = NKikimrSchemeOp::TTableReplicationConfig;
+        const auto setImportState = [&](TConfig::EImportState state) {
+            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            tx.SetWorkingDir("/Root");
+            tx.SetInternal(true);
+            auto& desc = *tx.MutableAlterTable();
+            desc.SetName("table-1");
+            auto& config = *desc.MutableReplicationConfig();
+            config.SetMode(TConfig::REPLICATION_MODE_READ_ONLY);
+            config.SetConsistencyLevel(TConfig::CONSISTENCY_LEVEL_ROW);
+            config.SetImportState(state);
+            runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+            const auto result = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+            WaitTxNotification(server, sender, result->Get()->Record.GetTxId());
+        };
+        const auto checkStateAfterReboot = [&](TConfig::EImportState state) {
+            RebootTablet(runtime, shards.front(), sender);
+            const auto tables = GetTables(server, shards.front()).first;
+            UNIT_ASSERT_VALUES_EQUAL(tables.at("table-1").GetDescription().GetReplicationConfig().GetImportState(), state);
+        };
+        const auto rejectUpload = [&](NTxProxy::EUploadRowsMode mode) {
+            DoUploadRows(runtime, "/Root", "/Root/table-1", {{1, 20}, {2, 30}}, mode, Ydb::StatusIds::GENERIC_ERROR);
+        };
 
-        DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
+        // Neither ordinary replicas nor placeholders accept index-builder writes.
+        rejectUpload(NTxProxy::EUploadRowsMode::WriteToTableShadow);
+        setImportState(TConfig::WAITING_IMPORT);
+        rejectUpload(NTxProxy::EUploadRowsMode::WriteToTableShadow);
+        setImportState(TConfig::IMPORTING);
+        checkStateAfterReboot(TConfig::IMPORTING);
 
-        // The index builder may populate a replica, even without a physical shadow table.
+        // Import allows the builder, but never ordinary bulk uploads.
         DoUploadRows(runtime, "/Root", "/Root/table-1", {{1, 10}}, NTxProxy::EUploadRowsMode::WriteToTableShadow);
+        rejectUpload(NTxProxy::EUploadRowsMode::Normal);
         UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 10\n");
 
-        // Ordinary uploads must still neither overwrite existing rows nor insert new ones.
-        DoUploadRows(runtime, "/Root", "/Root/table-1", {{1, 20}, {2, 30}},
-            NTxProxy::EUploadRowsMode::Normal, Ydb::StatusIds::GENERIC_ERROR);
+        // The final ALTER closes the import window, including after a shard restart.
+        setImportState(TConfig::IMPORTED);
+        checkStateAfterReboot(TConfig::IMPORTED);
+        rejectUpload(NTxProxy::EUploadRowsMode::WriteToTableShadow);
+        rejectUpload(NTxProxy::EUploadRowsMode::Normal);
         UNIT_ASSERT_VALUES_EQUAL(ReadShardedTable(server, "/Root/table-1"), "key = 1, value = 10\n");
     }
 

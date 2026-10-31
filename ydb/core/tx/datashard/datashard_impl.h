@@ -1715,6 +1715,16 @@ public:
         return false;
     }
 
+    bool IsImportingReplica() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsReplicated() && info->ReplicationConfig.ImportState
+                    == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool IsIncrementalRestore() const {
         for (const auto& [_, info] : TableInfos) {
             if (info->IsIncrementalRestore()) {

@@ -388,16 +388,19 @@ struct TUserTable : public TThrRefBase {
     struct TReplicationConfig {
         NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
         NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel ConsistencyLevel;
+        NKikimrSchemeOp::TTableReplicationConfig::EImportState ImportState;
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
             , ConsistencyLevel(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_UNKNOWN)
+            , ImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORT_STATE_NONE)
         {
         }
 
         TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
             : Mode(config.GetMode())
             , ConsistencyLevel(config.GetConsistencyLevel())
+            , ImportState(config.GetImportState())
         {
         }
 
@@ -412,6 +415,7 @@ struct TUserTable : public TThrRefBase {
         void Serialize(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
             proto.SetMode(Mode);
             proto.SetConsistencyLevel(ConsistencyLevel);
+            proto.SetImportState(ImportState);
         }
     };
 

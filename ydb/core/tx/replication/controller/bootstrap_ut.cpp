@@ -185,7 +185,7 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
     };
     checkRestoredObjects("after import");
 
-    // Import completion is persisted in SchemeShard without a final table ALTER.
+    // The final ALTER must persist IMPORTED before import completion.
     // Attachment must observe IMPORTED even after SchemeShard restarts.
     const auto schemeShardId = env.GetPathId("/Root/replica").OwnerId;
     const auto previousSchemeShard = ResolveTablet(runtime, schemeShardId);

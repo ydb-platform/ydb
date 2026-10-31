@@ -3972,6 +3972,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         CreateChangefeed = 6,
         DownloadExportMetadata = 7,
         DropPlaceholder = 8,
+        FinalizeImport = 9,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,

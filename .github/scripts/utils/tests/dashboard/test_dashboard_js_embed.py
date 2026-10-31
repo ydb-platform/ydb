@@ -179,7 +179,7 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("grid-column: 1 / -1;", source)
         self.assertIn("height: 520px;", source)
         self.assertIn("Expand to full width (same as ya make concurrency)", source)
-        # Hover/click panels must remain visible in compact tile mode.
+        # Hover/click panels stay available in tile mode (filled on hover/click).
         self.assertIn(
             "Hover/click detail panels stay visible in tile mode too",
             source,
@@ -188,6 +188,11 @@ class JsScriptJsonTest(unittest.TestCase):
             ".chart-tile-meta {{\n      display: none;",
             source,
         )
+        # No instructional placeholders — empty panels are hidden until filled.
+        self.assertNotIn("Hover CPU chart to see sorted contributors", source)
+        self.assertNotIn("Move cursor over chart to see sorted contributors", source)
+        self.assertIn(".hoverbox:empty,", source)
+        self.assertIn('id="cpuHover" class="hoverbox"></div>', source)
         # Suite grid → tests кат → active кат → pies. Both secondary charts
         # sit under closed <details>, not in the main suite grid.
         suite_grid_idx = source.find('id="suiteChartGrid"')

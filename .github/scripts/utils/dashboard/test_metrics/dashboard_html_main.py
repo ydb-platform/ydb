@@ -327,8 +327,14 @@ def build_html_dashboard(
     }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
     #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
-    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
+    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; }}
     .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
+    /* Empty until hover/click fills them — no instructional placeholders. */
+    .hoverbox:empty,
+    .clickbox:empty {{ display: none; margin: 0; padding: 0; border: 0; }}
+    .chart-tile-meta:not(:has(.hoverbox:not(:empty), .clickbox:not(:empty))) {{
+      display: none;
+    }}
     .clickbox table {{ width: 100%; border-collapse: collapse; }}
     .clickbox th, .clickbox td {{ border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; vertical-align: top; }}
     .clickbox th {{ position: sticky; top: 0; background: #fafafa; }}
@@ -604,8 +610,8 @@ def build_html_dashboard(
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
         <div class="chart-tile-meta">
-          <div id="activeHoverChunk" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-          <div id="activeClickChunk" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+          <div id="activeHoverChunk" class="hoverbox"></div>
+          <div id="activeClickChunk" class="clickbox"></div>
         </div>
       </div>
       <div class="chart-tile" data-pane="cpuLayer">
@@ -615,8 +621,8 @@ def build_html_dashboard(
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
-          <div id="cpuHover" class="hoverbox">Hover CPU chart to see sorted contributors</div>
-          <div id="cpuClick" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+          <div id="cpuHover" class="hoverbox"></div>
+          <div id="cpuClick" class="clickbox"></div>
         </div>
       </div>
       <div class="chart-tile" data-pane="ramLayer">
@@ -626,8 +632,8 @@ def build_html_dashboard(
         </div>
         <div id="ramLayer" class="chart-pane"></div>
         <div class="chart-tile-meta">
-          <div id="ramHover" class="hoverbox">Hover RAM chart to see sorted contributors</div>
-          <div id="ramClick" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
+          <div id="ramHover" class="hoverbox"></div>
+          <div id="ramClick" class="clickbox"></div>
         </div>
       </div>
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
@@ -655,8 +661,8 @@ def build_html_dashboard(
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
-          <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
-          <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
+          <div id="cpuHoverSuite" class="hoverbox"></div>
+          <div id="cpuClickSuite" class="clickbox"></div>
         </div>
       </div>
       <div class="chart-tile" data-pane="ramLayerSuite">
@@ -666,8 +672,8 @@ def build_html_dashboard(
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
         <div class="chart-tile-meta">
-          <div id="ramHoverSuite" class="hoverbox">Hover RAM chart to see sorted contributors</div>
-          <div id="ramClickSuite" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
+          <div id="ramHoverSuite" class="hoverbox"></div>
+          <div id="ramClickSuite" class="clickbox"></div>
         </div>
       </div>
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
@@ -687,8 +693,8 @@ def build_html_dashboard(
           </div>
           <div id="testsLayerSuite" class="chart-pane"></div>
           <div class="chart-tile-meta">
-            <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
-            <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
+            <div id="testsHoverSuite" class="hoverbox"></div>
+            <div id="testsClickSuite" class="clickbox"></div>
           </div>
         </div>
       </div>
@@ -702,8 +708,8 @@ def build_html_dashboard(
           </div>
           <div id="activeLayerSuite" class="chart-pane"></div>
           <div class="chart-tile-meta">
-            <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-            <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
+            <div id="activeHoverSuite" class="hoverbox"></div>
+            <div id="activeClickSuite" class="clickbox"></div>
           </div>
         </div>
       </div>
@@ -2541,7 +2547,7 @@ def build_html_dashboard(
         showChartTip(ev);
       }});
       plot.on('plotly_unhover', () => {{
-        panel.textContent = 'Move cursor over chart to see sorted contributors';
+        panel.textContent = '';
         hideChartTipSoon();
       }});
     }}

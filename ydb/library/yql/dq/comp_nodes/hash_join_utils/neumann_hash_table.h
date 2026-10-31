@@ -171,6 +171,12 @@ class TNeumannHashTable {
         if constexpr (ConsecutiveDuplicates) {
             BufferSlotSize_ += sizeof(ui32);
         }
+        const ui8 keyMask = layout->KeyColumnsNum >= 8 ? 0xFF : (1u << layout->KeyColumnsNum) - 1;
+        NullRejectMask_ = keyMask & ~(layout->HasEqualNullsKeys ? layout->GetEqualNullsMaskByte(0) : 0);
+    }
+
+    bool HasRejectingNullKey(const ui8 *const row) const {
+        return (row[Layout_->BitmaskOffset] & NullRejectMask_) != NullRejectMask_;
     }
 
     TNeumannHashTable(const TNeumannHashTable &) = delete;
@@ -379,6 +385,9 @@ class TNeumannHashTable {
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 
         TIterator iter;
+        if (HasRejectingNullKey(row)) {
+            return iter;
+        }
 
         const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
@@ -495,6 +504,9 @@ class TNeumannHashTable {
                std::predicate<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");
         MKQL_ENSURE(!Directories_.empty() && Tuples_ != nullptr, "lookup to empty table?");
+        if (HasRejectingNullKey(row)) {
+            return;
+        }
 
         const THash thash = ReadUnaligned<THash>(row);
         const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
@@ -605,6 +617,7 @@ class TNeumannHashTable {
     bool IsInplace_;
     ui32 BufferSlotSize_;
     ui32 RowIndexSize_;
+    ui8 NullRejectMask_ = 0;
 
     unsigned DirectoryHashBits_;
     Hash DirectoryHashMask_;

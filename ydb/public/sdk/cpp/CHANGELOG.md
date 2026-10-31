@@ -1,3 +1,4 @@
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
 
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
 

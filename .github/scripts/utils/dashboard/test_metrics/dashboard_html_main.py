@@ -83,12 +83,65 @@ def build_html_dashboard(
     .tab {{ display: none; }}
     .tab.active {{ display: block; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
+    .measured-body {{ display: flex; gap: 16px; align-items: flex-start; }}
+    .measured-nav {{ flex: 0 0 460px; min-width: 0; }}
+    .measured-nav input[type="search"] {{ width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
+    .measured-test-hits {{ max-height: 180px; overflow: auto; margin: 0 0 8px 0; padding: 0; list-style: none; font-size: 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; }}
+    .measured-test-hits li {{ padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #f0f2f4; }}
+    .measured-test-hits li:hover, .measured-test-hits li.on {{ background: #e7f3ff; }}
+    .measured-test-hits .hit-name {{ word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .measured-test-hits .hit-chunk {{ color: #6b7280; }}
+    .measured-tree {{ max-height: 720px; overflow: auto; border: 1px solid #d0d7de; border-radius: 8px; background: #fafbfc; font-size: 12px; }}
+    .measured-tree button {{ border: 0; background: transparent; cursor: pointer; font: inherit; text-align: left; }}
+    .measured-tree .mt-row {{ display: flex; align-items: flex-start; gap: 2px; }}
+    .measured-tree .mt-twist, .measured-tree .mt-spacer {{ flex: 0 0 16px; width: 16px; padding: 4px 0; color: #57606a; }}
+    .measured-tree .mt-pick {{ flex: 1; min-width: 0; padding: 3px 6px; border-radius: 4px; }}
+    .measured-tree .mt-pick:hover {{ background: #eef2f6; }}
+    .measured-tree .mt-pick.on {{ background: #e7f3ff; }}
+    .measured-tree .mt-name {{ font-weight: 600; }}
+    .measured-tree .mt-chunk .mt-name {{ font-weight: 400; }}
+    .measured-tree .stats {{ display: block; color: #6b7280; font-weight: 400; font-variant-numeric: tabular-nums; }}
+    .measured-tree .outcomes {{ margin-top: 1px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }}
+    .measured-tree .stat-max {{ color: #9a3412; font-weight: 700; background: #ffedd5; padding: 0 3px; border-radius: 3px; }}
+    .measured-tree .st, #measuredMeta .st {{ display: inline-block; padding: 0 5px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }}
+    .measured-tree .st-pass, #measuredMeta .st-pass {{ color: #166534; background: #dcfce7; }}
+    .measured-tree .st-fail, #measuredMeta .st-fail {{ color: #fff; background: #dc2626; }}
+    .measured-tree .st-mute, #measuredMeta .st-mute {{ color: #fff; background: #7c3aed; }}
+    .measured-tree .st-skip, #measuredMeta .st-skip {{ color: #fff; background: #6b7280; }}
+    .measured-tree .st-nl, #measuredMeta .st-nl {{ color: #fff; background: #6c757d; }}
+    .measured-tree .st-other, #measuredMeta .st-other {{ color: #374151; background: #e5e7eb; }}
+    .measured-tree .odur, #measuredMeta .odur {{ color: #6b7280; font-variant-numeric: tabular-nums; }}
+    .measured-charts {{ flex: 1; min-width: 0; }}
+    .measured-test-list {{ margin: 0 0 10px 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }}
+    .measured-test-list li {{ display: flex; gap: 8px; align-items: flex-start; padding: 3px 6px; border-radius: 4px; }}
+    .measured-test-list li.on {{ background: #e7f3ff; }}
+    .measured-test-list .swatch {{ flex: 0 0 10px; width: 10px; height: 10px; margin-top: 5px; border-radius: 2px; }}
+    .measured-test-list .tbody {{ flex: 1; min-width: 0; }}
+    .measured-test-list .tline {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }}
+    .measured-test-list .tname {{ min-width: 0; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    .measured-test-list .tmeta {{ flex: 0 0 auto; color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+    .measured-test-list .tlogs {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }}
+    .measured-test-list .tlogs a {{ color: #0969da; text-decoration: none; }}
+    .measured-test-list .tlogs a:hover {{ text-decoration: underline; }}
+    .measured-test-list .st, .measured-test-list .ebadge {{ display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.02em; }}
+    .measured-test-list .st-pass {{ color: #166534; background: #dcfce7; }}
+    .measured-test-list .st-fail {{ color: #fff; background: #dc2626; }}
+    .measured-test-list .st-mute {{ color: #fff; background: #7c3aed; }}
+    .measured-test-list .st-skip {{ color: #fff; background: #6b7280; }}
+    .measured-test-list .st-other {{ color: #374151; background: #e5e7eb; }}
+    .measured-test-list .eb-TIMEOUT {{ color: #fff; background: #ff8c00; }}
+    .measured-test-list .eb-VERIFY {{ color: #fff; background: #b22222; }}
+    .measured-test-list .eb-SANITIZER {{ color: #fff; background: #ff4500; }}
+    .measured-test-list .eb-XFAILED {{ color: #fff; background: #6f42c1; }}
+    .measured-test-list .eb-POSSIBLE_OOM {{ color: #fff; background: #d63384; }}
+    .measured-test-list .eb-NOT_LAUNCHED {{ color: #fff; background: #6c757d; }}
+    .measured-test-list .eb-other {{ color: #fff; background: #475569; }}
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
     #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
-    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
+    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; white-space: pre-wrap; font-variant-numeric: tabular-nums; }}
     .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
     .clickbox table {{ width: 100%; border-collapse: collapse; }}
     .clickbox th, .clickbox td {{ border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; vertical-align: top; }}
@@ -199,6 +252,32 @@ def build_html_dashboard(
       background: #fff;
       color: #64748b;
       font-weight: 600;
+    }}
+    .headline-hint {{
+      position: relative;
+      cursor: help;
+      text-decoration: underline dotted;
+      text-underline-offset: 2px;
+      outline: none;
+    }}
+    .headline-hint:hover::after, .headline-hint:focus::after {{
+      content: attr(data-tooltip);
+      position: absolute;
+      z-index: 10000;
+      left: 0;
+      top: calc(100% + 6px);
+      width: 360px;
+      padding: 8px 10px;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+      background: #0f172a;
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+      white-space: normal;
+      font-weight: 400;
+      line-height: 1.35;
+      text-align: left;
+      pointer-events: none;
     }}
     .headline-card {{
       border: 1px solid #e2e8f0;
@@ -369,6 +448,7 @@ def build_html_dashboard(
       <ul>
         <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
         <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
+        <li><b>Measured per test:</b> stacked layers from <code>ya-test-*</code> cgroups (CPU/RAM/disk every 3s), plus cgroup CPU throttling, CPU/memory/I/O PSI, and memory events. Select a chunk to align these signals with its run. The host chart shows iowait, PSI, disk busy time, and in-flight I/O. These fields are interval deltas; older logs omit unavailable signals.</li>
         <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
         <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
         <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
@@ -407,8 +487,36 @@ def build_html_dashboard(
       </details>
     </div>
   </details>
+  <div id="measuredWrap" style="display:none;margin:12px 0 16px 0;padding:10px 12px;border:1px solid #d0d7de;border-radius:8px;background:#fff;">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <b>Measured per test (cgroup layers)</b>
+      <span id="measuredMeta" class="muted"></span>
+    </div>
+    <div class="measured-body">
+      <div class="measured-nav">
+        <input id="measuredTestSearch" type="search" placeholder="Find test by name…" />
+        <ol id="measuredTestHits" class="measured-test-hits" style="display:none;"></ol>
+        <div id="measuredTree" class="measured-tree"></div>
+      </div>
+      <div class="measured-charts">
+        <div id="measuredTestsLane" class="wide" style="height:90px;display:none;"></div>
+        <ol id="measuredTestsList" class="measured-test-list" style="display:none;"></ol>
+        <div id="measuredCpu" class="wide" style="height:280px;"></div>
+        <div id="measuredCpuHover" class="hoverbox">Hover CPU layers to see sorted contributors</div>
+        <div id="measuredRam" class="wide" style="height:280px;"></div>
+        <div id="measuredRamHover" class="hoverbox">Hover RAM layers to see sorted contributors</div>
+        <div id="measuredWrite" class="wide" style="height:280px;"></div>
+        <div id="measuredWriteHover" class="hoverbox">Hover write layers to see sorted contributors</div>
+        <div id="measuredRead" class="wide" style="height:280px;"></div>
+        <div id="measuredReadHover" class="hoverbox">Hover read layers to see sorted contributors</div>
+        <div id="measuredPressure" class="wide" style="height:320px;display:none;"></div>
+        <div id="measuredPressureHover" class="hoverbox">Hover to inspect per-chunk throttling and PSI</div>
+      </div>
+    </div>
+  </div>
   <div id="activeChunks" class="wide"></div>
   <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
+  <div id="hostContentionChart" class="wide" style="display:none;height:320px;"></div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
@@ -496,7 +604,7 @@ def build_html_dashboard(
     function formatHeadlineNumber(metric, value) {{
       const n = Number(value);
       if (!Number.isFinite(n)) return '—';
-      if (metric === 'cpu' || metric === 'ram' || metric === 'disk') return n.toFixed(1);
+      if (metric === 'cpu' || metric === 'ram' || metric === 'disk' || metric === 'pct' || metric === 'queue') return n.toFixed(1);
       return String(Math.round(n));
     }}
     function formatHeadlineValue(metric, value) {{
@@ -572,18 +680,23 @@ def build_html_dashboard(
           const metric = row[1];
           const stats = row[2];
           const limit = row[3];
-          return '<tr><td>' + label + '</td>' +
+          const hint = row[4];
+          const labelHtml = hint
+            ? '<span class="headline-hint" tabindex="0" data-tooltip="' + escapeHtml(hint) + '">' + label + '</span>'
+            : label;
+          return '<tr><td>' + labelHtml + '</td>' +
             (withLimit ? ('<td>' + (limit == null || limit === '' ? '—' : limit) + '</td>') : '') +
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +
             statCell(metric, stats, 'median') +
+            statCell(metric, stats, 'avg') +
           '</tr>';
         }}).join('');
         return (
           '<table class="headline-table"><thead><tr>' +
             '<th></th>' +
             (withLimit ? '<th title="CPU cores and MemTotal from /proc on this host. Disk rows are throughput, so they have no capacity limit.">limit</th>' : '') +
-            '<th>max</th><th>p95</th><th>median</th>' +
+            '<th>max</th><th>p95</th><th>median</th><th>avg</th>' +
           '</tr></thead><tbody>' + body + '</tbody></table>'
         );
       }}
@@ -614,19 +727,67 @@ def build_html_dashboard(
       if (cpuHost || ramHost || diskRead || diskWrite) {{
         const samples = Math.round(Number((cpuHost || ramHost || diskRead || {{}}).samples || 0));
         const sampleNote = samples ? ' · ' + String(samples) + ' samples' : '';
+        const hostRows = [
+          ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
+          ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
+          ['Disk read, MB/s', 'disk', diskRead, null],
+          ['Disk write, MB/s', 'disk', diskWrite, null],
+        ];
         hostBlock =
           '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
-          statTable([
-            ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
-            ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
-            ['Disk read, MB/s', 'disk', diskRead, null],
-            ['Disk write, MB/s', 'disk', diskWrite, null],
-          ], true) +
+          statTable(hostRows, true) +
           '</div>';
       }}
+      const telemetryRows = [];
+      [
+          ['CPU iowait, %', 'pct', hs.cpu_iowait_pct, null,
+            'Доля времени CPU, проведённая в ожидании завершения I/O. Устойчиво высокое значение означает, что вычисления простаивают из-за диска или другого блочного устройства.'],
+          ['CPU PSI some, %', 'pct', hs.pressure_cpu_some_pct, null,
+            'Доля времени, когда хотя бы одна задача была готова исполняться, но ждала CPU. Высокое значение означает конкуренцию за процессор.'],
+          ['CPU PSI full, %', 'pct', hs.pressure_cpu_full_pct, null,
+            'Доля времени полного CPU-стопа: все исполняемые задачи одновременно ждали CPU. Для CPU на Linux обычно отсутствует или равна нулю.'],
+          ['Memory PSI some, %', 'pct', hs.pressure_memory_some_pct, null,
+            'Доля времени, когда хотя бы одна задача тормозила из-за нехватки памяти, reclaim или swap. Рост указывает на давление по RAM.'],
+          ['Memory PSI full, %', 'pct', hs.pressure_memory_full_pct, null,
+            'Доля времени, когда все активные задачи одновременно были заблокированы из-за памяти. Ненулевое устойчивое значение означает сильное давление по RAM.'],
+          ['I/O PSI some, %', 'pct', hs.pressure_io_some_pct, null,
+            'Доля времени, когда хотя бы одна задача была заблокирована на I/O. Показывает влияние медленного диска даже при неполной загрузке всего раннера.'],
+          ['I/O PSI full, %', 'pct', hs.pressure_io_full_pct, null,
+            'Доля времени, когда все активные задачи одновременно ждали I/O. Высокое значение означает общий I/O-затор раннера.'],
+          ['Disk busy, %', 'pct', hs.disk_busy_pct, null,
+            'Доля интервала, когда диск обслуживал хотя бы один запрос. Значения около 100% длительное время означают насыщение устройства.'],
+          ['Disk queue, requests', 'queue', hs.disk_io_in_progress, null,
+            'Число I/O-запросов в работе на момент замера. Устойчивая растущая очередь вместе с высоким Disk busy и I/O PSI указывает на перегрузку диска.'],
+      ].forEach(row => {{ if (row[2]) telemetryRows.push(row); }});
+      const telemetryBlock = telemetryRows.length
+        ? '<div class="headline-block"><h4 title="Метрики давления на ресурсы всего раннера. Наведите на название строки для объяснения." style="cursor:help;">Host · telemetry</h4>' +
+          statTable(telemetryRows, false) +
+          '</div>'
+        : '';
+      const cgroupRows = [
+        ['CPU, cores', 'cpu', hs.cpu_cgroup],
+        ['RAM, GB', 'ram', hs.ram_cgroup],
+        ['Disk read, MB/s', 'disk', hs.disk_read_cgroup],
+        ['Disk write, MB/s', 'disk', hs.disk_write_cgroup],
+        ['Active cgroups', 'count', hs.active_cgroups],
+      ].filter(row => row[2]);
+      const cgroupSamples = cgroupRows.length
+        ? Math.round(Number((cgroupRows[0][2] || {{}}).samples || 0))
+        : 0;
+      const cgroupBlock = cgroupRows.length
+        ? '<div class="headline-block"><h4>Tests · cgroups' +
+          (cgroupSamples ? ' · ' + String(cgroupSamples) + ' samples' : '') +
+          '</h4>' +
+          statTable(cgroupRows, false) +
+          '</div>'
+        : '';
       grid.innerHTML =
         runLine +
         '<div class="headline-tables">' +
+          telemetryBlock +
+          cgroupBlock +
+        '</div>' +
+        '<div class="headline-tables" style="margin-top:16px;">' +
           '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
           hostBlock +
         '</div>';
@@ -1810,6 +1971,7 @@ def build_html_dashboard(
       if (unit === 'active') return String(Math.round(y));
       if (unit === 'tests') return String(Math.round(y));
       if (unit === 'GB') return y.toFixed(3);
+      if (unit === 'MB/s') return y.toFixed(2);
       return y.toFixed(3);
     }}
 
@@ -1818,6 +1980,7 @@ def build_html_dashboard(
       if (unit === 'tests') return 0.5;
       if (unit === 'GB') return 0.001;   // ~1 MB
       if (unit === 'cores') return 0.01; // suppress tiny CPU noise shown as 0.000
+      if (unit === 'MB/s') return 0.01;
       return 0.0;
     }}
 
@@ -1848,13 +2011,28 @@ def build_html_dashboard(
       tip.style.left = Math.max(8, x) + 'px';
       tip.style.top = Math.max(8, y) + 'px';
     }}
-    function showChartTip(ev) {{
+    function hoverContributionRows(ev, unit) {{
+      const rows = (ev.points || []).map(p => ({{
+        name: p && p.data ? p.data.name : '',
+        y: Number(p && p.y || 0),
+      }})).filter(p => isSuiteContribution(p.name));
+      const total = rows.reduce((sum, row) => sum + row.y, 0);
+      const eps = minVisibleValue(unit);
+      const top = rows.filter(row => row.y > eps).sort((a, b) => b.y - a.y).slice(0, 40);
+      return {{ total: total, top: top }};
+    }}
+    function hoverTotalLine(total, unit) {{
+      return 'Total: ' + formatValue(Number(total) || 0, unit) + ' ' + unit;
+    }}
+    function showChartTip(ev, unit) {{
       const tip = document.getElementById('chartTip');
       if (!tip || !ev || !ev.points || !ev.points.length) return;
       clearTimeout(chartTipHideTimer);
       const label = formatPointTime(ev.points[0]);
       const seen = new Set();
       const lines = [];
+      const contrib = unit ? hoverContributionRows(ev, unit) : null;
+      if (contrib) lines.push(hoverTotalLine(contrib.total, unit));
       for (const p of ev.points) {{
         const line = hoverPointLine(p);
         if (!line || seen.has(line)) continue;
@@ -1910,15 +2088,12 @@ def build_html_dashboard(
         if (!ev || !ev.points || !ev.points.length) return;
         const point = ev.points[0];
         const label = formatPointTime(point);
-        const eps = minVisibleValue(unit);
-        const rows = ev.points
-          .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && isSuiteContribution(p.name))
-          .sort((a, b) => b.y - a.y);
-        const top = rows.slice(0, 40);
-        const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
+        const contrib = hoverContributionRows(ev, unit);
+        const lines = [hoverTotalLine(contrib.total, unit)].concat(
+          contrib.top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`)
+        );
         panel.textContent = `t=${{label}}\\n` + lines.join('\\n');
-        showChartTip(ev);
+        showChartTip(ev, unit);
       }});
       plot.on('plotly_unhover', () => {{
         panel.textContent = 'Move cursor over chart to see sorted contributors';
@@ -2160,6 +2335,46 @@ def build_html_dashboard(
           hoverlabel: {{ namelength: -1 }},
         }}, {{ responsive: true }});
       }}
+      const hostSignals = ro.host_resource_signals || {{}};
+      const hostChart = document.getElementById('hostContentionChart');
+      if (hostChart && Object.keys(hostSignals).length) {{
+        const signalNames = {{
+          cpu_iowait_pct: 'CPU iowait',
+          pressure_cpu_some_pct: 'CPU PSI some',
+          pressure_cpu_full_pct: 'CPU PSI full',
+          pressure_memory_some_pct: 'Memory PSI some',
+          pressure_memory_full_pct: 'Memory PSI full',
+          pressure_io_some_pct: 'I/O PSI some',
+          pressure_io_full_pct: 'I/O PSI full',
+          disk_busy_pct: 'Disk busy',
+          disk_io_in_progress: 'Disk I/O in progress',
+        }};
+        const traces = Object.keys(signalNames).filter(name => hostSignals[name]).map((name, index) => {{
+          const isQueue = name === 'disk_io_in_progress';
+          return {{
+            x: xDisp,
+            y: hostSignals[name],
+            type: 'scatter',
+            mode: 'lines',
+            name: signalNames[name],
+            yaxis: isQueue ? 'y2' : 'y',
+            connectgaps: false,
+            line: {{ width: 2, color: ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309'][index % 9] }},
+            hovertemplate: '%{{fullData.name}}: %{{y:.2f}}' + (isQueue ? ' requests<extra></extra>' : '%<extra></extra>'),
+          }};
+        }});
+        if (traces.length) {{
+          hostChart.style.display = '';
+          Plotly.newPlot(hostChart, traces, {{
+            title: 'Host contention signals (iowait, PSI, disk queue)',
+            xaxis: axisLayout(xDisp),
+            yaxis: {{ title: 'Stall / busy time (%)', rangemode: 'tozero' }},
+            yaxis2: {{ title: 'Requests in progress', overlaying: 'y', side: 'right', rangemode: 'tozero' }},
+            hovermode: 'x unified',
+            hoverlabel: {{ namelength: -1 }},
+          }}, {{ responsive: true }});
+        }}
+      }}
     }}
     attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');
     attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
@@ -2290,6 +2505,668 @@ def build_html_dashboard(
       }}
     }}
     window.applyLayerToggles = applyLayerToggles;
+
+    const measuredList = (data.resources_overlay && data.resources_overlay.measured_tests) || [];
+    const measuredLayers = (data.resources_overlay && data.resources_overlay.measured_layers) || {{}};
+    const measuredChunkTests = (data.resources_overlay && data.resources_overlay.measured_chunk_tests) || {{}};
+    const measuredWrap = document.getElementById('measuredWrap');
+    const MEASURED_PALETTE = ['#d97706','#7c3aed','#0284c7','#65a30d','#dc2626','#0f766e','#c026d3','#1d4ed8','#b45309','#15803d','#be123c','#4338ca'];
+    const _measuredColors = {{}};
+    const _origColorForTrack = colorForTrack;
+    colorForTrack = function(trackName) {{
+      if (_measuredColors[trackName]) return _measuredColors[trackName];
+      return _origColorForTrack(trackName);
+    }};
+    function measuredPeak(track) {{
+      return (track || []).reduce((m, v) => Math.max(m, Number(v) || 0), 0);
+    }}
+    function filterMeasuredTracks(allTracks, labels) {{
+      const out = {{}};
+      const selected = new Set(labels || []);
+      Object.keys(allTracks || {{}}).forEach(name => {{
+        const separator = name.lastIndexOf(' · ');
+        const label = separator >= 0 ? name.slice(0, separator) : name;
+        if (selected.has(label)) out[name] = allTracks[name];
+      }});
+      return out;
+    }}
+    function topMeasuredTracks(tracks, limit) {{
+      const names = Object.keys(tracks || {{}}).sort((a, b) => measuredPeak(tracks[b]) - measuredPeak(tracks[a]));
+      const ordered = {{}};
+      if (names.length <= limit) {{
+        names.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+        return ordered;
+      }}
+      const top = names.slice(0, limit);
+      const rest = names.slice(limit);
+      const other = tracks[rest[0]].map((_, i) => rest.reduce((s, n) => s + (Number(tracks[n][i]) || 0), 0));
+      ordered.other = other;
+      top.slice().reverse().forEach(n => {{ ordered[n] = tracks[n]; }});
+      return ordered;
+    }}
+    function plotMeasuredLayers(labels, titleSuffix) {{
+      if (!window.Plotly || !measuredLayers.xs_evlog_sec) return;
+      const charts = [
+        ['measuredCpu', measuredLayers.cpu_tracks, 'Layered measured CPU' + titleSuffix, 'cores'],
+        ['measuredRam', measuredLayers.ram_tracks, 'Layered measured RAM' + titleSuffix, 'GB'],
+        ['measuredWrite', measuredLayers.write_tracks, 'Layered measured disk write' + titleSuffix, 'MB/s'],
+        ['measuredRead', measuredLayers.read_tracks, 'Layered measured disk read' + titleSuffix, 'MB/s'],
+      ];
+      charts.forEach(([divId, allTracks, title, unit]) => {{
+        const tracks = topMeasuredTracks(filterMeasuredTracks(allTracks, labels), 50);
+        Object.keys(tracks).forEach((name, i) => {{
+          _measuredColors[name] = name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        }});
+        stackedArea(divId, measuredLayers.xs_evlog_sec, tracks, title, unit);
+      }});
+      attachMeasuredHover('measuredCpu', 'measuredCpuHover', 'cores');
+      attachMeasuredHover('measuredRam', 'measuredRamHover', 'GB');
+      attachMeasuredHover('measuredWrite', 'measuredWriteHover', 'MB/s');
+      attachMeasuredHover('measuredRead', 'measuredReadHover', 'MB/s');
+    }}
+    function plotMeasuredPressure(labels, titleSuffix) {{
+      const el = document.getElementById('measuredPressure');
+      const panel = document.getElementById('measuredPressureHover');
+      if (!el || !window.Plotly) return;
+      const allTracks = measuredLayers.pressure_tracks || {{}};
+      const tracks = topMeasuredTracks(filterMeasuredTracks(allTracks, labels), 50);
+      const names = Object.keys(tracks);
+      if (!names.length) {{
+        el.style.display = 'none';
+        if (panel) panel.style.display = 'none';
+        return;
+      }}
+      el.style.display = '';
+      if (panel) panel.style.display = '';
+      const xs = (measuredLayers.xs_evlog_sec || []).map(xToDisplay);
+      const traces = names.map((name, i) => ({{
+        x: xs,
+        y: tracks[name],
+        type: 'scatter',
+        mode: 'lines',
+        name: name,
+        connectgaps: false,
+        line: {{ width: 2, color: name === 'other' ? '#bdbdbd' : MEASURED_PALETTE[i % MEASURED_PALETTE.length] }},
+        hovertemplate: '%{{fullData.name}}: %{{y:.2f}}%<extra></extra>',
+      }}));
+      Plotly.newPlot(el, traces, {{
+        title: 'Cgroup throttling and pressure' + titleSuffix,
+        xaxis: axisLayout(xs),
+        yaxis: {{ title: 'Interval time (%)', rangemode: 'tozero' }},
+        hovermode: 'x unified',
+        hoverlabel: {{ namelength: -1 }},
+        margin: {{ t: 48, r: 20, b: 30, l: 52 }},
+      }}, {{ responsive: true }});
+      el.on('plotly_hover', (ev) => {{
+        if (!panel || !ev || !ev.points || !ev.points.length) return;
+        panel.textContent = ev.points.map(p => `${{p.data.name}}: ${{Number(p.y).toFixed(2)}}%`).join(' · ');
+      }});
+      el.on('plotly_unhover', () => {{ if (panel) panel.textContent = 'Hover to inspect per-chunk throttling and PSI'; }});
+    }}
+    let _measuredActiveTests = [];
+    function testAtSec(tSec) {{
+      if (!Number.isFinite(Number(tSec))) return null;
+      const t = Number(tSec);
+      return (_measuredActiveTests || []).find(row => Number(row.start_sec) <= t && t < Number(row.end_sec)) || null;
+    }}
+    function highlightMeasuredTest(name) {{
+      document.querySelectorAll('#measuredTestsList li').forEach(li => {{
+        li.classList.toggle('on', Boolean(name) && li.dataset.name === name);
+      }});
+    }}
+    function measuredStatusLabel(status) {{
+      const u = String(status || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'OK' || u === 'PASS' || u === 'PASSED' || u === 'GOOD') return 'PASS';
+      if (u === 'FAILED' || u === 'FAIL' || u === 'ERROR') return 'FAIL';
+      if (u === 'MUTE' || u === 'MUTED') return 'MUTE';
+      if (u === 'SKIP' || u === 'SKIPPED') return 'SKIP';
+      if (u === 'NOT_LAUNCHED' || u === 'NOTLAUNCHED') return 'NOT LAUNCHED';
+      return u;
+    }}
+    function measuredStatusClass(label) {{
+      if (label === 'PASS') return 'st-pass';
+      if (label === 'FAIL') return 'st-fail';
+      if (label === 'MUTE') return 'st-mute';
+      if (label === 'SKIP') return 'st-skip';
+      if (label === 'NOT LAUNCHED') return 'st-nl';
+      return 'st-other';
+    }}
+    function measuredErrorTags(errorType) {{
+      return String(errorType || '').split(',').map(s => s.trim()).filter(Boolean);
+    }}
+    function measuredErrorBadgeClass(tag) {{
+      const u = String(tag || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'TIMEOUT' || u === 'VERIFY' || u === 'SANITIZER' || u === 'XFAILED' || u === 'POSSIBLE_OOM' || u === 'NOT_LAUNCHED') return 'eb-' + u;
+      return 'eb-other';
+    }}
+    function measuredErrorBadgeLabel(tag) {{
+      const u = String(tag || '').toUpperCase().replace(/\\s+/g, '_');
+      if (u === 'POSSIBLE_OOM') return 'possible OOM';
+      if (u === 'NOT_LAUNCHED') return 'NOT LAUNCHED';
+      return String(tag || '').toUpperCase();
+    }}
+    function resolveArtifactUrl(url) {{
+      const raw = String(url || '').trim();
+      if (!raw) return '';
+      if (/^https?:\\/\\//i.test(raw)) return raw;
+      const base = String((data.config && data.config.artifacts_url) || '').trim();
+      if (!base) return raw;
+      return base.replace(/\\/?$/, '/') + raw.replace(/^\\//, '');
+    }}
+    function measuredLogEntries(links) {{
+      const src = links && typeof links === 'object' ? links : {{}};
+      const preferred = ['stderr', 'stdout', 'log', 'Log', 'logsdir'];
+      const skip = new Set(['core', 'binary']);
+      const names = [];
+      preferred.forEach(name => {{ if (src[name] && !names.includes(name)) names.push(name); }});
+      Object.keys(src).sort().forEach(name => {{
+        const kind = String(name).toLowerCase().replace(/\\d+$/, '').trim();
+        if (skip.has(kind) || kind.endsWith(' core') || kind.endsWith(' binary')) return;
+        if (src[name] && !names.includes(name)) names.push(name);
+      }});
+      return names.map(name => ({{ name: name, url: resolveArtifactUrl(src[name]) }})).filter(x => x.url);
+    }}
+    function measuredTestHoverLine(point) {{
+      const test = testAtSec(sourceSecFromPoint(point));
+      highlightMeasuredTest(test && test.name);
+      if (!test) return '';
+      const status = measuredStatusLabel(test.status);
+      const tags = measuredErrorTags(test.error_type).map(measuredErrorBadgeLabel);
+      const extra = [status, ...tags].filter(Boolean).join(' · ');
+      return test.name + ' (' + Number(test.duration_sec || 0).toFixed(1) + 's' + (extra ? ', ' + extra : '') + ')';
+    }}
+    function attachMeasuredHover(plotId, panelId, unit) {{
+      const plot = document.getElementById(plotId);
+      const panel = document.getElementById(panelId);
+      if (!plot || !panel) return;
+      plot.classList.add('tz-hover');
+      plot.on('plotly_hover', (ev) => {{
+        if (!ev || !ev.points || !ev.points.length) return;
+        const point = ev.points[0];
+        const label = formatPointTime(point);
+        const testLine = measuredTestHoverLine(point);
+        const contrib = hoverContributionRows(ev, unit);
+        const lines = [hoverTotalLine(contrib.total, unit)].concat(
+          contrib.top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`)
+        );
+        panel.textContent = (testLine ? testLine + '\\n' : '') + `t=${{label}}\\n` + lines.join('\\n');
+        showChartTip(ev, unit);
+        const tip = document.getElementById('chartTip');
+        if (tip && testLine && tip.style.display !== 'none' && !(tip.textContent || '').includes(testLine)) {{
+          tip.textContent = testLine + '\\n' + (tip.textContent || '');
+        }}
+      }});
+      plot.on('plotly_unhover', () => {{
+        panel.textContent = 'Move cursor over chart to see sorted contributors';
+        highlightMeasuredTest('');
+        hideChartTipSoon();
+      }});
+    }}
+    function testsForMeasuredSelection(sel) {{
+      if (!sel || sel.kind !== 'chunk') return [];
+      const row = measuredList.find(r => r.key === sel.key) || {{}};
+      return measuredChunkTests[row.label] || measuredChunkTests[sel.key] || [];
+    }}
+    function testsForMeasuredRow(row) {{
+      if (!row) return [];
+      return measuredChunkTests[row.label] || measuredChunkTests[row.key] || [];
+    }}
+    function emptyMeasuredOutcomes() {{
+      return {{ pass: 0, fail: 0, mute: 0, skip: 0, nl: 0, other: 0, duration: 0, n: 0 }};
+    }}
+    function measuredOutcomeKey(test) {{
+      const tags = measuredErrorTags(test && test.error_type).map(tag => String(tag).toUpperCase().replace(/\\s+/g, '_'));
+      const label = measuredStatusLabel(test && test.status);
+      if (label === 'NOT LAUNCHED' || tags.includes('NOT_LAUNCHED')) return 'nl';
+      if (label === 'MUTE') return 'mute';
+      if (label === 'SKIP') return 'skip';
+      if (label === 'FAIL') return 'fail';
+      if (label === 'PASS') return 'pass';
+      return 'other';
+    }}
+    function addMeasuredOutcomes(dst, src) {{
+      dst.pass += src.pass;
+      dst.fail += src.fail;
+      dst.mute += src.mute;
+      dst.skip += src.skip;
+      dst.nl += src.nl;
+      dst.other += src.other;
+      dst.duration += src.duration;
+      dst.n += src.n;
+      return dst;
+    }}
+    function outcomesForTests(tests) {{
+      const out = emptyMeasuredOutcomes();
+      (tests || []).forEach(test => {{
+        out[measuredOutcomeKey(test)] += 1;
+        out.duration += Number(test.duration_sec) || 0;
+        out.n += 1;
+      }});
+      return out;
+    }}
+    function outcomesForRows(rows) {{
+      const out = emptyMeasuredOutcomes();
+      (rows || []).forEach(row => {{
+        if (!row._outcomes) row._outcomes = outcomesForTests(testsForMeasuredRow(row));
+        addMeasuredOutcomes(out, row._outcomes);
+      }});
+      return out;
+    }}
+    function measuredDurText(sec) {{
+      const s = Number(sec) || 0;
+      if (s >= 3600) return (s / 3600).toFixed(1) + 'h';
+      if (s >= 90) return (s / 60).toFixed(1) + 'm';
+      return s.toFixed(1) + 's';
+    }}
+    function measuredOutcomesHtml(out) {{
+      const parts = [];
+      const add = (n, cls, label) => {{
+        if (!n) return;
+        parts.push('<span class="st ' + cls + '">' + n + ' ' + label + '</span>');
+      }};
+      add(out.pass, 'st-pass', 'pass');
+      add(out.fail, 'st-fail', 'fail');
+      add(out.mute, 'st-mute', 'mute');
+      add(out.skip, 'st-skip', 'skip');
+      add(out.nl, 'st-nl', 'nl');
+      add(out.other, 'st-other', '?');
+      parts.push('<span class="odur">' + measuredDurText(out.duration) + '</span>');
+      return parts.join('');
+    }}
+    function plotMeasuredTestLane(tests) {{
+      const el = document.getElementById('measuredTestsLane');
+      const list = document.getElementById('measuredTestsList');
+      if (!el) return;
+      if (!tests || !tests.length) {{
+        _measuredActiveTests = [];
+        el.style.display = 'none';
+        if (list) {{ list.style.display = 'none'; list.innerHTML = ''; }}
+        return;
+      }}
+      el.style.display = '';
+      el.style.height = '90px';
+      _measuredActiveTests = tests;
+      const xs = measuredLayers.xs_evlog_sec || [];
+      const traces = tests.map((t, i) => {{
+        const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        return {{
+          type: 'scatter',
+          mode: 'lines',
+          x: [xToDisplay(t.start_sec), xToDisplay(t.end_sec)],
+          y: [1, 1],
+          line: {{ width: 18, color: color }},
+          name: t.name,
+          hovertemplate: t.name + '<br>' + Number(t.duration_sec || 0).toFixed(1) + 's' +
+            (measuredStatusLabel(t.status) ? '<br>' + measuredStatusLabel(t.status) : '') +
+            (measuredErrorTags(t.error_type).length ? '<br>' + measuredErrorTags(t.error_type).map(measuredErrorBadgeLabel).join(', ') : '') +
+            '<extra></extra>',
+          showlegend: false,
+        }};
+      }});
+      if (window.Plotly) {{
+        Plotly.newPlot(el, traces, {{
+          title: 'Tests in this chunk',
+          xaxis: axisLayout(xs.map(xToDisplay)),
+          yaxis: {{ visible: false, range: [0.4, 1.6] }},
+          hovermode: 'closest',
+          margin: {{ t: 36, r: 20, b: 24, l: 40 }},
+          height: 90,
+        }}, {{ responsive: true }});
+        el.on('plotly_hover', (ev) => {{
+          if (!ev || !ev.points || !ev.points.length) return;
+          measuredTestHoverLine(ev.points[0]);
+          showChartTip(ev);
+        }});
+        el.on('plotly_unhover', () => {{
+          highlightMeasuredTest('');
+          hideChartTipSoon();
+        }});
+      }}
+      if (list) {{
+        list.style.display = '';
+        list.innerHTML = tests.map((t, i) => {{
+          const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+          const from = formatTimeLabel(xToDisplay(t.start_sec));
+          const to = formatTimeLabel(xToDisplay(t.end_sec));
+          const status = measuredStatusLabel(t.status);
+          const badges = (status ? '<span class="st ' + measuredStatusClass(status) + '">' + escapeHtml(status) + '</span>' : '') +
+            measuredErrorTags(t.error_type).map(tag =>
+              '<span class="ebadge ' + measuredErrorBadgeClass(tag) + '">' + escapeHtml(measuredErrorBadgeLabel(tag)) + '</span>'
+            ).join('');
+          const logs = measuredLogEntries(t.links).map(link =>
+            '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener">' + escapeHtml(link.name) + '</a>'
+          ).join('');
+          return '<li data-name="' + escapeHtml(t.name) + '"><span class="swatch" style="background:' + color + '"></span>' +
+            '<span class="tbody"><span class="tline"><span class="tname">' + escapeHtml(t.name) + '</span>' + badges + '</span>' +
+            (logs ? '<span class="tlogs">' + logs + '</span>' : '') + '</span>' +
+            '<span class="tmeta">' + escapeHtml(from) + ' – ' + escapeHtml(to) +
+            ' · ' + Number(t.duration_sec || 0).toFixed(1) + 's</span></li>';
+        }}).join('');
+      }}
+    }}
+    function applyMeasuredTestBands(tests) {{
+      const shapes = (tests || []).map((t, i) => {{
+        const color = MEASURED_PALETTE[i % MEASURED_PALETTE.length];
+        return {{
+          type: 'rect',
+          xref: 'x',
+          yref: 'paper',
+          x0: xToDisplay(t.start_sec),
+          x1: xToDisplay(t.end_sec),
+          y0: 0,
+          y1: 1,
+          fillcolor: hexToRgba(color, 0.10),
+          line: {{ width: 1, color: hexToRgba(color, 0.35) }},
+          layer: 'below',
+        }};
+      }});
+      ['measuredCpu', 'measuredRam', 'measuredWrite', 'measuredRead', 'measuredPressure'].forEach(id => {{
+        const plot = document.getElementById(id);
+        if (plot && window.Plotly) Plotly.relayout(plot, {{ shapes: shapes, annotations: [] }});
+      }});
+    }}
+    function measuredAgg(rows) {{
+      let cpu = 0, ram = 0, write = 0, read = 0;
+      (rows || []).forEach(row => {{
+        cpu += Number(row.max_cpu) || 0;
+        ram += Number(row.max_ram_gb) || 0;
+        write += Number(row.max_write_mbps) || 0;
+        read += Number(row.max_read_mbps) || 0;
+      }});
+      return {{ n: (rows || []).length, cpu: cpu, ram_gb: ram, write_mbps: write, read_mbps: read }};
+    }}
+    function measuredSignalsText(rows) {{
+      const src = rows || [];
+      const max = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? Math.max(...vals) : null;
+      }};
+      const sum = key => {{
+        const vals = src.map(r => Number(r[key])).filter(Number.isFinite);
+        return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+      }};
+      const fmt = value => value == null ? '—' : Number(value).toFixed(1) + '%';
+      const fields = ['max_cpu_throttled_pct','max_cpu_psi_pct','max_memory_psi_pct','max_io_psi_pct'];
+      const present = src.some(r => fields.some(k => r[k] != null));
+      if (!present) return 'cgroup pressure: n/a';
+      const events = ['memory_high_events_delta','memory_max_events_delta','memory_oom_events_delta','memory_oom_kill_events_delta'].map(sum);
+      const throttledPeriods = sum('cpu_nr_throttled_delta');
+      const throttledUsec = sum('cpu_throttled_usec_delta');
+      const throttleCounts = throttledPeriods != null || throttledUsec != null
+        ? ' (' + (throttledPeriods == null ? '—' : Math.round(throttledPeriods)) + ' periods, ' + (throttledUsec == null ? '—' : (throttledUsec / 1000000).toFixed(2) + 's') + ')'
+        : '';
+      const text = 'throttle ' + fmt(max('max_cpu_throttled_pct')) + throttleCounts + ' · PSI CPU/mem/I/O ' +
+        fmt(max('max_cpu_psi_pct')) + '/' + fmt(max('max_memory_psi_pct')) + '/' + fmt(max('max_io_psi_pct'));
+      const haveEvents = events.some(v => v != null);
+      return text + (haveEvents ? ' · mem high/max/oom/kill ' + events.map(v => v == null ? '—' : String(Math.round(v))).join('/') : '');
+    }}
+    function measuredStatsText(agg, hideCount) {{
+      const body = agg.cpu.toFixed(2) + 'c · ' + agg.ram_gb.toFixed(2) + 'G · w' +
+        agg.write_mbps.toFixed(1) + ' r' + agg.read_mbps.toFixed(1);
+      if (hideCount) return body;
+      return agg.n + (agg.n > 1 ? ' · Σ ' : ' · ') + body;
+    }}
+    function measuredAggExtremes(aggs) {{
+      const ext = {{ cpu: 0, ram_gb: 0, write_mbps: 0, read_mbps: 0 }};
+      (aggs || []).forEach(agg => {{
+        ext.cpu = Math.max(ext.cpu, Number(agg.cpu) || 0);
+        ext.ram_gb = Math.max(ext.ram_gb, Number(agg.ram_gb) || 0);
+        ext.write_mbps = Math.max(ext.write_mbps, Number(agg.write_mbps) || 0);
+        ext.read_mbps = Math.max(ext.read_mbps, Number(agg.read_mbps) || 0);
+      }});
+      return ext;
+    }}
+    function suiteChunkExtremes(rows) {{
+      return measuredAggExtremes((rows || []).map(row => ({{
+        cpu: Number(row.max_cpu) || 0,
+        ram_gb: Number(row.max_ram_gb) || 0,
+        write_mbps: Number(row.max_write_mbps) || 0,
+        read_mbps: Number(row.max_read_mbps) || 0,
+      }})));
+    }}
+    function measuredStatMark(text, isMax) {{
+      return isMax ? ('<span class="stat-max">' + text + '</span>') : text;
+    }}
+    function measuredStatPartsHtml(cpu, ram, write, read, extremes, siblingCount) {{
+      const cpuTxt = Number(cpu || 0).toFixed(2);
+      const ramTxt = Number(ram || 0).toFixed(2);
+      const writeTxt = Number(write || 0).toFixed(1);
+      const readTxt = Number(read || 0).toFixed(1);
+      const canMark = siblingCount > 1 && extremes;
+      return measuredStatMark(cpuTxt + 'c', canMark && extremes.cpu > 0 && cpuTxt === extremes.cpu.toFixed(2)) +
+        ' · ' + measuredStatMark(ramTxt + 'G', canMark && extremes.ram_gb > 0 && ramTxt === extremes.ram_gb.toFixed(2)) +
+        ' · ' + measuredStatMark('w' + writeTxt, canMark && extremes.write_mbps > 0 && writeTxt === extremes.write_mbps.toFixed(1)) +
+        ' ' + measuredStatMark('r' + readTxt, canMark && extremes.read_mbps > 0 && readTxt === extremes.read_mbps.toFixed(1));
+    }}
+    function measuredStatsHtml(agg, extremes, siblingCount, hideCount) {{
+      const body = measuredStatPartsHtml(agg.cpu, agg.ram_gb, agg.write_mbps, agg.read_mbps, extremes, siblingCount);
+      if (hideCount) return body;
+      return agg.n + (agg.n > 1 ? ' · Σ ' : ' · ') + body;
+    }}
+    function measuredChunkStatsHtml(row, extremes, chunkCount) {{
+      return measuredStatPartsHtml(row.max_cpu, row.max_ram_gb, row.max_write_mbps, row.max_read_mbps, extremes, chunkCount);
+    }}
+    function buildMeasuredForest() {{
+      const root = {{ name: 'all', path: '', children: {{}}, rows: [] }};
+      measuredList.forEach(row => {{
+        const parts = String(row.suite || 'unknown').split('/').filter(Boolean);
+        let node = root;
+        node.rows.push(row);
+        let path = '';
+        parts.forEach(part => {{
+          path = path ? (path + '/' + part) : part;
+          if (!node.children[part]) node.children[part] = {{ name: part, path: path, children: {{}}, rows: [] }};
+          node = node.children[part];
+          node.rows.push(row);
+        }});
+      }});
+      return root;
+    }}
+    const measuredForest = buildMeasuredForest();
+    const measuredOpen = new Set();
+    function measuredAncestorPaths(path) {{
+      const parts = String(path || '').split('/').filter(Boolean);
+      const out = [];
+      let cur = '';
+      parts.forEach(part => {{
+        cur = cur ? (cur + '/' + part) : part;
+        out.push(cur);
+      }});
+      return out;
+    }}
+    function openMeasuredPath(path, includeSelf) {{
+      measuredAncestorPaths(path).forEach((p, i, arr) => {{
+        if (includeSelf || i < arr.length - 1) measuredOpen.add(p);
+      }});
+    }}
+    function measuredRowsForSelection(sel) {{
+      if (!sel || sel.kind === 'all') return measuredList;
+      if (sel.kind === 'chunk') return measuredList.filter(row => row.key === sel.key);
+      const path = sel.path || sel.suite || '';
+      return measuredList.filter(row => row.suite === path || String(row.suite || '').startsWith(path + '/'));
+    }}
+    function measuredLabelsForSelection(sel) {{
+      return measuredRowsForSelection(sel).map(row => row.label);
+    }}
+    function selectMeasured(sel) {{
+      const rows = measuredRowsForSelection(sel);
+      const labels = rows.map(row => row.label);
+      const agg = measuredAgg(rows);
+      const meta = document.getElementById('measuredMeta');
+      const title = (!sel || sel.kind === 'all')
+        ? 'all suites'
+        : (sel.kind === 'chunk' ? ((measuredList.find(r => r.key === sel.key) || {{}}).label || sel.key) : (sel.path || sel.suite));
+      const outcomes = outcomesForRows(rows);
+      if (meta) {{
+        meta.innerHTML = escapeHtml(title + ': ' + measuredStatsText(agg)) +
+          ' · ' + measuredOutcomesHtml(outcomes) +
+          '<div class="muted" style="margin-top:3px">' + escapeHtml(measuredSignalsText(rows)) + '</div>';
+      }}
+      const suffix = (!sel || sel.kind === 'all') ? ' (all)' : (sel.kind === 'chunk' ? ' (one chunk)' : ' / ' + (sel.path || sel.suite));
+      plotMeasuredLayers(labels, suffix);
+      plotMeasuredPressure(labels, suffix);
+      const chunkTests = testsForMeasuredSelection(sel);
+      plotMeasuredTestLane(chunkTests);
+      applyMeasuredTestBands(chunkTests);
+      if (sel && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, false);
+      if (sel && sel.kind === 'chunk' && (sel.path || sel.suite)) openMeasuredPath(sel.path || sel.suite, true);
+      renderMeasuredTree(sel);
+    }}
+    function renderMeasuredNode(node, depth, sel, siblingExtremes, siblingCount) {{
+      const childNames = Object.keys(node.children).sort();
+      const chunks = node.rows.filter(row => row.suite === node.path).slice().sort((a, b) => {{
+        const ca = a.chunk == null ? 1e9 : Number(a.chunk);
+        const cb = b.chunk == null ? 1e9 : Number(b.chunk);
+        return ca - cb;
+      }});
+      const hasKids = childNames.length > 0 || chunks.length > 0;
+      const open = measuredOpen.has(node.path);
+      const selected = sel && sel.kind === 'prefix' && sel.path === node.path;
+      let html = '<div class="mt-row" style="padding-left:' + (depth * 12) + 'px">';
+      html += hasKids
+        ? ('<button type="button" class="mt-twist" data-toggle="' + escapeHtml(node.path) + '">' + (open ? '▼' : '▶') + '</button>')
+        : '<span class="mt-spacer"></span>';
+      html += '<button type="button" class="mt-pick' + (selected ? ' on' : '') + '" data-kind="prefix" data-path="' + escapeHtml(node.path) + '">' +
+        '<span class="mt-name">' + escapeHtml(node.name) + '</span>' +
+        '<span class="stats">' + measuredStatsHtml(measuredAgg(node.rows), siblingExtremes, siblingCount) + '</span>' +
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(node.rows)) + '</span>' +
+        '<span class="stats">' + escapeHtml(measuredSignalsText(node.rows)) + '</span></button></div>';
+      if (open && hasKids) {{
+        const kids = childNames.map(name => node.children[name]);
+        const kidExt = measuredAggExtremes(kids.map(k => measuredAgg(k.rows)));
+        kids.forEach(child => {{ html += renderMeasuredNode(child, depth + 1, sel, kidExt, kids.length); }});
+        const extremes = suiteChunkExtremes(chunks);
+        chunks.forEach(row => {{
+          const on = sel && sel.kind === 'chunk' && sel.key === row.key;
+          html += '<div class="mt-row mt-chunk" style="padding-left:' + ((depth + 1) * 12) + 'px">' +
+            '<span class="mt-spacer"></span>' +
+            '<button type="button" class="mt-pick' + (on ? ' on' : '') + '" data-kind="chunk" data-key="' + escapeHtml(row.key) + '" data-path="' + escapeHtml(node.path) + '">' +
+            '<span class="mt-name">' + escapeHtml(row.chunk == null ? row.label : '[' + row.chunk + ']') + '</span>' +
+            '<span class="stats">' + measuredChunkStatsHtml(row, extremes, chunks.length) + '</span>' +
+            '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows([row])) + '</span>' +
+            '<span class="stats">' + escapeHtml(measuredSignalsText([row])) + '</span></button></div>';
+        }});
+      }}
+      return html;
+    }}
+    function renderMeasuredTree(sel) {{
+      const tree = document.getElementById('measuredTree');
+      if (!tree) return;
+      const childNames = Object.keys(measuredForest.children).sort();
+      const allOn = !sel || sel.kind === 'all';
+      let html = '<div class="mt-row"><span class="mt-spacer"></span>' +
+        '<button type="button" class="mt-pick' + (allOn ? ' on' : '') + '" data-kind="all">' +
+        '<span class="mt-name">all</span><span class="stats">' + measuredStatsText(measuredAgg(measuredList)) + '</span>' +
+        '<span class="stats outcomes">' + measuredOutcomesHtml(outcomesForRows(measuredList)) + '</span>' +
+        '<span class="stats">' + escapeHtml(measuredSignalsText(measuredList)) + '</span></button></div>';
+      const topKids = childNames.map(name => measuredForest.children[name]);
+      const topExt = measuredAggExtremes(topKids.map(k => measuredAgg(k.rows)));
+      topKids.forEach(child => {{ html += renderMeasuredNode(child, 1, sel, topExt, topKids.length); }});
+      tree.innerHTML = html;
+    }}
+    const measuredTreeEl = document.getElementById('measuredTree');
+    if (measuredTreeEl) {{
+      measuredTreeEl.addEventListener('click', (ev) => {{
+        const twist = ev.target.closest('[data-toggle]');
+        if (twist) {{
+          const path = twist.dataset.toggle;
+          if (measuredOpen.has(path)) measuredOpen.delete(path);
+          else measuredOpen.add(path);
+          renderMeasuredTree(window._measuredSel || {{kind: 'all'}});
+          return;
+        }}
+        const pick = ev.target.closest('.mt-pick');
+        if (!pick) return;
+        if (pick.dataset.kind === 'all') selectMeasured({{kind: 'all'}});
+        else if (pick.dataset.kind === 'chunk') selectMeasured({{kind: 'chunk', key: pick.dataset.key, path: pick.dataset.path, suite: pick.dataset.path}});
+        else selectMeasured({{kind: 'prefix', path: pick.dataset.path, suite: pick.dataset.path}});
+      }});
+    }}
+    const _selectMeasured = selectMeasured;
+    selectMeasured = function(sel) {{
+      window._measuredSel = sel || {{kind: 'all'}};
+      _selectMeasured(sel || {{kind: 'all'}});
+    }};
+    function buildMeasuredTestIndex() {{
+      const out = [];
+      const seen = new Set();
+      Object.keys(measuredChunkTests || {{}}).forEach(label => {{
+        if (String(label).startsWith('ya-test-')) return;
+        const row = measuredList.find(r => r.label === label);
+        (measuredChunkTests[label] || []).forEach(test => {{
+          const id = label + '|' + test.name;
+          if (seen.has(id)) return;
+          seen.add(id);
+          out.push({{
+            name: test.name,
+            label: label,
+            key: row && row.key,
+            suite: row && row.suite,
+            chunk: row && row.chunk,
+          }});
+        }});
+      }});
+      return out;
+    }}
+    const measuredTestIndex = buildMeasuredTestIndex();
+    function jumpToMeasuredTest(hit) {{
+      if (!hit || !hit.key) return;
+      if (hit.suite) openMeasuredPath(hit.suite, true);
+      selectMeasured({{kind: 'chunk', key: hit.key, path: hit.suite, suite: hit.suite}});
+      highlightMeasuredTest(hit.name);
+    }}
+    function renderMeasuredTestHits(query) {{
+      const box = document.getElementById('measuredTestHits');
+      if (!box) return;
+      const q = String(query || '').trim().toLowerCase();
+      if (!q) {{
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }}
+      const hits = measuredTestIndex.filter(hit =>
+        String(hit.name || '').toLowerCase().includes(q) ||
+        String(hit.label || '').toLowerCase().includes(q)
+      ).slice(0, 40);
+      box.style.display = hits.length ? '' : 'none';
+      box.innerHTML = hits.map((hit, i) =>
+        '<li data-idx="' + i + '"><div class="hit-name">' + escapeHtml(hit.name) + '</div>' +
+        '<div class="hit-chunk">' + escapeHtml(hit.label || '') + '</div></li>'
+      ).join('') || '<li>No matches</li>';
+      box._hits = hits;
+    }}
+    const measuredSearchEl = document.getElementById('measuredTestSearch');
+    const measuredHitsEl = document.getElementById('measuredTestHits');
+    if (measuredSearchEl) {{
+      measuredSearchEl.addEventListener('input', () => renderMeasuredTestHits(measuredSearchEl.value));
+    }}
+    if (measuredHitsEl) {{
+      measuredHitsEl.addEventListener('click', (ev) => {{
+        const li = ev.target.closest('li');
+        if (!li || li.dataset.idx == null) return;
+        const hit = (measuredHitsEl._hits || [])[Number(li.dataset.idx)];
+        jumpToMeasuredTest(hit);
+      }});
+    }}
+    if (measuredWrap && measuredList.length && measuredLayers.xs_evlog_sec) {{
+      measuredWrap.style.display = '';
+      const suites = [...new Set(measuredList.map(row => row.suite).filter(Boolean))];
+      if (suites.length === 1) {{
+        openMeasuredPath(suites[0], false);
+        selectMeasured({{kind: 'prefix', path: suites[0], suite: suites[0]}});
+      }} else {{
+        selectMeasured({{kind: 'all'}});
+      }}
+    }}
+    const _toggleSuiteMarkersOrig = toggleSuiteMarkers;
+    toggleSuiteMarkers = function(suitePath, enabled) {{
+      _toggleSuiteMarkersOrig(suitePath, enabled);
+      if (!enabled || !measuredList.length) return;
+      if (measuredList.some(row => row.suite === suitePath || String(row.suite || '').startsWith(suitePath + '/'))) {{
+        openMeasuredPath(suitePath, false);
+        selectMeasured({{kind: 'prefix', path: suitePath, suite: suitePath}});
+      }}
+    }};
 
     const suiteSearchEl = document.getElementById('suiteSearch');
     if (suiteSearchEl) {{

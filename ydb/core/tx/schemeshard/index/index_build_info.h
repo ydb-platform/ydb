@@ -97,6 +97,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         AlterSequence = 61,
         PrepareValidation = 62,
         AlterIndexTable = 63,
+        // Vector index consistent build: take a main table snapshot and switch the
+        // index to WriteOnly.
+        PrepareVectorIndex = 64,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -129,6 +132,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         FulltextIndexPrefixBorders = 204,
 
         RebuildReplacing = 300,
+
+        // Vector index consistent build: marks the delta-scan pass in Filling.
+        VectorIndexDelta = 110,
     };
 
     struct TColumnBuildInfo {
@@ -374,6 +380,11 @@ public:
 
     TStepId SnapshotStep;
     TTxId SnapshotTxId;
+
+    // Vector index consistent build: main table snapshot taken after the levels are
+    // built. Delta scans apply main table changes in (SnapshotTxId, DeltaSnapshotTxId].
+    TTxId DeltaSnapshotTxId;
+    TStepId DeltaSnapshotStep;
 
     TDuration ReBillPeriod = TDuration::Seconds(10);
 

@@ -66,6 +66,8 @@ struct TEvTxUserProxy {
 
         EvResolveTablesResponse,
 
+        EvEraseRowsResponse,
+
         EvEnd
     };
 
@@ -220,6 +222,16 @@ struct TEvTxUserProxy {
         NYql::TIssues Issues;
 
         TEvUploadRowsResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+            : Status(status)
+            , Issues(issues)
+        {}
+    };
+
+    struct TEvEraseRowsResponse: public TEventLocal<TEvEraseRowsResponse, EvEraseRowsResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+
+        TEvEraseRowsResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
             : Status(status)
             , Issues(issues)
         {}

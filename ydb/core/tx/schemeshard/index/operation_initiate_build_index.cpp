@@ -349,8 +349,7 @@ public:
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
-        context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());
-        context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
+        context.SS->AddTableSnapshot(tablePathId, OperationId.GetTxId());
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
 
         context.OnComplete.ActivateTx(OperationId);

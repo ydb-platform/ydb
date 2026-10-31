@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -12,6 +13,21 @@ namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
+
+// Vector index builds keep a second main table snapshot for the delta scan, we should drop it too
+TTxId GetExtraSnapshotTxId(TSchemeShard* ss, TIndexBuildInfo& buildInfo, const TPathId& pathId) {
+    if (!buildInfo.IsBuildVectorIndex() || buildInfo.TablePathId != pathId) {
+        return {};
+    }
+    if (const auto it = ss->TablesWithSnapshots.find(pathId); it != ss->TablesWithSnapshots.end()) {
+        for (const TTxId txId : it->second) {
+            if (txId != buildInfo.InitiateTxId) {
+                return txId;
+            }
+        }
+    }
+    return {};
+}
 
 class TConfigureParts: public TSubOperationState {
     virtual const char* Name() const override final { return "TConfigureParts"; }
@@ -45,7 +61,9 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+        auto buildInfoPtr = context.SS->IndexBuilds.FindPtr(TIndexBuildId(ui64(txState->BuildIndexId)));
+        Y_ABORT_UNLESS(buildInfoPtr && (*buildInfoPtr)->InitiateTxId);
+        const TTxId snapshotTxId = (*buildInfoPtr)->InitiateTxId;
         const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
@@ -60,6 +78,10 @@ public:
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepId));
+            if (const auto extraTxId = GetExtraSnapshotTxId(context.SS, **buildInfoPtr, pathId)) {
+                op->SetExtraSnapshotTxId(ui64(extraTxId));
+                op->SetExtraSnapshotStep(ui64(context.SS->SnapshotsStepIds.at(extraTxId)));
+            }
             op->SetTableSchemaVersion(table->AlterVersion+1);
             op->SetBuildIndexId(ui64(txState->BuildIndexId));
             if (txState->BuildIndexOutcome) {
@@ -117,15 +139,18 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         TPathId tableId = txState->TargetPathId;
-        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tableId);
-        context.SS->SnapshotsStepIds.erase(snapshotTxId);
-        context.SS->SnapshotTables.at(snapshotTxId).erase(tableId);
-        if (context.SS->SnapshotTables.at(snapshotTxId).empty()) {
-            context.SS->SnapshotTables.erase(snapshotTxId);
-        }
-        context.SS->TablesWithSnapshots.erase(tableId);
+        auto buildInfoPtr = context.SS->IndexBuilds.FindPtr(TIndexBuildId(ui64(txState->BuildIndexId)));
+        Y_ABORT_UNLESS(buildInfoPtr && (*buildInfoPtr)->InitiateTxId);
+        const TTxId snapshotTxId = (*buildInfoPtr)->InitiateTxId;
+        context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
 
         context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+
+        if (const TTxId extraTxId = GetExtraSnapshotTxId(context.SS, **buildInfoPtr, tableId)) {
+            context.SS->RemoveTableSnapshot(tableId, extraTxId);
+            context.SS->PersistDropSnapshot(db, extraTxId, tableId);
+            context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+        }
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
@@ -315,24 +340,24 @@ public:
             return result;
         }
 
-        if (!context.SS->TablesWithSnapshots.contains(tablePathId)) {
+        if (finalizeMainTable.HasExtraSnapshotTxId() &&
+            !context.SS->HasTableSnapshot(tablePathId, TTxId(finalizeMainTable.GetExtraSnapshotTxId())))
+        {
             errStr = TStringBuilder()
-                << "No snapshot presents for table"
+                << "No extra snapshot with requested txId presents for table"
                 << ", tableId:" << tablePathId
-                << ", txId: " << OperationId.GetTxId();
+                << ", requested snapshotTxId: " << finalizeMainTable.GetExtraSnapshotTxId();
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }
 
-        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tablePathId);
-        if (TTxId(finalizeMainTable.GetSnapshotTxId()) != snapshotTxId) {
+        const TTxId snapshotTxId = TTxId(finalizeMainTable.GetSnapshotTxId());
+        if (!context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
             errStr = TStringBuilder()
                 << "No snapshot with requested txId presents for table"
                 << ", tableId:" << tablePathId
                 << ", txId: " << OperationId.GetTxId()
-                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
-                << ", snapshotTxId: " << snapshotTxId
-                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
+                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId();
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }

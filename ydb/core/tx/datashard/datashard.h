@@ -409,6 +409,9 @@ namespace TEvDataShard {
         EvS3DirectWriteFinishResult,
         EvS3DirectWriteAbort,
 
+        EvDeltaKMeansRequest,
+        EvDeltaKMeansResponse,
+
         EvEnd
     };
 
@@ -1784,6 +1787,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvDeltaKMeansRequest
+        : public TEventPB<TEvDeltaKMeansRequest,
+                          NKikimrTxDataShard::TEvDeltaKMeansRequest,
+                          TEvDataShard::EvDeltaKMeansRequest> {
+    };
+
+    struct TEvDeltaKMeansResponse
+        : public TEventPB<TEvDeltaKMeansResponse,
+                          NKikimrTxDataShard::TEvDeltaKMeansResponse,
+                          TEvDataShard::EvDeltaKMeansResponse> {
     };
 
     struct TEvFilterKMeansRequest

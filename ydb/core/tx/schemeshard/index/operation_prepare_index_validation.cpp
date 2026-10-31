@@ -317,9 +317,9 @@ public:
             }
         }
 
-        if (context.SS->TablesWithSnapshots.contains(tablePathId)) {
+        if (context.SS->HasTableSnapshot(tablePathId, OperationId.GetTxId())) {
             errStr = TStringBuilder()
-                << "Snapshots already present for table"
+                << "Snapshot with the same txId already present for table"
                 << ", tableId:" << tablePathId
                 << ", txId: " << OperationId.GetTxId();
             result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, errStr);
@@ -342,8 +342,7 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
-        context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());
-        context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
+        context.SS->AddTableSnapshot(tablePathId, OperationId.GetTxId());
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
 
         SetState(NextState());

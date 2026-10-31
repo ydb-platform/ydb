@@ -88,6 +88,7 @@ TSchemeOperationFactory MakeDropSequence;
 TSchemeOperationFactory MakeApplyIndexBuild;
 TSchemeOperationFactory MakeInitiateBuildIndexImplTable;
 TSchemeOperationFactory MakePrepareIndexValidation;
+TSchemeOperationFactory MakePrepareVectorIndex;
 TSchemeOperationFactory MakeCancelIndexBuild;
 TSchemeOperationFactory MakeDropIndex;
 TSchemeOperationFactory MakeCreateCdcStream;
@@ -225,6 +226,7 @@ inline constexpr TSchemeOperationInfo SchemeOperations[] = {
     {NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable,
         nullptr, ESchemeOperationSupport::Internal, "multipart operations are handled before, also they require transaction details"},
     {NKikimrSchemeOp::ESchemeOpPrepareIndexValidation, &NOperationFactories::MakePrepareIndexValidation},
+    {NKikimrSchemeOp::ESchemeOpPrepareVectorIndex, &NOperationFactories::MakePrepareVectorIndex},
     {NKikimrSchemeOp::ESchemeOpCancelIndexBuild, &NOperationFactories::MakeCancelIndexBuild},
     {NKikimrSchemeOp::ESchemeOpDropIndex, &NOperationFactories::MakeDropIndex},
     {NKikimrSchemeOp::ESchemeOpDropTableIndexAtMainTable,

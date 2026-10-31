@@ -1804,6 +1804,8 @@ FROM `{table_name}`"""
         partition_write_speed = 50 * 1024 * 1024
         timeout = plain_or_under_sanitizer(60, 300)
         source_name = entity_name("large_topic_message")
+        query_name = f"{source_name}_query"
+        query_path = f"{kikimr.endpoint.database}/{query_name}"
         self.init_topics(source_name, endpoint=kikimr.endpoint)
         input_name = f"`{self.input_topic}`"
         output_name = f"`{self.output_topic}`"
@@ -1815,7 +1817,7 @@ FROM `{table_name}`"""
 
         driver_config = ydb.DriverConfig(
             endpoint=kikimr.endpoint.endpoint,
-            database=kikimr.get_database_name(),
+            database=kikimr.endpoint.database,
             auth_token="root@builtin",
             channel_options=[
                 ("grpc.max_receive_message_length", max_message_size),
@@ -1832,30 +1834,36 @@ FROM `{table_name}`"""
                     set_partition_write_burst_bytes=partition_write_speed,
                 )
 
-            future = kikimr.ydb_client.query_async(
+            kikimr.ydb_client.query(
                 f"""
-                    INSERT INTO {output_name}
-                    SELECT Data FROM {input_name} WITH (
-                        STREAMING = "TRUE",
-                        FORMAT = "raw",
-                        SCHEMA = (Data String NOT NULL)
-                    )
-                    LIMIT 1;
-                """,
-                timeout=timeout,
+                    CREATE STREAMING QUERY `{query_name}` AS
+                    DO BEGIN
+                        INSERT INTO {output_name}
+                        SELECT Data FROM {input_name} WITH (
+                            STREAMING = "TRUE",
+                            FORMAT = "raw",
+                            SCHEMA = (Data String NOT NULL)
+                        );
+                    END DO;
+                """
             )
-            data = b"x" * 130000000
-            writer = topic_client.writer(self.input_topic, codec=ydb.TopicCodec.RAW)
             try:
-                writer.write_with_ack(data, timeout=timeout)
-            finally:
-                writer.close(flush=False, timeout=timeout)
+                self.wait_completed_checkpoints(kikimr, query_path, timeout=timeout)
 
-            with topic_client.reader(self.output_topic, consumer=self.consumer_name) as reader:
-                message = reader.receive_message(timeout=timeout)
-                assert len(message.data) == len(data)
-                # Keep assertion diagnostics from printing the entire 130 MB payload.
-                contents_match = message.data == data
-                assert contents_match, "Large topic message contents differ"
-                reader.commit_with_ack(message, timeout=timeout)
-            future.result(timeout=timeout)
+                data = b"x" * 130000000
+                writer = topic_client.writer(self.input_topic, codec=ydb.TopicCodec.RAW)
+                try:
+                    writer.write_with_ack(data, timeout=timeout)
+                finally:
+                    writer.close(flush=False, timeout=timeout)
+
+                with topic_client.reader(self.output_topic, consumer=self.consumer_name) as reader:
+                    message = reader.receive_message(timeout=timeout)
+                    assert len(message.data) == len(data)
+                    # Keep assertion diagnostics from printing the entire 130 MB payload.
+                    contents_match = message.data == data
+                    assert contents_match, "Large topic message contents differ"
+                    reader.commit_with_ack(message, timeout=timeout)
+                self.wait_completed_checkpoints(kikimr, query_path, timeout=timeout)
+            finally:
+                kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

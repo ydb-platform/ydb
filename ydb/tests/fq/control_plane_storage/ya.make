@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/control_plane_storage)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SPLIT_FACTOR(18)
 

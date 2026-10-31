@@ -1,4 +1,5 @@
 PY3_LIBRARY()
+REQUIREMENTS(cpu:2)
 
     PY_SRCS (
         conftest.py

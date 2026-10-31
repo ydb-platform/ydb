@@ -180,6 +180,37 @@ A barrier record contains a single field `resolved` with a virtual timestamp:
 
 {% endnote %}
 
+### Binary Format {#binary-record-structure}
+
+`FORMAT = 'BINARY'` writes one binary record per table change. Every multi-byte integer is unsigned and little-endian. The record does not store column names.
+
+The first eight bytes are:
+
+* version: `1`.
+* kind: `1` for a row change, `2` for a [barrier](#barriers), `3` for a schema change.
+* operation: `1` update, `2` replacement, `3` erase. These are the same operations as the JSON fields `update`, `reset`, and `erase`. A barrier or a schema change uses `0`. One record has one operation.
+* flags, from the least significant bit: `1` [virtual timestamp](#virtual-timestamps), `2` two-byte column index, `4` old image (`oldImage`), `8` new image (`newImage`), `16` user SID, `32` trace id, `64` null key marker. A set bit means that part is present.
+* number of key cells, 16 bits.
+* number of value cells, 16 bits.
+
+When the old-image bit is set, the next field is the 16-bit number of old-image cells. When the new-image bit is set, the next field is the 16-bit number of new-image cells. When the virtual-timestamp bit is set, the next fields are `step` and `txId`: two 64-bit integers with the same meaning as in [JSON format](#json-record-structure).
+
+Key cells follow, in primary-key order. Value cells come next, then old-image cells, then new-image cells. Each value, old-image, and new-image cell starts with the column index. The index is the position of a non-key column after sorting non-key column names. It is one byte when the table has at most 127 non-key columns. When the table has more, the two-byte index bit is set and every index in the record is two bytes. NULL on an indexed cell sets the most significant bit of the index value, and the cell has no bytes after the index.
+
+A key cell may be NULL. The writer sets flag bit `64` when at least one key cell is NULL. Each key cell is then preceded by one byte: `0` means a value follows, `1` means NULL and no value bytes follow. When the bit is clear, every key cell is a value and has no preceding byte.
+
+A cell whose type has a fixed size is stored as that many bytes. Any other cell is a 32-bit length followed by that many bytes. The bytes are the value stored in the table. A non-NULL empty value has length `0`.
+
+In `NEW_IMAGE`, `OLD_IMAGE`, and `NEW_AND_OLD_IMAGES` the value-cell count is `0`. The column values are in the images whose flag bits are set. In [JSON format](#json-record-structure), `update` or `reset` is then only the operation flag.
+
+A barrier has kind `2`, operation `0`, no cells, and always includes `step` and `txId`. A schema change has kind `3` and operation `0`. After its eight-byte header it stores a 32-bit length and a JSON document with the table schema. Column indexes in later row records refer to non-key columns of that schema, sorted by name. This JSON document is not a row record of [JSON format](#json-record-structure). Its virtual timestamp is inside the document, not in the binary header.
+
+When `USER_SIDS` or `TRACE_IDS` is enabled and the value is not empty, the value is written after the cells. The user SID comes before the trace id. Each value is a 16-bit length followed by its bytes.
+
+By default the record is stored without compression. `COMPRESSION = 'ZSTD'` compresses a schema snapshot, and a data record of at least 512 bytes, with zstd when the compressed bytes are shorter than the record. A shorter data record and every heartbeat stay uncompressed. The option is set when the changefeed is created and does not depend on `FORMAT`. The topic client removes that zstd compression before it returns the message body. The body is still this binary record. The application parses the record from that body; removing zstd does not parse it.
+
+A changefeed in this format can be created only when binary changefeeds are enabled on the cluster that owns the table. An asynchronous replication uses this format when it is created with [`FORMAT = 'BINARY'`](../yql/reference/syntax/create-async-replication.md#params) and binary changefeeds are enabled on both the destination cluster and the source cluster. Otherwise its changefeeds are created in JSON.
+
 {% if audience == "tech" %}
 
 ### Amazon DynamoDB-Compatible JSON Format {#dynamodb-streams-json-record-structure}

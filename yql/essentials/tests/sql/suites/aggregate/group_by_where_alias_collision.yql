@@ -1,0 +1,17 @@
+PRAGMA AnsiImplicitCrossJoin;
+
+-- WHERE must see input columns, even when GROUP BY later gives them the same names.
+SELECT
+    l_orderkey,
+    SUM(l_extendedprice) AS revenue,
+    o_orderdate
+FROM
+    (VALUES (1, 1), (2, 2)) AS orders(o_orderkey, o_orderdate),
+    (VALUES (1, 10), (2, 20)) AS lineitem(l_orderkey, l_extendedprice)
+WHERE
+    l_orderkey = o_orderkey
+    AND o_orderdate < 3
+GROUP BY
+    l_orderkey AS l_orderkey,
+    o_orderdate AS o_orderdate
+ORDER BY l_orderkey;

@@ -1339,6 +1339,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
     EIndexTypeLocalCountMinSketch = 14;
+    EIndexTypeGlobalHnsw = 15;
 }
 
 enum EIndexState {
@@ -1350,6 +1351,20 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message THnswIndexDescription {
+    // Includes the routing tree settings as well as the local graph parameters.
+    optional Ydb.Table.KMeansTreeSettings Settings = 1;
+
+    // Set by SchemeShard from the posting-table schema for DataShard graph builds.
+    // This is the posting-table column ID, which may differ from the base table's.
+    optional uint32 EmbeddingColumnId = 2;
+
+    // Fully qualified paths of the base table and logical index for HNSW counter
+    // labels. These identify the graph's owners, rather than the posting table.
+    optional string TablePath = 3;
+    optional string IndexPath = 4;
 }
 
 message TFulltextIndexDescription {
@@ -1384,6 +1399,7 @@ message TIndexDescription {
         TFulltextIndexDescription FulltextIndexDescription = 12;
         TBloomFilter BloomFilterDescription = 13;
         TBloomNGrammFilter BloomNGrammFilterDescription = 14;
+        THnswIndexDescription HnswIndexDescription = 15;
     }
 }
 
@@ -1399,6 +1415,7 @@ message TIndexCreationConfig {
         TFulltextIndexDescription FulltextIndexDescription = 8;
         TBloomFilter BloomFilterDescription = 9;
         TBloomNGrammFilter BloomNGrammFilterDescription = 10;
+        THnswIndexDescription HnswIndexDescription = 11;
     }
 }
 
@@ -1421,6 +1438,7 @@ message TIndexAlteringConfig {
     oneof SpecializedIndexDescription {
         TBloomFilter BloomFilterDescription = 8;
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
+        THnswIndexDescription HnswIndexDescription = 11;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
     repeated string DataColumnNames = 10;

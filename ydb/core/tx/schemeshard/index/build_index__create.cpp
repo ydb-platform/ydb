@@ -394,6 +394,9 @@ private:
         const auto& index = settings.index();
 
         switch (index.type_case()) {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex:
+            explain = "HNSW index implementation is not available yet";
+            return false;
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
             explain = "Invalid or unset index type";
             return false;

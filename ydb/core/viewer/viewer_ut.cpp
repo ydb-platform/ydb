@@ -2667,6 +2667,108 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TestNodesWhiteboardData(true);
     }
 
+    void TestNodesCpuSortWithMissingStats(bool offloadMerge) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        THashMap<TActorId, TNodeId> whiteboardNodes;
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            const TNodeId nodeId = runtime.GetNodeId(nodeIndex);
+            runtime.RegisterService(MakeViewerID(nodeId), viewerId, nodeIndex);
+            const TActorId whiteboardId = runtime.GetLocalServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), nodeIndex);
+            whiteboardNodes.emplace(whiteboardId, nodeId);
+        }
+        TString missingStatsPool;
+        size_t offloadedResponses = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                const auto itNode = whiteboardNodes.find(ev->Sender);
+                if (itNode == whiteboardNodes.end() || ev->Cookie != itNode->second) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                auto* response = ev->Get<TEvWhiteboard::TEvSystemStateResponse>();
+                for (auto& info : *response->Record.MutableSystemStateInfo()) {
+                    info.ClearCoresUsed();
+                    info.ClearCoresTotal();
+                    info.ClearPoolStats();
+                    if (itNode->second == runtime.GetNodeId(0)) {
+                        if (!missingStatsPool.empty()) {
+                            auto* pool = info.AddPoolStats();
+                            pool->SetName(missingStatsPool);
+                            pool->SetUsage(0.5);
+                            pool->SetThreads(missingStatsPool == "IO" ? 2 : 0);
+                        }
+                    } else if (itNode->second == runtime.GetNodeId(1)) {
+                        info.SetCoresUsed(1);
+                        info.SetCoresTotal(4);
+                    } else {
+                        auto* pool = info.AddPoolStats();
+                        pool->SetName("System");
+                        pool->SetUsage(0.375);
+                        pool->SetThreads(2);
+                        pool->SetLimit(4);
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse
+                    && ev->Get<TEvViewer::TEvViewerResponse>()->Record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse) {
+                ++offloadedResponses;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto makeRequest = [&](const TString& sort) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,CPU"
+                    << "&offload_merge=" << (offloadMerge ? "true" : "false")
+                    << "&offload_merge_attempts=1&timeout=1000&sort=" << sort << " HTTP/1.1\r\n\r\n", endpoint, {});
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            return json;
+        };
+
+        for (const TString& pool : {TString(), TString("System"), TString("IO")}) {
+            missingStatsPool = pool;
+            // Check the value before CPU sorting: an invalid comparator need not crash on every input.
+            for (const TString& sort : {TString("NodeId"), TString("CPU"), TString("-CPU")}) {
+                const size_t responsesBefore = offloadedResponses;
+                const auto json = makeRequest(sort);
+                UNIT_ASSERT_VALUES_EQUAL(offloadedResponses > responsesBefore, offloadMerge);
+                const auto& nodes = json["Nodes"].GetArray();
+                UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), 3, NJson::WriteJson(json, false));
+                UNIT_ASSERT(!json["NeedSort"].GetBoolean());
+                for (size_t i = 0; i < nodes.size(); ++i) {
+                    const size_t nodeIndex = sort == "-CPU" ? 2 - i : i;
+                    UNIT_ASSERT_VALUES_EQUAL(nodes[i]["NodeId"].GetUInteger(), runtime.GetNodeId(nodeIndex));
+                    if (nodeIndex == 0) {
+                        UNIT_ASSERT_C(!nodes[i].Has("CpuUsage"), NJson::WriteJson(json, false));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(nodes[i]["CpuUsage"].GetDouble(), nodeIndex == 1 ? 0.25 : 0.75);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageCpuSortWithMissingStatsDirect) {
+        TestNodesCpuSortWithMissingStats(false);
+    }
+
+    Y_UNIT_TEST(NodesPageCpuSortWithMissingStatsOffloaded) {
+        TestNodesCpuSortWithMissingStats(true);
+    }
+
     void TestNodesAliveFilter(bool offloadMerge) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort())

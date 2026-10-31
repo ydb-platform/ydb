@@ -372,7 +372,7 @@ class TJsonNodes : public TViewerPipeClient {
                 SystemState.SetCoresUsed(usage);
                 SystemState.SetCoresTotal(threads);
             }
-            CpuUsage = usage / threads;
+            CpuUsage = threads ? usage / threads : 0.0f;
         }
 
         void CalcLoadAverage() {

@@ -2568,8 +2568,11 @@ private:
                 Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
-            YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
             const auto& expr = Settings->GetQuerySettings().GetQuery();
+            if (expr.empty()) {
+                RuntimeError("Expected non-empty query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+                return false;
+            }
 
             THashMap<TStringBuf, TWordStatePtr> seen;
             for (const auto& column : Settings->GetQuerySettings().GetColumns()) {

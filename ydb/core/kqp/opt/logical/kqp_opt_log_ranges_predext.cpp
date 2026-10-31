@@ -455,6 +455,18 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
         return {};
     }
 
+    if (indexName) {
+        const auto indexType = mainTableDesc.Metadata->GetIndex(indexName.Cast().Value()).second->Type;
+        if (indexType == TIndexDescription::EType::GlobalFulltextRelevance
+            || indexType == TIndexDescription::EType::GlobalFulltextCompactRelevance)
+        {
+            // Relevance index metadata describes the document table keyed by PK.
+            // Extracting a point range would turn the fulltext read into a lookup,
+            // leaving FulltextMatch/FulltextScore without an index search.
+            return {};
+        }
+    }
+
     TExprNode::TPtr ranges = buildResult.ComputeNode;
 
     if (!ranges) {

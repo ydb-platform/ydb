@@ -642,9 +642,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.Execute();
     }
 
-// A resent uncommitted write is answered twice: with the original result and, once the
-    // shard has seen it, with IsDuplicate set. KQP does not inspect IsDuplicate: the write
-    // actor drops the second reply as already acknowledged (dedup by message cookie).
+    // A resent uncommitted write may be answered twice with the same completed
+    // result. The test checks that KQP tolerates this: the write actor drops the
+    // second reply as already acknowledged (dedup by message cookie).
     class TUncommittedWriteSeqNumAnsweredTwice : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -670,7 +670,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     {
                         auto again = std::make_unique<NEvents::TDataEvents::TEvWriteResult>();
                         again->Record = record;
-                        again->Record.SetIsDuplicate(true);
                         runtime.Send(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
                             again.release(), 0, ev->Cookie));
                         ++answeredTwice;
@@ -1252,12 +1251,19 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         // Rows come from the operation payload (0 for the empty re-routed batches that
         // only carry the write chain).
         TVector<std::tuple<ui64, ui64, ui64, ui64>> WriteOps;
-        // Tablets that answered with IsDuplicate=true.
-        THashSet<ui64> DuplicateResponders;
         // Prepare destination -> DataShards of the attached ancestor locks.
         THashMap<ui64, THashSet<ui64>> PrepareAncestorLocks;
         // Prepare destination -> the ReceivingShards list of the prepare message.
         THashMap<ui64, THashSet<ui64>> PrepareReceivingShards;
+        // Every observed TEvWriteResult with the write chain entries it echoes.
+        struct TWriteResultInfo {
+            ui64 Origin = 0;
+            NKikimrDataEvents::TEvWriteResult::EStatus Status =
+                NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED;
+            // (DataShard, WriterIndex, WriteSeqNum) of every echoed TxLock chain entry.
+            TVector<std::tuple<ui64, ui64, ui64>> ChainEntries;
+        };
+        TVector<TWriteResultInfo> WriteResults;
 
         TTestActorRuntime::EEventAction Observe(TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvPipeCache::EvForward) {
@@ -1277,14 +1283,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             TVector<std::tuple<ui64, ui64, ui64, ui64>> result;
             with_lock(Mutex) {
                 result = WriteOps;
-            }
-            return result;
-        }
-
-        THashSet<ui64> DuplicateRespondersSnapshot() const {
-            THashSet<ui64> result;
-            with_lock(Mutex) {
-                result = DuplicateResponders;
             }
             return result;
         }
@@ -1309,6 +1307,14 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             THashMap<ui64, THashSet<ui64>> result;
             with_lock(Mutex) {
                 result = PrepareReceivingShards;
+            }
+            return result;
+        }
+
+        TVector<TWriteResultInfo> WriteResultsSnapshot() const {
+            TVector<TWriteResultInfo> result;
+            with_lock(Mutex) {
+                result = WriteResults;
             }
             return result;
         }
@@ -1380,6 +1386,15 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             const ui64 origin = record.GetOrigin();
             bool suppress = false;
             with_lock(Mutex) {
+                TWriteResultInfo& info = WriteResults.emplace_back();
+                info.Origin = origin;
+                info.Status = record.GetStatus();
+                for (const auto& lock : record.GetTxLocks()) {
+                    for (const auto& seqNum : lock.GetWriteSeqNums()) {
+                        info.ChainEntries.emplace_back(
+                            lock.GetDataShard(), seqNum.GetWriterIndex(), seqNum.GetWriteSeqNum());
+                    }
+                }
                 suppress = SuppressResultsFrom.contains(origin);
             }
             if (suppress) {
@@ -1387,11 +1402,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     SuppressedAckCompleted++;
                 }
                 return TTestActorRuntime::EEventAction::DROP;
-            }
-            if (record.GetIsDuplicate()) {
-                with_lock(Mutex) {
-                    DuplicateResponders.insert(origin);
-                }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         }
@@ -1872,16 +1882,36 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 2u,
                 "the split must re-route the batch to exactly two new shards");
             {
-                const auto duplicates = wire.DuplicateRespondersSnapshot();
-                for (const ui64 dest : rerouteDestinations) {
-                    UNIT_ASSERT_C(duplicates.contains(dest),
-                        "the re-routed batch must be answered as a duplicate of the transferred chain");
-                }
-            }
-            {
                 for (const ui64 cookie : wire.ObservedCookiesSnapshot()) {
                     UNIT_ASSERT_C(initialUnaffectedCookies.contains(cookie),
                         "the unaffected shard was re-written after the partitioning change");
+                }
+            }
+
+            // Every covering shard answered the re-routed batch: the delivery
+            // completed and echoed the transferred ancestor chain at its position (the
+            // rows were applied on the removed shard before the split, so the chain
+            // stayed at 1).
+            {
+                const auto results = wire.WriteResultsSnapshot();
+                for (const ui64 dest : rerouteDestinations) {
+                    bool answered = false;
+                    for (const auto& info : results) {
+                        if (info.Origin != dest) {
+                            continue;
+                        }
+                        answered = true;
+                        UNIT_ASSERT_VALUES_EQUAL_C(info.Status,
+                            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                            "the re-routed batch must complete on every covering shard");
+                        bool chainEchoed = false;
+                        for (const auto& [shard, writer, seq] : info.ChainEntries) {
+                            chainEchoed |= (shard == splitShard && seq == 1u);
+                        }
+                        UNIT_ASSERT_C(chainEchoed,
+                            "the answer must echo the transferred ancestor chain at position 1");
+                    }
+                    UNIT_ASSERT_C(answered, "the re-routed batch was not answered by a covering shard");
                 }
             }
 
@@ -2052,6 +2082,31 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     "the re-routed chain must be delivered to both covering new shards");
                 UNIT_ASSERT_VALUES_EQUAL_C(dataDestinations.size(), 1u,
                     "keys 21..25 must be re-routed to a single new shard");
+
+                // Every covering shard answered the re-routed batch: the delivery
+                // completed and the transferred ancestor chain advanced to position 2
+                // (the echo reports it on both shards, the data-bearing one and the
+                // empty chain-carrier).
+                const auto results = wire.WriteResultsSnapshot();
+                for (const ui64 dest : rerouteDestinations) {
+                    bool answered = false;
+                    for (const auto& info : results) {
+                        if (info.Origin != dest) {
+                            continue;
+                        }
+                        answered = true;
+                        UNIT_ASSERT_VALUES_EQUAL_C(info.Status,
+                            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                            "the re-routed batch must complete on every covering shard");
+                        bool chainEchoed = false;
+                        for (const auto& [shard, writer, seq] : info.ChainEntries) {
+                            chainEchoed |= (shard == splitShard && seq == 2u);
+                        }
+                        UNIT_ASSERT_C(chainEchoed,
+                            "the answer must echo the transferred ancestor chain advanced to 2");
+                    }
+                    UNIT_ASSERT_C(answered, "the re-routed batch was not answered by a covering shard");
+                }
             }
 
             // The third write routes by the updated partitioning straight to the new
@@ -2380,13 +2435,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_C(lockOnlyShard != 0, "no lock-only shard was found");
             UNIT_ASSERT_C(rerouteDestinations.contains(lockOnlyShard),
                 "the lock-only shard must receive the empty re-routed batch");
-            {
-                const auto duplicates = wire.DuplicateRespondersSnapshot();
-                UNIT_ASSERT_C(duplicates.contains(*dataDestinations.begin()),
-                    "the re-routed batch must be answered as a duplicate of the transferred chain");
-                UNIT_ASSERT_C(duplicates.contains(lockOnlyShard),
-                    "the lock-only shard must answer the empty re-routed batch as a duplicate of the transferred chain");
-            }
 
             // The lock-only shard joins the distributed commit: its prepare carries the
             // ancestor lock of the removed shard, which is validated and cleaned by the
@@ -2548,8 +2596,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     "the merged shard must receive the batch of the first removed shard");
                 UNIT_ASSERT_C(routedOriginalShards.contains(unaffectedShard),
                     "the merged shard must receive the batch of the second removed shard");
-                UNIT_ASSERT_C(wire.DuplicateRespondersSnapshot().contains(mergedShard),
-                    "the re-routed batches must be answered as duplicates of the transferred chains");
             }
 
             // The transaction commits through the merge.

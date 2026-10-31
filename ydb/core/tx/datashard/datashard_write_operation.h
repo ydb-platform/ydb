@@ -302,7 +302,10 @@ private:
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
     NWilson::TTraceId WriteRequestTraceId;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
-    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> DuplicateOpsResult;
+    // Statistics of the already applied (duplicate) operations of this batch,
+    // taken from the stored results of their original deliveries: the reply must
+    // report the sum of duplicate and newly applied operations' statistics.
+    TVector<NKikimrQueryStats::TTxStats> DuplicateTxStats;
 
     TValidatedWriteTx::TPtr WriteTx;
 

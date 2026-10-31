@@ -6,6 +6,7 @@ SIZE(SMALL)
 
 SRCS(
     yql_yt_activation_ut.cpp
+    yql_yt_dq_hybrid_ut.cpp
     yql_yt_dq_integration_ut.cpp
     yql_yt_epoch_ut.cpp
     yql_yt_cbo_ut.cpp

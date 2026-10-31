@@ -121,7 +121,8 @@ class Platform(object):
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
         self.is_rv32imc_zicsr_zifencei = self.arch in ('riscv32_imc_zicsr_zifencei',)
 
-        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei
+        self.is_riscv32_esp32p4 = self.arch == 'riscv32_esp32p4'
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei or self.is_riscv32_esp32p4
         self.is_riscv64 = self.arch == 'riscv64_aw'
         self.is_riscv64_aw = self.arch == 'riscv64_aw'
 
@@ -266,6 +267,7 @@ class Platform(object):
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_riscv32_esp32p4, 'ARCH_RISCV32_ESP32P4'),
             (self.is_riscv64, 'ARCH_RISCV64'),
             (self.is_riscv64_aw, 'ARCH_RISCV64_AW'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
@@ -1350,6 +1352,13 @@ class GnuToolchain(Toolchain):
         if target.is_zephyr_armv7_cortex_a35:
             self.c_flags_platform.append('-march=armv8-a -mthumb -mabi=aapcs -mfpu=neon-fp-armv8 -mfloat-abi=hard')
             self.setup_zephyr_armv7()
+
+        if target.is_riscv32_esp32p4:
+            self.c_flags_platform.extend([
+                '-march=rv32imafc_zicsr_zifencei_zaamo_zalrsc_xesploop_xespv',
+                '-mabi=ilp32f',
+                '-mtune=esp-base',
+            ])
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')

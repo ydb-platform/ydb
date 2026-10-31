@@ -14,7 +14,7 @@ TComputationNodeFactory GetDqYtFactory(NKikimr::NMiniKQL::IStatsRegistry* jobSta
         }
 
         if (name == "YtDqRowsWideWrite") {
-            return NDqs::WrapYtDqRowsWideWrite(callable, ctx);
+            return NDqs::WrapYtDqRowsWideWrite(callable, jobStats, ctx);
         }
 
         return nullptr;

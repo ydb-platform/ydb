@@ -61,6 +61,7 @@ if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resour
   --branch "${BRANCH_NAME}" \
   --commit "${ORIGINAL_HEAD}" \
   --artifacts-url "${PUBLIC_DIR_URL}" \
+  --report-url "${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
   --try-links "$TRY_LINKS" \
   --repo "${GITHUB_REPOSITORY}" \
   --repo-root . \

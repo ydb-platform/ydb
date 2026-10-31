@@ -1243,9 +1243,10 @@ def build_html_dashboard(
     const prTitle = cfg.pr_title != null && String(cfg.pr_title).trim() !== '' ? String(cfg.pr_title).trim() : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
     const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
-      const artifactsUrl = (cfg.artifacts_url || '').trim();
+    const artifactsUrl = (cfg.artifacts_url || '').trim();
+    const reportUrlRaw = (cfg.report_url || '').trim();
     const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
-    const hasCiData = pr || prTitle || branch || commit || artifactsUrl;
+    const hasCiData = pr || prTitle || branch || commit || artifactsUrl || reportUrlRaw;
     const repo = escapeHtml((cfg.repo || 'ydb-platform/ydb').trim());
     if (pr || prTitle) {{
       const el = document.getElementById('headerPr');
@@ -1286,27 +1287,48 @@ def build_html_dashboard(
       document.title = 'PR #' + pr + ' · Resource dashboard';
     }}
     const linksEl = document.getElementById('headerLinks');
-    const artifactsBase = safeHttpBase(artifactsUrl);
-    if (artifactsBase) {{
+    const linkStyle = 'color:var(--accent);font-size:13px;text-decoration:none;';
+    const appendHeaderLink = (href, text) => {{
+      if (!href || !linksEl) return;
+      if (linksEl.childNodes.length) linksEl.appendChild(document.createTextNode(' · '));
       const a = document.createElement('a');
-      a.href = artifactsBase + '/index.html';
+      a.href = href;
       a.target = '_blank';
       a.rel = 'noopener';
-      a.textContent = 'Artifacts';
-      a.style.cssText = 'color:#2563eb;font-size:13px;text-decoration:none;';
+      a.textContent = text;
+      a.style.cssText = linkStyle;
       linksEl.appendChild(a);
-      if (tryLinks.length) linksEl.appendChild(document.createTextNode(' · '));
+    }};
+    const artifactsBase = safeHttpBase(artifactsUrl);
+    if (artifactsBase) {{
+      appendHeaderLink(artifactsBase + '/index.html', 'Artifacts');
+    }}
+    // Test report (ya-test.html): explicit URL, else try_N/ya-test.html next to dashboard.
+    let testsReportHref = '';
+    try {{
+      if (reportUrlRaw) {{
+        const u = new URL(reportUrlRaw);
+        if (u.protocol === 'http:' || u.protocol === 'https:') testsReportHref = u.href;
+      }}
+    }} catch (e) {{}}
+    if (!testsReportHref && artifactsBase) {{
+      for (const path of tryLinks) {{
+        const m = String(path || '').match(/^(try_\\d+)\\//);
+        if (m) {{
+          testsReportHref = artifactsBase + '/' + m[1] + '/ya-test.html';
+          break;
+        }}
+      }}
+    }}
+    if (testsReportHref) {{
+      appendHeaderLink(testsReportHref, 'Tests');
     }}
     if (artifactsBase && tryLinks.length) {{
       tryLinks.forEach((path, i) => {{
-        if (i > 0) linksEl.appendChild(document.createTextNode('\u00a0'));
-        const a = document.createElement('a');
-        a.href = artifactsBase + '/' + String(path || '').split('/').filter(Boolean).join('/');
-        a.target = '_blank';
-        a.rel = 'noopener';
-        a.textContent = 'try ' + (i + 1);
-        a.style.cssText = 'color:#2563eb;font-size:13px;text-decoration:none;';
-        linksEl.appendChild(a);
+        appendHeaderLink(
+          artifactsBase + '/' + String(path || '').split('/').filter(Boolean).join('/'),
+          'try ' + (i + 1),
+        );
       }});
     }}
     document.getElementById('headerRow1').style.display = hasCiData ? 'flex' : 'none';

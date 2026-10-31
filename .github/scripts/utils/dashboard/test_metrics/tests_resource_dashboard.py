@@ -1548,6 +1548,12 @@ def main() -> None:
     p.add_argument("--branch", type=str, default=None, help="Target branch for dashboard header")
     p.add_argument("--commit", type=str, default=None, help="Commit SHA for dashboard header")
     p.add_argument("--artifacts-url", type=str, default=None, help="Base URL for artifacts (index.html, try links)")
+    p.add_argument(
+        "--report-url",
+        type=str,
+        default=None,
+        help="URL of the ya-test.html report for the dashboard header (after Artifacts)",
+    )
     p.add_argument("--try-links", type=str, default=None, help="Comma-separated try_N/tests_metrics/dashboard.html paths for links")
     p.add_argument("--repo", type=str, default="ydb-platform/ydb", help="GitHub repo for PR/commit links")
     args = p.parse_args()
@@ -1895,6 +1901,7 @@ def main() -> None:
             "branch": args.branch,
             "commit": args.commit,
             "artifacts_url": args.artifacts_url,
+            "report_url": args.report_url,
             "try_links": [s.strip() for s in (args.try_links or "").split(",") if s.strip()],
             "repo": args.repo,
             "suite_path": args.suite_path,

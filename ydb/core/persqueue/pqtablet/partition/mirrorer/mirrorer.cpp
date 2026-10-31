@@ -719,7 +719,7 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
                     pendingOffset = Max(pendingOffset, offset);
                 }
             } else {
-                LOG_E("Failed to parse replication service message", {"payloadSize", msg.GetData().size()});
+                LOG_E("Failed to parse replication service message, payloadSize: " << msg.GetData().size());
             }
             continue;
         }

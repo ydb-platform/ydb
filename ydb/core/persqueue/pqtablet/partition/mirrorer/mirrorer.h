@@ -118,7 +118,6 @@ private:
 
     TString GetCurrentState() const;
 
-    bool IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();

@@ -321,6 +321,64 @@ def test_active_series_downsampling_preserves_short_peak():
     assert max(sampled_ys) == 77.0
 
 
+def test_dashboard_main_falls_back_to_evlog_when_report_missing():
+    # Regression-run_Large can finish without report.json (disk full).
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        report = root / "missing_report.json"
+        evlog = root / "ya_evlog.jsonl"
+        out_html = root / "dashboard.html"
+        # Old worker_threads format — one real chunk run.
+        evlog.write_text(
+            json.dumps(
+                {
+                    "namespace": "worker_threads",
+                    "event": "node-finished",
+                    "thread_name": "worker_1",
+                    "value": {
+                        "name": "Run($(BUILD_ROOT)/ydb/core/kqp/test-results/foo/testing_out_stuff/chunk1/run)",
+                        "time": [10.0, 20.0],
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        script = Path(TEST_METRICS) / "tests_resource_dashboard.py"
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--report",
+                str(report),
+                "--evlog",
+                str(evlog),
+                "--out-html",
+                str(out_html),
+                "--no-csv",
+                "--top-n",
+                "5",
+                "--max-points",
+                "100",
+                "--repo-root",
+                str(Path(__file__).resolve().parents[5]),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr + proc.stdout
+        assert out_html.exists()
+        data = json.loads((root / "dashboard_data.json").read_text(encoding="utf-8"))
+        assert len(data.get("xs_active_exact") or []) >= 2
+        stats = json.loads((root / "dashboard_stats.json").read_text(encoding="utf-8"))
+        assert stats.get("report_missing_evlog_fallback") is True
+        assert int(stats.get("runs_from_evlog") or 0) >= 1
+
+
 def test_payload_keeps_exact_active_series_past_former_8k_cap():
     # Large (~x4) runs exceed the old silent 8000-point exact→downsampled swap.
     # Click-table counts must stay on the full undownsampled series.
@@ -370,6 +428,7 @@ def load_tests(loader, tests, pattern):
         test_evlog_activity_drains_truncated_open_at_last_ts,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
         test_active_series_downsampling_preserves_short_peak,
+        test_dashboard_main_falls_back_to_evlog_when_report_missing,
         test_payload_keeps_exact_active_series_past_former_8k_cap,
     ):
         suite.addTest(unittest.FunctionTestCase(fn))
@@ -386,5 +445,6 @@ if __name__ == "__main__":
     test_evlog_activity_drains_truncated_open_at_last_ts()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
     test_active_series_downsampling_preserves_short_peak()
+    test_dashboard_main_falls_back_to_evlog_when_report_missing()
     test_payload_keeps_exact_active_series_past_former_8k_cap()
     print("OK")

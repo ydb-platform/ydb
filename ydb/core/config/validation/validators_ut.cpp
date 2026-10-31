@@ -607,6 +607,41 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT(res.StartsWith("StateStorage ring #0differs from# Ring"));
     }
 
+    Y_UNIT_TEST(CanReassignNodeInMultiGroupConfig) {
+        NKikimrConfig::TStateStorageConfig current;
+        FillRing(current.AddRingGroups());
+        FillRing(current.AddRingGroups());
+        current.MutableRingGroups(1)->SetRingGroupActorIdOffset(100);
+
+        auto disabled = current;
+        auto* disabledRing = disabled.MutableRingGroups(1)->MutableRing(0);
+        disabledRing->SetIsDisabled(true);
+
+        auto res = ValidateStateStorageConfig("StateStorage", current, disabled);
+        UNIT_ASSERT_C(!res.empty(), res);
+        res = ValidateStateStorageConfig("StateStorage", current, disabled, true);
+        UNIT_ASSERT_C(res.empty(), res);
+
+        auto replaced = disabled;
+        replaced.MutableRingGroups(1)->MutableRing(0)->ClearIsDisabled();
+        replaced.MutableRingGroups(1)->MutableRing(0)->MutableNode()->Set(0, 1000);
+        res = ValidateStateStorageConfig("StateStorage", disabled, replaced, true);
+        UNIT_ASSERT_C(res.empty(), res);
+
+        auto unsafe = current;
+        unsafe.MutableRingGroups(1)->MutableRing(0)->MutableNode()->Set(0, 1000);
+        res = ValidateStateStorageConfig("StateStorage", current, unsafe, true);
+        UNIT_ASSERT_C(!res.empty(), res);
+
+        auto evenSelection = current;
+        evenSelection.MutableRingGroups(1)->SetNToSelect(4);
+        evenSelection.MutableRingGroups(1)->MutableRing(0)->SetIsDisabled(true);
+        auto lostEvenQuorum = evenSelection;
+        lostEvenQuorum.MutableRingGroups(1)->MutableRing(1)->SetIsDisabled(true);
+        res = ValidateStateStorageConfig("StateStorage", evenSelection, lostEvenQuorum, true);
+        UNIT_ASSERT_C(!res.empty(), res);
+    }
+
     Y_UNIT_TEST(ValidateConfigSelfManagement) {
         NKikimrConfig::TAppConfig proposed;
         proposed.MutableSelfManagementConfig()->SetEnabled(true);

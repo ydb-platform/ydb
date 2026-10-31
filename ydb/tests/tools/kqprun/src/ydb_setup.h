@@ -63,6 +63,8 @@ public:
 
     void WaitAsyncQueries() const;
 
+    void FlushTraces() const;
+
     void CloseSessions() const;
 
     void StartTraceOpt() const;

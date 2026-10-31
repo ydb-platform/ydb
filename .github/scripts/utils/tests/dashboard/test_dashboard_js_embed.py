@@ -116,8 +116,8 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("function fullEvlogRangeMs()", source)
         self.assertIn('id="testsBySuiteDetails"', source)
         self.assertIn('id="activeBySuiteDetails"', source)
-        self.assertIn("Tests in parallel by suite", source)
-        self.assertIn("Active chunks by suite", source)
+        self.assertIn("<summary>Tests in parallel</summary>", source)
+        self.assertIn("<summary>Active chunks</summary>", source)
         # Runner monitoring lives inside the dashboard header.
         header_idx = source.find('id="dashboardHeader"')
         monitoring_idx = source.find('id="monitoringLinkWrap"')
@@ -179,7 +179,8 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("cfg.pr_title", source)
         self.assertIn("Resource dashboard", source)
         self.assertIn("document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard'", source)
-        self.assertIn("CPU by suite · estimated cores", source)
+        self.assertIn('>CPU<span class="chart-tile-sub">cores by suite · red = host</span>', source)
+        self.assertIn(">ya make<span class=\"chart-tile-sub\">active jobs by phase</span>", source)
         self.assertIn("chart-tile-sub", source)
         # Expand matches the ya-activity full-row slot (same as .span-2).
         self.assertIn(".chart-tile.span-2,\n    .chart-tile.expanded {{", source)

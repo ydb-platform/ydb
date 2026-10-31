@@ -364,7 +364,7 @@ def build_html_dashboard(
   <div class="chart-grid" id="yaActivityGrid">
     <div class="chart-tile span-2" data-pane="yaActivity">
       <div class="chart-tile-head">
-        <span class="chart-tile-title">ya make concurrency<span class="chart-tile-sub">build, archives, cache, test workers, links</span></span>
+        <span class="chart-tile-title">ya make<span class="chart-tile-sub">active jobs by phase</span></span>
       </div>
       <div id="yaActivity" class="chart-pane"></div>
     </div>
@@ -377,7 +377,7 @@ def build_html_dashboard(
     <div class="chart-grid" id="chunkChartGrid">
       <div class="chart-tile" data-pane="activeLayerChunk">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">how many suite+chunk runs are alive at each moment</span></span>
+          <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">suite+chunk processes over time</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="activeLayerChunk" class="chart-pane"></div>
@@ -388,7 +388,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="cpuLayer">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">CPU · estimated cores<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
+          <span class="chart-tile-title">CPU<span class="chart-tile-sub">cores by suite+chunk · red = host</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="cpuLayer" class="chart-pane"></div>
@@ -399,7 +399,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="ramLayer">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">RAM · GB<span class="chart-tile-sub">stacked by suite+chunk; red line is host monitor</span></span>
+          <span class="chart-tile-title">RAM<span class="chart-tile-sub">GB by suite+chunk · red = host</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="ramLayer" class="chart-pane"></div>
@@ -410,7 +410,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
+          <span class="chart-tile-title">Disk I/O<span class="chart-tile-sub">MB/s · write up, read down</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="diskLayer" class="chart-pane"></div>
@@ -428,7 +428,7 @@ def build_html_dashboard(
     <div class="chart-grid" id="suiteChartGrid">
       <div class="chart-tile" data-pane="cpuLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">CPU by suite · estimated cores<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
+          <span class="chart-tile-title">CPU<span class="chart-tile-sub">cores by suite · red = host</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="cpuLayerSuite" class="chart-pane"></div>
@@ -439,7 +439,7 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="ramLayerSuite">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">RAM by suite · GB<span class="chart-tile-sub">stacked per suite; red line is host monitor</span></span>
+          <span class="chart-tile-title">RAM<span class="chart-tile-sub">GB by suite · red = host</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="ramLayerSuite" class="chart-pane"></div>
@@ -450,18 +450,18 @@ def build_html_dashboard(
       </div>
       <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
         <div class="chart-tile-head">
-          <span class="chart-tile-title">Disk bandwidth<span class="chart-tile-sub">write above zero, read below (MB/s)</span></span>
+          <span class="chart-tile-title">Disk I/O<span class="chart-tile-sub">MB/s · write up, read down</span></span>
           <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width (same as ya make concurrency)" aria-expanded="false">expand</button>
         </div>
         <div id="diskLayerSuite" class="chart-pane"></div>
       </div>
     </div>
     <details class="chart-secondary" id="testsBySuiteDetails">
-      <summary>Tests in parallel by suite</summary>
+      <summary>Tests in parallel</summary>
       <div class="chart-grid">
         <div class="chart-tile span-2 expanded" data-pane="testsLayerSuite">
           <div class="chart-tile-head">
-            <span class="chart-tile-title">Tests running by suite<span class="chart-tile-sub">how many individual tests are in flight at each moment</span></span>
+            <span class="chart-tile-title">Tests<span class="chart-tile-sub">in parallel by suite</span></span>
           </div>
           <div id="testsLayerSuite" class="chart-pane"></div>
           <div class="chart-tile-meta">
@@ -472,11 +472,11 @@ def build_html_dashboard(
       </div>
     </details>
     <details class="chart-secondary" id="activeBySuiteDetails">
-      <summary>Active chunks by suite</summary>
+      <summary>Active chunks</summary>
       <div class="chart-grid">
         <div class="chart-tile span-2 expanded" data-pane="activeLayerSuite">
           <div class="chart-tile-head">
-            <span class="chart-tile-title">Active chunks by suite<span class="chart-tile-sub">how many suite runs are alive at each moment</span></span>
+            <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">by suite over time</span></span>
           </div>
           <div id="activeLayerSuite" class="chart-pane"></div>
           <div class="chart-tile-meta">
@@ -2487,8 +2487,8 @@ def build_html_dashboard(
       // Put clock warning into the tile label when needed; keep the plot clean.
       const titleEl = document.querySelector('#yaActivityGrid .chart-tile-title');
       if (titleEl) {{
-        const main = activityUnaligned ? 'ya make concurrency (clock unaligned)' : 'ya make concurrency';
-        titleEl.innerHTML = main + '<span class="chart-tile-sub">build, archives, cache, test workers, links</span>';
+        const main = activityUnaligned ? 'ya make (clock unaligned)' : 'ya make';
+        titleEl.innerHTML = main + '<span class="chart-tile-sub">active jobs by phase</span>';
       }}
       const ax = axisLayout(allX, true);
       Plotly.newPlot('yaActivity', traces, {{
@@ -2660,7 +2660,7 @@ def build_html_dashboard(
         automargin: true,
         sort: false,
         hovertemplate: '%{{label}}<br>cpu_sec=%{{value:.2f}}<br>cpu_human=%{{customdata}}<extra></extra>',
-      }}], {{title: 'CPU consumers (top suite+chunk + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      }}], {{title: 'CPU by suite+chunk', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
       Plotly.newPlot('ramPie', [{{
         type: 'pie',
         labels: data.pie_ram_labels,
@@ -2672,7 +2672,7 @@ def build_html_dashboard(
         automargin: true,
         sort: false,
         hovertemplate: '%{{label}}<br>ram_kb_sum=%{{value:.0f}} KB<br>ram_human=%{{customdata}}<extra></extra>',
-      }}], {{title: 'RAM consumers (top suite+chunk + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      }}], {{title: 'RAM by suite+chunk', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
       Plotly.newPlot('activePie', [{{
         type: 'pie',
         labels: data.pie_active_labels,
@@ -2684,7 +2684,7 @@ def build_html_dashboard(
         automargin: true,
         sort: false,
         hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
-      }}], {{title: 'Active time share (suite+chunk, top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      }}], {{title: 'Active time by suite+chunk', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
     }}
 
     Plotly.newPlot('cpuPieSuite', [{{
@@ -2698,7 +2698,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>cpu_sec=%{{value:.2f}}<br>cpu_human=%{{customdata}}<extra></extra>',
-    }}], {{title: 'CPU consumers by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'CPU by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     Plotly.newPlot('ramPieSuite', [{{
       type: 'pie',
@@ -2711,7 +2711,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>ram_kb_sum=%{{value:.0f}} KB<br>ram_human=%{{customdata}}<extra></extra>',
-    }}], {{title: 'RAM consumers by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'RAM by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     Plotly.newPlot('activePieSuite', [{{
       type: 'pie',
@@ -2724,7 +2724,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
-    }}], {{title: 'Active time share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'Active time by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     Plotly.newPlot('testsPieSuite', [{{
       type: 'pie',
@@ -2736,7 +2736,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>tests=%{{value:.0f}}<extra></extra>',
-    }}], {{title: 'Tests count share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'Tests by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     if (data.resources_overlay) {{
       document.getElementById('layerTogglesWrap').style.display = '';

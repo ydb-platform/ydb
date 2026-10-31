@@ -650,7 +650,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks,
             size_t bridgeGroupCount = 1, bool ordinary = false,
             std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates = {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-            bool inlinePile = false) {
+            bool inlinePile = false, bool bridgeModeEnabled = false)
+    {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -662,7 +663,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         TTestActorRuntime& runtime = *server.GetRuntime();
-        if (ordinary) {
+        if (ordinary || bridgeModeEnabled) {
             runtime.GetAppData().BridgeModeEnabled = true;
         }
 
@@ -679,6 +680,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
+
+        if (bridgeModeEnabled) {
+            // NodeWarden defers bridge-mode queries until it has bridge information.
+            runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(runtime.GetNodeId(0)), sender,
+                new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, bridgeInfo)));
+        }
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -734,6 +741,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
+    Ydb::Monitoring::SelfCheckResult RequestHcInBridgeMode(const TVector<TVDisks>& groupVdisks,
+            std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates, bool inlinePile = false)
+    {
+        return RequestHcWithBridgeVdisks(groupVdisks, 1, false, pileStates, inlinePile, true);
+    }
+
     struct TLocationFilter {
         std::vector<std::function<bool(const Ydb::Monitoring::Location&)>> Filters;
 
@@ -768,6 +781,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL_C(issuesCount, total, "Wrong issues count for " << type << " with expecting status " << expectingStatus);
+    }
+
+    void CheckHcResultHasIssueWithMessage(const Ydb::Monitoring::SelfCheckResult& result, const TString& type,
+            Ydb::Monitoring::StatusFlag::Status status, const TString& message)
+    {
+        const bool found = std::ranges::any_of(result.issue_log(), [&](const auto& issue) {
+            return issue.type() == type && issue.status() == status && issue.message() == message;
+        });
+        UNIT_ASSERT_C(found, "No " << type << " issue with status " << status << " and message '" << message << "'");
     }
 
     // checks that issues of the given types are linked to each other by reason, from the first type down to the last one
@@ -1330,6 +1352,104 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             {NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1, NKikimrBridge::TClusterState::DISCONNECTED});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+    }
+
+    const auto checkDeadStage2Pile = [](bool inlinePile) {
+        const auto result = RequestHcInBridgeMode({TVDisks{8, NKikimrBlobStorage::READY}, TVDisks{3, NKikimrBlobStorage::ERROR}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2}, inlinePile);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, "Group failed in pile pile1");
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
+    };
+
+    Y_UNIT_TEST(BridgeGroupDeadInStage2Pile) {
+        checkDeadStage2Pile(false);
+    }
+
+    Y_UNIT_TEST(BridgeConvertedGroupDeadInStage2Pile) {
+        checkDeadStage2Pile(true);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInSynchronizedAndStage2Piles) {
+        const auto result = RequestHcInBridgeMode({TVDisks{3, NKikimrBlobStorage::ERROR}, TVDisks{3, NKikimrBlobStorage::ERROR}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, "Group dead in all piles");
+    }
+
+    const auto checkDeadSynchronizedPile = [](NKikimrBridge::TClusterState::EPileState otherState, bool inlinePile) {
+        const auto result = RequestHcInBridgeMode({TVDisks{3, NKikimrBlobStorage::ERROR}, TVDisks{8, NKikimrBlobStorage::READY}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, otherState}, inlinePile);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, "Group failed in pile pile0");
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
+    };
+
+    Y_UNIT_TEST(BridgeGroupDeadInSynchronizedPileWithHealthyStage2Pile) {
+        checkDeadSynchronizedPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2, false);
+    }
+
+    Y_UNIT_TEST(BridgeConvertedGroupDeadInSynchronizedPileWithHealthyStage2Pile) {
+        checkDeadSynchronizedPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2, true);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInSynchronizedPileWithHealthySuspendedPile) {
+        checkDeadSynchronizedPile(NKikimrBridge::TClusterState::SUSPENDED, false);
+    }
+
+    Y_UNIT_TEST(BridgeGroupHealthyStage2PileHasNoIssues) {
+        const auto result = RequestHcInBridgeMode({2, TVDisks{8, NKikimrBlobStorage::READY}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2});
+        Cerr << result.ShortDebugString() << Endl;
+        for (auto status : {Ydb::Monitoring::StatusFlag::YELLOW, Ydb::Monitoring::StatusFlag::ORANGE, Ydb::Monitoring::StatusFlag::RED}) {
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", status, 0, TLocationFilter().Pool("/Root:test"));
+            CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", status, 0, TLocationFilter().Pool("/Root:test"));
+        }
+    }
+
+    const auto checkIgnoredDeadPile = [](NKikimrBridge::TClusterState::EPileState otherState) {
+        const auto result = RequestHcInBridgeMode({TVDisks{8, NKikimrBlobStorage::READY}, TVDisks{3, NKikimrBlobStorage::ERROR}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, otherState});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+    };
+
+    Y_UNIT_TEST(BridgeGroupDeadInStage1PileIsIgnored) {
+        checkIgnoredDeadPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInSuspendedPileIsIgnored) {
+        checkIgnoredDeadPile(NKikimrBridge::TClusterState::SUSPENDED);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInDisconnectedPileIsIgnored) {
+        checkIgnoredDeadPile(NKikimrBridge::TClusterState::DISCONNECTED);
+    }
+
+    Y_UNIT_TEST(BridgeGroupStage2PartWithoutSynchronizedParts) {
+        const auto result = RequestHcInBridgeMode({2, TVDisks{8, NKikimrBlobStorage::READY}},
+            {NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2, NKikimrBridge::TClusterState::DISCONNECTED});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, "Group has no parts in synchronized piles");
+        for (const auto& issue : result.issue_log()) {
+            UNIT_ASSERT_UNEQUAL(issue.type(), "BRIDGE_GROUP");
+        }
     }
 
     /* HC currently infers group status on its own, so it's never unknown

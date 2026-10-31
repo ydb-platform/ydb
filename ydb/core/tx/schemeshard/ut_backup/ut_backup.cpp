@@ -11,6 +11,9 @@
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
+#include <atomic>
+#include <optional>
+
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
 
@@ -29,13 +32,30 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 Y_UNIT_TEST_SUITE(TBackupTests) {
     using TFillFn = std::function<void(TTestBasicRuntime&)>;
 
+    struct TBackupOptions {
+        TDuration ResponseDelay;
+        std::optional<ui64> ScheduledLimit;
+        THashMap<TString, TString>* ResultData = nullptr;
+    };
+
     auto Backup(TTestBasicRuntime& runtime, const TString& compressionCodec,
-            const TString& creationScheme, TFillFn fill, ui32 rowsBatchSize = 128, ui32 minWriteBatchSize = 0)
+            const TString& creationScheme, TFillFn fill, ui32 rowsBatchSize = 128, ui32 minWriteBatchSize = 0,
+            const TBackupOptions& options = {})
     {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        std::atomic<ui32> delayedRequests = 0;
+        TS3Mock::TSettings settings(port);
+        if (options.ResponseDelay) {
+            settings.ErrorResponse = [&](TStringBuf, TStringBuf) -> TString {
+                // Regression stimulus: HTTP must be slower than simulated timers.
+                Sleep(options.ResponseDelay);
+                ++delayedRequests;
+                return {};
+            };
+        }
+        TS3Mock s3Mock({}, settings);
         UNIT_ASSERT(s3Mock.Start());
 
         TTestEnv env(runtime);
@@ -60,6 +80,10 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
+        if (options.ScheduledLimit) {
+            runtime.ResetScheduledCount();
+            runtime.SetScheduledLimit(*options.ScheduledLimit);
+        }
         TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "Table"
             Table {
@@ -80,6 +104,13 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             }
         )", tableSchema.c_str(), port, minWriteBatchSize, rowsBatchSize, compressionCodec.c_str()));
         env.TestWaitNotification(runtime, txId);
+
+        if (options.ResponseDelay) {
+            UNIT_ASSERT_GT(delayedRequests.load(), 0);
+        }
+        if (options.ResultData) {
+            *options.ResultData = s3Mock.GetData();
+        }
 
         return std::make_pair(partsUploaded, objectsPut);
     }
@@ -261,6 +292,28 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         )", [](TTestBasicRuntime& runtime) {
             UpdateRow(runtime, "Table", 1, "valueA");
         });
+    }
+
+    Y_UNIT_TEST(ShouldSucceedWithSlowS3Responses) {
+        TTestBasicRuntime runtime;
+        THashMap<TString, TString> data;
+        TBackupOptions options;
+        options.ResponseDelay = TDuration::MilliSeconds(100);
+        // Setup is excluded from this budget. A small backup needs few timers
+        // with real-I/O dispatch; fast timer churn exhausts it while HTTP waits.
+        options.ScheduledLimit = 1000;
+        options.ResultData = &data;
+
+        Backup(runtime, "none", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", [](TTestBasicRuntime& runtime) {
+            UpdateRow(runtime, "Table", 1, "valueA");
+        }, 128, 0, options);
+
+        UNIT_ASSERT_VALUES_EQUAL(data.at("/data_00.csv"), "1,\"valueA\"\n");
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {

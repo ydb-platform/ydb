@@ -149,11 +149,6 @@ def build_html_dashboard(
     details.quiet-link-fold[open] > summary::before,
     .chart-secondary[open] > summary::before,
     .dash-footer[open] > summary::before {{ content: "▾ "; }}
-    .section-label {{
-      display: flex; align-items: center; gap: 8px; margin: 0 0 8px;
-      font-size: 13px; font-weight: 600; color: var(--fg);
-    }}
-    .section-label .help-btn {{ padding: 0 6px; min-width: auto; font-size: 12px; color: var(--muted); }}
     details.quiet-link-fold {{ display: none; margin: 2px 0 0; }}
     details.quiet-link-fold.is-visible {{ display: block; }}
     details.quiet-link-fold > summary {{ font-weight: 400; font-size: 11px; color: #8c959f; }}
@@ -264,7 +259,8 @@ def build_html_dashboard(
     .headline-run .group {{ white-space: nowrap; padding: 0 14px; border-right: 1px solid var(--line); }}
     .headline-run .group:first-child {{ padding-left: 0; }}
     .headline-run .group:last-child {{ border-right: 0; padding-right: 0; }}
-    .headline-tables {{ display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-start; }}
+    .headline-tables {{ display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-start; margin-top: 8px; }}
+    #cpuSuggestionsSection .clickbox {{ max-height: 420px; }}
     .headline-block h4 {{ margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }}
     .headline-table {{
       width: auto; border-collapse: collapse; font-size: 12px;
@@ -318,19 +314,6 @@ def build_html_dashboard(
   <div id="headlineStats" class="headline-stats" style="display:none;">
     <div class="headline-stats-title">Resource summary</div>
     <div id="headlineStatsGrid" class="headline-stats-grid"></div>
-  </div>
-  <div id="cpuSuggestionsSection" style="display:none;margin:16px 0;">
-    <div class="section-label">
-      <span>CPU suggestions</span>
-      <button id="cpuHelpToggle" class="help-btn" type="button" title="Open recommendation docs in footer">?</button>
-    </div>
-    <p id="syntheticNote" style="display:none;font-size:12px;color:#9a6700;margin:4px 0;"></p>
-    <p class="dash-header-meta" style="margin:4px 0 8px;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
-    <div id="cpuSuggestionsTable" class="clickbox"></div>
-    <details id="heavyTestsDetails" class="quiet-link-fold">
-      <summary>Long/heavy near timeout (0)</summary>
-      <div id="cpuHeavyTestsTable" class="clickbox"></div>
-    </details>
   </div>
   <div class="toolbar">
     <label for="suiteSearch">Search suite</label>
@@ -515,6 +498,16 @@ def build_html_dashboard(
   <details class="dash-footer" id="docsFooter">
     <summary>Docs &amp; debug</summary>
     <div class="dash-footer-body">
+      <details class="aux-fold" id="cpuSuggestionsSection" style="display:none;">
+        <summary>CPU suggestions</summary>
+        <p id="syntheticNote" style="display:none;font-size:12px;color:#9a6700;margin:4px 0;"></p>
+        <p class="dash-header-meta" style="margin:4px 0 8px;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
+        <div id="cpuSuggestionsTable" class="clickbox"></div>
+        <details id="heavyTestsDetails" class="quiet-link-fold">
+          <summary>Long/heavy near timeout (0)</summary>
+          <div id="cpuHeavyTestsTable" class="clickbox"></div>
+        </details>
+      </details>
       <details class="aux-fold" id="cpuHelpDetails">
         <summary>CPU recommendation logic</summary>
         <div id="cpuHelpText" class="cpu-help">
@@ -930,10 +923,13 @@ def build_html_dashboard(
       }}
       grid.innerHTML =
         runLine +
-        '<div class="headline-tables">' +
-          '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
-          hostBlock +
-        '</div>';
+        '<details class="aux-fold" id="headlineTablesDetails">' +
+          '<summary>Resource tables</summary>' +
+          '<div class="headline-tables">' +
+            '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
+            hostBlock +
+          '</div>' +
+        '</details>';
       wrap.style.display = 'block';
     }}
     renderHeadlineStats();
@@ -1396,7 +1392,9 @@ def build_html_dashboard(
     }}
 
     if (data.cpu_suggestions && data.cpu_suggestions.length > 0) {{
-      document.getElementById('cpuSuggestionsSection').style.display = 'block';
+      // Lives under Docs & debug; keep closed — only reveal the fold entry.
+      const sugSection = document.getElementById('cpuSuggestionsSection');
+      if (sugSection) sugSection.style.display = '';
       const nSyn = (data.stats && data.stats.runs_with_synthetic_metrics) ? Number(data.stats.runs_with_synthetic_metrics) : 0;
       const synEl = document.getElementById('syntheticNote');
       if (nSyn > 0 && synEl) {{
@@ -1760,16 +1758,6 @@ def build_html_dashboard(
         }});
       }}
 
-      const helpBtn = document.getElementById('cpuHelpToggle');
-      if (helpBtn) {{
-        helpBtn.addEventListener('click', () => {{
-          const footer = document.getElementById('docsFooter');
-          const cpuHelp = document.getElementById('cpuHelpDetails');
-          if (footer) footer.open = true;
-          if (cpuHelp) cpuHelp.open = true;
-          (cpuHelp || footer)?.scrollIntoView({{ behavior: 'smooth', block: 'nearest' }});
-        }});
-      }}
       window.renderSuggestionsTable = renderSuggestionsTable;
       renderSuggestionsTable();
     }}

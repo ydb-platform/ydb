@@ -118,8 +118,7 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn('id="activeBySuiteDetails"', source)
         self.assertIn("Tests in parallel by suite", source)
         self.assertIn("Active chunks by suite", source)
-        # Runner monitoring lives inside the dashboard header, not as a
-        # standalone box between Config and CPU suggestions.
+        # Runner monitoring lives inside the dashboard header.
         header_idx = source.find('id="dashboardHeader"')
         monitoring_idx = source.find('id="monitoringLinkWrap"')
         headline_idx = source.find('id="headlineStats"')
@@ -134,14 +133,13 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("'</b>build</span>'", source)
         self.assertIn("'</b>test</span>'", source)
         self.assertIn("headline-run-row", source)
+        self.assertIn("headlineTablesDetails", source)
         self.assertIn("function resolvePhaseDurations(hs)", source)
         self.assertIn('rel="icon"', source)
         self.assertIn("data:image/svg+xml,", source)
         self.assertIn("<title>Chunk Resource Dashboard</title>", source)
         # Typography: secondary collapses stay quiet; chart titles stay primary.
         self.assertIn("details.aux-fold", source)
-        self.assertIn(".section-label", source)
-        self.assertIn('<div class="section-label">', source)
         self.assertNotIn(
             '<h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">',
             source,
@@ -153,24 +151,30 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("build = whole job", source)
         self.assertIn("aria-expanded", source)
         self.assertIn("from urllib.parse import quote", source)
-        # Long prose / debug dumps live in one footer, not scattered mid-page.
+        # Long prose, debug dumps, and CPU suggestions live in one footer.
         self.assertIn('id="docsFooter"', source)
         self.assertIn("Docs &amp; debug", source)
         footer_idx = source.find('id="docsFooter"')
         stats_idx = source.find('id="stats"')
         run_config_idx = source.find('id="runConfig"')
         cpu_help_idx = source.find('id="cpuHelpText"')
+        sug_idx = source.find('id="cpuSuggestionsSection"')
+        heavy_idx = source.find('id="heavyTestsDetails"')
         self.assertGreater(footer_idx, 0)
+        self.assertGreater(sug_idx, footer_idx)
+        self.assertGreater(heavy_idx, sug_idx)
+        self.assertGreater(cpu_help_idx, sug_idx)
         self.assertGreater(stats_idx, footer_idx)
         self.assertGreater(run_config_idx, footer_idx)
-        self.assertGreater(cpu_help_idx, footer_idx)
         self.assertIn('class="quiet-link-fold"', source)
-        self.assertIn('id="heavyTestsDetails"', source)
-        # Mid-page walls of help text should be gone.
-        self.assertNotIn('class="metrics-help"', source)
+        # Not mid-page above charts.
         ya_idx = source.find('id="yaActivityGrid"')
         self.assertGreater(ya_idx, 0)
         self.assertLess(ya_idx, footer_idx)
+        self.assertLess(ya_idx, sug_idx)
+        self.assertNotIn('id="cpuHelpToggle"', source)
+        # Mid-page walls of help text should be gone.
+        self.assertNotIn('class="metrics-help"', source)
         self.assertNotIn("How CPU/RAM chart metrics are calculated", source[0:ya_idx])
         self.assertIn("cfg.pr_title", source)
         self.assertIn("Resource dashboard", source)

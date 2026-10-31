@@ -14,6 +14,7 @@ ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
+REQUIREMENTS(cpu:4)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32 cpu:2)
     SPLIT_FACTOR(20)

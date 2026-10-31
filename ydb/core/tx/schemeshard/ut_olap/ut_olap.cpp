@@ -1,19 +1,20 @@
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
-#include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
-#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/protos/table_stats.pb.h>
-#include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
+
 #include <ydb/library/testlib/helpers.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -36,11 +37,9 @@ bool IsSchemeTxCompleted(TTestBasicRuntime& runtime, ui64 txId) {
 
     TAutoPtr<IEventHandle> handle;
     const auto* ev = runtime.GrabEdgeEventIf<TEvSchemeShard::TEvNotifyTxCompletionResult>(
-        handle,
-        [txId](const TEvSchemeShard::TEvNotifyTxCompletionResult& msg) {
+        handle, [txId](const TEvSchemeShard::TEvNotifyTxCompletionResult& msg) {
             return msg.Record.GetTxId() == txId;
-        },
-        TDuration::Zero());
+        }, TDuration::Zero());
     return ev != nullptr;
 }
 
@@ -105,7 +104,7 @@ static const TString defaultTableSchema = R"(
 
 static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
     NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
-    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
+    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8))
 };
 
 static const TString tableSchemaFormat = R"(
@@ -220,17 +219,12 @@ THashSet<TString> ColumnTableIndexNames(const NKikimrScheme::TEvDescribeSchemeRe
     return names;
 }
 
-NLs::TCheckFunc LsCheckDiskQuotaExceeded(
-    bool expectExceeded = true,
-    const TString& debugHint = ""
-) {
-    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool expectExceeded = true, const TString& debugHint = "") {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
         auto& desc = record.GetPathDescription().GetDomainDescription();
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            desc.GetDomainState().GetDiskQuotaExceeded(),
-            expectExceeded,
-            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
-        );
+        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetDomainState().GetDiskQuotaExceeded(), expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n"
+                      << desc.GetDiskSpaceUsage().DebugString());
     };
 }
 
@@ -240,40 +234,23 @@ bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& re
     return state.GetSmallBlobsQuotaExceeded();
 }
 
-NLs::TCheckFunc LsCheckSmallBlobsQuotaExceeded(
-    bool expectExceeded = true,
-    const TString& debugHint = ""
-) {
-    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+NLs::TCheckFunc LsCheckSmallBlobsQuotaExceeded(bool expectExceeded = true, const TString& debugHint = "") {
+    return [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
         auto& desc = record.GetPathDescription().GetDomainDescription();
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            GetSmallBlobsQuotaExceeded(record),
-            expectExceeded,
-            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
-        );
+        UNIT_ASSERT_VALUES_EQUAL_C(GetSmallBlobsQuotaExceeded(record), expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n"
+                      << desc.GetDiskSpaceUsage().DebugString());
     };
 }
 
-void CheckSmallBlobsQuotaExceedance(TTestActorRuntime& runtime,
-                                    ui64 schemeShard,
-                                    const TString& pathToSubdomain,
-                                    bool expectExceeded,
-                                    const TString& debugHint = ""
-) {
-    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
-        LsCheckSmallBlobsQuotaExceeded(expectExceeded, debugHint)
-    });
+void CheckSmallBlobsQuotaExceedance(
+    TTestActorRuntime& runtime, ui64 schemeShard, const TString& pathToSubdomain, bool expectExceeded, const TString& debugHint = "") {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), { LsCheckSmallBlobsQuotaExceeded(expectExceeded, debugHint) });
 }
 
-void CheckQuotaExceedance(TTestActorRuntime& runtime,
-                          ui64 schemeShard,
-                          const TString& pathToSubdomain,
-                          bool expectExceeded,
-                          const TString& debugHint = ""
-) {
-    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
-        LsCheckDiskQuotaExceeded(expectExceeded, debugHint)
-    });
+void CheckQuotaExceedance(
+    TTestActorRuntime& runtime, ui64 schemeShard, const TString& pathToSubdomain, bool expectExceeded, const TString& debugHint = "") {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), { LsCheckDiskQuotaExceeded(expectExceeded, debugHint) });
 }
 
 NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 columnShardId, ui64 minPartCount = 0) {
@@ -281,18 +258,19 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
     bool captured = false;
 
     auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& event) {
-            const auto& record = event->Get()->Record;
-            if (record.GetDatashardId() == columnShardId && record.GetTableStats().GetPartCount() >= minPartCount) {
-                stats = record;
-                captured = true;
-            }
+        const auto& record = event->Get()->Record;
+        if (record.GetDatashardId() == columnShardId && record.GetTableStats().GetPartCount() >= minPartCount) {
+            stats = record;
+            captured = true;
         }
-    );
+    });
 
     for (int i = 0; i < 30 && !captured; ++i) {
         runtime.SimulateSleep(TDuration::Seconds(1));
         TDispatchOptions options;
-        options.CustomFinalCondition = [&]() { return captured; };
+        options.CustomFinalCondition = [&]() {
+            return captured;
+        };
         runtime.DispatchEvents(options, TDuration::Seconds(1));
     }
 
@@ -394,10 +372,9 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 
     ui64 txId = 100;
 
-    TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+    TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
             Name: "SomeDatabase"
-        )" << databaseDescription
-    );
+        )" << databaseDescription);
 
     const TString& olapSchema = defaultStoreSchema;
 
@@ -424,7 +401,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         auto& self = record.GetPathDescription().GetSelf();
         pathId = self.GetPathId();
         txId = self.GetCreateTxId() + 1;
-        planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+        planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
         auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
         UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
         shardId = sharding.GetColumnShards()[0];
@@ -440,7 +417,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 
     ui64 writeId = 0;
     const ui32 rowsInBatch = 100000;
-    const TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
+    const TString data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
 
     // Follow the exact small-blobs usage the shard reports to SchemeShard - this is the value the quota
     // check compares against the hard/soft quotas, so it lets us pin down which side of the band we are on.
@@ -453,8 +430,12 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
             reportedSmallBlobsVolume = record.GetTableStats().GetSmallBlobsVolumeBytes();
         }
     });
-    const auto usage = [&]() { return checkCount ? reportedSmallBlobsCount : reportedSmallBlobsVolume; };
-    const auto inBand = [&](const ui64 u) { return softQuota <= u && u <= hardQuota; };
+    const auto usage = [&]() {
+        return checkCount ? reportedSmallBlobsCount : reportedSmallBlobsVolume;
+    };
+    const auto inBand = [&](const ui64 u) {
+        return softQuota <= u && u <= hardQuota;
+    };
 
     // The quota uses hysteresis: the "exceeded" flag is raised only when usage rises strictly above the hard
     // quota, and cleared only when usage falls strictly below the soft quota; inside the [soft, hard] band it
@@ -475,11 +456,10 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         UNIT_ASSERT_C(++batches <= 100, "small-blobs quota was never exceeded; " << DEBUG_HINT);
         std::vector<ui64> writeIds;
         ++txId;
-        UNIT_ASSERT_C(
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId),
-            DEBUG_HINT);
+        UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                          NEvWrite::EModificationType::Upsert, txId), DEBUG_HINT);
         planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         runtime.SimulateSleep(TDuration::Seconds(1));   // let the stats and the quota flag propagate
         // (1) Usage is rising, so SchemeShard's view lags below the shard's: whenever the shard is already in
         // the band, SchemeShard still sees "not exceeded". Catching such a sample proves reaching the soft
@@ -500,8 +480,8 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     UNIT_ASSERT_C(reportedSmallBlobsCount > 0, DEBUG_HINT);
     const ui64 actualPerPortionBytes = reportedSmallBlobsVolume / reportedSmallBlobsCount;
     UNIT_ASSERT_C(actualPerPortionBytes > perPortionBytes * 0.9 && actualPerPortionBytes < perPortionBytes * 1.1,
-        "per-portion small-blobs volume " << actualPerPortionBytes << " deviates >10% from the hardcoded perPortionBytes "
-            << perPortionBytes << "; update the constant (and the quota calibration); " << DEBUG_HINT);
+        "per-portion small-blobs volume " << actualPerPortionBytes << " deviates >10% from the hardcoded perPortionBytes " << perPortionBytes
+                                          << "; update the constant (and the quota calibration); " << DEBUG_HINT);
 
     {   // With the quota exceeded, a further write must be refused. The shard does not reject it outright - it
         // throttles it by holding the request in its write queue (the same way it handles the local
@@ -521,10 +501,9 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         std::vector<ui64> writeIds;
         ++txId;
         UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
-                          NEvWrite::EModificationType::Upsert, txId),
-            "write must be accepted while enforcement is disabled; " << DEBUG_HINT);
+                          NEvWrite::EModificationType::Upsert, txId), "write must be accepted while enforcement is disabled; " << DEBUG_HINT);
         planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
     }
 
@@ -559,7 +538,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     // PlanCommits - the test-level equivalent of the coordinator ticking - which also wakes the shard to run
     // its background cycle.)
     const auto tick = [&]() {
-        NTxUT::PlanCommit(runtime, sender, shardId, NTxUT::TPlanStep{runtime.GetTimeProvider()->Now().MilliSeconds()}, {});
+        NTxUT::PlanCommit(runtime, sender, shardId, NTxUT::TPlanStep{ runtime.GetTimeProvider()->Now().MilliSeconds() }, {});
         runtime.SimulateSleep(TDuration::Seconds(1));
     };
     // The controller disables compaction again after each compaction wave, so re-enabling it lets exactly one
@@ -590,8 +569,8 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     {   // Quota recovered - writes should be accepted again
         std::vector<ui64> writeIds;
         ++txId;
-        bool writeResult =
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+        bool writeResult = NTxUT::WriteData(
+            runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
         UNIT_ASSERT_C(writeResult, DEBUG_HINT);
         planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
         TSet<ui64> txIds = { txId };
@@ -601,7 +580,8 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     statsObserver.Remove();
 }
 
-}}
+}   // namespace
+}   // namespace NKikimr
 
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
@@ -806,7 +786,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema1, {NKikimrScheme::StatusAccepted});
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema1, { NKikimrScheme::StatusAccepted });
     }
 
     Y_UNIT_TEST(CreateStoreWithDirs) {
@@ -851,7 +831,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     KeyColumnNames: [ "timestamp", "key1" ]
                 }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -923,8 +904,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 UNIT_ASSERT(stat.ColumnNamesSize() > 0);
                 UNIT_ASSERT(stat.TypesSize() > 0);
                 for (const auto type : stat.GetTypes()) {
-                    UNIT_ASSERT_EQUAL(
-                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                    UNIT_ASSERT_EQUAL(static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
                         NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
                 }
             }
@@ -957,11 +937,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
             MultiColumnStatistics { Name: "s1" ColumnNames: "key1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
         )");
         env.TestWaitNotification(runtime, txId);
-        checkMultiColumnStatistics({"s1"});
+        checkMultiColumnStatistics({ "s1" });
 
         // MultiColumnStatistics must survive a SchemeShard restart (persist -> load round-trip).
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        checkMultiColumnStatistics({"s1"});
+        checkMultiColumnStatistics({ "s1" });
 
         // ADD STATISTICS
         // A stats-only alter updates SchemeShard-local state without a shard round-trip,
@@ -969,33 +949,37 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
-        checkMultiColumnStatistics({"s1", "s2"});
+        checkMultiColumnStatistics({ "s1", "s2" });
 
         // DROP STATISTICS
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             DropMultiColumnStatistics: "s2"
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
-        checkMultiColumnStatistics({"s1"});
+        checkMultiColumnStatistics({ "s1" });
 
         // Validation: referencing an unknown column must fail.
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             UpsertMultiColumnStatistics { Name: "bad" ColumnNames: "missing" Types: COUNT_MIN_SKETCH }
-        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+        )",
+            { NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter });
 
         // True upsert: re-adding an existing name overwrites its definition instead of failing.
-        checkStatisticsColumns("s1", {"key1", "data"});
+        checkStatisticsColumns("s1", { "key1", "data" });
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
-        checkMultiColumnStatistics({"s1"});
-        checkStatisticsColumns("s1", {"data"});
+        checkMultiColumnStatistics({ "s1" });
+        checkStatisticsColumns("s1", { "data" });
     }
 
     Y_UNIT_TEST(AlterShardReadFlagsCompletesSynchronously) {
@@ -1016,16 +1000,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
 
         const ui64 alterTxId = ++txId;
-        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime,
-            [alterTxId](const auto& ev) {
-                return ev->Cookie == alterTxId;
-            });
+        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime, [alterTxId](const auto& ev) {
+            return ev->Cookie == alterTxId;
+        });
 
         // Reopening the readable shard exercises the same metadata-only update
         // used by MERGE, which must retain its synchronous completion behavior.
-        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", TStringBuilder()
-            << "Name: \"ColumnTable\" AlterShards { Modification { OpenReadIds: "
-            << sharding.GetColumnShards(0) << " } }", {NKikimrScheme::StatusSuccess});
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore",
+            TStringBuilder() << "Name: \"ColumnTable\" AlterShards { Modification { OpenReadIds: " << sharding.GetColumnShards(0) << " } }",
+            { NKikimrScheme::StatusSuccess });
         env.TestWaitNotification(runtime, alterTxId);
         publicationAcks.Stop().Unblock();
     }
@@ -1039,17 +1022,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         const ui64 alterTxId = ++txId;
-        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime,
-            [alterTxId](const auto& ev) {
-                return ev->Cookie == alterTxId;
-            });
+        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime, [alterTxId](const auto& ev) {
+            return ev->Cookie == alterTxId;
+        });
 
         TestAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
             Name: "ColumnTable"
             UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
 
-        runtime.WaitFor("statistics publication acknowledgement", [&] { return !publicationAcks.empty(); });
+        runtime.WaitFor("statistics publication acknowledgement", [&] {
+            return !publicationAcks.empty();
+        });
         if constexpr (Restart) {
             const auto previousGeneration = publicationAcks.front()->Get()->Record.GetGeneration();
             GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -1065,28 +1050,29 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         bool registered = false;
         bool completed = false;
-        auto registeredObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionRegistered>(
-            [&](const auto& ev) {
-                if (ev->Get()->Record.GetTxId() == alterTxId) {
-                    registered = true;
-                }
-            });
-        auto completedObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>(
-            [&](const auto& ev) {
-                if (ev->Get()->Record.GetTxId() == alterTxId) {
-                    completed = true;
-                }
-            });
+        auto registeredObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionRegistered>([&](const auto& ev) {
+            if (ev->Get()->Record.GetTxId() == alterTxId) {
+                registered = true;
+            }
+        });
+        auto completedObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](const auto& ev) {
+            if (ev->Get()->Record.GetTxId() == alterTxId) {
+                completed = true;
+            }
+        });
 
         const auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
-            new TEvSchemeShard::TEvNotifyTxCompletion(alterTxId), 0, GetPipeConfigWithRetries());
-        runtime.WaitFor("statistics alter completion subscription", [&] { return registered || completed; });
-        UNIT_ASSERT_C(registered && !completed,
-            "A statistics-only ALTER must wait for SchemeBoard publication before completing");
+        runtime.SendToPipe(
+            TTestTxConfig::SchemeShard, sender, new TEvSchemeShard::TEvNotifyTxCompletion(alterTxId), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("statistics alter completion subscription", [&] {
+            return registered || completed;
+        });
+        UNIT_ASSERT_C(registered && !completed, "A statistics-only ALTER must wait for SchemeBoard publication before completing");
 
         publicationAcks.Stop().Unblock();
-        runtime.WaitFor("statistics alter completion", [&] { return completed; });
+        runtime.WaitFor("statistics alter completion", [&] {
+            return completed;
+        });
     }
 
     Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
@@ -1121,13 +1107,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTableNoTypes"
             DropMultiColumnStatistics: "s1"
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTableNoTypes"
             UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics("s2");
     }
@@ -1147,8 +1135,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 UNIT_ASSERT(stat.ColumnNamesSize() > 0);
                 UNIT_ASSERT(stat.TypesSize() > 0);
                 for (const auto type : stat.GetTypes()) {
-                    UNIT_ASSERT_EQUAL(
-                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                    UNIT_ASSERT_EQUAL(static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
                         NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
                 }
             }
@@ -1167,17 +1154,18 @@ Y_UNIT_TEST_SUITE(TOlap) {
             MultiColumnStatistics { Name: "h1" ColumnNames: "key1" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
         )");
         env.TestWaitNotification(runtime, txId);
-        checkEqHeight({"h1"});
+        checkEqHeight({ "h1" });
 
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        checkEqHeight({"h1"});
+        checkEqHeight({ "h1" });
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "EqHeightColumnTable"
             UpsertMultiColumnStatistics { Name: "h2" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
-        checkEqHeight({"h1", "h2"});
+        checkEqHeight({ "h1", "h2" });
     }
 
     Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogramRejectsJson) {
@@ -1194,7 +1182,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: [ "timestamp" ]
             }
             MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
-        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+        )",
+            { NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter });
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "EqHeightJsonColumnTable"
@@ -1210,7 +1199,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "EqHeightJsonColumnTable"
             UpsertMultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
-        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+        )",
+            { NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter });
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -1238,9 +1228,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::All(
-            NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+        TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::All(NLs::PathExist, NLs::HasColumnTableSchemaPreset("default")));
 
         // Missing column from schema preset
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1250,7 +1238,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         // Extra column not in schema preset
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1262,7 +1251,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "comment" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         // Different column order
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1273,7 +1263,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         // Extra key column
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1285,7 +1276,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "timestamp"
                 KeyColumnNames: "data"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         // Unknown key column
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1296,7 +1288,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "nottimestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         // Different data column type
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1307,7 +1300,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         // Repeating preset schema should succeed
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1328,9 +1322,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/DirA/DirB/NestedTable", false, NLs::All(
-            NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+        TestLs(runtime, "/MyRoot/OlapStore/DirA/DirB/NestedTable", false, NLs::All(NLs::PathExist, NLs::HasColumnTableSchemaPreset("default")));
 
         // Additional storage tier in schema
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -1341,7 +1333,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
     }
 
     Y_UNIT_TEST(CustomDefaultPresets) {
@@ -1361,9 +1354,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(NLs::PathExist, NLs::HasColumnTableSchemaPreset("default")));
     }
 
     Y_UNIT_TEST(CreateDropTable) {
@@ -1402,7 +1393,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
 
-        TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore", {NKikimrScheme::StatusNameConflict});
+        TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore", { NKikimrScheme::StatusNameConflict });
         TestRmDir(runtime, ++txId, "/MyRoot/OlapStore", "MyDir");
         env.TestWaitNotification(runtime, txId);
 
@@ -1466,8 +1457,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT(sharding.HasHashSharding());
             auto& hashSharding = sharding.GetHashSharding();
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
-            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
-                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(), NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
@@ -1529,8 +1519,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT(sharding.HasHashSharding());
             auto& hashSharding = sharding.GetHashSharding();
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
-            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
-                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(), NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
@@ -1617,11 +1606,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema1);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/Table1", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(runtime, "/MyRoot/OlapStore/Table1", false,
+            NLs::All(NLs::HasColumnTableSchemaPreset("default"), NLs::HasColumnTableSchemaVersion(1), NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
 
         TString tableSchema2 = R"(
             Name: "Table2"
@@ -1634,11 +1621,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema2);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/Table2", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsDisabled()));
+        TestLs(
+            runtime, "/MyRoot/OlapStore/Table2", false, NLs::All(NLs::HasColumnTableSchemaPreset("default"), NLs::HasColumnTableSchemaVersion(1),
+                                                            NLs::HasColumnTableTtlSettingsVersion(1), NLs::HasColumnTableTtlSettingsDisabled()));
 
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
             Name: "Tier1"
@@ -1673,11 +1658,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema3);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/Table3", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "/MyRoot/Tier1")));
+        TestLs(runtime, "/MyRoot/OlapStore/Table3", false,
+            NLs::All(NLs::HasColumnTableSchemaPreset("default"), NLs::HasColumnTableSchemaVersion(1), NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "/MyRoot/Tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
@@ -1696,8 +1679,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4,
-                            {NKikimrScheme::StatusAccepted});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4, { NKikimrScheme::StatusAccepted });
     }
 
     Y_UNIT_TEST(AlterStore) {
@@ -1720,8 +1702,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX,
-                            {NKikimrScheme::StatusSchemeError});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX, { NKikimrScheme::StatusSchemeError });
 
         TString tableSchema = R"(
             Name: "ColumnTable"
@@ -1737,11 +1718,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false,
+            NLs::All(NLs::HasColumnTableSchemaPreset("default"), NLs::HasColumnTableSchemaVersion(1), NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
 
         TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
             Name: "OlapStore"
@@ -1751,7 +1730,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     AddColumns { Name: "comment" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
         TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
@@ -1762,7 +1742,119 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     AlterColumns { Name: "comment" DefaultValue: "10" }
                 }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
+    }
+
+    Y_UNIT_TEST(ResetSchemaOptions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        auto describeOptions = [&]() {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/ColumnTable");
+            return descr.GetPathDescription().GetColumnTableDescription().GetSchema().GetOptions();
+        };
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                Options {
+                    SchemeNeedActualization: true
+                    ScanReaderPolicyName: "SIMPLE"
+                    DeduplicationEnabled: false
+                    CacheBlobsAfterWrite: true
+                    InsertOptions { BuildIndexesEnabled: true BuildIndexesMinBlobBytes: 1024 }
+                    CompactionPlannerConstructor { ClassName: "tiling" Tiling { } }
+                    MetadataManagerConstructor { ClassName: "local_db" LocalDB { } }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(options.GetSchemeNeedActualization());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "SIMPLE");
+            UNIT_ASSERT(options.HasDeduplicationEnabled());
+            UNIT_ASSERT(!options.GetDeduplicationEnabled());
+            UNIT_ASSERT(options.GetCacheBlobsAfterWrite());
+            UNIT_ASSERT(options.GetInsertOptions().GetBuildIndexesEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetInsertOptions().GetBuildIndexesMinBlobBytes(), 1024u);
+            UNIT_ASSERT(options.HasCompactionPlannerConstructor());
+            UNIT_ASSERT(options.HasMetadataManagerConstructor());
+        }
+
+        // an alter that does not mention an option keeps its value
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { ScanReaderPolicyName: "PLAIN" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(options.GetSchemeNeedActualization());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "PLAIN");
+        }
+
+        // Explicit false and zero values still conflict with a reset. A rejected
+        // request must also leave earlier, non-conflicting resets unapplied.
+        const auto optionsBeforeConflicts = describeOptions().SerializeAsString();
+        for (const auto& conflict : {
+                 R"(SchemeNeedActualization: false ResetOptions: SCHEME_NEED_ACTUALIZATION)",
+                 R"(CompactionPlannerConstructor { ClassName: "tiling" Tiling { } } ResetOptions: COMPACTION_PLANNER)",
+                 R"(MetadataManagerConstructor { ClassName: "local_db" LocalDB { } } ResetOptions: METADATA_MEMORY_MANAGER)",
+                 R"(ScanReaderPolicyName: "SIMPLE" ResetOptions: SCAN_READER_POLICY_NAME)",
+                 R"(DeduplicationEnabled: false ResetOptions: DEDUPLICATION_ENABLED)",
+                 R"(CacheBlobsAfterWrite: false ResetOptions: CACHE_BLOBS_AFTER_WRITE)",
+                 R"(InsertOptions { BuildIndexesEnabled: false } ResetOptions: INSERT_OPTIONS)",
+                 R"(InsertOptions { BuildIndexesMinBlobBytes: 0 } ResetOptions: INSERT_OPTIONS)",
+             }) {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+                Name: "ColumnTable"
+                AlterSchema { Options {
+                    ResetOptions: SCHEME_NEED_ACTUALIZATION
+            )" << conflict << "} }",
+                { NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusSchemeError });
+            UNIT_ASSERT_VALUES_EQUAL(describeOptions().SerializeAsString(), optionsBeforeConflicts);
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { Options { ResetOptions: SCHEME_NEED_ACTUALIZATION ResetOptions: DEDUPLICATION_ENABLED } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(!options.GetSchemeNeedActualization());
+            UNIT_ASSERT(!options.HasDeduplicationEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(options.GetScanReaderPolicyName(), "PLAIN");
+            UNIT_ASSERT(options.HasCompactionPlannerConstructor());
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                Options {
+                    ResetOptions: SCAN_READER_POLICY_NAME
+                    ResetOptions: INSERT_OPTIONS
+                    ResetOptions: COMPACTION_PLANNER
+                    ResetOptions: METADATA_MEMORY_MANAGER
+                    ResetOptions: CACHE_BLOBS_AFTER_WRITE
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto options = describeOptions();
+            UNIT_ASSERT(!options.HasScanReaderPolicyName());
+            UNIT_ASSERT(!options.HasInsertOptions());
+            UNIT_ASSERT(!options.HasCompactionPlannerConstructor());
+            UNIT_ASSERT(!options.HasMetadataManagerConstructor());
+            UNIT_ASSERT(!options.HasCacheBlobsAfterWrite());
+        }
     }
 
     Y_UNIT_TEST(AlterTtl) {
@@ -1803,11 +1895,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false,
+            NLs::All(NLs::HasColumnTableSchemaPreset("default"), NLs::HasColumnTableSchemaVersion(1), NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
@@ -1820,11 +1910,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(2),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false,
+            NLs::All(NLs::HasColumnTableSchemaPreset("default"), NLs::HasColumnTableSchemaVersion(1), NLs::HasColumnTableTtlSettingsVersion(2),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
@@ -1911,7 +1999,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep =  NTxUT::TPlanStep{self.GetCreateStep()};
+            planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -1932,19 +2020,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_EQUAL(tabletStats.GetDataSize(), 0);
         }
 
-
         ui32 rowsInBatch = 100000;
 
         {   // Write data directly into shard
             TActorId sender = runtime.AllocateEdgeActor();
-            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TString data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
 
             //some immidiate writes
             ui64 writeId = 0;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, 0);
+                NTxUT::WriteData(
+                    runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, 0);
             }
 
             // emulate timeout
@@ -1953,7 +2041,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
             ++txId;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+            NTxUT::WriteData(
+                runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
             planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
             NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
@@ -2063,10 +2152,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 txId = 100;
 
-        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
                 Name: "SomeDatabase"
-            )" << databaseDescription
-        );
+            )" << databaseDescription);
 
         const TString& olapSchema = defaultStoreSchema;
 
@@ -2093,7 +2181,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+            planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -2105,7 +2193,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT(pathId);
         UNIT_ASSERT(planStep.Val());
         {
-            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
+            auto description =
+                DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
@@ -2122,12 +2211,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {   // Write data directly into shard
             TActorId sender = runtime.AllocateEdgeActor();
-            data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::WriteData(
+                    runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
                 planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -2160,7 +2250,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         }
 
         {
-            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
+            auto description =
+                DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
@@ -2260,7 +2351,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+            planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -2272,15 +2363,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT(planStep.Val());
 
         const ui32 rowsInBatch = 100000;
-        const TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
+        const TString data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
         constexpr ui32 batchCount = 3;
         for (ui32 i = 0; i < batchCount; ++i) {
             std::vector<ui64> writeIds;
             ++txId;
-            UNIT_ASSERT(NTxUT::WriteData(runtime, sender, shardId, i + 1, pathId, data, defaultYdbSchema, &writeIds,
-                NEvWrite::EModificationType::Upsert, txId));
+            UNIT_ASSERT(NTxUT::WriteData(
+                runtime, sender, shardId, i + 1, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId));
             planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
 
         WaitTableStats(runtime, shardId);
@@ -2319,35 +2410,33 @@ Y_UNIT_TEST_SUITE(TOlap) {
         ui64 txId = 100;
 
         // Record the initial path count to verify cleanup later.
-        ui64 initialPathCount = DescribePath(runtime, "/MyRoot")
-            .GetPathDescription().GetDomainDescription().GetPathsInside();
+        ui64 initialPathCount = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetPathsInside();
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
-            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("Table"));
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", NLocalIndexes::OlapTableWithBloomAndNgramIndexes("Table"));
         env.TestWaitNotification(runtime, txId);
 
         NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/Table");
 
         // 3 new paths: the table + 2 index children.
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::PathsInsideDomain(initialPathCount + 3),
-        });
+                                                                 NLs::PathsInsideDomain(initialPathCount + 3),
+                                                             });
 
         // Drop the table using DropTableRequest (ESchemeOpDropTable)
         auto* dropEv = DropTableRequest(++txId, "/MyRoot", "Table");
         AsyncSend(runtime, TTestTxConfig::SchemeShard, dropEv);
-        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
+        TestModificationResults(runtime, txId, { { NKikimrScheme::StatusAccepted } });
         env.TestWaitNotification(runtime, txId);
 
         // Table and its index children should all be gone.
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_bloom"), {NLs::PathNotExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_ngram"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), { NLs::PathNotExist });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_bloom"), { NLs::PathNotExist });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_ngram"), { NLs::PathNotExist });
 
         // Path count must return to the initial value — no orphaned children.
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::PathsInsideDomain(initialPathCount),
-        });
+                                                                 NLs::PathsInsideDomain(initialPathCount),
+                                                             });
     }
 
     Y_UNIT_TEST(MoveNonExistentTable) {
@@ -2358,8 +2447,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
         env.TestWaitNotification(runtime, txId);
 
-        TestMoveTable(runtime, ++txId, "/MyRoot/MyDir/non_existent", "/MyRoot/MyDir/something",
-            {NKikimrScheme::StatusPathDoesNotExist});
+        TestMoveTable(runtime, ++txId, "/MyRoot/MyDir/non_existent", "/MyRoot/MyDir/something", { NKikimrScheme::StatusPathDoesNotExist });
     }
 
     Y_UNIT_TEST(MoveTableStats) {
@@ -2473,10 +2561,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 txId = 100;
 
-        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
                 Name: "SomeDatabase"
-            )" << databaseDescription
-        );
+            )" << databaseDescription);
 
         const TString tableSchema = R"(
             Name: "ColumnTable"
@@ -2499,12 +2586,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 auto& self = record.GetPathDescription().GetSelf();
                 pathId = self.GetPathId();
                 txId = self.GetCreateTxId() + 1;
-                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
                 auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
                 UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
                 shardId = sharding.GetColumnShards()[0];
             };
-            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), { checkFn });
         }
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
@@ -2517,12 +2604,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {   // Write data directly into shard to exceed quota
             TActorId sender = runtime.AllocateEdgeActor();
-            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TString data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::WriteData(
+                    runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
                 planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -2556,8 +2644,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
             ui64 totalBytesAfter = diskSpaceUsage.GetTables().GetTotalSize();
             UNIT_ASSERT_GT_C(totalBytesAfter, 0, DEBUG_HINT << ", DiskSpaceTablesTotalBytes should not be zero after move");
-            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfter, totalBytesBefore,
-                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be preserved after move");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                totalBytesAfter, totalBytesBefore, DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be preserved after move");
         }
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "MovedColumnTable");
@@ -2569,8 +2657,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
             auto& diskSpaceUsage = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage();
             ui64 totalBytesAfterDrop = diskSpaceUsage.GetTables().GetTotalSize();
-            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDrop, 0,
-                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after drop");
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDrop, 0, DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after drop");
         }
 
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
@@ -2613,8 +2700,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
                 Name: "SomeDatabase"
-            )" << databaseDescription
-        );
+            )" << databaseDescription);
 
         const TString tableSchema = R"(
             Name: "ColumnTable"
@@ -2637,12 +2723,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 auto& self = record.GetPathDescription().GetSelf();
                 pathId = self.GetPathId();
                 txId = self.GetCreateTxId() + 1;
-                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
                 auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
                 UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
                 shardId = sharding.GetColumnShards()[0];
             };
-            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), { checkFn });
         }
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
@@ -2655,12 +2741,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {
             TActorId writeSender = runtime.AllocateEdgeActor();
-            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TString data = NTxUT::MakeTestBlob({ 0, rowsInBatch }, defaultYdbSchema, {}, { "timestamp" });
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                    NEvWrite::EModificationType::Upsert, txId);
                 planStep = NTxUT::ProposeCommit(runtime, writeSender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -2687,8 +2774,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {
             const ui64 totalBytesAfterCopy = getTotalBytes();
-            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterCopy, totalBytesBefore,
-                DEBUG_HINT << ", backup copy must not change DiskSpaceTablesTotalBytes");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                totalBytesAfterCopy, totalBytesBefore, DEBUG_HINT << ", backup copy must not change DiskSpaceTablesTotalBytes");
         }
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
 
@@ -2713,8 +2800,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {
             const ui64 totalBytesAfterDropSource = getTotalBytes();
-            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDropSource, 0,
-                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after dropping source");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                totalBytesAfterDropSource, 0, DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after dropping source");
         }
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
@@ -2756,8 +2843,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
                 Name: "SomeDatabase"
-            )" << databaseDescription
-        );
+            )" << databaseDescription);
 
         const TString tableSchema = R"(
             Name: "ColumnTable"
@@ -2780,12 +2866,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 auto& self = record.GetPathDescription().GetSelf();
                 pathId = self.GetPathId();
                 txId = self.GetCreateTxId() + 1;
-                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                planStep = NTxUT::TPlanStep{ self.GetCreateStep() };
                 auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
                 UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
                 shardId = sharding.GetColumnShards()[0];
             };
-            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), { checkFn });
         }
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
@@ -2793,13 +2879,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {
             TActorId writeSender = runtime.AllocateEdgeActor();
-            TString data = NTxUT::MakeTestBlob({0, 100000}, defaultYdbSchema, {}, { "timestamp" });
+            TString data = NTxUT::MakeTestBlob({ 0, 100000 }, defaultYdbSchema, {}, { "timestamp" });
             ui64 writeId = 0;
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 100; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                    NEvWrite::EModificationType::Upsert, txId);
                 planStep = NTxUT::ProposeCommit(runtime, writeSender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
@@ -2832,8 +2919,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             const auto& disk = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage().GetTables();
             UNIT_ASSERT_VALUES_EQUAL_C(disk.GetTotalSize(), 0,
                 DEBUG_HINT << ", usage must stay zero after dropping backup copy"
-                           << ", TotalSize=" << disk.GetTotalSize()
-                           << ", DataSize=" << disk.GetDataSize());
+                           << ", TotalSize=" << disk.GetTotalSize() << ", DataSize=" << disk.GetDataSize());
         }
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
@@ -2862,10 +2948,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 srcPathId = 0;
         ui64 shardId = 0;
-        NOlap::TSnapshot lastSnapshot{0, 0};
+        NOlap::TSnapshot lastSnapshot{ 0, 0 };
         {
             const auto describe = DescribePath(runtime, "/MyRoot/ColumnTable");
-            TestDescribeResult(describe, {NLs::PathExist});
+            TestDescribeResult(describe, { NLs::PathExist });
             srcPathId = describe.GetPathId();
             const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
@@ -2878,19 +2964,20 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 NArrow::NTest::TTestColumn("timestamp", NScheme::TTypeInfo(NScheme::NTypeIds::Timestamp)).SetNullable(false),
                 NArrow::NTest::TTestColumn("value", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)),
             };
-            const auto data = NTxUT::MakeTestBlob({0, 100}, ydbSchema, {}, {"timestamp"});
+            const auto data = NTxUT::MakeTestBlob({ 0, 100 }, ydbSchema, {}, { "timestamp" });
             ui64 writeId = 0;
             std::vector<ui64> writeIds;
             const ui64 writeTxId = ++txId;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, srcPathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, writeTxId);
+            NTxUT::WriteData(
+                runtime, sender, shardId, ++writeId, srcPathId, data, ydbSchema, &writeIds, NEvWrite::EModificationType::Upsert, writeTxId);
             const auto planStep = NTxUT::ProposeCommit(runtime, sender, shardId, writeTxId, writeIds, writeTxId);
-            NTxUT::PlanCommit(runtime, sender, shardId, planStep, {writeTxId});
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, { writeTxId });
             lastSnapshot = NOlap::TSnapshot(planStep, writeTxId);
         }
 
         const ui64 copyTxId = ++txId;
-        TBlockEvents<NKikimr::TEvTxProcessing::TEvPlanStep> planBlocker(runtime,
-            [shardId](const NKikimr::TEvTxProcessing::TEvPlanStep::TPtr& ev) {
+        TBlockEvents<NKikimr::TEvTxProcessing::TEvPlanStep> planBlocker(
+            runtime, [shardId](const NKikimr::TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == shardId;
             });
 
@@ -2902,12 +2989,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )");
 
-        runtime.WaitFor("copy plan step blocked", [&]() { return !planBlocker.empty(); });
+        runtime.WaitFor("copy plan step blocked", [&]() {
+            return !planBlocker.empty();
+        });
         env.SimulateSleep(runtime, TDuration::Seconds(1));
 
         UNIT_ASSERT_C(
-            !IsSchemeTxCompleted(runtime, copyTxId),
-            "read-only copy must not complete on SS while ColumnShard copy plan step is blocked");
+            !IsSchemeTxCompleted(runtime, copyTxId), "read-only copy must not complete on SS while ColumnShard copy plan step is blocked");
 
         planBlocker.Stop().Unblock(1);
         env.TestWaitNotification(runtime, copyTxId);
@@ -2915,7 +3003,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         const ui64 copyPathId = DescribePath(runtime, "/MyRoot/ColumnTableCopy").GetPathId();
 
         NTxUT::TShardReader reader(runtime, shardId, copyPathId, lastSnapshot);
-        reader.SetReplyColumnIds({1, 2});
+        reader.SetReplyColumnIds({ 1, 2 });
         const auto batch = reader.ReadAll();
         UNIT_ASSERT_C(!reader.IsError(), reader.GetErrors().empty() ? "scan failed" : reader.GetErrors().front().message());
         UNIT_ASSERT(batch);
@@ -2925,55 +3013,64 @@ Y_UNIT_TEST_SUITE(TOlap) {
 }
 
 Y_UNIT_TEST_SUITE(TOlapNaming) {
-
-    static TString AlterUpsertBloomFilterIndex(const TString& tableName, const TString& indexName,
-            const TString& columnName, double falsePositiveProbability) {
+    static TString AlterUpsertBloomFilterIndex(
+        const TString& tableName, const TString& indexName, const TString& columnName, double falsePositiveProbability) {
         return TStringBuilder() << R"(
-            Name: ")" << tableName << R"("
+            Name: ")" << tableName
+                                << R"("
             AlterSchema {
                 UpsertIndexes {
-                    Name: ")" << indexName << R"("
+                    Name: ")" << indexName
+                                << R"("
                     ClassName: "BLOOM_FILTER"
                     BloomFilter {
-                        ColumnNames: [")" << columnName << R"("]
-                        FalsePositiveProbability: )" << falsePositiveProbability << R"(
+                        ColumnNames: [")"
+                                << columnName << R"("]
+                        FalsePositiveProbability: )"
+                                << falsePositiveProbability << R"(
                     }
                 }
             }
         )";
     }
 
-    static TString AlterUpsertBloomNGrammFilterIndex(const TString& tableName, const TString& indexName,
-            const TString& columnName, double falsePositiveProbability) {
+    static TString AlterUpsertBloomNGrammFilterIndex(
+        const TString& tableName, const TString& indexName, const TString& columnName, double falsePositiveProbability) {
         return TStringBuilder() << R"(
-            Name: ")" << tableName << R"("
+            Name: ")" << tableName
+                                << R"("
             AlterSchema {
                 UpsertIndexes {
-                    Name: ")" << indexName << R"("
+                    Name: ")" << indexName
+                                << R"("
                     ClassName: "BLOOM_NGRAMM_FILTER"
                     BloomNGrammFilter {
                         NGrammSize: 3
                         CaseSensitive: true
-                        ColumnName: ")" << columnName << R"("
-                        FalsePositiveProbability: )" << falsePositiveProbability << R"(
+                        ColumnName: ")"
+                                << columnName << R"("
+                        FalsePositiveProbability: )"
+                                << falsePositiveProbability << R"(
                     }
                 }
             }
         )";
     }
 
-    static TString AlterUpsertMinMaxIndex(const TString& tableName, const TString& indexName,
-            const TString& columnName) {
+    static TString AlterUpsertMinMaxIndex(const TString& tableName, const TString& indexName, const TString& columnName) {
         return TStringBuilder() << R"(
-            Name: ")" << tableName << R"("
+            Name: ")" << tableName
+                                << R"("
             AlterSchema {
                 UpsertIndexes {
-                    Name: ")" << indexName << R"("
+                    Name: ")" << indexName
+                                << R"("
                     StorageId: "__LOCAL_METADATA"
                     InheritPortionStorage: false
                     ClassName: "MIN_MAX"
                     MinMaxIndex {
-                        ColumnName: ")" << columnName << R"("
+                        ColumnName: ")"
+                                << columnName << R"("
                     }
                 }
             }
@@ -2989,7 +3086,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -3003,7 +3100,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -3012,12 +3109,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
+        TVector<TString> notAllowedNames = { "mess age", "~!@#$%^&*()+=asdfa" };
 
-        for (const auto& colName: notAllowedNames) {
+        for (const auto& colName : notAllowedNames) {
             TString tableSchema = Sprintf(tableSchemaFormat.c_str(), colName.c_str());
 
-            TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusSchemeError});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, { NKikimrScheme::StatusSchemeError });
             env.TestWaitNotification(runtime, txId);
         }
     }
@@ -3029,7 +3126,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         const TString& storeSchema = defaultStoreSchema;
 
-        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, {NKikimrScheme::StatusAccepted});
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
@@ -3042,7 +3139,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         const TString& storeSchema = invalidStoreSchema;
 
-        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, {NKikimrScheme::StatusSchemeError});
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, { NKikimrScheme::StatusSchemeError });
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
@@ -3056,7 +3153,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
@@ -3079,7 +3176,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, { NKikimrScheme::StatusAccepted });
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
@@ -3090,7 +3187,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     Type: "Int32"
                 }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -3117,7 +3215,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     AddColumns { Name: "comment" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            { NKikimrScheme::StatusAccepted });
 
         env.TestWaitNotification(runtime, txId);
     }
@@ -3145,7 +3244,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     AddColumns { Name: "mess age" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            { NKikimrScheme::StatusSchemeError });
 
         env.TestWaitNotification(runtime, txId);
     }
@@ -3193,7 +3293,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(2) });
             const auto& children = descr.GetPathDescription().GetChildren();
             bool foundBloomKey = false;
             bool foundNgramData = false;
@@ -3211,10 +3311,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_C(foundNgramData, "ngram_data must be visible in table children");
         }
 
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "ngram_data",
-            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "key" });
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/TestTable", "ngram_data", NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, { "data" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
@@ -3261,7 +3360,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Verify that only one index child remains
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "ngram_data");
@@ -3289,12 +3388,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Verify that the dropped index scheme object no longer exists
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
-            TestDescribeResult(descr, {NLs::PathNotExist});
+            TestDescribeResult(descr, { NLs::PathNotExist });
         }
 
         // Verify that the remaining index scheme object still exists
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "ngram_data",
-            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/TestTable", "ngram_data", NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, { "data" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "ngram_data");
 
@@ -3313,24 +3412,23 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data");
-            TestDescribeResult(descr, {NLs::PathNotExist});
+            TestDescribeResult(descr, { NLs::PathNotExist });
         }
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data", "data", 0.05));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableLifecycle");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTableLifecycle", "bloom_data",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/TestTableLifecycle", "bloom_data", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "data" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data");
 
@@ -3344,26 +3442,25 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data");
-            TestDescribeResult(descr, {NLs::PathNotExist});
+            TestDescribeResult(descr, { NLs::PathNotExist });
         }
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableLifecycle");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0) });
         }
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data_v2", "data", 0.01));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertBloomFilterIndex("TestTableLifecycle", "bloom_data_v2", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableLifecycle");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             UNIT_ASSERT_VALUES_EQUAL(descr.GetPathDescription().GetChildren(0).GetName(), "bloom_data_v2");
         }
 
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "data" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTableLifecycle", "bloom_data_v2");
 
@@ -3375,7 +3472,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TestLs(runtime, "/MyRoot/TestTableLifecycle", false, NLs::PathNotExist);
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data_v2");
-            TestDescribeResult(descr, {NLs::PathNotExist});
+            TestDescribeResult(descr, { NLs::PathNotExist });
         }
     }
 
@@ -3398,22 +3495,18 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        const ui64 pathsBefore = DescribePath(runtime, "/MyRoot")
-            .GetPathDescription().GetDomainDescription().GetPathsInside();
+        const ui64 pathsBefore = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TSchemeLimits limits;
         limits.MaxPaths = 1;
         SetSchemeshardSchemaLimits(runtime, limits);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"),
-            {{NKikimrScheme::StatusResourceExhausted, "paths count limit exceeded"}});
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"),
+            { { NKikimrScheme::StatusResourceExhausted, "paths count limit exceeded" } });
         env.TestWaitNotification(runtime, txId);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetPathsInside(),
-            pathsBefore);
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), {NLs::PathNotExist});
+        UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetPathsInside(), pathsBefore);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), { NLs::PathNotExist });
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
             const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
@@ -3423,11 +3516,10 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         limits.MaxPaths = pathsBefore + 100;
         SetSchemeshardSchemaLimits(runtime, limits);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"));
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), {NLs::PathExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), { NLs::PathExist });
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
             const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
@@ -3471,7 +3563,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(1) });
         }
 
         {
@@ -3500,13 +3592,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableAlter");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0) });
         }
 
         {
@@ -3522,13 +3613,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_C(foundBloom, "bloom_data index must exist in column table schema");
         }
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertBloomNGrammFilterIndex("TestTableAlter", "bloom_data_v2", "data", 0.01));
         env.TestWaitNotification(runtime, txId);
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTableAlter");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0) });
         }
 
         {
@@ -3537,8 +3627,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             bool foundBloomData = false;
             bool foundBloomDataV2 = false;
             for (const auto& idx : schema.GetIndexes()) {
-                if (idx.GetName() == "bloom_data") foundBloomData = true;
-                if (idx.GetName() == "bloom_data_v2") foundBloomDataV2 = true;
+                if (idx.GetName() == "bloom_data") {
+                    foundBloomData = true;
+                }
+                if (idx.GetName() == "bloom_data_v2") {
+                    foundBloomDataV2 = true;
+                }
             }
             UNIT_ASSERT_C(foundBloomData, "bloom_data index must exist in column table schema");
             UNIT_ASSERT_C(foundBloomDataV2, "bloom_data_v2 index must exist in column table schema");
@@ -3591,18 +3685,17 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("MigrationTableAlter", "bloom_data", "data", 0.05));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertBloomFilterIndex("MigrationTableAlter", "bloom_data", "data", 0.05));
         env.TestWaitNotification(runtime, txId);
 
         // Before migration: no scheme object children on either table
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0) });
         }
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0) });
         }
 
         // Enable flag and restart SchemeShard to trigger migrator actor
@@ -3617,26 +3710,26 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // After migration: inline-created index appears as scheme object
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_key");
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/MigrationTableCreate", "bloom_key",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/MigrationTableCreate", "bloom_key", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "key" });
 
         // After migration: ALTER-created index appears as scheme object
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/MigrationTableAlter", "bloom_data",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/MigrationTableAlter", "bloom_data", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "data" });
 
         // Restart again to verify migration is idempotent (no duplicate scheme objects)
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -3644,11 +3737,11 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
         }
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableAlter");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
         }
 
         // Drop a migrated index via ALTER, verify scheme object is removed
@@ -3662,7 +3755,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         {
             auto descr = DescribePath(runtime, "/MyRoot/MigrationTableCreate");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0) });
         }
     }
 
@@ -3721,7 +3814,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             // Before migration: no scheme object children but still have 30 indexes
             {
                 auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
-                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(30)});
+                TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(0), NLs::ColumnTableIndexesCount(30) });
             }
         }
 
@@ -3750,7 +3843,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
             {
                 auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
-                TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(30)});
+                TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(30) });
 
                 const auto& children = descr.GetPathDescription().GetChildren();
                 UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
@@ -3771,12 +3864,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             }
 
             // Verify a few sample indexes are ready
-            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_0",
-                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
-            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_15",
-                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
-            NLocalIndexes::CheckLocalIndexReady(runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_29",
-                NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, {"data"});
+            NLocalIndexes::CheckLocalIndexReady(
+                runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_0", NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, { "data" });
+            NLocalIndexes::CheckLocalIndexReady(
+                runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_15", NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, { "data" });
+            NLocalIndexes::CheckLocalIndexReady(
+                runtime, Sprintf("/MyRoot/%s", tableName.c_str()), "bloom_29", NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter, { "data" });
         }
 
         // Restart again to verify migration is idempotent (no duplicate scheme objects)
@@ -3786,7 +3879,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         for (int tableNum = 0; tableNum < 4; ++tableNum) {
             TString tableName = Sprintf("ManyIndexesTable%d", tableNum);
             auto descr = DescribePath(runtime, Sprintf("/MyRoot/%s", tableName.c_str()));
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(30)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(30) });
         }
     }
 
@@ -3834,7 +3927,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Verify initial state: two scheme object children
         {
             auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(2) });
         }
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
@@ -3857,8 +3950,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             bool foundBloomKey = false;
             bool foundBloomData = false;
             for (const auto& idx : schema.GetIndexes()) {
-                if (idx.GetName() == "bloom_key") foundBloomKey = true;
-                if (idx.GetName() == "bloom_data") foundBloomData = true;
+                if (idx.GetName() == "bloom_key") {
+                    foundBloomKey = true;
+                }
+                if (idx.GetName() == "bloom_data") {
+                    foundBloomData = true;
+                }
             }
             UNIT_ASSERT_C(!foundBloomKey, "bloom_key should be removed from schema");
             UNIT_ASSERT_C(foundBloomData, "bloom_data should still exist in schema");
@@ -3867,7 +3964,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         {
             auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
             // The scheme object child was removed by the ALTER operation
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
@@ -3876,7 +3973,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Verify the dropped index scheme object no longer exists
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/CleanupTable/bloom_key");
-            TestDescribeResult(descr, {NLs::PathNotExist});
+            TestDescribeResult(descr, { NLs::PathNotExist });
         }
 
         // Restart SchemeShard to verify orphaned cleanup doesn't break anything
@@ -3886,37 +3983,36 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // After restart: state should remain consistent
         {
             auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(1) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
         }
 
         // Verify the remaining index still exists and is valid
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/CleanupTable", "bloom_data",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/CleanupTable", "bloom_data", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "data" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
 
         // Test case: Re-create an index with the same name as the dropped one
         // This verifies that RemoveChild was called during orphaned cleanup,
         // allowing a new index with the same name to be created
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
-            AlterUpsertBloomFilterIndex("CleanupTable", "bloom_key", "key", 0.02));
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", AlterUpsertBloomFilterIndex("CleanupTable", "bloom_key", "key", 0.02));
         env.TestWaitNotification(runtime, txId);
 
         // Verify the new index was created successfully
         {
             auto descr = DescribePath(runtime, "/MyRoot/CleanupTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(2) });
             const auto& children = descr.GetPathDescription().GetChildren();
             UNIT_ASSERT_VALUES_EQUAL(children[0].GetName(), "bloom_data");
             UNIT_ASSERT_VALUES_EQUAL(children[1].GetName(), "bloom_key");
         }
 
         // Verify the new index is valid
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/CleanupTable", "bloom_key",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/CleanupTable", "bloom_key", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "key" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_key");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/CleanupTable", "bloom_data");
@@ -3962,10 +4058,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Verify initial state: two indexes
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(2) });
         }
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "key" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
@@ -3977,25 +4072,23 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Verify: old path gone, new path exists
         {
             auto descr = DescribePath(runtime, "/MyRoot/TestTable");
-            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+            TestDescribeResult(descr, { NLs::PathExist, NLs::ChildrenCount(2) });
         }
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
-            TestDescribeResult(descr, {NLs::PathNotExist});
+            TestDescribeResult(descr, { NLs::PathNotExist });
         }
-        NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/TestTable", "bloom_key_renamed",
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+        NLocalIndexes::CheckLocalIndexReady(
+            runtime, "/MyRoot/TestTable", "bloom_key_renamed", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "key" });
 
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_key_renamed");
         NLocalIndexes::CheckIndexVersionsConsistent(runtime, "/MyRoot/TestTable", "bloom_data");
 
         // Move non-existent index -> error
-        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "non_existent", "something", false,
-            {NKikimrScheme::StatusPathDoesNotExist});
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "non_existent", "something", false, { NKikimrScheme::StatusPathDoesNotExist });
 
         // Move to existing name without overwrite -> error
-        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false,
-            {NKikimrScheme::StatusSchemeError});
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false, { NKikimrScheme::StatusSchemeError });
     }
 
     Y_UNIT_TEST(AlterColumnTableLocalIndexProposeAbortRollback) {
@@ -4111,40 +4204,31 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             UNIT_ASSERT_VALUES_EQUAL_C(after.ColumnTableAlters, 0u, caseName);
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-                NLs::PathExist,
-                NLs::CheckPathState(),
-                NLs::ChildrenCount(2),
-            });
+                                                                           NLs::PathExist, NLs::CheckPathState(), NLs::ChildrenCount(2),
+                                                                       });
             TestDescribeResult(DescribePath(runtime, "/MyRoot/OlapStore"), {
-                NLs::PathExist,
-                NLs::CheckPathState(),
-            });
+                                                                               NLs::PathExist, NLs::CheckPathState(),
+                                                                           });
             TestDescribeResult(DescribePath(runtime, "/MyRoot/OlapStore/StoreTable"), {
-                NLs::PathExist,
-                NLs::CheckPathState(),
-            });
+                                                                                          NLs::PathExist, NLs::CheckPathState(),
+                                                                                      });
 
             {
                 const auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
                 UNIT_ASSERT_C(!ColumnTableHasColumn(descr, "extra"), caseName);
-                UNIT_ASSERT_VALUES_EQUAL_C(ColumnTableIndexNames(descr),
-                    (THashSet<TString>{"bloom_key", "bloom_data"}), caseName);
-                TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(1)});
+                UNIT_ASSERT_VALUES_EQUAL_C(ColumnTableIndexNames(descr), (THashSet<TString>{ "bloom_key", "bloom_data" }), caseName);
+                TestDescribeResult(descr, { NLs::HasColumnTableSchemaVersion(1) });
             }
             {
                 const auto descr = DescribePrivatePath(runtime, "/MyRoot/OlapStore/StoreTable");
-                UNIT_ASSERT_C(
-                    !descr.GetPathDescription().GetColumnTableDescription().HasTtlSettings()
-                        || descr.GetPathDescription().GetColumnTableDescription().GetTtlSettings().HasDisabled(),
-                    caseName);
+                UNIT_ASSERT_C(!descr.GetPathDescription().GetColumnTableDescription().HasTtlSettings() ||
+                                  descr.GetPathDescription().GetColumnTableDescription().GetTtlSettings().HasDisabled(), caseName);
             }
 
-            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx bad"), {NLs::PathNotExist});
-            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/no_such_idx"), {NLs::PathNotExist});
-            NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "bloom_key",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
-            NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "bloom_data",
-                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx bad"), { NLs::PathNotExist });
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/no_such_idx"), { NLs::PathNotExist });
+            NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "bloom_key", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "key" });
+            NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "bloom_data", NKikimrSchemeOp::EIndexTypeLocalBloomFilter, { "data" });
         };
 
         const TString inStoreTtlEds = R"(
@@ -4183,15 +4267,14 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         const auto runAbortingCombine = [&](const TString& standaloneAlter, const TString& reasonFragment) {
             ++txId;
-            AsyncSend(runtime, TTestTxConfig::SchemeShard, CombineSchemeTransactions({
-                AlterColumnTableRequest(txId, "/MyRoot/OlapStore", inStoreTtlEds),
-                AlterColumnTableRequest(txId, "/MyRoot", standaloneAlter),
-            }));
-            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusSchemeError, reasonFragment}});
+            AsyncSend(runtime, TTestTxConfig::SchemeShard,
+                CombineSchemeTransactions({
+                    AlterColumnTableRequest(txId, "/MyRoot/OlapStore", inStoreTtlEds), AlterColumnTableRequest(txId, "/MyRoot", standaloneAlter),
+                }));
+            TestModificationResults(runtime, txId, { { NKikimrScheme::StatusSchemeError, reasonFragment } });
         };
 
-        runAbortingCombine(
-            TStringBuilder() << standaloneAlterPrefix << R"(
+        runAbortingCombine(TStringBuilder() << standaloneAlterPrefix << R"(
                 UpsertIndexes {
                     Name: "idx bad"
                     ClassName: "BLOOM_FILTER"
@@ -4201,27 +4284,22 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                     }
                 }
             }
-        )",
-            "is not allowed in the path part");
+        )", "is not allowed in the path part");
         assertRolledBack("create");
 
-        runAbortingCombine(
-            TStringBuilder() << standaloneAlterPrefix << R"(
+        runAbortingCombine(TStringBuilder() << standaloneAlterPrefix << R"(
                 MoveIndex {
                     SourceName: "bloom_key"
                     DestinationName: "idx bad"
                 }
             }
-        )",
-            "is not allowed in the path part");
+        )", "is not allowed in the path part");
         assertRolledBack("move");
 
-        runAbortingCombine(
-            TStringBuilder() << standaloneAlterPrefix << R"(
+        runAbortingCombine(TStringBuilder() << standaloneAlterPrefix << R"(
                 DropIndexes: "no_such_idx"
             }
-        )",
-            "does not exist");
+        )", "does not exist");
         assertRolledBack("drop");
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
@@ -4286,8 +4364,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::All(
-            NLs::PathExist));
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::All(NLs::PathExist));
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
             Name: "ColumnTable"
@@ -4310,12 +4387,12 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/MyDir/ColumnTable");
             UNIT_ASSERT(hasColumn(descr, "add_1"));
-            TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(2)});
+            TestDescribeResult(descr, { NLs::HasColumnTableSchemaVersion(2) });
         }
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/MyDir/Copy");
             UNIT_ASSERT(!hasColumn(descr, "add_1"));
-            TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(1)});
+            TestDescribeResult(descr, { NLs::HasColumnTableSchemaVersion(1) });
         }
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
@@ -4323,7 +4400,8 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             AlterSchema {
                 AddColumns { Name: "add_2" Type: "Uint64" }
             }
-        )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Copy and Drop are allowed"}});
+        )",
+            { { NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Copy and Drop are allowed" } });
 
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
         env.TestWaitNotification(runtime, txId);

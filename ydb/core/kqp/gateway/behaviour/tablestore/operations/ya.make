@@ -8,6 +8,7 @@ SRCS(
     GLOBAL upsert_index.cpp
     GLOBAL drop_index.cpp
     GLOBAL upsert_opt.cpp
+    GLOBAL reset_opt.cpp
     GLOBAL alter_sharding.cpp
 )
 

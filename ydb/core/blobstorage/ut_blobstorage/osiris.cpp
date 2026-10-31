@@ -571,12 +571,15 @@ Y_UNIT_TEST_SUITE(Osiris) {
         ui32 replDone = 0;
         ui32 osirisWrites = 0;
         bool holdOsirisDone = false;
+        bool holdOsirisPuts = false;
+        std::map<ui32, ui32> subgroupIndicesByNode;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldOsirisPuts;
         std::vector<std::unique_ptr<IEventHandle>> heldOsirisDone;
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 9,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
         });
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
             switch (event->GetTypeRewrite()) {
                 case TEvBlobStorage::EvControllerNodeServiceSetUpdate: {
                     NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& record =
@@ -604,7 +607,16 @@ Y_UNIT_TEST_SUITE(Osiris) {
                     replDone += !event->Cookie;
                     break;
                 case TEvBlobStorage::EvAnubisOsirisPut:
-                    osirisWrites += event->Get<TEvAnubisOsirisPut>()->IsOsiris();
+                    if (event->Get<TEvAnubisOsirisPut>()->IsOsiris()) {
+                        if (holdOsirisPuts) {
+                            const ui32 disk = subgroupIndicesByNode.at(nodeId);
+                            UNIT_ASSERT_C(disk >= 3 && disk < 6,
+                                "Only the first handoff may add the second copy after the main disk");
+                            heldOsirisPuts.emplace_back(nodeId, std::move(event));
+                            return false;
+                        }
+                        ++osirisWrites;
+                    }
                     break;
             }
             return true;
@@ -628,6 +640,9 @@ Y_UNIT_TEST_SUITE(Osiris) {
         const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
         TBlobStorageGroupInfo::TOrderNums subgroup;
         info->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
+        for (ui32 disk = 0; disk < subgroup.size(); ++disk) {
+            subgroupIndicesByNode.emplace(info->GetActorId(subgroup[disk]).NodeId(), disk);
+        }
         // One copy in each normal realm satisfies D=1+1, but not the later D=2+2.
         for (ui32 part = 0; part < 3; ++part) {
             TVDiskID disk = info->GetVDiskId(subgroup[part]);
@@ -647,10 +662,19 @@ Y_UNIT_TEST_SUITE(Osiris) {
         env.Sim(TDuration::Seconds(30));
         osirisDone = replDone = osirisWrites = 0;
         states[0] = states[1] = TFailRealm::N1;
+        // Hold all resurrection records until every Osiris has observed the old ingress.
+        holdOsirisPuts = true;
         applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(heldOsirisPuts.size(), 2);
+        holdOsirisPuts = false;
+        for (std::pair<ui32, std::unique_ptr<IEventHandle>>& pending : heldOsirisPuts) {
+            env.Runtime->Send(pending.second.release(), pending.first);
+        }
+        heldOsirisPuts.clear();
+        env.Sim(TDuration::Seconds(30));
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
-        UNIT_ASSERT_C(osirisWrites, "N0->N1 must resurrect additional copies for D=2+2");
+        UNIT_ASSERT_VALUES_EQUAL(osirisWrites, 2); // Exactly one additional copy per normal realm.
         // A generation-only update must not start another pass.
         applyStates();
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);

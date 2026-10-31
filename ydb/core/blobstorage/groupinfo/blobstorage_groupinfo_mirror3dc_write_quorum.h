@@ -284,7 +284,10 @@ public:
         if (!hasActiveSource || skipRecoveringRealm) {
             return 0;
         }
-        return copies[localRealm] < requiredCopies ? 1u << localRealm : 0;
+        // Use fixed canonical targets so independent Osiris passes cannot resurrect
+        // the same part on every disk in the realm.
+        const ui32 localPosition = idxInSubgroup / 3;
+        return localPosition < requiredCopies ? 1u << localRealm : 0;
     }
 
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.

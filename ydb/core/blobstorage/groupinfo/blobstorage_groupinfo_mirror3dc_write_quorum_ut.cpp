@@ -148,6 +148,62 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 2), 0); // F is excluded.
     }
 
+    Y_UNIT_TEST(OsirisSelectsCanonicalDiskFromSameIngressSnapshot) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TBlobStorageGroupInfo info = MakeInfo({TFailRealm::N0, TFailRealm::N0, TFailRealm::N0});
+        for (ui32 hash = 0; hash < 3; ++hash) {
+            const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(info, hash);
+            UNIT_ASSERT(checker);
+            for (ui32 missingRealm = 0; missingRealm < 3; ++missingRealm) {
+                TSubgroupPartLayout parts;
+                for (ui32 disk = 0; disk < 6; ++disk) {
+                    if (disk % 3 != missingRealm) {
+                        parts.AddItem(disk, disk % 3, info.Type);
+                    }
+                }
+                // All Osiris instances decide from the same snapshot before any writes are visible.
+                ui32 selectedDisks = 0;
+                for (ui32 disk = 0; disk < 9; ++disk) {
+                    const ui32 selectedParts = checker->GetPartsToResurrect(parts, disk);
+                    UNIT_ASSERT_VALUES_EQUAL(selectedParts, disk == missingRealm ? 1u << missingRealm : 0);
+                    if (selectedParts) {
+                        selectedDisks |= 1u << disk;
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(selectedDisks, 1u << missingRealm);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OsirisSelectsFixedCanonicalPositions) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N1, TFailRealm::N1, TFailRealm::F},
+            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_11);
+        UNIT_ASSERT(checker);
+        // Bits describe the three positions within realm 0, in subgroup order.
+        const ui32 expectedDisks[] = {0b011, 0b010, 0b001, 0, 0b011, 0b010, 0b001, 0};
+        for (ui32 presentDisks = 0; presentDisks < 8; ++presentDisks) {
+            TSubgroupPartLayout parts;
+            parts.AddItem(1, 1, type); // Keep an active source while D=2+2 remains incomplete.
+            for (ui32 position = 0; position < 3; ++position) {
+                if (presentDisks & (1u << position)) {
+                    parts.AddItem(position * 3, 0, type);
+                }
+            }
+            ui32 selectedDisks = 0;
+            for (ui32 position = 0; position < 3; ++position) {
+                const ui32 selectedParts = checker->GetPartsToResurrect(parts, position * 3);
+                UNIT_ASSERT_VALUES_EQUAL(selectedParts, expectedDisks[presentDisks] & (1u << position) ? 1u : 0u);
+                if (selectedParts) {
+                    selectedDisks |= 1u << position;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(selectedDisks, expectedDisks[presentDisks]);
+        }
+    }
+
     Y_UNIT_TEST(OsirisRequiresAnActiveSourceAndUsesRecoveringRealmWhenNeeded) {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);

@@ -119,6 +119,7 @@ ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-strict]
 ydb/tests/compatibility/indexes test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-4-1_to_prestable-27-1-1]
+ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_current_proxy_returns_overloaded[mixed_current_and_intermediate-limit_enabled]
 ydb/tests/compatibility/kv test_inflight_limit.py.TestKvInflightLimitCompatibility.test_old_proxy_handles_limit_response_from_current_tablet[mixed_current_and_intermediate-limit_enabled]
 ydb/tests/compatibility/kv test_s3_router_metrics.py.TestS3RouterMetricsRestart.test_kv_volume_over_s3_survives_version_change_with_router_metrics_push[restart_prestable-27-1-1_to_stable-26-4-1]
 ydb/tests/compatibility/kv test_s3_router_metrics.py.TestS3RouterMetricsRolling.test_kv_volume_over_s3_survives_rolling_with_router_metrics_push[rolling_stable-26-4-1_to_prestable-27-1-1]
@@ -275,6 +276,7 @@ ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit[v
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topic_message[external-kikimr0]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_early_events_policy[2-no_shared-False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[DROP-expected0-True-2-no_shared]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]
@@ -305,6 +307,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/blobstorage test_other.py.TestOther.test_nodata
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled
+ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled_disabled
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic

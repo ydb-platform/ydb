@@ -43,6 +43,7 @@ namespace NSequenceProxy {
     private:
         class TAllocateActor;
         class TGetSequenceActor;
+        class TAdvanceSequenceActor;
 
         using TSequenceInfo = NSchemeCache::TSchemeCacheNavigate::TSequenceInfo;
 
@@ -151,6 +152,7 @@ namespace NSequenceProxy {
                 hFunc(TEvSequenceProxy::TEvNextVal, Handle);
                 hFunc(TEvSequenceProxy::TEvGetSequence, Handle);
                 hFunc(TEvSequenceProxy::TEvGetSequenceResult, Handle);
+                hFunc(TEvSequenceProxy::TEvAdvanceSequence, Handle);
                 hFunc(TEvPrivate::TEvAllocateResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             }
@@ -159,6 +161,7 @@ namespace NSequenceProxy {
         void HandlePoison();
         void Handle(TEvSequenceProxy::TEvNextVal::TPtr& ev);
         void Handle(TEvSequenceProxy::TEvGetSequence::TPtr& ev);
+        void Handle(TEvSequenceProxy::TEvAdvanceSequence::TPtr& ev);
         void Handle(TEvPrivate::TEvAllocateResult::TPtr& ev);
         void Handle(TEvSequenceProxy::TEvGetSequenceResult::TPtr& ev);
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);

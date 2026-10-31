@@ -203,6 +203,11 @@ private:
             , Span(std::move(span))
         {}
 
+        bool IsSourceIdMeta2Cdc(ui64 index) const {
+            return DbRoot == "/Root/logbroker-federation"
+                && Topics[index]->GetOriginalTopic() == "SourceIdMeta2/replication";
+        }
+
         bool ApplyResult(std::shared_ptr<TSchemeCacheNavigate>& result) {
             if (FirstRequestDone) {
                 Y_ABORT_UNLESS(Result != nullptr);
@@ -231,14 +236,16 @@ private:
                     if (!account.Defined() || account->empty()) {
                         continue;
                     }
-                    const TString database = Topics[index]->GetOriginalTopic() == "SourceIdMeta2/replication"
-                        ? "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2"
-                        : NKikimr::JoinPath({DbRoot, *account});
-                    Topics[index]->SetDatabase(database);
-                    if (!Topics[index]->GetSecondaryPath("").Defined()) {
-                        continue;
+                    if (IsSourceIdMeta2Cdc(index)) {
+                        SecondTryTopics.push_back(index);
+                    } else {
+                        Topics[index]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
+                        if (!Topics[index]->GetSecondaryPath("").Defined()) {
+                            ++index;
+                            continue;
+                        }
+                        SecondTryTopics.push_back(index);
                     }
-                    SecondTryTopics.push_back(index);
                 }
                 index++;
             }
@@ -258,6 +265,12 @@ private:
                     if (!account.Defined() || account->empty()) {
                         continue;
                     } else if (DbRoot.empty()) {
+                        continue;
+                    }
+                    if (IsSourceIdMeta2Cdc(i)) {
+                        ret.emplace_back(
+                            "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication",
+                            "/Root/logbroker/shared/federation-1");
                         continue;
                     }
                     Topics[i]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));

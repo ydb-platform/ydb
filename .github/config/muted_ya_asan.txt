@@ -53,6 +53,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.AlterAddGeneratedColumnIsRejected
+ydb/core/kqp/ut/scheme GeneratedVirtual.MetadataPersistsAcrossSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.NotNullPgVirtualDoesNotBecomeWriteConstraint
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnFromMultiUseNamedExpression
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReadVirtualColumnThroughSecondaryIndex
@@ -90,6 +91,7 @@ ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
 ydb/core/kqp/ut/tli KqpTli.LogDisabled
 ydb/core/kqp/ut/tli KqpTli.ManyUpserts2Node
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit
+ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/kqp/ut/tli KqpTli.MultipleKeys
 ydb/core/kqp/ut/tli KqpTli.TwoVictimsOneBreaker
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable

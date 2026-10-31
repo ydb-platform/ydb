@@ -355,6 +355,120 @@ config:
         storageConfig = rcvStorageConfig;
     }
 
+    // BSC parses the main YAML with the hosts of the cluster, so each YAML of these tests has the host of the test node.
+    // Its drive keeps the type of the static PDisk, ROT: a new type changes the device type of the static group without
+    // a new generation of the group, and BSC sends the group to the cache of distconf anew when it restarts.
+    TString HostsYaml(TTestActorRuntime& runtime) {
+        return Sprintf(R"(  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: %s
+      type: ROT
+  hosts:
+  - host: ::1
+    port: 12001
+    host_config_id: 1
+)", (runtime.GetTempDir() + "pdisk_1.dat").c_str());
+    }
+
+    // dispatches events until the condition holds
+    void WaitFor(TTestActorRuntime& runtime, std::function<bool()> condition) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = std::move(condition);
+        UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Minutes(10)));
+    }
+
+    Ydb::Config::ReplaceConfigResponse Replace(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server,
+            const TString& mainConfig, bool dryRun = false) {
+        Ydb::Config::ReplaceConfigResponse response;
+        Dispatched(runtime, [&] {
+            ReplaceConfig(server.GetChannel(), mainConfig, std::nullopt, std::nullopt, false, dryRun,
+                [&](const auto& resp) { response = resp; });
+        });
+        return response;
+    }
+
+    // a replacement whose validation or application is held: it is answered when the test lets it go
+    std::unique_ptr<TAsyncCall> ReplaceAsync(TKikimrWithGrpcAndRootSchema& server, const TString& mainConfig,
+            Ydb::Config::ReplaceConfigResponse& response) {
+        return std::make_unique<TAsyncCall>([&server, &response, mainConfig] {
+            ReplaceConfig(server.GetChannel(), mainConfig, std::nullopt, std::nullopt, false, false,
+                [&](const auto& resp) { response = resp; });
+        });
+    }
+
+    Ydb::Config::FetchConfigResponse Fetch(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server) {
+        Ydb::Config::FetchConfigResponse response;
+        Dispatched(runtime, [&] {
+            auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
+            Ydb::Config::FetchConfigRequest request;
+            request.mutable_all();
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            stub->FetchConfig(&ctx, request, &response);
+        });
+        return response;
+    }
+
+    std::optional<TString> FetchMainConfig(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server) {
+        const auto response = Fetch(runtime, server);
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        Ydb::Config::FetchConfigResult result;
+        response.operation().result().UnpackTo(&result);
+        for (const auto& entry : result.config()) {
+            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kMain) {
+                return entry.config();
+            }
+        }
+        return std::nullopt;
+    }
+
+    // the settings of the static PDisk of the test node can't change, so a change of the storage settings is a drive more
+    TString ExtraDrives(ui32 count) {
+        TStringBuilder drives;
+        for (ui32 i = 1; i <= count; ++i) {
+            drives << "    - path: SectorMap:" << i << ":64\n      type: SSD\n";
+        }
+        return drives;
+    }
+
+    // the node ids start from 1 again, so that the host of the YAML is the node with the PDisk of the test
+    struct TFirstNodeIdReset {
+        TFirstNodeIdReset() {
+            NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+        }
+    };
+
+    // the server of these tests: the runtime simulates the actor system, and the gRPC node has configuration v2 on;
+    // BSC turns it on with the first replacement
+    struct TRaceServer : TFirstNodeIdReset, TKikimrWithGrpcAndRootSchema {
+        TRaceServer()
+            : TKikimrWithGrpcAndRootSchema({}, {}, false)
+        {
+            auto& runtime = *GetRuntime();
+            runtime.SetScheduledLimit(10'000'000); // the timers of the whole server over minutes of simulated time
+            Ydb::DynamicConfig::ReplaceConfigResponse response;
+            Dispatched(runtime, [&] {
+                auto stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(GetChannel());
+                Ydb::DynamicConfig::ReplaceConfigRequest request;
+                request.set_config(R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  feature_flags:
+    switch_to_config_v2: true
+)");
+                grpc::ClientContext context;
+                AdjustCtxForDB(context);
+                stub->ReplaceConfig(&context, request, &response);
+            });
+            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+            WaitFor(runtime, [&] { return runtime.GetAppData(0).FeatureFlags.GetSwitchToConfigV2(); });
+        }
+    };
+
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;
         EnableConfigV2(&server);
@@ -908,120 +1022,6 @@ config:
 // replacements of the configuration overlapping with each other and with the replies of Console
 Y_UNIT_TEST_SUITE(ConfigGRPCServiceReplaceRaces) {
     using namespace NTestSuiteConfigGRPCService;
-
-    // BSC parses the main YAML with the hosts of the cluster, so each YAML of these tests has the host of the test node.
-    // Its drive keeps the type of the static PDisk, ROT: a new type changes the device type of the static group without
-    // a new generation of the group, and BSC sends the group to the cache of distconf anew when it restarts.
-    TString HostsYaml(TTestActorRuntime& runtime) {
-        return Sprintf(R"(  host_configs:
-  - host_config_id: 1
-    drive:
-    - path: %s
-      type: ROT
-  hosts:
-  - host: ::1
-    port: 12001
-    host_config_id: 1
-)", (runtime.GetTempDir() + "pdisk_1.dat").c_str());
-    }
-
-    // dispatches events until the condition holds
-    void WaitFor(TTestActorRuntime& runtime, std::function<bool()> condition) {
-        TDispatchOptions options;
-        options.CustomFinalCondition = std::move(condition);
-        UNIT_ASSERT(runtime.DispatchEvents(options, TDuration::Minutes(10)));
-    }
-
-    Ydb::Config::ReplaceConfigResponse Replace(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server,
-            const TString& mainConfig, bool dryRun = false) {
-        Ydb::Config::ReplaceConfigResponse response;
-        Dispatched(runtime, [&] {
-            ReplaceConfig(server.GetChannel(), mainConfig, std::nullopt, std::nullopt, false, dryRun,
-                [&](const auto& resp) { response = resp; });
-        });
-        return response;
-    }
-
-    // a replacement whose validation or application is held: it is answered when the test lets it go
-    std::unique_ptr<TAsyncCall> ReplaceAsync(TKikimrWithGrpcAndRootSchema& server, const TString& mainConfig,
-            Ydb::Config::ReplaceConfigResponse& response) {
-        return std::make_unique<TAsyncCall>([&server, &response, mainConfig] {
-            ReplaceConfig(server.GetChannel(), mainConfig, std::nullopt, std::nullopt, false, false,
-                [&](const auto& resp) { response = resp; });
-        });
-    }
-
-    Ydb::Config::FetchConfigResponse Fetch(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server) {
-        Ydb::Config::FetchConfigResponse response;
-        Dispatched(runtime, [&] {
-            auto stub = Ydb::Config::V1::ConfigService::NewStub(server.GetChannel());
-            Ydb::Config::FetchConfigRequest request;
-            request.mutable_all();
-            grpc::ClientContext ctx;
-            AdjustCtxForDB(ctx);
-            stub->FetchConfig(&ctx, request, &response);
-        });
-        return response;
-    }
-
-    std::optional<TString> FetchMainConfig(TTestActorRuntime& runtime, TKikimrWithGrpcAndRootSchema& server) {
-        const auto response = Fetch(runtime, server);
-        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
-        Ydb::Config::FetchConfigResult result;
-        response.operation().result().UnpackTo(&result);
-        for (const auto& entry : result.config()) {
-            if (entry.identity().type_case() == Ydb::Config::ConfigIdentity::TypeCase::kMain) {
-                return entry.config();
-            }
-        }
-        return std::nullopt;
-    }
-
-    // the settings of the static PDisk of the test node can't change, so a change of the storage settings is a drive more
-    TString ExtraDrives(ui32 count) {
-        TStringBuilder drives;
-        for (ui32 i = 1; i <= count; ++i) {
-            drives << "    - path: SectorMap:" << i << ":64\n      type: SSD\n";
-        }
-        return drives;
-    }
-
-    // the node ids start from 1 again, so that the host of the YAML is the node with the PDisk of the test
-    struct TFirstNodeIdReset {
-        TFirstNodeIdReset() {
-            NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
-        }
-    };
-
-    // the server of these tests: the runtime simulates the actor system, and the gRPC node has configuration v2 on;
-    // BSC turns it on with the first replacement
-    struct TRaceServer : TFirstNodeIdReset, TKikimrWithGrpcAndRootSchema {
-        TRaceServer()
-            : TKikimrWithGrpcAndRootSchema({}, {}, false)
-        {
-            auto& runtime = *GetRuntime();
-            runtime.SetScheduledLimit(10'000'000); // the timers of the whole server over minutes of simulated time
-            Ydb::DynamicConfig::ReplaceConfigResponse response;
-            Dispatched(runtime, [&] {
-                auto stub = Ydb::DynamicConfig::V1::DynamicConfigService::NewStub(GetChannel());
-                Ydb::DynamicConfig::ReplaceConfigRequest request;
-                request.set_config(R"(
-metadata:
-  kind: MainConfig
-  cluster: ""
-  version: 0
-config:
-  feature_flags:
-    switch_to_config_v2: true
-)");
-                grpc::ClientContext context;
-                AdjustCtxForDB(context);
-                stub->ReplaceConfig(&context, request, &response);
-            });
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
-            WaitFor(runtime, [&] { return runtime.GetAppData(0).FeatureFlags.GetSwitchToConfigV2(); });
-        }
-    };
 
     // The reply of Console validating the main YAML for BSC is held until the replacement times out. It says then that
     // the YAML is not valid; BSC has no request for it any more and must drop the reply, then serve the next request.

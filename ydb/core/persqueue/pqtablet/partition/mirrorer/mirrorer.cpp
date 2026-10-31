@@ -8,6 +8,7 @@
 #include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/replication.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
@@ -703,24 +704,10 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-bool TMirrorer::IsServiceReplicationMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) const {
-    if (message.GetOffset() != 0) {
-        return false;
-    }
-
-    const auto& messageMeta = message.GetMessageMeta();
-    for (const auto& attribute : messageMeta->Fields) {
-        if (attribute.first == "_ydb_service_replication_message" && attribute.second == "true") {
-            return true;
-        }
-    }
-    return false;
-}
-
 void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
-        if (IsServiceReplicationMessage(msg)) {
+        if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {

@@ -1,3 +1,5 @@
+* Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0

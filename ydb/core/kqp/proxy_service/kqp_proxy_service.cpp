@@ -100,7 +100,8 @@ std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
             return std::nullopt;
         }
 
-        if (!TryFromString(*nodeIds[0], nodeId)) {
+        // TActorId keeps only the low bits of a node id, so a larger one would name another node
+        if (!TryFromString(*nodeIds[0], nodeId) || nodeId == 0 || nodeId > TActorId::MaxNodeId) {
             return std::nullopt;
         }
 
@@ -111,6 +112,38 @@ std::optional<ui32> TryDecodeYdbSessionId(const TString& sessionId) {
 
     return std::nullopt;
 }
+
+// The query can't change data. Like ReplyTxStateUnknown of the data executer, a query whose outcome is unknown may be
+// reported as retryable only then.
+bool IsReadOnlyQuery(const TEvKqp::TEvQueryRequest& request) {
+    switch (request.GetAction()) {
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
+        case NKikimrKqp::QUERY_ACTION_VALIDATE:
+        case NKikimrKqp::QUERY_ACTION_PREPARE:
+        case NKikimrKqp::QUERY_ACTION_PARSE:
+            return true;
+        case NKikimrKqp::QUERY_ACTION_EXECUTE:
+        case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
+            break;
+        default:
+            return false;
+    }
+    if (!request.HasTxControl() || !request.GetTxControl().has_begin_tx()) {
+        return false; // an implicit transaction, or a statement of a transaction that may write
+    }
+    switch (request.GetTxControl().begin_tx().tx_mode_case()) {
+        case Ydb::Table::TransactionSettings::kOnlineReadOnly:
+        case Ydb::Table::TransactionSettings::kStaleReadOnly:
+        case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// The cookie of a subscription to the interconnect session that takes a forwarded query. Its bit keeps the cookie
+// apart from those of other subscriptions of the proxy, such as the request ids of remote proxies.
+constexpr ui64 ForwardSubscriptionCookieBit = 1ull << 63;
 
 TString EncodeSessionId(ui32 nodeId, const TString& id) {
     return TStringBuilder()
@@ -648,6 +681,11 @@ public:
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
         });
+        for (const auto& [node, _] : RemoteRequests) {
+            if (LocalSessions->FindSessions(node).empty()) {
+                Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
+            }
+        }
 
         DatabasesCache.StopSubscriberActor(ActorContext());
 
@@ -852,6 +890,16 @@ public:
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
         auto* proxyRequest = PendingRequests.FindPtr(requestId);
         AFL_ENSURE(proxyRequest);
+        if (ev->InterconnectSession) {
+            // The request came from another node. The response and the result parts go back only through this
+            // session: if it breaks, they are lost as a whole and none of them comes later through a new session.
+            proxyRequest->ReplySession = ev->InterconnectSession;
+            // The session sends the parts to the request actor through it only when that actor is on the same node
+            // as the sender: an interconnect session aborts on an event for an actor on another node.
+            if (ev->Get()->GetRequestActorId().NodeId() == ev->Sender.NodeId()) {
+                ev->Get()->SetReplySession(ev->InterconnectSession);
+            }
+        }
         auto& span = proxyRequest->Span;
         span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
             std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
@@ -993,6 +1041,22 @@ public:
                 span, SelfId().NodeId(), targetId.NodeId());
         }
         proxyRequest->QueryDispatched = true;
+        if (targetId.NodeId() != SelfId().NodeId()) {
+            // The remote node sends the result parts and the response only through the interconnect session the
+            // request came through, so after that session breaks nothing more comes for this query. Fail it at once
+            // instead of waiting for the query timeout. The subscription goes right before the query, so the session
+            // that answers it takes the query too; if that session breaks in between, the query fails needlessly, but
+            // with a status that doesn't claim it was not executed. FlagSubscribeOnSession is not used: the wrapper
+            // it puts the query in would come back undelivered instead of the query itself.
+            proxyRequest->RemoteNodeId = targetId.NodeId();
+            proxyRequest->RemoteReadOnly = IsReadOnlyQuery(*ev->Get());
+            RemoteRequests[targetId.NodeId()].insert(requestId);
+            // a node in a gap of the static node table has no interconnect proxy; the query then comes back
+            // undelivered and gets BAD_SESSION
+            if (const TActorId icProxy = TActivationContext::InterconnectProxy(targetId.NodeId())) {
+                Send(icProxy, new TEvents::TEvSubscribe, 0, requestId | ForwardSubscriptionCookieBit);
+            }
+        }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1292,6 +1356,19 @@ public:
             return;
         }
 
+        if (proxyRequest->RemoteNodeId) {
+            if (auto it = RemoteRequests.find(proxyRequest->RemoteNodeId); it != RemoteRequests.end()) {
+                it->second.erase(requestId);
+                if (it->second.empty()) {
+                    RemoteRequests.erase(it);
+                    // no query waits for that node, and no session is attached from it
+                    if (LocalSessions->FindSessions(proxyRequest->RemoteNodeId).empty()) {
+                        Send(TActivationContext::InterconnectProxy(proxyRequest->RemoteNodeId), new TEvents::TEvUnsubscribe);
+                    }
+                }
+            }
+        }
+
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
         if (info && !info->AttachedRpcId
             && (info->State != TKqpSessionInfo::EXECUTING || info->QueryRequestId == requestId)) {
@@ -1302,7 +1379,14 @@ public:
             EndProxyQueryTraceSpan(proxyRequest->Span, ev->Get()->Record);
             EndQueryTraceSpan(proxyRequest->RedirectSpan, ev->Get()->Record.GetYdbStatus());
         }
-        Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        if (proxyRequest->ReplySession) {
+            auto handle = std::make_unique<IEventHandle>(proxyRequest->Sender, SelfId(), ev->Release().Release(), 0,
+                proxyRequest->SenderCookie);
+            handle->Rewrite(TEvInterconnect::EvForward, proxyRequest->ReplySession);
+            TActivationContext::Send(handle.release());
+        } else {
+            Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        }
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
             LocalSessions->EndQuery(info);
@@ -1983,8 +2067,8 @@ private:
             ShutdownState->Update(LocalSessions->size());
         }
 
-        // No remaining sessions are attached to an RPC actor on this node.
-        if (nodeId) {
+        // No remaining sessions are attached to an RPC actor on this node, and no query waits for that node.
+        if (nodeId && !RemoteRequests.contains(nodeId)) {
             Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
         }
 
@@ -2163,12 +2247,20 @@ private:
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
+        // the session that takes a query forwarded to that node answers the subscription made for the query
+        if (ev->Cookie & ForwardSubscriptionCookieBit) {
+            if (auto* request = PendingRequests.FindPtr(ev->Cookie & ~ForwardSubscriptionCookieBit);
+                request && request->RemoteNodeId == nodeId && !request->RemoteSession)
+            {
+                request->RemoteSession = ev->Sender;
+            }
+        }
         auto sessions = LocalSessions->FindSessions(nodeId);
         if (sessions) {
             YDB_LOG_TRACE("Received node connected event with local sessions",
                 {"node", nodeId},
                 {"sessionsCount", sessions.size()});
-        } else {
+        } else if (!RemoteRequests.contains(nodeId)) {
             YDB_LOG_ERROR("Got TEvNodeConnected event from node without",
                 {"sessions", nodeId});
         }
@@ -2185,6 +2277,29 @@ private:
         // It allows to use common code to close and delete expired session
         for (const auto sessionInfo : sessions) {
             LocalSessions->StartIdleCheck(sessionInfo, IdleDurationAfterDisconnect);
+        }
+
+        if (auto it = RemoteRequests.find(nodeId); it != RemoteRequests.end()) {
+            const TString message = TStringBuilder() << "Connection with node " << nodeId << " lost.";
+            // ReplyProcessError ends a request through the mailbox, so the set doesn't change while it is walked
+            for (ui64 requestId : it->second) {
+                auto* request = PendingRequests.FindPtr(requestId);
+                if (!request || request->RemoteNodeDisconnected) {
+                    continue;
+                }
+                // Only the session the query went through fails it; an older one must not fail a query that went
+                // through a newer one. A query no session took comes back undelivered and gets BAD_SESSION.
+                if (request->RemoteSession && request->RemoteSession == ev->Sender) {
+                    request->RemoteNodeDisconnected = true;
+                    // the other node may have executed the query, and nothing tells it that the response is lost
+                    if (request->RemoteReadOnly) {
+                        ReplyProcessError(Ydb::StatusIds::UNAVAILABLE, message, requestId);
+                    } else {
+                        ReplyProcessError(Ydb::StatusIds::UNDETERMINED, TStringBuilder() << message
+                            << " The query may have been executed.", requestId);
+                    }
+                }
+            }
         }
     }
 
@@ -2391,6 +2506,8 @@ private:
 
     std::optional<TPeerStats> PeerStats;
     TKqpProxyRequestTracker PendingRequests;
+    // queries forwarded to the proxy of another node, by that node
+    THashMap<ui32, THashSet<ui64>> RemoteRequests;
     bool ShutdownRequested = false;
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;

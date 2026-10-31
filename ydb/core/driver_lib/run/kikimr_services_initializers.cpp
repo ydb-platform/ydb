@@ -2790,6 +2790,16 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
             {"#_dup_error", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+    } else {
+        auto names = NOlap::NBlobOperations::ValidateCacheConsumerQuotas(*serviceConfig);
+        if (names.IsFail()) {
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse portions metadata cache config"},
+                {"action", "default_usage"},
+                {"#_dup_error", names.GetErrorMessage()},
+                {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
+            serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+        }
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 
@@ -2817,6 +2827,16 @@ void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSyste
             {"#_dup_error", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+    } else {
+        auto names = NOlap::NBlobOperations::ValidateCacheConsumerQuotas(*serviceConfig);
+        if (names.IsFail()) {
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse column data cache config"},
+                {"action", "default_usage"},
+                {"#_dup_error", names.GetErrorMessage()},
+                {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
+            serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
+        }
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 

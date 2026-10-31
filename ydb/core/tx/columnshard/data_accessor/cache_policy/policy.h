@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/request_priority.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
@@ -13,7 +14,9 @@ namespace NKikimr::NOlap::NGeneralCache {
 class TGlobalPortionAddress {
 private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
+    YDB_READONLY(ui64, TabletId, 0);
     TPortionAddress InternalPortionAddress;
+    YDB_READONLY(ui64, ContentStamp, 0);
 
 public:
     const TPortionAddress& GetInternalPortionAddress() const;
@@ -22,7 +25,10 @@ public:
 
     TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress);
+    TGlobalPortionAddress(
+        const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp = 0);
+
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion);
 
     bool operator==(const TGlobalPortionAddress& item) const;
 
@@ -35,10 +41,18 @@ class TPortionsMetadataCachePolicy {
 public:
     using TAddress = TGlobalPortionAddress;
     using TObject = std::shared_ptr<TPortionDataAccessor>;
-    using TSourceId = NActors::TActorId;
+    using TSourceId = ui64;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
 
+    static constexpr bool EvictCacheWhenSourceGone = false;
+
     static TSourceId GetSourceId(const TAddress& address);
+
+    static NActors::TActorId GetRequestOwner(const TAddress& address) {
+        return address.GetTabletActorId();
+    }
+
+    static bool IsCacheEntryActual(const TAddress& address, const TObject& object);
 
     static EConsumer DefaultConsumer();
 

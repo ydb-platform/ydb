@@ -38,7 +38,8 @@ private:
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvObjectsInfo::TPtr& ev) {
-        Manager->OnRequestResult(ev->Get()->GetSourceId(), ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
+        Manager->OnRequestResult(ev->Get()->GetSourceId(), ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors(),
+            ev->Get()->GetSourceCookie());
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo::TPtr& ev) {
@@ -50,7 +51,7 @@ private:
     }
 
     void HandleMain(NPublic::TEvents<TPolicy>::TEvKillSource::TPtr& ev) {
-        Manager->AbortSource(ev->Get()->GetSourceId());
+        Manager->AbortSource(ev->Get()->GetSourceId(), ev->Get()->GetOwner());
     }
 
 public:

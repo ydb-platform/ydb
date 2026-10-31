@@ -34,10 +34,15 @@ struct TEvents {
         THashMap<TAddress, TString> Errors;
 
         const TSourceId SourceId;
+        const ui64 SourceCookie;
 
     public:
         TSourceId GetSourceId() const {
             return SourceId;
+        }
+
+        ui64 GetSourceCookie() const {
+            return SourceCookie;
         }
 
         THashMap<TAddress, TObject> ExtractObjects() {
@@ -58,12 +63,13 @@ struct TEvents {
             return std::move(Errors);
         }
 
-        TEvObjectsInfo(
-            const TSourceId sourceId, THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& errors)
+        TEvObjectsInfo(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed,
+            THashMap<TAddress, TString>&& errors)
             : Removed(std::move(removed))
             , Objects(std::move(objects))
             , Errors(std::move(errors))
-            , SourceId(sourceId) {
+            , SourceId(sourceId)
+            , SourceCookie(sourceCookie) {
         }
     };
 

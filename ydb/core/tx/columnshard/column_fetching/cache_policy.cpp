@@ -32,15 +32,15 @@ private:
         }
         for (auto&& [tablet, request] : columns) {
             NActors::TActivationContext::Send(
-                tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr), 0, cookie);
+                tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr, cookie));
         }
     }
 
-    virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
-        THashMap<TAddress, TString>&& errorAddresses) const override {
+    virtual void DoOnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
+        THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errorAddresses) const override {
         NActors::TActivationContext::Send(
             ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TColumnDataCachePolicy>::TEvObjectsInfo>(
-                                sourceId, std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses)));
+                                sourceId, sourceCookie, std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses)));
     }
 
 public:

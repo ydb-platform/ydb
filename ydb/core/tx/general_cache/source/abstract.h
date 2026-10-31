@@ -17,8 +17,8 @@ private:
     using TSelf = IObjectsProcessor<TPolicy>;
     virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
         const ui64 cookie) const = 0;
-    virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
-        THashMap<TAddress, TString>&& errorAddresses) const = 0;
+    virtual void DoOnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
+        THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errorAddresses) const = 0;
 
 public:
     virtual ~IObjectsProcessor() = default;
@@ -28,9 +28,9 @@ public:
         DoAskData(objectAddressesByConsumer, selfPtr, cookie);
     }
 
-    void OnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
-        THashMap<TAddress, TString>&& errorAddresses) const {
-        DoOnReceiveData(sourceId, std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));
+    void OnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
+        THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errorAddresses) const {
+        DoOnReceiveData(sourceId, sourceCookie, std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));
     }
 };
 

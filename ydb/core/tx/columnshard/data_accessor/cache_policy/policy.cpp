@@ -2,8 +2,11 @@
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
+
+#include <util/digest/numeric.h>
 
 namespace NKikimr::NOlap::NGeneralCache {
 
@@ -12,24 +15,42 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     class TAccessorsCallback: public NDataAccessorControl::IAccessorCallback {
     private:
         const NActors::TActorId OwnerActorId;
+        const ui64 TabletId;
+        const ui64 Cookie;
         const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> Callback;
         THashSet<TAddress> RequestedAddresses;
 
         virtual void OnAccessorsFetched(std::vector<std::shared_ptr<TPortionDataAccessor>>&& accessors) override {
+            THashMap<ui64, THashMap<ui64, std::vector<TAddress>>> waitingByPortion;
+            for (const auto& address : RequestedAddresses) {
+                if (address.GetTabletId() != TabletId) {
+                    continue;
+                }
+                waitingByPortion[address.GetPortionId()][address.GetPathId().GetRawValue()].push_back(address);
+            }
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
-                const TAddress address(OwnerActorId, i->GetPortionInfo().GetAddress());
-                AFL_VERIFY(RequestedAddresses.erase(address));
-                objects.emplace(address, std::move(i));
+                const auto& portion = i->GetPortionInfo();
+                const auto byPortion = waitingByPortion.find(portion.GetPortionId());
+                AFL_VERIFY(byPortion != waitingByPortion.end());
+                const auto byPath = byPortion->second.find(portion.GetPathId().GetRawValue());
+                AFL_VERIFY(byPath != byPortion->second.end());
+                AFL_VERIFY(!byPath->second.empty());
+                for (const auto& address : byPath->second) {
+                    AFL_VERIFY(RequestedAddresses.erase(address));
+                    AFL_VERIFY(objects.emplace(address, i).second);
+                }
             }
-            Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
+            Callback->OnReceiveData(TabletId, Cookie, std::move(objects), std::move(RequestedAddresses), {});
         }
 
     public:
-        TAccessorsCallback(const NActors::TActorId& ownerActorId,
+        TAccessorsCallback(const NActors::TActorId& ownerActorId, const ui64 tabletId, const ui64 cookie,
             const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>>& callback,
             THashSet<TAddress>&& requestedAddresses)
             : OwnerActorId(ownerActorId)
+            , TabletId(tabletId)
+            , Cookie(cookie)
             , Callback(callback)
             , RequestedAddresses(std::move(requestedAddresses))
         {
@@ -42,7 +63,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                     errorAddresses[addr] = TStringBuilder{} << "Unprocessed address " << addr.Debug()
                                                             << ". The main reason is the relocation of the tablet.";
                 }
-                Callback->OnReceiveData(OwnerActorId, {}, {}, std::move(errorAddresses));
+                Callback->OnReceiveData(TabletId, Cookie, {}, {}, std::move(errorAddresses));
             }
         }
     };
@@ -51,7 +72,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     private:
         using TAddress = TGlobalPortionAddress;
         using TObject = std::shared_ptr<TPortionDataAccessor>;
-        using TSourceId = NActors::TActorId;
+        using TSourceId = ui64;
         using EConsumer = TPortionsMetadataCachePolicy::EConsumer;
         using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>;
 
@@ -86,20 +107,26 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
             }
             for (auto&& i : requests) {
+                auto requested = i.second.ExtractRequestedAddresses();
+                AFL_VERIFY(!requested.empty());
+                const ui64 tabletId = requested.begin()->GetTabletId();
+                for (const auto& addr : requested) {
+                    AFL_VERIFY(addr.GetTabletId() == tabletId);
+                }
                 NActors::TActivationContext::Send(
                     i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
-                                 std::make_shared<TAccessorsCallback>(i.first, selfPtr, i.second.ExtractRequestedAddresses())), 0, cookie);
+                                 std::make_shared<TAccessorsCallback>(i.first, tabletId, cookie, selfPtr, std::move(requested))), 0, cookie);
             }
         }
 
-        virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses,
+        virtual void DoOnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
             THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errors) const override {
             if (NActors::TActorSystem::IsStopped()) {
                 return;
             }
             NActors::TActivationContext::Send(
                 ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvObjectsInfo>(
-                                    sourceId, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
+                                    sourceId, sourceCookie, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
         }
 
     public:
@@ -124,26 +151,79 @@ TInternalPathId TGlobalPortionAddress::GetPathId() const {
     return InternalPortionAddress.GetPathId();
 }
 
-TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress)
+namespace {
+
+ui64 HashSnapshot(const TSnapshot& snapshot) {
+    return CombineHashes(snapshot.GetPlanStep(), snapshot.GetTxId());
+}
+
+ui64 Mix(const ui64 hash, const ui64 value) {
+    return CombineHashes(hash, value);
+}
+
+ui64 PortionContentStamp(const TPortionInfo& portion) {
+    ui64 hash = portion.GetRecordsCount();
+    hash = Mix(hash, portion.GetCompactionLevel());
+    hash = Mix(hash, portion.GetMeta().GetColumnRawBytes());
+    hash = Mix(hash, portion.GetMeta().GetColumnBlobBytes());
+    hash = Mix(hash, portion.GetMeta().GetIndexRawBytes());
+    hash = Mix(hash, portion.GetMeta().GetIndexBlobBytes());
+    hash = Mix(hash, portion.GetSchemaVersion());
+    hash = Mix(hash, portion.GetShardingVersionDef(0));
+    hash = Mix(hash, THash<TString>()(portion.GetMeta().GetTierName()));
+    hash = Mix(hash, portion.GetMeta().GetNumSlices());
+    if (const auto removed = portion.GetRemoveSnapshotOptional()) {
+        hash = CombineHashes(hash, HashSnapshot(*removed));
+    }
+    if (portion.GetPortionType() == EPortionType::Written) {
+        const auto& written = static_cast<const TWrittenPortionInfo&>(portion);
+        if (const auto commit = written.GetCommitSnapshotOptional()) {
+            hash = CombineHashes(hash, HashSnapshot(*commit));
+        }
+    } else {
+        hash = CombineHashes(hash, HashSnapshot(portion.RecordSnapshotMin()));
+        hash = CombineHashes(hash, HashSnapshot(portion.RecordSnapshotMax()));
+    }
+    return hash;
+}
+
+}   // namespace
+
+TGlobalPortionAddress::TGlobalPortionAddress(
+    const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp)
     : TabletActorId(actorId)
+    , TabletId(tabletId)
     , InternalPortionAddress(internalAddress)
+    , ContentStamp(contentStamp)
+{
+    AFL_VERIFY(TabletId);
+}
+
+TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion)
+    : TGlobalPortionAddress(actorId, tabletId, portion.GetAddress(), PortionContentStamp(portion))
 {
 }
 
 bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {
-    return TabletActorId == item.TabletActorId && InternalPortionAddress == item.InternalPortionAddress;
+    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress && ContentStamp == item.ContentStamp;
 }
 
 TGlobalPortionAddress::operator size_t() const {
-    return TabletActorId.Hash() ^ THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress);
+    return CombineHashes(CombineHashes(THash<ui64>()(TabletId), THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress)), ContentStamp);
 }
 
 const TString TGlobalPortionAddress::Debug() const {
-    return TStringBuilder{} << "TabletActorId: " << TabletActorId << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
+    return TStringBuilder{} << "TabletId: " << TabletId << ", TabletActorId: " << TabletActorId << ", ContentStamp: " << ContentStamp
+                            << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
 }
 
 TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceId(const TAddress& address) {
-    return address.GetTabletActorId();
+    return address.GetTabletId();
+}
+
+bool TPortionsMetadataCachePolicy::IsCacheEntryActual(const TAddress& address, const TObject& object) {
+    AFL_VERIFY(object);
+    return address.GetContentStamp() == PortionContentStamp(object->GetPortionInfo());
 }
 
 TPortionsMetadataCachePolicy::EConsumer TPortionsMetadataCachePolicy::DefaultConsumer() {

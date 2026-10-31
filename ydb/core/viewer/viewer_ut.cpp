@@ -9,6 +9,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/stream.h>
 #include <util/generic/set.h>
 #include <util/stream/null.h>
 #include <util/string/join.h>
@@ -573,6 +574,519 @@ Y_UNIT_TEST_SUITE(Viewer) {
         for (const auto* field : {"DataCenterNum", "RoomNum", "RackNum", "BodyNum", "Body"}) {
             UNIT_ASSERT(!locationProperties[field]);
         }
+    }
+
+    enum class ENodeListStorageCache {
+        None,
+        All,
+        PoolsOnly,
+        GroupsAndVSlots,
+    };
+
+    struct TNodeListStorageOptions {
+        std::optional<bool> IncludeStorage;
+        bool Database = true;
+        bool Serverless = false;
+        bool ViewerAccess = true;
+        bool EmptyPools = false;
+        bool MissingPool = false;
+        bool DropVSlots = false;
+        bool FailBscPipe = false;
+        bool RootDatabase = false;
+        bool OldGenerationDonor = false;
+        std::optional<bool> UseCache = false;
+        ENodeListStorageCache Cache = ENodeListStorageCache::None;
+        bool MissingCachedPool = false;
+        bool Redirect = false;
+        std::optional<ui32> DisconnectBscAfterResponses;
+        std::optional<std::array<ui32, 3>> ExpectedStorageResponses;
+    };
+
+    void CheckNodeListStorage(const TNodeListStorageOptions& options) {
+        TPortManager ports;
+        TStringStream viewerLog;
+        auto settings = TServerSettings(ports.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        if (options.FailBscPipe || options.DisconnectBscAfterResponses) {
+            settings.SetLogBackend(new TStreamLogBackend(&viewerLog));
+        }
+        auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        security->AddAdministrationAllowedSIDs("viewer-user");
+        security->AddMonitoringAllowedSIDs("viewer-user");
+        security->AddViewerAllowedSIDs("viewer-user");
+        security->AddDatabaseAllowedSIDs("database-user");
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::VIEWER, NLog::PRI_ERROR);
+
+        const TPathId databaseKey(options.RootDatabase
+            ? TPathId(runtime.GetAppData().DomainsInfo->GetDomain()->SchemeRoot, 1)
+            : TPathId(7000000000, 2));
+        const TPathId sharedKey(7000000000, 1);
+        const std::vector<ui32> nodeIds = {1, 2, 3, 4, 5, 6, 7, 50001, 50002, 50003};
+        std::unordered_set<ui32> storageRequestTypes;
+        std::array<ui32, 3> storageResponses = {};
+        bool resolvedSharedDatabase = false;
+        bool bscPipeFailureInjected = false;
+        TActorId bscClientId;
+        TActorId bscServerId;
+        auto makePools = [](bool missingPool) {
+            auto response = std::make_shared<NSysView::TEvSysView::TEvGetStoragePoolsResponse>();
+            for (auto [boxId, poolId] : {std::pair<ui64, ui64>{1, 7}, {1, 8}, {2, 7}}) {
+                auto* pool = response->Record.AddEntries();
+                pool->MutableKey()->SetBoxId(boxId);
+                pool->MutableKey()->SetStoragePoolId(poolId);
+                pool->MutableInfo()->SetName(boxId == 1 && poolId == 7 && !missingPool
+                    ? "storage-pool" : "unrelated-pool");
+            }
+            return response;
+        };
+        auto makeGroups = [] {
+            auto response = std::make_shared<NSysView::TEvSysView::TEvGetGroupsResponse>();
+            for (ui32 groupId : {0, 10, 20, 30}) {
+                auto* group = response->Record.AddEntries();
+                group->MutableKey()->SetGroupId(groupId);
+                group->MutableInfo()->SetBoxId(groupId == 0 ? 0 : groupId == 30 ? 2 : 1);
+                group->MutableInfo()->SetStoragePoolId(groupId == 0 ? 0 : groupId == 20 ? 8 : 7);
+                group->MutableInfo()->SetGeneration(2);
+            }
+            return response;
+        };
+        auto makeVSlots = [&] {
+            auto response = std::make_shared<NSysView::TEvSysView::TEvGetVSlotsResponse>();
+            auto addSlot = [&](ui32 nodeId, ui32 groupId, ui32 generation) {
+                auto* slot = response->Record.AddEntries();
+                slot->MutableKey()->SetNodeId(nodeId);
+                slot->MutableKey()->SetPDiskId(1);
+                slot->MutableKey()->SetVSlotId(response->Record.EntriesSize());
+                slot->MutableInfo()->SetGroupId(groupId);
+                slot->MutableInfo()->SetGroupGeneration(generation);
+            };
+            for (auto [nodeId, groupId] : {std::pair<ui32, ui32>{1, 10}, {1, 10},
+                    {2, 10}, {3, 20}, {4, 30}, {6, 0}, {50002, 10}, {50003, 20}}) {
+                addSlot(nodeId, groupId, 2);
+            }
+            if (options.OldGenerationDonor) {
+                // The controller keeps the old generation for donor VSlots.
+                addSlot(7, 10, 1);
+            }
+            return response;
+        };
+        const auto isNodeListActor = [&](const TActorId& actorId) {
+            return actorId.NodeId() == runtime.GetNodeId(0)
+                && dynamic_cast<TJsonNodeList*>(runtime.FindActor(actorId));
+        };
+        auto observer = runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& event) {
+            if (isNodeListActor(event->Sender)) {
+                switch (event->GetTypeRewrite()) {
+                    case NSysView::TEvSysView::EvGetStoragePoolsRequest:
+                    case NSysView::TEvSysView::EvGetGroupsRequest:
+                    case NSysView::TEvSysView::EvGetVSlotsRequest:
+                        // Count data sources, not tablet-pipe forwarding events.
+                        storageRequestTypes.insert(event->GetTypeRewrite());
+                        break;
+                }
+            }
+            if (!isNodeListActor(event->GetRecipientRewrite())) {
+                return;
+            }
+            const bool storageResponse =
+                event->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse ||
+                event->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse ||
+                event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse;
+            // A failed connection cannot deliver controller data, including responses already in flight.
+            if (storageResponse && (options.FailBscPipe || bscPipeFailureInjected)) {
+                event.Reset();
+                return;
+            }
+            if (storageResponse && options.DisconnectBscAfterResponses
+                    && storageResponses[0] + storageResponses[1] + storageResponses[2] == *options.DisconnectBscAfterResponses) {
+                UNIT_ASSERT(bscClientId);
+                bscPipeFailureInjected = true;
+                auto response = MakeHolder<TEvTabletPipe::TEvClientDestroyed>(
+                    MakeBSControllerID(), bscClientId, bscServerId);
+                IEventHandle::TPtr replacement(new IEventHandle(event->Recipient, bscClientId,
+                    response.Release(), event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+                event.Swap(replacement);
+            }
+            switch (event->GetTypeRewrite()) {
+                case TEvTabletPipe::EvClientConnected: {
+                    const auto* previous = event->Get<TEvTabletPipe::TEvClientConnected>();
+                    if (previous->TabletId != MakeBSControllerID()) {
+                        break;
+                    }
+                    bscClientId = previous->ClientId;
+                    bscServerId = previous->ServerId;
+                    if (options.FailBscPipe) {
+                        bscPipeFailureInjected = true;
+                        auto response = MakeHolder<TEvTabletPipe::TEvClientConnected>(
+                            previous->TabletId, NKikimrProto::ERROR, previous->ClientId,
+                            TActorId(), false, false, previous->Generation);
+                        IEventHandle::TPtr replacement(new IEventHandle(event->Recipient, event->Sender,
+                            response.Release(), event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+                        event.Swap(replacement);
+                    }
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto* response = event->Get<TEvTxProxySchemeCache::TEvNavigateKeySetResult>();
+                    auto& entry = response->Request->ResultSet.front();
+                    const bool shared = entry.TableId.PathId == sharedKey;
+                    resolvedSharedDatabase |= shared;
+                    response->Request->ErrorCount = 0;
+                    entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                    entry.Path = options.RootDatabase ? TVector<TString>{"Root"}
+                        : TVector<TString>{"Root", shared ? "shared" : "database"};
+                    entry.DomainInfo = MakeIntrusive<TDomainInfo>(
+                        shared ? sharedKey : databaseKey,
+                        options.Serverless ? sharedKey : databaseKey);
+                    auto domain = MakeIntrusive<TSchemeCacheNavigate::TDomainDescription>();
+                    const auto key = shared ? sharedKey : databaseKey;
+                    domain->Description.MutableDomainKey()->SetSchemeShard(key.OwnerId);
+                    domain->Description.MutableDomainKey()->SetPathId(key.LocalPathId);
+                    if (!options.EmptyPools) {
+                        auto* pool = domain->Description.AddStoragePools();
+                        pool->SetName(options.Serverless && !shared ? "unused-serverless-pool" : "storage-pool");
+                        pool->SetKind("ssd");
+                    }
+                    entry.DomainDescription = domain;
+                    break;
+                }
+                case TEvStateStorage::EvBoardInfo: {
+                    const auto* previous = event->Get<TEvStateStorage::TEvBoardInfo>();
+                    auto response = MakeHolder<TEvStateStorage::TEvBoardInfo>(
+                        TEvStateStorage::TEvBoardInfo::EStatus::Ok, previous->Path);
+                    // Database endpoints are not necessarily dynamic nodes.
+                    response->InfoEntries[TActorId(5, 0, 0, 0)] = {};
+                    response->InfoEntries[TActorId(50001, 0, 0, 0)] = {};
+                    IEventHandle::TPtr replacement(new IEventHandle(event->Recipient, event->Sender,
+                        response.Release(), event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+                    event.Swap(replacement);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    auto* previous = event->Get<TEvInterconnect::TEvNodesInfo>();
+                    UNIT_ASSERT(!previous->Nodes.empty());
+                    auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+                    for (ui32 nodeId : nodeIds) {
+                        auto& node = nodes->emplace_back(previous->Nodes.front());
+                        node.NodeId = nodeId;
+                        node.IsStatic = nodeId < 50000;
+                        node.Host = TStringBuilder() << "node-" << nodeId << ".example";
+                        NActorsInterconnect::TNodeLocation location;
+                        location.SetBridgePileName("example-pile");
+                        location.SetDataCenter("example-dc");
+                        location.SetRack("example-rack");
+                        node.Location = TNodeLocation(location);
+                    }
+                    auto response = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes, std::move(previous->PileMap));
+                    IEventHandle::TPtr replacement(new IEventHandle(event->Recipient, event->Sender,
+                        response.Release(), event->Flags, event->Cookie, nullptr, std::move(event->TraceId)));
+                    event.Swap(replacement);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    ++storageResponses[0];
+                    auto& record = event->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                    record = makePools(options.MissingPool)->Record;
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    ++storageResponses[1];
+                    auto& record = event->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                    record = makeGroups()->Record;
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    ++storageResponses[2];
+                    if (options.DropVSlots) {
+                        event.Reset();
+                        return;
+                    }
+                    auto& record = event->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
+                    record = makeVSlots()->Record;
+                    break;
+                }
+            }
+        });
+
+        struct TNodeListHttpRequest : THttpRequest {
+            using THttpRequest::THttpRequest;
+            TString Uri;
+
+            const char* GetURI() const override {
+                return Uri.c_str();
+            }
+        } httpRequest(HTTP_METHOD_GET);
+        if (options.Database) {
+            httpRequest.CgiParameters.InsertUnescaped("database", options.RootDatabase ? "/Root" : "/Root/database");
+        }
+        if (options.IncludeStorage) {
+            httpRequest.CgiParameters.InsertUnescaped("include_storage", *options.IncludeStorage ? "true" : "false");
+        }
+        httpRequest.CgiParameters.InsertUnescaped("direct", options.Redirect ? "false" : "true");
+        if (options.UseCache) {
+            httpRequest.CgiParameters.InsertUnescaped("use_cache", *options.UseCache ? "true" : "false");
+        }
+        httpRequest.Uri = TStringBuilder() << "/viewer/json/nodelist?" << httpRequest.CgiParameters.Print();
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monRequest(nullptr, &httpRequest, nullptr, page.Get(), "/json/nodelist", nullptr);
+        NACLibProto::TUserToken token;
+        token.SetUserSID(options.ViewerAccess ? "viewer-user" : "database-user");
+        const auto sender = runtime.AllocateEdgeActor();
+        if (options.Cache == ENodeListStorageCache::All || options.Cache == ENodeListStorageCache::PoolsOnly) {
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new TEvViewer::TEvUpdateSharedCacheTabletResponse(makePools(options.MissingCachedPool))));
+        }
+        if (options.Cache == ENodeListStorageCache::All || options.Cache == ENodeListStorageCache::GroupsAndVSlots) {
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new TEvViewer::TEvUpdateSharedCacheTabletResponse(makeGroups())));
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new TEvViewer::TEvUpdateSharedCacheTabletResponse(makeVSlots())));
+        }
+        if (options.Redirect) {
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NMon::TEvHttpInfo(monRequest, token.SerializeAsString())));
+            TAutoPtr<IEventHandle> redirectHandle;
+            const auto* redirect = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(redirectHandle);
+            UNIT_ASSERT_C(redirect->Answer.StartsWith("HTTP/1.1 307"), redirect->Answer);
+            UNIT_ASSERT_C(redirect->Answer.Contains(httpRequest.Uri), redirect->Answer);
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
+            // The destination receives the same parameters and token with the forwarding header.
+            httpRequest.HttpHeaders.AddHeader("X-Forwarded-From-Node", "1");
+        }
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+            new NMon::TEvHttpInfo(monRequest, token.SerializeAsString())));
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        const bool includeStorage = options.IncludeStorage.value_or(false) && options.Database && !options.Serverless;
+        if (includeStorage && !options.ViewerAccess) {
+            UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 403"), response->Answer);
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
+            return;
+        }
+        if (options.FailBscPipe || options.DisconnectBscAfterResponses) {
+            UNIT_ASSERT(bscPipeFailureInjected);
+            UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 500"), response->Answer);
+            UNIT_ASSERT_C(response->Answer.Contains("Failed to resolve database storage nodes"), response->Answer);
+            // Flush preceding log events before checking that no completed requests were failed twice.
+            const TString marker = "nodelist-pipe-log-drained";
+            runtime.Send(new IEventHandle(runtime.GetLogSettings(0)->LoggerActorId, sender,
+                new NLog::TEvLog(NLog::PRI_ERROR, NKikimrServices::VIEWER, marker)));
+            TDispatchOptions logOptions;
+            logOptions.CustomFinalCondition = [&] { return viewerLog.Str().Contains(marker); };
+            logOptions.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime.DispatchEvents(logOptions, TDuration::Seconds(1));
+            UNIT_ASSERT_C(viewerLog.Str().Contains(marker), viewerLog.Str());
+            UNIT_ASSERT_C(!viewerLog.Str().Contains("Request count mismatch"), viewerLog.Str());
+            return;
+        }
+        std::array<ui32, 3> expectedResponses = {};
+        if (includeStorage && (!options.EmptyPools || options.RootDatabase)) {
+            expectedResponses = {options.EmptyPools ? 0u : 1u, 1, 1};
+        }
+        if (options.ExpectedStorageResponses) {
+            expectedResponses = *options.ExpectedStorageResponses;
+        }
+        for (size_t index = 0; index < expectedResponses.size(); ++index) {
+            UNIT_ASSERT_VALUES_EQUAL_C(storageResponses[index], expectedResponses[index], index);
+        }
+        if (!includeStorage) {
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(), 0);
+        }
+        if (options.MissingPool || options.DropVSlots) {
+            UNIT_ASSERT_C(response->Answer.StartsWith(options.DropVSlots ? "HTTP/1.1 504" : "HTTP/1.1 500"), response->Answer);
+            UNIT_ASSERT_VALUES_EQUAL(storageRequestTypes.size(),
+                std::count_if(expectedResponses.begin(), expectedResponses.end(), [](ui32 count) { return count != 0; }));
+            return;
+        }
+        UNIT_ASSERT_C(response->Answer.StartsWith("HTTP/1.1 200"), response->Answer);
+        UNIT_ASSERT_VALUES_EQUAL(resolvedSharedDatabase, options.Serverless);
+        const auto bodyStart = response->Answer.find("\r\n\r\n");
+        UNIT_ASSERT(bodyStart != TString::npos);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Answer.substr(bodyStart + 4), &json, true);
+        std::set<ui32> actualIds;
+        for (const auto& node : json.GetArray()) {
+            const ui32 nodeId = node["Id"].GetUInteger();
+            UNIT_ASSERT(actualIds.insert(nodeId).second);
+            UNIT_ASSERT_VALUES_EQUAL(node["Host"].GetString(), TStringBuilder() << "node-" << nodeId << ".example");
+            UNIT_ASSERT_VALUES_EQUAL(node["Location"]["BridgePileName"].GetString(), "example-pile");
+            UNIT_ASSERT_VALUES_EQUAL(node["Location"]["DataCenter"].GetString(), "example-dc");
+            UNIT_ASSERT_VALUES_EQUAL(node["Location"]["Rack"].GetString(), "example-rack");
+        }
+        std::set<ui32> expectedIds = {5, 50001};
+        if (!options.Database) {
+            expectedIds = std::set<ui32>(nodeIds.begin(), nodeIds.end());
+        } else if (includeStorage) {
+            if (!options.EmptyPools) {
+                expectedIds.insert({1, 2, 50002});
+                if (options.OldGenerationDonor) {
+                    expectedIds.insert(7);
+                }
+            }
+            if (options.RootDatabase) {
+                expectedIds.insert(6);
+            }
+        }
+        UNIT_ASSERT(actualIds == expectedIds);
+    }
+
+    Y_UNIT_TEST(NodeListStorageDefault) {
+        CheckNodeListStorage({});
+    }
+
+    Y_UNIT_TEST(NodeListStorageDisabled) {
+        CheckNodeListStorage({.IncludeStorage = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageIncludesOnlyRelatedNodes) {
+        CheckNodeListStorage({.IncludeStorage = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRootWithNamedPools) {
+        CheckNodeListStorage({.IncludeStorage = true, .RootDatabase = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRootWithoutNamedPools) {
+        CheckNodeListStorage({.IncludeStorage = true, .EmptyPools = true, .RootDatabase = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageKeepsOldGenerationDonors) {
+        CheckNodeListStorage({.IncludeStorage = true, .OldGenerationDonor = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageDefaultCacheHit) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = std::nullopt,
+            .Cache = ENodeListStorageCache::All, .ExpectedStorageResponses = {{0, 0, 0}}});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePartialCacheHit) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::PoolsOnly, .ExpectedStorageResponses = {{0, 1, 1}}});
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 0}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageExplicitCacheBypass) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = false,
+            .Cache = ENodeListStorageCache::All});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRefreshesMissingCachedPool) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = std::nullopt,
+            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRefreshesMissingPoolWithPartialCache) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::PoolsOnly, .MissingCachedPool = true,
+            .ExpectedStorageResponses = {{1, 2, 2}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingPoolDoesNotRetryFreshData) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
+            .ExpectedStorageResponses = {{1, 1, 1}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingFreshPoolDoesNotRefreshCachedGroups) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 0}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingPoolAfterCacheRefreshFails) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRedirect) {
+        CheckNodeListStorage({.IncludeStorage = true, .Redirect = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageRedirectRequiresViewerAccess) {
+        CheckNodeListStorage({.IncludeStorage = true, .ViewerAccess = false, .Redirect = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessIgnoresStorageFlag) {
+        CheckNodeListStorage({.IncludeStorage = true, .Serverless = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessDatabaseAccess) {
+        CheckNodeListStorage({.IncludeStorage = true, .Serverless = true, .ViewerAccess = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessLegacyDatabaseAccess) {
+        CheckNodeListStorage({.Serverless = true, .ViewerAccess = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageServerlessRedirect) {
+        CheckNodeListStorage({.IncludeStorage = true, .Serverless = true, .ViewerAccess = false, .Redirect = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageUnscoped) {
+        CheckNodeListStorage({.IncludeStorage = true, .Database = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageEmptyPools) {
+        CheckNodeListStorage({.IncludeStorage = true, .EmptyPools = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageMissingPoolFails) {
+        CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true});
+    }
+
+    Y_UNIT_TEST(NodeListStorageTimeout) {
+        CheckNodeListStorage({.IncludeStorage = true, .DropVSlots = true});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePipeConnectionFailure) {
+        CheckNodeListStorage({.IncludeStorage = true, .FailBscPipe = true});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePipeFailureAfterPartialResponse) {
+        CheckNodeListStorage({.IncludeStorage = true, .DisconnectBscAfterResponses = 1});
+    }
+
+    Y_UNIT_TEST(NodeListStoragePipeFailureDuringRefresh) {
+        // The first round reads Groups and VSlots; fail before or after one response in the refresh round.
+        for (ui32 responses : {2, 3}) {
+            CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+                .Cache = ENodeListStorageCache::PoolsOnly, .MissingCachedPool = true,
+                .DisconnectBscAfterResponses = responses});
+        }
+    }
+
+    Y_UNIT_TEST(NodeListStorageRequiresViewerAccess) {
+        CheckNodeListStorage({.IncludeStorage = true, .ViewerAccess = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageLegacyDatabaseAccess) {
+        CheckNodeListStorage({.IncludeStorage = false, .ViewerAccess = false});
+    }
+
+    Y_UNIT_TEST(NodeListStorageSwagger) {
+        const auto swagger = TJsonNodeList::GetSwagger();
+        bool found = false;
+        bool foundCache = false;
+        for (const auto& parameter : swagger["get"]["parameters"]) {
+            if (parameter["name"].as<std::string>() == "include_storage") {
+                UNIT_ASSERT_VALUES_EQUAL(parameter["schema"]["type"].as<std::string>(), "boolean");
+                UNIT_ASSERT(!parameter["schema"]["default"].as<bool>());
+                found = true;
+            } else if (parameter["name"].as<std::string>() == "use_cache") {
+                UNIT_ASSERT_VALUES_EQUAL(parameter["schema"]["type"].as<std::string>(), "boolean");
+                UNIT_ASSERT(parameter["schema"]["default"].as<bool>());
+                foundCache = true;
+            }
+        }
+        UNIT_ASSERT(found);
+        UNIT_ASSERT(foundCache);
     }
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {

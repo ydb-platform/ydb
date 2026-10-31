@@ -14,6 +14,7 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 * Working with [columns](columns.md) of row and column tables.
 * Adding or removing a [change stream](changefeed.md).
 * Working with [indexes](indexes.md).
+* Adding or removing [statistics](statistics.md).
 * Working with [column groups](family.md) of a row table.
 
 {% if backend_name == "YDB" and oss == true %}

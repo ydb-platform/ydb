@@ -5772,7 +5772,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SnapshotTables::TableOwnerId>(),
                         rowset.GetValue<Schema::SnapshotTables::TableLocalId>());
 
-                    Self->TablesWithSnapshots.emplace(tableId, id);
+                    Self->TablesWithSnapshots[tableId].insert(id);
                     Self->SnapshotTables[id].insert(tableId);
                     ++records;
 

@@ -1750,8 +1750,9 @@ private:
 
         // Check snapshot and pass it to Validate if it's present
         if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation) {
-            // TablesWithSnapshots.at() is already checked in ValidateSecondaryUniqueIndex()
-            auto snapId = Self->TablesWithSnapshots.at(path->PathId);
+            // The snapshot is already checked in ValidateSecondaryUniqueIndex().
+            // The index impl table holds exactly one snapshot at this point.
+            auto snapId = Self->GetAnyTableSnapshot(path->PathId);
             record.MutableSnapshot()->SetTxId(ui64(snapId));
             record.MutableSnapshot()->SetStep(ui64(Self->SnapshotsStepIds.at(snapId)));
         }
@@ -2254,7 +2255,7 @@ private:
 
         if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation) {
             auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
-            if (!Self->TablesWithSnapshots.contains(path->PathId)) {
+            if (!Self->HasTableSnapshot(path->PathId)) {
                 errorDesc = "Consistent validation requested, but index table snapshot is not found";
                 return true;
             }
@@ -3159,8 +3160,7 @@ private:
         // for now build index impl tables don't need snapshot,
         // because they're used only by build index
         if (!buildInfo.SnapshotTxId && GetShardsPath(Self, buildInfo)->PathId == buildInfo.TablePathId) {
-            Y_ENSURE(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
-            Y_ENSURE(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
+            Y_ENSURE(Self->HasTableSnapshot(buildInfo.TablePathId, buildInfo.InitiateTxId));
 
             buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
             Y_ENSURE(buildInfo.SnapshotTxId);

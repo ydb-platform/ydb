@@ -6,6 +6,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <array>
+#include <atomic>
+
 namespace NKikimr::NSecret {
 
 using NKqp::TKikimrRunner;
@@ -279,6 +282,86 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             auto promise = ResolveSecrets({secretName1, secretName2, secretName3}, kikimr);
             AssertSecretValues({secretValue1, secretValue2, secretValue3}, promise);
         }
+    }
+
+    Y_UNIT_TEST(BatchCacheChecksEachSecretPathId) {
+        class TCacheObserver : public TDescribeSchemaSecretsService::ISchemeCacheStatusGetter {
+        public:
+            mutable std::atomic<ui32> Entries = 0;
+
+            NSchemeCache::TSchemeCacheNavigate::EStatus GetStatus(
+                NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const override
+            {
+                ++Entries;
+                return entry.Status;
+            }
+        };
+
+        class TShardObserver : public TDescribeSchemaSecretsService::ISchemeShardStatusGetter {
+        public:
+            const std::array<TString, 2> Paths = {"/Root/batch-first", "/Root/batch-second"};
+            mutable std::array<std::atomic<ui32>, 2> Reads = {};
+            mutable std::array<std::atomic<ui64>, 2> PathIds = {};
+            mutable std::array<std::atomic<ui64>, 2> Versions = {};
+
+            NKikimrScheme::EStatus GetStatus(const NKikimrScheme::TEvDescribeSchemeResult& record) const override {
+                for (size_t i = 0; i < Paths.size(); ++i) {
+                    if (record.GetPath() == Paths[i]) {
+                        ++Reads[i];
+                        PathIds[i] = record.GetPathId();
+                        Versions[i] = record.GetPathDescription().GetSecretDescription().GetVersion();
+                    }
+                }
+                return record.GetStatus();
+            }
+        };
+
+        auto cacheObserver = MakeHolder<TCacheObserver>();
+        auto shardObserver = MakeHolder<TShardObserver>();
+        TKikimrSettings settings;
+        settings.SetDescribeSchemaSecretsServiceFactory(std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
+            /* secretUpdateListener */ nullptr, cacheObserver.Get(), shardObserver.Get()));
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        const auto& paths = shardObserver->Paths;
+        CreateSchemaSecret(paths[0], "first-value", session);
+        CreateSchemaSecret(paths[1], "second-value", session);
+
+        AssertSecretValues({"first-value", "second-value"}, ResolveSecrets({paths[0], paths[1]}, kikimr));
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[0].load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[1].load(), 1);
+        UNIT_ASSERT_C(shardObserver->PathIds[0].load() != shardObserver->PathIds[1].load(),
+            "The secrets must have different object identities");
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Versions[0].load(), shardObserver->Versions[1].load());
+        UNIT_ASSERT_VALUES_EQUAL(cacheObserver->Entries.load(), 2);
+
+        // Both values are cached. Each read still navigates for identity and access,
+        // but neither secret should be fetched from SchemeShard again.
+        AssertSecretValues({"first-value", "second-value"}, ResolveSecrets({paths[0], paths[1]}, kikimr));
+        UNIT_ASSERT_VALUES_EQUAL(cacheObserver->Entries.load(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[0].load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[1].load(), 1);
+
+        AssertSecretValues({"second-value", "first-value"}, ResolveSecrets({paths[1], paths[0]}, kikimr));
+        UNIT_ASSERT_VALUES_EQUAL(cacheObserver->Entries.load(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[0].load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[1].load(), 1);
+
+        // A version change invalidates just that secret, regardless of its position.
+        AlterSchemaSecret(paths[1], "second-updated", session);
+        AssertSecretValues({"second-updated", "first-value"}, ResolveSecrets({paths[1], paths[0]}, kikimr));
+        UNIT_ASSERT_VALUES_EQUAL(cacheObserver->Entries.load(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[0].load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[1].load(), 2);
+        UNIT_ASSERT_C(shardObserver->Versions[1].load() > shardObserver->Versions[0].load(),
+            "ALTER must change the second secret's version");
+
+        AssertSecretValues({"first-value", "second-updated"}, ResolveSecrets({paths[0], paths[1]}, kikimr));
+        UNIT_ASSERT_VALUES_EQUAL(cacheObserver->Entries.load(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[0].load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(shardObserver->Reads[1].load(), 2);
     }
 
     Y_UNIT_TEST(BigBatchRequest) {

@@ -269,19 +269,8 @@ bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr
     Y_ABORT_UNLESS(txState);
     const auto& pathId = txState->TargetPathId;
 
-    Y_ABORT_UNLESS(context.SS->TablesWithSnapshots.contains(pathId));
-    const auto snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
-
-    auto it = context.SS->SnapshotTables.find(snapshotTxId);
-    if (it != context.SS->SnapshotTables.end()) {
-        it->second.erase(pathId);
-        if (it->second.empty()) {
-            context.SS->SnapshotTables.erase(it);
-        }
-    }
-
-    context.SS->SnapshotsStepIds.erase(snapshotTxId);
-    context.SS->TablesWithSnapshots.erase(pathId);
+    const auto snapshotTxId = context.SS->GetAnyTableSnapshot(pathId);
+    context.SS->RemoveTableSnapshot(pathId, snapshotTxId);
 
     NIceDb::TNiceDb db(context.GetDB());
     context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);

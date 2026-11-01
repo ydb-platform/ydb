@@ -96,7 +96,9 @@ void TMemoryChanges::GrabCdcStream(TSchemeShard* ss, const TPathId& pathId) {
 }
 
 void TMemoryChanges::GrabNewTableSnapshot(TSchemeShard* ss, const TPathId& pathId, TTxId snapshotTxId) {
-    Y_ABORT_UNLESS(!ss->TablesWithSnapshots.contains(pathId));
+    auto& snapshots = ss->TablesWithSnapshots[pathId];
+    Y_ABORT_UNLESS(snapshots.find(snapshotTxId) == snapshots.end());
+    snapshots.insert(snapshotTxId);
     TablesWithSnapshots.emplace(pathId, snapshotTxId);
 }
 
@@ -264,7 +266,12 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     while (TablesWithSnapshots) {
         const auto& [id, snapshotTxId] = TablesWithSnapshots.top();
 
-        ss->TablesWithSnapshots.erase(id);
+        if (auto tit = ss->TablesWithSnapshots.find(id); tit != ss->TablesWithSnapshots.end()) {
+            tit->second.erase(snapshotTxId);
+            if (tit->second.empty()) {
+                ss->TablesWithSnapshots.erase(tit);
+            }
+        }
         auto it = ss->SnapshotTables.find(snapshotTxId);
         if (it != ss->SnapshotTables.end()) {
             it->second.erase(id);

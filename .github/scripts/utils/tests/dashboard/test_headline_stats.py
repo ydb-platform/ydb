@@ -26,6 +26,7 @@ class HeadlineHostStatsTest(unittest.TestCase):
             issues_summary=None,
             suite_chunk_issues_summary=None,
             resources_overlay={
+                "xs_evlog_sec": [0.5, 1.0, 1.5, 2.0, 3.0],
                 "cpu_total_cores": [10.0, 20.0, 30.0, 40.0, 50.0],
                 "ram_gb": [100.0, 110.0, 120.0, 130.0, 200.0],
                 "disk_read_mb": [1.0, 2.0, 3.0, 4.0, 100.0],
@@ -42,6 +43,12 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertEqual(stats["ram_host"]["max"], 200.0)
         self.assertEqual(stats["disk_read_host"]["max"], 100.0)
         self.assertEqual(stats["disk_write_host"]["samples"], 5.0)
+        # Tests window [1.0, 2.0] drops the 0.5 preamble and 3.0 post samples.
+        self.assertEqual(stats["cpu_host_tests"]["samples"], 3.0)
+        self.assertEqual(stats["cpu_host_tests"]["max"], 40.0)
+        self.assertEqual(stats["cpu_host_tests"]["median"], 30.0)
+        self.assertEqual(stats["ram_host_tests"]["max"], 130.0)
+        self.assertNotEqual(stats["cpu_host_tests"]["max"], stats["cpu_host"]["max"])
         self.assertEqual(stats["test_duration_sec"], 1.0)
         self.assertEqual(stats["total_duration_sec"], 1.0)
         self.assertEqual(stats["build_duration_sec"], 0.0)
@@ -60,6 +67,8 @@ class HeadlineHostStatsTest(unittest.TestCase):
         )
         self.assertNotIn("cpu_host", stats)
         self.assertNotIn("disk_read_host", stats)
+        self.assertNotIn("cpu_host_tests", stats)
+        self.assertNotIn("disk_read_host_tests", stats)
 
     def test_phase_durations_split_build_and_test(self):
         # Build 0..5s, tests 5..15s → build=5, test=10, total=15.

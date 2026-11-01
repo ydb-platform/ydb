@@ -900,29 +900,36 @@ def build_html_dashboard(
         ['Active chunks', 'count', hs.active_chunks],
         ['Tests in parallel', 'count', hs.tests],
       ]);
-      const cpuHost = hs.cpu_host;
-      const ramHost = hs.ram_host;
-      const diskRead = hs.disk_read_host;
-      const diskWrite = hs.disk_write_host;
-      let hostBlock = '';
-      if (cpuHost || ramHost || diskRead || diskWrite) {{
+      function hostProcBlock(title, cpuHost, ramHost, diskRead, diskWrite) {{
+        if (!(cpuHost || ramHost || diskRead || diskWrite)) return '';
         const samples = Math.round(Number((cpuHost || ramHost || diskRead || {{}}).samples || 0));
         const sampleNote = samples ? ' · ' + String(samples) + ' samples' : '';
-        hostBlock =
-          '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
+        return (
+          '<div class="headline-block"><h4>' + title + sampleNote + '</h4>' +
           statTable([
             ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
             ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
             ['Disk read, MB/s', 'disk', diskRead, null],
             ['Disk write, MB/s', 'disk', diskWrite, null],
           ], true) +
-          '</div>';
+          '</div>'
+        );
       }}
+      // Full job /proc (build+tests+tail) vs tests-only window (first→last chunk).
+      const hostFullBlock = hostProcBlock(
+        'Host · /proc · full job',
+        hs.cpu_host, hs.ram_host, hs.disk_read_host, hs.disk_write_host
+      );
+      const hostTestsBlock = hostProcBlock(
+        'Host · /proc · tests',
+        hs.cpu_host_tests, hs.ram_host_tests, hs.disk_read_host_tests, hs.disk_write_host_tests
+      );
       grid.innerHTML =
         runLine +
         '<div class="headline-tables">' +
           '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
-          hostBlock +
+          hostTestsBlock +
+          hostFullBlock +
         '</div>';
       wrap.style.display = 'block';
     }}

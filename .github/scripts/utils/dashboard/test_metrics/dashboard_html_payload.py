@@ -78,19 +78,64 @@ def _numeric_series(values: Any) -> list[float]:
     return out
 
 
-def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
-    """max / p95 / median of /proc samples (host), not the stacked test model."""
+def _test_window_sec(runs: list[dict[str, Any]]) -> Optional[tuple[float, float]]:
+    """First suite/chunk start → last end, in the same seconds domain as overlay xs."""
+    starts = [
+        float(r.get("start_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("start_us", 0.0) or 0.0) > 0.0
+    ]
+    ends = [
+        float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("end_us", 0.0) or 0.0) > 0.0
+    ]
+    if not starts or not ends:
+        return None
+    start = min(starts)
+    end = max(ends)
+    if end < start:
+        return None
+    return (start, end)
+
+
+def _host_resource_stats(
+    resources_overlay: Optional[dict[str, Any]],
+    *,
+    window_sec: Optional[tuple[float, float]] = None,
+    key_suffix: str = "",
+) -> dict[str, Any]:
+    """max / p95 / median of /proc samples (host), not the stacked test model.
+
+    When window_sec=(lo, hi) is set, only samples with xs_evlog_sec in that
+    inclusive range are kept (e.g. test phase only, excluding build preamble).
+    key_suffix appends to output keys ("" → cpu_host; "_tests" → cpu_host_tests).
+    """
     if not resources_overlay:
         return {}
+    xs = resources_overlay.get("xs_evlog_sec") or []
     series = {
-        "cpu_host": resources_overlay.get("cpu_total_cores"),
-        "ram_host": resources_overlay.get("ram_gb"),
-        "disk_read_host": resources_overlay.get("disk_read_mb"),
-        "disk_write_host": resources_overlay.get("disk_write_mb"),
+        f"cpu_host{key_suffix}": resources_overlay.get("cpu_total_cores"),
+        f"ram_host{key_suffix}": resources_overlay.get("ram_gb"),
+        f"disk_read_host{key_suffix}": resources_overlay.get("disk_read_mb"),
+        f"disk_write_host{key_suffix}": resources_overlay.get("disk_write_mb"),
     }
     out: dict[str, Any] = {}
     for key, values in series.items():
-        nums = _numeric_series(values)
+        vals = list(values or [])
+        if window_sec is not None and xs:
+            lo, hi = window_sec
+            clipped: list[Any] = []
+            n = min(len(xs), len(vals))
+            for i in range(n):
+                try:
+                    t = float(xs[i])
+                except (TypeError, ValueError):
+                    continue
+                if lo <= t <= hi:
+                    clipped.append(vals[i])
+            vals = clipped
+        nums = _numeric_series(vals)
         if nums:
             out[key] = _describe_distribution(nums)
     return out
@@ -231,6 +276,7 @@ def _build_headline_stats(
         "affected_chunks": int((suite_chunk_issues_summary or {}).get("affected_chunks", 0) or 0),
     }
 
+    test_window = _test_window_sec(runs)
     return {
         "total": {
             "suites": suite_total,
@@ -244,7 +290,12 @@ def _build_headline_stats(
         "active_chunks": _describe_distribution([float(v or 0.0) for v in ys_active]),
         "tests": _describe_distribution(_series_total_values(tests_tracks_suite)),
         **_phase_durations_sec(runs, ya_activity_deltas),
+        # Full monitor span (build + tests + post).
         **_host_resource_stats(resources_overlay),
+        # Same /proc series, clipped to first→last test chunk.
+        **_host_resource_stats(
+            resources_overlay, window_sec=test_window, key_suffix="_tests"
+        ),
     }
 
 

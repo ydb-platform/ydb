@@ -1,6 +1,8 @@
 # ANALYZE
 
-`ANALYZE` collects statistics for the [{{ ydb-short-name }} cost-based optimizer](../../../concepts/query_execution/optimizer.md).
+`ANALYZE` collects statistics for a table and its columns. The [{{ ydb-short-name }} cost-based optimizer](../../../concepts/query_execution/optimizer.md) uses them to estimate how much data a query will process and choose an execution plan.
+
+The statement works with one table and completes after updating the statistics.
 
 ## Syntax
 
@@ -8,34 +10,46 @@
 ANALYZE <path_to_table> [ (<column_name> [, ...]) ] [SAMPLE <rate>]
 ```
 
-The statement runs synchronously and completes when the requested statistics have been collected and are up to date. Each run can process only one table.
+Parameters:
 
-* `path_to_table` — path of the table to collect statistics for.
-* `column_name` — columns for which to collect statistics. If the list is omitted, `ANALYZE` processes every column in the table. A [multi-column statistic](create_table/statistics.md) is refreshed only when the list includes all of its columns. Statistics for the table as a whole are updated whether or not a column list is given.
-* `SAMPLE <rate>` — collect statistics from a sample. `<rate>` is a numeric expression that must return a finite value of type `Double` in the range `(0, 1]`. `SAMPLE 1` reads the whole table, as does `ANALYZE` without `SAMPLE`.
+* `path_to_table`: path to the table.
+* `column_name`: columns to collect statistics for. If the list is omitted, all columns are processed.
+* `SAMPLE <rate>`: collect statistics from a sample. The expression `rate` specifies the sampling rate and returns a `Double` value. The value must be finite, greater than `0`, and no greater than `1`.
 
-The statistics collected are described in [{#T}](../../../concepts/query_execution/optimizer.md#statistics). Declare multi-column statistics with [STATISTICS](create_table/statistics.md) in `CREATE TABLE` or [ALTER TABLE](alter_table/statistics.md).
+Without `SAMPLE`, or with `SAMPLE 1`, the entire table is read.
 
-## What is collected
+## Examples
 
-For each requested column, `ANALYZE` stores:
+Collect statistics for the `orders` table:
 
-* the number of values and the number of distinct values;
-* the minimum and the maximum, when the column type is numeric;
-* a [count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch), when fewer than 80% of the values are distinct;
-* an equi-width histogram, when the column is numeric and has more than one value.
+```yql
+-- All columns
+ANALYZE orders;
 
-Every `ANALYZE` collects statistics for the table as a whole and the per-column statistics listed above. To collect statistics over several columns together, declare the tuple with [STATISTICS](create_table/statistics.md) and include every column of that tuple in `ANALYZE`.
+-- Selected columns
+ANALYZE orders (customer_id, amount);
+
+-- A sample with a rate of 0.1
+ANALYZE orders SAMPLE 0.1;
+```
+
+## Collected statistics
+
+`ANALYZE` collects the row count and statistics for selected columns. It estimates the number of distinct values, their frequencies, and their distribution. The statistics collected depend on the column's type and contents.
+
+To collect multi-column statistics, add [STATISTICS](create_table/statistics.md) with the required column list to the table definition. For an existing table, use [ALTER TABLE](alter_table/statistics.md). When running `ANALYZE`, include every column in that set or omit the column list.
 
 ## Sampling
 
-With a rate below `1`, the statistics are approximate.
+To collect approximate statistics from a sample, add `SAMPLE` with a rate below `1`.
 
-* A row table is read in one pass. Each row is included in the sample with probability `<rate>` (Bernoulli sampling).
-* For a column table, shards are picked at random. At least one shard is read, and sometimes all of them.
+* For a row table, each row is independently included in the sample with probability `rate`.
+* For a column table, shards are selected at random. At least one shard is read; when there are few shards, all of them may be read.
 
-Sampled statistics are stored separately from the last full statistics. Background collection is scheduled based on the last full `ANALYZE`. The next full `ANALYZE`—without `SAMPLE` or with `SAMPLE 1`—replaces the sampled statistics. See [background collection](../../../concepts/query_execution/optimizer.md#statistics).
+When sampling, the estimated number of distinct values is stored only if all shards of a column table are read.
 
-## Background operation
+Sampled statistics are stored separately from full statistics and replaced by the next full `ANALYZE`. Sampling does not affect the [background collection](../../../reference/configuration/statistics_config.md#enable-background-column-stats-collection) schedule, which is based on the last full `ANALYZE`.
 
-SQL operation `ANALYZE` executes synchronously and waits for completion. In addition a background operation is created for observability. Use the [operation list](../../../reference/ydb-cli/operation-list.md) command to monitor the progress of background `ANALYZE` operations.
+## Monitoring progress
+
+While `ANALYZE` runs, it creates a background operation that you can monitor with the [operation list](../../../reference/ydb-cli/operation-list.md) command. The SQL statement waits for statistics collection to finish.

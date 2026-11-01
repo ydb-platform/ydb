@@ -1,54 +1,65 @@
 # statistics_config
 
-The `statistics_config` section controls how column statistics are collected for the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics). Row counts and table sizes come from scheme statistics and are not configured here.
+The `statistics_config` section controls how column statistics are collected for the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics).
 
-Run [ANALYZE](../../yql/reference/syntax/analyze.md) to collect statistics on demand. Declare multi-column statistics with [STATISTICS](../../yql/reference/syntax/create_table/statistics.md).
+Run [ANALYZE](../../yql/reference/syntax/analyze.md) to collect statistics on demand. To collect multi-column statistics, list the columns in a [STATISTICS](../../yql/reference/syntax/create_table/statistics.md) clause when creating or altering the table.
 
 ## Configuration parameters
 
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
 | `enable_background_column_stats_collection` | bool | `false` | Collect column statistics in the background |
-| `background_analyze_change_ratio_threshold_percent` | uint32 | `20` | Percentage of rows updated or deleted since the last full `ANALYZE` at which column statistics are considered stale |
-| `analyze_collect_primary_key_histogram` | bool | `false` | Build an equi-height histogram of the primary key on a full `ANALYZE` |
-| `analyze_column_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size of a column table that `ANALYZE` reads in a single query |
-| `analyze_row_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size of a row table that `ANALYZE` reads in a single query |
+| `background_analyze_change_ratio_threshold_percent` | uint32 | `20` | Change threshold for early collection, as a percentage |
+| `analyze_collect_primary_key_histogram` | bool | `false` | Build a primary-key histogram |
+| `analyze_column_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size for scanning a column table as a whole |
+| `analyze_row_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size for scanning a row table as a whole |
 
-### enable_background_column_stats_collection {#enable-background-column-stats-collection}
+## Background collection {#enable-background-column-stats-collection}
 
-When this is `true`, {{ ydb-short-name }} runs `ANALYZE` automatically for user tables. Each table is usually scanned about once a day; the threshold configured by [`background_analyze_change_ratio_threshold_percent`](#background-analyze-change-ratio-threshold-percent) can trigger a scan sooner. `ANALYZE SAMPLE` does not reset the background collection schedule. The internal table `.metadata/statistics_v2` is excluded from the schedule.
+`enable_background_column_stats_collection: true` enables automatic `ANALYZE` runs for user tables. Background collection is disabled by default.
 
-### background_analyze_change_ratio_threshold_percent {#background-analyze-change-ratio-threshold-percent}
+The next collection is scheduled 24 hours after the start of the previous full `ANALYZE`. This interval is fixed and cannot be configured. Collection may start earlier if the [change threshold](#background-analyze-change-ratio-threshold-percent) is reached. If another table is being processed, collection waits for it to finish.
 
-The threshold is a percentage of the current row count. Column statistics are considered stale when the percentage of rows updated or deleted since the last full `ANALYZE` reaches it:
+Sampling (`ANALYZE SAMPLE` with a rate below `1`) does not change the schedule.
 
-`(row updates + row deletes since the last full ANALYZE) / row count × 100%`
+### Change threshold {#background-analyze-change-ratio-threshold-percent}
 
-The default is 20%.
+`background_analyze_change_ratio_threshold_percent` sets the threshold for early collection. Row updates and deletes since the last full `ANALYZE` are compared with the current row count.
 
-### analyze_collect_primary_key_histogram {#analyze-collect-primary-key-histogram}
+For example, if the table currently has 1,000 rows, a 20% threshold corresponds to 200 updates or deletes. Repeated changes to the same row are counted separately.
 
-When this is `true`, a full `ANALYZE` builds an equi-height histogram of the primary key. It is skipped if the column list omits a key column, or if the key is empty or unsupported. This setting is `false` by default. A histogram declared as `STATISTICS ... WITH (EQ_HEIGHT_HISTOGRAM)` is collected regardless of this setting.
+## Primary-key histogram {#analyze-collect-primary-key-histogram}
 
-### analyze_column_table_whole_table_scan_max_bytes {#analyze-column-table-whole-table-scan-max-bytes}
+`analyze_collect_primary_key_histogram: true` enables collection of a primary-key equi-height histogram during `ANALYZE`.
 
-If a column table's size is known and within this limit, `ANALYZE` reads the whole table in one query. Larger tables and tables of unknown size are scanned shard by shard. A value of `0` always uses shard-by-shard scanning. The default is 10 GiB (`10737418240`).
+`ANALYZE` must include every primary-key column. No histogram is built if the key is empty or contains a column of an unsupported type.
 
-`ANALYZE SAMPLE` with a rate below `1` always reads only a subset of shards. The size limit applies to a full `ANALYZE`.
+This setting does not affect histograms defined with [STATISTICS](../../yql/reference/syntax/create_table/statistics.md): `ANALYZE` collects them regardless of its value.
 
-### analyze_row_table_whole_table_scan_max_bytes {#analyze-row-table-whole-table-scan-max-bytes}
+## Reading tables
 
-A row table whose size is known and within this limit is read in one query. Larger tables and tables of unknown size are scanned in primary-key ranges. A value of `0` scans by primary-key range when the key allows it. Otherwise the whole table is read. The default is 10 GiB (`10737418240`).
+Size thresholds are specified in bytes and apply only to a full `ANALYZE`. For sampling, see [{#T}](../../yql/reference/syntax/analyze.md#sampling).
 
-`ANALYZE SAMPLE` with a rate below `1` always uses a single scan. The size limit applies to a full `ANALYZE`.
+### Column tables {#analyze-column-table-whole-table-scan-max-bytes}
+
+If a column table's size is known and does not exceed the threshold, `ANALYZE` scans the whole table without splitting by shard. Larger tables and tables of unknown size are scanned shard by shard.
+
+A value of `0` always uses shard-by-shard scanning.
+
+### Row tables {#analyze-row-table-whole-table-scan-max-bytes}
+
+If a row table's size is known and does not exceed the threshold, `ANALYZE` scans the whole table without splitting into primary-key ranges. Larger tables and tables of unknown size are scanned in primary-key ranges.
+
+A value of `0` enables scanning by primary-key range. If the key does not allow the table to be split into ranges, the whole table is read.
 
 ## Configuration example
+
+Enable background collection with a data change threshold of 20%:
 
 ```yaml
 statistics_config:
   enable_background_column_stats_collection: true
   background_analyze_change_ratio_threshold_percent: 20
-  analyze_collect_primary_key_histogram: false
 ```
 
 ## See also

@@ -79,7 +79,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ### STATISTICS
 
-Объявление многоколоночной статистики для [ANALYZE](../analyze.md). Подробнее см. в разделе [{#T}](statistics.md).
+Указание столбцов и типов многоколоночной статистики, которую должен собирать [ANALYZE](../analyze.md). Подробнее см. в разделе [{#T}](statistics.md).
 
 ### PRIMARY KEY
 

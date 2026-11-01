@@ -443,6 +443,17 @@ inline TString GetRandomKey<TGUID>() {
     return RandomUuidKey;
 }
 
+// Host registrations for suspendable callables; independent of IUdfModule ABI.
+// Engines explicitly opt in by populating this catalogue and supplying the same
+// type context to the MKQL compiler. Runtime provider instances are task-local.
+struct TAsyncCallableDescriptor {
+    const TTypeAnnotationNode* InputType = nullptr;
+    const TTypeAnnotationNode* ResultType = nullptr;
+    TString Provider;
+    TString Operation;
+    ui64 MaxResponseBytes = 1024 * 1024;
+};
+
 struct TTypeAnnotationContext: public TThrRefBase {
     TTypeAnnotationContext();
     ~TTypeAnnotationContext() override;
@@ -461,6 +472,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSinkMap;
     TVector<TIntrusivePtr<IDataProvider>> DataSources;
     TVector<TIntrusivePtr<IDataProvider>> DataSinks;
+    THashMap<TString, TAsyncCallableDescriptor> AsyncFunctions;
     TUdfIndex::TPtr UdfIndex;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet;
     IUdfResolver::TPtr UdfResolver;

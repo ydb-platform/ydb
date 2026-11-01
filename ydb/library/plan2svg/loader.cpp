@@ -396,6 +396,7 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
                 readRangesNode = subNode.GetValueByPath("ReadRange");
             }
             if (readRangesNode) {
+                if (readRangesNode->GetArray().empty()) builder << "∅";
                 bool firstRange = true;
                 for (const auto& subNode : readRangesNode->GetArray()) {
                     if (firstRange) {
@@ -405,6 +406,8 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
                     }
                     builder << subNode.GetStringSafe();
                 }
+            } else if (const auto* expression = subNode.GetValueByPath("ReadRangesExpression")) {
+                builder << "Range expression: " << expression->GetStringSafe();
             }
         }
 

@@ -1,3 +1,4 @@
+#include "explain/kqp_explain_context.h"
 #include "kqp_rbo.h"
 #include "traces/kqp_rbo_rule_trace.h"
 #include "kqp_plan_conversion_utils.h"
@@ -14,6 +15,7 @@ bool HasProperty(ui32 props, ui32 property) {
 }
 
 std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrusivePtr<TOpRoot>>& roots) {
+    TExplainContext explain;
     ui64 counter = 0;
     ui32 operatorIdx = 0;
     THashMap<IOperator*, ui32> operatorIds;
@@ -21,8 +23,8 @@ std::pair<NJson::TJsonValue, NJson::TJsonValue> BuildPlans(const TVector<TIntrus
     TVector<NJson::TJsonValue> explainJsons;
 
     for (auto & rootPtr : roots) {
-        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds));
-        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds));
+        executionJsons.push_back(rootPtr->GetExecutionJson(counter, operatorIdx, operatorIds, 0, &explain));
+        explainJsons.push_back(rootPtr->GetExplainJson(counter, operatorIds, 0, &explain));
     }
 
     if (roots.size()==1) {

@@ -1,3 +1,4 @@
+#include "../explain/kqp_explain_context.h"
 #include "kqp_rbo_trace.h"
 
 #include <yql/essentials/ast/yql_type_string.h>
@@ -636,10 +637,11 @@ optimizer_trace::Node BuildPlanNode(
     TPlanProps& planProps,
     ui32 opts,
     const std::string& id,
-    TTraceBuildState* state)
+    TTraceBuildState* state,
+    TExplainContext& explain)
 {
     const auto& registry = planProps.InfoUnitRegistry;
-    optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx, registry)));
+    optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx, registry, &explain)));
     AttachStageTarget(state, *op, id);
     AttachOperatorTarget(state, *op, id);
     AttachPlanOverview(state, op);
@@ -724,16 +726,17 @@ optimizer_trace::Node BuildPlanNode(
     }
 
     for (size_t i = 0; i < op->GetChildren().size(); ++i) {
-        node.child(BuildPlanNode(op->GetChildren()[i], ctx, planProps, opts, id + "-" + std::to_string(i), state));
+        node.child(BuildPlanNode(op->GetChildren()[i], ctx, planProps, opts, id + "-" + std::to_string(i), state, explain));
     }
     return node;
 }
 
 optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui32 opts, TTraceBuildState* state) {
+    TExplainContext explain;
     const auto& registry = root.PlanProps.InfoUnitRegistry;
     const auto& subplans = root.PlanProps.Subplans;
     if (subplans.Empty()) {
-        return BuildPlanNode(root.GetInput().Get(), ctx, root.PlanProps, opts, "n-0", state);
+        return BuildPlanNode(root.GetInput().Get(), ctx, root.PlanProps, opts, "n-0", state, explain);
     }
     optimizer_trace::Node container("n", "Plan", "Plan");
     size_t index = 0;
@@ -747,10 +750,10 @@ optimizer_trace::Node BuildPlanNodeFromRoot(TOpRoot& root, TExprContext& ctx, ui
         if (!subplan.DependentIUs.Empty()) {
             AddInfoUnitField(sub, "SubplanDependentIUs", "Subplan dependent IUs", subplan.DependentIUs, registry);
         }
-        sub.child(BuildPlanNode(subplan.Plan.Get(), ctx, root.PlanProps, opts, subplanId + "-0", state));
+        sub.child(BuildPlanNode(subplan.Plan.Get(), ctx, root.PlanProps, opts, subplanId + "-0", state, explain));
         container.child(sub);
     }
-    container.child(BuildPlanNode(root.GetInput().Get(), ctx, root.PlanProps, opts, "n-" + std::to_string(index), state));
+    container.child(BuildPlanNode(root.GetInput().Get(), ctx, root.PlanProps, opts, "n-" + std::to_string(index), state, explain));
     return container;
 }
 

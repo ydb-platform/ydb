@@ -6,7 +6,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/testlib/default
-    ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/min_max
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
 )

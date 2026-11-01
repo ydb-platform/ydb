@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         UNIT_ASSERT(GetReplicatedRealmState(twoCopies, 0) == TFailRealm::N2);
         const TFailRealmStates recovering{TFailRealm::N0, TFailRealm::R, TFailRealm::F};
         UNIT_ASSERT(GetReplicatedRealmState(recovering, 1) == TFailRealm::N1);
-        const TFailRealmStates recoveryComplete{TFailRealm::N2, TFailRealm::N2, TFailRealm::R};
+        const TFailRealmStates recoveryComplete{TFailRealm::N1, TFailRealm::N1, TFailRealm::R};
         UNIT_ASSERT(GetReplicatedRealmState(recoveryComplete, 2) == TFailRealm::N0);
         UNIT_ASSERT(!GetReplicatedRealmState(recoveryComplete, 0));
         UNIT_ASSERT(GetReplicatedRealmState({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, 0) == TFailRealm::N1);
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
 
     Y_UNIT_TEST(RecoveryTargetCountsTheReturningRealm) {
         for (ui32 realm = 0; realm < 3; ++realm) {
-            TFailRealmStates fullyIncluded{TFailRealm::N2, TFailRealm::N2, TFailRealm::N2};
+            TFailRealmStates fullyIncluded{TFailRealm::N1, TFailRealm::N1, TFailRealm::N1};
             fullyIncluded[realm] = TFailRealm::R;
             UNIT_ASSERT(GetReplicatedRealmState(fullyIncluded, realm) == TFailRealm::N0);
             TFailRealmStates withFailure{TFailRealm::F, TFailRealm::F, TFailRealm::F};

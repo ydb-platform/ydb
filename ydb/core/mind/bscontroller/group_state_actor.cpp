@@ -262,6 +262,87 @@ public:
     )
 };
 
+// Observe the generation applied by each VDisk even when no replication promotion is pending.
+class TGroupConfigActor : public TActorBootstrapped<TGroupConfigActor> {
+    const TActorId ControllerId;
+    std::map<ui32, TGroupReplicationInfo> Groups;
+    struct TQuery {
+        ui32 GroupId;
+        ui32 Generation;
+        TGroupReplicationInfo::TVDisk Disk;
+    };
+    std::map<ui64, TQuery> Queries;
+    ui32 Cursor = 0;
+    ui64 NextCookie = 0;
+
+    void Handle(TEvGroupState::TEvUpdate::TPtr& ev) {
+        const TEvGroupState::TEvUpdate& message = *ev->Get();
+        if (message.Info) {
+            Groups[message.GroupId] = *message.Info;
+        } else {
+            Groups.erase(message.GroupId);
+        }
+    }
+
+    void Poll() {
+        Queries.clear();
+        if (!Groups.empty()) {
+            auto it = Groups.lower_bound(Cursor);
+            const ui32 count = Min<ui32>(64, Groups.size());
+            for (ui32 index = 0; index < count; ++index) {
+                if (it == Groups.end()) {
+                    it = Groups.begin();
+                }
+                for (const TGroupReplicationInfo::TVDisk& disk : it->second.VDisks) {
+                    const ui64 cookie = ++NextCookie;
+                    Queries.emplace(cookie, TQuery{it->first, it->second.Generation, disk});
+                    Send(disk.ActorId, new TEvBlobStorage::TEvVStatus(disk.Id), 0, cookie);
+                }
+                ++it;
+            }
+            Cursor = it == Groups.end() ? Groups.begin()->first : it->first;
+        }
+        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup);
+    }
+
+    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr& ev) {
+        const auto it = Queries.find(ev->Cookie);
+        if (it == Queries.end()) {
+            return;
+        }
+        const TQuery query = it->second;
+        Queries.erase(it);
+        const NKikimrBlobStorage::TEvVStatusResult& record = ev->Get()->Record;
+        if (!record.HasVDiskID()) {
+            return;
+        }
+        const TVDiskID reported = VDiskIDFromVDiskID(record.GetVDiskID());
+        if (!reported.SameExceptGeneration(query.Disk.Id)
+                || (record.GetStatus() != NKikimrProto::OK && record.GetStatus() != NKikimrProto::RACE)) {
+            return;
+        }
+        Send(ControllerId, new TEvGroupState::TEvConfigObserved(query.GroupId, query.Generation,
+            reported, query.Disk.ActorId, query.Disk.ObservationEpoch));
+    }
+
+public:
+    explicit TGroupConfigActor(const TActorId& controllerId) : ControllerId(controllerId) {}
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Poll();
+    }
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvGroupState::TEvUpdate, Handle)
+        hFunc(TEvBlobStorage::TEvVStatusResult, Handle)
+        cFunc(TEvents::TSystem::Wakeup, Poll)
+        cFunc(TEvents::TSystem::Poison, PassAway)
+    )
+};
+
+IActor* CreateGroupConfigActor(const TActorId& controllerId) {
+    return new TGroupConfigActor(controllerId);
+}
+
 IActor* CreateGroupStateActor(const TActorId& controllerId) {
     return new TGroupStateActor(controllerId);
 }

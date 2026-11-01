@@ -595,6 +595,7 @@ bool TBlobStorageController::OnRegisterNode(const TActorId& serverId, TNodeId no
 
 void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId, TActorId interconnectSessionId) {
     TNodeInfo& node = GetNode(nodeId);
+    ResetGroupConfigObservations(nodeId);
     if (node.ConnectedServerId) { // if this is a new connection instead of obsolete one, do reset some logic
         for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
             if (TGroupInfo *group = FindGroup(groupId)) {
@@ -633,6 +634,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     if (node.ConnectedServerId != serverId) {
         return; // a race
     }
+    ResetGroupConfigObservations(nodeId);
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
     node.Registered = false;

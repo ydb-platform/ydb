@@ -1,3 +1,4 @@
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include "impl.h"
 #include "config.h"
 #include "diff.h"
@@ -433,6 +434,38 @@ namespace NKikimr::NBsController {
                 }
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
+
+            // Publish G+1 only after the current generation has reached a configuration quorum.
+            for (TGroupId groupId : state.GroupContentChanged) {
+                const TGroupInfo* previous = FindGroup(groupId);
+                if (!previous || previous->ErasureSpecies != TErasureType::ErasureMirror3dc
+                        || previous->Topology->GetTotalFailRealmsNum() != 3
+                        || StoragePools.at(previous->StoragePoolId).BridgeMode
+                        || previous->VDisksInGroup.size() != previous->Topology->GetTotalVDisksNum()) {
+                    continue;
+                }
+                TBlobStorageGroupInfo::TDynamicInfo dynamic(groupId, previous->Generation);
+                const TFailRealmStates realms = previous->FailRealmStates.value_or(TFailRealmStates{});
+                dynamic.FailRealmStates.assign(realms.begin(), realms.end());
+                const TBlobStorageGroupInfo info(previous->Topology, std::move(dynamic), "", {}, NPDisk::DEVICE_TYPE_UNKNOWN);
+                TBlobStorageGroupInfo::TGroupVDisks confirmed(&info.GetTopology());
+                for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : previous->VDisksInGroup) {
+                    if (slot->ConfirmedGroupGeneration >= previous->Generation) {
+                        confirmed |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), slot->GetVDiskId());
+                    }
+                }
+                const bool supported = GetMirror3dcGroupState(realms[0], realms[1], realms[2]).has_value();
+                // Forced invalid states have no failure model; require every VDisk before repairing them.
+                const bool configDelivered = supported
+                    ? TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, confirmed)
+                    : confirmed.GetNumSetItems() == info.GetTopology().GetTotalVDisksNum();
+                if (!configDelivered) {
+                    *errorDescription = TStringBuilder() << "group# " << groupId
+                        << " must confirm configuration generation# " << previous->Generation
+                        << " on a quorum before advancing generation";
+                    return false;
+                }
+            }
 
             // spin generation for every changed group
             THashSet<TGroupId> bridgeProxyGroupIds;

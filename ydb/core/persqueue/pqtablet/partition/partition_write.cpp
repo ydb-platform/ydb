@@ -130,7 +130,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
         PQ_ENSURE(ReservedSize >= it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
-        it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicName(), Partition, ctx);//will change OwnerCookie
+        it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicPath(), Partition, ctx);//will change OwnerCookie
         //cookie is generated. but answer will be sent when all inflight writes will be done - they in the same queue 'Requests'
         EmplacePendingRequest(TOwnershipMsg{ev->Cookie, it->second.OwnerCookie}, {}, ctx);
         TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
@@ -458,7 +458,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             LOG_D(
                 "Answering for message sourceid: Topic: is",
                 {"escapeCS", EscapeC(s)},
-                {"topicName", TopicName()},
+                {"topicPath", TopicPath()},
                 {"seqNo", seqNo},
                 {"partNo", partNo},
                 {"offset", offset},
@@ -517,7 +517,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             ReplyOk(ctx, response.GetCookie(), response.Span);
         } else {
-            PQ_ENSURE(false)("reason", "Unexpected message")("topic", TopicName())("cookie", response.GetCookie())("index", response.Body.index());
+            PQ_ENSURE(false)("reason", "Unexpected message")("topic", TopicPath())("cookie", response.GetCookie())("index", response.Body.index());
         }
         Responses.pop_front();
     }
@@ -1234,7 +1234,7 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
         }
         LOG_D(
             "Writing blob: topic partition old key new key size WTime",
-            {"topicName", TopicName()},
+            {"topicPath", TopicPath()},
             {"oldKey", x.OldKey},
             {"newKey", x.NewKey},
             {"size", x.Size},
@@ -1347,7 +1347,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     LOG_T(
         "Topic partition process write",
-        {"topicName", TopicName()},
+        {"topicPath", TopicPath()},
         {"sourceId", EscapeC(p.Msg.SourceId)},
         {"disableDeduplication", p.Msg.DisableDeduplication},
         {"seqNo", p.Msg.SeqNo},
@@ -1411,7 +1411,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         if (poffset >= curOffset) {
             LOG_D(
                 "Already written message. Topic: SourceId: Message Committed Writing",
-                {"topicName", TopicName()},
+                {"topicPath", TopicPath()},
                 {"sourceId", EscapeC(p.Msg.SourceId)},
                 {"seqNo", p.Msg.SeqNo},
                 {"initialSeqNo", p.InitialSeqNo},
@@ -1421,7 +1421,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"curOffset", curOffset},
                 {"offset", poffset}
             );
-            PQ_ENSURE(!p.Internal)("topic", TopicName()); // No Already for transactions;
+            PQ_ENSURE(!p.Internal)("topic", TopicPath()); // No Already for transactions;
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
             MsgsDiscarded.Inc();
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
@@ -1455,7 +1455,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         LOG_D(
             "Topic partition process heartbeat sourceId version",
-            {"topicName", TopicName()},
+            {"topicPath", TopicPath()},
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"hbVersion", *hbVersion}
         );
@@ -1483,7 +1483,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         LOG_D(
             "Topic partition process schema change sourceId version",
-            {"topicName", TopicName()},
+            {"topicPath", TopicPath()},
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"scVersion", *scVersion}
         );
@@ -1584,7 +1584,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     LOG_D(
         "Topic partition part blob processing sourceId seqNo partNo",
-        {"topicName", TopicName()},
+        {"topicPath", TopicPath()},
         {"sourceId", EscapeC(p.Msg.SourceId)},
         {"seqNo", p.Msg.SeqNo},
         {"partNo", p.Msg.PartNo}
@@ -1648,7 +1648,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         LOG_D(
             "Topic partition part blob sourceId seqNo partNo result is size",
-            {"topicName", TopicName()},
+            {"topicPath", TopicPath()},
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
@@ -1696,7 +1696,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         LOG_D(
             "Topic partition part blob complete sourceId seqNo partNo FormedBlobsCount",
-            {"topicName", TopicName()},
+            {"topicPath", TopicPath()},
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
@@ -1959,7 +1959,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
     LOG_D(
         "Add new write blob: topic partition compactOffset HeadOffset endOffset curOffset size WTime",
-        {"topicName", TopicName()},
+        {"topicPath", TopicPath()},
         {"offset", key.GetOffset()},
         {"count", key.GetCount()},
         {"blobEncoderHeadOffset", BlobEncoder.Head.Offset},
@@ -2004,7 +2004,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
         if (heartbeat->Version > LastEmittedHeartbeat) {
             LOG_I(
                 "Topic partition emit heartbeat",
-                {"topicName", TopicName()},
+                {"topicPath", TopicPath()},
                 {"version", heartbeat->Version}
             );
 
@@ -2039,7 +2039,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
         if (schemaChange->Version > committed) {
             LOG_I(
                 "Topic partition emit schema change",
-                {"topicName", TopicName()},
+                {"topicPath", TopicPath()},
                 {"version", schemaChange->Version}
             );
 
@@ -2086,7 +2086,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {
     LOG_D(
         "Send write quota request. Topic",
-        {"topicName", TopicName()},
+        {"topicPath", TopicPath()},
         {"amount", dataSize},
         {"cookie", cookie}
     );

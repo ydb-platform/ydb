@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(Compression) {
         }
 
         Ydb::PersQueue::V1::AlterTopicRequest request;
-        request.set_path(TStringBuilder() << "/Root/PQ/rt3.dc1--" << setup.GetTestTopic());
+        request.set_path(setup.GetTestTopicPath());
         auto props = request.mutable_settings();
         props->set_partitions_count(1);
         props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);

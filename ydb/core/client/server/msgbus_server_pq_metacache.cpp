@@ -270,6 +270,7 @@ private:
                     if (DbRoot == "/Root/logbroker-federation"
                         && account.Defined()
                         && *account == "SourceIdMeta2"
+                        && t->GetPrimaryPath() == t->GetOriginalPath()
                         && t->GetFullModernName() == "replication")
                     {
                         ret.emplace_back(
@@ -349,16 +350,7 @@ private:
         Y_ABORT_UNLESS(inserted);
 
         TMaybe<TString> db = {};
-        const auto topics = waiter->GetTopics();
-
-        for (const auto& [path, database] : topics) {
-            if (path == "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication"
-                && database == "/Root/logbroker/shared/federation-1")
-            {
-                YDB_LOG_DEBUG_CTX(ctx, "Using SourceIdMeta2 CDC first-attempt path override",
-                    {"topicPath", path},
-                    {"database", database});
-            }
+        for (const auto& [path, database] : waiter->GetTopics()) {
             if (!db) db = database;
             if (*db != database) db = "";
             auto split = NKikimr::SplitPath(path);
@@ -375,7 +367,7 @@ private:
         }
         if (db) schemeCacheRequest->DatabaseName = *db;
         YDB_LOG_DEBUG_CTX(ctx, "Send request for topics, got requests infly",
-            {"topics", topics.size()},
+            {"topics", waiter->GetTopics().size()},
             {"waiters", DescribeTopicsWaiters.size()},
             {"db", db});
 

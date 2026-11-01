@@ -761,6 +761,7 @@
   - __memory/allocator_traits.h:                           contrib/libs/cxxsupp/libcxx/include/__memory/allocator_traits.h
   - __memory/array_cookie.h:                               contrib/libs/cxxsupp/libcxx/include/__memory/array_cookie.h
   - __memory/assume_aligned.h:                             contrib/libs/cxxsupp/libcxx/include/__memory/assume_aligned.h
+  - __memory/atomic_shared_ptr.h:                          contrib/libs/cxxsupp/libcxx/include/__memory/atomic_shared_ptr.h
   - __memory/auto_ptr.h:                                   contrib/libs/cxxsupp/libcxx/include/__memory/auto_ptr.h
   - __memory/compressed_pair.h:                            contrib/libs/cxxsupp/libcxx/include/__memory/compressed_pair.h
   - __memory/concepts.h:                                   contrib/libs/cxxsupp/libcxx/include/__memory/concepts.h

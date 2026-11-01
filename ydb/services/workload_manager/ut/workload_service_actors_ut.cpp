@@ -1,4 +1,6 @@
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/service/service.h>
@@ -22,6 +24,37 @@ TEvPrivate::TEvFetchPoolResponse::TPtr FetchPool(
         edgeActor, settings.DomainName_, poolId ? poolId : settings.PoolId_, userToken, NKikimrConfig::TWorkloadManagerConfig{}));
     return runtime->GrabEdgeEvent<TEvPrivate::TEvFetchPoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
 }
+
+// Stands in front of the scheme cache and answers PathErrorUnknown for the given path unless the version is synced,
+// like a cache entry that still holds the negative result after the path was created
+class TStaleSchemeCacheActor : public TActor<TStaleSchemeCacheActor> {
+public:
+    TStaleSchemeCacheActor(const TActorId& schemeCache, const TString& stalePath, std::shared_ptr<std::atomic<ui64>> staleResponses)
+        : TActor(&TStaleSchemeCacheActor::StateFunc)
+        , SchemeCache(schemeCache)
+        , StalePath(stalePath)
+        , StaleResponses(staleResponses)
+    {}
+
+    STFUNC(StateFunc) {
+        if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet) {
+            auto& request = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request;
+            if (request->ResultSet.size() == 1 && !request->ResultSet[0].SyncVersion && CanonizePath(request->ResultSet[0].Path) == StalePath) {
+                ++*StaleResponses;
+                request->ResultSet[0].Status = NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown;
+                request->ErrorCount = 1;
+                Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request), 0, ev->Cookie);
+                return;
+            }
+        }
+        TActivationContext::Forward(ev, SchemeCache);
+    }
+
+private:
+    const TActorId SchemeCache;
+    const TString StalePath;
+    const std::shared_ptr<std::atomic<ui64>> StaleResponses;
+};
 
 TEvPrivate::TEvCpuLoadResponse::TPtr FetchCpuInfo(TIntrusivePtr<IYdbSetup> ydb) {
     auto runtime = ydb->GetRuntime();
@@ -93,6 +126,32 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceActors) {
         // Check that default pool created
         response = ydb->Navigate(path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.at(0).Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindResourcePool);
+    }
+
+    Y_UNIT_TEST(TestDefaultPoolAlreadyCreatedWithStaleSchemeCache) {
+        auto ydb = TYdbSetupSettings().Create();
+        auto runtime = ydb->GetRuntime();
+        const auto& settings = ydb->GetSettings();
+
+        // Another session creates the default pool
+        const auto& edgeActor = runtime->AllocateEdgeActor();
+        runtime->Register(CreatePoolCreatorActor(edgeActor, settings.DomainName_, NResourcePool::DEFAULT_POOL_ID, settings.GetDefaultPoolSettings(), nullptr, {}));
+        auto createResponse = runtime->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(createResponse->Get()->Status, Ydb::StatusIds::SUCCESS, createResponse->Get()->Issues.ToOneLineString());
+
+        // Scheme cache on this node has not seen the creation yet
+        const TString stalePath = CanonizePath({settings.DomainName_, ".metadata/workload_manager/pools", NResourcePool::DEFAULT_POOL_ID});
+        auto staleResponses = std::make_shared<std::atomic<ui64>>(0);
+        const auto schemeCache = runtime->GetLocalServiceId(MakeSchemeCacheID());
+        const auto staleSchemeCache = runtime->Register(new TStaleSchemeCacheActor(schemeCache, stalePath, staleResponses));
+        runtime->RegisterService(MakeSchemeCacheID(), staleSchemeCache);
+
+        // Resolver gets NOT_FOUND, its own creation finds the pool already existing, the next fetch has to sync the cache
+        auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        runtime->RegisterService(MakeSchemeCacheID(), schemeCache);
+
+        UNIT_ASSERT_C(*staleResponses > 0, "Stale scheme cache was not used");
+        TSampleQueries::TSelect42::CheckResult(result);
     }
 
     Y_UNIT_TEST(TestDefaultPoolUsePermissions) {

@@ -929,6 +929,55 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         // No additional sync responses.
         UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
     }
+
+    // The sync request waits in every proxy for its replica. One proxy gets a notification of another cluster state
+    // then and goes to sleep: it must still answer the sync request, so the sync ends once the others answer.
+    Y_UNIT_TEST(ClusterStateMismatchAnswersCurrentSyncRequest) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({ {} }, ReplicasInRingGroup));
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        // the replica subscribers answer the sync request to their proxies; these answers wait
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<NInternalEvents::TEvSyncVersionResponse> replicaAnswers(runtime, [&](const NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
+            return ev->Recipient != subscriber && ev->Cookie == cookie;
+        });
+        runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+        runtime.WaitFor("answers of all replica subscribers", [&]() {
+            return replicaAnswers.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+
+        // the replica subscriber of one proxy tells it of another cluster state, before its answer gets there
+        const TActorId proxy = replicaAnswers.front()->Recipient;
+        const TActorId replicaSubscriber = replicaAnswers.front()->Sender;
+        replicaAnswers.pop_front();
+        // of the two other proxies one succeeds and one fails, so neither has a majority without the third
+        UNIT_ASSERT_VALUES_EQUAL(participatingReplicas, 3);
+        replicaAnswers.front()->Get()->Record.SetPartial(true);
+        auto notify = MakeHolder<NInternalEvents::TEvNotifyBuilder>(TString(Path), true);
+        notify->Record.MutableClusterState()->SetGeneration(Max<ui64>());
+        runtime.Send(new IEventHandle(proxy, replicaSubscriber, notify.Release()));
+
+        replicaAnswers.Stop().Unblock();
+        auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_C(syncResponse, "the sync never ends after a proxy went to sleep with the request");
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Cookie, cookie, syncResponse->ToString());
+    }
 }
 
 void TSubscriberCombinationsTest::PathIdLessThanImpl(ui64 badRootSchemeshardId) {

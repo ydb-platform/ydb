@@ -116,6 +116,8 @@ struct TKqpCompileRequest {
 
     bool FindInCache = true;
 
+    ui64 ConfigGeneration = 0;
+
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
     bool IsIntrestedInResult() const {
@@ -494,6 +496,7 @@ private:
                 {"output", diff.value_or("path aliases changed")});
 
             QueryCache->Clear();
+            ++ConfigGeneration;
         }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -745,16 +748,26 @@ private:
         bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
+        bool isStale = compileRequest.ConfigGeneration != ConfigGeneration;
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
+                    if (isStale) {
+                        YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
+                            {"queryUid", compileResult->Uid},
+                            {"requestGeneration", compileRequest.ConfigGeneration},
+                            {"currentGeneration", ConfigGeneration});
+                    } else {
+                        UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
+                    }
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    if (!isStale) {
+                        QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    }
                 }
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
@@ -765,7 +778,10 @@ private:
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
-                if (!hasTempTablesNameClashes) {
+                // A stale failure must not erase a fresh entry with the same UID: after the
+                // config change a new compile may have already succeeded under this UID
+                // (e.g. a recompile reuses the UID of the cached query).
+                if (!isStale && !hasTempTablesNameClashes) {
                     if (QueryCache->FindByUid(compileResult->Uid, false)) {
                         QueryCache->EraseByUid(compileResult->Uid);
                     }
@@ -1006,6 +1022,7 @@ private:
             {"sender", request.Sender},
             {"compileActor", compileActorId});
         request.CompileActor = compileActorId;
+        request.ConfigGeneration = ConfigGeneration;
 
         RequestsQueue.AddActiveRequest(std::move(request));
     }
@@ -1114,6 +1131,8 @@ private:
 
     TTableServiceConfig TableServiceConfig;
     std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+
+    ui64 ConfigGeneration = 0;
     TQueryServiceConfig QueryServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;

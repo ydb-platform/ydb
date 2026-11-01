@@ -60,7 +60,11 @@ CLUSTER_CONFIG = dict(
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
-        'max_read_staleness_ms': 200
+        'max_read_staleness_ms': 200,
+        # Report quota usage promptly so ingestion stops near the configured limit.
+        'statistics': {
+            'report_base_statistics_period_ms': 1000,
+        },
     },
     table_service_config={
     },
@@ -309,7 +313,7 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
             assert "exceeded a limit" in str(excinfo.value)
 
 
-def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db, ydb_endpoint, ydb_cluster):
+def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db, ydb_endpoint, ydb_cluster, caplog):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_disk_quoted_serverless_db, ydb_hostel_db
     )
@@ -453,8 +457,10 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         path = os.path.join(database, "dirA0", "table")
         pool.retry_operation_sync(create_table, None, path)
 
-        for start in range(0, 1000, 100):
-            IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
+        # Avoid formatting every large request payload as protobuf text.
+        with caplog.at_level(logging.INFO, logger="ydb.connection"):
+            for start in range(0, 1000, 100):
+                IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
 
         for _ in range(60):
             time.sleep(1)
@@ -489,7 +495,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
 
 
-def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_serverless_db, ydb_endpoint, ydb_cluster):
+def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_serverless_db, ydb_endpoint, ydb_cluster, caplog):
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_disk_small_quoted_serverless_db, ydb_hostel_db
     )
@@ -526,10 +532,14 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
 
     class BulkUpsertRow(object):
         __slots__ = ('ts', 'value_string')
+        _payload_size = 1024
+        _letter_translation = (string.ascii_lowercase * 10)[:256].encode('ascii')
 
         def __init__(self, ts):
             self.ts = ts
-            self.value_string = ''.join(random.choices(string.ascii_lowercase, k=1024))
+            # Generate fresh lowercase payloads in bulk instead of choosing each character in Python.
+            data = random.getrandbits(8 * self._payload_size).to_bytes(self._payload_size, 'little')
+            self.value_string = data.translate(self._letter_translation).decode('ascii')
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
     with ydb.QuerySessionPool(driver) as qpool:
@@ -541,19 +551,23 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
         column_types = ydb.BulkUpsertColumns() \
             .add_column('ts', ydb.OptionalType(ydb.PrimitiveType.Timestamp)) \
             .add_column('value_string', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        now = datetime.datetime.now()
-        for i in range(1000):
-            bulk_size = 1000  # rows
-            rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
-            try:
-                driver.table_client.bulk_upsert(path, rows, column_types)
-            except ydb.issues.Unavailable:
-                described = ydb_cluster.client.describe(database, '')
-                logger.debug('database state when oveloaded: %s', described)
-                assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
-                break
-        else:
-            assert False, 'database did not move into Overloaded state'
+        now = datetime.datetime.now(datetime.timezone.utc)
+
+        # Avoid formatting every large request payload as protobuf text.
+        with caplog.at_level(logging.INFO, logger="ydb.connection"):
+            for i in range(1000):
+                bulk_size = 1000  # rows
+                rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
+                try:
+                    driver.table_client.bulk_upsert(path, rows, column_types)
+                except ydb.issues.Unavailable:
+                    described = ydb_cluster.client.describe(database, '')
+                    logger.debug('database state when oveloaded: %s', described)
+                    assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'
+                    logger.info("Column disk quota reached after %d successful batches", i)
+                    break
+            else:
+                assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
         with pytest.raises(ydb.issues.Unavailable, match=r'.*Column shard.*is overloaded.*'):

@@ -7,6 +7,9 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+#include <ydb/library/backup/proto/proto.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
 #include <arrow/api.h>
 
@@ -271,6 +274,49 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
         f.ModifyChecksumAndCheckThatImportFails(checksumFiles, importSettings);
     }
 };
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
+    TBackupTraits<TExportSettings> traits;
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NCoordination::TClient coordination(f.YdbDriver());
+    status = coordination.CreateNode("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NRateLimiter::TRateLimiterClient rateLimiter(f.YdbDriver());
+    status = rateLimiter.CreateResource("/Root/KesusExport/Coordination", "limit",
+        NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(100)).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+    auto settings = traits.MakeExportSettingsRaw(f);
+    settings.AppendItem(typename TExportSettings::TItem{
+        .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
+        .Dst = "coordination",
+    });
+    f.WaitOpSuccess(traits.Export(f, settings));
+
+    const TString prefix = traits.FilePrefixRaw() + "coordination/" + (throughDirectory ? "Coordination/" : "");
+    auto readFile = [&](const TString& name) -> TString {
+        const TString path = prefix + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            const auto& data = f.GetS3Data();
+            UNIT_ASSERT_C(data.contains(path), path);
+            return data.at(path);
+        } else {
+            return TFileInput(TFsPath(f.GetTempDir().Path()) / path).ReadAll();
+        }
+    };
+    Ydb::Coordination::CreateNodeRequest node;
+    UNIT_ASSERT(NBackup::ParseProto(readFile("create_coordination_node.pb"), node));
+    UNIT_ASSERT(node.has_config());
+    Ydb::RateLimiter::Resources resources;
+    UNIT_ASSERT(NBackup::ParseProto(readFile("rate_limiter_resources.pb"), resources));
+    UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).resource_path(), "limit");
+    UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).hierarchical_drr().max_units_per_second(), 100);
+}
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
@@ -2160,6 +2206,10 @@ Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture)
 }
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
+    Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
+        ExportKesusImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2235,6 +2285,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
 }
 
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
+    Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
+        ExportKesusImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         ExportWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }

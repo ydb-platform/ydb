@@ -1529,6 +1529,7 @@ message TBackupTask {
     }
 
     optional TPathDescription Table = 10; // for further restore
+    optional string SourceDatabase = 21; // for restoring absolute references in table settings
     repeated TPathDescription ChangefeedUnderlyingTopics = 17; // for further restore
 
     message TScanSettings {

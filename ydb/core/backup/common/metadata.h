@@ -58,6 +58,9 @@ public:
     bool HasVersion() const;
     ui64 GetVersion() const;
 
+    void SetSourceDatabase(const TString& database);
+    const TString& GetSourceDatabase() const;
+
     void AddChangefeed(const TChangefeedMetadata& changefeed);
     const std::optional<std::vector<TChangefeedMetadata>>& GetChangefeeds() const;
 
@@ -76,6 +79,7 @@ private:
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
     TMaybeFail<ui64> Version;
+    TString SourceDatabase;
 
     // Changefeeds:
     // Undefined (previous versions): we don't know if we see the export with changefeeds or without them, so list suitable S3 files to find out all changefeeds

@@ -23,6 +23,14 @@ ui64 TMetadata::GetVersion() const {
     return *Version;
 }
 
+void TMetadata::SetSourceDatabase(const TString& database) {
+    SourceDatabase = database;
+}
+
+const TString& TMetadata::GetSourceDatabase() const {
+    return SourceDatabase;
+}
+
 void TMetadata::AddChangefeed(const TChangefeedMetadata& changefeed) {
     if (!Changefeeds) {
         Changefeeds.emplace();
@@ -61,6 +69,9 @@ TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
     if (Version.Defined()) {
         m["version"] = *Version;
+    }
+    if (SourceDatabase) {
+        m["source_database"] = SourceDatabase;
     }
     if (EnablePermissions) {
         m["permissions"] = static_cast<int>(*EnablePermissions);
@@ -108,6 +119,9 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
     const auto& value = json["version"];
 
     TMetadata result;
+    if (json.Has("source_database")) {
+        result.SourceDatabase = json["source_database"].GetStringSafe();
+    }
     if (value.IsUInteger()) {
         result.Version = value.GetUIntegerSafe();
     }

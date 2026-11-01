@@ -23,6 +23,7 @@
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
+#include <util/system/env.h>
 #include <util/thread/factory.h>
 
 using namespace NYdb;
@@ -1811,10 +1812,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        if (GetEnv("YDB_TEST_READ_TABLE_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        }
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -1962,9 +1965,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        if (GetEnv("YDB_TEST_READ_TABLE_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        }
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -2120,9 +2125,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        if (GetEnv("YDB_TEST_READ_TABLE_VERBOSE") == "1") {
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+            server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        }
 
         TString location = TStringBuilder() << "localhost:" << grpc;
 

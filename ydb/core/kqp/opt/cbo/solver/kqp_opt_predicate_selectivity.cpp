@@ -10,155 +10,9 @@ using namespace NYql::NNodes;
 namespace {
 
     using namespace NKikimr::NKqp;
-
-    THashSet<TString> PgComparisonSigns = {
-        "<", "<=", ">", ">=", "=", "<>", "!="};
+    using namespace NKikimr::NKqp::NPredicateTree;
 
     const double TWO_COLUMNS_DEFAULT_SELECTIVITY = 0.3;
-
-    THashMap<TString, EInequalityPredicateType> StringToComparisonOperatorMap{
-        {"<", EInequalityPredicateType::Less},
-        {"<=", EInequalityPredicateType::LessOrEqual},
-        {">", EInequalityPredicateType::Greater},
-        {">=", EInequalityPredicateType::GreaterOrEqual},
-        {"=", EInequalityPredicateType::Equal},
-        {"<>", EInequalityPredicateType::NotEqual},
-        {"!=", EInequalityPredicateType::NotEqual}};
-
-    THashMap<EInequalityPredicateType, TString> ComparisonOperatorToStringMap{
-        {EInequalityPredicateType::Less, "<"},
-        {EInequalityPredicateType::LessOrEqual, "<="},
-        {EInequalityPredicateType::Greater, ">"},
-        {EInequalityPredicateType::GreaterOrEqual, ">="},
-        {EInequalityPredicateType::Equal, "="},
-        {EInequalityPredicateType::NotEqual, "<>"}};
-
-    /**
-     * Check if a callable is an attribute of some table
-     * Currently just return a boolean and cover only basic cases
-     */
-    TMaybe<TString> IsAttribute(const TExprBase& input) {
-        if (auto member = input.Maybe<TCoMember>()) {
-            return TString(member.Cast().Name());
-        } else if (auto cast = input.Maybe<TCoSafeCast>()) {
-            return IsAttribute(cast.Cast().Value());
-        } else if (auto ifPresent = input.Maybe<TCoIfPresent>()) {
-            return IsAttribute(ifPresent.Cast().Optional());
-        } else if (auto just = input.Maybe<TCoJust>()) {
-            return IsAttribute(just.Cast().Input());
-        } else if (input.Ptr()->IsCallable("PgCast")) {
-            auto child = TExprBase(input.Ptr()->ChildRef(0));
-            return IsAttribute(child);
-        } else if (input.Ptr()->IsCallable("FromPg") || input.Ptr()->IsCallable("ToPg")) {
-            auto child = TExprBase(input.Ptr()->ChildRef(0));
-            return IsAttribute(child);
-        } else if (auto exists = input.Maybe<TCoExists>()) {
-            auto child = TExprBase(input.Ptr()->ChildRef(0));
-            return IsAttribute(child);
-        } else if (auto argument = input.Maybe<TCoArgument>()) {
-            TString argumentName = TString(argument.Cast().Name());
-            TStringBuf olapApplyMemberPrefix = "members_";
-            if (argumentName.StartsWith(olapApplyMemberPrefix)) {
-                return argumentName.substr(olapApplyMemberPrefix.length(), argumentName.size() - olapApplyMemberPrefix.length());
-            } else {
-                return argumentName;
-            }
-        }
-        return Nothing();
-    }
-
-    TMaybe<TCoMember> IsMember(const TExprBase& input) {
-        if (auto member = input.Maybe<TCoMember>()) {
-            return member.Cast();
-        } else if (auto cast = input.Maybe<TCoSafeCast>()) {
-            return IsMember(cast.Cast().Value());
-        } else if (auto ifPresent = input.Maybe<TCoIfPresent>()) {
-            return IsMember(ifPresent.Cast().Optional());
-        } else if (auto just = input.Maybe<TCoJust>()) {
-            return IsMember(just.Cast().Input());
-        } else if (input.Ptr()->IsCallable("PgCast")) {
-            auto child = TExprBase(input.Ptr()->ChildRef(0));
-            return IsMember(child);
-        } else if (input.Ptr()->IsCallable("FromPg") || input.Ptr()->IsCallable("ToPg")) {
-            auto child = TExprBase(input.Ptr()->ChildRef(0));
-            return IsMember(child);
-        } else if (auto exists = input.Maybe<TCoExists>()) {
-            auto child = TExprBase(input.Ptr()->ChildRef(0));
-            return IsMember(child);
-        }
-        return Nothing();
-    }
-
-    template<typename T>
-    TExprNode::TPtr FindNode(const TExprBase& input) {
-        for (const auto& child : input.Ptr()->Children()) {
-            if (TExprBase(child).Maybe<T>()) {
-                return child;
-            }
-
-            auto tmp = FindNode<T>(TExprBase(child));
-            if (tmp != nullptr) {
-                return tmp;
-            }
-        }
-
-        return nullptr;
-    }
-
-    TMaybe<TString> GetAttributeType(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
-        if (!stats || !stats->ColumnStatistics) {
-            return Nothing();
-        }
-
-        auto it = stats->ColumnStatistics->Data.find(attributeName);
-        if (it != stats->ColumnStatistics->Data.end()) {
-            return it->second.Type;
-        }
-
-        return Nothing();
-    }
-
-    enum class EValueParseClass {
-        Bool,
-        SignedInt,
-        UnsignedInt,
-        Float,
-        Text
-    };
-
-    EValueParseClass GetValueParseClass(TStringBuf typeName) {
-        static const THashSet<TStringBuf> unsignedTypes = {
-            "Uint8", "Uint16", "Uint32", "Uint64", "Date", "Datetime", "Timestamp"};
-        static const THashSet<TStringBuf> signedTypes = {
-            "Int8", "Int16", "Int32", "Int64", "Date32", "Datetime64", "Interval", "Timestamp64", "Interval64"};
-
-        if (typeName == "Bool") {
-            return EValueParseClass::Bool;
-        } else if (unsignedTypes.contains(typeName)) {
-            return EValueParseClass::UnsignedInt;
-        } else if (signedTypes.contains(typeName)) {
-            return EValueParseClass::SignedInt;
-        } else if (typeName == "Float" || typeName == "Double" || typeName.StartsWith("Decimal")) {
-            return EValueParseClass::Float;
-        }
-
-        // other types are considered as string and compared lexicographically
-        // Utf8, String, Text considered as text
-        // Uuid, Bytes, DyNumber, Yson, Json, JsonDocument
-        return EValueParseClass::Text;
-    }
-
-    TMaybe<EValueParseClass> GetValueParseClass(const TExprBase& input) {
-        const TTypeAnnotationNode* type = input.Ref().GetTypeAnn();
-        if (!type) {
-            return Nothing();
-        }
-        type = RemoveAllOptionals(type);
-        if (!type || type->GetKind() != ETypeAnnotationKind::Data) {
-            return Nothing();
-        }
-        return GetValueParseClass(type->Cast<TDataExprType>()->GetName());
-    }
 
     double DefaultEqualitySelectivity(const std::shared_ptr<NKikimr::NKqp::TOptimizerStatistics>& stats, const TString& attributeName) {
         if (stats == nullptr) {
@@ -231,138 +85,6 @@ namespace {
         }
 
         return Nothing();
-    }
-
-    // Returns an opposite predicate.
-    EInequalityPredicateType GetOppositePredicateType(EInequalityPredicateType predicate) {
-        switch (predicate) {
-            case EInequalityPredicateType::Less:
-                return EInequalityPredicateType::Greater;
-            case EInequalityPredicateType::Greater:
-                return EInequalityPredicateType::Less;
-            case EInequalityPredicateType::LessOrEqual:
-                return EInequalityPredicateType::GreaterOrEqual;
-            case EInequalityPredicateType::GreaterOrEqual:
-                return EInequalityPredicateType::LessOrEqual;
-            case EInequalityPredicateType::Equal:
-                return EInequalityPredicateType::NotEqual;
-            case EInequalityPredicateType::NotEqual:
-                return EInequalityPredicateType::Equal;
-            default:
-                Y_ABORT();
-        }
-    }
-
-    // Returns an opposite range direction.
-    EInequalityPredicateType GetOppositeRangeDirection(EInequalityPredicateType predicate) {
-        switch (predicate) {
-            case EInequalityPredicateType::Less:
-                return EInequalityPredicateType::GreaterOrEqual;
-            case EInequalityPredicateType::Greater:
-                return EInequalityPredicateType::LessOrEqual;
-            case EInequalityPredicateType::LessOrEqual:
-                return EInequalityPredicateType::Greater;
-            case EInequalityPredicateType::GreaterOrEqual:
-                return EInequalityPredicateType::Less;
-            case EInequalityPredicateType::Equal:
-                return EInequalityPredicateType::NotEqual;
-            case EInequalityPredicateType::NotEqual:
-                return EInequalityPredicateType::Equal;
-            default:
-                Y_ABORT();
-        }
-    }
-
-    TMaybe<TString> ExtractLiteral(NYql::NNodes::TExprBase maybeLiteral) {
-        if (auto maybeJust = maybeLiteral.Maybe<NYql::NNodes::TCoJust>()) {
-            maybeLiteral = maybeJust.Cast().Input();
-        }
-        if (maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>()) {
-            auto literal = maybeLiteral.Maybe<NYql::NNodes::TCoDataCtor>().Cast();
-            auto value = literal.Literal().Value();
-            return TString(value);
-        }
-        return Nothing();
-    }
-
-    i8 CompareValuesImpl(const TString& left, const TString& right, const TString columnType) {
-        if (columnType == "Bool") {
-            ui8 l = FromString<bool>(left);
-            ui8 r = FromString<bool>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Uint8") {
-            ui8 l = FromString<ui8>(left);
-            ui8 r = FromString<ui8>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Int8") {
-            i8 l = FromString<i8>(left);
-            i8 r = FromString<i8>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Uint16") {
-            ui16 l = FromString<ui16>(left);
-            ui16 r = FromString<ui16>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Int16") {
-            i16 l = FromString<i16>(left);
-            i16 r = FromString<i16>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Uint32") {
-            ui32 l = FromString<ui32>(left);
-            ui32 r = FromString<ui32>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Int32") {
-            i32 l = FromString<i32>(left);
-            i32 r = FromString<i32>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Uint64") {
-            ui64 l = FromString<ui64>(left);
-            ui64 r = FromString<ui64>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Int64") {
-            i64 l = FromString<i64>(left);
-            i64 r = FromString<i64>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Float") {
-            float l = FromString<float>(left);
-            float r = FromString<float>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
-            double l = FromString<double>(left);
-            double r = FromString<double>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Date") {
-            ui16 l = FromString<ui16>(left);
-            ui16 r = FromString<ui16>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Date32") {
-            i32 l = FromString<i32>(left);
-            i32 r = FromString<i32>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Datetime") {
-            ui32 l = FromString<ui32>(left);
-            ui32 r = FromString<ui32>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Interval" || columnType == "Interval64" || columnType == "Datetime64" || columnType == "Timestamp64") {
-            i64 l = FromString<i64>(left);
-            i64 r = FromString<i64>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Timestamp") {
-            ui64 l = FromString<ui64>(left);
-            ui64 r = FromString<ui64>(right);
-            return (l < r) ? -1 : (l > r) ? 1 : 0;
-        }
-
-        // other types are considered as string and compared lexicographically
-        // Utf8, String, Text, Uuid, Bytes, DyNumber, Yson, Json, JsonDocument
-        return (left < right) ? -1 : (left > right) ? 1 : 0;
-    }
-
-    i8 CompareValues(const TString& left, const TString& right, const TString columnType) {
-        try {
-            return CompareValuesImpl(left, right, columnType);
-        } catch (const yexception&) {
-            return (left < right) ? -1 : (left > right) ? 1 : 0;
-        }
     }
 
     // Returns a number of rows based on predicate.
@@ -619,12 +341,15 @@ namespace {
 
 namespace NKikimr::NKqp {
 
+using namespace NPredicateTree;
+
 double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
     const TExprBase& left,
     const TExprBase& right,
     bool collectMembers,
     EInequalityPredicateType predicate
 ) {
+    Y_UNUSED(collectMembers); // members are collected while the predicate tree is built
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
         return ComputeInequalitySelectivity(right, left, collectMembers, GetOppositePredicateType(predicate));
     }
@@ -643,11 +368,6 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
             }
 
             if (!Stats || !Stats->ColumnStatistics) {
-                if (CollectColumnsStatUsedMembers) {
-                    if (auto maybeMember = IsMember(left)) {
-                        ColumnStatsUsedMembers.AddInequality(maybeMember.GetRef());
-                    }
-                }
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
 
@@ -671,6 +391,8 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
     const TExprBase& right,
     bool collectMembers
 ) {
+    Y_UNUSED(collectMembers); // members are collected while the predicate tree is built
+
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
         return ComputeEqualitySelectivity(right, left, collectMembers);
     }
@@ -678,13 +400,6 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
     if (auto attribute = IsAttribute(left)) {
         // In case both arguments refer to an attribute, return TWO_COLUMNS_DEFAULT_SELECTIVITY
         if (IsAttribute(right)) {
-            if (collectMembers) {
-                auto maybeMember = IsMember(left);
-                auto maybeAnotherMember = IsMember(right);
-                if (maybeMember && maybeAnotherMember) {
-                    MemberEqualities.emplace_back(maybeMember.GetRef(), maybeAnotherMember.GetRef());
-                }
-            }
             return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         }
 
@@ -695,19 +410,7 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
 
-            if (collectMembers) {
-                auto maybeMember = IsMember(left);
-                if (maybeMember) {
-                    ConstantMembers.push_back(maybeMember.GetRef());
-                }
-            }
-
             if (!Stats || !Stats->ColumnStatistics) {
-                if (CollectColumnsStatUsedMembers) {
-                    if (auto maybeMember = IsMember(left)) {
-                        ColumnStatsUsedMembers.AddEquality(maybeMember.GetRef());
-                    }
-                }
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
 
@@ -731,12 +434,9 @@ double TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     const TExprBase& right,
     bool containString
 ) {
-    if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeComparisonSelectivity(right, left, containString);
-    }
-
+    // column is on the left
     if (IsAttribute(left)) {
-        // In case both arguments refer to an attribute, return TWO_COLUMNS_DEFAULT_SELECTIVITY
+        // both sides refer to an attribute
         if (IsAttribute(right)) {
             return TWO_COLUMNS_DEFAULT_SELECTIVITY;
         }
@@ -753,296 +453,7 @@ double TPredicateSelectivityComputer::ComputeComparisonSelectivity(
     return 1.0;
 }
 
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::CreateLeafNode(TMaybe<TString> attribute) {
-    auto node = std::make_shared<TTreeNode>();
-    node->Operator = ELogicalOperator::Leaf;
-
-    if (!attribute.Defined()) {
-        return node;
-    }
-
-    TString ref = attribute.GetRef();
-    size_t dotPos = ref.find('.');
-    if (dotPos != TString::npos) {
-        node->TableAlias = ref.substr(0, dotPos);
-        node->Column = ref.substr(dotPos + 1);
-    } else {
-        node->Column = ref;
-    }
-
-    TMaybe<TString> colType = GetAttributeType(Stats, ref);
-    if (colType.Defined()) {
-        node->ColumnType = colType.GetRef();
-    }
-
-    return node;
-}
-
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessStringPredicate(
-    const TExprBase& left,
-    const TExprBase& right,
-    bool underNot,
-    bool collectMembers,
-    bool containString
-) {
-    Y_UNUSED(collectMembers);
-
-    // left is column and right is constant expression
-    auto leftAttr = IsAttribute(left);
-    auto rightAttr = IsAttribute(right);
-
-    double resSelectivity = ComputeComparisonSelectivity(left, right, containString);
-    resSelectivity = underNot ? 1.0 - resSelectivity : resSelectivity;
-
-    std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
-    node->Selectivity = resSelectivity;
-
-    return node;
-}
-
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessBoolLiteralPredicate(
-    bool value,
-    bool underNot,
-    bool collectMembers
-) {
-    Y_UNUSED(collectMembers);
-
-    double resSelectivity = (value != underNot) ? 1.0 : 0.0;
-
-    // TODO: temporal column naming
-    std::shared_ptr<TTreeNode> node = CreateLeafNode("Bool");
-    node->Selectivity = resSelectivity;
-
-    return node;
-}
-
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessRegexPredicate(
-    bool underNot,
-    bool collectMembers
-) {
-    Y_UNUSED(collectMembers);
-
-    // NOTE: TCoAtom is not a Callable and consider NOT
-    double resSelectivity = underNot ? 1.0 - 0.5 : 0.5;
-
-    // TODO: temporal column naming
-    std::shared_ptr<TTreeNode> node = CreateLeafNode("Re2");
-    node->Selectivity = resSelectivity;
-
-    return node;
-}
-
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertInequalityToRange(
-    const TExprBase& left,
-    const TExprBase& right,
-    bool underNot,
-    bool collectMembers,
-    EInequalityPredicateType inequalitySign
-) {
-    auto leftAttr = IsAttribute(left);
-    auto rightAttr = IsAttribute(right);
-
-    // the case when both are attributes
-    if (leftAttr.Defined() && rightAttr.Defined()) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
-        node->Selectivity = TWO_COLUMNS_DEFAULT_SELECTIVITY;
-        return node;
-    } else if (!leftAttr.Defined() && !rightAttr.Defined()) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyAttr");
-        node->Selectivity = 1.0;
-        return node;
-    }
-
-    auto leftConstParam = IsConstantExprWithParams(left.Ptr());
-    auto rightConstParam = IsConstantExprWithParams(right.Ptr());
-
-    // the case when both are literals
-    if ((leftConstParam && rightConstParam) || (!leftConstParam && !rightConstParam)) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode("ConstantExprWithParams");
-        node->Selectivity = 1.0;
-        return node;
-    }
-
-    auto leftConst = IsConstantExpr(left.Ptr());
-    auto rightConst = IsConstantExpr(right.Ptr());
-
-    // the case when both are literals
-    if ((leftConst && rightConst) || (!leftConst && !rightConst)) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyConstantExpr");
-        if (leftAttr.Defined()) {
-            node->Selectivity = DefaultEqualitySelectivity(Stats, leftAttr.GetRef());
-        } else {
-            node->Selectivity = DefaultEqualitySelectivity(Stats, rightAttr.GetRef());
-        }
-        return node;
-    }
-
-    const TExprBase* leftPtr = &left;
-    const TExprBase* rightPtr = &right;
-
-    if (rightAttr) {
-        std::swap(leftPtr, rightPtr);
-        std::swap(leftAttr, rightAttr);
-        inequalitySign = GetOppositePredicateType(inequalitySign);
-    }
-
-    if (underNot) {
-        inequalitySign = GetOppositeRangeDirection(inequalitySign);
-    }
-
-    bool inclusive = false;
-    if (inequalitySign == EInequalityPredicateType::LessOrEqual || inequalitySign == EInequalityPredicateType::GreaterOrEqual) {
-        inclusive = true;
-    }
-
-    std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
-    node->Selectivity = ComputeInequalitySelectivity(*leftPtr, *rightPtr, collectMembers, inequalitySign);
-
-    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
-    if (literal.Defined()) {
-        if (inequalitySign == EInequalityPredicateType::Less || inequalitySign == EInequalityPredicateType::LessOrEqual) {
-            TPredicateRange rangeNode(Nothing(), Nothing(), false, *rightPtr, literal.GetRef(), inclusive);
-            node->Range = std::move(rangeNode);
-        } else if (inequalitySign == EInequalityPredicateType::Greater || inequalitySign == EInequalityPredicateType::GreaterOrEqual) {
-            TPredicateRange rangeNode(*rightPtr, literal.GetRef(), inclusive, Nothing(), Nothing(), false);
-            node->Range = std::move(rangeNode);
-        }
-    }
-
-    return node;
-}
-
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange(
-    const TExprBase& left,
-    const TExprBase& right,
-    bool underNot,
-    bool collectMembers
-) {
-    auto leftAttr = IsAttribute(left);
-    auto rightAttr = IsAttribute(right);
-
-    // the case when both are attributes
-    if (leftAttr.Defined() && rightAttr.Defined()) {
-        if (collectMembers && CollectMemberEqualities) {
-            const auto leftMember = IsMember(left);
-            const auto rightMember = IsMember(right);
-            if (leftMember && rightMember) {
-                MemberEqualities.emplace_back(leftMember.GetRef(), rightMember.GetRef());
-            }
-        }
-        std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
-        node->Selectivity = TWO_COLUMNS_DEFAULT_SELECTIVITY;
-        return node;
-    } else if (!leftAttr.Defined() && !rightAttr.Defined()) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyAttr");
-        node->Selectivity = 1.0;
-        return node;
-    }
-
-    auto leftConstParam = IsConstantExprWithParams(left.Ptr());
-    auto rightConstParam = IsConstantExprWithParams(right.Ptr());
-
-    // the case when both are literals
-    if ((leftConstParam && rightConstParam) || (!leftConstParam && !rightConstParam)) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode("ConstantExprWithParams");
-        node->Selectivity = 1.0;
-        return node;
-    }
-
-    auto leftConst = IsConstantExpr(left.Ptr());
-    auto rightConst = IsConstantExpr(right.Ptr());
-
-    // the case when both are literals
-    if ((leftConst && rightConst) || (!leftConst && !rightConst)) {
-        std::shared_ptr<TTreeNode> node = CreateLeafNode("EmptyConstantExpr");
-        if (leftAttr.Defined()) {
-            node->Selectivity = DefaultEqualitySelectivity(Stats, leftAttr.GetRef());
-        } else {
-            node->Selectivity = DefaultEqualitySelectivity(Stats, rightAttr.GetRef());
-        }
-        return node;
-    }
-
-    const TExprBase* leftPtr = &left;
-    const TExprBase* rightPtr = &right;
-
-    if (rightAttr) {
-        std::swap(leftPtr, rightPtr);
-        std::swap(leftAttr, rightAttr);
-    }
-
-    if (underNot) {
-        // converting not equality into two ranges (col < x) OR (col > x)
-        auto node = std::make_shared<TTreeNode>();
-        node->Operator = ELogicalOperator::Or;
-
-        std::shared_ptr<TTreeNode> left = ConvertInequalityToRange(*leftPtr, *rightPtr, false, collectMembers, EInequalityPredicateType::Less);
-        std::shared_ptr<TTreeNode> right = ConvertInequalityToRange(*leftPtr, *rightPtr, false, collectMembers, EInequalityPredicateType::Greater);
-
-        if (left) {
-            node->Children.push_back(left);
-        }
-        if (right) {
-            node->Children.push_back(right);
-        }
-
-        return node;
-    }
-
-    std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
-    node->Selectivity = ComputeEqualitySelectivity(*leftPtr, *rightPtr, collectMembers);
-
-    TMaybe<TString> literal = ExtractLiteral(*rightPtr);
-    if (literal.Defined()) {
-        TPredicateRange rangeNode(*rightPtr, literal.GetRef(), true, *rightPtr, literal.GetRef(), true);
-        node->Range = std::move(rangeNode);
-    }
-
-    return node;
-}
-
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ProcessSetPredicate(
-    const TExprBase& left,
-    const TExprNode::TPtr list,
-    bool underNot,
-    bool collectMembers
-) {
-    auto node = std::make_shared<TTreeNode>();
-
-    // convert set predicate into a subtree
-    auto logicalOperator = underNot ? ELogicalOperator::And : ELogicalOperator::Or;
-    node->Operator = logicalOperator;
-
-    TMaybe<EValueParseClass> columnParseClass;
-    if (auto member = IsMember(left)) {
-        columnParseClass = GetValueParseClass(TExprBase(member.GetRef()));
-    }
-
-    bool droppedElements = false;
-    for (const auto& element : list->Children()) {
-        TExprBase right = TExprBase(element);
-
-        auto elementParseClass = GetValueParseClass(right);
-        if (columnParseClass.Defined() && elementParseClass.Defined() && *columnParseClass != *elementParseClass) {
-            droppedElements = true;
-            continue;
-        }
-
-        auto child = ConvertEqualityToRange(left, right, underNot, collectMembers);
-        if (child) {
-            node->Children.push_back(child);
-        }
-    }
-
-    // empty set if all types do not match
-    if (droppedElements && node->Children.empty()) {
-        return nullptr;
-    }
-
-    return node;
-}
-
-double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName, TPredicateRange& mergedRange) {
+double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attributeName, const TPredicateRange& mergedRange) {
     // unbounded range
     if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
         return 1.0;
@@ -1161,444 +572,90 @@ double TPredicateSelectivityComputer::ReComputeEstimation(TString attributeName,
     return DefaultInequalitySelectivity(Stats, attributeName);
 }
 
-void SortRanges(TVector<std::shared_ptr<TTreeNode>>& allRanges, TString columnType) {
-    // sorting by left bound only
-    std::sort(allRanges.begin(), allRanges.end(), [columnType](const std::shared_ptr<TTreeNode>& left, const std::shared_ptr<TTreeNode>& right) {
+double TPredicateSelectivityComputer::ComputeLeafSelectivity(const TTreeNode& leaf) {
+    switch (leaf.Kind) {
+        case EPredicateKind::Comparison:
+            if (leaf.Sign == EInequalityPredicateType::Equal) {
+                return ComputeEqualitySelectivity(leaf.Left.GetRef(), leaf.Right.GetRef(), false);
+            }
+            return ComputeInequalitySelectivity(leaf.Left.GetRef(), leaf.Right.GetRef(), false, leaf.Sign);
 
-        // -inf bounds first
-        if (!left->Range.LeftBound.Defined() && !right->Range.LeftBound.Defined()) {
-            return false;
-        }
-        if (!left->Range.LeftBound.Defined()) {
-            return true;
-        }
-        if (!right->Range.LeftBound.Defined()) {
-            return false;
-        }
-
-        i8 cmp = CompareValues(left->Range.LeftBound.GetRef(), right->Range.LeftBound.GetRef(), columnType);
-        if (cmp != 0) {
-            return cmp < 0;
+        case EPredicateKind::MergedRanges: {
+            // a range unbounded on both sides covers the domain and estimates to 1.0
+            double selectivity = 0.0;
+            for (const auto& range : leaf.Ranges) {
+                selectivity += ReComputeEstimation(leaf.Column, range);
+            }
+            return std::min(1.0, selectivity);
         }
 
-        // inclusive starts earlier
-        if (left->Range.LeftInclusive != right->Range.LeftInclusive) {
-            return left->Range.LeftInclusive;
+        case EPredicateKind::StringMatch: {
+            const double selectivity = ComputeComparisonSelectivity(leaf.Left.GetRef(), leaf.Right.GetRef(), leaf.ContainString);
+            return leaf.UnderNot ? 1.0 - selectivity : selectivity;
         }
-        return false;
-    });
+
+        case EPredicateKind::TwoColumns:
+            return TWO_COLUMNS_DEFAULT_SELECTIVITY;
+        case EPredicateKind::Regex:
+            return leaf.UnderNot ? 1.0 - 0.5 : 0.5;
+        case EPredicateKind::BoolLiteral:
+            return leaf.BoolValue ? 1.0 : 0.0;
+        case EPredicateKind::NonAttribute: // EmptyAttr
+        case EPredicateKind::NonConstant: // ConstantExprWithParams
+            return 1.0;
+        case EPredicateKind::Parameter: // EmptyConstantExpr
+            return DefaultEqualitySelectivity(Stats, leaf.Attribute);
+    }
+    return 1.0;
 }
 
-TMaybe<TPredicateRange> IntersectOverlappingConjunctions(TVector<std::shared_ptr<TTreeNode>>& allRanges, TString columnType) {
-    if (allRanges.empty()) {
-        return Nothing();
-    }
-
-    TPredicateRange mergedRange = allRanges.front()->Range;
-
-    for (size_t i = 1; i < allRanges.size(); ++i) {
-        auto& range = allRanges[i]->Range;
-
-        // intersect left bound
-        if (range.LeftBound.Defined()) {
-            if (!mergedRange.LeftBound.Defined()) {
-                mergedRange.Left = range.Left;
-                mergedRange.LeftBound = range.LeftBound;
-                mergedRange.LeftInclusive = range.LeftInclusive;
-            } else {
-                i8 cmp = CompareValues(range.LeftBound.GetRef(), mergedRange.LeftBound.GetRef(), columnType);
-                if (cmp > 0 || (cmp == 0 && !range.LeftInclusive)) {
-                    mergedRange.Left = range.Left;
-                    mergedRange.LeftBound = range.LeftBound;
-                    mergedRange.LeftInclusive = range.LeftInclusive;
-                }
-            }
-        }
-
-        // intersect right bound
-        if (range.RightBound.Defined()) {
-            if (!mergedRange.RightBound.Defined()) {
-                mergedRange.Right = range.Right;
-                mergedRange.RightBound = range.RightBound;
-                mergedRange.RightInclusive = range.RightInclusive;
-            } else {
-                i8 cmp = CompareValues(range.RightBound.GetRef(), mergedRange.RightBound.GetRef(), columnType);
-                if (cmp < 0 || (cmp == 0 && !range.RightInclusive)) {
-                    mergedRange.Right = range.Right;
-                    mergedRange.RightBound = range.RightBound;
-                    mergedRange.RightInclusive = range.RightInclusive;
-                }
-            }
-        }
-
-        // check for empty intersection
-        if (mergedRange.LeftBound.Defined() && mergedRange.RightBound.Defined()) {
-            i8 cmp = CompareValues(mergedRange.LeftBound.GetRef(), mergedRange.RightBound.GetRef(), columnType);
-            if (cmp > 0) {
-                return Nothing();
-            } else if (cmp == 0 && (!mergedRange.LeftInclusive || !mergedRange.RightInclusive)) {
-                return Nothing();
-            }
-        }
-    }
-
-    return mergedRange;
-}
-
-TMaybe<TVector<TPredicateRange>> UnionOverlappingDisjunctions(TVector<std::shared_ptr<TTreeNode>>& allRanges, TString columnType) {
-    if (allRanges.empty()) {
-        return Nothing();
-    }
-
-    // sorting ranges by left bound only
-    SortRanges(allRanges, columnType);
-
-    TVector<TPredicateRange> mergedRanges;
-    TPredicateRange current = allRanges.front()->Range;
-
-    for (size_t i = 1; i < allRanges.size(); ++i) {
-        auto& range = allRanges[i]->Range;
-
-        // check whether the intervals do not overlap
-        bool disjoint = false;
-        if (current.RightBound.Defined() && range.LeftBound.Defined()) {
-            i8 cmp = CompareValues(current.RightBound.GetRef(), range.LeftBound.GetRef(), columnType);
-            if (cmp < 0) {
-                disjoint = true;
-            } else if (cmp == 0 && (!current.RightInclusive || !range.LeftInclusive)) {
-                disjoint = true;
-            }
-        }
-        if (disjoint) {
-            mergedRanges.push_back(current);
-            current = range;
-            continue;
-        }
-
-        // expand upper bound if either side is +inf
-        if (!current.RightBound.Defined() || !range.RightBound.Defined()) {
-            current.Right = Nothing();
-            current.RightBound = Nothing();
-            current.RightInclusive = false;
-        } else {
-            i8 cmp = CompareValues(range.RightBound.GetRef(), current.RightBound.GetRef(), columnType);
-            if (cmp > 0 || (cmp == 0 && range.RightInclusive)) {
-                current.Right = range.Right;
-                current.RightBound = range.RightBound;
-                current.RightInclusive = range.RightInclusive;
-            }
-        }
-
-        // if domain is fully covered, then exit
-        if (!current.LeftBound.Defined() && !current.RightBound.Defined()) {
-            mergedRanges.clear();
-            mergedRanges.push_back(current);
-            return mergedRanges;
-        }
-    }
-
-    mergedRanges.push_back(current);
-    return mergedRanges;
-}
-
-double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<TTreeNode>& node, TSet<TString>& tableAliases) {
+double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<TTreeNode>& node) {
     if (!node) { // it is empty tree, i.e. no selection predicates
         return 1.0;
     }
 
-    else if (node->Operator == ELogicalOperator::Leaf) {
-        if (node->TableAlias.Defined()) {
-            tableAliases.insert(node->TableAlias.GetRef());
-        }
-        return node->Selectivity;
+    if (node->Operator == ELogicalOperator::Leaf) {
+        return ComputeLeafSelectivity(*node);
     }
 
-    else if (node->Operator == ELogicalOperator::And) {
+    if (node->Operator == ELogicalOperator::And) {
         double resSelectivity = 1.0;
-        TMap<TString, TVector<std::shared_ptr<TTreeNode>>> columnSelectivities;
-
-        for (auto& child : node->Children) {
-            TString column = child->Column;
-            if (!columnSelectivities.contains(column)) {
-                TVector<std::shared_ptr<TTreeNode>> ranges;
-                columnSelectivities[column] = ranges;
-            }
-
-            // group by column and convert point predicates into ranges
-            if (child->Operator == ELogicalOperator::Leaf) {
-                columnSelectivities[column].push_back(child);
-            } else {
-                // next conjunction/disjunction
-                resSelectivity *= ComputeSelectivity(child, tableAliases);
-            }
+        for (const auto& child : node->Children) {
+            resSelectivity *= ComputeSelectivity(child);
         }
-
-        // intersect overlaps and re-compute selectivity
-        for (auto& column : columnSelectivities) {
-            if (column.second.size() == 0) {
-                // do nothing
-            } else if (column.second.size() == 1) {
-                resSelectivity *= ComputeSelectivity(column.second.front(), tableAliases);
-            } else {
-                TString columnType = column.second.front()->ColumnType;
-                TMaybe<TPredicateRange> mergedRange = IntersectOverlappingConjunctions(column.second, columnType);
-                if (mergedRange.Defined()) {
-                    resSelectivity *= ReComputeEstimation(column.first, mergedRange.GetRef());
-                } else {
-                    // in case of no overlaps, zero selectivity
-                    return 0.0;
-                }
-            }
-        }
-
-        return resSelectivity;
-    }
-
-    else if (node->Operator == ELogicalOperator::Or) {
-        double resSelectivity = 0.0;
-        TMap<TString, TVector<std::shared_ptr<TTreeNode>>> columnSelectivities;
-
-        for (auto& child : node->Children) {
-            TString column = child->Column;
-            if (!columnSelectivities.contains(column)) {
-                TVector<std::shared_ptr<TTreeNode>> ranges;
-                columnSelectivities[column] = ranges;
-            }
-
-            // group by column and convert point predicates into ranges
-            if (child->Operator == ELogicalOperator::Leaf) {
-                columnSelectivities[column].push_back(child);
-            } else {
-                // next conjunction/disjunction
-                resSelectivity += ComputeSelectivity(child, tableAliases);
-            }
-        }
-
-        // union overlaps and re-compute selectivity
-        for (auto& column : columnSelectivities) {
-            if (column.second.size() == 0) {
-                // do nothing
-            } else if (column.second.size() == 1) {
-                resSelectivity += ComputeSelectivity(column.second.front(), tableAliases);
-            } else {
-                TString columnType = column.second.front()->ColumnType;
-                TMaybe<TVector<TPredicateRange>> allMergedRanges = UnionOverlappingDisjunctions(column.second, columnType);
-                if (allMergedRanges.Defined()) {
-                    for (auto& mergedRange : allMergedRanges.GetRef()) {
-                        // domain full coverage
-                        if (!mergedRange.LeftBound.Defined() && !mergedRange.RightBound.Defined()) {
-                            return 1.0;
-                        }
-                        resSelectivity += ReComputeEstimation(column.first, mergedRange);
-                    }
-                } else {
-                    // in case of no overlaps, zero selectivity
-                    return 0.0;
-                }
-            }
-        }
-
         // cap at 1.0 to stop error propagation
-        return resSelectivity = std::min(1.0, resSelectivity);
+        return std::min(1.0, resSelectivity);
     }
 
-    return 1.0; // fallback
+    // processing Or nodes
+    double resSelectivity = 0.0;
+    for (const auto& child : node->Children) {
+        resSelectivity += ComputeSelectivity(child);
+    }
+    // cap at 1.0 to stop error propagation
+    return std::min(1.0, resSelectivity);
 }
 
 double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
-    std::shared_ptr<TTreeNode> rootNode = ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
+    std::shared_ptr<TTreeNode> rootNode = Builder.Build(input);
     if (!rootNode) {
         return 1.0;
     }
+    YQL_CLOG(TRACE, CoreDq) << "\nPredicate tree:\n" << rootNode->ToString();
 
     TSet<TString> tableAliases;
-    double resSelectivity = ComputeSelectivity(rootNode, tableAliases);
+    CollectTableAliases(rootNode, tableAliases);
+
     if (tableAliases.size() == 0) {
         YQL_CLOG(TRACE, CoreDq) << "No table aliases in computing selectivity.";
     } else if (tableAliases.size() != 1) {
         YQL_CLOG(TRACE, CoreDq) << "Multiple table aliases in computing selectivity.";
     }
 
-    return std::min(1.0, resSelectivity);
-}
+    const std::shared_ptr<TTreeNode> normalizedNode = TPredicateTreeBuilder::Normalize(rootNode);
+    YQL_CLOG(TRACE, CoreDq) << "\nNormalized tree:\n" << normalizedNode->ToString();
 
-/**
- * ComputeImpl - traverses (depth-first post-order) the predicate tree and computes the selectivity of a predicate using available statistics.
- */
-std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
-    const TExprBase& input,
-    bool underNot,
-    bool collectMembers
-) {
-    // Process OptionalIf, just return the predicate statistics
-    if (auto optIf = input.Maybe<TCoOptionalIf>()) {
-        return ComputeImpl(optIf.Cast().Predicate(), underNot, collectMembers);
-    }
-
-    // Same with Coalesce
-    else if (auto coalesce = input.Maybe<TCoCoalesce>()) {
-        return ComputeImpl(coalesce.Cast().Predicate(), underNot, collectMembers);
-    }
-
-    else if (
-        input.Ptr()->IsCallable("FromPg") ||
-        input.Ptr()->IsCallable("Exists") ||
-        input.Ptr()->IsCallable("AssumeStrict") ||
-        input.Ptr()->IsCallable("Apply") ||
-        input.Ptr()->IsCallable("Udf")) {
-        auto child = TExprBase(input.Ptr()->ChildRef(0));
-        return ComputeImpl(child, underNot, collectMembers);
-    }
-
-    // Process AND, OR, and NOT logical operators.
-    // In case of AND we multiply the selectivities, since we assume them to be independent
-    // In case of OR we sum them up, again assuming independence and disjointness, but make sure it is at most 1.0
-    // In case of NOT we subtract the argument's selectivity from 1.0
-
-    else if (auto andNode = input.Maybe<TCoAnd>()) {
-        auto logicalOperator = underNot ? ELogicalOperator::Or : ELogicalOperator::And;
-        auto node = std::make_shared<TTreeNode>();
-        node->Operator = logicalOperator;
-
-        for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
-            // collect all conjunctions of a column
-            const auto& child = ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectMembers);
-            if (child) {
-                node->Children.push_back(child);
-            }
-        }
-        return node;
-    }
-
-    else if (auto orNode = input.Maybe<TCoOr>()) {
-        auto logicalOperator = underNot ? ELogicalOperator::And : ELogicalOperator::Or;
-        auto node = std::make_shared<TTreeNode>();
-        node->Operator = logicalOperator;
-
-        for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
-            // collect all disjunctions of a column
-            auto child = ComputeImpl(orNode.Cast().Arg(i), underNot, underNot && collectMembers);
-            if (child) {
-                node->Children.push_back(child);
-            }
-        }
-        return node;
-    }
-
-    else if (auto notNode = input.Maybe<TCoNot>()) {
-        return ComputeImpl(notNode.Cast().Value(), !underNot, collectMembers);
-    }
-
-    // Process equality predicate
-    else if (auto equality = input.Maybe<TCoCmpEqual>()) { // x1 = x2
-        auto left = equality.Cast().Left();
-        auto right = equality.Cast().Right();
-        return ConvertEqualityToRange(left, right, underNot, !underNot && collectMembers);
-    }
-
-    // Process not equality predicate
-    else if (auto notEquality = input.Maybe<TCoCmpNotEqual>()) {
-        auto left = notEquality.Cast().Left();
-        auto right = notEquality.Cast().Right();
-        return ConvertEqualityToRange(left, right, !underNot, underNot && collectMembers);
-    }
-
-    // Process all inequality predicates
-    else if (auto less = input.Maybe<TCoCmpLess>()) { // x < value
-        auto left = less.Cast().Left();
-        auto right = less.Cast().Right();
-        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::Less);
-    }
-
-    else if (auto greater = input.Maybe<TCoCmpGreater>()) { // x > value
-        auto left = greater.Cast().Left();
-        auto right = greater.Cast().Right();
-        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::Greater);
-    }
-
-    else if (auto lessOrEqual = input.Maybe<TCoCmpLessOrEqual>()) { // x <= value
-        auto left = lessOrEqual.Cast().Left();
-        auto right = lessOrEqual.Cast().Right();
-        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::LessOrEqual);
-    }
-
-    else if (auto greaterOrEqual = input.Maybe<TCoCmpGreaterOrEqual>()) { // x >= value
-        auto left = greaterOrEqual.Cast().Left();
-        auto right = greaterOrEqual.Cast().Right();
-        return ConvertInequalityToRange(left, right, underNot, collectMembers, EInequalityPredicateType::GreaterOrEqual);
-    }
-
-    // Process Pg operators
-    else if (input.Ptr()->IsCallable("PgResolvedOp") && PgComparisonSigns.contains(input.Ptr()->ChildPtr(0)->Content())) {
-        auto left = TExprBase(input.Ptr()->ChildPtr(2));
-        auto right = TExprBase(input.Ptr()->ChildPtr(3));
-
-        EInequalityPredicateType compareSign = StringToComparisonOperatorMap[input.Ptr()->ChildPtr(0)->Content()];
-        if (compareSign == EInequalityPredicateType::Equal) {
-            return ConvertEqualityToRange(left, right, underNot, !underNot && collectMembers);
-        } else if (compareSign == EInequalityPredicateType::NotEqual) {
-            return ConvertEqualityToRange(left, right, !underNot, underNot && collectMembers);
-        } else {
-            return ConvertInequalityToRange(left, right, underNot, collectMembers, compareSign);
-        }
-    }
-
-    // Process string predicates (Find, LIKE %value%)
-    else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
-        auto left = TExprBase(input.Ptr()->ChildRef(0));
-        auto right = TExprBase(input.Ptr()->ChildRef(1));
-        return ProcessStringPredicate(left, right, underNot, collectMembers, true);
-    }
-
-    // Process string predicates (StartsWith LIKE value%, EndsWith LIKE %value)
-    else if (auto comparison = input.Maybe<TCoCompare>()) {
-        auto left = comparison.Cast().Left();
-        auto right = comparison.Cast().Right();
-        return ProcessStringPredicate(left, right, underNot, collectMembers, false);
-    }
-
-    // Process boolean literals
-    else if (auto boolLiteral = input.Maybe<TCoBool>()) {
-        const bool value = FromString<bool>(boolLiteral.Cast().Literal().Value());
-        return ProcessBoolLiteralPredicate(value, underNot, collectMembers);
-    }
-
-    // Process regular expression and StringContainsIgnoreCase (ILIKE %value%)
-    else if (input.Maybe<TCoAtom>()) {
-        auto atom = input.Cast<TCoAtom>();
-        // regexp (all starts with Re2)
-        if (atom.StringValue().StartsWith("Re2")) {
-            return ProcessRegexPredicate(underNot, collectMembers);
-        }
-    }
-
-    // Process SqlIn
-    else if (input.Ptr()->IsCallable("SqlIn")) {
-        auto list = input.Ptr()->ChildPtr(0);
-        if (list != nullptr) {
-            TExprBase left = TExprBase(input.Ptr()->ChildPtr(1)); // left is always column
-            return ProcessSetPredicate(left, list, underNot, false);
-        }
-    }
-
-    else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
-        auto ifExpr = maybeIfExpr.Cast();
-        // attr in ('a', 'b', 'c' ...)
-        if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
-            auto list = FindNode<TExprList>(ifExpr.ThenValue());
-            if (list != nullptr) {
-                TExprBase left = ifExpr.Predicate(); // left is always column
-                return ProcessSetPredicate(left, list, underNot, false);
-            }
-        }
-    }
-
-    else {
-        auto dumped = input.Raw()->Dump();
-        YQL_CLOG(TRACE, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
-    }
-
-    return nullptr;
+    return std::min(1.0, ComputeSelectivity(normalizedNode));
 }
 
 } // namespace NKikimr::NKqp

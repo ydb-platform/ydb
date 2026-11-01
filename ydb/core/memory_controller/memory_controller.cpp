@@ -426,7 +426,31 @@ private:
         }
 
         // allocatedMemory = otherConsumption + consumersConsumption
-        ui64 otherConsumption = SafeDiff(processMemoryInfo.AllocatedMemory, consumersConsumption);
+        ui64 budgetBase = processMemoryInfo.AllocatedMemory;
+        ui64 rssExcess = 0;
+        if (Config.GetRssAwareBudget() && processMemoryInfo.AnonRss.has_value()) {
+            // Free page-heap bytes can be reused or released. Charging them again after
+            // a consumer eviction would repeatedly cut useful caches while RSS stays flat.
+            // Keep charging the non-reclaimable allocator overhead beyond the slack.
+            ui64 rssBudget = SafeDiff(SafeDiff(processMemoryInfo.AnonRss.value(),
+                processMemoryInfo.AllocatorCachesReclaimable), Config.GetRssBudgetSlackBytes());
+            rssExcess = SafeDiff(rssBudget, processMemoryInfo.AllocatedMemory);
+            budgetBase = Max(budgetBase, rssBudget);
+        }
+        ui64 otherConsumption = SafeDiff(budgetBase, consumersConsumption);
+
+        ui64 releaseBytes = 0;
+        if (Config.GetReleaseAllocatorCachesOnPressure() && processMemoryInfo.AnonRss.has_value()
+                && processMemoryInfo.AnonRss.value() > softLimitBytes) {
+            ui64 reclaimableBytes = processMemoryInfo.AllocatorCachesReclaimable;
+            releaseBytes = Min(reclaimableBytes, processMemoryInfo.AnonRss.value() - softLimitBytes);
+            if (releaseBytes) {
+                // ask past the huge page cache, but never for more than is cached or fits in one tick
+                releaseBytes = Min(Max(releaseBytes, Config.GetMinAllocatorCachesReleaseBytes()),
+                    Min(reclaimableBytes, Config.GetMaxAllocatorCachesReleaseBytes()));
+                tcmalloc::MallocExtension::ReleaseMemoryToSystem(releaseBytes);
+            }
+        }
 
         ui64 externalConsumption = 0;
         if (hasMemTotalHardLimit && processMemoryInfo.AnonRss.has_value()
@@ -456,12 +480,15 @@ private:
             {"memAvailable", HumanReadableBytes(processMemoryInfo.MemAvailable)},
             {"allocatedMemory", HumanReadableBytes(processMemoryInfo.AllocatedMemory)},
             {"allocatorCachesMemory", HumanReadableBytes(processMemoryInfo.AllocatorCachesMemory)},
+            {"allocatorCachesReclaimable", HumanReadableBytes(processMemoryInfo.AllocatorCachesReclaimable)},
             {"hardLimit", HumanReadableBytes(hardLimitBytes)},
             {"softLimit", HumanReadableBytes(softLimitBytes)},
             {"targetUtilization", HumanReadableBytes(targetUtilizationBytes)},
             {"activitiesLimitBytes", HumanReadableBytes(activitiesLimitBytes)},
             {"consumersConsumption", HumanReadableBytes(consumersConsumption)},
             {"otherConsumption", HumanReadableBytes(otherConsumption)},
+            {"rssExcess", HumanReadableBytes(rssExcess)},
+            {"releaseBytes", HumanReadableBytes(releaseBytes)},
             {"externalConsumption", HumanReadableBytes(externalConsumption)},
             {"targetConsumersConsumption", HumanReadableBytes(targetConsumersConsumption)},
             {"resultingConsumersConsumption", HumanReadableBytes(resultingConsumersConsumption)},
@@ -474,12 +501,15 @@ private:
         Counters->GetCounter("Stats/MemMapsCount")->Set(GetMemoryMapsCountOrZero());
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/AllocatorCachesMemory")->Set(processMemoryInfo.AllocatorCachesMemory);
+        Counters->GetCounter("Stats/AllocatorCachesReclaimable")->Set(processMemoryInfo.AllocatorCachesReclaimable);
         Counters->GetCounter("Stats/HardLimit")->Set(hardLimitBytes);
         Counters->GetCounter("Stats/SoftLimit")->Set(softLimitBytes);
         Counters->GetCounter("Stats/TargetUtilization")->Set(targetUtilizationBytes);
         Counters->GetCounter("Stats/ActivitiesLimitBytes")->Set(activitiesLimitBytes);
         Counters->GetCounter("Stats/ConsumersConsumption")->Set(consumersConsumption);
         Counters->GetCounter("Stats/OtherConsumption")->Set(otherConsumption);
+        Counters->GetCounter("Stats/RssExcess")->Set(rssExcess);
+        Counters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Set(releaseBytes);
         Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);

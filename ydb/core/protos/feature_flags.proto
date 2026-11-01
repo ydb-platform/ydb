@@ -462,4 +462,6 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     optional bool EnableUnsafeTruncateTable = 373 [default = false];
     optional bool EnableCsPatternIndexHints = 374 [default = false];
+    // Permits FORMAT BINARY for changefeeds and for asynchronous replication.
+    optional bool EnableBinaryChangefeedForAsyncReplication = 375 [default = false];
 }

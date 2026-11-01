@@ -4539,12 +4539,37 @@ Y_UNIT_TEST(AlterTableSetTieringIsCorrect) {
 
 Y_UNIT_TEST(AlterTableAddChangefeedIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'json')").IsOk());
+    const auto res = SqlToYql(
+        "USE ydb; ALTER TABLE table ADD CHANGEFEED feed WITH ("
+        "MODE = 'UPDATES', FORMAT = 'BINARY', COMPRESSION = 'ZSTD')");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"format\"");
+            UNIT_ASSERT_STRING_CONTAINS(line, "BINARY");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"compression\"");
+            UNIT_ASSERT_STRING_CONTAINS(line, "ZSTD");
+        }
+    };
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterTableAddChangefeedCompressionMustBeString) {
+    const auto res = SqlToYql(
+        "USE ydb; ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', COMPRESSION = true)");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of String type is expected for COMPRESSION");
 }
 
 Y_UNIT_TEST(AlterTableAlterChangefeedIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
     ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
                         "<main>:1:57: Error: FORMAT alter is not supported\n");
+    ExpectFailWithError("USE ydb;   ALTER TABLE table ALTER CHANGEFEED feed SET (COMPRESSION = 'zstd');",
+                        "<main>:1:57: Error: COMPRESSION alter is not supported\n");
 }
 
 Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
@@ -5979,6 +6004,44 @@ Y_UNIT_TEST(AlterAsyncReplicationInitialScan) {
         "USE plato; ALTER ASYNC REPLICATION MyReplication SET (INITIAL_SCAN = TRUE);");
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "INITIAL_SCAN is not supported in ALTER");
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationFormatAndCompression) {
+    const auto res = SqlToYql(
+        "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 "
+        "WITH (FORMAT = \"BINARY\", COMPRESSION = \"ZSTD\");");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"format\"");
+            UNIT_ASSERT_STRING_CONTAINS(line, "BINARY");
+            UNIT_ASSERT_STRING_CONTAINS(line, "\"compression\"");
+            UNIT_ASSERT_STRING_CONTAINS(line, "ZSTD");
+        }
+    };
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateAsyncReplicationFormatAndCompressionMustBeStrings) {
+    for (const auto& setting : {"FORMAT = TRUE", "COMPRESSION = 1"}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; CREATE ASYNC REPLICATION MyReplication FOR table1 AS table2 WITH ("
+                                  << setting << ");");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Literal of String type is expected");
+    }
+}
+
+Y_UNIT_TEST(AlterAsyncReplicationFormatAndCompression) {
+    for (const auto& setting : {"FORMAT = \"JSON\"", "COMPRESSION = \"NONE\""}) {
+        const auto res = SqlToYql(TStringBuilder()
+                                  << "USE plato; ALTER ASYNC REPLICATION MyReplication SET (" << setting << ");");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "is not supported in ALTER");
+    }
 }
 
 Y_UNIT_TEST(CreateAsyncReplicationUnsupportedSettings) {

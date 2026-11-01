@@ -43,6 +43,8 @@ public:
     const NKikimrChangeExchange::TDataChange& GetDataChange() const;
     TConstArrayRef<TCell> GetKey() const;
     TString GetPartitionKey() const;
+    // MD5 of the serialized key cells. Used when a binary CDC topic autopartitions.
+    TString GetRawKeyPartitionKey() const;
     i64 GetSeqNo() const;
     TInstant GetApproximateCreationDateTime() const;
     bool IsBroadcast() const override;
@@ -68,6 +70,7 @@ private:
     mutable size_t BodySize = 0;
     mutable TMaybe<TOwnedCellVec> Key;
     mutable TMaybe<TString> PartitionKey;
+    mutable TMaybe<TString> RawKeyPartitionKey;
 
 }; // TChangeRecord
 
@@ -143,6 +146,7 @@ private:
         GetRecord()->ParsedBody.reset();
         GetRecord()->Key.Clear();
         GetRecord()->PartitionKey.Clear();
+        GetRecord()->RawKeyPartitionKey.Clear();
     }
 
 }; // TChangeRecordBuilder

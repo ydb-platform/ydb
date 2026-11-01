@@ -1,4 +1,4 @@
-"""Synthetic SelfCheck with YDB's synchronized-only BRIDGE_GROUP visibility.
+"""Synthetic SelfCheck with YDB's data-quorum BRIDGE_GROUP visibility.
 
 This models one representative group, not the tablet/whiteboard collection path.
 """
@@ -21,9 +21,9 @@ def blame(instance, node_index: int) -> typing.Dict[str, str]:
     """Pile name -> cause, for the node `node_index` of this instance's pile.
 
     Manual blame comes from the node's faults. Automatic blame (policy `auto_blame_dead_piles`)
-    is every other SYNCHRONIZED pile that this instance sees as not connected.
-    Real SelfCheck does not evaluate BRIDGE_GROUP parts in other stored states,
-    including NOT_SYNCHRONIZED_2 despite that state's data-quorum requirement.
+    is every other data-quorum pile that this instance sees as not connected.
+    BSC-backed SelfCheck evaluates BRIDGE_GROUP parts in stored SYNCHRONIZED
+    and NOT_SYNCHRONIZED_2 states.
     Manual blame uses the same visibility filter; raw response overrides may bypass it.
     A node never blames its own pile automatically.
     """
@@ -38,10 +38,10 @@ def blame(instance, node_index: int) -> typing.Dict[str, str]:
         for p, name in enumerate(instance.names):
             if p == instance.index or name in out:
                 continue
-            if not instance.connected(p) and state.per_pile[p] == model.Stored.SYNCHRONIZED:
+            if not instance.connected(p) and model.requires_data_quorum(state.per_pile[p]):
                 out[name] = CONNECTIVITY
     return {name: cause for name, cause in out.items()
-            if state.per_pile[instance.names.index(name)] == model.Stored.SYNCHRONIZED}
+            if model.requires_data_quorum(state.per_pile[instance.names.index(name)])}
 
 
 def _issue(node, pile_name: str, pile_index: int, cause: str):
@@ -77,7 +77,9 @@ def build(instance, node) -> ydb_monitoring_pb2.SelfCheckResult:
     if blamed:
         overall = StatusFlag.RED if synced.issubset(blamed) else StatusFlag.ORANGE
     if style == "realistic" and children:
-        result.issue_log.append(_parent_issue(node, children, overall))
+        evaluated = {instance.names[i] for i, state in enumerate(instance.replica.state.per_pile)
+                     if model.requires_data_quorum(state)}
+        result.issue_log.append(_parent_issue(node, children, overall, evaluated.issubset(blamed)))
     if faults.self_check is not None:
         result.self_check_result = SelfCheck.Result.Value(faults.self_check)
     elif overall == StatusFlag.RED:
@@ -99,19 +101,22 @@ def build(instance, node) -> ydb_monitoring_pb2.SelfCheckResult:
     return result
 
 
-def _parent_issue(node, children, overall):
+def _parent_issue(node, children, overall, all_evaluated_blamed):
     """Optional STORAGE_GROUP parent that lists the BRIDGE_GROUP ids in `reason`.
 
     Real RenameMergingIssues copies pile attribution only for a single reason,
     even when merging is off. The parent retains the proxy group ID, not a part's
     ID. The status is RED only when every SYNCHRONIZED pile's copy is blamed.
+    Wording covers all evaluated copies. Unlike production's single-child rewrite,
+    the mock retains aggregate wording because its child messages are mock-specific.
+    Clients must use status, type and pile location, not message text.
     """
     parent = ydb_monitoring_pb2.IssueLog(
         id="%d-storage-group" % node.node_id,
         type="STORAGE_GROUP",
         status=overall,
         level=ISSUE_LEVEL - 1,
-        message="Group dead in all piles" if overall == StatusFlag.RED else "Group dead in some piles",
+        message="Group dead in all piles" if all_evaluated_blamed else "Group dead in some piles",
         listed=len(children),
         count=len(children),
     )

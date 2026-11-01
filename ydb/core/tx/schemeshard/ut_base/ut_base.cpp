@@ -12152,13 +12152,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         checkSchema(true);
     }
 
-    Y_UNIT_TEST_FLAG(DropNotNullInternalDocumentId, UseRowId) {
+    Y_UNIT_TEST_FLAGS(DropNotNullInternalDocumentId, UseRowId, Compact) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         auto& flags = runtime.GetAppData().FeatureFlags;
         flags.SetEnableFulltextIndex(true);
         flags.SetEnableFulltextIndexRowId(true);
-        flags.SetEnableCompactFulltextIndex(!UseRowId);
+        flags.SetEnableCompactFulltextIndex(Compact);
         runtime.GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
         ui64 txId = 100;
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -12175,7 +12175,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
         )", UseRowId ? "Utf8" : "Uint64",
-            UseRowId ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextCompactRelevance"));
+            Compact ? "EIndexTypeGlobalFulltextCompactRelevance" : "EIndexTypeGlobalFulltextRelevance"));
         env.TestWaitNotification(runtime, txId);
 
         const TString column = UseRowId ? "__ydb_row_id" : "key";

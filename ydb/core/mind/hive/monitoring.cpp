@@ -1011,6 +1011,7 @@ public:
         UpdateConfig(db, "DataCenterChangeReactionPeriod", configUpdates);
         UpdateConfig(db, "TabletEventHistorySize", configUpdates);
         UpdateConfig(db, "NodeEventHistorySize", configUpdates);
+        UpdateConfig(db, "CountersExportMode", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1463,6 +1464,7 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
         ShowConfig(out, "TabletEventHistorySize");
         ShowConfig(out, "NodeEventHistorySize");
+        ShowConfig(out, "CountersExportMode");
 
         out << "<div class='row' style='margin-top:40px'>";
         bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();

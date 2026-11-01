@@ -2784,6 +2784,13 @@ message THiveConfig {
         optional string EnumDescription = 61003;
     }
 
+    enum ECountersExportMode {
+        COUNTERS_EXPORT_MODE_BASIC = 0 [(EnumDescription) = "only the basic Hive counters"];
+        COUNTERS_EXPORT_MODE_PER_RESOURCE_COUNTERS = 10 [(EnumDescription) = "also per-resource balancing counters (BalanceScatterCpu, BalancerExecuted by balancer type etc.)"];
+        COUNTERS_EXPORT_MODE_LOCAL_PER_NODE_COUNTERS = 20 [(EnumDescription) = "also node usage counters in Locals of this Hive, each node exports its own"];
+        COUNTERS_EXPORT_MODE_HIVE_PER_NODE_COUNTERS = 30 [(EnumDescription) = "also counters per node in Hive itself: all of them on the Hive node, the heaviest mode"];
+    }
+
     enum EHiveStorageBalanceStrategy {
         HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0 [(EnumDescription) = "use the parameter with maximum consumption"];
         HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1 [(EnumDescription) = "consider only IOPS"];
@@ -2957,6 +2964,8 @@ message THiveConfig {
         optional uint64 DefaultMaximum = 4 [(ParamDescription) = "Node capacity for the resource when the node does not report one. Without it such nodes are ignored when balancing the resource."];
     }
     repeated TNamedResourceSettings NamedResources = 97 [(ParamDescription) = "Settings of named resources (e.g. resource broker queues). Entries override built-in defaults."];
+
+    optional ECountersExportMode CountersExportMode = 98 [default = COUNTERS_EXPORT_MODE_BASIC, (ParamDescription) = "Which balancing counters Hive and Locals of its nodes export. Each mode includes the previous ones. Per-node counters produce one counter group per node."];
 }
 
 message THealthCheckConfig {

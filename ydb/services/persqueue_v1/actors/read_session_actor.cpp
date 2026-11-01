@@ -1143,6 +1143,14 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, 
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
 
+            if (t.TopicNameConverter->GetPrimaryPath()
+                == "/Root/logbroker/shared/federation-1/PQ/rt3.lbkx-mow--SourceIdMeta2@replication--streamImpl")
+            {
+                FullPathToConverter[
+                    "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication/streamImpl"] =
+                    t.TopicNameConverter;
+            }
+
             if (!GetMeteringMode()) {
                 SetMeteringMode(t.MeteringMode);
             } else if (*GetMeteringMode() != t.MeteringMode) {

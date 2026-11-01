@@ -39,7 +39,7 @@ struct Tiling: ICompactionUnit<TPortion> {
     LastLevel<TPortion> LastLevel;
     THashMap<ui64, MiddleLevel<TPortion>> MiddleLevels;
     const NMonitoring::TDynamicCounters::TCounterPtr TasksSkippedByPriorityGap;
-    const std::shared_ptr<NColumnShard::TDeriviativeHistogram> GeneratedTasksPriorityLevel;
+    const NMonitoring::THistogramPtr GeneratedTasksPriorityLevel;
 
     struct TPortionPlacement {
         ui8 Level = 0;

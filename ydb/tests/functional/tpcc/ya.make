@@ -5,6 +5,7 @@ PY3TEST()
 TEST_SRCS(test.py)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

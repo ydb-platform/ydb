@@ -5,7 +5,7 @@ TEST_SRCS(
     test.py
 )
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

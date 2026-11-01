@@ -3,6 +3,7 @@ PY3TEST()
     TAG(ya:manual)
 
     SIZE(LARGE)
+REQUIREMENTS(cpu:2)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(NEMESIS_BINARY="ydb/tests/stability/nemesis/nemesis")

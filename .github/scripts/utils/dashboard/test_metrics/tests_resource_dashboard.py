@@ -1258,9 +1258,20 @@ def _build_resources_overlay(
     if ref_report_ts is None:
         ref_report_ts = ref_run.get("report_suite_finish_ts")
     if ref_report_ts is None:
-        # Fallback: assume first resource sample aligns with first evlog run start
-        ref_report_ts = float(records[0].get("ts", 0) or 0)
-        ref_start_ev = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
+        first_mon = float(records[0].get("ts", 0) or 0)
+        first_ev = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
+        # resources_monitor.ts is unix wall clock. Old worker_threads evlog
+        # value.time is the same domain — identity mapping. Pinning the first
+        # monitor sample onto the first test run (legacy fallback) shifts the
+        # whole host overlay by the build preamble (~30min on Large) and paints
+        # a false high-CPU/RAM tail after the last active chunk.
+        if first_mon >= 1_000_000_000.0 and first_ev >= 1_000_000_000.0:
+            ref_start_ev = 0.0
+            ref_report_ts = 0.0
+        else:
+            # Monotonic / relative evlog: pin first monitor sample to first run.
+            ref_report_ts = first_mon
+            ref_start_ev = first_ev
     else:
         ref_report_ts = float(ref_report_ts)
     # cpu_cores is in the first record; fallback: search all records (monitor adds it only to first)

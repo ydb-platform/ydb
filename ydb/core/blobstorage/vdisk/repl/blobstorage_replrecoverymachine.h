@@ -198,7 +198,7 @@ namespace NKikimr {
                         }
 
                         ui32 numSmallParts = 0, numMissingParts = 0, numHuge = 0;
-                        std::array<TRope, 8> partData; // part data for small blobs
+                        std::array<TRope, TErasureType::MaxTotalParts> partData; // part data for small blobs
                         NMatrix::TVectorType small(0, parts.GetSize());
 
                         for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {

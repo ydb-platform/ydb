@@ -967,7 +967,8 @@ public:
         }
 
         IsGoodPatchedBlobId = result;
-        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsAllowedErasure = (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+                && Info->Type.GetErasure() != TErasureType::Erasure8Plus2Block)
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (EnableVPatchForTesting && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch

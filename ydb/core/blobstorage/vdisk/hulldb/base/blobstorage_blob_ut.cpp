@@ -13,21 +13,19 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageDiskBlob) {
 
-        Y_UNIT_TEST(CreateFromDistinctParts) {
+        void TestCreateFromDistinctParts(ui8 totalParts) {
             for (auto addHeader1 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
                 for (auto addHeader2 : {EBlobHeaderMode::OLD_HEADER, EBlobHeaderMode::NO_HEADER, EBlobHeaderMode::XXH3_64BIT_HEADER}) {
                     const ui32 partSize = 6;
                     const ui64 fullDataSize = partSize;
-                    const char *data[] = {
-                        "111111",
-                        "222222",
-                        "333333",
-                        "444444",
-                        "555555",
-                        "666666",
-                        "777777",
-                    };
-                    const ui8 totalParts = std::size(data);
+                    if (totalParts > 8 && (addHeader1 == EBlobHeaderMode::OLD_HEADER
+                            || addHeader2 == EBlobHeaderMode::OLD_HEADER)) {
+                        continue;
+                    }
+                    std::array<TString, TErasureType::MaxTotalParts> data;
+                    for (ui8 i = 0; i < totalParts; ++i) {
+                        data[i] = TString(partSize, '1' + i);
+                    }
 
                     for (ui32 mask = 1; mask < (1 << totalParts); ++mask) {
                         std::array<TRope, MaxTotalPartCount> partsData;
@@ -35,7 +33,7 @@ namespace NKikimr {
                         NMatrix::TVectorType parts(0, totalParts);
                         for (ui8 i = 0; i < totalParts; ++i) {
                             if (mask >> i & 1) {
-                                partsData[numParts++] = TRope(TString(data[i], partSize));
+                                partsData[numParts++] = TRope(data[i]);
                                 parts.Set(i);
                             }
                         }
@@ -48,7 +46,7 @@ namespace NKikimr {
                             if (mask >> i & 1) {
                                 const ui8 partId = i + 1;
                                 TRope blobBuffer = TDiskBlob::Create(fullDataSize, partId, totalParts,
-                                    TRope(TString(data[i], partSize)), Arena, addHeader2, std::nullopt);
+                                    TRope(data[i]), Arena, addHeader2, std::nullopt);
                                 TDiskBlob blob(&blobBuffer, NMatrix::TVectorType::MakeOneHot(i, totalParts), GType, TLogoBlobID(0, 0, 0, 0, fullDataSize, 0));
                                 m.Add(blob);
                             }
@@ -58,6 +56,14 @@ namespace NKikimr {
                     }
                 }
             }
+        }
+
+        Y_UNIT_TEST(CreateFromDistinctParts) {
+            TestCreateFromDistinctParts(7);
+        }
+
+        Y_UNIT_TEST(CreateFromDistinctPartsBlock82) {
+            TestCreateFromDistinctParts(10);
         }
 
         Y_UNIT_TEST(CreateIterate) {

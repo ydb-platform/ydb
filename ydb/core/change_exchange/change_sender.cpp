@@ -484,7 +484,7 @@ void TChangeSender::RemoveRecords() {
     }
 
     if (remove) {
-        RemoveRecords(TVector<ui64>(remove.begin(), remove.end()));
+        RemoveRecords(TVector<ui64>(remove.begin(), remove.end()), false);
     }
 }
 

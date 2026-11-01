@@ -691,7 +691,7 @@ class TCdcChangeSenderMain
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
-        RemoveRecords(std::move(ev->Get()->Records));
+        RemoveRecords(std::move(ev->Get()->Records), false);
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -771,4 +771,3 @@ IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

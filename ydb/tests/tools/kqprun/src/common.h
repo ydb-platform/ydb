@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log_iface.h>
@@ -45,12 +46,16 @@ struct TYdbSetupSettings: public NKikimrRun::TServerSettings {
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
     bool SameSession = false;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 
     bool DisableDiskMock = false;
     bool FormatStorage = false;
     std::optional<TString> PDisksPath;
     std::optional<ui64> DiskSize;
 
+    TString TraceFile;
+    TString TraceDataset = "kqprun";
+    ui8 TraceLevel = 15;
     bool TraceOptEnabled = false;
     EVerbosity VerbosityLevel = EVerbosity::Info;
     NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
@@ -93,6 +98,7 @@ struct TRequestOptions {
     TString Database;
     TDuration Timeout;
     size_t QueryId = 0;
+    TString QueryLabel;
     std::unordered_map<TString, Ydb::TypedValue> Params;
     std::optional<TVector<NACLib::TSID>> GroupSIDs = std::nullopt;
     Ydb::Table::QueryStatsCollection_Mode StatsCollectionMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;

@@ -1,7 +1,14 @@
 #include "update.h"
+#include "object.h"
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
+
+TConclusionStatus TColumnTableUpdate::DoRestore(const TUpdateRestoreContext& context) {
+    const auto& table = context.GetOriginalEntityAsVerified<TColumnTableEntity>().GetTableInfoVerified();
+    AFL_VERIFY(table.AlterData && table.AlterData->AlterBody);
+    return DoRestoreImpl(context, table.AlterData);
+}
 
 TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context) {
     auto conclusion = DoStartImpl(context);

@@ -139,7 +139,7 @@ struct TTest {
 
 Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     Y_UNIT_TEST(RestoreReadsWholeBlobAndWaitsForWriteQuorum) {
-        for (const auto states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N2, R::N2, R::R},
+        for (const TStates states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::R},
                 TStates{R::N1, R::N1, R::F}, TStates{R::N1, R::F, R::F}, TStates{R::N1, R::R, R::F}}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie, 2, 3);
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     }
 
     Y_UNIT_TEST(RestoreParallelReadsExcludeFailedRealms) {
-        for (const auto states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::F},
+        for (const TStates states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::F},
                 TStates{R::N1, R::F, R::F}, TStates{R::N1, R::R, R::F}}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie, 2, 3);
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     }
 
     Y_UNIT_TEST(ReadsRequestedRangeFromNormalOrRecoveringRealm) {
-        for (const auto states : {TStates{R::N1, R::F, R::F}, TStates{R::N1, R::R, R::F}}) {
+        for (const TStates states : {TStates{R::N1, R::F, R::F}, TStates{R::N1, R::R, R::F}}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie, 2, 3);
                 if (states[1] == R::R) {
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
             {{R::N1, R::F, R::F}, false, S::Absent}, // E = 1 is excluded by NODATA in N.
             {{R::N1, R::F, R::F}, true, S::Absent}, // Without ERROR, NOT_YET confirms missing data.
             {{R::N2, R::F, R::F}, true, S::Absent}, // NOT_YET alone does not make absence uncertain.
-            {{R::N2, R::N2, R::R}, true, S::Absent}, // NOT_YET without ERROR confirms missing data; R NODATA is trusted.
+            {{R::N1, R::N1, R::R}, true, S::Absent}, // NOT_YET without ERROR confirms missing data in N/N.
         };
         for (const auto& test : cases) {
             TTest t(test.States);
@@ -389,20 +389,17 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
             for (const auto recoveryReply : {S::Absent, S::Error, S::Lost}) {
                 for (ui32 errorsPerNormalRealm = 0; errorsPerNormalRealm <= 2; ++errorsPerNormalRealm) {
                     for (ui32 cookie = 0; cookie < 3; ++cookie) {
-                        TTest t({R::N2, R::N2, R::R}, cookie); // E = 1+1+1 OR 2+2.
+                        TTest t({R::N1, R::N1, R::R}, cookie); // E = 1+1 in N/N.
                         for (ui32 disk = 0; disk < 9; ++disk) {
                             t.Reply(disk, t.Realm(disk) == 2 ? recoveryReply
                                 : disk / 3 < errorsPerNormalRealm ? S::Error : S::Absent);
                         }
-                        const auto outcome = restore ? t.RunRestore() : t.Run();
-                        const bool hidden = errorsPerNormalRealm == 2
-                            || (errorsPerNormalRealm == 1 && recoveryReply != S::Absent);
-                        const bool failedModel = errorsPerNormalRealm == 2
-                            || (errorsPerNormalRealm == 1 && recoveryReply == S::Error);
+                        const EStrategyOutcome outcome = restore ? t.RunRestore() : t.Run();
+                        const bool failedModel = errorsPerNormalRealm != 0;
                         UNIT_ASSERT_VALUES_EQUAL(ui32(outcome.Value), ui32(failedModel
                             ? EStrategyOutcome::ERROR : EStrategyOutcome::DONE));
                         if (!failedModel) {
-                            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == (hidden ? S::Error : S::Absent));
+                            UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == S::Absent);
                         }
                         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
                     }
@@ -413,7 +410,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
 
     Y_UNIT_TEST(RecoveryErrorsFailConservativePhantomCheck) {
         for (const auto recoveryReply : {S::Error, S::Lost}) {
-            TTest t({R::N2, R::N2, R::R});
+            TTest t({R::N1, R::N1, R::R});
             for (ui32 disk = 0; disk < 9; ++disk) {
                 t.Reply(disk, t.Realm(disk) == 2 ? recoveryReply : S::Absent);
             }
@@ -423,7 +420,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     }
 
     Y_UNIT_TEST(RecoveryErrorsCanViolateFailureModelDespiteExistingWriteQuorum) {
-        TTest t({R::N2, R::N2, R::R});
+        TTest t({R::N1, R::N1, R::R});
         for (ui32 disk = 0; disk < 9; ++disk) {
             if (t.Realm(disk) != 2 && disk / 3 < 2) {
                 t.Data(disk);
@@ -436,30 +433,21 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
         UNIT_ASSERT(t.Blackboard.GroupDiskRequests.PutsPending.empty());
     }
 
-    Y_UNIT_TEST(RestoreWaitsWhileUnknownRecoveryReplyCanHideEnsuredLayout) {
-        for (const auto recoveryReply : {S::Absent, S::Unknown, S::Error, S::Lost}) {
+    Y_UNIT_TEST(RestoreDoesNotWaitForRecoveryReplyOutsideEnsuredLayout) {
+        for (const S recoveryReply : {S::Absent, S::Unknown, S::Error, S::Lost}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
-                TTest t({R::N2, R::N2, R::R}, cookie);
+                TTest t({R::N1, R::N1, R::R}, cookie);
                 const ui32 found = t.Realm(0) != 2 ? 3 : 4;
                 for (ui32 disk = 0; disk < 9; ++disk) {
                     if (disk == found) {
                         t.Data(disk);
-                    } else if (disk >= 3) {
+                    } else if (t.Realm(disk) != 2 || disk >= 3) {
                         t.Reply(disk, S::Absent);
                     } else if (t.Realm(disk) == 2 && recoveryReply != S::Unknown) {
                         t.Reply(disk, recoveryReply);
                     }
                 }
                 UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
-                if (recoveryReply == S::Unknown) {
-                    UNIT_ASSERT_VALUES_EQUAL(t.PutMask(), 0);
-                    for (ui32 disk = 0; disk < 3; ++disk) {
-                        if (t.Realm(disk) == 2) {
-                            t.Reply(disk, S::Absent);
-                        }
-                    }
-                    UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::IN_PROGRESS);
-                }
                 UNIT_ASSERT(t.PutMask());
                 t.ConfirmPuts();
                 UNIT_ASSERT(t.RunRestore() == EStrategyOutcome::DONE);
@@ -562,7 +550,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     }
 
     Y_UNIT_TEST(AllFailureMasksUseEnsuredAndNeverReadFailedRealms) {
-        for (const auto states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N2, R::N2, R::R},
+        for (const TStates states : {TStates{R::N0, R::N0, R::N0}, TStates{R::N1, R::N1, R::R},
                 TStates{R::N1, R::N1, R::F}, TStates{R::N1, R::F, R::F}, TStates{R::N1, R::R, R::F}}) {
             for (ui32 mask = 0; mask < 512; ++mask) {
                 TTest t(states);
@@ -858,7 +846,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
     }
 
     Y_UNIT_TEST(RestoreKnownCopyDespiteNotYetInActiveRealms) {
-        for (const auto states : {TStates{R::N1, R::F, R::F}, TStates{R::N2, R::N2, R::R},
+        for (const TStates states : {TStates{R::N1, R::F, R::F}, TStates{R::N1, R::N1, R::R},
                 TStates{R::N1, R::N1, R::F}, TStates{R::N1, R::R, R::F}}) {
             for (ui32 cookie = 0; cookie < 3; ++cookie) {
                 TTest t(states, cookie);

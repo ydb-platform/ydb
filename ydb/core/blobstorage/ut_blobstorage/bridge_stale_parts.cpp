@@ -272,6 +272,86 @@ namespace {
         env.Runtime->FilterFunction = {};
     }
 
+    void CheckNewGroupWaitsForClusterState(bool duringSync) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        CreatePoolAndGetGroup(env);
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+
+        constexpr ui32 staleNodeId = 3;
+        TStaticSyncFinishHold staticHold(env);
+        bool holdWriter = true;
+        std::unique_ptr<IEventHandle> heldConfig;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (duringSync && !staticHold.Filter(nodeId, ev)) {
+                return false;
+            }
+            if (holdWriter && nodeId == staleNodeId && ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                const auto *recipient = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                const auto *msg = ev->Get<TEvNodeWardenStorageConfig>();
+                if (recipient && TypeName(*recipient).Contains("TNodeWarden") &&
+                        msg->Config && msg->Config->HasClusterState() &&
+                        NBridge::PileStateTraits(msg->Config->GetClusterState().GetPerPileState(1)).RequiresDataQuorum) {
+                    heldConfig = std::move(ev);
+                    return false;
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, duringSync ? NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2
+            : NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitUntil(env, [&] { return bool(heldConfig); }, "withheld writer cluster state", TDuration::Seconds(1), 60);
+
+        CreateAnotherPool(env, 2);
+        env.Sim(TDuration::Seconds(30));
+        const auto baseConfig = env.FetchBaseConfig();
+        std::optional<ui32> groupId;
+        for (const auto *group : GetPoolGroups(baseConfig, 2)) {
+            if (group->GetIsProxyGroup()) {
+                groupId = group->GetGroupId();
+            }
+        }
+        UNIT_ASSERT(groupId);
+        const auto pileGroups = GetPileGroups(env, *groupId);
+        UNIT_ASSERT_VALUES_EQUAL(pileGroups.size(), 2);
+        const auto groupInfo = GetGroupInfo(env, *groupId);
+        const TString data = "new group write from a node with stale cluster state";
+        auto putAndCheck = [&](ui32 step, bool mustSucceed) {
+            const TLogoBlobID id(100500, 1, step, 0, data.size(), 0);
+            const auto edge = env.Runtime->AllocateEdgeActor(staleNodeId, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, *groupId, new TEvBlobStorage::TEvPut(id, data,
+                    env.Runtime->GetClock() + TDuration::Seconds(30)));
+            });
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+                env.Runtime->GetClock() + TDuration::Seconds(40));
+            UNIT_ASSERT(result);
+            if (mustSucceed) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+            }
+            if (result->Get()->Status == NKikimrProto::OK) {
+                for (ui32 pile : {0, 1}) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(ReadFromPileGroup(env, pileGroups[pile], 1 + 8 * pile, id, data),
+                        NKikimrProto::OK, "acknowledged write skipped pile " << pile);
+                }
+            }
+        };
+        putAndCheck(1, false);
+        UNIT_ASSERT_VALUES_EQUAL(groupInfo.GetBridgeGroupState().GetClusterStateGeneration(),
+            QueryStorageConfig(env).GetClusterState().GetGeneration());
+
+        holdWriter = false;
+        env.Runtime->Send(heldConfig.release(), staleNodeId);
+        env.Sim(TDuration::Seconds(1));
+        putAndCheck(2, true);
+        if (duringSync) {
+            staticHold.Release();
+            WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        }
+        env.Runtime->FilterFunction = {};
+    }
+
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeStaleParts) {
@@ -282,6 +362,80 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
 
     Y_UNIT_TEST_TWIN(AssimilateMergesNonemptyStaleInventory, reverse) {
         CheckAssimilateWithSuspendedSource(reverse, true);
+    }
+
+    Y_UNIT_TEST(ResyncRestartsWhenItsSourceIsSuspended) {
+        TEnvironmentSetup env({
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        });
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto groups = GetPileGroups(env, groupId);
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+
+        TBscConfigHold bscHold(env);
+        enum { WAIT_BARRIER_SCAN, WAIT_BLOB_SCAN, HELD, RELEASED } scan = WAIT_BARRIER_SCAN;
+        TActorId syncer;
+        std::unique_ptr<IEventHandle> heldScan;
+        ui32 scanNode = 0;
+        bool sourceScanned = false;
+        env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& ev) {
+            if (!bscHold.Filter(node, ev)) {
+                return false;
+            }
+            if (scan == HELD && ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilateResult &&
+                    ev->GetRecipientRewrite() == syncer) {
+                sourceScanned = true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate &&
+                    ev->Recipient == MakeBlobStorageProxyID(groups[1])) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvAssimilate>();
+                if (scan == WAIT_BARRIER_SCAN && msg->SkipBlocksUpTo && !msg->SkipBarriersUpTo && msg->SkipBlobsUpTo) {
+                    scan = WAIT_BLOB_SCAN;
+                } else if (scan == WAIT_BLOB_SCAN && msg->SkipBlocksUpTo && msg->SkipBarriersUpTo && !msg->SkipBlobsUpTo) {
+                    syncer = ev->Sender;
+                    heldScan = std::move(ev);
+                    scanNode = node;
+                    scan = HELD;
+                    return false;
+                }
+            }
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return sourceScanned; }, "old source metadata scanned", TDuration::Seconds(1), 600);
+        bscHold.Start();
+        auto state = QueryStorageConfig(env).GetClusterState();
+        TBridgePileId::FromPileIndex(2).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        TBridgePileId::FromPileIndex(2).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
+        state.SetGeneration(state.GetGeneration() + 1);
+        const auto promoted = InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(state);
+        });
+        UNIT_ASSERT_EQUAL_C(promoted.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            promoted.GetErrorReason());
+        SwitchPileState(env, 0, NKikimrBridge::TClusterState::SUSPENDED);
+        env.Sim(TDuration::Seconds(10));
+
+        // The pre-DATA target and the suspended source both miss this acknowledged write. No Keep is issued.
+        TDataChecker checker(env);
+        checker.Write(groupId, 17);
+        CheckPileData(env, checker, 2, 17);
+        scan = RELEASED;
+        env.Runtime->Send(heldScan.release(), scanNode);
+        WaitUntil(env, [&] { return GetPart(env, groupId, 1).GetStage() == NKikimrBridge::TGroupState::SYNCED; },
+            "target completion using the old source");
+        UNIT_ASSERT(GetPileState(env, 1) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        bscHold.Release();
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        env.Runtime->FilterFunction = {};
+        CheckPileData(env, checker, 1, 9);
     }
 
     // the pile gets back while BSC doesn't know it has been out: the part of the pile is SYNCED by its previous sync, but
@@ -790,5 +944,13 @@ Y_UNIT_TEST_SUITE(BridgeStaleParts) {
         UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL_C(msg->Responses[0].Status, NKikimrProto::OK, msg->ToString());
         UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Buffer.ConvertToString(), data);
+    }
+
+    Y_UNIT_TEST(NewGroupWaitsForClusterStateAfterRejoin) {
+        CheckNewGroupWaitsForClusterState(false);
+    }
+
+    Y_UNIT_TEST(NewGroupWaitsForClusterStateDuringSync) {
+        CheckNewGroupWaitsForClusterState(true);
     }
 }

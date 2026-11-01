@@ -5,6 +5,7 @@
 #include "traces/kqp_rbo_trace_output.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>
@@ -25,6 +26,37 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
+
+THashMap<TString, THashSet<TString>> TakeNotRequested(
+    const THashMap<TString, THashSet<TString>>& columnsByTableName,
+    THashMap<TString, THashSet<TString>>& requestedByTableName)
+{
+    THashMap<TString, THashSet<TString>> notRequested;
+    for (const auto& [table, columns] : columnsByTableName) {
+        auto& requested = requestedByTableName[table];
+        for (const auto& column : columns) {
+            if (requested.insert(column).second) {
+                notRequested[table].insert(column);
+            }
+        }
+    }
+    return notRequested;
+}
+
+THashMap<TString, THashMap<TString, TVector<TString>>> TakeNotRequested(
+    const THashMap<TString, THashMap<TString, TVector<TString>>>& tuplesByTableName,
+    THashMap<TString, THashSet<TString>>& requestedByTableName) {
+    THashMap<TString, THashMap<TString, TVector<TString>>> notRequested;
+    for (const auto& [table, tuples] : tuplesByTableName) {
+        auto& requested = requestedByTableName[table];
+        for (const auto& [tupleKey, columns] : tuples) {
+            if (requested.insert(tupleKey).second) {
+                notRequested[table].emplace(tupleKey, columns);
+            }
+        }
+    }
+    return notRequested;
+}
 
 NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
     const auto& cboStats = kqpCtx.CBOStats;
@@ -151,6 +183,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     settings.VisitTuples = true;
 
     // At first step convert KqpOps to RBO Ops.
+    std::optional<TCompileTraceScope> traceScope(std::in_place, KqpCtx.GetCompileTrace(), TCompileTraceLevels::Step,
+        "Convert to new RBO operators");
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -200,6 +234,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         },
         ctx, settings);
 
+    traceScope->SetSuccess(status != TStatus::Error);
+    traceScope.reset();
     if (status != TStatus::Ok) {
         return status;
     }
@@ -290,6 +326,8 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
         HistColumnsByTableName[lhsTable].insert(lhsEntry->ColumnName);
         HistColumnsByTableName[rhsTable].insert(rhsEntry->ColumnName);
+        SimpleColumnsByTableName[lhsTable].insert(lhsEntry->ColumnName);
+        SimpleColumnsByTableName[rhsTable].insert(rhsEntry->ColumnName);
 
         auto& keys = keysByTablePair[TStringBuilder() << lhsTable << '\0' << rhsTable];
         keys.first.push_back(lhsEntry);
@@ -316,6 +354,7 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(TOpJoin* join, const TColumnL
         const auto& tableName = entry->TableName;
         const auto& colName = entry->ColumnName;
         HistColumnsByTableName[tableName].insert(colName);
+        SimpleColumnsByTableName[tableName].insert(colName);
     };
 
     TVector<const TColumnLineageEntry*> lhsKeys;
@@ -405,12 +444,19 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
     CollectTablesAndColumnsNames(ctx);
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM, EqHeightHistTuplesByTableName,
-                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
+    TCompileTraceDependencies trace(KqpCtx.GetCompileTrace(), "Await column statistics");
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH,
+                   TakeNotRequested(CMColumnsByTableName, RequestedCMColumns),
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; }, &trace);
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM,
+                   TakeNotRequested(HistColumnsByTableName, RequestedHistColumns),
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; }, &trace);
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::SIMPLE_COLUMN,
+                   TakeNotRequested(SimpleColumnsByTableName, RequestedSimpleColumns),
+                   [](const NYql::TColumnStatistics& stats) { return stats.HyperLogLog.has_value(); }, &trace);
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM,
+                   TakeNotRequested(EqHeightHistTuplesByTableName, RequestedEqHeightTuples),
+                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; }, &trace);
 
     if (futures.empty()) {
         return TStatus::Ok;
@@ -469,6 +515,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                 }
             }
         });
+    // Each request span records the outcome of its request.
+    ColumnStatisticsReadiness = trace.Await(ColumnStatisticsReadiness);
 
     SharedState = sharedState;
     return TStatus::Async;
@@ -545,6 +593,9 @@ void TKqpNewRBOTransformer::ApplyColumnStatistics() {
 }
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    if (auto* trace = KqpCtx.GetCompileTrace()) {
+        trace->ResumeWaits();
+    }
     ApplyColumnStatistics();
     return ContinueOptimizations(input, output, ctx);
 }

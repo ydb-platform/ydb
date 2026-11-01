@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+#include <util/digest/multi.h>
 #include <util/generic/hash.h>
 #include <util/generic/guid.h>
 #include <util/generic/hash_set.h>
@@ -11,17 +12,31 @@
 
 namespace NYql::NDqs {
 
+struct TDownloadKey {
+    TString ObjectId;
+    TString UploadPrefix;
+    TString UploadClusterAddress;
+
+    bool operator==(const TDownloadKey&) const = default;
+};
+
+struct TDownloadKeyHash {
+    size_t operator()(const TDownloadKey& key) const {
+        return MultiHash(key.ObjectId, key.UploadPrefix, key.UploadClusterAddress);
+    }
+};
+
 class TInflightLimiter: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TInflightLimiter>;
 
     TInflightLimiter(i32 inflightLimit);
-    bool CanDownload(const TString& id);
-    void MarkDownloadStarted(const TString& id);
-    void MarkDownloadFinished(const TString& id);
+    bool CanDownload(const TDownloadKey& key);
+    void MarkDownloadStarted(const TDownloadKey& key);
+    void MarkDownloadFinished(const TDownloadKey& key);
 
 private:
-    THashMap<TString, i32> InflightResources;
+    THashMap<TDownloadKey, i32, TDownloadKeyHash> InflightResources;
     i32 InflightLimit;
 };
 
@@ -97,6 +112,22 @@ struct TWorkerInfo: public TThrRefBase {
     using TPtr = TIntrusivePtr<TWorkerInfo>;
     using TFileResource = Yql::DqsProto::TFile;
 
+    struct TDownloadResource {
+        TFileResource File;
+        TString UploadPrefix;
+        TString UploadClusterAddress;
+
+        TDownloadKey GetKey() const {
+            return {
+                .ObjectId = File.GetObjectId(),
+                .UploadPrefix = UploadPrefix,
+                .UploadClusterAddress = UploadClusterAddress,
+            };
+        }
+    };
+
+    using TDownloadList = THashMap<TDownloadKey, TDownloadResource, TDownloadKeyHash>;
+
     const ui32 NodeId;
     const TGUID WorkerId;
     TInstant LastPingTime;
@@ -148,15 +179,15 @@ struct TWorkerInfo: public TThrRefBase {
 
     bool Update(const Yql::DqsProto::RegisterNodeRequest& request);
 
-    void RemoveFromDownloadList(const TString& objectId);
+    void RemoveFromDownloadList(const TDownloadKey& key);
 
-    void AddToDownloadList(const THashMap<TString, TFileResource>& downloadList);
+    void AddToDownloadList(const TDownloadList& downloadList);
 
-    bool AddToDownloadList(const TString& key, const TFileResource& value);
+    bool AddToDownloadList(const TDownloadResource& value);
 
-    const THashMap<TString, TFileResource>& GetDownloadList();
+    const TDownloadList& GetDownloadList();
 
-    THashMap<TString, TFileResource> GetResourcesForDownloading();
+    TDownloadList GetResourcesForDownloading();
 
     const THashSet<TString>& GetResources();
 
@@ -177,11 +208,11 @@ struct TWorkerInfo: public TThrRefBase {
 private:
     THashSet<TString> Resources;
     google::protobuf::RepeatedPtrField<::Yql::DqsProto::RegisterNodeRequest_LocalFile> ResourcesOrdered;
-    THashMap<TString, TFileResource> DownloadList;
+    TDownloadList DownloadList;
     TSensorsGroupPtr Metrics;
     TInflightLimiter::TPtr InflightLimiter;
     TClusterResources ClusterResources;
-    THashMap<TString, TFileResource> ActiveDownloads;
+    TDownloadList ActiveDownloads;
 
     TSensorCounterPtr CurrentDownloadsSum;
     TSensorCounterPtr CurrentDownloadsMax;

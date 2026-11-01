@@ -549,23 +549,14 @@ template <typename TTable> void TestApplyReturnsPackedRows() {
 
 Y_UNIT_TEST_SUITE(NeumannHashTableTest) {
     Y_UNIT_TEST(ApplyReturnsPackedRows) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TestApplyReturnsPackedRows<TNeumannTable>();
     }
 
     Y_UNIT_TEST(ApplyReturnsPackedRowsWithConsecutiveDuplicates) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TestApplyReturnsPackedRows<TNeumannTableSeq>();
     }
 
     Y_UNIT_TEST(RequiredMemoryForBuild) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TColumnDesc key;
         key.Role = EColumnRole::Key;
         key.DataSize = sizeof(ui32);
@@ -598,7 +589,7 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
     static constexpr bool toCSV = false;
 
     Y_UNIT_TEST(Uniform) {
-        if (!NX86::HaveAVX2()) {
+        if (!NX86::HaveSSE42()) {
             return;
         }
         TUniformDistribution uni1M(0, 1e6 - 1);
@@ -611,7 +602,7 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
     }
 
     Y_UNIT_TEST(UniformPayloaded) {
-        if (!NX86::HaveAVX2()) {
+        if (!NX86::HaveSSE42()) {
             return;
         }
         TUniformDistribution uni1M(0, 1e6 - 1);
@@ -624,7 +615,7 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
     }
 
     Y_UNIT_TEST(NormalPayloaded) {
-        if (!NX86::HaveAVX2()) {
+        if (!NX86::HaveSSE42()) {
             return;
         }
         TNormalDistribution norm1M(1000000 / 2, 1000000 / 6);

@@ -462,6 +462,46 @@ struct TTwoPartsOnOneNodeTest {
 
 Y_UNIT_TEST_SUITE(VDiskBalancing) {
 
+    Y_UNIT_TEST(WaitsForDurabilityReplication) {
+        TEnvironmentSetup env({
+            .NodeCount = 9,
+            .VDiskReplPausedAtStart = false,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
+                config.BlobStorageConfig->MutableVDiskBalancingConfig()->SetEnableSend(true);
+                config.BlobStorageConfig->MutableVDiskBalancingConfig()->SetSecondsToSleepIfNothingToDo(3600);
+            },
+        });
+        bool durabilityReplicated = false;
+        THashSet<TActorId> balancingActors;
+        THashSet<TActorId> statusRequesters;
+        ui32 statusResponses = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatus) {
+                statusRequesters.insert(event->Sender);
+            } else if (event->GetTypeRewrite() == TEvBlobStorage::EvVStatusResult
+                    && statusRequesters.contains(event->Recipient)) {
+                NKikimrBlobStorage::TEvVStatusResult& record = event->Get<TEvBlobStorage::TEvVStatusResult>()->Record;
+                record.SetReplicated(true);
+                record.SetDurabilityReplicated(durabilityReplicated);
+                balancingActors.insert(event->Recipient);
+                ++statusResponses;
+            }
+            return true;
+        };
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(60));
+        UNIT_ASSERT(statusResponses);
+        // Failed readiness checks retry after ten seconds; an empty successful pass sleeps for an hour.
+        UNIT_ASSERT_C(balancingActors.size() > 9, balancingActors.size());
+        durabilityReplicated = true;
+        env.Sim(TDuration::Seconds(30));
+        const ui32 completedActors = balancingActors.size();
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(balancingActors.size(), completedActors);
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(TestStopOneNode_Block42) {
         TStopOneNodeTest{TTestEnv(8, TBlobStorageGroupType::Erasure4Plus2Block), GenRandomBuffer(100)}.RunTest();
     }

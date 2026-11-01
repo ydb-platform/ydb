@@ -752,14 +752,9 @@ void TExecutor::LogWaitingTransaction(const TTransactionWaitPad& transaction) {
 
 namespace {
 
-// A page collection is sticky when it holds data pages of a sticky group.
+// A page collection is sticky when its leader group is sticky.
 bool IsStickySlot(const NTable::TPartStore& partStore, ui32 slot, const TVector<bool>& stickyGroups) {
-    for (size_t groupIndex : xrange(stickyGroups.size())) {
-        if (stickyGroups[groupIndex] && partStore.DataSlot(NTable::NPage::TGroupId(groupIndex)) == slot) {
-            return true;
-        }
-    }
-    return false;
+    return stickyGroups[partStore.Slots.SlotLeaderGroup(slot)];
 }
 
 // The shared cache walks a group's B-tree when one of its collections is in memory or it is sticky.
@@ -843,9 +838,9 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
             Stats->PacksMetaBytes += pack->Meta.Raw.size();
     }
 
-    for (size_t groupIndex : xrange(partView->GroupsCount)) {
-        partStore->PageCollections[partStore->DataSlot(NTable::NPage::TGroupId(groupIndex))]->SetCacheMode(
-            GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes)
+    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
+        partStore->PageCollections[slot]->SetCacheMode(
+            GetCacheMode(partView->Scheme->Groups[partStore->Slots.SlotLeaderGroup(slot)].Columns, cacheModes)
         );
     }
 
@@ -1638,14 +1633,18 @@ void TExecutor::UpdateCacheModesForPartStore(NTable::TPartView& partView, const 
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
     TVector<bool> modeChanged(partStore->PageCollections.size(), false);
 
-    for (size_t groupIndex : xrange(partView->GroupsCount)) {
+    for (ui32 slot : xrange(partStore->Slots.SlotsCount())) {
+        const size_t groupIndex = partStore->Slots.SlotLeaderGroup(slot);
         ECacheMode cacheMode = GetCacheMode(partView->Scheme->Groups[groupIndex].Columns, cacheModes);
-        const ui32 slot = partStore->DataSlot(NTable::NPage::TGroupId(groupIndex));
         auto* pageCollection = partStore->PageCollections[slot].Get();
 
-        if (PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection)) {
-            modeChanged[slot] = true;
-        }
+        modeChanged[slot] = PrivatePageCache->UpdateCacheMode(cacheMode, pageCollection);
+    }
+
+    // A separate descriptor page collection has no data pages to attach B-tree seeds with
+    if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && modeChanged[slot]) {
+        auto* pageCollection = partStore->PageCollections[slot].Get();
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode()));
     }
 
     // A group is re-seeded when the mode of the collection with its data or index pages changes.
@@ -1678,9 +1677,18 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
 
         if (stickyGroups[groupIndex]) {
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(groupId)),
+                NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(partStore->DataSlot(groupId), groupId)),
                 0, ui64(ERequestTypeCookie::StickyPages));
         }
+    }
+
+    // A separate descriptor page collection has no data pages and is sticky with the main group, as page
+    // collection 0 of the old layout, so V1 indexes kept in it stay in memory
+    if (const ui32 slot = partStore->DescriptorSlot(); slot != partStore->DataSlot({ }) && IsStickySlot(*partStore, slot, stickyGroups)) {
+        auto* pageCollection = partStore->PageCollections[slot].Get();
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+            NBlockIO::EPriority::Bkgr, pageCollection->PageCollection, partStore->GetPages(slot, { })),
+            0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
 
@@ -5278,6 +5286,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     };
 
+    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
+
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
         static const NTable::TScheme::TFamily defaultFamilySettings;
@@ -5310,7 +5320,13 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
             addChannel(room->Outer);
 
             cfg.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+
+            descriptorChannel = room->Main;
         }
+    }
+
+    if (NWriter::ApplyDescriptorChannel(cfg.Layout, cfg.Writer, descriptorChannel)) {
+        addChannel(descriptorChannel);
     }
 
     cfg.DataKind = DataKindByTabletType(Owner->TabletType());
@@ -5414,6 +5430,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     };
 
+    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
+
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
         static const NTable::TScheme::TFamily defaultFamilySettings;
@@ -5448,7 +5466,15 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             addChannel(room->Outer);
 
             comp->Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+
+            descriptorChannel = room->Main;
         }
+    }
+
+    // Data of the main group is written to the leader family channel too until tier compaction,
+    // so parts keep descriptor pages and main group data in a single page collection
+    if (NWriter::ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
+        addChannel(descriptorChannel);
     }
 
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {

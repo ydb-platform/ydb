@@ -60,6 +60,7 @@ class KiKiMRDistConfSelfHealTest(object):
     # once at node startup and is NOT affected by dynamic ReplaceConfig calls, so options like
     # automatic_*_management / *_self_heal_allowed_nodes must be set here, before cluster start.
     self_management_extra_options = {}
+    cms_config = None
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -83,6 +84,7 @@ class KiKiMRDistConfSelfHealTest(object):
             use_self_management=True,
             extra_grpc_services=['config'],
             additional_log_configs=log_configs,
+            cms_config=cls.cms_config,
             n_to_select=cls.n_to_select,
             state_storage_rings=cls.state_storage_rings)
 
@@ -244,6 +246,20 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
     erasure = Erasure.MIRROR_3_DC
     nodes_count = 9
     rgOffset = 1
+    cms_config = {"sentinel_config": {
+        "state_storage_self_heal_config": {
+            "enable": True,
+            "node_good_state_limit": 3,
+            "node_pretty_good_state_limit": 2,
+            "node_bad_state_limit": 3,
+            "wait_for_config_step": 1_000_000,
+        },
+        "default_state_limit": 2,
+        "update_config_interval": 2_000_000,
+        "update_state_interval": 2_000_000,
+        "update_state_timeout": 1_000_000,
+        "retry_update_config": 1_000_000,
+    }}
 
     def do_test(self, configName):
         self.do_bad_config(configName)
@@ -256,9 +272,27 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
         assert_that("WriteOnly" not in rg[0])
         assert_that("WriteOnly" not in rg[1])
 
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
-        time.sleep(1)
-        assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 3)
+        deadline = time.monotonic() + 30
+        while True:
+            response = self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}})
+            logger.info(response)
+            error = response.get("ErrorReason", "")
+            if not error:
+                break
+            assert_eq(error, "Node states are not ready for choosing a readable State Storage group")
+            assert_that(time.monotonic() < deadline, response)
+            time.sleep(1)
+
+        deadline = time.monotonic() + 30
+        config = self.do_request_config()[f"{configName}Config"]
+        while "RingGroups" in config and len(config["RingGroups"]) != 3 and time.monotonic() < deadline:
+            time.sleep(1)
+            config = self.do_request_config()[f"{configName}Config"]
+        if "RingGroups" in config:
+            assert_eq(len(config["RingGroups"]), 3)
+        else:
+            # With short test-only Sentinel intervals the third group may already be promoted.
+            assert_that("Ring" in config, config)
         time.sleep(10)
 
         rg = self.do_request_config()[f"{configName}Config"]["Ring"]

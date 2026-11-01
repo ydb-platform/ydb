@@ -4,14 +4,16 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
+TConclusionStatus TStandaloneSchemaUpdate::DoRestoreImpl(
+    const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
+    UpdateSchema = alterData->AlterBody->HasAlterSchema();
+    UpdateTTL = alterData->AlterBody->HasAlterTtlSettings();
+    TargetStandalone = std::make_shared<TStandaloneTable>(context.GetOriginalEntity().GetPathId(), alterData);
+    return TConclusionStatus::Success();
+}
+
 NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
     const auto& originalTable = context.GetOriginalEntityAsVerified<TStandaloneTable>();
-    if (const auto& alterData = originalTable.GetTableInfoVerified().AlterData) {
-        UpdateSchema = alterData->AlterBody->HasAlterSchema();
-        UpdateTTL = alterData->AlterBody->HasAlterTtlSettings();
-        TargetStandalone = std::make_shared<TStandaloneTable>(originalTable.GetPathId(), alterData);
-        return TConclusionStatus::Success();
-    }
 
     auto alter = TConverterModifyToAlter().Convert(*context.GetModification());
     if (alter.IsFail()) {

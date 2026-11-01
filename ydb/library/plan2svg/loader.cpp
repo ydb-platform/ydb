@@ -280,7 +280,7 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
         ReadString(subNode, "Limit", description.Info);
     } else if (name == "Sort") {
         if (auto* sortByNode = subNode.GetValueByPath("SortBy")) {
-            auto sortBy = sortByNode->GetStringSafe();
+            auto sortBy = FormatPlanProperty("SortBy", *sortByNode);
             while (true) {
                 auto p = sortBy.find("row.");
                 if (p == sortBy.npos) {
@@ -311,7 +311,7 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
         description.OperatorType = "Aggregation";
         TStringBuilder builder;
         if (auto* aggregationNode = subNode.GetValueByPath("Aggregation")) {
-            auto aggr = aggregationNode->GetStringSafe();
+            auto aggr = FormatPlanProperty("Aggregation", *aggregationNode);
             if (aggr) {
                 if (aggr.StartsWith("{")) {
                     aggr.erase(aggr.begin());
@@ -365,7 +365,7 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
             }
         }
         if (auto* groupByNode = subNode.GetValueByPath("GroupBy")) {
-            auto groupBy = groupByNode->GetStringSafe();
+            auto groupBy = FormatPlanProperty("GroupBy", *groupByNode);
             while (true) {
                 auto p = groupBy.find("item.");
                 if (p == groupBy.npos) {
@@ -419,7 +419,7 @@ static TOperatorDescription DescribeOperator(const NJson::TJsonValue& subNode, c
             }
         }
         if (auto* topSortByNode = subNode.GetValueByPath("TopSortBy")) {
-            auto topSortBy = topSortByNode->GetStringSafe();
+            auto topSortBy = FormatPlanProperty("TopSortBy", *topSortByNode);
             if (topSortBy) {
                 if (TString(builder)) {
                     builder << ", ";
@@ -860,7 +860,7 @@ void TPlan::LoadConnection(const std::shared_ptr<TStage>& stage, const NJson::TJ
         }
         if (auto* sortColumnsNode = plan.GetValueByPath("SortColumns")) {
             for (auto& sortColumn : sortColumnsNode->GetArray()) {
-                connection->SortColumns.push_back(sortColumn.GetStringSafe());
+                connection->SortColumns.push_back(FormatSortColumn(sortColumn));
             }
         }
         if (auto* hashFuncNode = plan.GetValueByPath("HashFunc")) {
@@ -1129,7 +1129,10 @@ void TVisualizer::LoadPlans(const TString& plans, bool simplified) {
 }
 
 void TVisualizer::LoadPlans(const NJson::TJsonValue& root) {
-    if (auto* subNode = root.GetValueByPath("Plans")) {
+    // New RBO simplified plans start at ResultSet, without a Query wrapper.
+    if (root["PlanNodeType"] == "ResultSet") {
+        LoadPlan(root["Node Type"].GetStringSafe(), root);
+    } else if (auto* subNode = root.GetValueByPath("Plans")) {
         for (auto& plan : subNode->GetArray()) {
             if (auto* typeNode = plan.GetValueByPath("Node Type")) {
                 auto nodeType = typeNode->GetStringSafe();

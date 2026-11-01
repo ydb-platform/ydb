@@ -920,6 +920,8 @@ public:
             }
         }
 
+        ui64 ScaleGroupResource(ui64 value) const;
+
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
         bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool useExpectedSlotCount) const;

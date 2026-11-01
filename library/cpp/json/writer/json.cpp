@@ -260,6 +260,11 @@ namespace NJsonWriter {
             }
         }
         size_t len = FloatToString(f, buf, Y_ARRAY_SIZE(buf), mode, ndigits);
+        if (TStringBuf(buf, len) == "-0") {
+            // Keep negative zero floating-point: integer parsing would discard its sign.
+            buf[len++] = '.';
+            buf[len++] = '0';
+        }
         UnsafeWriteValue(buf, len);
         return TValueContext(*this);
     }

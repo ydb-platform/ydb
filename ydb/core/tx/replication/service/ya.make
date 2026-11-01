@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     library/cpp/json
+    library/cpp/string_utils/base64
     ydb/core/base
     ydb/core/change_exchange
     ydb/core/fq/libs/row_dispatcher/events

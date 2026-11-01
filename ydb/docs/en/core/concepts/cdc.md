@@ -94,6 +94,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
     "erase": {},
     "newImage": {<columns>},
     "oldImage": {<columns>},
+    "yson": {<section>: {<column>: "<base64 YSON bytes>"}},
     "ts": [<step>, <txId>],
     "user": "<user SID>",
     "traceId": "<Trace ID>"
@@ -106,6 +107,7 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 * `erase`: Erase flag. Present if a record matches the erase operation.
 * `newImage`: Row snapshot that results from its being changed. Present in `NEW_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
 * `oldImage`: Row snapshot before the change. Present in `OLD_IMAGE` and `NEW_AND_OLD_IMAGES` modes. Contains column names and values.
+* `yson`: Exact values of non-NULL `Yson` columns, encoded in Base64 and grouped by the corresponding section (`update`, `reset`, `newImage`, or `oldImage`). These bytes preserve YSON attributes and value types that the JSON representation cannot express. SQL NULL has no entry; a YSON entity (`#`) has an entry. The existing column values remain JSON projections for compatibility. If the JSON projection contains a string or map key with invalid UTF-8, the entire column projection is `null`; the exact value remains available in `yson`.
 * `ts`: [Virtual timestamp](#virtual-timestamps). Present if the `VIRTUAL_TIMESTAMPS` setting is enabled. Contains the value of the global coordinator time (`step`) and the unique transaction ID (`txId`).
 * `user`: User identifier. Present if the `USER_SIDS` setting is enabled. Contains the user's [SID](glossary.md#access-sid) and is set to `ttl@system` if the record is deleted by the [TTL](ttl.md) process.
 * `traceId`: OpenTelemetry [trace identifier](../reference/observability/tracing/external-traces.md). Present if the `TRACE_IDS` setting is enabled.

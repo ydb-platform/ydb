@@ -205,7 +205,7 @@ private:
     const int UncaughtExceptions;
     NWilson::TTraceId Parent;
     NWilson::TTraceId Id;
-    TInstant StartTime;
+    ui64 StartUnixNano = 0;
     bool Applied = false;
 };
 

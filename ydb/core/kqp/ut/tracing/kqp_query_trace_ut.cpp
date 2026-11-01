@@ -850,6 +850,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertDescendant(released, "Release compilation state", "Compile query");
         AssertSpawn(release);
         AssertLink(release, compile, NKqp::FollowsFromRelation);
+        AssertFlowsNest(snapshot, "Get query plan");
 
         // Conversion errors are returned as status, not thrown out of the compiler.
         const TString failureTrace = "00-77777777777777777777777777777777-7777777777777777-01";
@@ -860,6 +861,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         const auto failure = WaitForExternalTrace(runtime, failureTrace, {"Compile query", "Convert to new RBO operators"});
         AssertStatus(failure, "Convert to new RBO operators", NTraceProto::Status::STATUS_CODE_ERROR);
         AssertStatus(failure, "Compile query", NTraceProto::Status::STATUS_CODE_ERROR);
+        AssertFlowsNest(failure, "Get query plan");
     }
 
     Y_UNIT_TEST(IndexMetadataDependencies) {
@@ -928,6 +930,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         } else {
             AssertDescendant(snapshot, "Convert to physical plan", "Prepare physical query");
         }
+        AssertFlowsNest(snapshot, "Get query plan");
     }
 
     Y_UNIT_TEST(CompilerFallbackKeepsBothAttempts) {
@@ -967,6 +970,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             const auto* optimizer = FindAttribute(span, NKqp::OptimizerAttribute);
             return span.name() == "Optimize query" && optimizer && optimizer->value().string_value() == NKqp::OldRboOptimizer;
         }), snapshot.PrintTraces());
+        AssertFlowsNest(snapshot, "Get query plan");
     }
 
     Y_UNIT_TEST_TWIN(SnapshotManagerTracePropagation, Mvcc) {
@@ -1213,6 +1217,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(metadata && stats && initiating);
         UNIT_ASSERT_VALUES_EQUAL(metadata->parent_span_id(), initiating->span_id());
         UNIT_ASSERT_VALUES_EQUAL(stats->parent_span_id(), initiating->span_id());
+        UNIT_ASSERT_LE(metadata->end_time_unix_nano(), stats->start_time_unix_nano());
         AssertLink(*stats, *metadata, NKqp::FollowsFromRelation);
         AssertStatus(*uploader, "Load statistics", NTraceProto::Status::STATUS_CODE_ERROR);
     }

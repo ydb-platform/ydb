@@ -13,6 +13,9 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
+#include <util/string/join.h>
+
+#include <chrono>
 #include <thread>
 #include <stdexcept>
 
@@ -140,6 +143,8 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
             AssertStatus(*uploader, name, NTraceProto::Status::STATUS_CODE_OK);
             const auto& request = *FindSpan(*uploader, name);
             UNIT_ASSERT_VALUES_EQUAL(request.parent_span_id(), wait.parent_span_id());
+            UNIT_ASSERT_LE(request.start_time_unix_nano(), wait.start_time_unix_nano());
+            UNIT_ASSERT_LE(request.end_time_unix_nano(), wait.end_time_unix_nano());
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(request, NKqp::ParentRelationAttribute)->value().string_value(), NKqp::SpawnRelation);
             UNIT_ASSERT(std::ranges::any_of(wait.links(), [&](const auto& link) {
                 return link.span_id() == request.span_id()
@@ -154,10 +159,12 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         auto* uploader = RegisterUploader(runtime);
         for (bool finish : {true, false}) {
             ClearUploader(*uploader);
+            NWilson::TSpan query(15, NWilson::TTraceId::NewTraceId(15, 4095), "Query",
+                NWilson::EFlags::NONE, runtime.GetActorSystem(0));
             auto promise = NThreading::NewPromise<void>();
             NThreading::TFuture<void> ready;
             {
-                NKqp::TCompileTrace trace(NWilson::TTraceId::NewTraceId(15, 4095), runtime.GetActorSystem(0));
+                NKqp::TCompileTrace trace(query.GetTraceId(), runtime.GetActorSystem(0));
                 const int group = 0;
                 trace.BeginRegion(15, "Phase", &group);
                 NKqp::TCompileTraceDependencies dependencies(&trace, "Abandoned wait");
@@ -167,8 +174,10 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
                     trace.BeginRegion(15, "After finish", &group);
                 }
             }
+            query.EndError("stopped");
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
             AssertStatus(*uploader, "Phase", NTraceProto::Status::STATUS_CODE_ERROR);
+            UNIT_ASSERT_LE(FindSpan(*uploader, "Phase")->end_time_unix_nano(), FindSpan(*uploader, "Query")->end_time_unix_nano());
             AssertStatus(*uploader, "Abandoned wait", NTraceProto::Status::STATUS_CODE_ERROR);
             UNIT_ASSERT(!FindSpan(*uploader, "After finish"));
             UNIT_ASSERT(!ready.IsReady());
@@ -220,7 +229,69 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         AssertDescendant(*uploader, "Unapplied child", "Rule: Unapplied with work (not applied)");
         AssertStatus(*uploader, "Rule: Throwing", NTraceProto::Status::STATUS_CODE_ERROR);
         UNIT_ASSERT(!FindSpan(*uploader, "Rule: Empty attempt"));
+        // Deferred rules must still contain the work they started.
+        const auto& rule = *FindSpan(*uploader, "Rule: Applied");
+        const auto& child = *FindSpan(*uploader, "CBO work");
+        UNIT_ASSERT_LE(rule.start_time_unix_nano(), child.start_time_unix_nano());
+        UNIT_ASSERT_LE(child.end_time_unix_nano(), rule.end_time_unix_nano());
         UNIT_ASSERT(uploader->BuildTraceTrees());
+    }
+
+    Y_UNIT_TEST(FlowNestingViolations) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NWilson::TSpan root(15, NWilson::TTraceId::NewTraceId(15, 4095), "Root",
+            NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        const auto pause = [] {
+            // Distinct timestamps, whatever the resolution of the clock.
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        };
+        auto request = root.CreateChild(15, "Request");
+        NKqp::MarkSpawn(request);
+        auto unmarked = root.CreateChild(15, "Unmarked request");
+        pause();
+        {
+            auto step = root.CreateChild(15, "Step");
+            step.EndOk();
+        }
+        root.EndOk();
+        pause();
+        // Both requests outlive the root; only the marked one may.
+        request.EndOk();
+        unmarked.EndOk();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto violations = FindFlowNestingViolations(*uploader, "Root");
+        std::ranges::sort(violations);
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq("; ", violations),
+            "Step overlaps Unmarked request in Root; Unmarked request sticks out of its parent Root");
+    }
+
+    Y_UNIT_TEST(FlowNestingViolationsAgainstLongSibling) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        auto* uploader = RegisterUploader(runtime);
+        NWilson::TSpan root(15, NWilson::TTraceId::NewTraceId(15, 4095), "Root",
+            NWilson::EFlags::NONE, runtime.GetActorSystem(0));
+        const auto pause = [] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        };
+        // Both later siblings overlap the long one, not only the first of them.
+        auto longStep = root.CreateChild(15, "Long step");
+        pause();
+        root.CreateChild(15, "First step").EndOk();
+        pause();
+        root.CreateChild(15, "Second step").EndOk();
+        pause();
+        longStep.EndOk();
+        root.EndOk();
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        auto violations = FindFlowNestingViolations(*uploader, "Root");
+        std::ranges::sort(violations);
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq("; ", violations),
+            "First step overlaps Long step in Root; Second step overlaps Long step in Root");
     }
 
     TFakeWilsonUploader* RegisterUploader(NActors::TTestActorRuntimeBase& runtime) {

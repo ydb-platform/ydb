@@ -1,7 +1,6 @@
 import functools
 import hashlib
 import shlex
-import re
 import os
 from enum import auto, StrEnum
 from typing import Any, TYPE_CHECKING
@@ -257,19 +256,6 @@ def _with_report_configure_error(fn):
             logger.reset(*last_state)
 
     return _wrapper
-
-
-def _get_var_name(s: str) -> tuple[bool, str]:
-    if not s.startswith("$"):
-        return False, ""
-
-    PLAIN_VAR_PATTERN = r"^\$\w+$"
-    WRAPPED_VAR_PATTERN = r"^\$\{\w+\}$"
-    if re.match(PLAIN_VAR_PATTERN, s):
-        return True, s[1:]
-    if re.match(WRAPPED_VAR_PATTERN, s):
-        return True, s[2:-1]
-    return False, ""
 
 
 def _is_real_file(path: str) -> bool:
@@ -1103,10 +1089,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         )
 
     build_command = unit.get("_TS_BUILD_COMMAND")
-    after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
-    if after_build_command:
-        build_command = "{} && {}".format(build_command, after_build_command)
-    if after_build_command or (unit.get("_TS_LIBRARY_FOR") == "yes" and build_command):
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and build_command:
         _set_ts_build_command(unit, build_command)
 
     # Code navigation
@@ -1456,26 +1439,6 @@ def _DEPENDS_ON_MOD(unit: ymake.Unit) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_FOR_PATH")
         unit.ondepends([for_mod_path])
-
-
-@ymake.macro
-@_with_report_configure_error
-def _RUN_JAVASCRIPT_AFTER_BUILD_PROCESS_INPUTS(unit: ymake.Unit, js_script: str) -> None:
-    inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
-
-    def process_input(input: str) -> str:
-        is_var, var_name = _get_var_name(input)
-        if is_var:
-            return f"${{hide;input:{var_name}}}"
-        return _build_cmd_input_paths([input], hide=True)
-
-    processed_inputs = [process_input(i) for i in inputs if i]
-
-    js_script = os.path.normpath(js_script)
-    if not js_script.startswith("node_modules/"):
-        processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
-
-    unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
 
 
 @ymake.macro

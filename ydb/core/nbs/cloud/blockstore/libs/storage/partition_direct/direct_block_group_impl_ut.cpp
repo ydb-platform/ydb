@@ -9,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
 
@@ -1280,15 +1281,13 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             sentIds[2].GetDDiskSlotId());
     }
 
-    Y_UNIT_TEST_F(
-        ShouldReplyForCoordinatorOnlyWhenNodeDisconnected,
-        TDBGFixture)
+    Y_UNIT_TEST_F(ShouldAnswerEveryDiskOnIndirectUndelivery, TDBGFixture)
     {
         const auto coordinatorHost = THostIndex(2);
 
         auto executor = MakeExecutor();
         auto transport = std::make_shared<TStorageTransportMock>();
-        transport->WriteToManyPBufferCoordinatorOnlyStatus =
+        transport->WriteToManyPBuffersUndeliveredStatus =
             NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
         auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
@@ -1335,15 +1334,16 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto writeResponse =
             pendingWrite.GetValue(WaitTimeout).GetValue(WaitTimeout);
 
-        // Only the coordinator host is present in the response with an error.
-        UNIT_ASSERT_VALUES_EQUAL(1, writeResponse.Responses.size());
-        UNIT_ASSERT_VALUES_EQUAL(
-            coordinatorHost,
-            writeResponse.Responses[0].HostIndex);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            E_FAIL,
-            writeResponse.Responses[0].Error.GetCode(),
-            FormatError(writeResponse.Responses[0].Error));
+        UNIT_ASSERT_VALUES_EQUAL(3, writeResponse.Responses.size());
+        for (const auto& hostResponse: writeResponse.Responses) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                E_FAIL,
+                hostResponse.Error.GetCode(),
+                FormatError(hostResponse.Error));
+            UNIT_ASSERT(
+                hostResponse.Error.GetMessage().Contains(
+                    UndeliveryErrorMessage));
+        }
 
         // Coordinator host: the WriteToManyPBuffers inflight is drained and an
         // error is counted.

@@ -936,13 +936,19 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         const bool isCoordinator = coordinatorHostIndex == *hostIndex;
         coordinatorFound = coordinatorFound || isCoordinator;
 
-        OnResponse(
-            *hostIndex,
-            executionTime,
-            isCoordinator ? EOperation::WriteToManyPBuffers
-                          : EOperation::WriteToPBuffer,
-            isCoordinator,
-            error);
+        // Undelivery did not reach this disk, so it is not a host error.
+        const bool undeliveredOtherDisk =
+            !isCoordinator && HasError(error) &&
+            error.GetMessage().Contains(UndeliveryErrorMessage);
+        if (!undeliveredOtherDisk) {
+            OnResponse(
+                *hostIndex,
+                executionTime,
+                isCoordinator ? EOperation::WriteToManyPBuffers
+                              : EOperation::WriteToPBuffer,
+                isCoordinator,
+                error);
+        }
 
         dbgResponse.Responses.push_back(
             {.HostIndex = *hostIndex, .Error = std::move(error)});

@@ -5,6 +5,7 @@
 #include "traces/kqp_rbo_trace_output.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>
@@ -182,6 +183,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     settings.VisitTuples = true;
 
     // At first step convert KqpOps to RBO Ops.
+    std::optional<TCompileTraceScope> traceScope(std::in_place, KqpCtx.GetCompileTrace(), TCompileTraceLevels::Step,
+        "Convert to new RBO operators");
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
@@ -231,6 +234,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         },
         ctx, settings);
 
+    traceScope->SetSuccess(status != TStatus::Error);
+    traceScope.reset();
     if (status != TStatus::Ok) {
         return status;
     }
@@ -439,18 +444,19 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
     CollectTablesAndColumnsNames(ctx);
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
+    TCompileTraceDependencies trace(KqpCtx.GetCompileTrace(), "Await column statistics");
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH,
                    TakeNotRequested(CMColumnsByTableName, RequestedCMColumns),
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM,
                    TakeNotRequested(HistColumnsByTableName, RequestedHistColumns),
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::SIMPLE_COLUMN,
                    TakeNotRequested(SimpleColumnsByTableName, RequestedSimpleColumns),
-                   [](const NYql::TColumnStatistics& stats) { return stats.HyperLogLog.has_value(); });
+                   [](const NYql::TColumnStatistics& stats) { return stats.HyperLogLog.has_value(); }, &trace);
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_HEIGHT_HISTOGRAM,
                    TakeNotRequested(EqHeightHistTuplesByTableName, RequestedEqHeightTuples),
-                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; });
+                   [](const NYql::TMultiColumnStatistics& stats) { return !!stats.EqHeightHistogram; }, &trace);
 
     if (futures.empty()) {
         return TStatus::Ok;
@@ -509,6 +515,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
                 }
             }
         });
+    // Each request span records the outcome of its request.
+    ColumnStatisticsReadiness = trace.Await(ColumnStatisticsReadiness);
 
     SharedState = sharedState;
     return TStatus::Async;
@@ -585,6 +593,9 @@ void TKqpNewRBOTransformer::ApplyColumnStatistics() {
 }
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    if (auto* trace = KqpCtx.GetCompileTrace()) {
+        trace->ResumeWaits();
+    }
     ApplyColumnStatistics();
     return ContinueOptimizations(input, output, ctx);
 }

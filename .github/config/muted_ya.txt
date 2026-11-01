@@ -54,6 +54,8 @@ ydb/core/tx/scheme_board/ut_populator TPopulatorQuorumTest.ColdDeletionWithPathW
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
+ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
+ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.GetAllStartPartitionSessions

@@ -5,6 +5,7 @@ RECURSE(
     bindings
     main_py3
     python3_small
+    python3_small/impl
     python_udf
     system_python
 )

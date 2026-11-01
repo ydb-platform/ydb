@@ -678,7 +678,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
                 auto joinNode = FindPlanNodeByKv(plan.GetMapSafe().at("SimplifiedPlan"), "Node Type", joinKind);
                 UNIT_ASSERT(joinNode.IsDefined());
                 auto op = joinNode.GetMapSafe().at("Operators").GetArraySafe()[0];
-                auto eRows = op.GetMapSafe().at("E-Rows").GetStringSafe();
+                auto eRows = op.GetMapSafe().at("E-Rows").GetStringRobust();
                 UNIT_ASSERT_EQUAL(std::stod(eRows), card);
             }
         }

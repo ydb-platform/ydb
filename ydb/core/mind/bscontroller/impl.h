@@ -142,6 +142,8 @@ public:
         TGroupId GroupId = TGroupId::Zero();
         Table::GroupGeneration::Type GroupPrevGeneration = 0;
         Table::GroupGeneration::Type GroupGeneration = 0;
+        ui32 ConfirmedGroupGeneration = 0;
+        ui64 ConfigObservationEpoch = 0;
         Table::Category::Type Kind = NKikimrBlobStorage::TVDiskKind::Default;
         Table::RingIdx::Type RingIdx = 0;
         Table::FailDomainIdx::Type FailDomainIdx = 0;
@@ -2066,6 +2068,9 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
+    TActorId GroupConfigActorId;
+    void ResetGroupConfigObservations(TNodeId nodeId);
+    void Handle(TEvGroupState::TEvConfigObserved::TPtr& ev);
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;
@@ -2621,6 +2626,7 @@ public:
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
         GroupStateActorId = Register(CreateGroupStateActor(SelfId()));
+        GroupConfigActorId = Register(CreateGroupConfigActor(SelfId()));
         for (const auto& [groupId, group] : GroupMap) {
             UpdateGroupStateActor(groupId);
         }

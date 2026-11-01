@@ -1095,6 +1095,7 @@ STFUNC(TBlobStorageController::StateWork) {
     THPTimer timer;
 
     switch (type) {
+        hFunc(TEvGroupState::TEvConfigObserved, Handle);
         fFunc(TEvBlobStorage::EvControllerRegisterNode, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerGetGroup, EnqueueIncomingEvent);
         fFunc(TEvBlobStorage::EvControllerSelectGroups, EnqueueIncomingEvent);
@@ -1178,7 +1179,7 @@ void TBlobStorageController::PassAway() {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
     }
-    for (TActorId *ptr : {&SelfHealId, &GroupStateActorId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
+    for (TActorId *ptr : {&SelfHealId, &GroupStateActorId, &GroupConfigActorId, &StatProcessorActorId, &SystemViewsCollectorId, &ClusterBalanceActorId}) {
         if (const TActorId actorId = std::exchange(*ptr, {})) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }

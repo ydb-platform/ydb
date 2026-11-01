@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/kqp/tracing
     ydb/library/actors/wilson/test_util
 )
 

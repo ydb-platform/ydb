@@ -183,9 +183,9 @@ public:
         OutputParam(s, rest...);
     }
 
-    // Native types support
-    template <typename T, typename K = TKeyName>
-    TCreateMessageArg(K&& name, const T& value) {
+    // Normalize key types to avoid specializing the constructor for each string literal length.
+    template <typename T>
+    TCreateMessageArg(TKeyName name, const T& value) {
         if constexpr (std::is_function<T>::value) {
             static_assert(false, "It is not allowed to pass function into structured message");
         } else if constexpr (std::is_same<T, TStructuredMessage>::value) {

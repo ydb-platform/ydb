@@ -360,6 +360,7 @@ TStringBuf ToString(EPredicateKind kind) {
         case EPredicateKind::NonConstant: return "NonConstant";
         case EPredicateKind::Parameter: return "Parameter";
         case EPredicateKind::MergedRanges: return "MergedRanges";
+        case EPredicateKind::Unknown: return "Unknown";
     }
     return "?";
 }
@@ -1155,7 +1156,7 @@ std::shared_ptr<TTreeNode> TPredicateTreeBuilder::ComputeImpl(
         YQL_CLOG(TRACE, CoreDq) << "ComputePredicateSelectivity NOT FOUND : " << dumped;
     }
 
-    return nullptr;
+    return CreateLeafNode(EPredicateKind::Unknown, &input);
 }
 
 } // namespace NKikimr::NKqp

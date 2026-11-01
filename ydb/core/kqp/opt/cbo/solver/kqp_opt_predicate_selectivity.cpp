@@ -602,6 +602,7 @@ double TPredicateSelectivityComputer::ComputeLeafSelectivity(const TTreeNode& le
             return leaf.BoolValue ? 1.0 : 0.0;
         case EPredicateKind::NonAttribute: // EmptyAttr
         case EPredicateKind::NonConstant: // ConstantExprWithParams
+        case EPredicateKind::Unknown:
             return 1.0;
         case EPredicateKind::Parameter: // EmptyConstantExpr
             return DefaultEqualitySelectivity(Stats, leaf.Attribute);

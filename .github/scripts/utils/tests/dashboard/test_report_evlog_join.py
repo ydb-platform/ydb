@@ -313,6 +313,33 @@ def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
     assert overlay["evlog_range_sec"] == [-50.0, 250.0]
 
 
+def test_resources_overlay_identity_when_wall_clock_evlog_has_no_report_ts():
+    # Large evlog-only fallback: monitor + worker_threads times are both unix
+    # epoch. Must NOT pin first monitor sample onto first test (that shifts the
+    # host CPU/RAM curve by the build preamble and fabricates a post-test tail).
+    mon0 = 1_700_000_000.0
+    run0 = mon0 + 1800.0  # tests start 30min after monitor
+    enriched_runs = [
+        {
+            "start_us": run0 * 1_000_000.0,
+            "end_us": (run0 + 100.0) * 1_000_000.0,
+            # no report_suite_start_ts
+        }
+    ]
+    records = [
+        {"ts": mon0, "cpu_total_pct": 90, "cpu_cores": 8, "ram_used_kb": 8 * 1024 * 1024},
+        {"ts": run0, "cpu_total_pct": 10, "cpu_cores": 8, "ram_used_kb": 1 * 1024 * 1024},
+        {"ts": run0 + 50.0, "cpu_total_pct": 20, "cpu_cores": 8, "ram_used_kb": 2 * 1024 * 1024},
+    ]
+    overlay = _build_resources_overlay(
+        Path("unused.jsonl"),
+        enriched_runs,
+        records=records,
+    )
+    assert overlay is not None
+    assert overlay["xs_evlog_sec"] == [mon0, run0, run0 + 50.0]
+
+
 def test_active_series_downsampling_preserves_short_peak():
     xs = [float(i) for i in range(100)]
     ys = [0.0] * 100
@@ -427,6 +454,7 @@ def load_tests(loader, tests, pattern):
         test_evlog_activity_zero_length_close_stays_balanced,
         test_evlog_activity_drains_truncated_open_at_last_ts,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
+        test_resources_overlay_identity_when_wall_clock_evlog_has_no_report_ts,
         test_active_series_downsampling_preserves_short_peak,
         test_dashboard_main_falls_back_to_evlog_when_report_missing,
         test_payload_keeps_exact_active_series_past_former_8k_cap,
@@ -444,6 +472,7 @@ if __name__ == "__main__":
     test_evlog_activity_zero_length_close_stays_balanced()
     test_evlog_activity_drains_truncated_open_at_last_ts()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
+    test_resources_overlay_identity_when_wall_clock_evlog_has_no_report_ts()
     test_active_series_downsampling_preserves_short_peak()
     test_dashboard_main_falls_back_to_evlog_when_report_missing()
     test_payload_keeps_exact_active_series_past_former_8k_cap()

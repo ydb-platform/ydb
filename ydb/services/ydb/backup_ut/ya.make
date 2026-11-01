@@ -22,6 +22,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/fmt
     library/cpp/streams/zstd
+    ydb/core/kqp/ut/common
     ydb/core/testlib/pg
     ydb/core/util
     ydb/core/wrappers/ut_helpers

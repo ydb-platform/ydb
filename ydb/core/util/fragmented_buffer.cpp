@@ -6,18 +6,18 @@
 namespace NKikimr {
 
 bool TFragmentedBuffer::IsMonolith() const {
-    return (BufferForOffset.size() == 1 && BufferForOffset.begin()->first == 0);
+    return (BufferForOffset.size() == 1 && BufferForOffset.front().first == 0);
 }
 
 TRope TFragmentedBuffer::GetMonolith() {
     Y_ABORT_UNLESS(IsMonolith());
-    return BufferForOffset.begin()->second;
+    return BufferForOffset.front().second;
 }
 
 void TFragmentedBuffer::SetMonolith(TRope&& data) {
     Y_ABORT_UNLESS(data);
     BufferForOffset.clear();
-    BufferForOffset[0] = std::move(data);
+    BufferForOffset.emplace_back(0, std::move(data));
 }
 
 void TFragmentedBuffer::Write(ui32 begin, const char* buffer, ui32 size) {
@@ -25,10 +25,17 @@ void TFragmentedBuffer::Write(ui32 begin, const char* buffer, ui32 size) {
 }
 
 void TFragmentedBuffer::Write(ui32 begin, TRope&& data) {
-    auto it = BufferForOffset.upper_bound(begin);
-    if (it != BufferForOffset.begin()) {
-        auto& [prevOffset, prevRope] = *--it;
+    if (!data) {
+        return;
+    }
+
+    // index of the fragment that is going to hold the written data; iterators do not survive the
+    // insertion below, so everything here is index-based
+    size_t idx = UpperBound(begin);
+    if (idx) {
+        auto& [prevOffset, prevRope] = BufferForOffset[idx - 1];
         if (begin <= prevOffset + prevRope.size()) {
+            --idx; // the preceding fragment touches the written range, so it absorbs the data
             const ui32 overlap = prevOffset + prevRope.size() - begin;
             if (data.size() < overlap) {
                 const ui32 offset = begin - prevOffset;
@@ -38,27 +45,25 @@ void TFragmentedBuffer::Write(ui32 begin, TRope&& data) {
                 prevRope.EraseBack(overlap);
                 prevRope.Insert(prevRope.End(), std::exchange(data, {}));
             }
-        } else {
-            ++it;
         }
     }
 
     if (data) {
-        it = BufferForOffset.try_emplace(it, begin, std::move(data));
+        BufferForOffset.emplace(BufferForOffset.begin() + idx, begin, std::move(data));
     }
 
     // consume or join succeeding intervals
-    auto& [prevOffset, prevRope] = *it++;
-    const ui32 end = prevOffset + prevRope.size();
-    auto endIt = BufferForOffset.upper_bound(end);
-    Y_DEBUG_ABORT_UNLESS(endIt != BufferForOffset.begin());
-    auto& [lastOffset, lastRope] = *std::prev(endIt);
+    const ui32 end = BufferForOffset[idx].first + BufferForOffset[idx].second.size();
+    const size_t endIdx = UpperBound(end);
+    Y_DEBUG_ABORT_UNLESS(endIdx != 0);
+    auto& [lastOffset, lastRope] = BufferForOffset[endIdx - 1];
     const ui32 bytesToCut = end - lastOffset;
     if (bytesToCut < lastRope.size()) {
         lastRope.EraseFront(bytesToCut);
-        prevRope.Insert(prevRope.End(), std::move(lastRope));
+        auto& rope = BufferForOffset[idx].second;
+        rope.Insert(rope.End(), std::move(lastRope));
     }
-    BufferForOffset.erase(it, endIt);
+    BufferForOffset.erase(BufferForOffset.begin() + idx + 1, BufferForOffset.begin() + endIdx);
 }
 
 void TFragmentedBuffer::Read(ui32 begin, char* buffer, ui32 size) const {
@@ -68,11 +73,11 @@ void TFragmentedBuffer::Read(ui32 begin, char* buffer, ui32 size) const {
 TRope TFragmentedBuffer::Read(ui32 begin, ui32 size) const {
     // X....Y X.....Y X'.....Y'
     //        b.b.e.e
-    auto it = BufferForOffset.upper_bound(begin);
-    Y_ABORT_UNLESS(it != BufferForOffset.begin());
-    --it;
-    Y_ABORT_UNLESS(it->first <= begin && begin + size <= it->first + it->second.size());
-    const auto iter = it->second.begin() + (begin - it->first);
+    const size_t idx = UpperBound(begin);
+    Y_ABORT_UNLESS(idx != 0);
+    const auto& [offset, rope] = BufferForOffset[idx - 1];
+    Y_ABORT_UNLESS(offset <= begin && begin + size <= offset + rope.size());
+    const auto iter = rope.begin() + (begin - offset);
     return {iter, iter + size};
 }
 

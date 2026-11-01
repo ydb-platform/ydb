@@ -113,13 +113,13 @@ def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
             text_format.Merge(f.read(), gateway_config)
 
 
-def merge_default_gateway_cfg(cfg_dir, gateway_config):
+def merge_default_gateway_cfg(cfg_dir, gateway_config, ignore_extra_config=False):
     gateway_cfg_filename = get_gateway_cfg_filename()
     with open(yql_source_path(os.path.join(cfg_dir, gateway_cfg_filename))) as f:
         text_format.Merge(f.read(), gateway_config)
 
     suffix = get_gateway_cfg_suffix()
-    if suffix:
+    if suffix and not ignore_extra_config:
         # The patch lives in a dedicated folder (e.g. tests-experimental),
         # independent of the base cfg_dir which may point elsewhere
         # (yql/cfg/local for LOCAL_BENCH, yql/essentials/cfg/udf_test, etc.).

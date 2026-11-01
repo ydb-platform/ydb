@@ -13,6 +13,7 @@
 #include "bridge_sync_counters.h"
 #include "indir.h"
 #include "self_heal.h"
+#include "group_state.h"
 #include "storage_pool_stat.h"
 #include "database_space.h"
 #include "yaml_config_helpers.h"
@@ -1266,7 +1267,7 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
-            TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> Location; // set only through SetLocation
+            TMaybe<TString> Location; // set only through SetLocation
             std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
 
             void SetLocation(const TString& serialized) {
@@ -1293,9 +1294,6 @@ public:
                 }
                 if (rowset.template HaveValue<T::Kind>()) {
                     result.Kind = rowset.template GetValue<T::Kind>();
-                }
-                if (rowset.template HaveValue<T::Location>()) {
-                    result.SetLocation(rowset.template GetValue<T::Location>());
                 }
                 return result;
             }
@@ -1352,8 +1350,12 @@ public:
                 return s.Str();
             }
 
+            auto GetLegacyKey() const {
+                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind);
+            }
+
             auto GetKey() const {
-                return std::tie(BoxId, StoragePoolId, Type, SharedWithOs, ReadCentric, Kind, Location);
+                return std::tuple_cat(GetLegacyKey(), std::tie(Location));
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
@@ -1365,7 +1367,7 @@ public:
             }
 
             void Load(IInputStream* s) {
-                TMaybe<Schema::BoxStoragePoolPDiskFilter::Location::Type> location;
+                TMaybe<TString> location;
                 ::LoadMany(s, Type, SharedWithOs, ReadCentric, Kind, location);
                 Location.Clear();
                 RequiredLocation.reset();
@@ -1489,6 +1491,10 @@ public:
         TUserIds UserIds;
         TPDiskFilters PDiskFilters;
 
+        bool LoadPDiskFilters(NIceDb::TNiceDb& db, const TBoxStoragePoolId& id);
+        static void UpdatePDiskFilters(NTable::TDatabase& db, const TPDiskFilters* previous,
+            const TPDiskFilters* current);
+
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
             static TTableAdapter<Table, TStoragePoolInfo,
@@ -1520,8 +1526,7 @@ public:
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
                     Table::PersistentBufferAllocationMode,
-                    TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
-                    TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
+                    TInlineTable<TUserIds, Schema::BoxStoragePoolUser>
                 > adapter(
                     &TStoragePoolInfo::Name,
                     &TStoragePoolInfo::ErasureSpecies,
@@ -1551,8 +1556,7 @@ public:
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::PersistentBufferAllocationMode,
-                    &TStoragePoolInfo::UserIds,
-                    &TStoragePoolInfo::PDiskFilters
+                    &TStoragePoolInfo::UserIds
                 );
             callback(&adapter);
         }
@@ -2061,6 +2065,8 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
+    TActorId GroupStateActorId;
+    void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;
 
@@ -2614,6 +2620,10 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+        GroupStateActorId = Register(CreateGroupStateActor(SelfId()));
+        for (const auto& [groupId, group] : GroupMap) {
+            UpdateGroupStateActor(groupId);
+        }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();

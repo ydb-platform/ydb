@@ -148,7 +148,7 @@ class IGrpcWrapperAsyncIO(abc.ABC):
     async def receive(self, timeout: Optional[int] = None) -> Any: ...
 
     @abc.abstractmethod
-    def write(self, wrap_message: IToProto): ...
+    def write(self, wrap_message: Union[IToProto, Message]): ...
 
     @abc.abstractmethod
     def close(self): ...
@@ -255,8 +255,8 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         # print("rekby, grpc, received", grpc_message)
         return self.convert_server_grpc_to_wrapper(grpc_message)
 
-    def write(self, wrap_message: IToProto) -> None:
-        grpc_message = wrap_message.to_proto()
+    def write(self, wrap_message: Union[IToProto, Message]) -> None:
+        grpc_message = wrap_message if isinstance(wrap_message, Message) else wrap_message.to_proto()
         # print("rekby, grpc, send", grpc_message)
         self.from_client_grpc.put_nowait(grpc_message)
 

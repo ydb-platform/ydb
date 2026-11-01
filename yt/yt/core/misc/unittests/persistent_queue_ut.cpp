@@ -145,6 +145,52 @@ TEST(TPersistentQueueTest, Clear)
     EXPECT_EQ(snapshot.Begin(), snapshot.End());
 }
 
+struct TSizedElement
+{
+    i64 ByteSize = 0;
+
+    i64 GetByteSize() const
+    {
+        return ByteSize;
+    }
+};
+
+TEST(TPersistentQueueTest, MemoryUsage)
+{
+    TPersistentQueue<TSizedElement, 10> sizelessQueue;
+    TPersistentQueue<TSizedElement, 10> sizedQueue;
+
+    EXPECT_EQ(0, sizedQueue.GetMemoryUsage());
+
+    const int N = 25;
+
+    for (int index = 0; index < N; ++index) {
+        sizelessQueue.Enqueue(TSizedElement{.ByteSize = 0});
+        sizedQueue.Enqueue(TSizedElement{.ByteSize = 100});
+    }
+
+    EXPECT_EQ(sizelessQueue.GetMemoryUsage() + N * 100, sizedQueue.GetMemoryUsage());
+
+    for (int index = 0; index < N; ++index) {
+        sizelessQueue.Dequeue();
+        sizedQueue.Dequeue();
+    }
+
+    EXPECT_EQ(sizelessQueue.GetMemoryUsage(), sizedQueue.GetMemoryUsage());
+
+    sizedQueue.Enqueue(TSizedElement{.ByteSize = 100});
+    sizedQueue.Clear();
+    EXPECT_EQ(0, sizedQueue.GetMemoryUsage());
+}
+
+TEST(TPersistentQueueTest, MemoryUsageOfSizelessElements)
+{
+    TQueueType queue;
+
+    queue.Enqueue(1);
+    EXPECT_EQ(static_cast<i64>(sizeof(TPersistentQueueChunk<int, 10>)), queue.GetMemoryUsage());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTrackedQueueValue
@@ -191,18 +237,18 @@ TEST(TPersistentQueueTest, ConstructsOnlyEnqueuedValues)
 
     TPersistentQueue<TTrackedQueueValue, 3> queue;
     EXPECT_EQ(0, TTrackedQueueValue::LiveCount);
-    EXPECT_EQ(0, queue.GetByteSize());
+    EXPECT_EQ(0, queue.GetMemoryUsage());
     for (int index = 0; index < 7; ++index) {
         queue.Enqueue(TTrackedQueueValue(index));
         EXPECT_EQ(index + 1, TTrackedQueueValue::LiveCount);
         EXPECT_EQ(0, TTrackedQueueValue::DefaultConstructionCount);
         EXPECT_EQ(
             static_cast<i64>(((index + 1) / 3 + 1) * sizeof(TPersistentQueueChunk<TTrackedQueueValue, 3>)),
-            queue.GetByteSize());
+            queue.GetMemoryUsage());
     }
     queue.Clear();
     EXPECT_EQ(0, TTrackedQueueValue::LiveCount);
-    EXPECT_EQ(0, queue.GetByteSize());
+    EXPECT_EQ(0, queue.GetMemoryUsage());
 }
 
 TEST(TPersistentQueueTest, SnapshotAndIteratorKeepValuesAlive)

@@ -66,8 +66,8 @@ Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
         }
     }
 
-    Y_UNIT_TEST(RecoveryErrorsCanHideTripleButCannotReplaceNormalRealmInPair) {
-        const auto info = MakeMirror3dcInfo({R::N2, R::N2, R::R});
+    Y_UNIT_TEST(RecoveryRealmCannotReplaceNormalRealmInEnsuredPair) {
+        const TBlobStorageGroupInfo info = MakeMirror3dcInfo({R::N1, R::N1, R::R});
         for (const auto failures : {std::array{1u, 1u, 1u}, std::array{2u, 0u, 2u}}) {
             TGroupQuorumTracker tracker(&info);
             for (const auto& disk : info.GetVDisks()) {

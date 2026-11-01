@@ -263,7 +263,48 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
 
     const TKqlReadTableFullTextIndex& read = node.Cast<TKqlReadTableFullTextIndex>();
 
-    auto phyRead = ctx.RenameNode(*node.Raw(), TKqpReadTableFullTextIndex::CallableName());
+    if (!IsDqPureExpr(read.Query())) {
+        TVector<TDqConnection> connections;
+        bool isPure;
+        FindDqConnections(read.Query(), connections, isPure);
+        if (!isPure) {
+            return node;
+        }
+
+        TNodeOnNodeOwnedMap replacements;
+        for (const auto& connection : connections) {
+            if (!connection.Maybe<TDqCnUnionAll>()) {
+                return node;
+            }
+            replacements[connection.Raw()] = Build<TDqPhyPrecompute>(ctx, connection.Pos())
+                .Connection(connection)
+                .Done().Ptr();
+        }
+
+        // A scalar expression may consume an entire rowset (for example, JoinFromList),
+        // rather than a scalar subquery. Materialize those dependencies as lists first.
+        // Return the logical read so the changed expression is typed before we build
+        // its scalar precompute. Shared outputs are handled by ReplicatePrecompute.
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TKqlReadTableFullTextIndex::idx_Query,
+            ctx.ReplaceNodes(read.Query().Ptr(), replacements)));
+    }
+
+    TVector<TExprBase> query;
+    query.reserve(read.Query().Size());
+    for (const auto& value : read.Query()) {
+        // A fulltext source serializes only literals and parameters. Materialize the
+        // whole scalar expression (not just its subqueries); build-txs will bind its
+        // result as a parameter. PrecomputeToInput also lifts any nested dependencies.
+        if (value.Maybe<TCoDataCtor>() || value.Maybe<TCoParameter>() || value.Maybe<TDqPhyPrecompute>()) {
+            query.push_back(value);
+        } else {
+            query.push_back(KqpPrecomputeParameter(value, ctx));
+        }
+    }
+
+    auto phyRead = ctx.ChangeChild(*node.Raw(), TKqlReadTableFullTextIndex::idx_Query,
+        Build<TExprList>(ctx, read.Pos()).Add(query).Done().Ptr());
+    phyRead = ctx.RenameNode(*phyRead, TKqpReadTableFullTextIndex::CallableName());
 
     auto stage = Build<TDqStage>(ctx, read.Pos())
         .Inputs()

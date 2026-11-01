@@ -1,4 +1,6 @@
 PY3_PROGRAM(solomon_recipe)
+REQUIREMENTS(cpu:2)
+
 
 STYLE_PYTHON()
 

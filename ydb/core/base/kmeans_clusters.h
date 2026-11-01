@@ -41,6 +41,10 @@ public:
 
     virtual void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
 
+    virtual void FindClusters(TConstArrayRef<TStringBuf> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
+    virtual void FindClusters(TConstArrayRef<TCell> centroids, const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) = 0;
+
     virtual std::optional<ui32> FindCluster(const TStringBuf embedding) = 0;
 
     virtual std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) = 0;

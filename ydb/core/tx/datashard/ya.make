@@ -32,9 +32,14 @@ SRCS(
     read_iterator.h
     read_table_scan.h
     setup_sys_locks.h
+    build_index/table_range_reader.h
+    build_index/vector_resolve_actor.h
+    build_index/delta_kmeans.cpp
     build_index/filter_kmeans.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp
+    build_index/table_range_reader.cpp
+    build_index/vector_resolve_actor.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/secondary_index.cpp
@@ -466,6 +471,8 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
@@ -532,6 +539,7 @@ RECURSE_FOR_TESTS(
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows
+    ut_erase_rows_proxy
     ut_export
     ut_external_blobs
     ut_followers

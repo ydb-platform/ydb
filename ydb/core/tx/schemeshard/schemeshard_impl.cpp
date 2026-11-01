@@ -1927,37 +1927,66 @@ bool TSchemeShard::CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TS
 }
 
 bool TSchemeShard::CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const {
-    auto it = TablesWithSnapshots.find(tablePathId);
-    if (it == TablesWithSnapshots.end()) {
+    // A table may hold several snapshots at once, so a new snapshot is only
+    // rejected when the exact same txId is already registered for the table.
+    if (!HasTableSnapshot(tablePathId, txId)) {
         return true;
     }
 
-    const auto& snapshotTxId = it->second;
     TStepId snapshotStepId;
-
-    if (auto sit = SnapshotsStepIds.find(snapshotTxId); sit != SnapshotsStepIds.end()) {
+    if (auto sit = SnapshotsStepIds.find(txId); sit != SnapshotsStepIds.end()) {
         snapshotStepId = sit->second;
     }
 
-    if (txId == snapshotTxId) {
-        status = NKikimrScheme::StatusAlreadyExists;
-        errStr = TStringBuilder()
-            << "Snapshot with the same txId already presents for table"
-            << ", tableId:" << tablePathId
-            << ", txId: " << txId
-            << ", snapshotTxId: " << snapshotTxId
-            << ", snapshotStepId: " << snapshotStepId;
-    } else {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = TStringBuilder()
-            << "Snapshot with another txId already presents for table, only one snapshot is allowed for table for now"
-            << ", tableId:" << tablePathId
-            << ", txId: " << txId
-            << ", snapshotTxId: " << snapshotTxId
-            << ", snapshotStepId: " << snapshotStepId;
-    }
+    status = NKikimrScheme::StatusAlreadyExists;
+    errStr = TStringBuilder()
+        << "Snapshot with the same txId already presents for table"
+        << ", tableId:" << tablePathId
+        << ", txId: " << txId
+        << ", snapshotStepId: " << snapshotStepId;
 
     return false;
+}
+
+bool TSchemeShard::HasTableSnapshot(const TPathId& tablePathId) const {
+    auto it = TablesWithSnapshots.find(tablePathId);
+    return it != TablesWithSnapshots.end() && !it->second.empty();
+}
+
+bool TSchemeShard::HasTableSnapshot(const TPathId& tablePathId, TTxId txId) const {
+    auto it = TablesWithSnapshots.find(tablePathId);
+    return it != TablesWithSnapshots.end() && it->second.find(txId) != it->second.end();
+}
+
+TTxId TSchemeShard::GetAnyTableSnapshot(const TPathId& tablePathId) const {
+    auto it = TablesWithSnapshots.find(tablePathId);
+    Y_ABORT_UNLESS(it != TablesWithSnapshots.end() && it->second.size() == 1,
+        "Table %s should have exactly 1 snapshot", tablePathId.ToString().data());
+    return *it->second.begin();
+}
+
+void TSchemeShard::AddTableSnapshot(const TPathId& tablePathId, TTxId txId) {
+    TablesWithSnapshots[tablePathId].insert(txId);
+    SnapshotTables[txId].insert(tablePathId);
+}
+
+void TSchemeShard::RemoveTableSnapshot(const TPathId& tablePathId, TTxId txId) {
+    if (auto it = TablesWithSnapshots.find(tablePathId); it != TablesWithSnapshots.end()) {
+        it->second.erase(txId);
+        if (it->second.empty()) {
+            TablesWithSnapshots.erase(it);
+        }
+    }
+
+    if (auto it = SnapshotTables.find(txId); it != SnapshotTables.end()) {
+        it->second.erase(tablePathId);
+        if (it->second.empty()) {
+            SnapshotTables.erase(it);
+            SnapshotsStepIds.erase(txId);
+        }
+    } else {
+        SnapshotsStepIds.erase(txId);
+    }
 }
 
 TShardIdx TSchemeShard::ReserveShardIdxs(ui64 count) {
@@ -2065,6 +2094,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterUserAttributes:
     case TTxState::TxInitializeBuildIndex:
     case TTxState::TxPrepareIndexValidation:
+    case TTxState::TxPrepareVectorIndex:
     case TTxState::TxFinalizeBuildIndex:
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
@@ -5228,16 +5258,12 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Sub(1);
     }
 
-    if (TablesWithSnapshots.contains(pathId)) {
-        const TTxId snapshotId = TablesWithSnapshots.at(pathId);
-        PersistDropSnapshot(db, snapshotId, pathId);
-
-        TablesWithSnapshots.erase(pathId);
-        SnapshotTables.at(snapshotId).erase(pathId);
-        if (SnapshotTables.at(snapshotId).empty()) {
-            SnapshotTables.erase(snapshotId);
+    if (auto it = TablesWithSnapshots.find(pathId); it != TablesWithSnapshots.end()) {
+        const TVector<TTxId> snapshotIds(it->second.begin(), it->second.end());
+        for (const TTxId snapshotId : snapshotIds) {
+            PersistDropSnapshot(db, snapshotId, pathId);
+            RemoveTableSnapshot(pathId, snapshotId);
         }
-        SnapshotsStepIds.erase(snapshotId);
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
@@ -6224,6 +6250,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvFilterKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvDeltaKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);

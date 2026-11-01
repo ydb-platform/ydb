@@ -312,7 +312,7 @@ public:
     TDbRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, DbRefMaps};
     TDbRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, DbRefMaps};
 
-    THashMap<TPathId, TTxId> TablesWithSnapshots;
+    THashMap<TPathId, TSet<TTxId>> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
     THashMap<TTxId, TStepId> SnapshotsStepIds;
 
@@ -757,6 +757,17 @@ public:
     bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr, ui64 count = 1) const;
     bool CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const;
     bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
+
+    // A table may hold several snapshots at once (e.g. a build snapshot and an
+    // additional one). All lookups below are keyed by (tablePathId, txId) so that
+    // the one-snapshot-per-table assumption is not needed.
+    bool HasTableSnapshot(const TPathId& tablePathId) const;
+    bool HasTableSnapshot(const TPathId& tablePathId, TTxId txId) const;
+    // Returns the only snapshot of a table. Only valid where exactly one snapshot
+    // is guaranteed (e.g. the index impl table during unique-index validation).
+    TTxId GetAnyTableSnapshot(const TPathId& tablePathId) const;
+    void AddTableSnapshot(const TPathId& tablePathId, TTxId txId);
+    void RemoveTableSnapshot(const TPathId& tablePathId, TTxId txId);
 
     TShardIdx ReserveShardIdxs(ui64 count);
     TShardIdx NextShardIdx(const TShardIdx& shardIdx, ui64 inc) const;
@@ -2000,6 +2011,7 @@ public:
         struct TTxReplyRecomputeKMeans;
         struct TTxReplyFilterKMeans;
         struct TTxReplyLocalKMeans;
+        struct TTxReplyDeltaKMeans;
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
         struct TTxReplyValidateUniqueIndex;
@@ -2033,6 +2045,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& recompute);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvFilterKMeansResponse::TPtr& filter);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvDeltaKMeansResponse::TPtr& delta);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
@@ -2054,6 +2067,7 @@ public:
     void Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvFilterKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvDeltaKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);

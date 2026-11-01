@@ -329,6 +329,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
+        if (CreatePlaceholder) {
+            auto& bootstrap = *replicationConfig.MutableBootstrapInfo();
+            bootstrap.SetStatus(NKikimrSchemeOp::TBootstrapInfo::WAITING_IMPORT);
+        }
+    }
+
+    bool ShouldCreateDestination() const {
+        // Both initial scan and S3 bootstrap start by creating a replica.
+        // Attachment instead resolves the table already restored by the user.
+        return InitialScan || CreatePlaceholder;
     }
 
     void AllocateTxId() {
@@ -360,7 +370,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             ExecuteSchemeTx(DropIndexTx);
         } else if (Attaching) {
             AttachDst();
-        } else if (InitialScan) {
+        } else if (ShouldCreateDestination()) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -381,7 +391,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
-        return !InitialScan
+        return !ShouldCreateDestination()
             && Kind == TReplication::ETargetKind::Table
             && !Cleanup
             && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
@@ -550,7 +560,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     return PrepareDropIndex(index, record);
                 }
             }
-            if (InitialScan || AttachmentComplete) {
+            if (ShouldCreateDestination() || AttachmentComplete) {
                 return Success();
             }
 
@@ -561,7 +571,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return PrepareAttachment();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
-            if (!InitialScan) {
+            if (!ShouldCreateDestination()) {
                 return Error(record.GetStatus(), TStringBuilder() << "`" << DstPath << "` does not exist");
             }
             return AllocateTxId();
@@ -608,6 +618,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
+        const auto& replicationConfig = got.GetReplicationConfig();
+        const auto& bootstrap = replicationConfig.GetBootstrapInfo();
+        if (!ShouldCreateDestination() && replicationConfig.HasBootstrapInfo()
+            && bootstrap.GetStatus() != NKikimrSchemeOp::TBootstrapInfo::IMPORTED) {
+            error = "Destination import is not complete";
+            return false;
+        }
         const bool needsConfig = InitialScan || Attaching || IsReplica(got);
 
         if (needsConfig && !got.HasReplicationConfig()) {
@@ -883,7 +900,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_INFO("Success",
             {"dstPathId", DstPathId});
 
-        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
+        TPathId attachedDstPathId = DstPathId;
+        if (CreatePlaceholder) {
+            // Only the empty placeholder is ready. Import will replace it, so
+            // the controller must resolve and attach the final table at STANDBY.
+            attachedDstPathId = {};
+        }
+        Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, attachedDstPathId));
         PassAway();
     }
 
@@ -978,7 +1001,8 @@ public:
             const TString& database,
             bool initialScan,
             const TPathId& pendingDstPathId,
-            bool cleanup)
+            bool cleanup,
+            bool createPlaceholder)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -991,6 +1015,7 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
+        , CreatePlaceholder(createPlaceholder)
         , Cleanup(cleanup)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
@@ -1008,7 +1033,7 @@ public:
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
-            if (!InitialScan) {
+            if (!ShouldCreateDestination()) {
                 return Resolve(PathId);
             }
             [[fallthrough]];
@@ -1044,6 +1069,8 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
+    // Create an empty replica now; leave attachment until after S3 import.
+    const bool CreatePlaceholder;
     bool Cleanup;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
@@ -1129,14 +1156,17 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
+    const bool initialScan = replication->GetConfig().GetInitialScan();
+    const bool createPlaceholder = !initialScan
+        && replication->GetDesiredState() == TReplication::EState::Paused;
+    const bool cleanup = replication->GetDesiredState() == TReplication::EState::Done
+        || replication->GetState() == TReplication::EState::Removing;
+
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(),
-        target->GetPendingDstPathId(),
-        replication->GetDesiredState() == TReplication::EState::Done
-            || replication->GetState() == TReplication::EState::Removing);
+        initialScan, target->GetPendingDstPathId(), cleanup, createPlaceholder);
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
@@ -1144,9 +1174,10 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
         const TPathId& pendingDstPathId,
-        bool cleanup)
+        bool cleanup,
+        bool createPlaceholder)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, cleanup, createPlaceholder);
 }
 
 }

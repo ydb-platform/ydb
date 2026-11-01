@@ -1,6 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_replication_bootstrap.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -139,8 +140,11 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .NotUnderOperation()
-                .IsTable()
-                .NotAsyncReplicaTable();
+                .IsTable();
+
+            if (!Transaction.GetInternal() || !IsReplicationBootstrapTable(tablePath, context.SS)) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();

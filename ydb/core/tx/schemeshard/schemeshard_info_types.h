@@ -3998,6 +3998,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         NBackup::TMetadata Metadata;
         TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
+        NKikimrSchemeOp::TTableReplicationConfig ReplicationConfig;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;

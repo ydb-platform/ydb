@@ -140,6 +140,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         auto& tableDesc = *modifyScheme.MutableCreateColumnTable();
         tableDesc.SetName(wdAndPath.second);
         tableDesc.SetIsRestore(true);
+        if (item.ReplicationConfig.HasBootstrapInfo()) {
+            error = "A column table cannot replace a replication placeholder";
+            return nullptr;
+        }
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         Ydb::StatusIds::StatusCode status;
@@ -151,6 +155,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         auto& tableDesc = *indexedTable.MutableTableDescription();
         tableDesc.SetName(wdAndPath.second);
         tableDesc.SetIsRestore(true);
+        if (item.ReplicationConfig.HasBootstrapInfo()) {
+            *tableDesc.MutableReplicationConfig() = item.ReplicationConfig;
+            tableDesc.MutableReplicationConfig()->MutableBootstrapInfo()->SetStatus(NKikimrSchemeOp::TBootstrapInfo::IMPORTING);
+        }
 
         Y_ABORT_UNLESS(ss->TableProfilesLoaded);
         Ydb::StatusIds::StatusCode status;
@@ -495,6 +503,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    modifyScheme.SetInternal(true);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);

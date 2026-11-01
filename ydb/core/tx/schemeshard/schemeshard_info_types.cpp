@@ -608,6 +608,18 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                         }
                     }
                 }
+                for (const auto& generatedColumn : op.GetColumns()) {
+                    if (!generatedColumn.HasDefaultFromExpression()) {
+                        continue;
+                    }
+                    for (const auto& dependency : generatedColumn.GetDefaultFromExpression().GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't change nullability of column '%s': it is used by generated column '%s'",
+                                colName.c_str(), generatedColumn.GetName().c_str());
+                            return nullptr;
+                        }
+                    }
+                }
             }
 
             if (col.HasDefaultFromSequence()) {
@@ -754,6 +766,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     return nullptr;
                 }
 
+                if (source && !stored && !featureFlags.EnableAddColumnGeneratedVirtual) {
+                    errStr = "Adding VIRTUAL GENERATED columns is disabled (EnableAddColumnGeneratedVirtual)";
+                    return nullptr;
+                }
+
                 if (!stored && columnFamily && columnFamily->GetId() != 0) {
                     errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
                     return nullptr;
@@ -845,6 +862,38 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
+    for (const auto& column : op.GetColumns()) {
+        if (!column.HasDefaultFromExpression()) {
+            continue;
+        }
+
+        const auto& columnName = column.GetName();
+        for (const auto& dependency : column.GetDefaultFromExpression().GetDependencyColumnNames()) {
+            if (dependency == columnName) {
+                errStr = TStringBuilder() << "Generated column " << columnName << " can not reference itself";
+                return nullptr;
+            }
+
+            const TColumn* dependencyColumn = nullptr;
+            if (auto it = colName2Id.find(dependency); it != colName2Id.end()) {
+                dependencyColumn = alterData->Columns.FindPtr(it->second);
+                if (!dependencyColumn && source) {
+                    dependencyColumn = source->Columns.FindPtr(it->second);
+                }
+            }
+            if (!dependencyColumn || dependencyColumn->IsDropped()) {
+                errStr = TStringBuilder() << "Generated column " << columnName
+                    << " references an unknown column: " << dependency;
+                return nullptr;
+            }
+            if (dependencyColumn->DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                errStr = TStringBuilder() << "Generated column " << columnName
+                    << " references another generated column: " << dependency;
+                return nullptr;
+            }
+        }
+    }
+
     if ((colName2Id.size() - op.DropColumnsSize()) > limits.MaxTableColumns) {
         errStr = TStringBuilder()
             << "Too many columns"
@@ -870,6 +919,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
 
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
+    } else if (source && source->TTLSettings().HasEnabled()
+        && AnyOf(op.GetColumns(), [](const auto& column) { return column.HasDefaultFromExpression(); }))
+    {
+        if (!ValidateTtlSettings(source->TTLSettings(), source->Columns, alterData->Columns, colName2Id, subDomain, errStr)) {
+            return nullptr;
+        }
     }
 
     // Multi-column statistics.

@@ -2078,6 +2078,7 @@ public:
 
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
+            bool hasGeneratedColumns = false;
 
             auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
@@ -2132,6 +2133,13 @@ public:
                         ::NKikimrIndexBuilder::TColumnBuildSetting* columnBuild = nullptr;
                         bool hasDefaultValue = false;
                         bool hasNotNull = false;
+                        bool isGenerated = false;
+                        if (columnTuple.Size() > 2) {
+                            const auto constraints = columnTuple.Item(2).Cast<TCoNameValueTuple>().Value().Cast<TCoNameValueTupleList>();
+                            isGenerated = AnyOf(constraints, [](const auto& constraint) {
+                                return constraint.Name().Value() == "generated";
+                            });
+                        }
                         if (columnTuple.Size() > 2) {
                             auto columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                             for (const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
@@ -2140,9 +2148,21 @@ public:
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "generated") {
-                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                                        "Column addition with a GENERATED ALWAYS AS expression is not supported"));
-                                    return SyncError();
+                                    const auto& value = constraint.Value().Cast().Ref();
+                                    YQL_ENSURE(value.ChildrenSize() == 4);
+                                    if (value.Child(2)->Content() == "stored") {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                                        return SyncError();
+                                    }
+                                    hasGeneratedColumns = true;
+                                    add_column->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION);
+                                    auto& generated = *add_column->MutableDefaultFromExpression();
+                                    generated.SetExprText(TString(value.Child(1)->Content()));
+                                    generated.SetStored(false);
+                                    for (const auto& dependency : value.Child(3)->Children()) {
+                                        generated.AddDependencies(TString(dependency->Content()));
+                                    }
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
@@ -2164,12 +2184,15 @@ public:
                                     hasDefaultValue = true;
 
                                 } else if (constraint.Name().Value() == "not_null") {
+                                    hasNotNull = true;
+                                    if (isGenerated) {
+                                        continue;
+                                    }
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
                                     columnBuild->SetNotNull(true);
-                                    hasNotNull = true;
                                 }
                             }
                         }
@@ -2179,7 +2202,7 @@ public:
                         // opt-in (NFulltext::RowIdColumn). The schemeshard creates the sequence,
                         // backfills existing rows via the column-build scan, and bit-reverses
                         // each value to spread inserts across posting-table shards.
-                        if (hasNotNull && !hasDefaultValue
+                        if (hasNotNull && !hasDefaultValue && !isGenerated
                             && TString(columnName.Value()) == NKikimr::NTableIndex::NFulltext::RowIdColumn
                             && actualType->GetKind() == ETypeAnnotationKind::Data
                             && actualType->Cast<TDataExprType>()->GetName() == "Uint64")
@@ -2198,7 +2221,11 @@ public:
                             hasDefaultValue = true;
                         }
 
-                        if (hasNotNull && !hasDefaultValue) {
+                        if (isGenerated) {
+                            add_column->SetNotNull(hasNotNull || notNull);
+                        }
+
+                        if (hasNotNull && !hasDefaultValue && !isGenerated) {
                             ctx.AddError(
                                 YqlIssue(ctx.GetPosition(columnTuple.Pos()),
                                     TIssuesIds::KIKIMR_BAD_REQUEST,
@@ -3510,14 +3537,20 @@ public:
                     return SyncError();
                 }
                 future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
-            } else if (isColumn) {
+            } else if (isColumn && !hasGeneratedColumns) {
                 future = Gateway->AlterColumnTable(cluster, std::move(alterTableRequest));
             } else {
                 TMaybe<TString> requestType;
                 if (!SessionCtx->Query().DocumentApiRestricted) {
                     requestType = NKikimr::NDocApi::RequestType;
                 }
-                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags, std::move(indexBuildSettings));
+                if (hasGeneratedColumns && indexBuildSettings.has_column_build_operation()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                        "Adding VIRTUAL GENERATED columns together with columns requiring a build is not supported"));
+                    return SyncError();
+                }
+                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags,
+                    std::move(indexBuildSettings));
             }
 
             return WrapFuture(future,

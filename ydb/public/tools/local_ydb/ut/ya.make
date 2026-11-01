@@ -21,11 +21,11 @@ ENV(YDB_TINY_MODE=true)
 
 SIZE(MEDIUM)
 TIMEOUT(600)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE == "address")
     # Allow additional memory for the instrumented server and CLI processes.
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:1)
 ENDIF()
 
 # Do not enable FORK_SUBTESTS: every scenario starts a real ydbd and must run sequentially.

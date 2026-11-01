@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
+    ydb/core/kqp/query_compiler/remote_embedder
     ydb/core/kqp/runtime/common
     ydb/core/kqp/tracing
     ydb/core/protos
@@ -31,3 +32,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    remote_embedder
+)

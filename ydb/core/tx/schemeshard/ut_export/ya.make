@@ -27,6 +27,7 @@ IF (NOT OS_WINDOWS)
         ydb/core/tx/columnshard/hooks/testing
         ydb/core/tx/columnshard/test_helper
         ydb/core/tx/schemeshard/ut_helpers
+        ydb/core/tx/tx_allocator_client
         ydb/core/util
         ydb/core/wrappers/ut_helpers
         ydb/library/aws_init
@@ -36,6 +37,7 @@ IF (NOT OS_WINDOWS)
     SRCS(
         ut_export.cpp
         ut_export_fs.cpp
+        ut_export_table_scheme_snapshot.cpp
     )
 ENDIF()
 

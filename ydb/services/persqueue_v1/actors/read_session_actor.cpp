@@ -1143,16 +1143,12 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, 
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
 
-            // SourceIdMeta2 CDC is stored under the table's physical PQ path, while
-            // the federation converter exposes primary/secondary names without that
-            // path. PQRB locks use the physical path from the CDC stream implementation.
-            constexpr TStringBuf primarySuffix = "/replication/streamImpl";
-            auto databasePath = t.TopicNameConverter->GetPrimaryPath();
-            if (databasePath.EndsWith(primarySuffix)) {
-                databasePath.resize(databasePath.size() - primarySuffix.size());
-                const auto cdcPath = NPersQueue::NormalizeFullPath(
-                    JoinPath({databasePath, "PQ", "SourceIdMeta2", "replication", "streamImpl"}));
-                FullPathToConverter[cdcPath] = t.TopicNameConverter;
+            if (t.TopicNameConverter->GetPrimaryPath()
+                == "/Root/logbroker/shared/federation-1/PQ/rt3.lbkx-mow--SourceIdMeta2@replication--streamImpl")
+            {
+                FullPathToConverter[
+                    "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication/streamImpl"] =
+                    t.TopicNameConverter;
             }
 
             if (!GetMeteringMode()) {

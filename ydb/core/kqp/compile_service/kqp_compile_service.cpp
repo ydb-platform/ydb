@@ -778,6 +778,9 @@ private:
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
+                // A stale failure must not erase a fresh entry with the same UID: after the
+                // config change a new compile may have already succeeded under this UID
+                // (e.g. a recompile reuses the UID of the cached query).
                 if (!isStale && !hasTempTablesNameClashes) {
                     if (QueryCache->FindByUid(compileResult->Uid, false)) {
                         QueryCache->EraseByUid(compileResult->Uid);

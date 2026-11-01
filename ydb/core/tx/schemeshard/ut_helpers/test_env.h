@@ -37,7 +37,7 @@ namespace NSchemeShardUT_Private {
             type name##_ = defaultValue
 
         OPTION(ui32, NChannels, 4);
-        OPTION(NActors::NLog::EPriority, SchemeShardLogPriority, NActors::NLog::PRI_DEBUG);
+        OPTION(NActors::NLog::EPriority, SchemeShardLogPriority, NActors::NLog::PRI_WARN);
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);

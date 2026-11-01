@@ -1349,7 +1349,7 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
     return new TTestEnv(*Runtime, GetTestEnvOptions()
         .RunFakeConfigDispatcher(true)
-        .SchemeShardLogPriority(NActors::NLog::PRI_NOTICE));
+        .SchemeShardLogPriority(NActors::NLog::PRI_WARN));
 }
 
 

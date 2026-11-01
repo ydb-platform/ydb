@@ -1,0 +1,6 @@
+items:
+- name: Управление соединениями
+  href: connections/index.md
+  include:
+    mode: link
+    path: connections/toc_p.yaml

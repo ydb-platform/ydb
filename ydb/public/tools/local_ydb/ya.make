@@ -1,4 +1,6 @@
 PY3_PROGRAM(local_ydb)
+REQUIREMENTS(cpu:2)
+
 
 PY_SRCS(__main__.py)
 

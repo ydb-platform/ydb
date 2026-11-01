@@ -205,7 +205,9 @@
 /ydb/tests/functional/replication @ydb-platform/core
 /ydb/tests/functional/restarts @ydb-platform/core
 /ydb/tests/functional/minidumps @ydb-platform/core
+/ydb/tests/stress/node_broker @ydb-platform/core
 /ydb/tests/stress/scheme_board @ydb-platform/core
+/ydb/tests/stress/system_tablet_backup @ydb-platform/core
 /ydb/tools/cfg @ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core

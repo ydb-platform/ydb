@@ -4,7 +4,10 @@
 #include "tablet_info.h"
 #include "event_history.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/intrlist.h>
+
+#include <memory>
 
 namespace NKikimr {
 namespace NHive {
@@ -111,11 +114,46 @@ public:
     // diagnostics only: newest events of this node, constructed on the first event, see THive::RecordNodeEvent
     TEventHistory EventHistory;
 
+    struct TCounters {
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Parent;
+
+        // THive::GetStats, take part in the decision whether to start a balancer and which one.
+        TCounterPtr BalanceUsagePercent; // Node usage as THive::GetStats sees it: max{TabletsUsage* over all resources, fast rising average TotalNodeUsage reported by Local}. Its min/max over nodes are BalanceUsageMin/BalanceUsageMax, used to decide whether to start the emergency balancer.
+        TCounterPtr TabletsUsageCpuPercent; // Normalized tablets CPU usage. Its scatter over nodes is used to decide whether to trigger the balancer.
+        TCounterPtr TabletsUsageMemPercent; // Normalized tablets memory usage. Its scatter over nodes is used to decide whether to trigger the balancer.
+        TCounterPtr TabletsUsageNetPercent; // Normalized tablets network usage. Its scatter over nodes is used to decide whether to trigger the balancer.
+        TCounterPtr TabletsUsageCtr; // Number of tablets without CPU, memory and network usage (not normalized, because the denominator is too big). Its scatter over nodes is used to decide whether to trigger the balancer.
+
+        // GetNodeUsage(resource): node ordering and move expediency inside a balancer run.
+        TCounterPtr NodeUsageAvgComputeResourcesPercent; // Max{NodeUsageAvg* over all resources (Ctr is normalized here), fast rising average TotalNodeUsage reported by Local}. TotalNodeUsage is calculated by Local as: max{pool usage among monitored pools (System,User,IC by default), node memory usage over memory limit (if the limit is known)}.
+        // NodeUsageAvg*: normalized max{tablets usage, average TotalResourceUsage reported by Local}, see GetResourceCurrentValues.
+        TCounterPtr NodeUsageAvgCpuPercent; // Normalized node CPU usage.
+        TCounterPtr NodeUsageAvgMemPercent; // Normalized node memory usage.
+        TCounterPtr NodeUsageAvgNetPercent; // Normalized node network usage.
+        TCounterPtr NodeUsageAvgCtr; // Number of tablets without CPU, memory and network usage (not normalized, because the denominator is too big). Local doesn't report it, so it equals TabletsUsageCtr.
+
+        TCounterPtr NodeTabletsRunning;
+        TCounterPtr NodeTabletsStarting;
+        TCounterPtr TabletsMovedToNode;
+        TCounterPtr TabletsMovedFromNode;
+    };
+    std::unique_ptr<TCounters> Counters;
+
+    void CreateCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& hiveGroup); // no-op when present
+    void DropCounters(); // removes the node subgroup, no-op when absent
+    void UpdateCounters(); // no-op when absent
+
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
     TNodeInfo(TNodeInfo&&) = delete;
     TNodeInfo& operator =(const TNodeInfo&) = delete;
     TNodeInfo& operator =(TNodeInfo&&) = delete;
+
+    ~TNodeInfo() {
+        DropCounters(); // the counters belong to the node's process, a Hive that stops or moves must not leave them behind
+    }
 
     TString GetLogPrefix() const;
 
@@ -245,6 +283,7 @@ public:
             }
             Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
             Local = TActorId();
+            DropCounters(); // a node that is not alive is not balanced, do not show its stale values
             ChangeVolatileState(EVolatileState::Disconnected);
             for (TTabletInfo* tablet : TabletsToRestart) {
                 if (tablet->IsReadyToBoot()) {
@@ -276,6 +315,7 @@ public:
     void SetLocation(const TNodeLocation& location, EHiveEventReason reason);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);
 
+    // Max{tablets usage, average TotalResourceUsage reported by Local} per resource. Local values are used only after the average is stable.
     TResourceRawValues GetResourceCurrentValues() const;
 
     const TResourceRawValues& GetResourceMaximumValues() const {

@@ -16,10 +16,10 @@ enum ESimpleCounters {
     COUNTER_METRICS_CPU = 6 [(CounterOpts) = {Name: "MetricsCPU"}];
     COUNTER_METRICS_MEMORY = 7 [(CounterOpts) = {Name: "MetricsMemory"}];
     COUNTER_METRICS_NETWORK = 8 [(CounterOpts) = {Name: "MetricsNetwork"}];
-    COUNTER_BALANCE_SCATTER = 9 [(CounterOpts) = {Name: "BalanceScatter"}];
+    COUNTER_BALANCE_SCATTER = 9 [(CounterOpts) = {Name: "BalanceScatter"}]; // Max of the per-resource scatters below, in percent.
     COUNTER_WAITQUEUE_SIZE = 10 [(CounterOpts) = {Name: "WaitQueueSize"}];
-    COUNTER_BALANCE_USAGE_MIN = 11 [(CounterOpts) = {Name: "BalanceUsageMin"}];
-    COUNTER_BALANCE_USAGE_MAX = 12 [(CounterOpts) = {Name: "BalanceUsageMax"}];
+    COUNTER_BALANCE_USAGE_MIN = 11 [(CounterOpts) = {Name: "BalanceUsageMin"}]; // Min over alive nodes of the node usage, in percent.
+    COUNTER_BALANCE_USAGE_MAX = 12 [(CounterOpts) = {Name: "BalanceUsageMax"}]; // Max over alive nodes of the node usage, in percent.
     COUNTER_SEQUENCE_FREE = 13 [(CounterOpts) = {Name: "SequenceFree"}];
     COUNTER_SEQUENCE_ALLOCATED = 14 [(CounterOpts) = {Name: "SequenceAllocated"}];
     COUNTER_EVENTQUEUE_SIZE = 15 [(CounterOpts) = {Name: "EventQueueSize"}];
@@ -44,6 +44,34 @@ enum ESimpleCounters {
     COUNTER_SHRINK_HISTORY_TABLETS = 34 [(CounterOpts) = {Name: "ShrinkRemainingHistoryTablets"}];
     COUNTER_SHRINK_MOVE_DATA_INFLIGHT = 35 [(CounterOpts) = {Name: "ShrinkMoveDataInFlight"}];
     COUNTER_SHRINK_MOVE_DATA_QUEUED = 36 [(CounterOpts) = {Name: "ShrinkMoveDataQueued"}];
+
+    // Scatter by each resource, in percent. Scatter = (MaxUsage - MinUsage) / MaxUsage,
+    // where usages are the ones from BalanceUsageMin*/BalanceUsageMax* below.
+    // Counter scatter of one tablet is ignored (set to 0).
+    COUNTER_BALANCE_SCATTER_COUNTER = 37 [(CounterOpts) = {Name: "BalanceScatterCtr"}];
+    COUNTER_BALANCE_SCATTER_CPU = 38 [(CounterOpts) = {Name: "BalanceScatterCpu"}];
+    COUNTER_BALANCE_SCATTER_MEMORY = 39 [(CounterOpts) = {Name: "BalanceScatterMem"}];
+    COUNTER_BALANCE_SCATTER_NETWORK = 40 [(CounterOpts) = {Name: "BalanceScatterNet"}];
+
+    // Min node usage by each resource, in percent; Ctr is the number of tablets (as the per-node TabletsUsageCtr).
+    // Only the usage reported by tablets is counted (no TotalResourceUsage from Local).
+    // Cpu/Mem/Net values below MinNodeUsageToBalance are raised to MinNodeUsageToBalance.
+    COUNTER_BALANCE_USAGE_MIN_COUNTER = 41 [(CounterOpts) = {Name: "BalanceUsageMinCtr"}];
+    COUNTER_BALANCE_USAGE_MIN_CPU = 42 [(CounterOpts) = {Name: "BalanceUsageMinCpu"}];
+    COUNTER_BALANCE_USAGE_MIN_MEMORY = 43 [(CounterOpts) = {Name: "BalanceUsageMinMem"}];
+    COUNTER_BALANCE_USAGE_MIN_NETWORK = 44 [(CounterOpts) = {Name: "BalanceUsageMinNet"}];
+
+    // Max node usage by each resource, in percent. Same rules as for BalanceUsageMin*.
+    COUNTER_BALANCE_USAGE_MAX_COUNTER = 45 [(CounterOpts) = {Name: "BalanceUsageMaxCtr"}];
+    COUNTER_BALANCE_USAGE_MAX_CPU = 46 [(CounterOpts) = {Name: "BalanceUsageMaxCpu"}];
+    COUNTER_BALANCE_USAGE_MAX_MEMORY = 47 [(CounterOpts) = {Name: "BalanceUsageMaxMem"}];
+    COUNTER_BALANCE_USAGE_MAX_NETWORK = 48 [(CounterOpts) = {Name: "BalanceUsageMaxNet"}];
+
+    // Number of overloaded nodes. A node is overloaded when its max resource usage
+    // is at least MaxNodeUsageToKick. See TNodeInfo::IsOverloaded.
+    // If the tenant has both overloaded and not overloaded nodes (below MaxNodeUsageToKick - NodeUsageRangeToKick threshold),
+    // Hive starts the emergency balancer.
+    COUNTER_NODES_OVERLOADED = 49 [(CounterOpts) = {Name: "NodesOverloaded"}];
 }
 
 enum ECumulativeCounters {
@@ -67,6 +95,36 @@ enum ECumulativeCounters {
     COUNTER_SHRINK_MOVE_DATA_SENT = 17 [(CounterOpts) = {Name: "ShrinkMoveDataSent"}];
     COUNTER_SHRINK_MOVE_DATA_ANSWERED = 18 [(CounterOpts) = {Name: "ShrinkMoveDataAnswered"}];
     COUNTER_SHRINK_MOVE_DATA_RETRIED = 19 [(CounterOpts) = {Name: "ShrinkMoveDataRetried"}];
+
+    // The tablet balancer counters (BalancerExecuted, BalancerFailed, TabletsMoved) split by balancer type, see EBalancerType.
+    // TabletsMoved also counts drain and fill moves, they are counted per move by DrainExecuted and FillExecuted:
+    // TabletsMoved = sum of TabletsMoved<Type> + DrainExecuted + FillExecuted.
+    COUNTER_BALANCER_EXECUTED_MANUAL = 20 [(CounterOpts) = {Name: "BalancerExecutedManual"}];
+    COUNTER_BALANCER_EXECUTED_SCATTER = 21 [(CounterOpts) = {Name: "BalancerExecutedScatter"}];
+    COUNTER_BALANCER_EXECUTED_COUNTER = 22 [(CounterOpts) = {Name: "BalancerExecutedScatterCtr"}];
+    COUNTER_BALANCER_EXECUTED_CPU = 23 [(CounterOpts) = {Name: "BalancerExecutedScatterCpu"}];
+    COUNTER_BALANCER_EXECUTED_MEMORY = 24 [(CounterOpts) = {Name: "BalancerExecutedScatterMem"}];
+    COUNTER_BALANCER_EXECUTED_NETWORK = 25 [(CounterOpts) = {Name: "BalancerExecutedScatterNet"}];
+    COUNTER_BALANCER_EXECUTED_EMERGENCY = 26 [(CounterOpts) = {Name: "BalancerExecutedEmergency"}];
+    COUNTER_BALANCER_EXECUTED_SPREAD = 27 [(CounterOpts) = {Name: "BalancerExecutedSpread"}];
+
+    COUNTER_BALANCER_FAILED_MANUAL = 28 [(CounterOpts) = {Name: "BalancerFailedManual"}];
+    COUNTER_BALANCER_FAILED_SCATTER = 29 [(CounterOpts) = {Name: "BalancerFailedScatter"}];
+    COUNTER_BALANCER_FAILED_COUNTER = 30 [(CounterOpts) = {Name: "BalancerFailedScatterCtr"}];
+    COUNTER_BALANCER_FAILED_CPU = 31 [(CounterOpts) = {Name: "BalancerFailedScatterCpu"}];
+    COUNTER_BALANCER_FAILED_MEMORY = 32 [(CounterOpts) = {Name: "BalancerFailedScatterMem"}];
+    COUNTER_BALANCER_FAILED_NETWORK = 33 [(CounterOpts) = {Name: "BalancerFailedScatterNet"}];
+    COUNTER_BALANCER_FAILED_EMERGENCY = 34 [(CounterOpts) = {Name: "BalancerFailedEmergency"}];
+    COUNTER_BALANCER_FAILED_SPREAD = 35 [(CounterOpts) = {Name: "BalancerFailedSpread"}];
+
+    COUNTER_TABLETS_MOVED_MANUAL = 36 [(CounterOpts) = {Name: "TabletsMovedManual"}];
+    COUNTER_TABLETS_MOVED_SCATTER = 37 [(CounterOpts) = {Name: "TabletsMovedScatter"}];
+    COUNTER_TABLETS_MOVED_COUNTER = 38 [(CounterOpts) = {Name: "TabletsMovedScatterCtr"}];
+    COUNTER_TABLETS_MOVED_CPU = 39 [(CounterOpts) = {Name: "TabletsMovedScatterCpu"}];
+    COUNTER_TABLETS_MOVED_MEMORY = 40 [(CounterOpts) = {Name: "TabletsMovedScatterMem"}];
+    COUNTER_TABLETS_MOVED_NETWORK = 41 [(CounterOpts) = {Name: "TabletsMovedScatterNet"}];
+    COUNTER_TABLETS_MOVED_EMERGENCY = 42 [(CounterOpts) = {Name: "TabletsMovedEmergency"}];
+    COUNTER_TABLETS_MOVED_SPREAD = 43 [(CounterOpts) = {Name: "TabletsMovedSpread"}];
 }
 
 enum EPercentileCounters {

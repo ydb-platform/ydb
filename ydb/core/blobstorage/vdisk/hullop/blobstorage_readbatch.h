@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_sector_sealing.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
@@ -91,7 +92,15 @@ namespace NKikimr {
 
         typename TReadQueue::iterator Iterator;
 
-        TMap<void *, std::pair<typename TReadQueue::iterator, typename TReadQueue::iterator>> ActiveRequests;
+        struct TActiveRequest {
+            typename TReadQueue::iterator Begin;
+            typename TReadQueue::iterator End;
+            // what was asked for, to open a RawSectors result
+            ui32 Offset;
+            ui32 Size;
+            TLogoBlobID BlobId;
+        };
+        TMap<void *, TActiveRequest> ActiveRequests;
         ui64 NextRequestCookie = 1;
 
         struct TCompareReadItem {
@@ -209,11 +218,11 @@ namespace NKikimr {
                 }
             }
 
-            ActiveRequests.emplace(reinterpret_cast<void *>(NextRequestCookie), std::make_pair(Iterator, outIt));
-
             // create message
             const ui32 offset = enclosingRange.first;
             const ui32 size = enclosingRange.second - enclosingRange.first;
+            ActiveRequests.emplace(reinterpret_cast<void *>(NextRequestCookie),
+                TActiveRequest{Iterator, outIt, offset, size, hugeBlobId});
             auto msg = std::make_unique<NPDisk::TEvChunkRead>(owner, ownerRound, chunkIdx, offset, size, priorityClass,
                     reinterpret_cast<void *>(NextRequestCookie));
             msg->BlobId = hugeBlobId;
@@ -227,14 +236,19 @@ namespace NKikimr {
             return msg;
         }
 
-        // apply read result
-        void Apply(NPDisk::TEvChunkReadResult *msg) {
+        // apply read result; pdiskCtx is needed to open the result of a read sent with RawSectors
+        void Apply(NPDisk::TEvChunkReadResult *msg, const TPDiskCtx *pdiskCtx = nullptr) {
             auto& data = msg->Data;
 
             auto it = ActiveRequests.find(msg->Cookie);
             Y_VERIFY_S(it != ActiveRequests.end(), VDiskLogPrefix);
 
-            for (auto reqIt = it->second.first; reqIt != it->second.second; ++reqIt) {
+            if (msg->RawSectors) {
+                Y_VERIFY_S(pdiskCtx, VDiskLogPrefix);
+                OpenRawSectors(*pdiskCtx, *msg, it->second.Offset, it->second.Size, it->second.BlobId);
+            }
+
+            for (auto reqIt = it->second.Begin; reqIt != it->second.End; ++reqIt) {
                 TReadItem& item = *reqIt;
 
                 item.Status = msg->Status;

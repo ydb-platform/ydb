@@ -72,6 +72,11 @@ struct TEnvironmentSetup {
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
         const bool ReportVDiskMetricsInPDiskMock = false;
+        // Mock PDisks lay data chunks out in encrypted sectors and hand out the format context, as a real PDisk does.
+        // Off: plain data chunks with whole-sector append blocks.
+        const bool SectorFormatInPDiskMock = true;
+        // VDiskControls.EnableVDiskSectorPreparation: VDisks build and open data sectors themselves.
+        const bool EnableVDiskSectorPreparation = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
         const ui32 NumPiles = 0;
@@ -303,7 +308,8 @@ struct TEnvironmentSetup {
                         metadata = std::make_shared<TPDiskMockState::TMetadata>();
                     }
                     auto state = MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
-                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata);
+                        Settings.PDiskSize, chunkSize, cfg.ReadOnly, Settings.DiskType, policy, metadata,
+                        Settings.SectorFormatInPDiskMock);
                     state->SetReportVDiskMetrics(Settings.ReportVDiskMetricsInPDiskMock);
                     return state;
                 },
@@ -647,6 +653,8 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumReadValidationOnVDisk, false, false, true, false);
                 ADD_ICB_CONTROL(VDiskControls.EnableChecksumWriteValidationOnVDisk, false, false, true, false);
+                ADD_ICB_CONTROL(VDiskControls.EnableVDiskSectorPreparation, false, false, true,
+                    Settings.EnableVDiskSectorPreparation);
                 ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
                 ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
                 ADD_ICB_CONTROL(VDiskControls.HullCompEmergencyMaxSsts, 8, 0, 64, 8);

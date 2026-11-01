@@ -31,10 +31,11 @@ TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasur
 {}
 
 void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce,
-        TOwner owner) {
+        TOwner owner, TPDiskHashCalculator *sharedHasher) {
     ui32 sectorCount = IsErasureEncode ? (IsTrippleCopy ? ReplicationFactor : (ErasureDataParts + 1)) : 1;
     ui64 maxNonce = 0;
-    TPDiskHashCalculator hasher;
+    TPDiskHashCalculator localHasher;
+    TPDiskHashCalculator &hasher = sharedHasher ? *sharedHasher : localHasher;
     for (ui32 i = 0; i < sectorCount; ++i) {
         TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
             (source + (i + 1) * Format.SectorSize - sizeof(TDataSectorFooter));

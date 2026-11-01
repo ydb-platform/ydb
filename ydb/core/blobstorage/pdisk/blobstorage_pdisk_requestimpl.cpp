@@ -54,6 +54,8 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     , Cookie(ev.Cookie)
     , DoFlush(ev.DoFlush)
     , IsSeqWrite(ev.IsSeqWrite)
+    , PreformattedSectors(ev.PreformattedSectors)
+    , FirstSectorNonce(ev.FirstSectorNonce)
     , BlobId(ev.BlobId)
 {
     if (PartsPtr) {
@@ -63,6 +65,39 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
     }
     TotalSize = RemainingSize;
     SlackSize = Max<ui32>();
+}
+
+void TChunkWrite::AbortPiece(TActorSystem *actorSystem) {
+    AtomicSet(PieceAborted, 1);
+    if (PreformattedSectors && PreformattedPieceCount) {
+        // counted with the pieces in flight; the last one to finish answers with the error
+        AtomicSet(PreformattedPieceFailed, 1);
+        if (AtomicDecrement(PreformattedPiecesInFlight) == 0) {
+            ReplyAborted(actorSystem);
+        }
+    } else if (AtomicDecrement(Pieces) == 0 && Completion) {
+        ReplyAborted(actorSystem);
+    }
+}
+
+void TChunkWrite::PieceDone(TActorSystem *actorSystem) {
+    Y_VERIFY(!PreformattedSectors); // counted by their own completions
+    // The last piece hands Completion to the device; until then it is here and answers if a piece was dropped.
+    if (AtomicDecrement(Pieces) == 0 && AtomicGet(PieceAborted) && Completion) {
+        ReplyAborted(actorSystem);
+    }
+}
+
+void TChunkWrite::ReplyAborted(TActorSystem *actorSystem) {
+    if (IsReplied) {
+        // already answered, e.g. by SendChunkWriteError for a bad piece; Completion and the owner's buffer go
+        // with this write, unanswered a second time
+        return;
+    }
+    TCompletionChunkWrite *completion = Completion.Release();
+    completion->ErrorReason = "TChunkWrite is being aborted";
+    completion->Release(actorSystem); // replies CORRUPTED, as Abort does, and deletes itself
+    IsReplied = true;
 }
 
 

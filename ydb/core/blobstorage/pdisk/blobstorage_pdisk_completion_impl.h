@@ -177,6 +177,47 @@ public:
     }
 };
 
+// One piece of a PreformattedSectors write. The write's own completion runs when the last piece is done, as a
+// failure if any piece failed. A piece dropped unsent (TChunkWrite::AbortPiece, when the PDisk stops) counts as a
+// failed one, so the write is always answered exactly once.
+class TCompletionChunkWritePreformattedPiece : public TCompletionAction {
+    TIntrusivePtr<TChunkWrite> Write;
+
+public:
+    TCompletionChunkWritePreformattedPiece(TChunkWrite *write)
+        : Write(write)
+    {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false; // as TCompletionChunkWrite
+    }
+
+    void Exec(TActorSystem *actorSystem) override {
+        Done(actorSystem, false);
+    }
+
+    void Release(TActorSystem *actorSystem) override {
+        Done(actorSystem, true);
+    }
+
+private:
+    void Done(TActorSystem *actorSystem, bool failed) {
+        if (failed) {
+            AtomicSet(Write->PreformattedPieceFailed, 1);
+        }
+        if (AtomicDecrement(Write->PreformattedPiecesInFlight) == 0) {
+            TCompletionChunkWrite *completion = Write->Completion.Release();
+            if (AtomicGet(Write->PreformattedPieceFailed)) {
+                completion->ErrorReason = failed && !ErrorReason.empty()
+                    ? ErrorReason
+                    : TString("a piece of the preformatted write failed");
+                completion->Release(actorSystem);
+            } else {
+                completion->Exec(actorSystem);
+            }
+        }
+        delete this;
+    }
+};
+
 class TCompletionLogWrite : public TCompletionAction {
     TPDisk *PDisk;
     TVector<TLogWrite*> LogWriteQueue;

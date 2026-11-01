@@ -4,11 +4,12 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     REQUIREMENTS(
         ram:32
+        cpu:1
     )
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()

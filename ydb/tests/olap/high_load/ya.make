@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/services/ydb)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
+REQUIREMENTS(cpu:4)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)

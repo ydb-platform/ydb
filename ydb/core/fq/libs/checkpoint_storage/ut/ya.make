@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/fq/libs/checkpoint_storage)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
+REQUIREMENTS(cpu:2)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)

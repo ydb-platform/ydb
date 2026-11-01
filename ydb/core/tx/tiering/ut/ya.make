@@ -6,6 +6,7 @@ SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
+REQUIREMENTS(cpu:4)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
 ELSE()

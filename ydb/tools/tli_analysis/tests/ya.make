@@ -5,7 +5,7 @@ TEST_SRCS(
     test_find_tli_chain.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:2)
 
 SIZE(MEDIUM)
 

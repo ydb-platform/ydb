@@ -11,6 +11,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/overloaded.h>
 
+#include <functional>
+#include <ranges>
 #include <variant>
 
 namespace NYql::NCommon {
@@ -148,6 +150,28 @@ TVector<TAttribute> SelectAndSaveActivatedFlags(
                               }}, *loaded);
     }
     return NPrivate::FilterSourceAndSaveIndexes<TAttribute>(source, filter, activationLabel, qContext, hasProviderName);
+}
+
+template <typename TAttribute, typename TContainer, typename TFilter, typename TMakeActivationLabel, typename TCallback>
+void ForEachActivatedFlag(
+    const TContainer& source,
+    const TFilter& filter,
+    const TQContext& qContext,
+    const TMakeActivationLabel& makeActivationLabel,
+    bool hasProviderName,
+    const TCallback& callback)
+{
+    auto apply = [&](auto&& flags) {
+        for (const auto& flag : flags) {
+            callback(flag);
+        }
+    };
+    if (qContext) {
+        apply(SelectAndSaveActivatedFlags<TAttribute>(
+            makeActivationLabel(), qContext, source, filter, hasProviderName));
+    } else {
+        apply(source | std::views::filter(std::cref(filter)));
+    }
 }
 
 } // namespace NYql::NCommon

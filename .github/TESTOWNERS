@@ -45,25 +45,6 @@
 /ydb/core/keyvalue @ydb-platform/cs
 /ydb/services/keyvalue @ydb-platform/cs
 
-#Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/core
-/ydb/core/mind/hive @ydb-platform/core
-/ydb/core/tx/schemeshard @ydb-platform/core
-/ydb/core/util @ydb-platform/core
-/ydb/core/client @ydb-platform/core
-/ydb/core/engine @ydb-platform/qp
-/ydb/tests/functional/hive @ydb-platform/core
-/ydb/core/tx/scheme_board @ydb-platform/core
-/ydb/core/tx/scheme_cache @ydb-platform/core
-/ydb/core/audit @ydb-platform/security
-/ydb/core/health_check @ydb-platform/core
-/ydb/library/aclib @ydb-platform/security
-/ydb/mvp/oidc_proxy @ydb-platform/security
-/ydb/tests/functional/audit @ydb-platform/security
-/ydb/tests/functional/limits @ydb-platform/core
-/ydb/tests/functional/scheme_shard @ydb-platform/core
-/ydb/tests/functional/tenants @ydb-platform/core
-/ydb/services/ydb/table_split_ut @ydb-platform/core
-
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
@@ -75,23 +56,28 @@
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 
 #Security Team @azevaykin TEAM:@ydb-platform/security
+/ydb/core/audit @ydb-platform/security
 /ydb/core/log_backend/ut @ydb-platform/security
 /ydb/mvp/core/ut @ydb-platform/security
 /ydb/mvp/meta @ydb-platform/security
+/ydb/mvp/oidc_proxy @ydb-platform/security
 /ydb/tests/functional/mvp/meta @ydb-platform/security
 /ydb/tests/functional/mvp/oidc_proxy @ydb-platform/security
 /ydb/core/security @ydb-platform/security
+/ydb/library/aclib @ydb-platform/security
 /ydb/library/login @ydb-platform/Security
 /ydb/library/security @ydb-platform/Security
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
+/ydb/tests/functional/audit @ydb-platform/security
 /ydb/tests/functional/secrets @ydb-platform/Security
 /ydb/tests/functional/security @ydb-platform/Security
 /ydb/services/scheme_secret/ut @ydb-platform/Security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/tests/sql @slonn @ydb-platform/qp
+/ydb/core/engine @ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
 /ydb/tests/functional/canonical @ydb-platform/qp
@@ -164,57 +150,70 @@
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/backup @ydb-platform/core
-/ydb/core/base/generated/ut @ydb-platform/core
-/ydb/core/control/ut @ydb-platform/core
-/ydb/core/debug_tools/ut @ydb-platform/core
+/ydb/core/client @ydb-platform/core
+/ydb/core/cms @ydb-platform/core
+/ydb/core/config @ydb-platform/core
+/ydb/core/quoter @ydb-platform/core
 /ydb/core/driver_lib @ydb-platform/core
-/ydb/core/graph @ydb-platform/core
 /ydb/core/grpc_services @ydb-platform/core
 /ydb/core/grpc_streaming/ut @ydb-platform/core
-/ydb/core/jaeger_tracing/ut @ydb-platform/core
-/ydb/core/memory_controller/ut @ydb-platform/core
+/ydb/core/health_check @ydb-platform/core
+/ydb/core/kesus @ydb-platform/core
 /ydb/core/metering/ut @ydb-platform/core
 /ydb/core/mind @ydb-platform/core
 /ydb/core/mon @ydb-platform/core
-/ydb/core/sys_view @ydb-platform/core
 /ydb/core/tablet/ut @ydb-platform/core
-/ydb/core/testlib/actors/ut @ydb-platform/core
-/ydb/core/tx/balance_coverage/ut @ydb-platform/core
-/ydb/core/tx/mediator/ut @ydb-platform/core
-/ydb/core/tx/sequenceproxy/ut @ydb-platform/core
-/ydb/core/tx/sequenceshard @ydb-platform/core
-/ydb/core/tx/time_cast/ut @ydb-platform/core
-/ydb/core/tx/tx_allocator/ut @ydb-platform/core
-/ydb/core/tx/tx_allocator_client/ut @ydb-platform/core
+/ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
+/ydb/core/tx/replication @ydb-platform/core
+/ydb/core/tx/scheme_board @ydb-platform/core
+/ydb/core/tx/scheme_cache @ydb-platform/core
+/ydb/core/tx/schemeshard @ydb-platform/core
 /ydb/core/tx/tx_proxy @ydb-platform/core
+/ydb/core/util @ydb-platform/core
 /ydb/core/wrappers/ut @ydb-platform/core
 /ydb/core/ydb_convert @ydb-platform/core
+/ydb/library/yaml_config @ydb-platform/core
 /ydb/services/cms/ut @ydb-platform/core
 /ydb/services/config/ut @ydb-platform/core
 /ydb/services/dynamic_config/ut @ydb-platform/core
 /ydb/services/rate_limiter/ut @ydb-platform/core
+/ydb/services/ydb/backup_ut @ydb-platform/core
+/ydb/services/ydb/table_split_ut @ydb-platform/core
 /ydb/services/ydb/ut @ydb-platform/core
 /ydb/tests/functional/api @ydb-platform/core
 /ydb/tests/functional/backup @ydb-platform/core
-/ydb/tests/functional/rename @ydb-platform/core
-/ydb/tests/functional/scheme_tests @ydb-platform/core
-/ydb/tests/functional/wardens @ydb-platform/core
 /ydb/tests/functional/backup_collection @ydb-platform/core
 /ydb/tests/functional/cms @ydb-platform/core
-/ydb/tests/functional/serverless @ydb-platform/core
+/ydb/tests/functional/hive @ydb-platform/core
+/ydb/tests/functional/limits @ydb-platform/core
+/ydb/tests/functional/rename @ydb-platform/core
 /ydb/tests/functional/replication @ydb-platform/core
-/ydb/tests/functional/restarts @ydb-platform/core
-/ydb/tests/functional/minidumps @ydb-platform/core
+/ydb/tests/functional/scheme_shard @ydb-platform/core
+/ydb/tests/functional/scheme_tests @ydb-platform/core
+/ydb/tests/functional/serverless @ydb-platform/core
+/ydb/tests/functional/tenants @ydb-platform/core
 /ydb/tests/stress/scheme_board @ydb-platform/core
-/ydb/tools/cfg @ydb-platform/core
-/ydb/core/config @ydb-platform/core
-/ydb/core/kesus @ydb-platform/core
-/ydb/core/tx/replication @ydb-platform/core
-/ydb/core/cms @ydb-platform/core
-/ydb/core/quoter @ydb-platform/core
-/ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
-/ydb/library/yaml_config/ut_transform @ydb-platform/core
-/ydb/services/ydb/backup_ut @ydb-platform/core
+
+#Moved from Core. Requires attention
+/ydb/core/control/ut @ydb-platform/engineering
+/ydb/core/debug_tools/ut @ydb-platform/engineering
+/ydb/core/graph @ydb-platform/engineering
+/ydb/core/tx/balance_coverage/ut @ydb-platform/engineering
+/ydb/tests/functional/wardens @ydb-platform/engineering
+/ydb/tests/functional/restarts @ydb-platform/engineering
+/ydb/tests/functional/minidumps @ydb-platform/engineering
+/ydb/core/base/generated/ut @ydb-platform/engineering
+/ydb/core/jaeger_tracing/ut @ydb-platform/engineering
+/ydb/core/memory_controller/ut @ydb-platform/engineering
+/ydb/core/sys_view @ydb-platform/engineering
+/ydb/core/testlib/actors/ut @ydb-platform/engineering
+/ydb/core/tx/mediator/ut @ydb-platform/engineering
+/ydb/core/tx/sequenceproxy/ut @ydb-platform/engineering
+/ydb/core/tx/sequenceshard @ydb-platform/engineering
+/ydb/core/tx/time_cast/ut @ydb-platform/engineering
+/ydb/core/tx/tx_allocator/ut @ydb-platform/engineering
+/ydb/core/tx/tx_allocator_client/ut @ydb-platform/engineering
+/ydb/tools/cfg @ydb-platform/engineering
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/core/raw_socket/ut @ydb-platform/topics

@@ -4,6 +4,7 @@
 #include <ydb/core/base/events.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
 #include <functional>
@@ -44,6 +45,8 @@ struct TEvWorker {
         EvCommit,
         EvTerminateWriter,
         EvStatsWakeup,
+        EvCommitResult,
+        EvReaderStarted,
         EvEnd,
     };
 
@@ -65,6 +68,16 @@ struct TEvWorker {
         TString ToString() const override;
     };
 
+    struct TEvCommitResult: public TEventLocal<TEvCommitResult, EvCommitResult> {
+        ui64 Offset;
+        explicit TEvCommitResult(ui64 offset) : Offset(offset) {}
+    };
+
+    struct TEvReaderStarted: public TEventLocal<TEvReaderStarted, EvReaderStarted> {
+        ui64 CommittedOffset;
+        explicit TEvReaderStarted(ui64 offset) : CommittedOffset(offset) {}
+    };
+
     struct TEvData: public TEventLocal<TEvData, EvData> {
         ui32 PartitionId;
         TString Source;
@@ -82,7 +95,8 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
-            OVERLOAD
+            OVERLOAD,
+            DATA_LOSS,
         };
 
         EStatus Status;
@@ -94,6 +108,8 @@ struct TEvWorker {
 
     struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
         TDuration Lag;
+        TString SourceOffsetMismatch;
+        TMaybe<ui64> SourceCommittedOffset;
         std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);
@@ -129,7 +145,9 @@ struct TEvWorker {
 IActor* CreateWorker(
     const TActorId& parent,
     std::function<IActor*(void)>&& createReaderFn,
-    std::function<IActor*(void)>&& createWriterFn);
+    std::function<IActor*(void)>&& createWriterFn,
+    bool trackSourceOffsets = false,
+    TMaybe<ui64> processedSourceOffset = Nothing());
 
 } // NService
 } // NKikimr::NReplication

@@ -115,6 +115,18 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         auto& response = ResponseQueue.front();
         auto& result = response.DataEv->Get()->Result;
+        if (Settings.FailOnDataLoss_) {
+            for (const auto& msg : result.Messages) {
+                if (msg.GetOffset() != NextReadOffset) {
+                    Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                        << "Unexpected message offset in topic " << Settings.GetBase().Topics_.at(0).Path_
+                        << ", partition " << result.PartitionId << ", consumer " << Settings.GetBase().ConsumerName_
+                        << ": expected offset " << NextReadOffset << ", got " << msg.GetOffset());
+                    return;
+                }
+                NextReadOffset += msg.GetLogicalMessageCount();
+            }
+        }
         const auto msgCount = result.Messages.size();
         TVector<TTopicMessage> records(::Reserve(msgCount));
         const ui64 maxOffset = result.Messages.back().GetOffset();
@@ -154,6 +166,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
+        NextReadOffset = ev->Get()->Result.CommittedOffset;
+        Send(Worker, new TEvWorker::TEvReaderStarted(NextReadOffset));
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
@@ -164,7 +178,26 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
 
-        CommittedOffset = ev->Get()->Offset;
+        const auto offset = ev->Get()->Offset;
+        if (CommitInFlight.Defined()) {
+            if (offset > *CommitInFlight && (!PendingCommit || offset > *PendingCommit)) {
+                PendingCommit = offset;
+            }
+            YDB_LOG_DEBUG("Commit queued while another commit is in flight",
+                {"offset", offset},
+                {"inFlightOffset", *CommitInFlight},
+                {"pendingOffset", PendingCommit.GetOrElse(*CommitInFlight)});
+            return;
+        }
+
+        StartCommit(offset);
+    }
+
+    void StartCommit(ui64 offset) {
+        Y_ABORT_UNLESS(!CommitInFlight);
+
+        CommittedOffset = offset;
+        CommitInFlight = CommittedOffset;
         Send(YdbProxy, CreateCommitOffsetRequest().release());
     }
 
@@ -179,6 +212,14 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 {"ev", ev->Get()->ToString()});
             if (CommittedOffset) {
                 Send(ReadSession, CreateCommitOffsetRequest().release());
+            }
+            const auto committedOffset = *CommitInFlight;
+            Send(Worker, new TEvWorker::TEvCommitResult(committedOffset));
+            CommitInFlight.Clear();
+            if (PendingCommit) {
+                const auto pendingOffset = *PendingCommit;
+                PendingCommit.Clear();
+                StartCommit(pendingOffset);
             }
         }
     }
@@ -309,6 +350,9 @@ private:
     TActorId ReadSession;
     TString ReadSessionId;
     ui64 CommittedOffset = 0;
+    ui64 NextReadOffset = 0;
+    TMaybe<ui64> CommitInFlight;
+    TMaybe<ui64> PendingCommit;
 
     bool CreatingReadSessionInProgress = false;
     bool StoppingInProgress = false;

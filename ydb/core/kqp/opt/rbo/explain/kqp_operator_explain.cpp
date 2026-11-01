@@ -28,7 +28,7 @@ TString FormatIds(const TRange& ids, const TInfoUnitRegistry* registry = nullptr
 
 } // namespace
 
-NJson::TJsonValue IOperator::ToJson(ui32 explainFlags, const TInfoUnitRegistry&)
+NJson::TJsonValue IOperator::ToJson(ui32 explainFlags, const TInfoUnitRegistry&, TExplainContext*)
 {
     Y_UNUSED(explainFlags);
     auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
@@ -36,7 +36,7 @@ NJson::TJsonValue IOperator::ToJson(ui32 explainFlags, const TInfoUnitRegistry&)
     return res;
 }
 
-TString TOpReplicate::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpReplicate::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     const auto& rebindings = GetRebindings();
     TStringBuilder result;
@@ -53,13 +53,13 @@ TString TOpReplicate::ToString(TExprContext& ctx, const TInfoUnitRegistry& regis
     return result << "}";
 }
 
-TString TOpEmptySource::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
+TString TOpEmptySource::ToString(TExprContext& ctx, const TInfoUnitRegistry&, TExplainContext*) {
     Y_UNUSED(ctx);
     return "EmptySource";
 }
 
-NJson::TJsonValue TOpEmptySource::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpEmptySource::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
     if (Input && TCoParameter::Match(Input.Get())) {
         res["Parameter"] = TCoParameter(Input).Name().StringValue();
     }
@@ -81,13 +81,8 @@ static std::optional<TString> GetUint64Literal(const TExprNode::TPtr& node) {
     return std::nullopt;
 }
 
-TString StripAliasPrefix(const TString& column) {
-    const auto dot = column.rfind('.');
-    return (dot != TString::npos) ? column.substr(dot + 1) : column;
-}
-
-NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
 
     // Tables are usually named in a path-like fashion, like "/<path>/<name>".
     // In such case we extract the name of a table from a path,
@@ -120,7 +115,6 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     }
 
     // Build ReadColumns: for range scans, list ranged key columns first, then remaining columns.
-    // This mirrors the old RBO which embeds key range descriptions into ReadColumns.
     NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
     THashSet<TString> addedColumns;
     if (RangeInfo) {
@@ -128,17 +122,25 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         TVector<TString> rangedKeys;
         rangedKeys.reserve(usedLen);
         for (size_t i = 0; i < usedLen; ++i) {
-            rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
+            rangedKeys.push_back(SplitAliasedMemberName(RangeInfo->KeyColumns[i]).second);
         }
 
-        const auto descriptions = NOpt::BuildReadRangeDescriptions(RangeInfo->ComputeNode, RangeInfo->KeyColumns, usedLen);
-        for (const auto& label : descriptions.empty() ? rangedKeys : descriptions) {
-            readColumns.AppendValue(label);
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->ComputeNode,
+                                                          RangeInfo->KeyColumns, RangeInfo->ExpectedMaxRanges, explain);
+        if (description.Ranges) {
+            NJson::TJsonValue readRanges(NJson::EJsonValueType::JSON_ARRAY);
+            for (const auto& range : *description.Ranges) {
+                readRanges.AppendValue(range);
+            }
+            res["ReadRanges"] = std::move(readRanges);
+        } else if (description.Expression) {
+            res["ReadRangesExpression"] = *description.Expression;
         }
 
         NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);
         for (const auto& key : rangedKeys) {
             addedColumns.insert(key);
+            readColumns.AppendValue(key);
             rangeKeys.AppendValue(key);
         }
         res["ReadRangesKeys"] = std::move(rangeKeys);
@@ -155,13 +157,13 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         }
     }
     res["ReadColumns"] = std::move(readColumns);
-    // ReadColumns names storage fields/ranges; Columns names the produced row.
+    // ReadColumns names storage fields; Columns names the produced row.
     res["Columns"] = MakeColumnsJson(Columns_, registry);
 
     return res;
 }
 
-TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain) {
     auto res = TStringBuilder();
     res << "Read (" << TKqpTable(TableCallable).Path().StringValue() << "," << Alias << ", [";
 
@@ -180,11 +182,14 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
         }
         res << " OlapFilter: (" << PrintRBOExpression(NOpt::TOlapFilterInspector::RenameColumns(OlapFilterLambda, names, ctx), ctx) << ")";
     }
-    if (const auto ranges = GetRanges()) {
-        res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
-    }
-    if (const auto literalRange = GetLiteralRange()) {
-        res << " Literal range: (" << PrintRBOExpression(literalRange, ctx) << ")";
+    if (RangeInfo) {
+        const auto description = NOpt::DescribeReadRanges(RangeInfo->LiteralRange, RangeInfo->ComputeNode,
+                                                          RangeInfo->KeyColumns, RangeInfo->ExpectedMaxRanges, explain);
+        if (description.Ranges) {
+            res << " Ranges: [" << JoinSeq(", ", *description.Ranges) << "]";
+        } else if (description.Expression) {
+            res << " Ranges expression: (" << *description.Expression << ")";
+        }
     }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
@@ -197,7 +202,7 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
     return res;
 }
 
-TString TOpMap::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpMap::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder text;
     text << "Map [";
@@ -210,8 +215,8 @@ TString TOpMap::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
     return text << "]";
 }
 
-NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto result = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto result = IOperator::ToJson(explainFlags, registry, explain);
     TStringBuilder name;
     name << "Map [";
     TStringBuf separator;
@@ -224,7 +229,7 @@ NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags, const TInfoUnitRegistry& reg
     return result;
 }
 
-TString TOpAddDependencies::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpAddDependencies::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder result;
     result << "Correlated [";
@@ -236,13 +241,13 @@ TString TOpAddDependencies::ToString(TExprContext& ctx, const TInfoUnitRegistry&
     return result << "]";
 }
 
-TString TOpFilter::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
+TString TOpFilter::ToString(TExprContext& ctx, const TInfoUnitRegistry&, TExplainContext*) {
     Y_UNUSED(ctx);
     return TStringBuilder() << "Filter :" << FilterExpr.ToString();
 }
 
-NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
     res["Predicate"] = FilterExpr.ToExplainString(registry);
     return res;
 }
@@ -285,7 +290,7 @@ TString GetExplainJoinAlgoName(const TPhysicalOpProps& props) {
     return GetJoinAlgoName(joinAlgo);
 }
 
-TString TOpJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder res;
     res << "Join, Kind: " << JoinKind;
@@ -319,8 +324,8 @@ static TString FormatJoinKeys(const TJoinIUs& keys, const TInfoUnitRegistry& reg
     return result;
 }
 
-NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
     const auto joinAlgoName = GetExplainJoinAlgoName(Props);
 
     if (JoinKind == "Cross") {
@@ -344,24 +349,24 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     return res;
 }
 
-TString TOpDependentJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpDependentJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     return TStringBuilder() << "DependentJoin, Domain: [" << FormatIds(Dependencies, &registry, true) << "]";
 }
 
-TString TOpUnionAll::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
+TString TOpUnionAll::ToString(TExprContext& ctx, const TInfoUnitRegistry&, TExplainContext*) {
     Y_UNUSED(ctx);
     return "UnionAll";
 }
 
-NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto result = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto result = IOperator::ToJson(explainFlags, registry, explain);
     result["Ordered"] = Ordered;
     result["Columns"] = MakeColumnsJson(Columns.Keys(), registry);
     return result;
 }
 
-TString TOpLimit::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
+TString TOpLimit::ToString(TExprContext& ctx, const TInfoUnitRegistry&, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder builder;
     builder << "Limit: " << LimitCond.ToString() << " ";
@@ -372,8 +377,8 @@ TString TOpLimit::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
     return builder;
 }
 
-NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
     res["Limit"] = LimitCond.ToExplainString(registry);
     if (OffsetCond) {
         res["Offset"] = OffsetCond->ToExplainString(registry);
@@ -384,7 +389,7 @@ NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags, const TInfoUnitRegistry& r
     return res;
 }
 
-TString TOpSort::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpSort::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder text;
     text << "Sort: [";
@@ -410,7 +415,7 @@ static TString FormatLookupKeys(const TOpTableLookup::TLookupKeys& keys, const T
     return text;
 }
 
-TString TOpTableLookup::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpTableLookup::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder res;
     res << GetExplainName() << ": " << TKqpTable(Table).Path().StringValue();
@@ -442,8 +447,8 @@ TString TOpTableLookup::ToString(TExprContext& ctx, const TInfoUnitRegistry& reg
     return res;
 }
 
-NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto result = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto result = IOperator::ToJson(explainFlags, registry, explain);
     result["Table"] = TKqpTable(Table).Path().StringValue();
     if (IsJoin()) {
         result["JoinKind"] = JoinKind;
@@ -470,15 +475,15 @@ NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags, const TInfoUnitRegis
     return result;
 }
 
-TString TOpIndexLookupJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpIndexLookupJoin::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder res;
     res << "IndexLookupJoin, Kind: " << JoinKind << " [" << FormatJoinKeys(JoinKeys, registry, true) << "]";
     return res;
 }
 
-NJson::TJsonValue TOpIndexLookupJoin::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpIndexLookupJoin::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
     res["Name"] = TStringBuilder() << JoinKind << "Join (Lookup)";
     res["JoinKind"] = JoinKind;
     res["JoinAlgo"] = "Lookup";
@@ -488,8 +493,8 @@ NJson::TJsonValue TOpIndexLookupJoin::ToJson(ui32 explainFlags, const TInfoUnitR
     return res;
 }
 
-NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto res = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto res = IOperator::ToJson(explainFlags, registry, explain);
     if (IsTopSort()) {
         res["TopSortBy"] = MakeSortColumnsJson(SortElements, registry);
         if (LimitCond) {
@@ -504,7 +509,7 @@ NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     return res;
 }
 
-TString TOpAggregate::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpAggregate::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder text;
     text << "Aggregate [";
@@ -520,8 +525,8 @@ TString TOpAggregate::ToString(TExprContext& ctx, const TInfoUnitRegistry& regis
                 << (PushedToOlap ? " (Pushed to OLAP)" : "");
 }
 
-NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto result = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto result = IOperator::ToJson(explainFlags, registry, explain);
     if (!KeyColumns.Items().empty()) {
         result["GroupBy"] = MakeColumnsJson(KeyColumns.Items(), registry);
     }
@@ -548,7 +553,7 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TInfoUnitRegistr
     return result;
 }
 
-TString TOpGroupingSets::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpGroupingSets::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
 
     TStringBuilder result;
@@ -584,7 +589,7 @@ static TString FormatWindowFunctions(const TWindowIUs& functions, const TInfoUni
     return text;
 }
 
-TString TOpWindow::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpWindow::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder text;
     text << "Window [" << FormatWindowFunctions(WindowFuncs, &registry, true) << "]";
@@ -611,8 +616,8 @@ TString TOpWindow::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry
     return text << "]";
 }
 
-NJson::TJsonValue TOpWindow::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
-    auto result = IOperator::ToJson(explainFlags, registry);
+NJson::TJsonValue TOpWindow::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    auto result = IOperator::ToJson(explainFlags, registry, explain);
     result["WindowFunctions"] = TStringBuilder() << "{" << FormatWindowFunctions(WindowFuncs, &registry) << "}";
     if (!PartitionKeys.Items().empty()) {
         result["PartitionBy"] = MakeColumnsJson(PartitionKeys.Items(), registry);
@@ -634,11 +639,13 @@ NJson::TJsonValue TOpWindow::ToJson(ui32 explainFlags, const TInfoUnitRegistry& 
     return result;
 }
 
-TString TOpCBOTree::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpCBOTree::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext* explain) {
+    TExplainContext local;
+    if (!explain) explain = &local;
     TStringBuilder res;
     res << "CBO Tree: [";
     for (size_t i=0; i < TreeNodes.size(); i++) {
-        res << TreeNodes[i]->ToString(ctx, registry);
+        res << TreeNodes[i]->ToString(ctx, registry, explain);
         if (i != TreeNodes.size()-1) {
             res << ", ";
         }
@@ -647,7 +654,7 @@ TString TOpCBOTree::ToString(TExprContext& ctx, const TInfoUnitRegistry& registr
     return res;
 }
 
-TString TOpSequencer::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+TString TOpSequencer::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry, TExplainContext*) {
     Y_UNUSED(ctx);
     TStringBuilder result;
     result << "Sequencer [";
@@ -678,33 +685,36 @@ TString TOpTableEffect::GetExplainName() const {
     }
 }
 
-TString TOpTableEffect::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
+TString TOpTableEffect::ToString(TExprContext& ctx, const TInfoUnitRegistry&, TExplainContext*) {
     Y_UNUSED(ctx);
     return GetExplainName();
 }
 
-TString TOpRoot::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
+TString TOpRoot::ToString(TExprContext& ctx, const TInfoUnitRegistry&, TExplainContext*) {
     Y_UNUSED(ctx);
     return "Root";
 }
 
 TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
+    TExplainContext explain;
     auto builder = TStringBuilder();
     for (const auto& [binding, subplan] : PlanProps.Subplans) {
         builder << "Subplan binding to " << PlanProps.InfoUnitRegistry.GetDebugName(binding) << ":\n";
-        PlanToStringRec(subplan.Plan.Get(), ctx, builder, 0, printOptions);
+        PlanToStringRec(subplan.Plan.Get(), ctx, builder, 0, printOptions, &explain);
     }
-    PlanToStringRec(GetInput().Get(), ctx, builder, 0, printOptions);
+    PlanToStringRec(GetInput().Get(), ctx, builder, 0, printOptions, &explain);
     return builder;
 }
 
-void TOpRoot::PlanToStringRec(IOperator* op, TExprContext& ctx, TStringBuilder& builder, int tabs, ui32 printOptions) const {
+void TOpRoot::PlanToStringRec(IOperator* op, TExprContext& ctx, TStringBuilder& builder, int tabs, ui32 printOptions, TExplainContext* explain) const {
+    TExplainContext local;
+    if (!explain) explain = &local;
     TStringBuilder tabString;
     for (int i = 0; i < tabs; i++) {
         tabString << "  ";
     }
 
-    builder << tabString << op->ToString(ctx, PlanProps.InfoUnitRegistry);
+    builder << tabString << op->ToString(ctx, PlanProps.InfoUnitRegistry, explain);
     if (op->Props.StageId.has_value()) {
         builder << " StageId: " << *op->Props.StageId;
     }
@@ -736,7 +746,7 @@ void TOpRoot::PlanToStringRec(IOperator* op, TExprContext& ctx, TStringBuilder& 
     }
 
     for (auto c : op->GetChildren()) {
-        PlanToStringRec(c, ctx, builder, tabs + 1, printOptions);
+        PlanToStringRec(c, ctx, builder, tabs + 1, printOptions, explain);
     }
 }
 

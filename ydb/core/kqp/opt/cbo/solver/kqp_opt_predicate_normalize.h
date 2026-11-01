@@ -32,6 +32,7 @@ enum class EPredicateKind : ui8 {
     NonConstant,  // column vs a non-constant expression
     Parameter,    // column vs an expression with parameters
     MergedRanges, // comparisons on one attribute, the column is in the union of Ranges
+    Unknown,      // a predicate the builder does not recognize; kept so that an Or or a key match does not lose it
 };
 
 // Predicate tree. ComputeImpl builds it with no selectivities, only what is needed to compute them later;

@@ -5,10 +5,10 @@ SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 IF(SANITIZER_TYPE == "memory")
@@ -16,6 +16,7 @@ IF(SANITIZER_TYPE == "memory")
     # Just double default memory requirements since we run MSan without origin tracking by default.
     REQUIREMENTS(
         ram:16
+        cpu:1
     )
 ENDIF()
 

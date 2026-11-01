@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     defaults.h
@@ -34,5 +34,6 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    load
     ut_selector_coro
 )

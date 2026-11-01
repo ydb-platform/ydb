@@ -28,6 +28,12 @@ class AbstractLocalClusterTest(object):
     def teardown_class(cls):
         cls.cluster.stop()
 
+    def _create_tablets(self):
+        tablets_count = len(self.cluster.nodes) * TABLETS_PER_NODE
+        return create_tablets_and_wait_for_start(
+            self.cluster.client, tablets_count, batch_size=tablets_count
+        )
+
 
 class AbstractTestRestartMultiple(AbstractLocalClusterTest):
     repetitions_count = 5
@@ -37,8 +43,7 @@ class AbstractTestRestartMultiple(AbstractLocalClusterTest):
         pass
 
     def test_tablets_are_successfully_started_after_few_killed_nodes(self):
-        nodes_count = len(self.cluster.nodes.values())
-        all_tablet_ids = create_tablets_and_wait_for_start(self.cluster.client, nodes_count * TABLETS_PER_NODE)
+        all_tablet_ids = self._create_tablets()
 
         for iteration_idx in range(1, self.repetitions_count + 1):
             logger.info("Starting %d iteration of nodes restart", iteration_idx)
@@ -70,8 +75,7 @@ class AbstractTestRestartMultiple(AbstractLocalClusterTest):
 class AbstractTestRestartSingle(AbstractLocalClusterTest):
     def test_restart_single_node_is_ok(self):
         # Act
-        num_of_nodes = len(self.cluster.nodes)
-        all_tablet_ids = create_tablets_and_wait_for_start(self.cluster.client, num_of_nodes * TABLETS_PER_NODE)
+        all_tablet_ids = self._create_tablets()
 
         for node_id, node in self.cluster.nodes.items():
             if node_id == 1:
@@ -98,8 +102,7 @@ class AbstractTestRestartSingle(AbstractLocalClusterTest):
 class AbstractTestRestartCluster(AbstractLocalClusterTest):
     def test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok(self):
         # Act
-        num_of_nodes = len(self.cluster.nodes)
-        all_tablet_ids = create_tablets_and_wait_for_start(self.cluster.client, num_of_nodes * TABLETS_PER_NODE)
+        all_tablet_ids = self._create_tablets()
 
         for node_id, node in self.cluster.nodes.items():
             logger.info("Node is stopped %s", node_id)

@@ -313,6 +313,35 @@ def test_resources_overlay_keeps_samples_before_and_after_test_chunks():
     assert overlay["evlog_range_sec"] == [-50.0, 250.0]
 
 
+def test_resources_overlay_skips_test_cgroup_rows_for_host_series():
+    # Mixed host + per-test cgroup samples: host table must not see the zeros
+    # from test rows that lack cpu_total_pct / ram_used_kb.
+    enriched_runs = [
+        {
+            "start_us": 1_000_000_000_000.0,
+            "end_us": 1_100_000_000_000.0,
+            "report_suite_start_ts": 1000.0,
+        }
+    ]
+    records = [
+        {"kind": "host", "ts": 1000.0, "cpu_total_pct": 50, "cpu_cores": 8, "ram_used_kb": 8 * 1024 * 1024,
+         "disk_read_mbps": 1.0, "disk_write_mbps": 2.0},
+        {"kind": "test", "ts": 1001.0, "suite": "ydb/foo", "cpu_used_cores": 1.5, "ram_kb": 1000,
+         "disk_read_mbps": 0.0, "disk_write_mbps": 0.0},
+        {"kind": "host", "ts": 1100.0, "cpu_total_pct": 100, "cpu_cores": 8, "ram_used_kb": 16 * 1024 * 1024,
+         "disk_read_mbps": 3.0, "disk_write_mbps": 4.0},
+    ]
+    overlay = _build_resources_overlay(
+        Path("unused.jsonl"),
+        enriched_runs,
+        records=records,
+    )
+    assert overlay is not None
+    assert len(overlay["xs_evlog_sec"]) == 2
+    assert overlay["cpu_total_cores"] == [4.0, 8.0]
+    assert overlay["ram_gb"] == [8.0, 16.0]
+
+
 def test_resources_overlay_identity_when_wall_clock_evlog_has_no_report_ts():
     # Large evlog-only fallback: monitor + worker_threads times are both unix
     # epoch. Must NOT pin first monitor sample onto first test (that shifts the
@@ -454,6 +483,7 @@ def load_tests(loader, tests, pattern):
         test_evlog_activity_zero_length_close_stays_balanced,
         test_evlog_activity_drains_truncated_open_at_last_ts,
         test_resources_overlay_keeps_samples_before_and_after_test_chunks,
+        test_resources_overlay_skips_test_cgroup_rows_for_host_series,
         test_resources_overlay_identity_when_wall_clock_evlog_has_no_report_ts,
         test_active_series_downsampling_preserves_short_peak,
         test_dashboard_main_falls_back_to_evlog_when_report_missing,
@@ -472,6 +502,7 @@ if __name__ == "__main__":
     test_evlog_activity_zero_length_close_stays_balanced()
     test_evlog_activity_drains_truncated_open_at_last_ts()
     test_resources_overlay_keeps_samples_before_and_after_test_chunks()
+    test_resources_overlay_skips_test_cgroup_rows_for_host_series()
     test_resources_overlay_identity_when_wall_clock_evlog_has_no_report_ts()
     test_active_series_downsampling_preserves_short_peak()
     test_dashboard_main_falls_back_to_evlog_when_report_missing()

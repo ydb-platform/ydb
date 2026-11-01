@@ -1078,6 +1078,68 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
 
+    // NULL in the TTL column never expires a row. A portion whose nullable TTL column holds only NULL has a NULL
+    // min_max value; TTL must keep its rows. A control table with expired values shows that the TTL cycle ran.
+    // Like TieringViaIndex, TTL is set before the data is written and the data is large enough to be compacted, so the
+    // portions get min_max index data.
+    void CheckNullTtlColumnKeepsRows(const TString& type) {
+        TTieringTestHelper tieringHelper{true, [](TKikimrSettings& settings) {
+            settings.FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+        }};
+        auto& helper = tieringHelper.GetTestHelper();
+        auto& controller = tieringHelper.GetCsController();
+        auto tableClient = helper.GetKikimr().GetTableClient();
+        const ui64 rowsCount = 100000;
+        const TString expiredValue = type == "DyNumber" ? TString("DyNumber(\"-1\")") : TStringBuilder() << "Unwrap(CAST(-1 AS " << type << "))";
+        const TString nullPath = "/Root/ttl_null_" + type;
+        const TString controlPath = "/Root/ttl_expired_" + type;
+        for (const TString& path : {nullPath, controlPath}) {
+            const auto create = helper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                << "CREATE TABLE `" << path << "` (id Uint64 NOT NULL, ts " << type << ", PRIMARY KEY(id)) "
+                << "PARTITION BY HASH(id) WITH (STORE=COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT=1);"
+                << "ALTER TABLE `" << path << "` ADD INDEX ttl_max LOCAL USING min_max ON(ts);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), NYdb::EStatus::SUCCESS, create.GetIssues().ToString());
+            const auto alter = helper.GetSession().ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER TABLE `" << path << "` SET TTL Interval(\"PT1S\") ON ts" << (type == "DyNumber" ? " AS SECONDS" : "") << ";")
+                .GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(), NYdb::EStatus::SUCCESS, alter.GetIssues().ToString());
+        }
+        for (const auto& [path, value] : {std::pair<TString, TString>{nullPath, "NULL"}, std::pair<TString, TString>{controlPath, expiredValue}}) {
+            for (ui32 i = 0; i < 2; ++i) {
+                helper.ExecuteQuery(TStringBuilder()
+                    << "$rows = ListMap(ListFromRange(" << i * rowsCount << "ul, " << (i + 1) * rowsCount << "ul), ($x) -> { RETURN AsStruct($x AS id); });"
+                    << "UPSERT INTO `" << path << "` (id, ts) SELECT id, " << value << " AS ts FROM AS_TABLE($rows);");
+            }
+        }
+        controller->WaitCompactions(TDuration::Seconds(10));
+        controller->WaitActualization(TDuration::Seconds(10));
+        controller->WaitTtl(TDuration::Seconds(5));
+        controller->WaitCondition(TDuration::Seconds(60), [&]() {
+            return ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT id FROM `" << controlPath << "` LIMIT 1;").empty();
+        });
+        controller->WaitTtl(TDuration::Seconds(5));
+
+        const auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << nullPath << "`;");
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("cnt")), 2 * rowsCount, "rows with NULL in the TTL column were deleted");
+    }
+
+    Y_UNIT_TEST(NullDyNumberTtlColumnKeepsRows) {
+        CheckNullTtlColumnKeepsRows("DyNumber");
+    }
+
+    Y_UNIT_TEST(NullDate32TtlColumnKeepsRows) {
+        CheckNullTtlColumnKeepsRows("Date32");
+    }
+
+    Y_UNIT_TEST(NullDatetime64TtlColumnKeepsRows) {
+        CheckNullTtlColumnKeepsRows("Datetime64");
+    }
+
+    Y_UNIT_TEST(NullTimestamp64TtlColumnKeepsRows) {
+        CheckNullTtlColumnKeepsRows("Timestamp64");
+    }
+
     Y_UNIT_TEST(TieringViaIndex, ELocalIndexAsSchemeObject) {
         const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         TTieringTestHelper tieringHelper{localIndexAsSchemeObject};

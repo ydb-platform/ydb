@@ -88,6 +88,10 @@ NKikimr::NKqp::TOptimizerHints TKqpOptimizeContext::GetOptimizerHints() {
     return NKikimr::NKqp::TOptimizerHints();
 }
 
+NKikimr::NKqp::TCompileTrace* TKqpOptimizeContext::GetCompileTrace() const {
+    return QueryCtx ? QueryCtx->CompileTrace.Get() : nullptr;
+}
+
 bool TKqpOptimizeContext::IsDataQuery() const {
     return QueryCtx->Type == NYql::EKikimrQueryType::Dml;
 }

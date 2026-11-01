@@ -81,7 +81,7 @@ Index definition on the table. Supported:
 
 ### STATISTICS
 
-Declaration of multi-column statistics for [ANALYZE](../analyze.md). See [{#T}](statistics.md).
+Specifies columns and types of multi-column statistics to collect with [ANALYZE](../analyze.md). See [{#T}](statistics.md).
 
 ### PRIMARY KEY
 

@@ -1,8 +1,10 @@
 # STATISTICS
 
-`STATISTICS` declares statistics over a tuple of columns. [ANALYZE](../analyze.md) collects them for the [cost-based optimizer](../../../../concepts/query_execution/optimizer.md).
+`STATISTICS` defines multi-column statistics for a new table. Run [ANALYZE](../analyze.md) to collect them.
 
-Without `STATISTICS`, `ANALYZE` already collects table statistics and per-column statistics. Use `STATISTICS` to additionally collect statistics over combinations of columns.
+The [cost-based optimizer](../../../../concepts/query_execution/optimizer.md) uses the resulting data to choose a query plan. By default, `ANALYZE` collects information about the table as a whole and about each column separately. Use `STATISTICS` to also analyze combinations of values across multiple columns.
+
+Add `STATISTICS` to the table definition:
 
 ```yql
 CREATE TABLE <table_name> (
@@ -13,23 +15,30 @@ CREATE TABLE <table_name> (
 );
 ```
 
-`SHOW CREATE TABLE` displays these declarations. To add or remove one on an existing table, use [`ALTER TABLE`](../alter_table/statistics.md).
+[`SHOW CREATE TABLE`](../show_create.md) displays the statistics settings. To add or remove them for an existing table, use [`ALTER TABLE`](../alter_table/statistics.md).
 
 ## Parameters
 
-* `statistics_name` — name of the declaration.
-* `column_name` — columns in the tuple. Each name must match a column in the table, and the column order matters.
-* `statistics_type` — `COUNT_MIN_SKETCH` or `EQ_HEIGHT_HISTOGRAM`. Without `WITH`, every supported type is requested.
+* `table_name`: name of the table to create.
+* `statistics_name`: name of the statistics, used in `ALTER TABLE ... DROP STATISTICS`.
+* `column_name`: names of existing table columns. The column order matters.
+* `statistics_type`: `COUNT_MIN_SKETCH` or `EQ_HEIGHT_HISTOGRAM`. If `WITH` is omitted, all supported types are used.
 
-`COUNT_MIN_SKETCH` is useful only for two or more columns. For a single column, the declaration does not create a separate statistic. A per-column sketch is built when fewer than 80% of the values are distinct.
+## Statistics types
 
-`EQ_HEIGHT_HISTOGRAM` can be declared only for types whose values have a total order. `Json`, `Yson`, and `JsonDocument` do not, so declaring this histogram for these types results in an error.
+`COUNT_MIN_SKETCH` estimates how often a combination of values from multiple columns occurs. Specify at least two columns: a single column does not produce separate statistics.
 
-`ANALYZE` collects a declared equi-height histogram even when automatic primary-key histogram collection is disabled. See [`analyze_collect_primary_key_histogram`](../../../../reference/configuration/statistics_config.md#analyze-collect-primary-key-histogram).
+For individual columns, `ANALYZE` builds sketches without `STATISTICS` when the estimated number of distinct values is less than 80% of the row count.
 
-`DROP STATISTICS` removes only the declaration. To collect statistics, run [ANALYZE](../analyze.md).
+`EQ_HEIGHT_HISTOGRAM` describes the distribution of values using an equi-height histogram. It supports only types whose values can be fully ordered. `Json`, `Yson`, and `JsonDocument` do not support this ordering, so explicitly specifying `WITH (EQ_HEIGHT_HISTOGRAM)` for these types results in an error.
+
+Multi-column equi-height histograms help estimate the number of rows produced by a join. Both tables must have histograms for the join columns in the corresponding order and with matching types.
+
+`ANALYZE` builds this histogram even when [automatic primary-key histogram collection](../../../../reference/configuration/statistics_config.md#analyze-collect-primary-key-histogram) is disabled.
 
 ## Example
+
+Configure two histograms when creating a table and start collecting statistics:
 
 ```yql
 CREATE TABLE orders (
@@ -37,8 +46,10 @@ CREATE TABLE orders (
     order_date Date,
     status Utf8,
     amount Int64,
-    PRIMARY KEY (customer_id, order_date),
     STATISTICS orders_hist ON (customer_id, order_date) WITH (EQ_HEIGHT_HISTOGRAM),
-    STATISTICS status_hist ON (status) WITH (EQ_HEIGHT_HISTOGRAM)
+    STATISTICS status_hist ON (status) WITH (EQ_HEIGHT_HISTOGRAM),
+    PRIMARY KEY (customer_id, order_date)
 );
+
+ANALYZE orders;
 ```

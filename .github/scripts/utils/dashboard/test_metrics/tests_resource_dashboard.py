@@ -1287,6 +1287,15 @@ def _build_resources_overlay(
     disk_read_mb: list[float] = []
     disk_write_mb: list[float] = []
     for r in records:
+        # Host overlay is /proc machine totals. Newer monitors also emit
+        # kind=test cgroup rows (suite/chunk) without cpu_total_pct /
+        # ram_used_kb. Filling those as 0.0 zeros out headline p95/median
+        # (~97% of samples on squeeze2) and dilutes avg to ~1–2 cores.
+        kind = str(r.get("kind") or "").lower()
+        if kind == "test":
+            continue
+        if kind != "host" and r.get("cpu_total_pct") is None and r.get("ram_used_kb") is None:
+            continue
         ts = float(r.get("ts", 0) or 0)
         # Missing/zero timestamps produce a nonsense negative timeline that
         # force-expands every chart x-range; skip them.

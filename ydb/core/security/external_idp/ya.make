@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/security/util
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/services

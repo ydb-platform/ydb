@@ -6,6 +6,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/async/event.h>
+#include <ydb/library/actors/async/sleep.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -210,6 +212,7 @@ private:
 
     // Periodic refresh
     void HandleWakeup(const TActorContext& ctx);
+    void WatchJwksCache();
 
     void ReplyError(
         const TActorId& sender, const TString& key,
@@ -227,6 +230,7 @@ private:
 
     TString JwksUrl;
     TJwksCache JwksCache;
+    NActors::TAsyncEvent JwksUpdated;
 
     NMonitoring::TDynamicCounterPtr Counters;
 
@@ -422,6 +426,7 @@ void TExternalIdpProvider::Bootstrap(const TActorContext& ctx) {
     );
 
     Become(&TThis::StateWork, REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+    WatchJwksCache();
 }
 
 void TExternalIdpProvider::StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
@@ -900,6 +905,7 @@ void TExternalIdpProvider::HandleJwksResponse(
         {"newKeys", JwksCache.Count()}
     );
     isSuccess = true;
+    JwksUpdated.NotifyAll();
 }
 
 void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
@@ -956,13 +962,21 @@ void TExternalIdpProvider::HandleWakeup(const TActorContext& ctx) {
     StartDiscoveryFetch(now);
     StartJwksFetch(now);
 
-    if (JwksCache.IsStale(now)) {
-        JwksCache.Clear();
-        DiscoveryRefresh.ResetBackoff();
-        JwksRefresh.ResetBackoff();
-    }
-
     Schedule(REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+}
+
+void TExternalIdpProvider::WatchJwksCache() {
+    for (;;) {
+        co_await NActors::AsyncSleepFor(REFRESH_PERIOD);
+        if (JwksCache.IsStale(TActivationContext::Now())) {
+            JwksCache.Clear();
+            DiscoveryRefresh.ResetBackoff();
+            JwksRefresh.ResetBackoff();
+            // An empty cache must not reset retries again. A fresh JWKS
+            // update starts the next cache lifetime.
+            co_await JwksUpdated.Wait();
+        }
+    }
 }
 
 void TExternalIdpProvider::ReplyError(

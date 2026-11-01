@@ -66,16 +66,13 @@ To compare plans, the optimizer needs to estimate their costs. The cost function
 
 ### Statistics for the Cost-Based Optimizer {#statistics}
 
-The cost-based optimizer relies on table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains these statistics in the background. You can manually force statistics collection using the [ANALYZE](../../yql/reference/syntax/analyze.md) query.
+Statistics help the optimizer estimate how many rows a query needs to read and how many rows filters and joins will produce. It uses these estimates to choose a query execution plan.
 
-The current set of table statistics includes:
+{{ ydb-short-name }} automatically updates table statistics: the row count and size in bytes.
 
-* Number of records
-* Table size in bytes
+For more accurate estimates, collect column statistics with [ANALYZE](../../yql/reference/syntax/analyze.md). These statistics describe column values and how often they occur. For example, the optimizer can use them to estimate how many rows match a `WHERE` condition.
 
-The current set of column statistics includes:
-
-* [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch)
+You can collect column statistics manually or [configure background collection](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).
 
 ### Cost Optimization Levels
 

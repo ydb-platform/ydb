@@ -1,13 +1,26 @@
 #pragma once
 
-#include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/library/generated_columns/generated_column_dependencies.h>
 
-#include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/generated_columns/expr/generated_column_expr.h>
+
+#include <util/generic/vector.h>
+
+namespace NKikimr::NKqp {
+class TKqpTranslationSettingsBuilder;
+}
 
 namespace NYql {
 
-// Wraps a raw GENERATED expression body in the SELECT envelope
-TString AssembleGeneratedQuery(const TString& exprBody);
+struct TKikimrColumnMetadata;
+struct TKikimrTableMetadata;
+
+bool IsGeneratedColumn(const TKikimrColumnMetadata* column);
+bool IsStoredGeneratedColumn(const TKikimrColumnMetadata* column);
+bool IsVirtualGeneratedColumn(const TKikimrColumnMetadata* column);
+bool BuildGeneratedColumnGraph(const TKikimrTableMetadata& metadata,
+    NKikimr::NGeneratedColumns::TGeneratedColumnDependencyGraph& graph, TString& error);
+
 
 // Compiles the stored SQL text of a GENERATED column into
 // a normalized `(lambda '(row) <expr>)` whose single argument is the table row

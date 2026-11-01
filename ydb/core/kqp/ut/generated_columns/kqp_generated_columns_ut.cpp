@@ -1,3 +1,4 @@
+#include "generated_column_test_utils.h"
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -20,13 +21,7 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStreamWrite = true) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
-    appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
-    appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
-    return appConfig;
-}
+using namespace NGeneratedColumnTest;
 
 static NKikimrPQ::TPQConfig GeneratedColumnsPQConfig() {
     NKikimrPQ::TPQConfig pqConfig;
@@ -36,18 +31,6 @@ static NKikimrPQ::TPQConfig GeneratedColumnsPQConfig() {
     pqConfig.SetRequireCredentialsInNewProtocol(false);
     pqConfig.AddClientServiceType()->SetName("data-streams");
     return pqConfig;
-}
-
-std::string GetShowCreateTable(NYdb::NQuery::TSession& session, const std::string& path) {
-    const std::string query = "SHOW CREATE TABLE `" + path + "`;";
-    auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-    TResultSetParser parser(result.GetResultSet(0));
-    UNIT_ASSERT(parser.TryNextRow());
-    auto ddl = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
-    UNIT_ASSERT_C(ddl.has_value(), "SHOW CREATE TABLE returned an empty CreateQuery");
-    return *ddl;
 }
 
 void CheckGeneratedColumnAlterRejections(const std::string& modifier) {
@@ -256,188 +239,6 @@ TString RowsYson(std::initializer_list<const char*> rows) {
     result << "]";
     return result;
 }
-
-class TTestFixture {
-public:
-    explicit TTestFixture(const std::string& createTable, const std::string& seed = "",
-        bool enableIndexStreamWrite = true)
-        : TTestFixture(createTable, seed, GeneratedColumnsAppConfig(enableIndexStreamWrite))
-    {}
-
-    TTestFixture(const std::string& createTable, const std::string& seed,
-        const NKikimrConfig::TAppConfig& appConfig)
-        : Kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false))
-        , Db(Kikimr.GetQueryClient())
-        , Session(Db.GetSession().GetValueSync().GetSession())
-    {
-        Exec(createTable);
-        if (!seed.empty()) {
-            Exec(seed);
-        }
-    }
-
-    void Exec(const std::string& query) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
-    }
-
-    void Rejects(const std::string& query, const TString& expectedError) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(!result.IsSuccess(), "expected the query to be rejected: " << query);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
-    }
-
-    void Check(const std::string& query, const TString& expected) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
-        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    TString QueryYson(const std::string& query) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
-        return FormatResultSetYson(result.GetResultSet(0));
-    }
-
-    void CheckStaleEventually(const std::string& query, const TString& expected) {
-        const TString normalizedExpected = ReformatYson(expected);
-        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        TString actual;
-
-        do {
-            auto result = Session.ExecuteQuery(
-                                     query, TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx())
-                              .GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n"
-                                                               << result.GetIssues().ToString());
-            actual = FormatResultSetYson(result.GetResultSet(0));
-            if (ReformatYson(actual) == normalizedExpected) {
-                return;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        } while (TInstant::Now() < deadline);
-
-        CompareYson(expected, actual, TStringBuilder() << "eventual result mismatch for: " << query);
-    }
-
-    void CheckUnordered(const std::string& query, const TString& expected) {
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << query << "\n" << result.GetIssues().ToString());
-        CompareYsonUnordered(expected, FormatResultSetYson(result.GetResultSet(0)),
-            TStringBuilder() << "unexpected rows for: " << query);
-    }
-
-    void CheckReturning(const std::string& update, const std::string& selectBack, const TString& expected) {
-        auto result = Session.ExecuteQuery(update, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "query failed: " << update << "\n" << result.GetIssues().ToString());
-        const TString returned = FormatResultSetYson(result.GetResultSet(0));
-
-        CompareYsonUnordered(expected, returned, TStringBuilder() << "unexpected RETURNING rows for: " << update);
-
-        auto after = Session.ExecuteQuery(selectBack, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(after.IsSuccess(), "query failed: " << selectBack << "\n" << after.GetIssues().ToString());
-
-        CompareYsonUnordered(returned, FormatResultSetYson(after.GetResultSet(0)),
-            TStringBuilder() << "RETURNING disagrees with a subsequent SELECT for: " << update);
-    }
-
-    TString ExplainAst(const std::string& query) {
-        auto settings = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx(), settings).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "explain failed: " << query << "\n" << result.GetIssues().ToString());
-        UNIT_ASSERT_C(result.GetStats().has_value(), "no stats for: " << query);
-        const auto ast = result.GetStats()->GetAst();
-        UNIT_ASSERT_C(ast.has_value(), "no AST for: " << query);
-        return TString(*ast);
-    }
-
-    NJson::TJsonValue ExplainPlan(const std::string& query) {
-        auto settings = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
-        auto result = Session.ExecuteQuery(query, TTxControl::NoTx(), settings).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), "explain failed: " << query << "\n" << result.GetIssues().ToString());
-        UNIT_ASSERT_C(result.GetStats().has_value(), "no stats for: " << query);
-        const auto serializedPlan = result.GetStats()->GetPlan();
-        UNIT_ASSERT_C(serializedPlan.has_value(), "no plan for: " << query);
-
-        NJson::TJsonValue plan;
-        UNIT_ASSERT_C(NJson::ReadJsonTree(*serializedPlan, &plan, true),
-            "invalid JSON plan for: " << query << "\n" << *serializedPlan);
-        return plan;
-    }
-
-    void CheckStreamLookup(const std::string& query, bool expected) {
-        const TString ast = ExplainAst(query);
-        const bool has = ast.Contains("KqpCnStreamLookup");
-        UNIT_ASSERT_C(has == expected,
-            "stream lookup expectation mismatch for: " << query
-                << "\n  expected stream lookup: " << (expected ? "yes" : "no")
-                << ", found: " << (has ? "yes" : "no")
-                << "\nAST:\n" << ast);
-    }
-
-    void RestartSchemeShard(const std::string& tablePath) {
-        auto& runtime = *Kikimr.GetTestServer().GetRuntime();
-        const auto sender = runtime.AllocateEdgeActor();
-        NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-
-        auto connect = [&](TDuration timeout) {
-            const auto pipe = runtime.Register(
-                NTabletPipe::CreateClient(sender, Tests::SchemeRoot, pipeConfig));
-            auto connected = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientConnected>(
-                sender, timeout);
-            UNIT_ASSERT_C(connected, "timed out connecting to SchemeShard");
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->TabletId, Tests::SchemeRoot);
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->ClientId, pipe);
-            UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
-            return std::pair(pipe, connected->Get()->Generation);
-        };
-
-        const auto [oldPipe, oldGeneration] = connect(TDuration::Seconds(30));
-        runtime.Send(MakePipePerNodeCacheID(false), sender,
-            new TEvPipeCache::TEvForward(
-                new TEvents::TEvPoisonPill(), Tests::SchemeRoot, false));
-
-        auto destroyed = runtime.GrabEdgeEventRethrow<TEvTabletPipe::TEvClientDestroyed>(
-            sender, TDuration::Seconds(30));
-        UNIT_ASSERT_C(destroyed, "timed out waiting for SchemeShard shutdown");
-        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->TabletId, Tests::SchemeRoot);
-        UNIT_ASSERT_VALUES_EQUAL(destroyed->Get()->ClientId, oldPipe);
-
-        const auto [newPipe, newGeneration] = connect(TDuration::Seconds(30));
-        UNIT_ASSERT_C(newGeneration > oldGeneration,
-            "SchemeShard generation did not change after restart: " << oldGeneration);
-        runtime.Send(new IEventHandle(newPipe, sender, new TEvents::TEvPoisonPill()));
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath(TString(tablePath));
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.SyncVersion = true;
-        runtime.Send(MakeSchemeCacheID(), sender,
-            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-
-        auto response = runtime.GrabEdgeEventRethrow<
-            TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender, TDuration::Seconds(30));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ResultSet.front().Status,
-            NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
-    }
-
-    std::string ShowCreateTable(const std::string& tablePath) {
-        return GetShowCreateTable(Session, tablePath);
-    }
-
-    NYdb::NQuery::TSession& QuerySession() {
-        return Session;
-    }
-
-private:
-    TKikimrRunner Kikimr;
-    NYdb::NQuery::TQueryClient Db;
-    NYdb::NQuery::TSession Session;
-};
 
 void CollectPhysicalReadColumns(const NJson::TJsonValue& node, TStringBuf targetTable,
     const TString& inheritedTable, TVector<TVector<TString>>& result)
@@ -831,6 +632,464 @@ void CheckVirtualReturningWithFulltextIndex(bool compact) {
 }
 
 }   // namespace
+
+Y_UNIT_TEST_SUITE(GeneratedReferences) {
+    void CheckDDL(const std::string& ddl, const TString& expectedError = {}) {
+        TKikimrRunner kikimr(TKikimrSettings(GeneratedColumnsAppConfig()).SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
+        if (expectedError.empty()) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+            auto tableSession = kikimr.GetTableClient().CreateSession().ExtractValueSync().GetSession();
+            UNIT_ASSERT(!tableSession.DescribeTable("/Root/TestTable").ExtractValueSync().IsSuccess());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateOnKeysDoNotTriggerGeneratedColumns, CompositeKey) {
+        const std::string keyColumns = CompositeKey ? "tenant, k" : "k";
+        TTestFixture fixture("CREATE TABLE TestTable (tenant Int32 NOT NULL, k Int32 NOT NULL, a Int32, "
+            "r Uint64 NOT NULL GENERATED ALWAYS AS (" + std::string(CompositeKey ? "RandomNumber(tenant)" : "RandomNumber(k)") + ") VIRTUAL, "
+            "s Uint64 NOT NULL GENERATED ALWAYS AS (r) STORED, "
+            "z Uint64 NOT NULL GENERATED ALWAYS AS (s) STORED, "
+            "PRIMARY KEY (" + keyColumns + "));",
+            "INSERT INTO TestTable (tenant, k, a) VALUES (7, 1, 10), (7, 2, 20);");
+        const auto before = fixture.QueryYson("SELECT k, s, z FROM TestTable ORDER BY k;");
+        fixture.Exec("UPDATE TestTable SET a = 11 WHERE k = 1;");
+        CompareYson(before, fixture.QueryYson("SELECT k, s, z FROM TestTable ORDER BY k;"));
+        const std::string columns = CompositeKey ? "tenant, k, a" : "k, a";
+        const std::string values = CompositeKey ? "(7, 1, 12), (7, 2, 22), (7, 3, 30)" : "(1, 12), (2, 22), (3, 30)";
+        fixture.Exec("UPDATE TestTable ON (" + columns + ") VALUES " + values + ";");
+        CompareYson(before, fixture.QueryYson("SELECT k, s, z FROM TestTable ORDER BY k;"));
+        fixture.Check("SELECT k, a FROM TestTable ORDER BY k;", "[[1;[12]];[2;[22]]]");
+        fixture.Exec("UPDATE TestTable ON (" + keyColumns + ") VALUES "
+            + (CompositeKey ? "(7, 1), (7, 3);" : "(1), (3);"));
+        CompareYson(before, fixture.QueryYson("SELECT k, s, z FROM TestTable ORDER BY k;"));
+    }
+
+    Y_UNIT_TEST(VirtualChainProjection) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                a Int32,
+                v2 Int32 GENERATED ALWAYS AS (v1 * 2) VIRTUAL,
+                v1 Int32 GENERATED ALWAYS AS (a + 1) VIRTUAL,
+                PRIMARY KEY(k),
+                INDEX idx_a GLOBAL SYNC ON (a)
+            );
+        )", "INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20);");
+        fixture.Check("SELECT v2 FROM TestTable ORDER BY k;", "[[[22]];[[42]]]");
+        fixture.Check("SELECT v2, v1 FROM TestTable ORDER BY k;", "[[[22];[11]];[[42];[21]]]");
+        fixture.Check("SELECT k FROM TestTable WHERE v2 = 42;", "[[2]]");
+        fixture.Check("SELECT v2 FROM TestTable VIEW idx_a WHERE a = 10;", "[[[22]]]");
+
+        auto star = fixture.QuerySession().ExecuteQuery("SELECT * FROM TestTable ORDER BY k;", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(star.IsSuccess(), star.GetIssues().ToString());
+        TResultSetParser parser(star.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("v1").GetOptionalInt32().value(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("v2").GetOptionalInt32().value(), 22);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("v1").GetOptionalInt32().value(), 21);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("v2").GetOptionalInt32().value(), 42);
+        UNIT_ASSERT(!parser.TryNextRow());
+
+        auto client = fixture.Runner().GetQueryClient();
+        auto stream = client.StreamExecuteQuery("SELECT v2 FROM TestTable ORDER BY k;", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+        CompareYson("[[[22]];[[42]]]", StreamResultToYson(stream));
+        auto scan = fixture.Runner().GetTableClient().StreamExecuteScanQuery("SELECT v2 FROM TestTable ORDER BY k;").ExtractValueSync();
+        UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+        CompareYson("[[[22]];[[42]]]", CollectStreamResult(scan).ResultSetYson);
+    }
+
+    Y_UNIT_TEST(VirtualDiamondSharedValue) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                root Uint64 NOT NULL GENERATED ALWAYS AS (RandomNumber(k)) VIRTUAL,
+                lhs Uint64 NOT NULL GENERATED ALWAYS AS (root) VIRTUAL,
+                rhs Uint64 NOT NULL GENERATED ALWAYS AS (root) VIRTUAL,
+                PRIMARY KEY(k)
+            );
+        )", "INSERT INTO TestTable (k) VALUES (1), (2), (3);");
+        fixture.Check("SELECT rhs = root AND lhs = root FROM TestTable ORDER BY k;",
+            "[[%true];[%true];[%true]]");
+    }
+
+    Y_UNIT_TEST(VirtualOverStoredUsesPersistedValue) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                root Uint64 NOT NULL GENERATED ALWAYS AS (RandomNumber(k)) STORED,
+                v1 Uint64 NOT NULL GENERATED ALWAYS AS (root) VIRTUAL,
+                v2 Uint64 NOT NULL GENERATED ALWAYS AS (v1) VIRTUAL,
+                PRIMARY KEY(k)
+            );
+        )", "INSERT INTO TestTable (k) VALUES (1), (2);");
+        const auto persisted = fixture.QueryYson("SELECT root FROM TestTable ORDER BY k;");
+        for (size_t i = 0; i < 3; ++i) {
+            fixture.Check("SELECT v2 = root AND v1 = root FROM TestTable ORDER BY k;", "[[%true];[%true]]");
+            CompareYson(persisted, fixture.QueryYson("SELECT v2 FROM TestTable ORDER BY k;"));
+        }
+    }
+
+    Y_UNIT_TEST(ConstantVirtualChainPreservesRows) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL,
+                v2 Int32 NOT NULL GENERATED ALWAYS AS (v1 * 2) VIRTUAL,
+                v1 Int32 NOT NULL GENERATED ALWAYS AS (11) VIRTUAL,
+                PRIMARY KEY(k)
+            );
+        )", "INSERT INTO TestTable (k) VALUES (1), (2), (3);");
+        fixture.Check("SELECT v2 FROM TestTable;", "[[22];[22];[22]]");
+        fixture.Check("SELECT COUNT(*) FROM TestTable WHERE v2 = 22;", "[[3u]]");
+        fixture.Exec("DELETE FROM TestTable;");
+        fixture.Check("SELECT v2 FROM TestTable;", "[]");
+    }
+
+    Y_UNIT_TEST(StoredWriteMatrix) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32, b Int32,
+                g2 Int32 GENERATED ALWAYS AS (g1 * 2) STORED,
+                g1 Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(b, 0)) STORED,
+                PRIMARY KEY(k)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k, a, b) VALUES (1, 10, 3);");
+        fixture.Check("SELECT g1, g2 FROM TestTable WHERE k = 1;", "[[[13];[26]]]");
+        fixture.CheckStreamLookup("UPSERT INTO TestTable (k, a, b) VALUES (1, 10, 3);", false);
+        fixture.CheckStreamLookup("UPSERT INTO TestTable (k, a) VALUES (1, 7);", true);
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 7), (2, 7);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;[10];[20]];[2;[7];[14]]]");
+        fixture.Exec("REPLACE INTO TestTable (k, a) VALUES (1, 4);");
+        fixture.Check("SELECT g1, g2 FROM TestTable WHERE k = 1;", "[[[4];[8]]]");
+        fixture.Exec("INSERT INTO TestTable (k, a, b) SELECT 3, 10, 3;");
+        fixture.Exec("UPSERT INTO TestTable (k, a) SELECT 3, 7;");
+        fixture.Check("SELECT g1, g2 FROM TestTable WHERE k = 3;", "[[[10];[20]]]");
+        fixture.Exec("UPSERT INTO TestTable (k, a, b) SELECT 3, 10, 3;");
+        fixture.Check("SELECT g1, g2 FROM TestTable WHERE k = 3;", "[[[13];[26]]]");
+        fixture.Exec("REPLACE INTO TestTable (k, a) SELECT 3, 4;");
+        fixture.Check("SELECT g1, g2 FROM TestTable WHERE k = 3;", "[[[4];[8]]]");
+    }
+
+    Y_UNIT_TEST(MixedChainWrites) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32, b Int32,
+                s2 Int32 GENERATED ALWAYS AS (v2 + 1) STORED,
+                v2 Int32 GENERATED ALWAYS AS (s1 + b) VIRTUAL,
+                s1 Int32 GENERATED ALWAYS AS (v1 * 2) STORED,
+                v1 Int32 GENERATED ALWAYS AS (a + 1) VIRTUAL,
+                PRIMARY KEY(k)
+            );
+        )");
+        fixture.CheckStreamLookup("UPSERT INTO TestTable (k, a, b) VALUES (1, 10, 3);", false);
+        fixture.Exec("UPSERT INTO TestTable (k, a, b) VALUES (1, 10, 3);");
+        fixture.Check("SELECT s1, s2 FROM TestTable;", "[[[22];[26]]]");
+        fixture.CheckStreamLookup("UPSERT INTO TestTable (k, a) VALUES (1, 20);", true);
+        fixture.Exec("UPSERT INTO TestTable (k, a) VALUES (1, 20);");
+        fixture.Check("SELECT s1, s2 FROM TestTable;", "[[[42];[46]]]");
+        fixture.Exec("INSERT INTO TestTable (k, a, b) SELECT 2, 10, 3;");
+        fixture.Exec("REPLACE INTO TestTable (k, a, b) SELECT 1, 10, 3;");
+        fixture.Check("SELECT k, s1, s2 FROM TestTable ORDER BY k;", "[[1;[22];[26]];[2;[22];[26]]]");
+    }
+
+    Y_UNIT_TEST(PartialWriteDefaultsAndNulls) {
+        auto config = GeneratedColumnsAppConfig();
+        config.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32, d Int32 DEFAULT 7, seq Serial,
+                v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + COALESCE(d, 0) + seq) VIRTUAL,
+                g Int32 GENERATED ALWAYS AS (v * 2) STORED,
+                out Int32 GENERATED ALWAYS AS (g + 1) STORED,
+                PRIMARY KEY(k)
+            );
+        )", "INSERT INTO TestTable (k, a, d, seq) VALUES (1, 10, 50, 60);", config);
+        fixture.Exec("UPSERT INTO TestTable (k) VALUES (1), (2);");
+        fixture.Check("SELECT k, d, seq, g, out FROM TestTable ORDER BY k;",
+            "[[1;[50];60;[240];[241]];[2;[7];2;[18];[19]]]");
+        fixture.Exec("INSERT INTO TestTable (k) VALUES (3);");
+        fixture.Check("SELECT g, out FROM TestTable WHERE k = 3;", "[[[20];[21]]]");
+        fixture.Exec("UPSERT INTO TestTable (k, a, d) VALUES (1, NULL, NULL);");
+        fixture.Check("SELECT g, out FROM TestTable WHERE k = 1;", "[[[120];[121]]]");
+        fixture.Exec("REPLACE INTO TestTable (k) VALUES (1);");
+        fixture.Check("SELECT g, out FROM TestTable WHERE k = 1;", "[[[24];[25]]]");
+    }
+
+    Y_UNIT_TEST(IntermediateDeclaredTypes) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Uint16 NOT NULL, n Int32, p PgText NOT NULL,
+                widened Uint32 GENERATED ALWAYS AS (a) VIRTUAL,
+                numeric_out Uint64 GENERATED ALWAYS AS (widened + 1u) STORED,
+                nullable_mid Int32 GENERATED ALWAYS AS (n) VIRTUAL,
+                nullable_out Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(nullable_mid, 5)) STORED,
+                pg_mid PgText NOT NULL GENERATED ALWAYS AS (p) VIRTUAL,
+                pg_out PgText NOT NULL GENERATED ALWAYS AS (pg_mid) STORED,
+                PRIMARY KEY(k)
+            );
+        )");
+        fixture.Exec("INSERT INTO TestTable (k, a, p) VALUES (1, 10us, 'hello'pt);");
+        fixture.Check("SELECT numeric_out, nullable_out, pg_out FROM TestTable;", "[[[11u];5;\"hello\"]]");
+        fixture.Exec("UPSERT INTO TestTable (k, a, n, p) VALUES (1, 20us, 8, 'world'pt);");
+        fixture.Check("SELECT numeric_out, nullable_out, pg_out FROM TestTable;", "[[[21u];8;\"world\"]]");
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL, a Int32,
+            mid Int32 GENERATED ALWAYS AS (a) VIRTUAL,
+            bad Int32 NOT NULL GENERATED ALWAYS AS (mid) STORED, PRIMARY KEY(k));)", "nullable");
+    }
+
+    Y_UNIT_TEST(StoredDiamondSharedValue) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32,
+                rhs Uint64 NOT NULL GENERATED ALWAYS AS (root) STORED,
+                lhs Uint64 NOT NULL GENERATED ALWAYS AS (root) STORED,
+                root Uint64 NOT NULL GENERATED ALWAYS AS (RandomNumber(k)) STORED,
+                PRIMARY KEY(k), INDEX idx_a GLOBAL SYNC ON (a) COVER (root, lhs, rhs)
+            );
+        )");
+        const auto returned = fixture.QueryYson(
+            "INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20), (3, 30) RETURNING k, root, lhs, rhs;");
+        CompareYsonUnordered(returned, fixture.QueryYson("SELECT k, root, lhs, rhs FROM TestTable;"));
+        CompareYsonUnordered(returned, fixture.QueryYson("SELECT k, root, lhs, rhs FROM TestTable VIEW idx_a;"));
+        fixture.Check("SELECT root = lhs AND root = rhs FROM TestTable ORDER BY k;", "[[%true];[%true];[%true]]");
+    }
+
+    static constexpr const char* UpdateChainDDL = R"(
+        CREATE TABLE TestTable (
+            k Int32 NOT NULL, a Int32 NOT NULL, b Int32 NOT NULL, c Int32 NOT NULL,
+            g2 Int32 GENERATED ALWAYS AS (g1 * 2) STORED,
+            g1 Int32 GENERATED ALWAYS AS (a + b) STORED,
+            v Int32 GENERATED ALWAYS AS (a + 1) VIRTUAL,
+            mixed Int32 GENERATED ALWAYS AS (v * 2) STORED,
+            lhs Int32 GENERATED ALWAYS AS (g1) VIRTUAL,
+            rhs Int32 GENERATED ALWAYS AS (g1) VIRTUAL,
+            diamond Int32 GENERATED ALWAYS AS (lhs + rhs) STORED,
+            unrelated Uint64 NOT NULL GENERATED ALWAYS AS (RandomNumber(c)) STORED,
+            PRIMARY KEY(k)
+        );
+    )";
+
+    Y_UNIT_TEST(UpdateTransitiveClosure) {
+        TTestFixture fixture(UpdateChainDDL, "INSERT INTO TestTable (k, a, b, c) VALUES (1, 10, 3, 5);");
+        const auto unrelated = fixture.QueryYson("SELECT unrelated FROM TestTable;");
+        fixture.Exec("UPDATE TestTable SET a = 20 WHERE k = 1;");
+        fixture.Check("SELECT g1, g2, mixed, diamond FROM TestTable;", "[[[23];[46];[42];[46]]]");
+        fixture.Exec("UPDATE TestTable SET a = b, b = a WHERE k = 1;");
+        fixture.Check("SELECT a, b, g1, g2, mixed, diamond FROM TestTable;", "[[3;20;[23];[46];[8];[46]]]");
+        fixture.Exec("UPDATE TestTable SET a = COALESCE(g2, 0), b = a WHERE k = 1;");
+        fixture.Check("SELECT a, b, g1, g2, mixed, diamond FROM TestTable;", "[[46;3;[49];[98];[94];[98]]]");
+        CompareYson(unrelated, fixture.QueryYson("SELECT unrelated FROM TestTable;"));
+    }
+
+    Y_UNIT_TEST(UpdateOnTransitiveClosure) {
+        TTestFixture fixture(UpdateChainDDL, "INSERT INTO TestTable (k, a, b, c) VALUES (1, 10, 3, 5);");
+        const auto unrelated = fixture.QueryYson("SELECT unrelated FROM TestTable;");
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 20), (2, 20);");
+        fixture.Check("SELECT k, g1, g2, mixed, diamond FROM TestTable;", "[[1;[23];[46];[42];[46]]]");
+        CompareYson(unrelated, fixture.QueryYson("SELECT unrelated FROM TestTable;"));
+    }
+
+    Y_UNIT_TEST(UpdateKeepsUnchangedStoredPredecessor) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Uint64 NOT NULL, b Uint64 NOT NULL,
+                s1 Uint64 NOT NULL GENERATED ALWAYS AS (COALESCE(RandomNumber(a) % 1000000u, 0u)) STORED,
+                v Uint64 NOT NULL GENERATED ALWAYS AS (s1) VIRTUAL,
+                s2 Uint64 NOT NULL GENERATED ALWAYS AS (v + b) STORED,
+                PRIMARY KEY(k)
+            );
+        )", "INSERT INTO TestTable (k, a, b) VALUES (1, 10u, 1u);");
+        const auto before = fixture.QueryYson("SELECT s1 FROM TestTable;");
+        fixture.Exec("UPDATE TestTable SET b = 2u WHERE k = 1;");
+        CompareYson(before, fixture.QueryYson("SELECT s1 FROM TestTable;"));
+        fixture.Check("SELECT s2 = s1 + b FROM TestTable;", "[[%true]]");
+        fixture.CheckStreamLookup("UPDATE TestTable ON (k, b) VALUES (1, 3u);", true);
+        fixture.Exec("UPDATE TestTable ON (k, b) VALUES (1, 3u), (2, 3u);");
+        CompareYson(before, fixture.QueryYson("SELECT s1 FROM TestTable;"));
+        fixture.Check("SELECT k, s2 = s1 + b FROM TestTable;", "[[1;%true]]");
+    }
+
+    Y_UNIT_TEST_TWIN(ChainedIndexesAndReturning, EnableStreamWrite) {
+        auto config = GeneratedColumnsAppConfig();
+        config.MutableTableServiceConfig()->SetEnableStreamWrite(EnableStreamWrite);
+        config.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32 NOT NULL,
+                g1 Int32 NOT NULL GENERATED ALWAYS AS (a + 1) STORED,
+                v Int32 NOT NULL GENERATED ALWAYS AS (g1 * 2) VIRTUAL,
+                g2 Int32 NOT NULL GENERATED ALWAYS AS (v + 1) STORED,
+                out Int32 NOT NULL GENERATED ALWAYS AS (g2 + 1) VIRTUAL,
+                PRIMARY KEY(k),
+                INDEX idx_g2 GLOBAL UNIQUE SYNC ON (g2) COVER (g1),
+                INDEX idx_a GLOBAL SYNC ON (a) COVER (g2)
+            );
+        )", "INSERT INTO TestTable (k, a) VALUES (1, 10), (2, 20);", config);
+        fixture.CheckReturning("UPDATE TestTable SET a = 30 WHERE k = 1 RETURNING k, g1, g2, out;",
+            "SELECT k, g1, g2, out FROM TestTable WHERE k = 1;", "[[1;31;63;64]]");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable VIEW idx_g2 WHERE g2 = 23;", "[]");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable VIEW idx_g2 WHERE g2 = 63;", "[[1;31;63]]");
+        fixture.Check("SELECT k, a, g2 FROM TestTable VIEW idx_a ORDER BY a;", "[[2;20;43];[1;30;63]]");
+        fixture.CheckReturning("UPDATE TestTable ON (k, a) VALUES (1, 40) RETURNING out, g2, g1;",
+            "SELECT out, g2, g1 FROM TestTable WHERE k = 1;", "[[84;83;41]]");
+        fixture.Check("SELECT k FROM TestTable VIEW idx_g2 WHERE g2 = 63;", "[]");
+        const auto before = fixture.QueryYson("SELECT k, a, g1, g2 FROM TestTable ORDER BY k;");
+        auto failed = fixture.QuerySession().ExecuteQuery("UPDATE TestTable SET a = 20 WHERE k = 1;", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(failed.GetStatus(), EStatus::PRECONDITION_FAILED, failed.GetIssues().ToString());
+        CompareYson(before, fixture.QueryYson("SELECT k, a, g1, g2 FROM TestTable ORDER BY k;"));
+        fixture.Check("SELECT k, g1, g2 FROM TestTable VIEW idx_g2 ORDER BY k;", "[[1;41;83];[2;21;43]]");
+        CompareYson("[[1;41;83;84]]", fixture.QueryYson("DELETE FROM TestTable WHERE k = 1 RETURNING k, g1, g2, out;"));
+        fixture.Check("SELECT k FROM TestTable VIEW idx_g2 WHERE g2 = 83;", "[]");
+    }
+
+    Y_UNIT_TEST(ChainAfterRestartAndCopy) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32 NOT NULL,
+                leaf Int32 NOT NULL GENERATED ALWAYS AS (s * 2) VIRTUAL,
+                s Int32 NOT NULL GENERATED ALWAYS AS (v + 1) STORED,
+                v Int32 NOT NULL GENERATED ALWAYS AS (a + 1) VIRTUAL,
+                PRIMARY KEY(k)
+            );
+        )", "INSERT INTO TestTable (k, a) VALUES (1, 10);");
+        const auto originalDDL = fixture.ShowCreateTable("/Root/TestTable");
+        fixture.RestartSchemeShard("/Root/TestTable");
+        fixture.Check("SELECT s, leaf FROM TestTable;", "[[12;24]]");
+        fixture.Exec("UPDATE TestTable SET a = 20 WHERE k = 1;");
+        fixture.Check("SELECT s, leaf FROM TestTable;", "[[22;44]]");
+        UNIT_ASSERT_VALUES_EQUAL(originalDDL, fixture.ShowCreateTable("/Root/TestTable"));
+        auto tableSession = fixture.Runner().GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        auto copied = tableSession.CopyTable("/Root/TestTable", "/Root/Copy").ExtractValueSync();
+        UNIT_ASSERT_C(copied.IsSuccess(), copied.GetIssues().ToString());
+        fixture.Check("SELECT s, leaf FROM Copy;", "[[22;44]]");
+        fixture.Exec("UPDATE Copy SET a = 30 WHERE k = 1;");
+        fixture.Check("SELECT s, leaf FROM Copy;", "[[32;64]]");
+        fixture.Check("SELECT s, leaf FROM TestTable;", "[[22;44]]");
+        auto described = fixture.Runner().GetTestClient().Ls("/Root/Copy");
+        TMap<TString, TVector<TString>> dependencies;
+        TVector<TString> order;
+        for (const auto& column : described->Record.GetPathDescription().GetTable().GetColumns()) {
+            order.push_back(column.GetName());
+            if (column.HasDefaultFromExpression()) {
+                const auto& refs = column.GetDefaultFromExpression().GetDependencyColumnNames();
+                dependencies[column.GetName()].assign(refs.begin(), refs.end());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(order, (TVector<TString>{"k", "a", "leaf", "s", "v"}));
+        UNIT_ASSERT_VALUES_EQUAL(dependencies.at("leaf"), (TVector<TString>{"s"}));
+        UNIT_ASSERT_VALUES_EQUAL(dependencies.at("s"), (TVector<TString>{"v"}));
+        UNIT_ASSERT_VALUES_EQUAL(dependencies.at("v"), (TVector<TString>{"a"}));
+
+        const TString cachedQuery = "UPDATE `/Root/Copy` SET a = a + 1 WHERE k = 1;";
+        auto settings = NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)
+            .CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Basic);
+        auto execute = [&] {
+            auto result = tableSession.ExecuteDataQuery(cachedQuery, NYdb::NTable::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats().has_value());
+            return NYdb::TProtoAccessor::GetProto(*result.GetStats()).compilation().from_cache();
+        };
+        UNIT_ASSERT(!execute());
+        UNIT_ASSERT(execute());
+        fixture.Exec("ALTER TABLE Copy DROP COLUMN leaf;");
+        UNIT_ASSERT(!execute());
+        fixture.Check("SELECT a, s, v FROM Copy;", "[[33;35;34]]");
+        auto afterDrop = fixture.QuerySession().ExecuteQuery("SELECT leaf FROM Copy;", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!afterDrop.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(fixture.ShowCreateTable("/Root/Copy"), "GENERATED ALWAYS AS (v + 1) STORED");
+    }
+
+    Y_UNIT_TEST(MultiShardChainUpdates) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Int32 NOT NULL, a Int32 NOT NULL,
+                g2 Int32 NOT NULL GENERATED ALWAYS AS (g1 * 2) STORED,
+                g1 Int32 NOT NULL GENERATED ALWAYS AS (v + 1) STORED,
+                v Int32 NOT NULL GENERATED ALWAYS AS (a + 1) VIRTUAL,
+                PRIMARY KEY(k)
+            ) WITH (PARTITION_AT_KEYS = (10));
+        )", "INSERT INTO TestTable (k, a) VALUES (1, 10), (11, 20), (21, 30);");
+        fixture.Exec("UPDATE TestTable SET a = a + 10;");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;22;44];[11;32;64];[21;42;84]]");
+        fixture.Exec("UPDATE TestTable ON (k, a) VALUES (1, 5), (11, 6), (21, 7), (31, 8);");
+        fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;7;14];[11;8;16];[21;9;18]]");
+    }
+
+    Y_UNIT_TEST(CreateKindMatrix) {
+        for (const std::string first : {"STORED", "VIRTUAL"}) {
+            for (const std::string second : {"STORED", "VIRTUAL"}) {
+                CheckDDL("CREATE TABLE TestTable (k Int32 NOT NULL, a Int32, "
+                    "g1 Int32 GENERATED ALWAYS AS (a + 1) " + first + ", "
+                    "g2 Int32 GENERATED ALWAYS AS (g1 * 2) " + second + ", PRIMARY KEY(k));");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CreateForwardReferences) {
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL, a Int32,
+            g2 Int32 GENERATED ALWAYS AS (`quoted-g` + `quoted-g`) STORED,
+            `quoted-g` Int32 GENERATED ALWAYS AS (a + 1) VIRTUAL, PRIMARY KEY(k));)");
+    }
+
+    Y_UNIT_TEST(RejectTwoNodeCycle) {
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL,
+            g1 Int32 GENERATED ALWAYS AS (g2 + 1) STORED,
+            g2 Int32 GENERATED ALWAYS AS (g1 + 1) STORED, PRIMARY KEY(k));)",
+            "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectLongAndDisconnectedCycles) {
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL,
+            good Int32 GENERATED ALWAYS AS (k + 1) STORED,
+            g1 Int32 GENERATED ALWAYS AS (g2 + 1) STORED,
+            g2 Int32 GENERATED ALWAYS AS (g3 + 1) STORED,
+            g3 Int32 GENERATED ALWAYS AS (g1 + 1) STORED, PRIMARY KEY(k));)",
+            "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectMixedKindCycle) {
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL,
+            g1 Int32 GENERATED ALWAYS AS (g2 + 1) VIRTUAL,
+            g2 Int32 GENERATED ALWAYS AS (g1 + 1) STORED, PRIMARY KEY(k));)",
+            "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectCycleInConditionalBranch) {
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL,
+            g1 Int32 GENERATED ALWAYS AS (IF(false, g2, 0)) VIRTUAL,
+            g2 Int32 GENERATED ALWAYS AS (g1 + 1) STORED, PRIMARY KEY(k));)",
+            "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectUnknownAndSelfReference) {
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL,
+            g1 Int32 GENERATED ALWAYS AS (missing + 1) VIRTUAL, PRIMARY KEY(k));)", "unknown column");
+        CheckDDL(R"(CREATE TABLE TestTable (k Int32 NOT NULL,
+            g1 Int32 GENERATED ALWAYS AS (g1 + 1) STORED, PRIMARY KEY(k));)", "can not reference itself");
+    }
+
+    Y_UNIT_TEST(RejectInconsistentLoadedDependencies) {
+        TKikimrRunner kikimr(TKikimrSettings(GeneratedColumnsAppConfig()).SetWithSampleTables(false));
+        UNIT_ASSERT_UNEQUAL(kikimr.GetTestClient().CreateTable("/Root", R"(
+            Name: "TestTable"
+            Columns { Name: "k" Type: "Int32" NotNull: true }
+            Columns { Name: "a" Type: "Int32" }
+            Columns { Name: "g" Type: "Int32" DefaultFromExpression {
+                ExprText: "a + 1" Stored: true
+            } }
+            KeyColumnNames: ["k"]
+        )"), NMsgBusProxy::MSTATUS_OK);
+        auto tableSession = kikimr.GetTableClient().CreateSession().ExtractValueSync().GetSession();
+        UNIT_ASSERT(!tableSession.DescribeTable("/Root/TestTable").ExtractValueSync().IsSuccess());
+    }
+}
 
 Y_UNIT_TEST_SUITE(GeneratedStored) {
     Y_UNIT_TEST(Basic) {
@@ -1422,16 +1681,15 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             "unknown column");
     }
 
-    Y_UNIT_TEST(ReferencesGeneratedRejected) {
-        CheckGeneratedColumnRejected(R"(
+    Y_UNIT_TEST(ReferencesGeneratedAccepted) {
+        NTestSuiteGeneratedReferences::CheckDDL(R"(
             CREATE TABLE TestTable (
                 k Int32,
                 a Int32 GENERATED ALWAYS AS (k + 1) STORED,
                 b Int32 GENERATED ALWAYS AS (a + 1) STORED,
                 PRIMARY KEY (k)
             );
-        )",
-            "references another generated column");
+        )");
     }
 
     Y_UNIT_TEST(AggregateFunctionRejected) {
@@ -2894,6 +3152,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
                 value Int32,
                 stored_value Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(value, 0) * 10) STORED,
                 virtual_value Int32 NOT NULL GENERATED ALWAYS AS (COALESCE(value, 0) * 10 + 1) VIRTUAL,
+                downstream Int32 NOT NULL GENERATED ALWAYS AS (virtual_value + 1) STORED,
                 PRIMARY KEY (k)
             );
         )");
@@ -2972,10 +3231,14 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
             const bool hasOldImage = json.Has("oldImage") && json["oldImage"].IsMap();
             if (hasNewImage) {
                 UNIT_ASSERT_C(json["newImage"].Has("stored_value"), message);
+                UNIT_ASSERT_VALUES_EQUAL_C(json["newImage"]["downstream"].GetInteger(),
+                    json["newImage"]["stored_value"].GetInteger() + 2, message);
                 UNIT_ASSERT_C(!json["newImage"].Has("virtual_value"), message);
             }
             if (hasOldImage) {
                 UNIT_ASSERT_C(json["oldImage"].Has("stored_value"), message);
+                UNIT_ASSERT_VALUES_EQUAL_C(json["oldImage"]["downstream"].GetInteger(),
+                    json["oldImage"]["stored_value"].GetInteger() + 2, message);
                 UNIT_ASSERT_C(!json["oldImage"].Has("virtual_value"), message);
             }
 
@@ -3144,7 +3407,6 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         auto explain = session.ExplainDataQuery(update).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(explain.GetAst(), "Inplace", explain.GetAst());
 
         auto params = db.GetParamsBuilder()
             .AddParam("$key").Uint64(1).Build()
@@ -5996,15 +6258,6 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             rejects("UPSERT INTO Writable (k, a, v) VALUES (1, 10, 11);", "cannot be set explicitly");
             rejects("UPDATE Writable SET v = 11 WHERE k = 1;", "cannot be set explicitly");
             rejects("UPDATE Writable ON (k, v) VALUES (1, 11);", "cannot be set explicitly");
-            rejects(R"(
-                CREATE TABLE StoredOverVirtual (
-                    k Int32 NOT NULL,
-                    a Int32,
-                    v Int32 GENERATED ALWAYS AS (COALESCE(a, 0) + 1) VIRTUAL,
-                    s Int32 GENERATED ALWAYS AS (COALESCE(v, 0) + 1) STORED,
-                    PRIMARY KEY (k)
-                );
-            )", "references another generated column");
             rejects(R"(
                 ALTER TABLE Writable ADD COLUMN s
                     Int32 GENERATED ALWAYS AS (COALESCE(v, 0) + 1) STORED;

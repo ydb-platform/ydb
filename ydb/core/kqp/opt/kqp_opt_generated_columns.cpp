@@ -4,6 +4,8 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/generated_column.h>
+#include <ydb/library/generated_columns/generated_column_dependencies.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -17,41 +19,86 @@ using namespace NYql::NNodes;
 
 namespace {
 
-bool IsVirtualGeneratedColumn(const TKikimrColumnMetadata* column) {
-    return column && column->IsDefaultFromExpression() && !column->DefaultExpression->Stored;
+TVector<TString> GeneratedColumnNames(const TVector<const TKikimrColumnMetadata*>& columns) {
+    TVector<TString> names;
+    for (const auto* column : columns) {
+        names.push_back(column->Name);
+    }
+    return names;
 }
 
-TVector<TString> GetMissingStoredGeneratedDeps(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
-    const THashSet<TStringBuf>& inputColumnsSet, const THashSet<TString>& generateColumnsIfInsert)
+} // namespace
+
+TMaybe<TGeneratedColumnEvaluationPlan> BuildGeneratedColumnEvaluationPlan(
+    const TKikimrTableDescription& table, const TVector<TString>& requestedColumns,
+    const THashSet<TString>& storedColumnsToRecompute, TPositionHandle pos, TExprContext& ctx)
 {
-    THashSet<TString> generatedNames;
-    for (const auto* colMeta : generatedColumns) {
-        generatedNames.insert(colMeta->Name);
+    const auto* graph = table.GetGeneratedColumnGraph(pos, ctx);
+    if (!graph) {
+        return {};
     }
 
-    THashSet<TString> missing;
-    for (const auto* colMeta : generatedColumns) {
-        for (const auto& dep : colMeta->DefaultExpression->Dependencies) {
-            if ((!inputColumnsSet.contains(dep) || generateColumnsIfInsert.contains(dep)) && !generatedNames.contains(dep)) {
-                missing.insert(dep);
+    THashSet<TString> visited;
+    THashSet<TString> scheduled;
+    THashSet<TString> physical;
+    TVector<TString> pending = requestedColumns;
+    while (!pending.empty()) {
+        auto name = std::move(pending.back());
+        pending.pop_back();
+        if (!visited.insert(name).second) {
+            continue;
+        }
+        const auto* column = table.Metadata->Columns.FindPtr(name);
+        if (!column) {
+            // System columns are present in the loaded row type rather than schema metadata.
+            if (!table.GetColumnType(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown generated input column " << name));
+                return {};
             }
+            physical.insert(name);
+        } else if (!IsGeneratedColumn(column)
+            || (column->DefaultExpression->Stored && !storedColumnsToRecompute.contains(name)))
+        {
+            physical.insert(name);
+        } else {
+            scheduled.insert(name);
+            const auto& dependencies = graph->Dependencies.at(name);
+            pending.insert(pending.end(), dependencies.begin(), dependencies.end());
         }
     }
 
-    TVector<TString> result(missing.begin(), missing.end());
-    std::ranges::sort(result);
+    TGeneratedColumnEvaluationPlan result;
+    for (const auto& name : graph->EvaluationOrder) {
+        if (scheduled.contains(name)) {
+            result.EvaluationOrder.push_back(table.Metadata->Columns.FindPtr(name));
+        }
+    }
+    result.PhysicalColumns.assign(physical.begin(), physical.end());
+    std::ranges::sort(result.PhysicalColumns);
     return result;
 }
 
-std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprBase& input, const TCoAtomList& inputColumns,
-    const TVector<const TKikimrColumnMetadata*>& generatedColumns, const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx)
+namespace {
+
+TVector<TString> GetMissingStoredGeneratedDeps(const TGeneratedColumnEvaluationPlan& plan,
+    const THashSet<TStringBuf>& inputColumnsSet, const THashSet<TString>& generateColumnsIfInsert)
+{
+    TVector<TString> missing;
+    for (const auto& name : plan.PhysicalColumns) {
+        if (!inputColumnsSet.contains(name) || generateColumnsIfInsert.contains(name)) {
+            missing.push_back(name);
+        }
+    }
+    return missing;
+}
+
+TMaybe<std::pair<TExprBase, TCoAtomList>> BuildStoredGeneratedColumnsInline(const TExprBase& input, const TCoAtomList& inputColumns,
+    const TGeneratedColumnEvaluationPlan& plan, const TVector<TString>& outputColumns,
+    const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
 {
     THashSet<TString> generatedNames;
     THashSet<TStringBuf> inputColumnsSet;
-    for (const auto* colMeta : generatedColumns) {
-        generatedNames.insert(colMeta->Name);
-    }
+    generatedNames.insert(outputColumns.begin(), outputColumns.end());
     for (const auto& col : inputColumns) {
         inputColumnsSet.insert(col.Value());
     }
@@ -60,7 +107,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
     TExprBase generatedInputRow = rowArg;
 
     const THashSet<TString> generateColumnsIfInsert;
-    auto absentDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet, generateColumnsIfInsert);
+    auto absentDeps = GetMissingStoredGeneratedDeps(plan, inputColumnsSet, generateColumnsIfInsert);
     if (!absentDeps.empty()) {
         TVector<TExprBase> mergedMembers;
         for (const auto& col : inputColumns) {
@@ -76,7 +123,10 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
 
         for (const auto& dep : absentDeps) {
             const auto* columnType = table.GetColumnType(dep);
-            YQL_ENSURE(columnType, "Unknown generated dependency column " << dep);
+            if (!columnType) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown generated dependency column " << dep));
+                return {};
+            }
 
             const auto* optionalType = columnType->IsOptionalOrNull()
                 ? columnType
@@ -113,7 +163,11 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
                 .Done());
     }
 
-    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, generatedInputRow, pos, ctx);
+    auto generated = BuildGeneratedColumnMembers(plan, outputColumns, generatedInputRow, table, pos, ctx);
+    if (!generated) {
+        return {};
+    }
+    auto& [genColumnNames, genColumnMembers] = *generated;
     for (auto& name : std::move(genColumnNames)) {
         allColumns.push_back(std::move(name));
     }
@@ -135,11 +189,11 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
         .Add(allColumns)
         .Done();
 
-    return {writeData, columnList};
+    return std::pair{writeData, columnList};
 }
 
-std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(const TExprBase& input, const TCoAtomList& inputColumns,
-    const TVector<const TKikimrColumnMetadata*>& generatedColumns, const TVector<TString>& missingDeps,
+TMaybe<std::pair<TExprBase, TCoAtomList>> BuildStoredGeneratedColumnsViaStreamLookup(const TExprBase& input, const TCoAtomList& inputColumns,
+    const TGeneratedColumnEvaluationPlan& plan, const TVector<TString>& outputColumns, const TVector<TString>& missingDeps,
     const THashSet<TString>& generateColumnsIfInsert, const TKikimrTableDescription& table, bool dropRowsAbsentFromTable,
     TPositionHandle pos, TExprContext& ctx)
 {
@@ -148,9 +202,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
     THashSet<TString> generatedNames;
     THashSet<TStringBuf> inputColumnsSet;
 
-    for (const auto* colMeta : generatedColumns) {
-        generatedNames.insert(colMeta->Name);
-    }
+    generatedNames.insert(outputColumns.begin(), outputColumns.end());
 
     for (const auto& col : inputColumns) {
         inputColumnsSet.insert(col.Value());
@@ -243,7 +295,10 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
 
     for (const auto& dep : missingDeps) {
         const auto* columnType = table.GetColumnType(dep);
-        YQL_ENSURE(columnType, "Unknown generated dependency column " << dep);
+        if (!columnType) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown generated dependency column " << dep));
+            return {};
+        }
 
         TExprBase depValue = Build<TCoMember>(ctx, pos)
             .Struct(presentRowArg)
@@ -317,7 +372,11 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                 .Done());
     }
 
-    auto [genColumnNames, genColumnMembers] = BuildGeneratedColumnMembers(generatedColumns, mergedRow, pos, ctx);
+    auto generated = BuildGeneratedColumnMembers(plan, outputColumns, mergedRow, table, pos, ctx);
+    if (!generated) {
+        return {};
+    }
+    auto& [genColumnNames, genColumnMembers] = *generated;
     for (auto& name : std::move(genColumnNames)) {
         allColumns.push_back(std::move(name));
     }
@@ -359,7 +418,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
         .Add(allColumns)
         .Done();
 
-    return {writeData, columnList};
+    return std::pair{writeData, columnList};
 }
 
 bool GeneratedDepsComeFromTable(TYdbOperation op) {
@@ -376,161 +435,175 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(name);
-        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->Stored) {
+        if (IsStoredGeneratedColumn(colMeta)) {
             generatedColumns.push_back(colMeta);
         }
     }
     return generatedColumns;
 }
 
-TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
-    const TExprBase& depRow, TPositionHandle pos, TExprContext& ctx)
+TMaybe<TVector<const TKikimrColumnMetadata*>> CollectAffectedStoredGeneratedColumns(
+    const TKikimrTableDescription& table, const THashSet<TString>& changedColumns,
+    TPositionHandle pos, TExprContext& ctx)
 {
-    TGeneratedColumnMembers result;
-    result.Names.reserve(generatedColumns.size());
-    result.Members.reserve(generatedColumns.size());
-
-    for (const auto* colMeta : generatedColumns) {
-        YQL_ENSURE(colMeta->DefaultExpression.Defined(), "Generated column " << colMeta->Name << " has no expression metadata");
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "Generated column " << colMeta->Name << " has no compiled expression");
-
-        auto value = Build<TExprApplier>(ctx, pos)
-            .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
-            .With(0, depRow)
-            .Done();
-
-        auto nameAtom = TCoAtom(ctx.NewAtom(pos, colMeta->Name));
-        result.Names.push_back(nameAtom);
-        result.Members.push_back(
-            Build<TCoNameValueTuple>(ctx, pos)
-                .Name(nameAtom)
-                .Value(value)
-                .Done());
+    const auto* graph = table.GetGeneratedColumnGraph(pos, ctx);
+    if (!graph) {
+        return {};
     }
-
+    const auto affected = NGeneratedColumns::CollectAffectedGeneratedColumns(*graph, changedColumns);
+    TVector<const TKikimrColumnMetadata*> result;
+    for (const auto* column : CollectStoredGeneratedColumns(table)) {
+        if (affected.contains(column->Name)) {
+            result.push_back(column);
+        }
+    }
     return result;
 }
 
-TCoAtomList BuildPhysicalColumnsForVirtualGeneratedColumns(
-    const TCoAtomList& logicalColumns,
-    const TKikimrTableDescription& table,
-    TPositionHandle pos,
-    TExprContext& ctx)
+TMaybe<TGeneratedColumnMembers> BuildGeneratedColumnMembers(const TGeneratedColumnEvaluationPlan& plan,
+    const TVector<TString>& outputGeneratedColumns, const TExprBase& depRow,
+    const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
 {
-    TVector<const TKikimrColumnMetadata*> virtualColumns;
-    THashSet<TStringBuf> virtualNames;
-
-    for (const auto& column : logicalColumns) {
-        const auto* metadata = table.Metadata->Columns.FindPtr(column.Value());
-        if (IsVirtualGeneratedColumn(metadata)) {
-            virtualColumns.push_back(metadata);
-            virtualNames.insert(metadata->Name);
+    THashMap<TString, TExprNode::TPtr> values;
+    for (const auto* column : plan.EvaluationOrder) {
+        if (!column->DefaultExpression || !column->DefaultExpression->Expr) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Generated column " << column->Name << " has no compiled expression"));
+            return {};
         }
+        const auto* type = table.GetColumnType(column->Name);
+        if (!type) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Unknown generated column " << column->Name));
+            return {};
+        }
+
+        // Reuse the computed value nodes in every consumer, including the output.
+        // Only direct dependencies are exposed, so old generated placeholders cannot shadow them.
+        TVector<TExprBase> dependencies;
+        THashSet<TString> seen;
+        for (const auto& name : column->DefaultExpression->Dependencies) {
+            if (!seen.insert(name).second) {
+                continue;
+            }
+            const auto value = values.find(name);
+            dependencies.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(name)
+                .Value(value != values.end()
+                    ? TExprBase(value->second)
+                    : TExprBase(Build<TCoMember>(ctx, pos).Struct(depRow).Name().Build(name).Done()))
+                .Done());
+        }
+        const auto dependencyRow = Build<TCoAsStruct>(ctx, pos).Add(dependencies).Done();
+        const auto value = Build<TExprApplier>(ctx, pos)
+            .Apply(TCoLambda(column->DefaultExpression->Expr))
+            .With(0, dependencyRow)
+            .Done();
+        const auto normalized = Build<TCoStrictCast>(ctx, pos)
+            .Value(value)
+            .Type(NCommon::BuildTypeExpr(pos, *type, ctx))
+            .Done();
+        values.emplace(column->Name, normalized.Ptr());
     }
 
-    if (virtualColumns.empty()) {
+    TGeneratedColumnMembers result;
+    for (const auto& name : outputGeneratedColumns) {
+        const auto value = values.find(name);
+        if (value == values.end()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Generated column " << name << " is absent from the evaluation plan"));
+            return {};
+        }
+        auto atom = TCoAtom(ctx.NewAtom(pos, name));
+        result.Names.push_back(atom);
+        result.Members.push_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name(atom).Value(TExprBase(value->second)).Done());
+    }
+    return result;
+}
+
+TMaybe<TCoAtomList> BuildPhysicalColumnsForVirtualGeneratedColumns(
+    const TCoAtomList& logicalColumns, const TKikimrTableDescription& table,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    if (!table.GetGeneratedColumnGraph(pos, ctx)) {
+        return {};
+    }
+    TVector<TString> requested;
+    bool hasVirtual = false;
+    for (const auto& column : logicalColumns) {
+        requested.emplace_back(column.Value());
+        hasVirtual |= IsVirtualGeneratedColumn(table.Metadata->Columns.FindPtr(column.Value()));
+    }
+    if (!hasVirtual) {
         return logicalColumns;
     }
-
-    TVector<TCoAtom> physicalColumns;
-    THashSet<TStringBuf> physicalNames;
-
-    for (const auto& column : logicalColumns) {
-        if (!virtualNames.contains(column.Value())) {
-            physicalColumns.push_back(column);
-            physicalNames.insert(column.Value());
+    auto plan = BuildGeneratedColumnEvaluationPlan(table, requested, {}, pos, ctx);
+    if (!plan) {
+        return {};
+    }
+    if (plan->PhysicalColumns.empty()) {
+        if (table.Metadata->KeyColumnNames.empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "A constant generated projection requires a physical primary key"));
+            return {};
         }
+        plan->PhysicalColumns.push_back(table.Metadata->KeyColumnNames.front());
     }
-
-    for (const auto* column : virtualColumns) {
-        for (const auto& dependency : column->DefaultExpression->Dependencies) {
-            if (physicalNames.insert(dependency).second) {
-                physicalColumns.push_back(TCoAtom(ctx.NewAtom(pos, dependency)));
-            }
-        }
+    TVector<TCoAtom> physical;
+    for (const auto& name : plan->PhysicalColumns) {
+        physical.emplace_back(ctx.NewAtom(pos, name));
     }
-
-    if (physicalColumns.empty()) {
-        YQL_ENSURE(!table.Metadata->KeyColumnNames.empty());
-        physicalColumns.push_back(TCoAtom(ctx.NewAtom(pos, table.Metadata->KeyColumnNames.front())));
-    }
-
-    return Build<TCoAtomList>(ctx, pos)
-        .Add(physicalColumns)
-        .Done();
+    return Build<TCoAtomList>(ctx, pos).Add(physical).Done();
 }
 
-TExprBase BuildVirtualGeneratedColumnProjection(
-    const TExprBase& physicalRows,
-    const TCoAtomList& logicalColumns,
-    const TKikimrTableDescription& table,
-    TPositionHandle pos,
-    TExprContext& ctx)
+TMaybe<TExprBase> BuildVirtualGeneratedColumnProjection(
+    const TExprBase& physicalRows, const TCoAtomList& logicalColumns,
+    const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
 {
-    TVector<const TKikimrColumnMetadata*> virtualColumns;
-    THashSet<TStringBuf> virtualNames;
-
+    if (!table.GetGeneratedColumnGraph(pos, ctx)) {
+        return {};
+    }
+    TVector<TString> requested;
+    TVector<TString> virtualNames;
     for (const auto& column : logicalColumns) {
-        const auto* metadata = table.Metadata->Columns.FindPtr(column.Value());
-        if (IsVirtualGeneratedColumn(metadata)) {
-            virtualColumns.push_back(metadata);
-            virtualNames.insert(metadata->Name);
+        requested.emplace_back(column.Value());
+        if (IsVirtualGeneratedColumn(table.Metadata->Columns.FindPtr(column.Value()))) {
+            virtualNames.emplace_back(column.Value());
         }
     }
-
-    if (virtualColumns.empty()) {
+    if (virtualNames.empty()) {
         return physicalRows;
     }
-
-    auto row = Build<TCoArgument>(ctx, pos)
-        .Name("row")
-        .Done();
-    auto generated = BuildGeneratedColumnMembers(virtualColumns, row, pos, ctx);
-
-    TVector<TExprBase> members;
-    members.reserve(logicalColumns.Size());
-    size_t generatedIndex = 0;
-
-    for (const auto& column : logicalColumns) {
-        if (virtualNames.contains(column.Value())) {
-            const auto* columnType = table.GetColumnType(virtualColumns.at(generatedIndex)->Name);
-            YQL_ENSURE(columnType, "Unknown virtual generated column " << column.Value());
-
-            const auto generatedMember = generated.Members.at(generatedIndex++).Cast<TCoNameValueTuple>();
-            members.push_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name(column)
-                    .Value<TCoStrictCast>()
-                        .Value(generatedMember.Value().Cast())
-                        .Type(NCommon::BuildTypeExpr(pos, *columnType, ctx))
-                        .Build()
-                    .Done());
-        } else {
-            members.push_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name(column)
-                    .Value<TCoMember>()
-                        .Struct(row)
-                        .Name(column)
-                        .Build()
-                    .Done());
-        }
+    const auto plan = BuildGeneratedColumnEvaluationPlan(table, requested, {}, pos, ctx);
+    if (!plan) {
+        return {};
     }
-
-    YQL_ENSURE(generatedIndex == generated.Members.size());
-
+    auto row = Build<TCoArgument>(ctx, pos).Name("row").Done();
+    const auto generated = BuildGeneratedColumnMembers(*plan, virtualNames, row, table, pos, ctx);
+    if (!generated) {
+        return {};
+    }
+    THashMap<TStringBuf, TExprBase> generatedMembers;
+    for (const auto& member : generated->Members) {
+        generatedMembers.emplace(member.Cast<TCoNameValueTuple>().Name().Value(), member);
+    }
+    TVector<TExprBase> members;
+    for (const auto& column : logicalColumns) {
+        const auto generatedMember = generatedMembers.find(column.Value());
+        members.push_back(generatedMember != generatedMembers.end()
+            ? generatedMember->second
+            : TExprBase(Build<TCoNameValueTuple>(ctx, pos)
+                .Name(column)
+                .Value<TCoMember>().Struct(row).Name(column).Build()
+                .Done()));
+    }
     return Build<TCoMap>(ctx, pos)
         .Input(physicalRows)
-        .Lambda()
-            .Args({row})
-            .Body<TCoAsStruct>()
-                .Add(members)
-                .Build()
-            .Build()
+        .Lambda().Args({row}).Body<TCoAsStruct>().Add(members).Build().Build()
         .Done();
 }
 
-TExprBase BuildReadWithVirtualGeneratedColumns(
+TMaybe<TExprBase> BuildReadWithVirtualGeneratedColumns(
     const TCoAtomList& logicalColumns,
     const TKikimrTableDescription& table,
     TPositionHandle pos,
@@ -538,25 +611,20 @@ TExprBase BuildReadWithVirtualGeneratedColumns(
     const std::function<TExprBase(const TCoAtomList&)>& buildRead)
 {
     const auto physicalColumns = BuildPhysicalColumnsForVirtualGeneratedColumns(logicalColumns, table, pos, ctx);
-    return BuildVirtualGeneratedColumnProjection(buildRead(physicalColumns), logicalColumns, table, pos, ctx);
+    if (!physicalColumns) {
+        return {};
+    }
+    return BuildVirtualGeneratedColumnProjection(buildRead(*physicalColumns), logicalColumns, table, pos, ctx);
 }
 
-TExprBase BuildGeneratedDependencyRow(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
+TExprBase BuildGeneratedDependencyRow(const TGeneratedColumnEvaluationPlan& plan,
     const TStructExprType& updateStructType, const TExprBase& updateStruct, const TExprBase& rowArg,
     const TPositionHandle pos, TExprContext& ctx)
 {
-    THashSet<TString> deps;
-    for (const auto* colMeta : generatedColumns) {
-        deps.insert(colMeta->DefaultExpression->Dependencies.begin(), colMeta->DefaultExpression->Dependencies.end());
-    }
-
-    TVector<TString> sortedDeps(deps.begin(), deps.end());
-    std::ranges::sort(sortedDeps);
-
     TVector<TExprBase> members;
-    members.reserve(sortedDeps.size());
+    members.reserve(plan.PhysicalColumns.size());
 
-    for (const auto& dep : sortedDeps) {
+    for (const auto& dep : plan.PhysicalColumns) {
         TCoAtom depAtom(ctx.NewAtom(pos, dep));
 
         TExprBase valueSource = updateStructType.FindItem(dep)
@@ -576,12 +644,15 @@ TExprBase BuildGeneratedDependencyRow(const TVector<const TKikimrColumnMetadata*
     return Build<TCoAsStruct>(ctx, pos).Add(members).Done();
 }
 
-TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteTable& write, const TExprBase& input,
+TMaybe<TBuildWriteInputResult> ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteTable& write, const TExprBase& input,
     const TCoAtomList& inputColumns, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx, bool generatedLookup)
 {
+    if (!table.GetGeneratedColumnGraph(pos, ctx)) {
+        return {};
+    }
     auto generatedColumns = CollectStoredGeneratedColumns(table);
     if (generatedColumns.empty()) {
-        return { .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };
+        return TBuildWriteInputResult{ .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };
     }
 
     THashSet<TStringBuf> inputColumnsSet;
@@ -602,33 +673,46 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
     }
 
     if (tableOp == TYdbOperation::UpdateOn) {
-        TVector<const TKikimrColumnMetadata*> touched;
-        touched.reserve(generatedColumns.size());
-
-        for (const auto* colMeta : generatedColumns) {
-            const auto& deps = colMeta->DefaultExpression->Dependencies;
-            if (std::ranges::any_of(deps, [&](const TString& dep) { return inputColumnsSet.contains(dep); })) {
-                touched.push_back(colMeta);
+        THashSet<TString> changedColumns;
+        for (const auto& column : inputColumns) {
+            if (!table.GetKeyColumnIndex(TString(column.Value()))) {
+                changedColumns.emplace(column.Value());
             }
         }
-
-        generatedColumns.swap(touched);
-        if (generatedColumns.empty()) {
-            return { .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };
+        auto affected = CollectAffectedStoredGeneratedColumns(table, changedColumns, pos, ctx);
+        if (!affected) {
+            return {};
         }
+        generatedColumns = std::move(*affected);
+        if (generatedColumns.empty()) {
+            return TBuildWriteInputResult{ .Input=input, .Columns=inputColumns, .EmittedStreamLookup=false };
+        }
+    }
+
+    const auto outputColumns = GeneratedColumnNames(generatedColumns);
+    const auto plan = BuildGeneratedColumnEvaluationPlan(table, outputColumns,
+        THashSet<TString>(outputColumns.begin(), outputColumns.end()), pos, ctx);
+    if (!plan) {
+        return {};
     }
 
     if (generatedLookup && depsComeFromTable) {
-        auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet, generateColumnsIfInsert);
+        auto missingDeps = GetMissingStoredGeneratedDeps(*plan, inputColumnsSet, generateColumnsIfInsert);
         if (!missingDeps.empty()) {
-            auto [rewritten, columns] = BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns,
+            auto rewritten = BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, *plan, outputColumns,
                 missingDeps, generateColumnsIfInsert, table, WriteSkipsRowsAbsentFromTable(tableOp), pos, ctx);
-            return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=true };
+            if (!rewritten) {
+                return {};
+            }
+            return TBuildWriteInputResult{ .Input=rewritten->first, .Columns=rewritten->second, .EmittedStreamLookup=true };
         }
     }
 
-    auto [rewritten, columns] = BuildStoredGeneratedColumnsInline(input, inputColumns, generatedColumns, table, pos, ctx);
-    return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=false };
+    auto rewritten = BuildStoredGeneratedColumnsInline(input, inputColumns, *plan, outputColumns, table, pos, ctx);
+    if (!rewritten) {
+        return {};
+    }
+    return TBuildWriteInputResult{ .Input=rewritten->first, .Columns=rewritten->second, .EmittedStreamLookup=false };
 }
 
 }   // namespace NKikimr::NKqp::NOpt

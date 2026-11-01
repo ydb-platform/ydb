@@ -199,6 +199,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui64>, TabletId);
     // The sources order this cursor's position was taken in. See the proto field.
     YDB_ACCESSOR_DEF(std::optional<NKikimrKqp::TEvKqpScanCursor::ESourcesSorting>, SourcesSorting);
+    YDB_READONLY(bool, IndexMaybeInDictionaryCoordinates, false);
 
     virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const = 0;
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const = 0;
@@ -248,6 +249,7 @@ public:
         if (proto.HasSourcesSorting()) {
             SourcesSorting = proto.GetSourcesSorting();
         }
+        IndexMaybeInDictionaryCoordinates = proto.GetIndexMaybeInDictionaryCoordinates();
         return DoDeserializeFromProto(proto);
     }
 
@@ -259,6 +261,7 @@ public:
         if (SourcesSorting) {
             result.SetSourcesSorting(*SourcesSorting);
         }
+        result.SetIndexMaybeInDictionaryCoordinates(IndexMaybeInDictionaryCoordinates);
         DoSerializeToProto(result);
         return result;
     }

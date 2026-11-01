@@ -525,7 +525,12 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
         StoppingWorkers.erase(id);
         worker.ClearSession();
 
-        BootQueue.insert(id);
+        // The stop acknowledgement is lost with the session, nothing else completes the removal
+        if (RemoveQueue.contains(id)) {
+            RemoveWorker(id, ctx);
+        } else {
+            BootQueue.insert(id);
+        }
     }
 
     Sessions.erase(nodeId);

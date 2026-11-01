@@ -54,11 +54,12 @@ def _series_total_values(tracks: dict[str, list[float]]) -> list[float]:
 def _describe_distribution(values: list[float]) -> dict[str, float]:
     vals = [float(v or 0.0) for v in values]
     if not vals:
-        return {"max": 0.0, "p95": 0.0, "median": 0.0, "samples": 0.0}
+        return {"max": 0.0, "p95": 0.0, "median": 0.0, "avg": 0.0, "samples": 0.0}
     return {
         "max": float(max(vals)),
         "p95": _percentile(vals, 0.95),
         "median": _percentile(vals, 0.5),
+        "avg": float(sum(vals) / len(vals)),
         "samples": float(len(vals)),
     }
 
@@ -74,7 +75,7 @@ def _numeric_series(values: Any) -> list[float]:
 
 
 def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
-    """max / p95 / median of /proc samples (host), not the stacked test model."""
+    """max / p95 / median / average of /proc samples (host), not the stacked test model."""
     if not resources_overlay:
         return {}
     series = {
@@ -88,6 +89,46 @@ def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[st
         nums = _numeric_series(values)
         if nums:
             out[key] = _describe_distribution(nums)
+    host_signals = resources_overlay.get("host_resource_signals") or {}
+    for key, values in host_signals.items():
+        nums = _numeric_series(values)
+        if nums:
+            out[key] = _describe_distribution(nums)
+    return out
+
+
+def _measured_test_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """Summaries of the resources attributed specifically to test cgroups."""
+    layers = (resources_overlay or {}).get("measured_layers") or {}
+    tracks_by_metric = {
+        "cpu_cgroup": layers.get("cpu_tracks") or {},
+        "ram_cgroup": layers.get("ram_tracks") or {},
+        "disk_read_cgroup": layers.get("read_tracks") or {},
+        "disk_write_cgroup": layers.get("write_tracks") or {},
+    }
+    out: dict[str, Any] = {}
+    for key, tracks in tracks_by_metric.items():
+        if tracks:
+            out[key] = _describe_distribution(_series_total_values(tracks))
+
+    all_tracks = list(tracks_by_metric.values())
+    sample_count = max(
+        (len(values) for tracks in all_tracks for values in tracks.values()),
+        default=0,
+    )
+    if sample_count:
+        active = []
+        for index in range(sample_count):
+            active.append(float(sum(
+                1
+                for label in set().union(*(tracks.keys() for tracks in all_tracks))
+                if any(
+                    index < len(tracks.get(label, []))
+                    and float(tracks[label][index] or 0.0) > 0.0
+                    for tracks in all_tracks
+                )
+            )))
+        out["active_cgroups"] = _describe_distribution(active)
     return out
 
 
@@ -156,6 +197,7 @@ def _build_headline_stats(
         "tests": _describe_distribution(_series_total_values(tests_tracks_suite)),
         "total_duration_sec": duration_sec,
         **_host_resource_stats(resources_overlay),
+        **_measured_test_resource_stats(resources_overlay),
     }
 
 

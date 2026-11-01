@@ -8,7 +8,9 @@
 #include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
+#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ylimits.h>
@@ -193,9 +195,56 @@ namespace {
         return type == TABLET_TYPE ? &descriptor : nullptr;
     }
 
+    // The PARTITION leaves of the tables <database>/T<t>, tablets 1000 * (t + 1) + p
+    TPublicReport MakeGrid(ui32 tables, ui32 partitions, ui32 followerId = 0,
+                           const TPublicValues& values = TPublicValues(), const TString& database = DATABASE_PATH) {
+        TPublicReport report;
+        for (ui32 t = 0; t < tables; ++t) {
+            for (ui32 p = 0; p < partitions; ++p) {
+                report.Leaf(1000 * (t + 1) + p, followerId, values, database + "/T" + ToString(t));
+            }
+        }
+        return report;
+    }
+
+    // A limit that a fold by it restores within: bytes are at most 80% of it
+    ui64 RestoreLimitFor(ui64 bytes) {
+        return (bytes * 5 + 3) / 4;
+    }
+
+    // The tablet_id subgroups anywhere below the group
+    size_t CountTabletIdGroups(const NMonitoring::TDynamicCounters& group) {
+        size_t count = 0;
+        for (const auto& [key, value] : group.ReadSnapshot()) {
+            if (const auto* subgroup = dynamic_cast<const NMonitoring::TDynamicCounters*>(value.Get())) {
+                count += (key.LabelName == "tablet_id") + CountTabletIdGroups(*subgroup);
+            }
+        }
+        return count;
+    }
+
+    // The series ToJson writes, sized by their labels, a counter value per scalar and a bucket per histogram bucket
+    // with +Inf
+    ui64 SeriesBytes(const NMonitoring::TDynamicCounters& counters) {
+        NJson::TJsonValue parsed;
+        UNIT_ASSERT(NJson::ReadJsonTree(NMonitoring::ToJson(counters), &parsed));
+        ui64 bytes = 0;
+        for (const auto& sensor : parsed["sensors"].GetArray()) {
+            for (const auto& [name, value] : sensor["labels"].GetMap()) {
+                bytes += name.size() + value.GetString().size();
+            }
+            bytes += sensor.Has("hist")
+                ? (sensor["hist"]["bounds"].GetArray().size() + 1) * sizeof(NMonitoring::TBucket)
+                : sizeof(NMonitoring::TCounterForPtr::TValue);
+        }
+        return bytes;
+    }
+
     struct TProcessorFixture {
-        explicit TProcessorFixture(TDetailedMetricsDescriptorGetter getDescriptor = &GetDetailedMetricsDescriptor)
-            : Processor(CreateProcessorDatabaseMetricsAggregator(PublicRoot, DATABASE_PATH, getDescriptor))
+        explicit TProcessorFixture(NMonitoring::TDynamicCounterPtr budgetScope = nullptr,
+                                   const TString& database = DATABASE_PATH,
+                                   TDetailedMetricsDescriptorGetter getDescriptor = &GetDetailedMetricsDescriptor)
+            : Processor(CreateProcessorDatabaseMetricsAggregator(PublicRoot, database, budgetScope, getDescriptor))
         {
         }
 
@@ -214,6 +263,25 @@ namespace {
         void ApplyPublicNode(ui32 nodeId, const TPublicReport& leaders, const TPublicReport& followers = TPublicReport()) {
             Processor->ApplyFromNode(nodeId, false, leaders.Get());
             Processor->ApplyFromNode(nodeId, true, followers.Get());
+        }
+
+        void Tick(ui32 count = 1) {
+            for (ui32 i = 0; i < count; ++i) {
+                Processor->RecalculateAllCounters();
+            }
+        }
+
+        size_t CountTabletGroups() const {
+            return CountTabletIdGroups(*PublicRoot);
+        }
+
+        // Folded until the last of DETAILED_OUTPUT_RESTORE_TICKS ticks, which publishes the leaves
+        void AssertRestores(size_t tabletGroups) {
+            UNIT_ASSERT_VALUES_EQUAL(CountTabletGroups(), 0);
+            Tick(DETAILED_OUTPUT_RESTORE_TICKS - 1);
+            UNIT_ASSERT_VALUES_EQUAL(CountTabletGroups(), 0);
+            Tick();
+            UNIT_ASSERT_VALUES_EQUAL(CountTabletGroups(), tabletGroups);
         }
 
         TString DumpPublicSeries() const {
@@ -1752,7 +1820,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
     }
 
     Y_UNIT_TEST(DerivativeHistogramAccumulatesOverNodesAndIgnoresNonDerivative) {
-        TProcessorFixture fixture(&GetDerivativeHistogramDescriptor);
+        TProcessorFixture fixture(nullptr, DATABASE_PATH, &GetDerivativeHistogramDescriptor);
         const auto report = [](ui64 bucket, ui64 count) {
             TPublicValues values;
             values.Bucket(bucket, count).Mutable().MutableHistogram(PUBLIC_USED_CORE_PERCENTS)->ClearNonDerivative();
@@ -1775,5 +1843,258 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         // A histogram marked NonDerivative (as TPublicValues does) is ignored
         fixture.ApplyPublicNode(2, TPublicReport().Leaf(1000, 0, TPublicValues().Bucket(2, 7)));
         UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "1:5,4:1");
+    }
+
+    Y_UNIT_TEST(EstimateCountsLabelAndValueBytes) {
+        TProcessorFixture fixture;
+        const TString projectId = "proj1";
+        // Registered as the SVP does, so the series carry the prefix labels
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        root->GetSubgroup("host", "")->GetSubgroup("monitoring_project_id", projectId)
+            ->RegisterSubgroup("database", DATABASE_PATH, fixture.PublicRoot);
+        fixture.Processor->SetOutputLimit(Max<ui64>(),
+            {{"host", ""}, {"monitoring_project_id", projectId}, {"database", DATABASE_PATH}});
+        fixture.ApplyPublicNode(1, MakeGrid(2, 3).Table(TPublicValues(), OTHER_TABLE_PATH), MakeGrid(2, 1, 1));
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Processor->GetEstimatedOutputBytes(), SeriesBytes(*root));
+        // The real encoding adds its own overhead
+        UNIT_ASSERT_LE(fixture.Processor->GetEstimatedOutputBytes(), NMonitoring::ToJson(*root).size());
+    }
+
+    Y_UNIT_TEST(FoldsOverLimitAndRestoresAfterStableTicks) {
+        const auto leaders = MakeGrid(2, 3, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 7))
+            .Table(TPublicValues().Gauge(PUBLIC_ROW_COUNT, 9), OTHER_TABLE_PATH);
+        const auto followers = MakeGrid(2, 1, 1);
+        TProcessorFixture reference;
+        reference.ApplyPublicNode(1, leaders, followers);
+        reference.Tick();
+
+        // A report decides nothing: the next tick folds
+        TProcessorFixture fixture;
+        fixture.Processor->SetOutputLimit(0, {});
+        fixture.ApplyPublicNode(1, leaders, followers);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CountTabletGroups(), reference.CountTabletGroups());
+
+        const ui64 estimate = fixture.Processor->GetEstimatedOutputBytes();
+        UNIT_ASSERT_VALUES_EQUAL(estimate, reference.Processor->GetEstimatedOutputBytes());
+        const ui64 restoreLimit = RestoreLimitFor(estimate);
+        const auto assertFolded = [&](ui32 ticks) {
+            fixture.Tick(ticks);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.CountTabletGroups(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Processor->GetEstimatedOutputBytes(), estimate);
+        };
+        const auto assertRestores = [&] {
+            assertFolded(DETAILED_OUTPUT_RESTORE_TICKS - 1);
+            fixture.Tick();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.DumpPublicSeries(), reference.DumpPublicSeries());
+        };
+        assertFolded(DETAILED_OUTPUT_RESTORE_TICKS);
+
+        // Folded by the limit, the output stays folded up to the limit itself
+        fixture.Processor->SetOutputLimit(estimate, {});
+        assertFolded(2 * DETAILED_OUTPUT_RESTORE_TICKS);
+
+        // A leaf outage neither counts nor resets the fitting ticks
+        fixture.Processor->SetOutputLimit(restoreLimit, {});
+        assertFolded(DETAILED_OUTPUT_RESTORE_TICKS - 2);
+        fixture.Processor->DropNode(1);
+        fixture.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        fixture.ApplyPublicNode(1, leaders, followers);
+        assertFolded(1);
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DumpPublicSeries(), reference.DumpPublicSeries());
+
+        // Published, the limit itself still fits
+        fixture.Processor->SetOutputLimit(estimate, {});
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.DumpPublicSeries(), reference.DumpPublicSeries());
+
+        // A tick over the limit resets the fitting ticks
+        fixture.Processor->SetOutputLimit(estimate - 1, {});
+        assertFolded(1);
+        fixture.Processor->SetOutputLimit(restoreLimit, {});
+        assertFolded(DETAILED_OUTPUT_RESTORE_TICKS - 1);
+        fixture.Processor->SetOutputLimit(estimate - 1, {});
+        assertFolded(1);
+        fixture.Processor->SetOutputLimit(restoreLimit, {});
+        assertRestores();
+    }
+
+    Y_UNIT_TEST(FoldKeepsRollupAndLeafStateContinuous) {
+        TProcessorFixture reference;
+        TProcessorFixture limited;
+        const auto values = [](ui64 cpu) {
+            return TPublicValues().Gauge(PUBLIC_ROW_COUNT, 7).Rate(PUBLIC_CONSUMED_CPU_US, cpu).Bucket(1, 1);
+        };
+        const auto step = [&](const TPublicReport& leaders, const TPublicReport& followers, ui32 ticks = 1) {
+            for (auto* fixture : {&reference, &limited}) {
+                fixture->ApplyPublicNode(1, leaders, followers);
+                fixture->Tick(ticks);
+            }
+        };
+        const auto rollup = [](TProcessorFixture& fixture, const TString& name) {
+            return GetMappedCounterValue(FindPublicTableGroup(fixture.PublicRoot), name);
+        };
+
+        step(TPublicReport().Leaf(1000, 0, values(100)), TPublicReport().Leaf(1000, 1, values(10)));
+        UNIT_ASSERT_VALUES_EQUAL(limited.DumpPublicSeries(), reference.DumpPublicSeries());
+
+        // Folded: a new leaf and new deltas still reach the rollup
+        limited.Processor->SetOutputLimit(0, {});
+        step(TPublicReport().Leaf(1000, 0, values(200)).Leaf(1001, 0, values(300)), TPublicReport().Leaf(1000, 1, values(20)));
+        UNIT_ASSERT_VALUES_EQUAL(limited.CountTabletGroups(), 0);
+        for (const TString name : {"table.datashard.row_count", "table.datashard.consumed_cpu_us"}) {
+            UNIT_ASSERT_VALUES_EQUAL_C(rollup(limited, name), rollup(reference, name), name);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(FindPublicTableGroup(limited.PublicRoot)),
+                                 DumpNonEmptyBuckets(FindPublicTableGroup(reference.PublicRoot)));
+
+        // Restored: the leaves resume their cumulative values
+        limited.Processor->SetOutputLimit(Max<ui64>(), {});
+        step(TPublicReport().Leaf(1000, 0, values(400)).Leaf(1001, 0, values(0)), TPublicReport().Leaf(1000, 1, values(40)),
+             DETAILED_OUTPUT_RESTORE_TICKS);
+        UNIT_ASSERT_VALUES_EQUAL(limited.DumpPublicSeries(), reference.DumpPublicSeries());
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicLeafGroup(limited.PublicRoot, 1000, 0),
+                                                       "table.datashard.partition.consumed_cpu_us"), 700);
+    }
+
+    Y_UNIT_TEST(ShapeChangesFoldAndRestoreThroughEstimateOnly) {
+        TProcessorFixture fixture;
+        const auto limitTo = [&](ui64 maxBytes) {
+            fixture.Processor->SetOutputLimit(maxBytes, {{"host", ""}});
+        };
+        limitTo(Max<ui64>());
+        fixture.ApplyPublicNode(1, MakeGrid(1, 3));
+        // 3 partitions restore within it
+        const ui64 limit = RestoreLimitFor(fixture.Processor->GetEstimatedOutputBytes());
+        limitTo(limit);
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CountTabletGroups(), 3);
+
+        // A split folds and stays folded, a merge restores
+        fixture.ApplyPublicNode(1, MakeGrid(1, 6));
+        UNIT_ASSERT_GT(fixture.Processor->GetEstimatedOutputBytes(), limit);
+        fixture.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CountTabletGroups(), 0);
+        fixture.ApplyPublicNode(1, MakeGrid(1, 3));
+        fixture.AssertRestores(3);
+
+        // PARTITION -> TABLE -> PARTITION and a rename while folded
+        limitTo(0);
+        fixture.Tick();
+        fixture.ApplyPublicNode(1, TPublicReport().Table(TPublicValues().Gauge(PUBLIC_ROW_COUNT, 5), DATABASE_PATH + "/T0"));
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(fixture.PublicRoot, "T0"),
+                                                       "table.datashard.row_count"), 5);
+        fixture.ApplyPublicNode(1, MakeGrid(1, 3));
+        fixture.ApplyPublicNode(1, TPublicReport().Leaf(1000, 0, TPublicValues(), DATABASE_PATH + "/Renamed"));
+        UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot, "T0"));
+        limitTo(Max<ui64>());
+        fixture.AssertRestores(1);
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0, "Renamed"));
+
+        // Nothing left, no drift: the prefix term is gone too
+        fixture.Processor->DropNode(1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Processor->GetEstimatedOutputBytes(), 0);
+    }
+
+    Y_UNIT_TEST(ScopedAggregatorStartsFolded) {
+        TProcessorFixture fixture(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        // The start fold waits for the leaves, however long the aggregator was empty
+        fixture.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        fixture.ApplyPublicNode(1, MakeGrid(1, 3, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 7)));
+        fixture.AssertRestores(3);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0, "T0"),
+                                                       "table.datashard.partition.row_count"), 7);
+
+        // The start fold restores at the limit itself
+        TProcessorFixture restarted(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        restarted.ApplyPublicNode(1, MakeGrid(1, 3));
+        restarted.Processor->SetOutputLimit(restarted.Processor->GetEstimatedOutputBytes(), {});
+        restarted.AssertRestores(3);
+
+        // A start over the limit is a fold by the limit: it restores at 80% of it
+        TProcessorFixture over(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        over.ApplyPublicNode(1, MakeGrid(1, 3));
+        const ui64 estimate = over.Processor->GetEstimatedOutputBytes();
+        over.Processor->SetOutputLimit(estimate - 1, {});
+        over.Tick();
+        over.Processor->SetOutputLimit(estimate, {});
+        over.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        UNIT_ASSERT_VALUES_EQUAL(over.CountTabletGroups(), 0);
+        over.Processor->SetOutputLimit(RestoreLimitFor(estimate), {});
+        over.AssertRestores(3);
+    }
+
+    Y_UNIT_TEST(SharedBudgetFoldsLargestDatabaseFirst) {
+        const auto scope = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        const auto report = [](TProcessorFixture& fixture, const TString& database, ui32 partitions) {
+            fixture.ApplyPublicNode(1, MakeGrid(1, partitions, 0, TPublicValues(), database));
+            return fixture.Processor->GetEstimatedOutputBytes();
+        };
+        TProcessorFixture a(scope, "/Root/a");
+        TProcessorFixture b(scope, "/Root/b");
+        const auto limitTo = [&](ui64 maxBytes) {
+            a.Processor->SetOutputLimit(maxBytes, {});
+            b.Processor->SetOutputLimit(maxBytes, {});
+        };
+        const auto tick = [&](ui32 count) {
+            for (ui32 i = 0; i < count; ++i) {
+                a.Tick();
+                b.Tick();
+            }
+        };
+        const auto assertLeaves = [&](size_t expectedA, size_t expectedB) {
+            UNIT_ASSERT_VALUES_EQUAL(a.CountTabletGroups(), expectedA);
+            UNIT_ASSERT_VALUES_EQUAL(b.CountTabletGroups(), expectedB);
+        };
+        const auto restoreAll = [&](size_t expectedA, size_t expectedB) {
+            limitTo(Max<ui64>());
+            tick(DETAILED_OUTPUT_RESTORE_TICKS);
+            assertLeaves(expectedA, expectedB);
+        };
+
+        // The larger database folds, the smaller one keeps its leaves
+        const ui64 a4 = report(a, "/Root/a", 4);
+        const ui64 b2 = report(b, "/Root/b", 2);
+        limitTo(a4 + b2 - 1);
+        tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        assertLeaves(0, 2);
+
+        // b's growth folds the larger a at a's next tick, not at b's report or tick
+        restoreAll(4, 2);
+        limitTo(a4 + b2);
+        report(b, "/Root/b", 3);
+        assertLeaves(4, 3);
+        b.Tick();
+        assertLeaves(4, 3);
+        a.Tick();
+        assertLeaves(0, 3);
+
+        // A tie folds the lesser database path
+        report(a, "/Root/a", 2);
+        report(b, "/Root/b", 2);
+        restoreAll(2, 2);
+        limitTo(2 * b2 - 1);
+        tick(1);
+        assertLeaves(0, 2);
+
+        // c publishes rollups only, which count for every member; its leave frees them
+        auto c = MakeHolder<TProcessorFixture>(scope, "/Root/c");
+        TPublicReport rollupsOnly;
+        for (ui32 t = 0; t < 20; ++t) {
+            rollupsOnly.Table(TPublicValues(), "/Root/c/T" + ToString(t));
+        }
+        c->ApplyPublicNode(1, rollupsOnly);
+        const ui64 rollups = c->Processor->GetEstimatedOutputBytes();
+        restoreAll(2, 2);
+        const ui64 limit = 2 * b2 + rollups - 1;
+        limitTo(limit);
+        tick(1);
+        assertLeaves(0, 2);
+        UNIT_ASSERT_LE(2 * b2, limit - limit / 5);
+        c.Reset();
+        tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        assertLeaves(2, 2);
     }
 } // Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest)

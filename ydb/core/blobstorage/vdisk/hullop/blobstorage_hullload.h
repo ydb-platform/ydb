@@ -10,28 +10,21 @@
 namespace NKikimr {
 
     template<typename TMemRec>
-    struct TSmallBlobChunkIdxExtractor {
-        template<typename TIterator>
-        TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& /*it*/) {
-            return {};
-        }
-    };
+    TMaybe<TChunkIdx> ExtractSmallBlobChunkIdx(const TMemRec& /*memRec*/) {
+        return {};
+    }
 
-    template<>
-    struct TSmallBlobChunkIdxExtractor<TMemRecLogoBlob> {
-        template<typename TIterator>
-        TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& it) {
-            if (it.GetMemRec().GetType() == TBlobType::DiskBlob) {
-                TDiskDataExtractor extr;
-                it.GetDiskData(&extr);
-                const TDiskPart& part = extr.SwearOne();
-                if (!part.Empty()) {
-                    return part.ChunkIdx;
-                }
+    inline TMaybe<TChunkIdx> ExtractSmallBlobChunkIdx(const TMemRecLogoBlob& memRec) {
+        if (memRec.GetType() == TBlobType::DiskBlob) {
+            TDiskDataExtractor extr;
+            memRec.GetDiskData(&extr, nullptr); // a DiskBlob does not refer to the outbound
+            const TDiskPart& part = extr.SwearOne();
+            if (!part.Empty()) {
+                return part.ChunkIdx;
             }
-            return {};
         }
-    };
+        return {};
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // THullSegLoaded
@@ -127,67 +120,31 @@ namespace NKikimr {
             TThis::Become(&TThis::StateFunc);
         }
 
-        // loaded index to string
-        TString ToString() const {
-            TStringStream str;
-            {
-                str << "LOADER(" << (const void*)this << "): INDEX:";
-                typename TLevelSegment::TMemIterator it(LevelSegment);
-                it.SeekToFirst();
-                while (it.IsValid()) {
-                    str << " " << it.GetKey().ToString();
-                }
-            }
-            {
-                const char *b = LevelSegment->LoadedOutbound.Data();
-                const char *e = b + LevelSegment->LoadedOutbound.Size();
-                const TDiskPart *begin = (const TDiskPart *)b;
-                const TDiskPart *end = (const TDiskPart *)e;
-                str << " OUTBOUND:";
-                if (begin == end)
-                    str << " empty";
-                else {
-                    for (const TDiskPart *i = begin; i != end; i++) {
-                        str << " " << i->ToString();
-                    }
-                }
-            }
-            return str.Str();
-        }
-
         void Finish(const TActorContext &ctx) {
             Y_VERIFY_S(RestToReadIndex == 0 && RestToReadOutbound == 0, VCtx->VDiskLogPrefix);
+
+            // add data chunks; walk the linear index before it is turned into the in-memory form
+            const typename TLevelSegment::TRec* prev = nullptr;
+            for (const auto& rec : LinearIndex) {
+                if (const TMaybe<TChunkIdx> chunkIdx = ExtractSmallBlobChunkIdx(rec.GetMemRec())) {
+                    Chunks.Add(*chunkIdx);
+                }
+
+                // ensure that keys are stored in strictly increasing order
+                if (prev) {
+                    const TKey prevKey = prev->GetKey();
+                    const TKey key = rec.GetKey();
+                    Y_VERIFY_S(prevKey < key && !prevKey.IsSameAs(key), VCtx->VDiskLogPrefix);
+                }
+                prev = &rec;
+            }
+            Chunks.FillInVector(LevelSegment->AllChunks);
 
             if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
                 LevelSegment->LoadLinearIndex(LinearIndex);
             } else {
                 LevelSegment->LoadedIndex.swap(LinearIndex);
             }
-
-            // add data chunks to ChunksBuilder
-            typedef typename TLevelSegment::TMemIterator TMemIterator;
-            TSmallBlobChunkIdxExtractor<TMemRec> chunkIdxExtr;
-            TMemIterator it(LevelSegment.Get());
-            it.SeekToFirst();
-            bool first = true;
-            TKey prevKey;
-            while (it.Valid()) {
-                if (const TMaybe<TChunkIdx> chunkIdx = chunkIdxExtr.ExtractChunkIdx(it)) {
-                    Chunks.Add(*chunkIdx);
-                }
-
-                // ensure that keys are stored in strictly increasing order
-                const TKey& key = it.GetCurKey();
-                if (first) {
-                    first = false;
-                } else {
-                    Y_VERIFY_S(prevKey < key && !prevKey.IsSameAs(key), VCtx->VDiskLogPrefix);
-                }
-                prevKey = key;
-
-                it.Next();
-            }
-            Chunks.FillInVector(LevelSegment->AllChunks);
 
             ctx.Send(Recipient, new THullSegLoaded<TLevelSegment>(LevelSegment));
             TThis::Die(ctx);

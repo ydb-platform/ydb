@@ -302,6 +302,8 @@ message TEvDescribeReplicationResult {
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
     optional TReplicationStats Stats = 7;
     optional TAvailabilityPeriod AvailabilityPeriod = 8;
+    optional Ydb.Replication.DescribeReplicationResult.Transactions Transactions = 9;
+    optional Ydb.Replication.DescribeReplicationResult.ApplyStatus ApplyStatus = 10;
 }
 
 message TControllerIdentity {
@@ -479,6 +481,8 @@ message TEvWorkerStatus {
     optional uint32 LagMilliSeconds = 5;
     optional TWorkerStats Stats = 6;
     optional uint64 SourceCommittedOffset = 7;
+    // Informational sample, sent together with periodic lag reports.
+    optional bool InflightBatch = 8;
 }
 
 message TEvWorkerDataEnd {

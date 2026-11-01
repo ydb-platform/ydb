@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/virtual_timestamp.h>
+
 #include <optional>
 
 #include <util/datetime/base.h>
@@ -121,6 +123,26 @@ private:
 
 class TReplicationDescription {
 public:
+    struct TAssignedTransaction {
+        // Exclusive upper source version of the commit interval.
+        NScheme::TVirtualTimestamp UpperBoundBarrier;
+        // Write transaction ID on the destination.
+        uint64_t WriteTxId = 0;
+    };
+
+    struct TApplyStatus {
+        uint64_t Workers = 0;
+        uint64_t InflightWorkers = 0;
+        uint64_t UnknownWorkers = 0;
+    };
+
+    struct TTransactions {
+        // Both lists are ordered by interval version.
+        std::vector<TAssignedTransaction> Assigned;
+        // Versions queued for assignment; reconstructed from worker requests after restart.
+        std::vector<NScheme::TVirtualTimestamp> Pending;
+    };
+
     struct TItem {
         uint64_t Id;
         std::string SrcPath;
@@ -160,6 +182,15 @@ public:
     EConsistencyLevel GetConsistencyLevel() const;
     const TGlobalConsistency& GetGlobalConsistency() const;
 
+    // Current assigned global transactions and versions queued for assignment.
+    // Missing means unavailable; empty lists do not imply that replication caught up.
+    const std::optional<TTransactions>& GetTransactions() const;
+
+    // Last reported ROW-mode activity, independently of IncludeStats.
+    // Missing or expired worker reports are counted as unknown. Values may lag
+    // behind current activity and do not indicate that replication caught up.
+    const std::optional<TApplyStatus>& GetApplyStatus() const;
+
     EState GetState() const;
     const TRunningState& GetRunningState() const;
     const TErrorState& GetErrorState() const;
@@ -171,6 +202,8 @@ private:
     std::vector<TItem> Items_;
     EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
     std::optional<TDuration> AvailabilityPeriod_;
+    std::optional<TTransactions> Transactions_;
+    std::optional<TApplyStatus> ApplyStatus_;
 
     std::variant<
         TRowConsistency,

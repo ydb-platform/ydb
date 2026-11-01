@@ -197,16 +197,21 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     }
 }
 
-void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
-    if (context.GetActualInstant() < NextActualizations) {
+void TGranuleMeta::BuildActualizationTasks(
+    NActualizer::TTieringProcessContext& context, const TDuration tieringDelay, NActualizer::EActualizationScope scope) const {
+    // Only tiering uses the delay; MoveData runs on the driver's cadence.
+    const bool isTieringPass = (scope != NActualizer::EActualizationScope::MoveDataOnly);
+    if (isTieringPass && context.GetActualInstant() < NextActualizations) {
         YDB_LOG_DEBUG("",
             {"event", "skip_actualization"},
             {"waiting", NextActualizations - context.GetActualInstant()});
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
-    ActualizationIndex->ExtractActualizationTasks(context, extTasks);
-    NextActualizations = context.GetActualInstant() + actualizationLag;
+    ActualizationIndex->ExtractActualizationTasks(context, extTasks, scope);
+    if (isTieringPass) {
+        NextActualizations = context.GetActualInstant() + tieringDelay;
+    }
 }
 
 void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,

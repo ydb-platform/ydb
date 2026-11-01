@@ -329,6 +329,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void FillReplicationConfig(NKikimrSchemeOp::TTableReplicationConfig& replicationConfig) const {
         NController::FillReplicationConfig(replicationConfig, Mode, Consistency);
+        if (AssignOwner) {
+            PathId.ToProto(replicationConfig.MutableOwner());
+        }
     }
 
     void AllocateTxId() {
@@ -410,10 +413,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void PrepareAttachment() {
         NeedToCheck = true;
-        if (PendingDstPathId) {
-            return AllocateTxId();
-        }
-        // Persist the path before either removing indexes or making it read-only.
+        // A saved path may belong to a failed attempt. Persist Attaching again
+        // before either removing indexes or making the table read-only so DONE
+        // and DROP wait for this attempt too.
         PendingDstPathId = DstPathId;
         Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
         Become(&TThis::StateWaitForPrepareAttachDstResult);
@@ -545,18 +547,27 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-            for (const auto& index : desc.GetTable().GetTableIndexes()) {
-                if (ShouldDropVectorIndex(index)) {
-                    return PrepareDropIndex(index, record);
+            const auto& config = desc.GetTable().GetReplicationConfig();
+            // Claim a foreign-owned table through ALTER before changing its indexes.
+            if (!config.HasOwner() || TPathId::FromProto(config.GetOwner()) == PathId) {
+                for (const auto& index : desc.GetTable().GetTableIndexes()) {
+                    if (ShouldDropVectorIndex(index)) {
+                        return PrepareDropIndex(index, record);
+                    }
                 }
             }
-            if (InitialScan || AttachmentComplete) {
+            if (CanUseReplica(desc.GetTable()) && (InitialScan || AttachmentComplete)) {
                 return Success();
+            }
+            if (InitialScan) {
+                return Error(NKikimrScheme::StatusPreconditionFailed, "Existing table is not owned by this replication");
             }
 
             // Readonly metadata is published before destination shards finish
             // the ALTER. A recovered/uncertain attachment needs a serialized
             // replacement ALTER and its completion, even if mode already matches.
+            AssignOwner = desc.GetTable().GetReplicationConfig().HasOwner()
+                || (AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership() && !IsReplica(desc.GetTable()));
             Attaching = true;
             return PrepareAttachment();
         }
@@ -605,6 +616,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
+    }
+
+    bool CanUseReplica(const NKikimrSchemeOp::TTableDescription& table) const {
+        const auto& config = table.GetReplicationConfig();
+        // Ownerless replicas retain legacy behavior and remain unclaimed.
+        return IsReplica(table) && (!config.HasOwner()
+            || TPathId::FromProto(config.GetOwner()) == PathId);
     }
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
@@ -857,6 +875,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             return;
         }
 
+        if (Kind == TReplication::ETargetKind::IndexTable && !CanUseReplica(desc.GetPathDescription().GetTable())) {
+            return Error(NKikimrScheme::StatusPreconditionFailed, "Index table is not owned by this replication");
+        }
         DstPathId = ev->Get()->PathId;
         return Success();
     }
@@ -1000,6 +1021,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
+        AssignOwner = AppData()->FeatureFlags.GetEnableAsyncReplicationTableOwnership();
         // DONE and DROP finish the pending attachment so it can be detached locally.
         if (PendingDstPathId && Cleanup) {
             return AllocateTxId();
@@ -1059,6 +1081,7 @@ private:
     bool NeedToCheck = false;
     bool Attaching = false;
     bool AttachmentComplete = false;
+    bool AssignOwner = false;
     ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TPathId PendingDstPathId;

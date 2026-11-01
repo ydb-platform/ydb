@@ -24,11 +24,18 @@ namespace NKikimr {
         const TVDiskEternalGuid Guid;
         // Our confidence about given Guid
         const ESyncState State;
+        const NKikimrBlobStorage::TSyncGuidHistory History;
+        const NKikimrBlobStorage::TSyncGuidWitness RecoveredGuid;
+        const bool HasHistory;
 
-        TEvVDiskGuidObtained(const TVDiskID &vdisk, TVDiskEternalGuid guid, ESyncState state)
+        TEvVDiskGuidObtained(const TVDiskID &vdisk, TVDiskEternalGuid guid, ESyncState state,
+                const NKikimrBlobStorage::TEvVSyncGuidResult& record)
             : VDiskId(vdisk)
             , Guid(guid)
             , State(state)
+            , History(record.GetGuidHistory())
+            , RecoveredGuid(record.GetRecoveredGuid())
+            , HasHistory(record.HasGuidHistory())
         {
             Y_ABORT_UNLESS(!(State == TSyncVal::Final && Guid == TVDiskEternalGuid()));
         }
@@ -54,6 +61,7 @@ namespace NKikimr {
                                              const TVDiskID &selfVDiskId,
                                              const TVDiskID &targetVDiskId,
                                              const TActorId &targetServiceId,
-                                             const TActorId &notifyId);
+                                             const TActorId &notifyId,
+                                             bool readHistory = false);
 
 } // NKikimr

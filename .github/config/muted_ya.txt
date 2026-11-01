@@ -1,4 +1,3 @@
-ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
@@ -48,7 +47,6 @@ ydb/tests/functional/audit test_canonical_records.py.test_create_drop_and_alter_
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealOverrides.test_state_storage
-ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_name_with_symbols

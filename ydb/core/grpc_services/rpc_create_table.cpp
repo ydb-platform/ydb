@@ -351,7 +351,7 @@ private:
         Ydb::Table::CreateTableRequest requestWithNormalizedPaths;
         if (req->has_ttl_settings() && req->ttl_settings().has_tiered_ttl()) {
             requestWithNormalizedPaths.CopyFrom(*req);
-            ResolveTtlStoragePaths(*requestWithNormalizedPaths.mutable_ttl_settings(), *Request_);
+            NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_ttl_settings(), *Request_);
             req = &requestWithNormalizedPaths;
         }
 

@@ -6,7 +6,7 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
-#include <util/generic/yexception.h>
+#include <util/datetime/base.h>
 
 #include <cstdlib>
 #include <string>
@@ -19,8 +19,7 @@ namespace {
 
     template <typename TResult>
     TResult Success(NThreading::TFuture<TResult> future) {
-        Y_ENSURE(future.Wait(TDuration::Seconds(30)), "Request timed out");
-        auto result = future.ExtractValueSync();
+        auto result = future.ExtractValue(TDuration::Seconds(30));
         NStatusHelpers::ThrowOnError(result);
         return result;
     }
@@ -60,16 +59,12 @@ TEST(RelativeDatabase, RepeatedSessionsAndSlashlessResources) {
     const char* configuredDatabase = std::getenv("YDB_DATABASE");
     ASSERT_NE(endpoint, nullptr);
     ASSERT_NE(configuredDatabase, nullptr);
-    std::string database = configuredDatabase;
-    ASSERT_FALSE(database.empty());
-    if (database.front() != '/') {
-        database.insert(database.begin(), '/');
-    }
-    const std::string root = database.substr(1, database.find('/', 1) - 1);
-    const std::string boundary = root + "2";
-    const char* token = std::getenv("YDB_TOKEN");
+    const std::string database = configuredDatabase;
+    ASSERT_EQ(database, "/Root/mydb");
+    const std::string root = "Root";
+    const std::string boundary = "Root2";
     const auto makeDriver = [&](const std::string& spelling) {
-        return TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase(spelling).SetAuthToken(token ? token : "").SetDiscoveryMode(EDiscoveryMode::Sync));
+        return TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase(spelling).SetDiscoveryMode(EDiscoveryMode::Sync));
     };
 
     auto driver = makeDriver(database);

@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 import ydb
 
 from common import BridgeKiKiMRTest
@@ -110,3 +113,32 @@ class TestMixedStorageDatabases(BridgeKiKiMRTest):
             assert [(row.id, row.value) for row in rows] == [(1, "before-promotion"), (2, "after-promotion")]
             self.cluster.alter_database(f"/Root/{kind}", storage_units_to_add={kind: 1})
         self.check_pools(2)
+
+    def test_database_bridge_mode(self):
+        self.execute("bridged", "CREATE TABLE data (id Uint64, value Utf8, PRIMARY KEY(id));", scheme=True)
+        self.execute("bridged", 'UPSERT INTO data (id, value) VALUES (1u, "before-conversion");')
+        node = self.cluster.nodes[1]
+        env = os.environ.copy()
+        env['YDB_TOKEN'] = 'root@builtin'
+        cli = [self.configurator.get_ydb_cli_path(), '-e', f'grpc://{node.host}:{node.port}', '-y']
+        operation = ['admin', 'cluster', 'bridge', 'set-database-mode']
+        missing_target = subprocess.run(cli + ['-d', '/Root'] + operation + ['--bridged'],
+                                        capture_output=True, env=env, timeout=10)
+        assert missing_target.returncode != 0
+        assert b'target-database' in missing_target.stderr, missing_target.stderr
+        operation += ['--target-database', '/Root/bridged']
+        original = {pool.Name: pool for pool in self.cluster.client.read_storage_pools()}
+        untouched = original['/Root/ordinary:ordinary']
+        pool_id = original['/Root/bridged:bridged'].StoragePoolId
+
+        for options, bridged, connection in ((['--ordinary', '--retain-pile', 'r1'], False, ['-d', '/Root']),
+                                             (['--bridged'], True, [])):
+            result = subprocess.run(cli + connection + operation + options, capture_output=True, env=env, timeout=120)
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            pools = {pool.Name: pool for pool in self.cluster.client.read_storage_pools()}
+            assert pools['/Root/bridged:bridged'].BridgeMode == bridged
+            assert pools['/Root/bridged:bridged'].StoragePoolId == pool_id
+            assert pools['/Root/ordinary:ordinary'] == untouched
+            self.execute("bridged", f'UPSERT INTO data (id, value) VALUES (2u, "bridged={bridged}");')
+            rows = self.execute("bridged", "SELECT id, value FROM data WHERE id = 1u;")[0].rows
+            assert [(row.id, row.value) for row in rows] == [(1, "before-conversion")]

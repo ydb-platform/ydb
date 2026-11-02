@@ -10258,6 +10258,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             });
         }
 
+        // the switchover has finished: the pile is the primary one, and nothing is being promoted
+        void SetPrimary(ui32 pile) {
+            UpdateBridgeInfo([pile](std::shared_ptr<TBridgeInfo> newState) {
+                for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                    newState->Piles[i].IsPrimary = i == pile;
+                    newState->Piles[i].IsBeingPromoted = false;
+                }
+            });
+        }
+
         void SetPileState(ui32 pile, NKikimrBridge::TClusterState::EPileState state) {
             UpdateBridgeInfo([pile, state](std::shared_ptr<TBridgeInfo> newState) {
                 newState->Piles[pile].State = state;
@@ -10675,6 +10685,49 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // just none in pile 0
         UNIT_ASSERT_C(WaitUntil(runtime, [&] { return tabletsInPile(1) == NUM_TABLETS; }),
             "tablets are left in the drained pile");
+    }
+
+    // the pile turning HOT_STANDBY stays connected, so its tablets are not restarted, but they are moved out of it
+    Y_UNIT_TEST(TestBridgeHotStandbyDrainsPile) {
+        static constexpr ui32 NUM_NODES = 4;
+        static constexpr ui32 NUM_TABLETS = 4;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true, 2);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        std::vector<ui64> tablets;
+        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i,
+                TTabletTypes::Dummy, BINDED_CHANNELS));
+            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true));
+            MakeSureTabletIsUp(runtime, tablets.back(), 0);
+        }
+
+        // nodes of the even indexes belong to pile 0
+        auto pileOf = [&](ui32 nodeId) { return (nodeId - runtime.GetNodeId(0)) % 2; };
+        auto tabletsInPile = [&](ui32 pile) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto *response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            ui32 num = 0;
+            for (const auto& tablet : response->Record.GetTablets()) {
+                num += std::ranges::find(tablets, tablet.GetTabletID()) != tablets.end() && tablet.GetNodeID() &&
+                    pileOf(tablet.GetNodeID()) == pile;
+            }
+            return num;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(0), NUM_TABLETS);
+
+        // pile 1 has become the primary one, and the former primary pile goes standby with the tablets left in it
+        bridge.SetPrimary(1);
+        bridge.SetPileState(0, NKikimrBridge::TClusterState::HOT_STANDBY);
+        UNIT_ASSERT_C(WaitUntil(runtime, [&] { return tabletsInPile(1) == NUM_TABLETS; }),
+            "tablets are left in the HOT_STANDBY pile");
     }
 
     // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later

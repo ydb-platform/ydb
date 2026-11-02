@@ -39,7 +39,7 @@ ANALYZE orders SAMPLE 0.1;
 
 To collect multi-column statistics, add [STATISTICS](create_table/statistics.md) with the required column list to the table definition. For an existing table, use [ALTER TABLE](alter_table/statistics.md). When running `ANALYZE`, include every column in that set or omit the column list.
 
-## Sampling
+## Sampling {#sampling}
 
 To collect approximate statistics from a sample, add `SAMPLE` with a rate below `1`.
 

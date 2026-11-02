@@ -15,6 +15,7 @@
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/backup/proto/proto.h>
@@ -24,8 +25,6 @@
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
-
-#include <google/protobuf/text_format.h>
 
 #include <util/generic/hash_set.h>
 #include <util/stream/file.h>
@@ -671,9 +670,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             item.CreationQuery = content;
         } else if (IsKesus(SchemeKey)) {
             Ydb::Coordination::CreateNodeRequest request;
-            google::protobuf::TextFormat::Parser parser;
-            // Unknown fields must not turn an unsupported backup into a default node.
-            if (content.empty() || !parser.ParseFromString(content, &request)) {
+            if (content.empty() || !NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST,
                     TStringBuilder() << SchemeKey << ": cannot parse coordination node scheme");
             }
@@ -763,24 +760,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
     }
 
-    static bool ValidateKesusMetric(const Ydb::RateLimiter::MeteringConfig::Metric& metric, TString& error) {
-        static const THashSet<TString> supportedFields{
-            "version", "schema", "cloud_id", "folder_id", "resource_id", "source_id", "database",
-        };
-        for (const auto& [name, value] : metric.metric_fields().fields()) {
-            if (!supportedFields.contains(name)) {
-                error = TStringBuilder() << "Unsupported key for metric. Key: " << name;
-                return false;
-            }
-            if (!value.has_string_value()) {
-                error = TStringBuilder() << "Unsupported type for metric. Key: " << name;
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool ValidateKesusResources(Ydb::RateLimiter::Resources& resources) {
+    bool ValidateKesusResources(const Ydb::RateLimiter::Resources& resources) {
         THashSet<TString> paths;
         for (const auto& resource : resources.resources()) {
             const TString& path = resource.resource_path();
@@ -797,37 +777,21 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (!paths.insert(path).second) {
                 return fail("Duplicate resource path");
             }
-            if (!resource.has_hierarchical_drr()) {
-                return fail("Unsupported resource type or no resource properties");
-            }
-            if (resource.has_metering_config()) {
-                if (!ImportInfo->CanRestoreRateLimiterMetering) {
-                    return fail("Setting metering is allowed only for administrators", Ydb::StatusIds::UNAUTHORIZED);
-                }
-                const auto& metering = resource.metering_config();
-                TString error;
-                if ((metering.has_provisioned() && !ValidateKesusMetric(metering.provisioned(), error))
-                    || (metering.has_on_demand() && !ValidateKesusMetric(metering.on_demand(), error))
-                    || (metering.has_overshoot() && !ValidateKesusMetric(metering.overshoot(), error)))
-                {
-                    return fail(error);
-                }
-            }
-        }
 
-        for (const auto& path : paths) {
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!ValidateRateLimiterResourceProperties(resource, ImportInfo->CanRestoreRateLimiterMetering, status, error)) {
+                return fail(error, status);
+            }
+
+            // The exporter writes parents before children. Preserve that order
+            // and reject an invalid dependency before creating the node.
             const auto separator = path.rfind('/');
             if (separator != TString::npos && !paths.contains(path.substr(0, separator))) {
-                Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << KesusResourcesKey
-                    << ": parent resource '" << path.substr(0, separator) << "' is missing for '" << path << "'");
-                return false;
+                return fail(TStringBuilder() << "Parent resource '" << path.substr(0, separator)
+                    << "' must precede its child");
             }
         }
-
-        auto& sorted = *resources.mutable_resources();
-        std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.resource_path() < rhs.resource_path();
-        });
         return true;
     }
 
@@ -864,10 +828,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         Ydb::RateLimiter::Resources resources;
-        google::protobuf::TextFormat::Parser parser;
-        // Unlike ParseProto, reject unknown fields: a misspelled container must not
-        // silently turn a backup into an empty resource set.
-        if (!parser.ParseFromString(content, &resources)) {
+        if (!NYdb::NBackup::ParseProto(content, resources)) {
             return Reply(Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << KesusResourcesKey << ": cannot parse rate limiter resources");
         }
@@ -880,7 +841,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             Reply();
         };
         if (NeedValidateChecksums) {
-            // The checksum covers the original text, not the sorted protobuf.
+            // The checksum covers the original text, including any ignored unknown fields.
             StartValidatingChecksum(KesusResourcesKey, content, nextStep);
         } else {
             nextStep();

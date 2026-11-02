@@ -330,12 +330,27 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         TestRoundTrip(Fs, Encrypted, true);
     }
 
-    Y_UNIT_TEST(UnsortedResources) {
+    Y_UNIT_TEST(PreservesResourceOrderWithParentsBeforeChildren) {
         TKesusImportEnv t;
         const auto resources = MakeResources();
         t.WriteBackup(ResourcesText(resources));
+        TVector<TString> addedPaths;
+        auto observer = t.Runtime.AddObserver<TEvKesus::TEvAddQuoterResource>([&](auto& ev) {
+            addedPaths.push_back(ev->Get()->Record.GetResource().GetResourcePath());
+        });
         t.Finish(t.StartImport(t.MakeImport()));
         t.AssertResources(resources);
+        UNIT_ASSERT_VALUES_EQUAL(addedPaths.size(), resources.resources_size());
+        for (int i = 0; i < resources.resources_size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(addedPaths[i], resources.resources(i).resource_path());
+        }
+    }
+
+    Y_UNIT_TEST(ParentAfterChild) {
+        RejectResources(R"(
+            resources { resource_path: "a/b" hierarchical_drr {} }
+            resources { resource_path: "a" hierarchical_drr { max_units_per_second: 10 } }
+        )", "Parent resource 'a' must precede its child");
     }
 
     Y_UNIT_TEST(MissingResources) {
@@ -354,13 +369,27 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         RejectResources("resources {", "cannot parse rate limiter resources");
     }
 
-    Y_UNIT_TEST(UnknownContainerField) {
-        RejectResources("resoruces: []", "cannot parse rate limiter resources");
+    Y_UNIT_TEST_FLAG(UnknownContainerFieldsAreIgnored, Empty) {
+        TKesusImportEnv t;
+        const auto resources = Empty ? Ydb::RateLimiter::Resources() : MakeResources();
+        t.WriteBackup(ResourcesText(resources) + "future_container_field { version: 1 }\n");
+        t.Finish(t.StartImport(t.MakeImport()));
+        t.AssertResources(resources);
     }
 
-    Y_UNIT_TEST(UnknownResourceField) {
-        RejectResources(R"(resources { resource_path: "a" hierarchical_drr { max_units_per_second: 10 } unknown: 1 })",
-            "cannot parse rate limiter resources");
+    Y_UNIT_TEST(UnknownResourceFieldsAreIgnored) {
+        TKesusImportEnv t;
+        t.WriteBackup(R"(resources {
+            resource_path: "a"
+            hierarchical_drr { max_units_per_second: 10 future_drr_field: 2 }
+            future_resource_field: 1
+        })");
+        t.Finish(t.StartImport(t.MakeImport()));
+        Ydb::RateLimiter::Resources expected;
+        auto& resource = *expected.add_resources();
+        resource.set_resource_path("a");
+        resource.mutable_hierarchical_drr()->set_max_units_per_second(10);
+        t.AssertResources(expected);
     }
 
     Y_UNIT_TEST(NoncanonicalPath) {
@@ -385,11 +414,15 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
     }
 
     Y_UNIT_TEST(MissingParent) {
-        RejectResources(R"(resources { resource_path: "a/b" hierarchical_drr {} })", "parent resource 'a' is missing");
+        RejectResources(R"(resources { resource_path: "a/b" hierarchical_drr {} })", "Parent resource 'a' must precede its child");
     }
 
     Y_UNIT_TEST(MissingResourceType) {
-        RejectResources(R"(resources { resource_path: "a" })", "Unsupported resource type or no resource properties");
+        RejectResources(R"(resources { resource_path: "a" })", "No resource properties");
+    }
+
+    Y_UNIT_TEST(UnknownResourceType) {
+        RejectResources(R"(resources { resource_path: "a" future_algorithm { limit: 10 } })", "No resource properties");
     }
 
     Y_UNIT_TEST(InvalidNumericPropertiesLeaveCreatedNode) {
@@ -439,12 +472,19 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.AssertNotCreated();
     }
 
-    Y_UNIT_TEST(UnknownNodeField) {
+    Y_UNIT_TEST(UnknownNodeFieldsAreIgnored) {
         TKesusImportEnv t;
         t.WriteBackup("resources: []\n");
-        t.WriteFile(NodeKey, "unknown_node_field: 1");
-        t.Finish(t.StartImport(t.MakeImport()), Ydb::StatusIds::CANCELLED);
-        t.AssertNotCreated();
+        t.WriteFile(NodeKey, R"(
+            config { self_check_period_millis: 1234 session_grace_period_millis: 5678 future_config_field: 1 }
+            future_node_field: 2
+        )");
+        t.Finish(t.StartImport(t.MakeImport()));
+        const auto description = DescribePath(t.Runtime, "/MyRoot/Restored");
+        const auto& config = description.GetPathDescription().GetKesus().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.self_check_period_millis(), 1234);
+        UNIT_ASSERT_VALUES_EQUAL(config.session_grace_period_millis(), 5678);
+        t.AssertResources(Ydb::RateLimiter::Resources());
     }
 
     Y_UNIT_TEST(SourceNodePathDoesNotOverrideDestination) {
@@ -581,7 +621,7 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         });
         ui32 rootAdds = 0;
         auto adds = t.Runtime.AddObserver<TEvKesus::TEvAddQuoterResource>([&](auto& ev) {
-            rootAdds += ev->Get()->Record.GetResource().GetResourcePath() == "a";
+            rootAdds += ev->Get()->Record.GetResource().GetResourcePath() == resources.resources(0).resource_path();
         });
         const ui64 id = t.StartImport(t.MakeImport(), true);
         t.Finish(id);

@@ -12,6 +12,7 @@ SRCS(
     column_table_index_entity_id_ut.cpp
     compression_ut.cpp
     dictionary_feature_flag_ut.cpp
+    kesus_description_ut.cpp
     table_description_ut.cpp
     table_settings_ut.cpp
     topic_description_ut.cpp

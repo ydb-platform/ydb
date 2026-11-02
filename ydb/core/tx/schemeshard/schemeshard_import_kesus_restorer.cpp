@@ -81,10 +81,6 @@ public:
             resource.Clear();
             FillRateLimiterDescription(resource, internal);
         }
-        auto& resources = *Resources.mutable_resources();
-        std::sort(resources.begin(), resources.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.resource_path() < rhs.resource_path();
-        });
         for (int i = 0; i < Resources.resources_size(); ++i) {
             const auto& path = Resources.resources(i).resource_path();
             if (!ResourcesByPath.emplace(path, i).second) {

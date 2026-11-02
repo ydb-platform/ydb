@@ -3901,6 +3901,11 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.Generation = 0;
                 userInfo.Step = 0;
                 userInfo.PipeClient = {};
+<<<<<<< HEAD
+=======
+                userInfo.ReadSessionActor = {};
+                FailStaleSessionReadRequests(operation.GetConsumer(), ActorContext());
+>>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
             }
         }
 
@@ -4010,7 +4015,20 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
             bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+<<<<<<< HEAD
 
+=======
+            if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                && !actual->Session.empty() && actual->ReadSessionActor
+                && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
+                    || userInfo.Step != actual->Step || userInfo.ReadSessionActor != actual->ReadSessionActor)) {
+                replicationSessionEstablished = true;
+            }
+
+            userInfo.PipeClient = actual->PipeClient;
+            userInfo.ReadSessionActor = actual->ReadSessionActor;
+            userInfo.PartitionSessionId = actual->PartitionSessionId;
+>>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
             userInfo.Session = actual->Session;
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
@@ -4459,6 +4477,8 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
         userInfo.PipeClient = act.PipeClient;
+        userInfo.ReadSessionActor = act.ReadSessionActor;
+        userInfo.PartitionSessionId = act.PartitionSessionId;
         ScheduleReplyGetClientOffsetOk(act.Cookie,
                                        userInfo.Offset,
                                        ts.first, ts.second, ui->AnyCommits);
@@ -4573,6 +4593,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         userInfo.ReadRuleGeneration = 0;
         userInfo.Session = "";
+        userInfo.ReadSessionActor = {};
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
@@ -4593,6 +4614,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
         userInfo.ReadRuleGeneration = readRuleGeneration;
         userInfo.Session = "";
+        userInfo.ReadSessionActor = {};
         userInfo.PartitionSessionId = 0;
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
@@ -4620,6 +4642,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Generation = generation;
             userInfo.Step = step;
             userInfo.PipeClient = act.PipeClient;
+            userInfo.ReadSessionActor = act.ReadSessionActor;
             userInfo.PartitionSessionId = act.PartitionSessionId;
         } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || commitNotFromReadSession) {
             userInfo.Session = "";
@@ -4627,6 +4650,11 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Generation = 0;
             userInfo.Step = 0;
             userInfo.PipeClient = {};
+<<<<<<< HEAD
+=======
+            userInfo.ReadSessionActor = {};
+            FailStaleSessionReadRequests(user, ctx);
+>>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
         }
 
         PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);
@@ -4888,6 +4916,7 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
             newPendingUserIt->second.Session = userIt->Session;
             newPendingUserIt->second.PartitionSessionId = userIt->PartitionSessionId;
             newPendingUserIt->second.PipeClient = userIt->PipeClient;
+            newPendingUserIt->second.ReadSessionActor = userIt->ReadSessionActor;
 
             newPendingUserIt->second.Generation = userIt->Generation;
             newPendingUserIt->second.Step = userIt->Step;

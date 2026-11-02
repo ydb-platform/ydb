@@ -200,6 +200,14 @@ private:
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
+<<<<<<< HEAD
+=======
+
+    y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
+    y_absl::flat_hash_map<TString, ui64> ReplicatedOffsetsByConsumers;
+    TInstant LastReplicationDataTimestamp;
+    TMaybe<ui64> MirroredOffsetToSend;
+>>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
 };
 
 bool AppendToWriteRequest(

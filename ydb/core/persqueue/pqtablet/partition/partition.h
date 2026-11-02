@@ -1193,6 +1193,13 @@ private:
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
 
+<<<<<<< HEAD
+=======
+    void SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos = {});
+    void RestoreReadSessionActor(TUserInfo& userInfo, const TString& sessionId,
+                                const TActorId& readSessionActor, const TActorContext& ctx);
+
+>>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
     void OnHandleWriteResponse(const TActorContext& ctx);
 
     void ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx);

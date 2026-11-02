@@ -32,7 +32,6 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui8>(bytes.back()), static_cast<ui8>(Format<T>));
         NKnnVectorSerialization::TDeserializer<T> decoder(bytes);
         UNIT_ASSERT_VALUES_EQUAL(decoder.GetElementCount(), dimension);
-        UNIT_ASSERT_VALUES_EQUAL(decoder.GetElementCount(), dimension);
         decoder.DoDeserialize([](const T& value) {
             const float decoded = static_cast<float>(value);
             UNIT_ASSERT(std::isfinite(decoded));
@@ -146,7 +145,6 @@ Y_UNIT_TEST_SUITE(VectorWorkloadInt4) {
     }
 
     Y_UNIT_TEST_QUAD(Int4CsvImport, Signed, Directory) {
-        using T = NVectorDistance::NPrivate::TInt4<Signed>;
         TTempDir directory;
         auto file = TTempFileHandle::InDir(directory.Path(), "int4", "csv");
         {
@@ -170,7 +168,7 @@ Y_UNIT_TEST_SUITE(VectorWorkloadInt4) {
         auto* csv = std::get_if<IBulkDataGenerator::TDataPortion::TCsv>(&portions.front()->MutableData());
         UNIT_ASSERT(csv);
         TStringBuilder expected;
-        NKnnVectorSerialization::TSerializer<T> serializer(&expected.Out);
+        NKnnVectorSerialization::TSerializer<float> serializer(&expected.Out);
         for (int value : {-9, 0, 19}) { serializer.HandleElement(value); }
         serializer.Finish();
         UNIT_ASSERT_STRING_CONTAINS(csv->Data, expected);
@@ -178,7 +176,6 @@ Y_UNIT_TEST_SUITE(VectorWorkloadInt4) {
     }
 
     Y_UNIT_TEST_TWIN(Int4ParquetImport, Signed) {
-        using T = NVectorDistance::NPrivate::TInt4<Signed>;
         auto file = TTempFileHandle::InCurrentDir("int4", "parquet");
         arrow::UInt64Builder ids;
         UNIT_ASSERT(ids.Append(1).ok());
@@ -226,10 +223,10 @@ Y_UNIT_TEST_SUITE(VectorWorkloadInt4) {
         const auto column = std::static_pointer_cast<arrow::BinaryArray>(batch->GetColumnByName("embedding"));
         UNIT_ASSERT(column);
         const auto bytes = column->GetView(0);
-        NKnnVectorSerialization::TDeserializer<T> decoder(TStringBuf(bytes.data(), bytes.size()));
-        const int expected[] = {T::MinValue, 0, T::MaxValue};
+        NKnnVectorSerialization::TDeserializer<float> decoder(TStringBuf(bytes.data(), bytes.size()));
+        const float expected[] = {-9.0f, 0.0f, 19.0f};
         size_t index = 0;
-        decoder.DoDeserialize([&](const T& value) { UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value), expected[index++]); });
+        decoder.DoDeserialize([&](const float& value) { UNIT_ASSERT_VALUES_EQUAL(value, expected[index++]); });
         UNIT_ASSERT_VALUES_EQUAL(index, 3);
         UNIT_ASSERT(generators.front()->GenerateDataPortion().empty());
     }

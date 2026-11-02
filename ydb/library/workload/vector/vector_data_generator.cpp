@@ -40,25 +40,17 @@ class TDataGeneratorWrapper final: public IBulkDataGenerator {
 private:
     const std::shared_ptr<IBulkDataGenerator> InnerDataGenerator;
     const TString EmbeddingColumnName;
-    const NVector::TVectorOpts& VectorOpts;
 
 private:
     template <typename TProducer>
     TString SerializeEmbedding(TProducer&& produce) const {
-        const auto encode = [&]<typename T>() {
-            TStringBuilder buffer;
-            NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
-            produce([&](float value) { serializer.HandleElement(value); });
-            serializer.Finish();
-            return TString(buffer);
-        };
-        if (VectorOpts.VectorType == "uint4") {
-            return encode.template operator()<TUint4>();
-        }
-        if (VectorOpts.VectorType == "int4") {
-            return encode.template operator()<TInt4>();
-        }
-        return encode.template operator()<float>();
+        // Preserve file-import compatibility: float lists use FloatVector for every
+        // requested vector type, including INT4/UINT4. Binary embeddings are passed through.
+        TStringBuilder buffer;
+        NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
+        produce([&](float value) { serializer.HandleElement(value); });
+        serializer.Finish();
+        return TString(buffer);
     }
 
     static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
@@ -255,11 +247,10 @@ private:
     }
 
 public:
-    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName, const NVector::TVectorOpts& vectorOpts)
+    TDataGeneratorWrapper(const std::shared_ptr<IBulkDataGenerator> innerDataGenerator, const TString embeddingColumnName)
         : IBulkDataGenerator(innerDataGenerator->GetName(), innerDataGenerator->GetSize())
         , InnerDataGenerator(innerDataGenerator)
         , EmbeddingColumnName(embeddingColumnName)
-        , VectorOpts(vectorOpts)
     {}
 
     virtual TDataPortions GenerateDataPortion() override {
@@ -581,7 +572,7 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
                     VectorParams.GetColumns(),
                     TDataGenerator::EPortionSizeUnit::Line
                 );
-                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName, VectorParams.VectorOpts));
+                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName));
             }
         }
         return result;
@@ -603,7 +594,7 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
     );
 
     return {
-        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName, VectorParams.VectorOpts)
+        std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName)
     };
 }
 

@@ -30,6 +30,29 @@ static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 namespace {
 
+<<<<<<< HEAD
+=======
+TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
+
+TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
+    TStringBuilder out;
+    bool firstConsumer = true;
+    for (const auto& [consumer, offset] : offsetsByConsumers) {
+        if (!firstConsumer) {
+            out << ", ";
+        }
+        firstConsumer = false;
+        out << consumer << ": " << offset;
+    }
+    return out;
+}
+
+>>>>>>> 5a1ee5ea937 (better)
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
@@ -492,16 +515,38 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         return;
     }
 
+    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
     for (auto& [consumer, offset] : OffsetsByConsumers) {
-        OffsetsByConsumers[consumer] = Min(offset, EndOffset);
+        auto offsetToSend = Min(offset, EndOffset);
+        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offset) {
+            continue;
+        }
+        
+        offsetsByConsumersToSend[consumer] = offsetToSend;
+    }
+
+    if (offsetsByConsumersToSend.empty()) {
+        return;
     }
 
     ReplicationDataInFlight = true;
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
         (event->OffsetsByConsumers)[consumer] = offset;
+
+        ReplicatedOffsetsByConsumers[consumer] = offset;
+
+        if (offset == OffsetsByConsumers[consumer]) {
+            OffsetsByConsumers.erase(consumer);
+        }
     }
-    OffsetsByConsumers.clear();
+
+    LOG_D("Sending replication data to consumers",
+        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
+        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
+
     if (MirroredOffsetToSend) {
         event->MirroredOffset = *MirroredOffsetToSend;
         MirroredOffsetToSend = Nothing();

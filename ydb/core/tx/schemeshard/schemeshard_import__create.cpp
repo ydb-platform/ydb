@@ -1627,6 +1627,11 @@ private:
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         } else if (item.CoordinationNode) {
+            if (!AppData()->FeatureFlags.GetEnableKesusImport()) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx,
+                    "The feature flag \"EnableKesusImport\" is disabled. The operation cannot be performed.",
+                    "coordination node import is disabled");
+            }
             TString error;
             if (!item.RateLimiterResources || !CreateKesusPropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx,

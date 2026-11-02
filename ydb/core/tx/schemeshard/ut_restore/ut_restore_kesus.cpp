@@ -11,12 +11,15 @@
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
 #include <google/protobuf/text_format.h>
+#include <google/protobuf/util/field_comparator.h>
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/folder/tempdir.h>
 #include <util/string/builder.h>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 using namespace NKikimr;
@@ -97,6 +100,7 @@ public:
         Runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         Runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         Runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        Runtime.GetAppData().FeatureFlags.SetEnableKesusImport(true);
     }
 
     ui64 CreateNode(const TString& name = "Original") {
@@ -159,7 +163,11 @@ public:
     void AssertResources(const Ydb::RateLimiter::Resources& expected) {
         const auto normalized = NormalizeResources(expected);
         const auto actual = DescribeResources();
-        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(normalized, actual),
+        google::protobuf::util::DefaultFieldComparator comparator;
+        comparator.set_treat_nan_as_equal(true);
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.set_field_comparator(&comparator);
+        UNIT_ASSERT_C(differencer.Compare(normalized, actual),
             "Expected: " << normalized.DebugString() << "; actual: " << actual.DebugString());
     }
 
@@ -328,6 +336,37 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
 
     Y_UNIT_TEST_FLAGS(EmptyRoundTrip, Fs, Encrypted) {
         TestRoundTrip(Fs, Encrypted, true);
+    }
+
+    Y_UNIT_TEST_FLAGS(KesusImportDisabledByDefault, Fs, Encrypted) {
+        TKesusImportEnv t;
+        t.CreateNode();
+        t.Export(Fs, Encrypted);
+        auto& flags = t.Runtime.GetAppData().FeatureFlags;
+        flags.ClearEnableKesusImport();
+        UNIT_ASSERT(!flags.GetEnableKesusImport());
+        const ui64 id = t.StartImport(t.MakeImport(Fs, Encrypted));
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "unsupported scheme object type");
+        t.AssertNotCreated();
+        t.RebootSchemeShard();
+        TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST_FLAG(DisableKesusImportBeforeSchemeReady, Fs) {
+        TKesusImportEnv t;
+        const auto resources = MakeResources();
+        t.Populate(t.CreateNode(), resources);
+        t.Export(Fs, false);
+        TBlockEvents<TEvPrivate::TEvImportSchemeReady> replies(t.Runtime);
+        const ui64 id = t.StartImport(t.MakeImport(Fs));
+        t.Runtime.WaitFor("scheme downloaded before payload persisted", [&] { return !replies.empty(); });
+        UNIT_ASSERT(replies.front()->Get()->Success);
+        t.Runtime.GetAppData().FeatureFlags.SetEnableKesusImport(false);
+        replies.Stop().Unblock();
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "EnableKesusImport");
+        t.AssertNotCreated();
+        t.RebootSchemeShard();
+        TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(PreservesResourceOrderWithParentsBeforeChildren) {
@@ -588,9 +627,13 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(RebootReplaysSavedResourcesAfterLostAddResponse) {
+    Y_UNIT_TEST_FLAG(RebootReplaysSavedResourcesAfterLostAddResponse, NaN) {
         TKesusImportEnv t;
-        const auto resources = MakeResources(true);
+        auto resources = MakeResources(true);
+        if (NaN) {
+            resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(
+                std::numeric_limits<double>::quiet_NaN());
+        }
         t.WriteBackup(ResourcesText(resources));
         TBlockEvents<TEvKesus::TEvAddQuoterResourceResult> replies(t.Runtime);
         const ui64 id = t.StartImport(t.MakeImport(), true);
@@ -598,6 +641,8 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(replies.front()->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
         // The persisted payload must survive the restart even if the source is replaced.
         t.WriteFile(ResourcesKey, "resources: []\n");
+        // Disabling the feature must not prevent an already persisted import from resuming.
+        t.Runtime.GetAppData().FeatureFlags.SetEnableKesusImport(false);
         replies.Stop();
         t.RebootSchemeShard();
         t.Finish(id);
@@ -606,9 +651,13 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(LostAddResponseIsReconciledWithoutReboot) {
+    Y_UNIT_TEST_FLAG(LostAddResponseIsReconciledWithoutReboot, NaN) {
         TKesusImportEnv t;
-        const auto resources = MakeResources(true);
+        auto resources = MakeResources(true);
+        if (NaN) {
+            resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(
+                std::numeric_limits<double>::quiet_NaN());
+        }
         t.WriteBackup(ResourcesText(resources));
         auto timers = t.Runtime.AddObserver<TEvSchemeShard::TEvDescribeSchemeResult>([&](auto& ev) {
             if (ev->Get()->GetRecord().GetPathDescription().HasKesus()) {
@@ -630,6 +679,35 @@ Y_UNIT_TEST_SUITE(TKesusImportTests) {
         t.AssertResources(resources);
         replies.Stop().Unblock();
         TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST_FLAG(RebootRejectsDifferentNaNValue, SavedNaN) {
+        TKesusImportEnv t;
+        auto resources = MakeResources();
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        resources.mutable_resources(0)->mutable_hierarchical_drr()->set_max_burst_size_coefficient(SavedNaN ? nan : 1.5);
+        t.WriteBackup(ResourcesText(resources));
+        // Store a different value before the Add reply is lost, then compare it
+        // with the saved backup on recovery: NaN must never equal a finite value.
+        bool replaceFirst = true;
+        auto observer = t.Runtime.AddObserver<TEvKesus::TEvAddQuoterResource>([&](auto& ev) {
+            if (std::exchange(replaceFirst, false)) {
+                ev->Get()->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxBurstSizeCoefficient(
+                    SavedNaN ? 1.5 : nan);
+            }
+        });
+        TBlockEvents<TEvKesus::TEvAddQuoterResourceResult> replies(t.Runtime);
+        const ui64 id = t.StartImport(t.MakeImport());
+        t.Runtime.WaitFor("first resource committed before reply", [&] { return !replies.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(replies.front()->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+        replies.Stop();
+        t.RebootSchemeShard();
+        t.Finish(id, Ydb::StatusIds::CANCELLED, "already exists with different settings");
+        const auto actual = t.DescribeResources();
+        UNIT_ASSERT_VALUES_EQUAL(actual.resources_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::isnan(actual.resources(0).hierarchical_drr().max_burst_size_coefficient()), !SavedNaN);
+        replies.Unblock();
+        TestGetImport(t.Runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(ResourceRequestRetriesAreBounded) {

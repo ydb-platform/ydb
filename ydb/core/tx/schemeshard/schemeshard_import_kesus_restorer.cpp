@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <google/protobuf/util/field_comparator.h>
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/hash.h>
@@ -145,7 +146,11 @@ private:
     bool IsExpectedResource(const NKikimrKesus::TStreamingQuoterResource& resource, int index) const {
         Ydb::RateLimiter::Resource actual;
         FillRateLimiterDescription(actual, resource);
-        return google::protobuf::util::MessageDifferencer::Equals(Resources.resources(index), actual);
+        google::protobuf::util::DefaultFieldComparator comparator;
+        comparator.set_treat_nan_as_equal(true);
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.set_field_comparator(&comparator);
+        return differencer.Compare(Resources.resources(index), actual);
     }
 
     void Handle(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {

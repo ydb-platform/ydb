@@ -170,7 +170,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
     if (!db.LoadGCBarrierPreparation(GCBarrierPreparation)) {
         return false;
     }
-    AFL_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation,
+    YDB_LOG_VERIFY(!GCBarrierPreparation.Generation() || LastCollectedGenStep <= GCBarrierPreparation,
         {"prepared", GCBarrierPreparation},
         {"last", LastCollectedGenStep});
 
@@ -191,7 +191,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db, const TTabletId selfTabletId) {
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
         Y_ABORT_UNLESS(LastCollectedGenStep < TGenStep(blobId));
 
-        AFL_VERIFY(blobsToKeepLocal.Add(blobId),
+        YDB_LOG_VERIFY(blobsToKeepLocal.Add(blobId),
             {"blobToKeepDouble", unifiedBlobId.ToStringNew()});
     }
     std::swap(blobsToKeepLocal, BlobsToKeep);
@@ -213,7 +213,7 @@ std::deque<TGenStep> TBlobManager::FindNewGCBarriers() {
         result.emplace_back(TGenStep(CurrentGen, CurrentStep));
     }
     for (auto& allocated : AllocatedGenSteps) {
-        AFL_VERIFY(allocated->GenStep > newCollectGenStep);
+        YDB_LOG_VERIFY(allocated->GenStep > newCollectGenStep);
         if (!allocated->Finished()) {
             break;
         }
@@ -311,7 +311,7 @@ bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
         {"gsBlobsToKeepCount", BlobsToKeep.GetSize()});
 
     const auto pred = [&](const TGenStep& genStep, const TLogoBlobID& logoBlobId) {
-        AFL_VERIFY(LastCollectedGenStep < genStep,
+        YDB_LOG_VERIFY(LastCollectedGenStep < genStep,
             {"last", LastCollectedGenStep},
             {"gen", genStep});
         const ui32 blobGroup = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
@@ -345,7 +345,7 @@ bool TBlobManager::DrainKeepTo(const TGenStep& dest, TGCContext& gcContext) {
 std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTask(const TString& storageId,
     const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
     const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept {
-    AFL_VERIFY(!CollectGenStepInFlight);
+    YDB_LOG_VERIFY(!CollectGenStepInFlight);
     if (BlobsToKeep.IsEmpty() && BlobsToDelete.IsEmpty() && LastCollectedGenStep == TGenStep{ CurrentGen, CurrentStep }) {
         BlobsManagerCounters.GCCounters.SkipCollectionEmpty->Add(1);
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
@@ -373,8 +373,8 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     const std::deque<TGenStep> newCollectGenSteps = FindNewGCBarriers();
     if (GCBarrierPreparation != LastCollectedGenStep) {
         if (GCBarrierPreparation.Generation()) {
-            AFL_VERIFY(GCBarrierPreparation.Generation() < CurrentGen);
-            AFL_VERIFY(LastCollectedGenStep <= GCBarrierPreparation);
+            YDB_LOG_VERIFY(GCBarrierPreparation.Generation() < CurrentGen);
+            YDB_LOG_VERIFY(LastCollectedGenStep <= GCBarrierPreparation);
             if (DrainKeepTo(GCBarrierPreparation, gcContext)) {
                 CollectGenStepInFlight = GCBarrierPreparation;
             }
@@ -398,11 +398,11 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
             FirstGC = false;
         }
         if (!BlobsToKeep.IsEmpty()) {
-            AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified(),
+            YDB_LOG_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified(),
                 {"gs", *CollectGenStepInFlight},
                 {"first", BlobsToKeep.GetMinGenStepVerified()});
         }
-        AFL_VERIFY(LastCollectedGenStep < *CollectGenStepInFlight);
+        YDB_LOG_VERIFY(LastCollectedGenStep < *CollectGenStepInFlight);
     }
     YDB_LOG_INFO("",
         {"notice", "collect_gen_step"},
@@ -429,7 +429,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
 }
 
 ui32 TBlobManager::PickDataChannel() const {
-    AFL_VERIFY(TabletInfo->Channels.size() > 2);
+    YDB_LOG_VERIFY(TabletInfo->Channels.size() > 2);
     if (!WeightedDataChannelSelection) {
         return TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2].Channel;
     }
@@ -442,7 +442,7 @@ void TBlobManager::UpdateChannelApproximateFreeSpace(ui32 channel, float approxi
 }
 
 TBlobBatch TBlobManager::StartBlobBatch() {
-    AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
+    YDB_LOG_VERIFY(++CurrentStep < Max<ui32>() - 10);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
     const ui32 channel = PickDataChannel();
     ++CountersUpdate.BatchesStarted;
@@ -469,14 +469,14 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{ logoBlobId.Generation(), logoBlobId.Step() };
 
-        AFL_VERIFY(genStep > edgeGenStep,
+        YDB_LOG_VERIFY(genStep > edgeGenStep,
             {"genStep", genStep},
             {"edgeGenStep", edgeGenStep},
             {"blobId", blobId.ToStringNew()});
         YDB_LOG_INFO("",
             {"toKeep", logoBlobId});
 
-        AFL_VERIFY(BlobsToKeep.Add(logoBlobId));
+        YDB_LOG_VERIFY(BlobsToKeep.Add(logoBlobId));
         BlobsManagerCounters.OnBlobsToKeep(BlobsToKeep);
     }
     blobBatch.BatchInfo->GenStepRef.Reset();
@@ -495,7 +495,7 @@ void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobMa
         auto logoBlobId = blobId.GetLogoBlobId();
         TGenStep genStep{ logoBlobId.Generation(), logoBlobId.Step() };
 
-        AFL_VERIFY(genStep > edgeGenStep,
+        YDB_LOG_VERIFY(genStep > edgeGenStep,
             {"genStep", genStep},
             {"edgeGenStep", edgeGenStep},
             {"blobId", blobId.ToStringNew()});
@@ -524,13 +524,13 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
         YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet delete blob",
             {"tabletId", TabletInfo->TabletID},
             {"blobId", blobId});
-        AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
+        YDB_LOG_VERIFY(BlobsToDelete.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
     } else {
         YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet delay delete blob",
             {"tabletId", TabletInfo->TabletID},
             {"blobId", blobId});
-        AFL_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));
+        YDB_LOG_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDeleteDelayed(BlobsToDeleteDelayed);
     }
 }
@@ -572,18 +572,18 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
     if (genStep) {
         LastCollectedGenStep = *genStep;
-        AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep,
+        YDB_LOG_VERIFY(GCBarrierPreparation == LastCollectedGenStep,
             {"prepare", GCBarrierPreparation},
             {"last", LastCollectedGenStep});
         CollectGenStepInFlight.reset();
     } else {
-        AFL_VERIFY(!CollectGenStepInFlight);
+        YDB_LOG_VERIFY(!CollectGenStepInFlight);
     }
 }
 
 void TBlobManager::OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
     if (genStep) {
-        AFL_VERIFY(LastCollectedGenStep < *genStep,
+        YDB_LOG_VERIFY(LastCollectedGenStep < *genStep,
             {"last", LastCollectedGenStep},
             {"prepared", genStep});
         db.SaveGCBarrierPreparation(*genStep);
@@ -592,7 +592,7 @@ void TBlobManager::OnGCStartOnExecute(const std::optional<TGenStep>& genStep, IB
 
 void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
     if (genStep) {
-        AFL_VERIFY(GCBarrierPreparation <= *genStep,
+        YDB_LOG_VERIFY(GCBarrierPreparation <= *genStep,
             {"last", GCBarrierPreparation},
             {"prepared", genStep});
         GCBarrierPreparation = *genStep;

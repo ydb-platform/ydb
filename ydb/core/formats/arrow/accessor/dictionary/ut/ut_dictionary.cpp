@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        AFL_VERIFY(PrepareToCompare(dict->GetChunkedArray()->ToString()) == R"([[null,null,null,null,null]])");
+        YDB_LOG_VERIFY(PrepareToCompare(dict->GetChunkedArray()->ToString()) == R"([[null,null,null,null,null]])");
     }
 
     Y_UNIT_TEST(SimpleBuild) {
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        AFL_VERIFY(PrepareToCompare(dict->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,null,null]])");
+        YDB_LOG_VERIFY(PrepareToCompare(dict->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,null,null]])");
     }
 
     Y_UNIT_TEST(Slices) {
@@ -58,24 +58,24 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(5, 3));
-            AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
-            AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,"ab",null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab",null])");
-            AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,0,null])");
+            YDB_LOG_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,"ab",null]])");
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab",null])");
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,0,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(7, 2));
-            AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
-            AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([null])");
-            AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,null])");
+            YDB_LOG_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,null]])");
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([null])");
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(2, 0));
-            AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
-            AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
-            AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([])");
+            YDB_LOG_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([])");
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
+            YDB_LOG_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([])");
         }
     }
 
@@ -97,13 +97,13 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         // Slice(1, 2) -> positions [1, 2] -> we use dict indices 1 and 2 (B and C), not 0.
         // Filtered dict = [B, C]. Old 1->0, 2->1. Positions must be remapped to [0, 1].
         auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(1, 2));
-        AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
+        YDB_LOG_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
         Cerr << PrepareToCompare(slice->GetChunkedArray()->ToString()) << Endl;
         Cerr << PrepareToCompare(slice->GetDictionary()->ToString()) << Endl;
         Cerr << PrepareToCompare(slice->GetPositions()->ToString()) << Endl;
-        AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([["B","C"]])");
-        AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["B","C"])");
-        AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([0,1])");
+        YDB_LOG_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([["B","C"]])");
+        YDB_LOG_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["B","C"])");
+        YDB_LOG_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([0,1])");
     }
 
     Y_UNIT_TEST(SlicePreservesNullDictionaryEntry) {
@@ -144,9 +144,9 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         Cerr << PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) << Endl;
         Cerr << PrepareToCompare(dictParsed->GetPositions()->ToString()) << Endl;
         Cerr << PrepareToCompare(dictParsed->GetDictionary()->ToString()) << Endl;
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,"",null]])");
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetPositions()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetDictionary()->ToString()) == R"(["","ab","abc","abcd",null])");
+        YDB_LOG_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,"",null]])");
+        YDB_LOG_VERIFY(PrepareToCompare(dictParsed->GetPositions()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
+        YDB_LOG_VERIFY(PrepareToCompare(dictParsed->GetDictionary()->ToString()) == R"(["","ab","abc","abcd",null])");
     }
 
     Y_UNIT_TEST(BuildDictionaryOnlyReader) {
@@ -163,17 +163,17 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
         auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
-        AFL_VERIFY(dictData);
+        YDB_LOG_VERIFY(dictData);
         TString dictionaryBlobOnly(blobAndMeta.Blob.data(), dictData->DictionaryBlobSize);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
         auto conclusion = NDictionary::TConstructor::BuildDictionaryOnlyReader(dictionaryBlobOnly, infoWithMeta);
-        AFL_VERIFY(conclusion.IsSuccess(),
+        YDB_LOG_VERIFY(conclusion.IsSuccess(),
             {"error", conclusion.GetErrorMessage()});
         auto dictionaryArray = conclusion.DetachResult();
-        AFL_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetDictionary()->ToString()));
-        AFL_VERIFY(dictionaryArray->length() == dict->GetDictionary()->length());
+        YDB_LOG_VERIFY(PrepareToCompare(dictionaryArray->ToString()) == PrepareToCompare(dict->GetDictionary()->ToString()));
+        YDB_LOG_VERIFY(dictionaryArray->length() == dict->GetDictionary()->length());
     }
 
     Y_UNIT_TEST(ManyDistinctValuesUint16Positions) {
@@ -193,12 +193,12 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
         // Dictionary has 300 distinct values + null slot = 301 variants -> uint16 positions
-        AFL_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
+        YDB_LOG_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
 
         auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
-        AFL_VERIFY(dictData);
-        AFL_VERIFY(dictData->PositionsBlobSize > 0);
+        YDB_LOG_VERIFY(dictData);
+        YDB_LOG_VERIFY(dictData->PositionsBlobSize > 0);
 
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
@@ -206,10 +206,10 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
             NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
 
-        AFL_VERIFY(dictParsed->GetPositions()->type()->id() == arrow::Type::UINT16);
-        AFL_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
-        AFL_VERIFY(dictParsed->GetChunkedArray()->length() == NumRecords);
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
+        YDB_LOG_VERIFY(dictParsed->GetPositions()->type()->id() == arrow::Type::UINT16);
+        YDB_LOG_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
+        YDB_LOG_VERIFY(dictParsed->GetChunkedArray()->length() == NumRecords);
+        YDB_LOG_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
     }
 
     // Corner cases around 254/255/256 variants: with and without nulls. Ensures positions type (uint8 vs uint16) and null slot are correct.
@@ -227,12 +227,12 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        AFL_VERIFY(dict->GetPositions()->type()->id() == expectedPositionsType,
+        YDB_LOG_VERIFY(dict->GetPositions()->type()->id() == expectedPositionsType,
             {"numDistinct", numDistinct},
             {"withNulls", withNulls},
             {"expected", static_cast<int>(expectedPositionsType)},
             {"actual", static_cast<int>(dict->GetPositions()->type()->id())});
-        AFL_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
+        YDB_LOG_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
 
         auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
@@ -240,9 +240,9 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             std::nullopt, blobAndMeta.Meta);
         auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
             NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
-        AFL_VERIFY(dictParsed->GetPositions()->type()->id() == expectedPositionsType);
-        AFL_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
-        AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
+        YDB_LOG_VERIFY(dictParsed->GetPositions()->type()->id() == expectedPositionsType);
+        YDB_LOG_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
+        YDB_LOG_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
     }
 
     Y_UNIT_TEST(CornerCase254NoNulls) {
@@ -286,16 +286,16 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dict = BuildSimpleDict();
         std::vector<std::shared_ptr<arrow::Array>> visited;
         dict->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
-            AFL_VERIFY(arr);
+            YDB_LOG_VERIFY(arr);
             visited.emplace_back(arr);
         });
-        AFL_VERIFY(visited.size() == 1,
+        YDB_LOG_VERIFY(visited.size() == 1,
             {"size", visited.size()});
-        AFL_VERIFY((ui32)visited[0]->length() == dict->GetRecordsCount(),
+        YDB_LOG_VERIFY((ui32)visited[0]->length() == dict->GetRecordsCount(),
             {"len", visited[0]->length()});
-        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["abc","abcd","abcd",null,"abc",null,"ab",null,null,null])",
+        YDB_LOG_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["abc","abcd","abcd",null,"abc",null,"ab",null,null,null])",
             {"actual", PrepareToCompare(visited[0]->ToString())});
-        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == PrepareToCompare(dict->GetChunkedArray()->chunk(0)->ToString()));
+        YDB_LOG_VERIFY(PrepareToCompare(visited[0]->ToString()) == PrepareToCompare(dict->GetChunkedArray()->chunk(0)->ToString()));
     }
 
     // VisitDistinctValues is the value-set view for set-membership indexing: it hands over the
@@ -306,15 +306,15 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dict = BuildSimpleDict();
         std::vector<std::shared_ptr<arrow::Array>> visited;
         dict->VisitDistinctValues([&](std::shared_ptr<arrow::Array> arr) {
-            AFL_VERIFY(arr);
+            YDB_LOG_VERIFY(arr);
             visited.emplace_back(arr);
         });
-        AFL_VERIFY(visited.size() == 1,
+        YDB_LOG_VERIFY(visited.size() == 1,
             {"size", visited.size()});
         // Deduplicated: length == #distinct (+ null slot), strictly less than the record count.
-        AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount(),
+        YDB_LOG_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount(),
             {"len", visited[0]->length()});
-        AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])",
+        YDB_LOG_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])",
             {"actual", PrepareToCompare(visited[0]->ToString())});
     }
 
@@ -328,8 +328,8 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             decoded = std::move(array);
         });
 
-        AFL_VERIFY(!HasNulls(decoded));
-        AFL_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
+        YDB_LOG_VERIFY(!HasNulls(decoded));
+        YDB_LOG_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
     }
 
     Y_UNIT_TEST(VisitValuesWithoutNullsPreservesStringDataSize) {

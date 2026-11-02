@@ -15,8 +15,8 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 std::unique_ptr<TDataSourceLease> ISourcesConstructor::TryExtractNext(
     const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
-    AFL_VERIFY(!IsFinished());
-    AFL_VERIFY(InitCursorFlag);
+    YDB_LOG_VERIFY(!IsFinished());
+    YDB_LOG_VERIFY(InitCursorFlag);
     return DoTryExtractNext(context, inFlightCurrentLimit);
 }
 
@@ -77,7 +77,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
             for (const TPortionInfo::TConstPtr& p : conflictingPortions) {
                 // add maybe conflicting writes
                 if (!p->IsCommitted()) {
-                    AFL_VERIFY(p->GetPortionType() == EPortionType::Written);
+                    YDB_LOG_VERIFY(p->GetPortionType() == EPortionType::Written);
                     auto* written = static_cast<const TWrittenPortionInfo*>(p.get());
                     auto writeId = written->GetInsertWriteId();
                     auto op = opManager.GetOperationByInsertWriteIdVerified(writeId);
@@ -110,9 +110,9 @@ std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
     const auto& ids = GetProgram().GetEarlyFilterColumns();
     std::set<ui32> result(ids.begin(), ids.end());
-    AFL_VERIFY(result.size() == ids.size());
+    YDB_LOG_VERIFY(result.size() == ids.size());
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
-        AFL_VERIFY(indexInfo.HasColumnId(i),
+        YDB_LOG_VERIFY(indexInfo.HasColumnId(i),
             {"columnId", i});
     }
     return result;

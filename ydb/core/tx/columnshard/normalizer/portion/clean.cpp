@@ -88,7 +88,7 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(
             }
         } else if (storageId == NBlobOperations::TGlobal::LocalMetadataStorageId) {
         } else {
-            AFL_VERIFY(false,
+            YDB_LOG_VERIFY(false,
                 {"details", "Invalid storage for normalizer"});
         }
     }

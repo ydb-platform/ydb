@@ -420,7 +420,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
     }
 
     if (CurrentStateFunc() == &TThis::StateResolveDatabase) {
-        AFL_ENSURE(navigate->ResultSet.size() == 1,
+        YDB_LOG_ENSURE(navigate->ResultSet.size() == 1,
             {"resultSetSize", navigate->ResultSet.size()},
             {"database", DatabasePath});
         IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();

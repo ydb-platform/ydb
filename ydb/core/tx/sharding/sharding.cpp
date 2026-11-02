@@ -83,8 +83,8 @@ NKikimr::TConclusionStatus IShardingBase::DeserializeFromProto(const NKikimrSche
             if (shardInfo.IsFail()) {
                 return shardInfo;
             }
-            AFL_VERIFY(sortedTabletIds.emplace(shardInfo->GetSequenceIdx(), shardInfo->GetTabletId()).second);
-            AFL_VERIFY(Shards.emplace(shardInfo->GetTabletId(), shardInfo.GetResult()).second);
+            YDB_LOG_VERIFY(sortedTabletIds.emplace(shardInfo->GetSequenceIdx(), shardInfo->GetTabletId()).second);
+            YDB_LOG_VERIFY(Shards.emplace(shardInfo->GetTabletId(), shardInfo.GetResult()).second);
         }
         for (auto&& i : sortedTabletIds) {
             OrderedShardIds.emplace_back(i.second);
@@ -156,7 +156,7 @@ NKikimr::TConclusionStatus IShardingBase::ApplyModification(const NKikimrSchemeO
         };
         OrderedShardIds.erase(std::remove_if(OrderedShardIds.begin(), OrderedShardIds.end(), pred), OrderedShardIds.end());
     }
-    
+
     {
         auto conclusion = DoApplyModification(proto);
         if (conclusion.IsFail()) {
@@ -231,8 +231,8 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> IShardingBase::
 
 NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     NKikimrSchemeOp::TColumnTableSharding result;
-    AFL_VERIFY(Shards.size() == OrderedShardIds.size());
-    AFL_VERIFY(OrderedShardIds.size());
+    YDB_LOG_VERIFY(Shards.size() == OrderedShardIds.size());
+    YDB_LOG_VERIFY(OrderedShardIds.size());
     for (auto&& i : OrderedShardIds) {
         *result.AddShardsInfo() = GetShardInfoVerified(i).SerializeToProto();
         result.AddColumnShards(i);
@@ -245,11 +245,11 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShards
     THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
     if (sharding.size() == 1) {
-        AFL_VERIFY(chunks.emplace(sharding.begin()->first, batch).second);
+        YDB_LOG_VERIFY(chunks.emplace(sharding.begin()->first, batch).second);
     } else {
         chunks = NArrow::ShardingSplit(batch, sharding, memoryPool);
     }
-    AFL_VERIFY(chunks.size() == sharding.size());
+    YDB_LOG_VERIFY(chunks.size() == sharding.size());
     return chunks;
 }
 
@@ -271,12 +271,12 @@ TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> IShardingBase
 }
 
 void IShardingBase::InitializeFromOrdered(const std::vector<ui64>& orderedIds) {
-    AFL_VERIFY(orderedIds.size());
+    YDB_LOG_VERIFY(orderedIds.size());
     std::set<ui64> shardIdsSetOriginal;
     OrderedShardIds.clear();
     Shards.clear();
     for (auto&& i : orderedIds) {
-        AFL_VERIFY(shardIdsSetOriginal.emplace(i).second);
+        YDB_LOG_VERIFY(shardIdsSetOriginal.emplace(i).second);
         Shards.emplace(i, TShardInfo(i, OrderedShardIds.size()));
         OrderedShardIds.emplace_back(i);
     }
@@ -308,7 +308,7 @@ NKikimr::TConclusionStatus TShardInfo::DeserializeFromProto(const NKikimrSchemeO
         }
         OpenForWriteSnapshot = ss;
     }
-    AFL_VERIFY(proto.HasShardingVersion());
+    YDB_LOG_VERIFY(proto.HasShardingVersion());
     ShardingVersion = proto.GetShardingVersion();
     if (!TabletId) {
         return TConclusionStatus::Fail("incorrect TabletId for TShardInfo proto");

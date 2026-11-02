@@ -23,7 +23,7 @@ private:
         bool doRemove = false;
         if (shared) {
             auto itTablet = shared->find(tabletId);
-            AFL_VERIFY(itTablet != shared->end());
+            YDB_LOG_VERIFY(itTablet != shared->end());
             if (shared->size() == 1) {
                 doRemove = true;
             }
@@ -34,7 +34,7 @@ private:
         if (doRemove) {
             auto it = BorrowedBlobIds.find(blobId);
             if (it != BorrowedBlobIds.end()) {
-                AFL_VERIFY(it->second != tabletId);
+                YDB_LOG_VERIFY(it->second != tabletId);
                 blobs.AddBorrowed(it->second, blobId);
             } else {
                 blobs.AddDirect(tabletId, blobId);
@@ -107,7 +107,7 @@ public:
                     shared = true;
                 }
             }
-            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1,
+            YDB_LOG_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1,
                 {"b", borrowed},
                 {"d", direct},
                 {"s", shared},
@@ -120,7 +120,7 @@ public:
 
     void RemoveSharedBlobs(const TTabletsByBlob& blobIds) {
         for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
-            AFL_VERIFY(SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId()));
+            YDB_LOG_VERIFY(SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId()));
         }
     }
 
@@ -145,7 +145,7 @@ public:
             }
             auto infoInsert = BorrowedBlobIds.emplace(i.first, i.second);
             if (!infoInsert.second) {
-                AFL_VERIFY(infoInsert.first->second == i.second,
+                YDB_LOG_VERIFY(infoInsert.first->second == i.second,
                     {"before", infoInsert.first->second},
                     {"after", i.second});
             }
@@ -162,7 +162,7 @@ public:
     }
 
     [[nodiscard]] bool UpsertBorrowedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
-        AFL_VERIFY(ownerTabletId != SelfTabletId);
+        YDB_LOG_VERIFY(ownerTabletId != SelfTabletId);
         return BorrowedBlobIds.emplace(blobId, ownerTabletId).second;
     }
 
@@ -192,7 +192,7 @@ public:
     }
 
     void FinishExternalModification() {
-        AFL_VERIFY(ExternalModificationsCount.Dec() >= 0);
+        YDB_LOG_VERIFY(ExternalModificationsCount.Dec() >= 0);
     }
 
     bool HasExternalModifications() const {
@@ -254,7 +254,7 @@ public:
 
     std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerVerified(const TString& storageId) const {
         auto it = Storages.find(storageId);
-        AFL_VERIFY(it != Storages.end(),
+        YDB_LOG_VERIFY(it != Storages.end(),
             {"storageId", storageId});
         return it->second;
     }

@@ -89,13 +89,13 @@ public:
             finishRecordActor();
             return;
         }
-        AFL_VERIFY(CurrentChunkStartPosition <= recordIndex,
+        YDB_LOG_VERIFY(CurrentChunkStartPosition <= recordIndex,
             {"pred", CurrentChunkStartPosition},
             {"record", recordIndex});
         if (recordIndex - CurrentChunkStartPosition >= CurrentChunk->GetArray()->GetRecordsCount()) {
             InitArray(recordIndex);
         }
-        AFL_VERIFY(CurrentChunk->GetAddress().Contains(recordIndex));
+        YDB_LOG_VERIFY(CurrentChunk->GetAddress().Contains(recordIndex));
         DataIterator->ReadRecord(recordIndex - CurrentChunkStartPosition, startRecordActor, kvActor, finishRecordActor);
     }
 };

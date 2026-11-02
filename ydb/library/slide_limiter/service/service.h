@@ -88,7 +88,7 @@ public:
                     {"limiter", LimiterName},
                     {"problem", "unexpected event"},
                     {"type", ev->GetTypeRewrite()});
-                AFL_VERIFY_DEBUG(false)("type", ev->GetTypeRewrite());
+                YDB_LOG_VERIFY_DEBUG(false)("type", ev->GetTypeRewrite());
                 break;
         }
     }

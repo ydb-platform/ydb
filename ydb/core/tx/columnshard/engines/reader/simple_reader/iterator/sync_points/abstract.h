@@ -94,7 +94,7 @@ public:
     }
 
     void SetNext(const std::shared_ptr<ISyncPoint>& next) {
-        AFL_VERIFY(!Next);
+        YDB_LOG_VERIFY(!Next);
         Next = next;
     }
 

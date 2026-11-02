@@ -22,13 +22,13 @@ void TFetchedData::SyncTableColumns(
 
 void TFetchedData::AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers) {
     for (auto&& i : fetchers) {
-        AFL_VERIFY(Fetchers.emplace(i->GetEntityId(), i).second,
+        YDB_LOG_VERIFY(Fetchers.emplace(i->GetEntityId(), i).second,
             {"entityId", i->GetEntityId()});
     }
 }
 
 void TFetchedData::AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher) {
-    AFL_VERIFY(Fetchers.emplace(fetcher->GetEntityId(), fetcher).second,
+    YDB_LOG_VERIFY(Fetchers.emplace(fetcher->GetEntityId(), fetcher).second,
         {"entityId", fetcher->GetEntityId()});
 }
 

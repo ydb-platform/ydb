@@ -37,7 +37,7 @@ public:
     using TBase::TBase;
 
     void AddChildren(const std::shared_ptr<ITxReader>& reader) {
-        AFL_VERIFY(!GetIsStarted());
+        YDB_LOG_VERIFY(!GetIsStarted());
         reader->AddNamePrefix(GetStageName() + "/");
         Children.emplace_back(reader);
     }

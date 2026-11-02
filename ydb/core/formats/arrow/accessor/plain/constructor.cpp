@@ -25,7 +25,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             << " original data: " << Base64Encode(originalData));
     }
     auto rb = TStatusValidator::GetValid(result);
-    AFL_VERIFY(rb->num_columns() == 1,
+    YDB_LOG_VERIFY(rb->num_columns() == 1,
         {"count", rb->num_columns()},
         {"schema", schema->ToString()});
     if (externalInfo.HasNullRecordsCount()) {

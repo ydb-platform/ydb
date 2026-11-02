@@ -55,8 +55,8 @@ public:
         , Adapter(adapter)
         , Session(session)
     {
-        AFL_VERIFY(!!Session);
-        AFL_VERIFY(!!Adapter);
+        YDB_LOG_VERIFY(!!Session);
+        YDB_LOG_VERIFY(!!Adapter);
     }
 
     void Handle(TEvLocalTransactionCompleted::TPtr& ev);
@@ -72,7 +72,7 @@ public:
             hFunc(TEvSessionControl, Handle);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
             default:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"unexpectedEvent", ev->GetTypeName()});
         }
     }

@@ -26,19 +26,19 @@
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
 
 void TGraphNode::AddEdgeTo(TGraphNode* to, const ui32 resourceId) {
-    AFL_VERIFY(OutputEdges.emplace(TAddress(to->GetIdentifier(), resourceId), to).second);
+    YDB_LOG_VERIFY(OutputEdges.emplace(TAddress(to->GetIdentifier(), resourceId), to).second);
 }
 
 void TGraphNode::AddEdgeFrom(TGraphNode* from, const ui32 resourceId) {
-    AFL_VERIFY(InputEdges.emplace(TAddress(from->GetIdentifier(), resourceId), from).second);
+    YDB_LOG_VERIFY(InputEdges.emplace(TAddress(from->GetIdentifier(), resourceId), from).second);
 }
 
 void TGraphNode::RemoveEdgeTo(const ui32 identifier, const ui32 resourceId) {
-    AFL_VERIFY(OutputEdges.erase(TAddress(identifier, resourceId)));
+    YDB_LOG_VERIFY(OutputEdges.erase(TAddress(identifier, resourceId)));
 }
 
 void TGraphNode::RemoveEdgeFrom(const ui32 identifier, const ui32 resourceId) {
-    AFL_VERIFY(InputEdges.erase(TAddress(identifier, resourceId)));
+    YDB_LOG_VERIFY(InputEdges.erase(TAddress(identifier, resourceId)));
 }
 
 bool TGraphNode::HasEdgeFrom(const ui32 nodeId, const ui32 resourceId) const {
@@ -52,7 +52,7 @@ bool TGraphNode::HasEdgeTo(const ui32 nodeId, const ui32 resourceId) const {
 bool TGraph::HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const {
     const bool hasEdgeTo = from->HasEdgeTo(to->GetIdentifier(), resourceId);
     const bool hasEdgeFrom = to->HasEdgeFrom(from->GetIdentifier(), resourceId);
-    AFL_VERIFY(hasEdgeTo == hasEdgeFrom,
+    YDB_LOG_VERIFY(hasEdgeTo == hasEdgeFrom,
         {"from", hasEdgeFrom},
         {"to", hasEdgeTo});
     return hasEdgeFrom;
@@ -70,7 +70,7 @@ void TGraph::RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId)
 
 void TGraph::RemoveNode(const ui32 idenitifier) {
     auto it = Nodes.find(idenitifier);
-    AFL_VERIFY(it != Nodes.end());
+    YDB_LOG_VERIFY(it != Nodes.end());
     for (auto&& i : it->second->GetInputEdges()) {
         i.second->RemoveEdgeTo(it->second->GetIdentifier(), i.first.GetResourceId());
     }
@@ -96,7 +96,7 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
     for (auto&& i : processors) {
         auto node = AddNode(i);
         for (auto&& output : i->GetOutput()) {
-            AFL_VERIFY(Producers.emplace(output.GetColumnId(), node.get()).second);
+            YDB_LOG_VERIFY(Producers.emplace(output.GetColumnId(), node.get()).second);
         }
         for (auto&& input : i->GetInput()) {
             if (Producers.find(input.GetColumnId()) != Producers.end()) {
@@ -107,11 +107,11 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
             const IDataSource::TDataAddress dataAddr(
                 input.GetColumnId(), Resolver.GetColumnName(input.GetColumnId()), NAccessor::NSubColumns::TCanonicalSubColumnName{});
             auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(input.GetColumnId(), dataAddr));
-            //            AFL_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
+            //            YDB_LOG_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
 
             auto nodeInputAssembler =
                 AddNode(std::make_shared<TOriginalColumnAccessorProcessor>(input.GetColumnId(), input.GetColumnId(), dataAddr));
-            AFL_VERIFY(Producers.emplace(input.GetColumnId(), nodeInputAssembler.get()).second);
+            YDB_LOG_VERIFY(Producers.emplace(input.GetColumnId(), nodeInputAssembler.get()).second);
             AddEdge(inputFetcher.get(), nodeInputAssembler.get(), input.GetColumnId());
         }
     }
@@ -174,7 +174,7 @@ TConclusion<bool> TGraph::OptimizeForFetchSubColumns(TGraphNode* condNode) {
         if (!addr->GetSubColumnName()) {
             continue;
         }
-        AFL_VERIFY(addr->GetColumnId() == originalAssemble->GetDataAddress().GetColumnId());
+        YDB_LOG_VERIFY(addr->GetColumnId() == originalAssemble->GetDataAddress().GetColumnId());
         auto it = resourceProducers.find(*addr);
         if (it == resourceProducers.end()) {
             const IDataSource::TDataAddress dataAddr(addr->GetColumnId(), Resolver.GetColumnName(addr->GetColumnId()), addr->GetSubColumnName());
@@ -264,7 +264,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         } else if (baseNode->Is(EProcessorType::Projection)) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
         }
-        AFL_VERIFY(policy);
+        YDB_LOG_VERIFY(policy);
         auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
         auto nodeReserve = AddNode(reserveMemory);
         nodeReserve->GetProcessor()->AddOutput(0);

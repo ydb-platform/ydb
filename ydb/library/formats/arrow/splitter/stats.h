@@ -43,11 +43,11 @@ public:
     };
 
     double GetSerializedBytesPerRecord() const {
-        AFL_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount);
         return 1.0 * SerializedBytes / RecordsCount;
     }
     double GetRawBytesPerRecord() const {
-        AFL_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(RecordsCount);
         return 1.0 * RawBytes / RecordsCount;
     }
 
@@ -198,10 +198,10 @@ public:
         auto it = StatsByColumnId.find(info.GetColumnId());
         if (it == StatsByColumnId.end()) {
             ColumnStat.emplace_back(info);
-            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second,
+            YDB_LOG_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second,
                 {"columnId", info.GetColumnId()},
                 {"columnName", info.GetColumnName()});
-            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second,
+            YDB_LOG_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second,
                 {"columnId", info.GetColumnId()},
                 {"columnName", info.GetColumnName()});
         } else {

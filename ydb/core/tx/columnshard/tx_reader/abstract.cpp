@@ -16,7 +16,7 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     }
     const TMonotonic attemptStart = TMonotonic::Now();
     if (!IsStarted) {
-        AFL_VERIFY(Orbit,
+        YDB_LOG_VERIFY(Orbit,
             {"stage", StageName});
         IsStarted = true;
         FirstAttemptInstant = attemptStart;

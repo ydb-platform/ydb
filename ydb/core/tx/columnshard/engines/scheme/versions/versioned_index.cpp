@@ -17,7 +17,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
     auto newVersion = indexInfo->GetVersion();
     auto itVersion =
         SnapshotByVersion.emplace(newVersion, TSchemaInfoByVersion(std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot)));
-    AFL_VERIFY(itVersion.second,
+    YDB_LOG_VERIFY(itVersion.second,
         {"message", "duplication for registered version"},
         {"version", LastSchemaVersion});
     if (needActualization) {

@@ -22,9 +22,9 @@ private:
 protected:
     template <class T>
     const T& GetChunkAs(const ui32 idx) const {
-        AFL_VERIFY(idx < Chunks.size());
+        YDB_LOG_VERIFY(idx < Chunks.size());
         auto result = std::dynamic_pointer_cast<T>(Chunks[idx]);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -32,7 +32,7 @@ public:
     TSplittedEntity(const ui32 entityId)
         : EntityId(entityId)
     {
-        AFL_VERIFY(EntityId);
+        YDB_LOG_VERIFY(EntityId);
     }
 
     ui64 GetPackedSize() const {
@@ -40,7 +40,7 @@ public:
         for (auto&& i : Chunks) {
             result += i->GetPackedSize();
         }
-        AFL_VERIFY(Size == result,
+        YDB_LOG_VERIFY(Size == result,
             {"size", Size},
             {"result", result});
         return result;
@@ -64,7 +64,7 @@ public:
         TEntityChunk DetachEntityChunkVerified(const std::shared_ptr<IPortionDataChunk>& chunk) {
             for (ui32 idx = 0; idx < Chunks.size(); ++idx) {
                 if (Chunks[idx]->GetChunkIdxVerified() == chunk->GetChunkIdxVerified()) {
-                    AFL_VERIFY((ui64)Chunks[idx].get() == (ui64)chunk.get());
+                    YDB_LOG_VERIFY((ui64)Chunks[idx].get() == (ui64)chunk.get());
                     std::swap(Chunks[idx], Chunks[Chunks.size() - 1]);
                     Chunks.pop_back();
                     TEntityChunk result(Entity);
@@ -73,7 +73,7 @@ public:
                     return result;
                 }
             }
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
             return TEntityChunk(Entity);
         }
 
@@ -100,22 +100,22 @@ public:
                     return i;
                 }
             }
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
             return Chunks[0];
         }
 
         void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
-            AFL_VERIFY(chunk);
-            AFL_VERIFY(chunk->GetPackedSize());
+            YDB_LOG_VERIFY(chunk);
+            YDB_LOG_VERIFY(chunk->GetPackedSize());
             for (auto&& i : Chunks) {
-                AFL_VERIFY(i->GetChunkIdxVerified() != chunk->GetChunkIdxVerified());
+                YDB_LOG_VERIFY(i->GetChunkIdxVerified() != chunk->GetChunkIdxVerified());
             }
             Chunks.emplace_back(chunk);
             Size.Add(chunk->GetPackedSize());
         }
 
         void Merge(const TEntityChunk& item) {
-            AFL_VERIFY((ui64)Entity == (ui64)item.Entity);
+            YDB_LOG_VERIFY((ui64)Entity == (ui64)item.Entity);
             for (auto&& i : item.Chunks) {
                 AddChunk(i);
             }
@@ -131,7 +131,7 @@ public:
                 {"limit", sizeLimit},
                 {"rCount", bigChunk->GetRecordsCountVerified()});
             const auto predSplit = [sizeLimit, entityId, schema, counters](const std::shared_ptr<IPortionDataChunk>& chunkToSplit) {
-                AFL_VERIFY(chunkToSplit->IsSplittable());
+                YDB_LOG_VERIFY(chunkToSplit->IsSplittable());
                 counters->BySizeSplitter.OnTrashSerialized(chunkToSplit->GetPackedSize());
                 const ui32 countSplit = chunkToSplit->GetPackedSize() / sizeLimit + 1;
                 const ui32 sizeSplit = chunkToSplit->GetPackedSize() / countSplit;
@@ -162,7 +162,7 @@ public:
                 if (checkImpl->GetPackedSize() < sizeLimit) {
                     result.emplace_back(checkImpl);
                 } else {
-                    AFL_VERIFY(checkImpl->IsSplittable(),
+                    YDB_LOG_VERIFY(checkImpl->IsSplittable(),
                         {"pSize", checkImpl->GetPackedSize()},
                         {"cImpl", checkImpl->GetRecordsCountVerified()});
                     auto parts = predSplit(checkImpl);
@@ -193,7 +193,7 @@ public:
 
         TEntityChunk ExtractChunk(const ui32 id) {
             auto it = Entities.find(id);
-            AFL_VERIFY(it != Entities.end());
+            YDB_LOG_VERIFY(it != Entities.end());
             Size.Sub(it->second.GetSize());
             auto result = std::move(it->second);
             Entities.erase(it);
@@ -280,14 +280,14 @@ public:
             , Counters(counters)
             , InternalSplitsCount(&internalSplitsCount)
         {
-            AFL_VERIFY(MinSize * 2 < MaxSize);
+            YDB_LOG_VERIFY(MinSize * 2 < MaxSize);
         }
 
         std::vector<TSplittedBlob> Finish(const TString& groupName);
 
         void AddChunk(TBlobChunk&& chunk) {
             Size.Add(chunk.GetSize());
-            AFL_VERIFY(chunk.GetSize() < MaxSize,
+            YDB_LOG_VERIFY(chunk.GetSize() < MaxSize,
                 {"size", chunk.GetSize()},
                 {"max", MaxSize});
             if (chunk.GetSize() < MinSize) {
@@ -326,7 +326,7 @@ public:
             ui32 sumSize = 0;
             for (auto&& i : smallPtr) {
                 if (sumSize + i->GetSize() >= MaxSize) {
-                    AFL_VERIFY(normal.size() > 1);
+                    YDB_LOG_VERIFY(normal.size() > 1);
                     result.AddChunk(TBlobChunk(std::move(normal)));
                     normal.clear();
                     sumSize = 0;
@@ -344,7 +344,7 @@ public:
             if (Small.empty()) {
                 return;
             }
-            AFL_VERIFY(Small.size() == 1);
+            YDB_LOG_VERIFY(Small.size() == 1);
             TBlobChunk smallBlob = std::move(Small.front());
             Small.clear();
             if (Normal.empty()) {
@@ -359,7 +359,7 @@ public:
             }
             for (auto&& i : Normal) {
                 if (smallBlob.TakeEntityFrom(i, MinSize, MaxSize)) {
-                    AFL_VERIFY(smallBlob.GetSize() < MaxSize);
+                    YDB_LOG_VERIFY(smallBlob.GetSize() < MaxSize);
                     Normal.emplace_back(std::move(smallBlob));
                     return;
                 }
@@ -370,7 +370,7 @@ public:
                 if (smallBlob.TakeEntityPartFrom(i, MinSize, MaxSize, Schema, Counters, *InternalSplitsCount)) {
                     Size.Add(smallBlob.GetSize());
                     Size.Add(i.GetSize());
-                    AFL_VERIFY(smallBlob.GetSize() < MaxSize);
+                    YDB_LOG_VERIFY(smallBlob.GetSize() < MaxSize);
                     Normal.emplace_back(std::move(smallBlob));
                     return;
                 }
@@ -399,7 +399,7 @@ public:
         std::vector<TBlobChunk> bChunks;
         bChunks.reserve(Chunks.size());
         for (ui32 idx = 0; idx < Chunks.size(); ++idx) {
-            AFL_VERIFY(idx == Chunks[idx]->GetChunkIdxVerified());
+            YDB_LOG_VERIFY(idx == Chunks[idx]->GetChunkIdxVerified());
             if (eChunk.GetSize() + Chunks[idx]->GetPackedSize() >= maxSize) {
                 bChunks.emplace_back(std::move(eChunk));
                 eChunk = TEntityChunk(this);
@@ -413,11 +413,11 @@ public:
     }
 
     void SwitchChunk(const std::shared_ptr<IPortionDataChunk>& from, const std::vector<std::shared_ptr<IPortionDataChunk>>& to) {
-        AFL_VERIFY(to.size() > 1);
+        YDB_LOG_VERIFY(to.size() > 1);
         const ui32 startSize = Chunks.size();
-        AFL_VERIFY(startSize);
-        AFL_VERIFY(from->GetChunkIdxVerified() < startSize);
-        AFL_VERIFY((ui64)Chunks[from->GetChunkIdxVerified()].get() == (ui64)from.get());
+        YDB_LOG_VERIFY(startSize);
+        YDB_LOG_VERIFY(from->GetChunkIdxVerified() < startSize);
+        YDB_LOG_VERIFY((ui64)Chunks[from->GetChunkIdxVerified()].get() == (ui64)from.get());
         std::vector<std::shared_ptr<IPortionDataChunk>> result;
         result.insert(result.end(), Chunks.begin(), Chunks.begin() + from->GetChunkIdxVerified());
         result.insert(result.end(), to.begin(), to.end());
@@ -441,11 +441,11 @@ public:
 
     void Merge(TSplittedEntity&& c) {
         Size += c.Size;
-        AFL_VERIFY(!!RecordsCount == !!c.RecordsCount);
+        YDB_LOG_VERIFY(!!RecordsCount == !!c.RecordsCount);
         if (RecordsCount) {
             *RecordsCount += *c.RecordsCount;
         }
-        AFL_VERIFY(EntityId == c.EntityId,
+        YDB_LOG_VERIFY(EntityId == c.EntityId,
             {"self", EntityId},
             {"c", c.EntityId});
         Y_ABORT_UNLESS(c.EntityId);
@@ -465,7 +465,7 @@ public:
             if (!hasRecords) {
                 hasRecords = !!rc;
             }
-            AFL_VERIFY(*hasRecords == !!rc);
+            YDB_LOG_VERIFY(*hasRecords == !!rc);
             if (!rc) {
                 continue;
             }

@@ -31,13 +31,13 @@ public:
     TUploadStatus(const Ydb::StatusIds::StatusCode code, const TString& errorMessage)
         : Code(code)
         , ErrorMessage(errorMessage) {
-        AFL_VERIFY(code != Ydb::StatusIds::SUCCESS);
+        YDB_LOG_VERIFY(code != Ydb::StatusIds::SUCCESS);
     }
     TUploadStatus(const Ydb::StatusIds::StatusCode code, const ECustomSubcode& subcode, const TString& errorMessage)
         : Code(code)
         , Subcode(ToString(subcode))
         , ErrorMessage(errorMessage) {
-        AFL_VERIFY(code != Ydb::StatusIds::SUCCESS);
+        YDB_LOG_VERIFY(code != Ydb::StatusIds::SUCCESS);
     }
     TUploadStatus(const NSchemeCache::TSchemeCacheNavigate::EStatus status);
     TUploadStatus(const NKikimrTxDataShard::TError::EKind status, const TString& errorDescription);
@@ -105,13 +105,13 @@ public:
 
         void OnCommitStarted() {
             CommitStarted = TMonotonic::Now();
-            AFL_VERIFY(WritingStarted);
+            YDB_LOG_VERIFY(WritingStarted);
             Owner.WritingDuration->Collect((*CommitStarted - *WritingStarted).MilliSeconds());
         }
 
         void OnCommitFinished() {
             CommitFinished = TMonotonic::Now();
-            AFL_VERIFY(CommitStarted);
+            YDB_LOG_VERIFY(CommitStarted);
             Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
         }
 

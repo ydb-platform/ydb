@@ -632,7 +632,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
             TString str;
             bool res = proto.SerializeToString(&str);
-            AFL_ENSURE(res,
+            YDB_LOG_ENSURE(res,
                 {"reason", "failed to serialize TDataChunk"});
 
             auto w = partitionRequest->AddCmdWrite();

@@ -228,7 +228,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
         }, ctx, kqpCtx);
     }
 
-    AFL_ENSURE(!useStreamIndex || needsKqpEffect);
+    YDB_LOG_ENSURE(!useStreamIndex || needsKqpEffect);
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
         .Args({"stub"})

@@ -14,7 +14,7 @@ namespace NPQ {
         TStringBuilder s;
         s << owner << "|" << CreateGuidAsString() << "_" << OwnerGeneration;
         ++OwnerGeneration;
-        AFL_ENSURE(OwnerCookie != s,
+        YDB_LOG_ENSURE(OwnerCookie != s,
             {"topicName", topicName},
             {"partition", partition});
         OwnerCookie = s;

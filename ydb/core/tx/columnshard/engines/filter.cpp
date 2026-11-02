@@ -17,9 +17,9 @@ private:
 
 public:
     TChunkedArrayIterator(const std::shared_ptr<arrow::ChunkedArray>& chunks) {
-        AFL_VERIFY(!!chunks);
+        YDB_LOG_VERIFY(!!chunks);
         Chunks = &chunks->chunks();
-        AFL_VERIFY(Chunks->size());
+        YDB_LOG_VERIFY(Chunks->size());
         CurrentChunkIt = Chunks->begin();
         Y_ABORT_UNLESS(chunks->type()->id() == arrow::TypeTraits<typename TArrayView::TypeClass>::type_singleton()->id());
         if (IsValid()) {
@@ -32,12 +32,12 @@ public:
     }
 
     typename TArrayView::value_type GetValue() const {
-        AFL_VERIFY_DEBUG(IsValid());
+        YDB_LOG_VERIFY_DEBUG(IsValid());
         return RawView[CurrentChunkPosition];
     }
 
     bool Next() {
-        AFL_VERIFY_DEBUG(IsValid());
+        YDB_LOG_VERIFY_DEBUG(IsValid());
         ++CurrentChunkPosition;
         while (CurrentChunkIt != Chunks->end() && (*CurrentChunkIt)->length() == CurrentChunkPosition) {
             if (++CurrentChunkIt != Chunks->end()) {
@@ -67,14 +67,14 @@ public:
     }
 
     bool operator[](const ui32 idx) const {
-        AFL_VERIFY(CurrentIdx + 1 == idx,
+        YDB_LOG_VERIFY(CurrentIdx + 1 == idx,
             {"currentIdx", CurrentIdx},
             {"idx", idx});
         CurrentIdx = idx;
         const bool result = std::less_equal<TSnapshot>()(TSnapshot(Steps.GetValue(), Ids.GetValue()), Snapshot);
         const bool sNext = Steps.Next();
         const bool idNext = Ids.Next();
-        AFL_VERIFY(sNext == idNext);
+        YDB_LOG_VERIFY(sNext == idNext);
         if (!idNext) {
             CurrentIdx = -2;
         }

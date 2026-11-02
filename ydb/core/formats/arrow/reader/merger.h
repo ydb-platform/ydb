@@ -54,7 +54,7 @@ private:
         const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
 
         if (MaxVersion) {
-            AFL_VERIFY(MinUncommittedVersion.has_value());
+            YDB_LOG_VERIFY(MinUncommittedVersion.has_value());
             bool skippedPk = false;
             while (SortHeap.Size() && !SortHeap.Current().IsControlPoint() &&
                    SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater && SortHeap.Current().GetVersionColumns().Compare(*MinUncommittedVersion) == std::partial_ordering::less && !skippedPk) {
@@ -99,12 +99,12 @@ private:
             //                {"keySkip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust()});
             auto& anotherIterator = SortHeap.Current();
             if (PossibleSameVersionFlag) {
-                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater,
+                YDB_LOG_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater,
                     {"r", startVersion->BuildCursor(startPosition).DebugJson()},
                     {"a", anotherIterator.GetVersionColumns().DebugJson()},
                     {"key", startSorting->BuildCursor(startPosition).DebugJson()});
             } else {
-                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less,
+                YDB_LOG_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less,
                     {"r", startVersion->BuildCursor(startPosition).DebugJson()},
                     {"a", anotherIterator.GetVersionColumns().DebugJson()},
                     {"key", startSorting->BuildCursor(startPosition).DebugJson()});
@@ -133,7 +133,7 @@ public:
         , VersionColumnNames(versionColumnNames)
         , MaxVersion(maxVersion)
         , MinUncommittedVersion(minUncommittedVersion) {
-        AFL_VERIFY(maxVersion.has_value() == minUncommittedVersion.has_value());
+        YDB_LOG_VERIFY(maxVersion.has_value() == minUncommittedVersion.has_value());
         Y_ABORT_UNLESS(SortSchema);
         Y_ABORT_UNLESS(SortSchema->num_fields());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
@@ -167,12 +167,12 @@ public:
     template <class TDataContainer>
     void AddSource(const std::shared_ptr<TDataContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter,
         const TIterationOrder& order, const std::optional<ui64> sourceIdExt = std::nullopt) {
-        AFL_VERIFY(order.GetIsReversed() == Reverse);
+        YDB_LOG_VERIFY(order.GetIsReversed() == Reverse);
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
         if (!batch || (i64)batch->num_rows() == (i64)order.GetStart()) {
             return;
         }
-        AFL_VERIFY((i64)order.GetStart() < (i64)batch->num_rows(),
+        YDB_LOG_VERIFY((i64)order.GetStart() < (i64)batch->num_rows(),
             {"start", order.GetStart()},
             {"numRows", batch->num_rows()});
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
@@ -205,7 +205,7 @@ public:
 
     template <MergeResultBuilder TBuilder>
     bool DrainToControlPoint(TBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr) {
-        AFL_VERIFY(ControlPoints == 1);
+        YDB_LOG_VERIFY(ControlPoints == 1);
         builder.ValidateDataSchema(DataSchema);
         bool cpReachedFlag = false;
         std::shared_ptr<TSortableScanData> resultScanData;

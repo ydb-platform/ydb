@@ -264,14 +264,14 @@ NYql::NNodes::TExprBase KqpBuildLockAndCheckStages(NYql::NNodes::TExprBase node,
     if (!node.Maybe<TKqpLockAndCheck>()) {
         return node;
     }
-    AFL_ENSURE(kqpCtx.UsePessimisticLocks);
+    YDB_LOG_ENSURE(kqpCtx.UsePessimisticLocks);
 
     auto lockAndCheck = node.Cast<TKqpLockAndCheck>();
 
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lockAndCheck.Table().Path());
 
     const TTypeAnnotationNode* inputAnnotation = lockAndCheck.Input().Ptr()->GetTypeAnn();
-    AFL_ENSURE(inputAnnotation);
+    YDB_LOG_ENSURE(inputAnnotation);
 
     TVector<TString> inputColumns;
     const TTypeAnnotationNode* inputItemType = GetSeqItemType(inputAnnotation);
@@ -290,7 +290,7 @@ NYql::NNodes::TExprBase KqpBuildLockAndCheckStages(NYql::NNodes::TExprBase node,
         .InputType(ExpandType(lockAndCheck.Pos(), *inputAnnotation, ctx))
         .Settings(streamLookupSettings.BuildNode(ctx, lockAndCheck.Pos()))
         .Done();
- 
+
     auto lockStage = Build<TDqStage>(ctx, lockAndCheck.Pos())
         .Inputs()
             .Add(lockStreamLookup)

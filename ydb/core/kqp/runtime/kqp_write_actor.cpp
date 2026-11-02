@@ -192,8 +192,8 @@ namespace {
                 transaction.AddReceivingShards(receivingShardId);
             }
 
-            AFL_ENSURE(transaction.GetSendingShards().size() <= 1);
-            AFL_ENSURE(transaction.GetReceivingShards().size() == 1);
+            YDB_LOG_ENSURE(transaction.GetSendingShards().size() <= 1);
+            YDB_LOG_ENSURE(transaction.GetReceivingShards().size() == 1);
         }
     }
 
@@ -216,7 +216,7 @@ namespace {
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
-        AFL_ENSURE(txManager->HasShard(shardId));
+        YDB_LOG_ENSURE(txManager->HasShard(shardId));
         const auto& reattachState = txManager->GetReattachState(shardId);
         if (reattachState.Cookie != ev->Cookie) {
             return std::nullopt;
@@ -249,7 +249,7 @@ namespace {
         // Restarts are only signaled after PREPARE started, so the shard must
         // still be registered: a reroute (which erases the shard) cannot happen
         // past that point.
-        AFL_ENSURE(txManager->HasShard(shardId));
+        YDB_LOG_ENSURE(txManager->HasShard(shardId));
         switch (txManager->GetState(shardId)) {
             case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
             case NKikimr::NKqp::IKqpTransactionManager::EXECUTING: {
@@ -441,18 +441,18 @@ TVector<ui64> FindCoveringShards(
         const TShardMeta& removedShardMeta,
         const TPartitioning::TCPtr& newPartitioning,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
-    AFL_ENSURE(newPartitioning);
+    YDB_LOG_ENSURE(newPartitioning);
     // The removed shard's metadata must be filled: it is registered from the
     // pre-update partitioning before the covering computation. A miss means a
     // re-homing would silently break the commit — fail closed instead.
-    AFL_ENSURE(removedShardMeta.IsKnown());
-    AFL_ENSURE(!removedShardMeta.Borders.From.empty());
+    YDB_LOG_ENSURE(removedShardMeta.IsKnown());
+    YDB_LOG_ENSURE(!removedShardMeta.Borders.From.empty());
 
     auto intersections = newPartitioning->GetIntersectionWithRange(
         keyColumnTypes, removedShardMeta.Borders);
     // The removed shard's range must remain covered by the new partitioning; an empty
     // intersection means a desync — fail closed.
-    AFL_ENSURE(!intersections.empty());
+    YDB_LOG_ENSURE(!intersections.empty());
     TVector<ui64> result;
     result.reserve(intersections.size());
     for (const auto& intersection : intersections) {
@@ -549,9 +549,9 @@ public:
         , Counters(counters)
         , UserCtx(userCtx)
     {
-        AFL_ENSURE(lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION || !CommitMvccSnapshot);
+        YDB_LOG_ENSURE(lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION || !CommitMvccSnapshot);
         // A non-inconsistent write always has a lock id (assigned by the executer).
-        AFL_ENSURE(inconsistentTx || lockTxId != 0);
+        YDB_LOG_ENSURE(inconsistentTx || lockTxId != 0);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
@@ -744,7 +744,7 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"eventType", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -871,7 +871,7 @@ public:
 
         // CTAS (inconsistent) may stream to either row or column tables, and the
         // consistent row-table move-retry resolves this way too.
-        AFL_ENSURE(InconsistentTx || !IsOlap);
+        YDB_LOG_ENSURE(InconsistentTx || !IsOlap);
 
         const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
@@ -989,7 +989,7 @@ public:
             {"cookie", ev->Cookie});
 
         // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
-        AFL_ENSURE(ev->Cookie != 0);
+        YDB_LOG_ENSURE(ev->Cookie != 0);
 
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
             // TODO: in future don't ignore non-retryable errors and fail immediately
@@ -1012,7 +1012,7 @@ public:
             Counters->WriteActorRemoteShardWrites->Inc();
         }
 
-        AFL_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
+        YDB_LOG_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
         if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
                 && IsSupersededWriteResult(ev->Cookie, metadata)
                 && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
@@ -1290,7 +1290,7 @@ public:
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         YQL_ENSURE(Mode == EMode::PREPARE);
         const auto& record = ev->Get()->Record;
-        AFL_ENSURE(record.GetTxLocks().empty());
+        YDB_LOG_ENSURE(record.GetTxLocks().empty());
 
         UpdateStats(record.GetTxStats());
 
@@ -1309,7 +1309,7 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        AFL_ENSURE(result.IsShardEmpty);
+        YDB_LOG_ENSURE(result.IsShardEmpty);
         RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
         Callbacks->OnPrepared(std::move(preparedInfo), result.DataSize);
     }
@@ -1359,7 +1359,7 @@ public:
             UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result.DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else {
-            AFL_ENSURE(Mode == EMode::WRITE);
+            YDB_LOG_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnMessageAcknowledged(result.DataSize);
         }
@@ -1441,7 +1441,7 @@ public:
     // AttachWriteSeqNum): row tables only, where the resolved partitioning always
     // has representable per-shard key ranges.
     TShardMeta MakeShardMeta(const ui64 shardId) const {
-        AFL_ENSURE(AttachWriteSeqNum);
+        YDB_LOG_ENSURE(AttachWriteSeqNum);
         return NKqp::MakeShardMeta(TableId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
     }
 
@@ -1472,7 +1472,7 @@ public:
         // A resend is safe when the shard deduplicates by uncommitted write seq num
         // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
         // without the flag a resend would break the write order, so fail loudly.
-        AFL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        YDB_LOG_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
         if (metadata.SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
@@ -1500,7 +1500,7 @@ public:
             if (auto batchSnapshot = ShardedWriteController->GetMessageMvccSnapshot(shardId)) {
                 return batchSnapshot;
             }
-            AFL_ENSURE(!CommitMvccSnapshot || LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+            YDB_LOG_ENSURE(!CommitMvccSnapshot || LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
             return CommitMvccSnapshot;
         }();
 
@@ -1577,7 +1577,7 @@ public:
                 }
             }
             if (needMvccSnapshot) {
-                AFL_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
+                YDB_LOG_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 *evWrite->Record.MutableMvccSnapshot() = *messageMvccSnapshot;
             }
         }
@@ -1607,7 +1607,7 @@ public:
             {"mode", static_cast<int>(Mode)},
             {"bufferMemory", GetMemory()});
 
-        AFL_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
+        YDB_LOG_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
 
         LinkedPipeCache = true;
         Send(
@@ -1634,7 +1634,7 @@ public:
             return;
         }
 
-        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
+        YDB_LOG_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (!metadata) {
             YDB_LOG_INFO("Shard retry skipped because metadata was not found.",
@@ -1714,7 +1714,7 @@ public:
             // pending: nothing to resend.
             return;
         }
-        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
+        YDB_LOG_ENSURE(InconsistentTx || AttachWriteSeqNum);
         // The resend budget is enforced in SendDataToShard: once the attempts are
         // exhausted it routes to the re-resolve path instead of sending again.
         SendDataToShard(msg->ShardId);
@@ -1795,7 +1795,7 @@ public:
                     << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
             return;
         } else {
-            AFL_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
+            YDB_LOG_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
         }
     }
 
@@ -1847,7 +1847,7 @@ public:
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
 
-        AFL_ENSURE(TxManager->HasShard(tabletId));
+        YDB_LOG_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -1901,8 +1901,8 @@ public:
                 // (preserving WriteSeqNum / OriginalShard) and transfer the removed shards'
                 // TxManager participant state (locks, flags) to those shards so the
                 // commit survives. Row tables only: column tables can't change sharding.
-                AFL_ENSURE(!IsOlap);
-                AFL_ENSURE(oldPartitioning);
+                YDB_LOG_ENSURE(!IsOlap);
+                YDB_LOG_ENSURE(oldPartitioning);
                 TVector<std::pair<ui64, TVector<ui64>>> transferTargets;
                 if (AttachWriteSeqNum) {
                     // The inconsistent-tx TxManager is collect-only: nothing to transfer.
@@ -1963,7 +1963,7 @@ public:
                     // Abort here — an earlier AddLock failure does the same, and
                     // proceeding to prepare would hit the BrokenLocks assumption of
                     // StartPrepare.
-                    AFL_ENSURE(TxManager->BrokenLocks());
+                    YDB_LOG_ENSURE(TxManager->BrokenLocks());
                     RuntimeError(NYql::NDqProto::StatusIds::ABORTED, MakeLockIssues(TxManager, {}));
                     return;
                 }
@@ -1986,8 +1986,8 @@ public:
             // round's reroute can only push fragments for dead shards with pending
             // batches — none exist at commit time — so emptiness is preserved and the
             // completion is immediate.
-            AFL_ENSURE(ShardedWriteController->IsEmpty());
-            AFL_ENSURE(ShardedWriteController->ExtractShardUpdates().empty());
+            YDB_LOG_ENSURE(ShardedWriteController->IsEmpty());
+            YDB_LOG_ENSURE(ShardedWriteController->ExtractShardUpdates().empty());
             Callbacks->OnResolveCompleted();
         }
 
@@ -2053,14 +2053,14 @@ public:
     // Runs in the same reroute window (EMode::WRITE) as the regular resolve; if a
     // resolve is already in flight (retry path), the completion fires after it.
     void RefreshPartitioning() {
-        AFL_ENSURE(Mode == EMode::WRITE);
-        AFL_ENSURE(AttachWriteSeqNum && !IsOlap);
+        YDB_LOG_ENSURE(Mode == EMode::WRITE);
+        YDB_LOG_ENSURE(AttachWriteSeqNum && !IsOlap);
         // All write data of the transaction is flushed and acknowledged by the time
         // the round starts: the Read Committed data executer flushes per statement
         // (sent and acknowledged before its result is returned), and the commit's
         // Flush path drains the rest before OnFlushed. Otherwise echo locks could be
         // lost on the mode switch to PREPARE.
-        AFL_ENSURE(ShardedWriteController->IsEmpty());
+        YDB_LOG_ENSURE(ShardedWriteController->IsEmpty());
         PrePrepareResolve = true;
         if (!ResolvingInProgress) {
             Resolve();
@@ -2233,37 +2233,37 @@ public:
         , Alloc(std::move(alloc))
         , Database(std::move(database)) {
 
-        AFL_ENSURE(!keyColumns.empty());
+        YDB_LOG_ENSURE(!keyColumns.empty());
         for (const auto& keyColumn : keyColumns) {
             NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
             KeyColumnTypes.push_back(typeInfo);
         }
 
         for (const auto& write : writes) {
-            AFL_ENSURE(write.NewColumnsIndexes.size() == write.OldColumnsIndexes.size());
-            AFL_ENSURE(write.NewColumnsIndexes.empty() || write.NewColumnsIndexes.size() == write.ColumnTypes.size());
-            AFL_ENSURE(write.OldColumnsIndexes.empty() || write.OldColumnsIndexes.size() == write.ColumnTypes.size());
+            YDB_LOG_ENSURE(write.NewColumnsIndexes.size() == write.OldColumnsIndexes.size());
+            YDB_LOG_ENSURE(write.NewColumnsIndexes.empty() || write.NewColumnsIndexes.size() == write.ColumnTypes.size());
+            YDB_LOG_ENSURE(write.OldColumnsIndexes.empty() || write.OldColumnsIndexes.size() == write.ColumnTypes.size());
             PathWriteInfo[write.WriteActor->GetTableId().PathId] = write;
         }
         for (const auto& lookup : lookups) {
             PathLookupInfo[lookup.Lookup->GetTableId().PathId] = lookup;
 
             if (lookup.Lookup->GetTableId().PathId == PathId) {
-                AFL_ENSURE(lookup.Lookup->GetKeyColumnTypes().size() == KeyColumnTypes.size());
-                AFL_ENSURE(lookup.KeyIndexes.empty());
-                AFL_ENSURE(lookup.OldKeyIndexes.empty());
-                AFL_ENSURE(lookup.FullKeyIndexes.empty());
-                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
+                YDB_LOG_ENSURE(lookup.Lookup->GetKeyColumnTypes().size() == KeyColumnTypes.size());
+                YDB_LOG_ENSURE(lookup.KeyIndexes.empty());
+                YDB_LOG_ENSURE(lookup.OldKeyIndexes.empty());
+                YDB_LOG_ENSURE(lookup.FullKeyIndexes.empty());
+                YDB_LOG_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
             } else {
-                AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
-                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
-                AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
-                AFL_ENSURE(!lookup.SkipMissingRows);
+                YDB_LOG_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
+                YDB_LOG_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
+                YDB_LOG_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
+                YDB_LOG_ENSURE(!lookup.SkipMissingRows);
             }
         }
 
         for (const auto& lock : locks) {
-            AFL_ENSURE(PathLookupInfo.contains(lock.LockActor->GetTableId().PathId)
+            YDB_LOG_ENSURE(PathLookupInfo.contains(lock.LockActor->GetTableId().PathId)
                     || PathWriteInfo.contains(lock.LockActor->GetTableId().PathId));
             PathLockInfo[lock.LockActor->GetTableId().PathId] = lock;
         }
@@ -2272,8 +2272,8 @@ public:
     }
 
     void Write(IDataBatchPtr data) {
-        AFL_ENSURE(!Closed);
-        AFL_ENSURE(!IsError());
+        YDB_LOG_ENSURE(!Closed);
+        YDB_LOG_ENSURE(!IsError());
 
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();
@@ -2290,7 +2290,7 @@ public:
     }
 
     void Process(bool forceFlush) {
-        AFL_ENSURE(!IsFinished());
+        YDB_LOG_ENSURE(!IsFinished());
 
         auto stateIteration = [&]() -> bool {
             switch (State) {
@@ -2371,7 +2371,7 @@ public:
     }
 
     TString GetError() const {
-        AFL_ENSURE(Error);
+        YDB_LOG_ENSURE(Error);
         return *Error;
     }
 
@@ -2418,16 +2418,16 @@ public:
 
 private:
     bool ProcessBuffering(bool forceFlush) {
-        AFL_ENSURE(!IsError());
-        AFL_ENSURE(ProcessBatches.empty());
-        AFL_ENSURE(ProcessCells.empty());
-        AFL_ENSURE(Writes.empty());
+        YDB_LOG_ENSURE(!IsError());
+        YDB_LOG_ENSURE(ProcessBatches.empty());
+        YDB_LOG_ENSURE(ProcessCells.empty());
+        YDB_LOG_ENSURE(Writes.empty());
 
         if (IsClosed()) {
             if (BufferedBatches.empty()) {
-                AFL_ENSURE(IsEmpty());
-                AFL_ENSURE(!IsError());
-                AFL_ENSURE(GetMemory() == 0);
+                YDB_LOG_ENSURE(IsEmpty());
+                YDB_LOG_ENSURE(!IsError());
+                YDB_LOG_ENSURE(GetMemory() == 0);
                 State = EState::CLOSING;
                 return true;
             }
@@ -2449,9 +2449,9 @@ private:
     }
 
     bool ProcessLockingMainTable() {
-        AFL_ENSURE(!IsError());
-        AFL_ENSURE(!ProcessBatches.empty());
-        AFL_ENSURE(!ProcessCells.empty());
+        YDB_LOG_ENSURE(!IsError());
+        YDB_LOG_ENSURE(!ProcessBatches.empty());
+        YDB_LOG_ENSURE(!ProcessCells.empty());
 
         auto& lockInfo = PathLockInfo.at(PathId);
 
@@ -2520,11 +2520,11 @@ private:
     }
 
     bool StartMainTableLock() {
-        AFL_ENSURE(NeedLock());
-        AFL_ENSURE(ProcessCells.empty());
-        AFL_ENSURE(KeyToIndexes.empty());
+        YDB_LOG_ENSURE(NeedLock());
+        YDB_LOG_ENSURE(ProcessCells.empty());
+        YDB_LOG_ENSURE(KeyToIndexes.empty());
         TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
-        AFL_ENSURE(!ProcessCells.empty());
+        YDB_LOG_ENSURE(!ProcessCells.empty());
 
         auto& lockInfo = PathLockInfo.at(PathId);
         lockInfo.LockActor->AddLockTask(
@@ -2535,14 +2535,14 @@ private:
     }
 
     bool StartMainTableLookup() {
-        AFL_ENSURE(NeedLookup());
-        AFL_ENSURE(ProcessCells.empty());
-        AFL_ENSURE(KeyToIndexes.empty());
-        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-        AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
+        YDB_LOG_ENSURE(NeedLookup());
+        YDB_LOG_ENSURE(ProcessCells.empty());
+        YDB_LOG_ENSURE(KeyToIndexes.empty());
+        YDB_LOG_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+        YDB_LOG_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
 
         TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
-        AFL_ENSURE(!ProcessCells.empty());
+        YDB_LOG_ENSURE(!ProcessCells.empty());
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
         lookupInfo.Lookup->AddLookupTask(
@@ -2552,7 +2552,7 @@ private:
     }
 
     bool CheckInsertDuplicateKeys() {
-        AFL_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && PathWriteInfo.size() > 1);
+        YDB_LOG_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && PathWriteInfo.size() > 1);
         TPrimaryKeysSet primaryKeysSet;
         for (const auto& batch : ProcessBatches) {
             for (const auto& row : GetRows(batch)) {
@@ -2605,10 +2605,10 @@ private:
             std::vector<TOwnedCellVec>& readCells) {
         TKeyToReadCellsIndex keyToReadCellsIndex;
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-            AFL_ENSURE(cells.size() >= KeyColumnTypes.size());
+            YDB_LOG_ENSURE(cells.size() >= KeyColumnTypes.size());
             readCells.emplace_back(cells);
             const auto key = readCells.back().first(KeyColumnTypes.size());
-            AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
+            YDB_LOG_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
         });
         return keyToReadCellsIndex;
     }
@@ -2622,10 +2622,10 @@ private:
             }
         } else {
             Memory -= EstimateSize(processCells);
-            AFL_ENSURE(DefaultMap.size() == processCells.size());
+            YDB_LOG_ENSURE(DefaultMap.size() == processCells.size());
             for (size_t i = 0; i < processCells.size(); ++i) {
-                AFL_ENSURE(DefaultMap[i] < processCells.size() + newCells.size());
-                AFL_ENSURE(DefaultMap[i] == 0 || DefaultMap[i] >= processCells.size());
+                YDB_LOG_ENSURE(DefaultMap[i] < processCells.size() + newCells.size());
+                YDB_LOG_ENSURE(DefaultMap[i] == 0 || DefaultMap[i] >= processCells.size());
 
                 const auto& cell = DefaultMap[i] == 0
                     ? processCells[i]
@@ -2657,10 +2657,10 @@ private:
     }
 
     bool ProcessLookupMainTable() {
-        AFL_ENSURE(!IsError());
-        AFL_ENSURE(!ProcessBatches.empty());
-        AFL_ENSURE(!ProcessCells.empty());
-        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+        YDB_LOG_ENSURE(!IsError());
+        YDB_LOG_ENSURE(!ProcessBatches.empty());
+        YDB_LOG_ENSURE(!ProcessCells.empty());
+        YDB_LOG_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
         if (!lookupInfo.Lookup->HasResult(Cookie) && !lookupInfo.Lookup->IsEmpty(Cookie)) {
@@ -2683,7 +2683,7 @@ private:
             if (keyIt != keyToReadCellsIndex.end()) {
                 const auto& readCellsEntry = readCells[keyIt->second];
                 const auto newCells = TConstArrayRef<TCell>(readCellsEntry).last(readCellsEntry.size() - KeyColumnTypes.size());
-                AFL_ENSURE(lookupColumnsCount == newCells.size());
+                YDB_LOG_ENSURE(lookupColumnsCount == newCells.size());
 
                 BuildLookupRowFound(processCells, newCells, *rowsBatcher);
                 existsMask.push_back(true);
@@ -2693,7 +2693,7 @@ private:
                     keyToReadCellsIndex.erase(keyIt);
                 }
             } else if (lookupInfo.SkipMissingRows) {
-                AFL_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                YDB_LOG_ENSURE(OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
                     || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
                 // Skip updates and deletes for non-existing rows.
                 Memory -= EstimateSize(processCells);
@@ -2714,7 +2714,7 @@ private:
             .Batch = rowsBatcher->Flush(),
             .ExistsMask = std::move(existsMask),
         });
-        AFL_ENSURE(rowsBatcher->IsEmpty());
+        YDB_LOG_ENSURE(rowsBatcher->IsEmpty());
 
         if (PathLookupInfo.size() > 1) {
             // Lookup unique indexes
@@ -2741,13 +2741,13 @@ private:
             TUniqueSecondaryKeyCollector& collector,
             TPathLookupInfo& lookupInfo,
             bool skipExistingKeys) {
-        AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
-        AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
+        YDB_LOG_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
+        YDB_LOG_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
 
         for (const auto& write : Writes) {
             const auto writeRows = GetRows(write.Batch);
             const auto& existsMask = write.ExistsMask;
-            AFL_ENSURE(writeRows.size() == existsMask.size());
+            YDB_LOG_ENSURE(writeRows.size() == existsMask.size());
             for (size_t index = 0; index < writeRows.size(); ++index) {
                 const auto& row = writeRows[index];
                 // Only UPSERT/REPLACE/UPDATE here with skipExistingKeys
@@ -2792,7 +2792,7 @@ private:
     }
 
     bool ProcessLockingUniqueIndex() {
-        AFL_ENSURE(!IsError());
+        YDB_LOG_ENSURE(!IsError());
 
         for (auto& [pathId, lockInfo] : PathLockInfo) {
             if (pathId != PathId) {
@@ -2809,13 +2809,13 @@ private:
         const bool skipExistingKeys = NeedLookup(); // has main table lookup
         // skipExistingKeys=false means that unique indexes keys are subsets of main table key or operation is INSERT.
 
-        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+        YDB_LOG_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
         // INSERT => !skipExistingKeys
-        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT || !skipExistingKeys);
+        YDB_LOG_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT || !skipExistingKeys);
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId == PathId) {
-                AFL_ENSURE(skipExistingKeys);
+                YDB_LOG_ENSURE(skipExistingKeys);
                 continue;
             }
 
@@ -2836,11 +2836,11 @@ private:
     }
 
     bool ProcessLookupUniqueIndex() {
-        AFL_ENSURE(!IsError());
-        AFL_ENSURE(ProcessBatches.empty());
-        AFL_ENSURE(ProcessCells.empty());
-        AFL_ENSURE(!Writes.empty());
-        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
+        YDB_LOG_ENSURE(!IsError());
+        YDB_LOG_ENSURE(ProcessBatches.empty());
+        YDB_LOG_ENSURE(ProcessCells.empty());
+        YDB_LOG_ENSURE(!Writes.empty());
+        YDB_LOG_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId && !lookupInfo.Lookup->HasResult(Cookie) && !lookupInfo.Lookup->IsEmpty(Cookie)) {
@@ -2854,7 +2854,7 @@ private:
                 std::vector<TOwnedCellVec> extractedRows;
                 lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
                     extractedRows.emplace_back(cells);
-                    AFL_ENSURE(collector.AddSecondaryTableRow(extractedRows.back()));
+                    YDB_LOG_ENSURE(collector.AddSecondaryTableRow(extractedRows.back()));
                 });
 
                 for (const auto& write : Writes) {
@@ -2879,8 +2879,8 @@ private:
     }
 
     bool ProcessWriting() {
-        AFL_ENSURE(State == EState::WRITING);
-        AFL_ENSURE(!IsError());
+        YDB_LOG_ENSURE(State == EState::WRITING);
+        YDB_LOG_ENSURE(!IsError());
 
         if (!AllWriteActorsReady()) {
             return false;
@@ -2896,8 +2896,8 @@ private:
     }
 
     bool ProcessClosing() {
-        AFL_ENSURE(State == EState::CLOSING);
-        AFL_ENSURE(!IsError());
+        YDB_LOG_ENSURE(State == EState::CLOSING);
+        YDB_LOG_ENSURE(!IsError());
         if (!AllWriteActorsReady()) {
             return false;
         }
@@ -2917,7 +2917,7 @@ private:
         for (int batchIndex = static_cast<int>(Writes.size()) - 1; batchIndex >= 0; --batchIndex) {
             const auto& write = Writes[batchIndex];
             const auto rows = GetRows(write.Batch);
-            AFL_ENSURE(rows.size() == write.ExistsMask.size());
+            YDB_LOG_ENSURE(rows.size() == write.ExistsMask.size());
             for (int index = static_cast<int>(rows.size()) - 1; index >= 0; --index) {
                 keyToRow.emplace(
                     rows[index].first(KeyColumnTypes.size()),
@@ -2965,7 +2965,7 @@ private:
                 indexes,
                 Alloc);
             auto ft = static_cast<IFulltextTokenizeProjection*>(projection.Get());
-            AFL_ENSURE(info.AllocatedGenValues.size());
+            YDB_LOG_ENSURE(info.AllocatedGenValues.size());
             ft->SetGen(static_cast<NTableIndex::NFulltext::TGen>(info.AllocatedGenValues.back()));
             info.AllocatedGenValues.pop_back();
             return projection;
@@ -3004,8 +3004,8 @@ private:
 
     void FlushIndexDeleteOld(TPathWriteInfo& actorInfo, const TKeyToRow& keyToRow,
             bool hasMainTableLookup) {
-        AFL_ENSURE(!actorInfo.DeleteKeysIndexes.empty());
-        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+        YDB_LOG_ENSURE(!actorInfo.DeleteKeysIndexes.empty());
+        YDB_LOG_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
             && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
         const bool isCompact = IsCompactPathType(actorInfo.PathType);
         auto deleteProjection = CreateWriteProjection(
@@ -3022,7 +3022,7 @@ private:
 
     void FlushIndexWriteNew(TPathWriteInfo& actorInfo, const TKeyToRow& keyToRow,
             bool hasMainTableLookup) {
-        AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
+        YDB_LOG_ENSURE(!actorInfo.NewColumnsIndexes.empty());
         auto projection = CreateWriteProjection(
             actorInfo,
             OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE,
@@ -3081,10 +3081,10 @@ private:
             Memory -= batch->GetMemory();
 
             auto& actorInfo = PathWriteInfo.at(PathId);
-            AFL_ENSURE(actorInfo.DeleteKeysIndexes.empty());
+            YDB_LOG_ENSURE(actorInfo.DeleteKeysIndexes.empty());
 
             if (actorInfo.NeedWriteProjection) {
-                AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
+                YDB_LOG_ENSURE(!actorInfo.NewColumnsIndexes.empty());
                 auto projection = CreateDataBatchProjection(
                     actorInfo.NewColumnsIndexes,
                     Alloc);
@@ -3100,7 +3100,7 @@ private:
     }
 
     void FlushWritesToActors() {
-        AFL_ENSURE(!IsError());
+        YDB_LOG_ENSURE(!IsError());
 
         if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
             // Secondary index exists
@@ -3115,13 +3115,13 @@ private:
     }
 
     void CloseWrite() {
-        AFL_ENSURE(!IsError());
+        YDB_LOG_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
             if (!actorInfo.DeleteKeysIndexes.empty() && (
                     actorInfo.PathType == EPathWriteType::SecondaryIndex ||
                     actorInfo.PathType == EPathWriteType::FulltextDocs)) {
-                AFL_ENSURE(pathId != PathId);
+                YDB_LOG_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
         }
@@ -3164,15 +3164,15 @@ private:
 class TWriteTasksPlanner {
 public:
     void AddTask(TKqpWriteTask& task) {
-        AFL_ENSURE(!task.IsFinished());
-        AFL_ENSURE(PriorityToBlockedTask.emplace(task.GetPriority(), task).second);
+        YDB_LOG_ENSURE(!task.IsFinished());
+        YDB_LOG_ENSURE(PriorityToBlockedTask.emplace(task.GetPriority(), task).second);
         while (PriorityToBlockedTask.contains(FirstUnknownPriority)) {
             ++FirstUnknownPriority;
         }
     }
 
     void ReleaseTask(TKqpWriteTask& task) {
-        AFL_ENSURE(task.IsFinished());
+        YDB_LOG_ENSURE(task.IsFinished());
         for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
             TableLocks.at(pathId).Release(task.GetCookie());
         }
@@ -3240,25 +3240,25 @@ private:
         };
 
         bool CheckAcquire(ui64 taskCookie, ETableLockMode mode) const {
-            AFL_ENSURE(mode != ETableLockMode::NONE);
+            YDB_LOG_ENSURE(mode != ETableLockMode::NONE);
             if (Mode == ETableLockMode::NONE) {
-                AFL_ENSURE(Owners.empty());
+                YDB_LOG_ENSURE(Owners.empty());
                 return true;
             } else if (Mode == ETableLockMode::SHARED) {
-                AFL_ENSURE(!Owners.empty());
+                YDB_LOG_ENSURE(!Owners.empty());
                 if (mode == ETableLockMode::SHARED) {
                     return true;
                 } else {
                     return Owners.size() == 1 && Owners.contains(taskCookie);
                 }
             } else {
-                AFL_ENSURE(Owners.size() == 1);
+                YDB_LOG_ENSURE(Owners.size() == 1);
                 return Owners.contains(taskCookie);
             }
         }
 
         void Acquire(ui64 taskCookie, ETableLockMode mode) {
-            AFL_ENSURE(CheckAcquire(taskCookie, mode));
+            YDB_LOG_ENSURE(CheckAcquire(taskCookie, mode));
             if (Mode < mode) {
                 Mode = mode;
             }
@@ -3315,7 +3315,7 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
 
-        AFL_ENSURE(Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_FLAT);
+        YDB_LOG_ENSURE(Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_FLAT);
         TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
@@ -3366,7 +3366,7 @@ public:
                 Settings.GetKeyColumns().begin(),
                 Settings.GetKeyColumns().end());
             TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(Settings.GetColumns().size());
-            AFL_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
+            YDB_LOG_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
             for (int index = 0; index < Settings.GetColumns().size(); ++index) {
                 columnsMetadata[Settings.GetWriteIndexes()[index]] = Settings.GetColumns()[index];
             }
@@ -3607,11 +3607,11 @@ private:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&&, ui64) override {
-        AFL_ENSURE(false);
+        YDB_LOG_ENSURE(false);
     }
 
     void OnCommitted(ui64, ui64, std::optional<TCommitTimestamp>) override {
-        AFL_ENSURE(false);
+        YDB_LOG_ENSURE(false);
     }
 
     void OnMessageAcknowledged(ui64 dataSize) override {
@@ -3819,7 +3819,7 @@ public:
                 hFunc(TEvBufferWrite, Handle);
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_StateWrite: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3836,7 +3836,7 @@ public:
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_StateWaitTasks: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3859,7 +3859,7 @@ public:
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_StateResolveRound: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3876,7 +3876,7 @@ public:
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleGenSequence);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_StateFlush: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3901,7 +3901,7 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_StatePrepare: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -3926,7 +3926,7 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_StateCommit: unknown message", ev->GetTypeRewrite()});
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -4129,7 +4129,7 @@ public:
             {"lockId", LockTxId},
             {"actorId", id});
 
-        AFL_ENSURE(actors.emplace(tableId.PathId, TLookupInfo::TActorInfo{
+        YDB_LOG_ENSURE(actors.emplace(tableId.PathId, TLookupInfo::TActorInfo{
             .LookupActor = ptr,
             .Id = id,
         }).second);
@@ -4179,7 +4179,7 @@ public:
             {"lockId", LockTxId},
             {"actorId", id});
 
-        AFL_ENSURE(actors.emplace(tableId.PathId, TLockInfo::TActorInfo{
+        YDB_LOG_ENSURE(actors.emplace(tableId.PathId, TLockInfo::TActorInfo{
             .LockActor = ptr,
             .Id = id,
         }).second);
@@ -4199,7 +4199,7 @@ public:
                 {});
             return false;
         }
-        AFL_ENSURE(actor->GetTableId() == tableId);
+        YDB_LOG_ENSURE(actor->GetTableId() == tableId);
         return true;
     }
 
@@ -4212,7 +4212,7 @@ public:
         const auto deleteCookie = token.Cookie + 1;
 
         for (const auto& indexSettings : settings.Indexes) {
-            AFL_ENSURE(!settings.IsOlap);
+            YDB_LOG_ENSURE(!settings.IsOlap);
 
             const bool isCompact = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
                 indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
@@ -4424,7 +4424,7 @@ public:
                         .LockActor = lockActor,
                     });
 
-                    AFL_ENSURE(settings.TransactionSettings.MvccSnapshot);
+                    YDB_LOG_ENSURE(settings.TransactionSettings.MvccSnapshot);
                     lockActor->SetLockSettings(
                         token.Cookie,
                         indexSettings.KeyColumns,
@@ -4492,7 +4492,7 @@ public:
             std::vector<TKqpWriteTask::TPathLockInfo>& locks) {
         const auto writeCookie = token.Cookie;
 
-        AFL_ENSURE(!settings.SkipMissingRows
+        YDB_LOG_ENSURE(!settings.SkipMissingRows
             || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
             || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
 
@@ -4508,7 +4508,7 @@ public:
             settings.Priority,
             settings.TransactionSettings.MvccSnapshot);
 
-        AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
+        YDB_LOG_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
         writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
             .DeleteKeysIndexes = {},
             .NewColumnsIndexes = GetIndexes(
@@ -4539,7 +4539,7 @@ public:
             const bool skipAbsent = settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
                 || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE;
 
-            AFL_ENSURE(settings.TransactionSettings.MvccSnapshot);
+            YDB_LOG_ENSURE(settings.TransactionSettings.MvccSnapshot);
             lockActor->SetLockSettings(
                 token.Cookie,
                 settings.KeyColumns,
@@ -4549,7 +4549,7 @@ public:
 
         // Main table lookup
         if (settings.NeedLookup) {
-            AFL_ENSURE(!settings.IsOlap);
+            YDB_LOG_ENSURE(!settings.IsOlap);
             auto& lookupInfo = LookupInfos.at(settings.TableId.PathId);
             auto& lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
             lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
@@ -4613,13 +4613,13 @@ public:
 
     std::optional<TWriteToken> InitializeWriteActors(const TWriteSettings& settings) {
         // Can't have CTAS here
-        AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+        YDB_LOG_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
 
         auto& writeInfo = WriteInfos[settings.TableId.PathId];
 
         // Ensure write actor for main table
         if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
-            AFL_ENSURE(writeInfo.Actors.empty());
+            YDB_LOG_ENSURE(writeInfo.Actors.empty());
             if (!EnsureWriteActor(settings, writeInfo, settings.TableId, settings.TablePath, settings.KeyColumns)) {
                 return std::nullopt;
             }
@@ -4647,8 +4647,8 @@ public:
 
         // Ensure lookup actor for main table
         if (settings.NeedLookup) {
-            AFL_ENSURE(settings.InputRowFormat == TWriteSettings::EInputRowFormat::Flat);
-            AFL_ENSURE(!settings.IsOlap);
+            YDB_LOG_ENSURE(settings.InputRowFormat == TWriteSettings::EInputRowFormat::Flat);
+            YDB_LOG_ENSURE(!settings.IsOlap);
             auto& lookupInfo = LookupInfos[settings.TableId.PathId];
             if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
                 if (!EnsureLookupActor(settings, lookupInfo, settings.TableId, settings.TablePath)) {
@@ -4700,12 +4700,12 @@ public:
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
         TWriteToken token;
         if (!ev->Get()->Token) {
-            AFL_ENSURE(ev->Get()->Settings);
+            YDB_LOG_ENSURE(ev->Get()->Settings);
             auto& settings = *ev->Get()->Settings;
             if (!WriteInfos.empty()) {
-                AFL_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
-                AFL_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
-                AFL_ENSURE(InconsistentTx == settings.TransactionSettings.InconsistentTx);
+                YDB_LOG_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
+                YDB_LOG_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
+                YDB_LOG_ENSURE(InconsistentTx == settings.TransactionSettings.InconsistentTx);
             } else {
                 LockTxId = settings.TransactionSettings.LockTxId;
                 LockNodeId = settings.TransactionSettings.LockNodeId;
@@ -4826,7 +4826,7 @@ public:
             while (!queue.empty()) {
                 auto& message = queue.front();
 
-                AFL_ENSURE(message.Token.PathId == pathId);
+                YDB_LOG_ENSURE(message.Token.PathId == pathId);
                 auto& writeTask = WriteTasks.at(message.Token.Cookie);
                 writeTask.Write(std::move(message.Data));
                 if (message.Close) {
@@ -4886,7 +4886,7 @@ public:
                 WriteTasks.erase(cookie);
                 if (const auto iterReturningConsumers = ReturningConsumers.find(cookie);
                         iterReturningConsumers != ReturningConsumers.end()) {
-                    AFL_ENSURE(iterReturningConsumers->second.IsEmpty());
+                    YDB_LOG_ENSURE(iterReturningConsumers->second.IsEmpty());
                     if (!iterReturningConsumers->second.IsDelayedAcksEmpty()) {
                         for (auto& ack : iterReturningConsumers->second.FlushDelayedAcks()) {
                             AckQueue.push(std::move(ack));
@@ -4948,7 +4948,7 @@ public:
     }
 
     bool Flush(NWilson::TTraceId traceId) {
-        AFL_ENSURE(WriteTasks.empty());
+        YDB_LOG_ENSURE(WriteTasks.empty());
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
         Become(&TThis::StateFlush);
 
@@ -4971,14 +4971,14 @@ public:
     }
 
     void Commit(ui64 txId, NWilson::TTraceId traceId) {
-        AFL_ENSURE(WriteTasks.empty());
+        YDB_LOG_ENSURE(WriteTasks.empty());
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->FlushBuffers();
         });
 
         if (!TxManager->NeedCommit()) {
             ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
-                AFL_ENSURE(actor->IsEmpty());
+                YDB_LOG_ENSURE(actor->IsEmpty());
             });
             Rollback(std::move(traceId), /* waitForResult */ true);
             return;
@@ -4998,7 +4998,7 @@ public:
                 // (RetryShard refuses to re-resolve in commit mode). Re-resolve
                 // first; TxId is needed by the distributed Prepare fallback in
                 // OnResolveCompleted if the resolve round reveals a split.
-                AFL_ENSURE(txId);
+                YDB_LOG_ENSURE(txId);
                 TxId = txId;
                 PendingResolveRoundImmediateCommit = true;
                 StartResolveRound();
@@ -5007,7 +5007,7 @@ public:
                 ImmediateCommit();
             }
         } else {
-            AFL_ENSURE(txId);
+            YDB_LOG_ENSURE(txId);
             TxId = txId;
 
             bool needToFlushBeforeCommit = false;
@@ -5056,8 +5056,8 @@ public:
     // from the immediate-commit branch and the transaction is still single-shard.
     void StartResolveRound() {
         // ONLY READ COMMITTED
-        AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
-        AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+        YDB_LOG_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
             || CurrentStateFunc() == &TThis::StateFlush);
         YDB_LOG_DEBUG("Start pre-prepare resolve round",
             {"logPrefix", this->LogPrefix});
@@ -5069,19 +5069,19 @@ public:
                 actor->RefreshPartitioning();
             }
         });
-        AFL_ENSURE(PendingResolveRoundActors > 0);
+        YDB_LOG_ENSURE(PendingResolveRoundActors > 0);
     }
 
     void OnResolveCompleted() override {
         // ONLY READ COMMITTED
-        AFL_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         if (CurrentStateFunc() == &TThis::StateError || CurrentStateFunc() == &TThis::StateRollback) {
             YDB_LOG_WARN("Ignoring late OnResolveCompleted: the transaction has already failed.",
                 {"logPrefix", this->LogPrefix});
             return;
         }
-        AFL_ENSURE(CurrentStateFunc() == &TThis::StateResolveRound);
-        AFL_ENSURE(PendingResolveRoundActors > 0);
+        YDB_LOG_ENSURE(CurrentStateFunc() == &TThis::StateResolveRound);
+        YDB_LOG_ENSURE(PendingResolveRoundActors > 0);
         if (--PendingResolveRoundActors == 0) {
             const bool immediateCommit = std::exchange(PendingResolveRoundImmediateCommit, false);
             if (immediateCommit && TxManager->CanUseImmediateCommit()) {
@@ -5104,7 +5104,7 @@ public:
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
-        AFL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
+        YDB_LOG_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks
             || CurrentStateFunc() == &TThis::StateFlush
             || CurrentStateFunc() == &TThis::StateResolveRound);
         Become(&TThis::StatePrepare);
@@ -5112,9 +5112,9 @@ public:
         PendingPrepareShards = CountParticipatingShards();
 
         CheckQueuesEmpty();
-        AFL_ENSURE(TxId);
+        YDB_LOG_ENSURE(TxId);
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
-            AFL_ENSURE(!actor->FlushBeforeCommit());
+            YDB_LOG_ENSURE(!actor->FlushBeforeCommit());
             actor->SetPrepare(*TxId);
         });
         Close();
@@ -5171,8 +5171,8 @@ public:
     }
 
     void Rollback(NWilson::TTraceId traceId, bool waitForResult) noexcept {
-        AFL_ENSURE(CurrentStateFunc() != &TThis::StateRollback);
-        AFL_ENSURE(!TxManager->IsRollBack());
+        YDB_LOG_ENSURE(CurrentStateFunc() != &TThis::StateRollback);
+        YDB_LOG_ENSURE(!TxManager->IsRollBack());
         Become(&TThis::StateRollback);
         try {
             Counters->BufferActorRollbacks->Inc();
@@ -5201,7 +5201,7 @@ public:
 
     void CheckQueuesEmpty() {
         for (const auto& [_, queue] : RequestQueues) {
-            AFL_ENSURE(queue.empty());
+            YDB_LOG_ENSURE(queue.empty());
         }
     }
 
@@ -5240,7 +5240,7 @@ public:
 
     void SendToExternalShards(const bool isImmediateCommit) {
         auto shards = TxManager->GetShards();
-        AFL_ENSURE(!isImmediateCommit || CountParticipatingShards() == 1);
+        YDB_LOG_ENSURE(!isImmediateCommit || CountParticipatingShards() == 1);
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
@@ -5262,7 +5262,7 @@ public:
     }
 
     void SendToExternalShard(const ui64 shardId, const bool isImmediate, const bool isRollback) {
-        AFL_ENSURE(!isRollback || isImmediate);
+        YDB_LOG_ENSURE(!isRollback || isImmediate);
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(isImmediate
             ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
             : (TxManager->IsVolatile()
@@ -5419,7 +5419,7 @@ public:
         for (const auto& shardInfo : commitInfo.ShardsInfo) {
             auto& item = *affectedSet.Add();
             item.SetTabletId(shardInfo.ShardId);
-            AFL_ENSURE(shardInfo.AffectedFlags != 0);
+            YDB_LOG_ENSURE(shardInfo.AffectedFlags != 0);
             item.SetFlags(shardInfo.AffectedFlags);
         }
 
@@ -5534,9 +5534,9 @@ public:
                 CommitPhase.End(Ydb::StatusIds::SUCCESS);
                 StartCommitPhase({"Apply commit", "CommitApplyShards", "TKqpBufferWriteActor", nullptr, "DataShard"});
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
-                    AFL_ENSURE(res->Record.HasStepId());
-                    AFL_ENSURE(res->Record.HasTxId());
-                    AFL_ENSURE(TxId && *TxId == res->Record.GetTxId());
+                    YDB_LOG_ENSURE(res->Record.HasStepId());
+                    YDB_LOG_ENSURE(res->Record.HasTxId());
+                    YDB_LOG_ENSURE(TxId && *TxId == res->Record.GetTxId());
                     CommitTimestamp = TCommitTimestamp{res->Record.GetStepId(), res->Record.GetTxId()};
                 }
                 break;
@@ -5612,9 +5612,9 @@ public:
         auto& event = ev->Get()->Record;
         switch (event.GetStatus()) {
         case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
-            AFL_ENSURE(false);
+            YDB_LOG_ENSURE(false);
         case NKikimrPQ::TEvProposeTransactionResult::COMPLETE:
-            AFL_ENSURE(false);
+            YDB_LOG_ENSURE(false);
         case NKikimrPQ::TEvProposeTransactionResult::ABORTED:
             YDB_LOG_ERROR("Received ABORTED ProposeTransactionResult from pers queue.",
                 {"logPrefix", this->LogPrefix},
@@ -5730,7 +5730,7 @@ public:
     void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
         const ui64 tabletId = ev->Get()->TabletId;
 
-        AFL_ENSURE(TxManager->HasShard(tabletId));
+        YDB_LOG_ENSURE(TxManager->HasShard(tabletId));
         auto& state = TxManager->GetReattachState(tabletId);
 
         YDB_LOG_DEBUG("Reattach to shard",
@@ -5862,7 +5862,7 @@ public:
     void Handle(TEvKqpBuffer::TEvFlush::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         for (auto& [_, writeTask] : WriteTasks) {
-            AFL_ENSURE(writeTask.IsClosed());
+            YDB_LOG_ENSURE(writeTask.IsClosed());
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
@@ -5879,7 +5879,7 @@ public:
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         for (auto& [_, writeTask] : WriteTasks) {
-            AFL_ENSURE(writeTask.IsClosed());
+            YDB_LOG_ENSURE(writeTask.IsClosed());
         }
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWrite);
         Become(&TThis::StateWaitTasks);
@@ -5904,7 +5904,7 @@ public:
     }
 
     void OnAllTasksFinised() {
-        AFL_ENSURE(AfterWaitTasksState);
+        YDB_LOG_ENSURE(AfterWaitTasksState);
         auto afterWaitTasksState = std::move(*AfterWaitTasksState);
         AfterWaitTasksState = std::nullopt;
 
@@ -6066,7 +6066,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
-            AFL_ENSURE(false);
+            YDB_LOG_ENSURE(false);
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             YDB_LOG_ERROR("Received external EvWriteResult with aborted status.",
                 {"logPrefix", this->LogPrefix},
@@ -6350,7 +6350,7 @@ public:
         if (prepared) {
             OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
-            AFL_ENSURE(GetTotalMemory() == 0);
+            YDB_LOG_ENSURE(GetTotalMemory() == 0);
             CommitPhase.End(Ydb::StatusIds::SUCCESS);
             DistributedCommit();
             return;
@@ -6360,12 +6360,12 @@ public:
 
     void OnCommitted(ui64 shardId, ui64, std::optional<TCommitTimestamp> writeResultTimestamp) override {
         if (CommitTimestamp && writeResultTimestamp) {
-            AFL_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep,
+            YDB_LOG_ENSURE(CommitTimestamp->PlanStep == writeResultTimestamp->PlanStep,
                 {"reason", "commit timestamp PlanStep mismatch"},
                 {"coordinator", CommitTimestamp->PlanStep},
                 {"writeResult", writeResultTimestamp->PlanStep},
                 {"shardId", shardId});
-            AFL_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId,
+            YDB_LOG_ENSURE(CommitTimestamp->TxId == writeResultTimestamp->TxId,
                 {"reason", "commit timestamp TxId mismatch"},
                 {"coordinator", CommitTimestamp->TxId},
                 {"writeResult", writeResultTimestamp->TxId},
@@ -6379,7 +6379,7 @@ public:
         if (committed) {
             if (FlushDeferredLocksBrokenIfPending()) return;
             if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
-                AFL_ENSURE(CommitTimestamp.has_value());
+                YDB_LOG_ENSURE(CommitTimestamp.has_value());
             }
             YDB_LOG_DEBUG("Committed",
                 {"logPrefix", this->LogPrefix},
@@ -6392,7 +6392,7 @@ public:
                 std::move(CommitTimestamp)
             });
             ExecuterActorId = {};
-            AFL_ENSURE(GetTotalMemory() == 0);
+            YDB_LOG_ENSURE(GetTotalMemory() == 0);
             PassAway();
             return;
         }
@@ -6438,7 +6438,7 @@ public:
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
 
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
-            AFL_ENSURE(TxId || actor->IsEmpty());
+            YDB_LOG_ENSURE(TxId || actor->IsEmpty());
             if (actor->IsEmpty()) {
                 actor->CleanupClosedTokens();
             }
@@ -6447,7 +6447,7 @@ public:
                 actor->SetParentTraceId({});
             }
 
-            AFL_ENSURE(!actor->FlushBeforeCommit());
+            YDB_LOG_ENSURE(!actor->FlushBeforeCommit());
         });
 
         if (TxId) {
@@ -6470,7 +6470,7 @@ public:
             BuildStats()
         });
         ExecuterActorId = {};
-        AFL_ENSURE(GetTotalMemory() == 0);
+        YDB_LOG_ENSURE(GetTotalMemory() == 0);
     }
 
     void OnLookupTaskFinished() override {
@@ -6849,12 +6849,12 @@ private:
         }
 
         void PushDelayedAck(TAckMessage message) {
-            AFL_ENSURE(Acks.empty()); // At current time fwd<->buffer inflight = 1
+            YDB_LOG_ENSURE(Acks.empty()); // At current time fwd<->buffer inflight = 1
             Acks.push_back(std::move(message));
         }
 
         std::vector<TAckMessage> FlushDelayedAcks() {
-            AFL_ENSURE(!Acks.empty());
+            YDB_LOG_ENSURE(!Acks.empty());
 
             std::swap(Acks.back().OutputData, Data);
             for (auto& data : Acks.back().OutputData) {
@@ -6866,7 +6866,7 @@ private:
             std::vector<TAckMessage> result;
             std::swap(result, Acks);
 
-            AFL_ENSURE(IsEmpty());
+            YDB_LOG_ENSURE(IsEmpty());
             return result;
         }
 
@@ -6965,8 +6965,8 @@ public:
 
         TGuard guard(*Alloc);
         if (Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS) {
-            AFL_ENSURE(!Settings.GetNeedLookup());
-            AFL_ENSURE(!Settings.GetIsOlap());
+            YDB_LOG_ENSURE(!Settings.GetNeedLookup());
+            YDB_LOG_ENSURE(!Settings.GetIsOlap());
             TVector<NKikimrKqp::TKqpColumnMetadataProto> lookupColumnsMetadata(
                 Settings.GetLookupColumns().begin(),
                 Settings.GetLookupColumns().end());
@@ -6979,14 +6979,14 @@ public:
         }
 
         if (TransformOutput) {
-            AFL_ENSURE(!Settings.GetReturningColumns().empty());
+            YDB_LOG_ENSURE(!Settings.GetReturningColumns().empty());
             ReturningColumnsTypes.reserve(Settings.GetReturningColumns().size());
             for (const auto& column : Settings.GetReturningColumns()) {
                 ReturningColumnsTypes.push_back(NScheme::TypeInfoFromProto(
                     column.GetTypeId(), column.GetTypeInfo()));
             }
         } else {
-            AFL_ENSURE(Settings.GetReturningColumns().empty());
+            YDB_LOG_ENSURE(Settings.GetReturningColumns().empty());
         }
 
         Counters->ForwardActorsCount->Inc();
@@ -7005,7 +7005,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBufferWriteResult, Handle);
             default:
-                AFL_ENSURE(false,
+                YDB_LOG_ENSURE(false,
                     {"#_unknown message", ev->GetTypeRewrite()});
             }
         } catch (...) {
@@ -7021,7 +7021,7 @@ private:
             {"logPrefix", this->LogPrefix},
             {"bufferActorId", BufferActorId});
 
-        AFL_ENSURE(!PendingResult);
+        YDB_LOG_ENSURE(!PendingResult);
         WriteToken = result->Get()->Token;
 
         if (TransformOutput) {
@@ -7035,9 +7035,9 @@ private:
     }
 
     void ConsumePendingReturning() {
-        AFL_ENSURE(TransformOutput);
-        AFL_ENSURE(PendingResult);
-        AFL_ENSURE(Alloc);
+        YDB_LOG_ENSURE(TransformOutput);
+        YDB_LOG_ENSURE(PendingResult);
+        YDB_LOG_ENSURE(Alloc);
         TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
 
         const auto& data = PendingResult->Data;
@@ -7050,7 +7050,7 @@ private:
                     return;
                 }
                 const auto& row = rows[rowIndex];
-                AFL_ENSURE(row.size() == ReturningColumnsTypes.size());
+                YDB_LOG_ENSURE(row.size() == ReturningColumnsTypes.size());
                 NUdf::TUnboxedValue* outputRowItems = nullptr;
                 auto outputRow = HolderFactory.CreateDirectArrayHolder(ReturningColumnsTypes.size(), outputRowItems);
                 for (size_t colIndex = 0; colIndex < ReturningColumnsTypes.size(); ++colIndex) {
@@ -7118,7 +7118,7 @@ private:
                 Settings.GetKeyColumns().begin(),
                 Settings.GetKeyColumns().end());
             TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(Settings.GetColumns().size());
-            AFL_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
+            YDB_LOG_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
             for (int index = 0; index < Settings.GetColumns().size(); ++index) {
                 columnsMetadata[Settings.GetWriteIndexes()[index]] = Settings.GetColumns()[index];
             }
@@ -7138,7 +7138,7 @@ private:
                 }
             }
 
-            AFL_ENSURE(Settings.GetDefaultColumnsIds().empty()
+            YDB_LOG_ENSURE(Settings.GetDefaultColumnsIds().empty()
                 || Settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
 
             ev->Settings = TWriteSettings{
@@ -7180,7 +7180,7 @@ private:
                     indexSettings.GetKeyColumns().begin(),
                     indexSettings.GetKeyColumns().end());
                 TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(indexSettings.GetColumns().size());
-                AFL_ENSURE(indexSettings.GetColumns().size() == indexSettings.GetWriteIndexes().size());
+                YDB_LOG_ENSURE(indexSettings.GetColumns().size() == indexSettings.GetWriteIndexes().size());
                 for (int index = 0; index < indexSettings.GetColumns().size(); ++index) {
                     columnsMetadata[indexSettings.GetWriteIndexes()[index]] = indexSettings.GetColumns()[index];
                 }
@@ -7241,7 +7241,7 @@ private:
             {"data", DataSize},
             {"closed", Closed},
             {"bufferActorId", BufferActorId});
-        AFL_ENSURE(Send(BufferActorId, ev.release(), 0, 0, ForwardWriteActorSpan.GetTraceId()));
+        YDB_LOG_ENSURE(Send(BufferActorId, ev.release(), 0, 0, ForwardWriteActorSpan.GetTraceId()));
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -7267,7 +7267,7 @@ private:
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
-        AFL_ENSURE(!InFlight);
+        YDB_LOG_ENSURE(!InFlight);
         Closed |= finished;
         Batcher->AddData(data);
         DataSize = Batcher->GetMemory();
@@ -7315,7 +7315,7 @@ private:
         if (!TransformOutput && !PendingResult) {
             return;
         }
-        AFL_ENSURE(Alloc);
+        YDB_LOG_ENSURE(Alloc);
         TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
         PendingResult.Reset();
         TransformOutput.Reset();
@@ -7386,7 +7386,7 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
     factory.RegisterOutputTransform<NKikimrKqp::TKqpTableSinkSettings>(
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TOutputTransformArguments&& args) {
-            AFL_ENSURE(ActorIdFromProto(settings.GetBufferActorId()));
+            YDB_LOG_ENSURE(ActorIdFromProto(settings.GetBufferActorId()));
             auto* actor = new TKqpForwardWriteActor(std::move(settings), std::move(args), counters);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });

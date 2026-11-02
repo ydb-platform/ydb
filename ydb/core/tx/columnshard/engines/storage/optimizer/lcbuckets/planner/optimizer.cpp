@@ -27,7 +27,7 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
 
 std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptimizationTasks(
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-    AFL_VERIFY(LevelsByWeight.size());
+    YDB_LOG_VERIFY(LevelsByWeight.size());
 
     TSaverContext saverContext(StoragesManager);
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;

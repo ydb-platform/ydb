@@ -52,7 +52,7 @@ public:
 
     void VisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& chunkVisitor,
         const TRecordVisitor& recordVisitor) const {
-        AFL_VERIFY(dataArray->IsDataOwner(),
+        YDB_LOG_VERIFY(dataArray->IsDataOwner(),
             {"type", dataArray->GetType()});
         DoVisitAll(dataArray, chunkVisitor, recordVisitor);
     }

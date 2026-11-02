@@ -10,7 +10,7 @@ namespace NKikimr {
 namespace NPQ {
 
 TString MiddleOf(const TString& from, const TString& to) {
-    AFL_ENSURE(to.empty() || from < to);
+    YDB_LOG_ENSURE(to.empty() || from < to);
 
     auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
         if (i >= str.size()) {
@@ -145,7 +145,7 @@ void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
 
 void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
     TSerializedCellVec cells;
-    AFL_ENSURE(TSerializedCellVec::TryParse(data, cells));
+    YDB_LOG_ENSURE(TSerializedCellVec::TryParse(data, cells));
     bound.ConstructInPlace(std::move(cells));
 }
 

@@ -352,9 +352,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
         }
         helper.GetVolumes(rawBytes3, bytes3, count3, false, { "field" });
-        AFL_VERIFY(bytes2 * 10 < bytes1);
-        AFL_VERIFY(bytes3 * 90 < bytes1);
-        AFL_VERIFY(rawBytes3 * 10 < rawBytes1);
+        YDB_LOG_VERIFY(bytes2 * 10 < bytes1);
+        YDB_LOG_VERIFY(bytes3 * 90 < bytes1);
+        YDB_LOG_VERIFY(rawBytes3 * 10 < rawBytes1);
         Cerr << rawBytes1 << "/" << bytes1 << "/" << count1 << Endl;
         Cerr << rawBytes2 << "/" << bytes2 << "/" << count2 << Endl;
         Cerr << rawBytes3 << "/" << bytes3 << "/" << count3 << Endl;
@@ -420,10 +420,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 rawBytesPK2;
             ui64 bytesPK2;
             helper.GetVolumes(rawBytesPK2, bytesPK2, count2, false, {"pk_int"});
-            AFL_VERIFY(rawBytesPK2 == rawBytesPK1,
+            YDB_LOG_VERIFY(rawBytesPK2 == rawBytesPK1,
                 {"pk1", rawBytesPK1},
                 {"pk2", rawBytesPK2});
-            AFL_VERIFY(bytesPK2 < bytesPK1 / 3,
+            YDB_LOG_VERIFY(bytesPK2 < bytesPK1 / 3,
                 {"pk1", bytesPK1},
                 {"pk2", bytesPK2});
         }
@@ -434,10 +434,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 rawBytesPK2;
             ui64 bytesPK2;
             helper.GetVolumes(rawBytesPK2, bytesPK2, count3, false, {"pk_int"});
-            AFL_VERIFY(rawBytesPK2 == rawBytesPK1,
+            YDB_LOG_VERIFY(rawBytesPK2 == rawBytesPK1,
                 {"pk1", rawBytesPK1},
                 {"pk2", rawBytesPK2});
-            AFL_VERIFY(bytesPK2 < bytesPK1 * 1.01 && bytesPK1 < bytesPK2 * 1.01,
+            YDB_LOG_VERIFY(bytesPK2 < bytesPK1 * 1.01 && bytesPK1 < bytesPK2 * 1.01,
                 {"pk1", bytesPK1},
                 {"pk2", bytesPK2});
         }
@@ -463,8 +463,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         csController->WaitCompactions(TDuration::Seconds(5));
 
         helper.GetVolumes(rawBytes1, bytes1, count1, false, {"new_column_ui64"});
-        AFL_VERIFY(rawBytes1 == 0);
-        AFL_VERIFY(bytes1 == 0);
+        YDB_LOG_VERIFY(rawBytes1 == 0);
+        YDB_LOG_VERIFY(bytes1 == 0);
         auto tableClient = kikimr.GetTableClient();
         {
             helper.ExecuteSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
@@ -473,9 +473,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 rawBytes2;
             ui64 bytes2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, { "new_column_ui64", NOlap::IIndexInfo::SPEC_COL_DELETE_FLAG });
-            AFL_VERIFY(rawBytes2 == 0,
+            YDB_LOG_VERIFY(rawBytes2 == 0,
                 {"real", rawBytes2});
-            AFL_VERIFY(bytes2 == 0,
+            YDB_LOG_VERIFY(bytes2 == 0,
                 {"b", bytes2});
         }
     }
@@ -507,10 +507,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 bytes2;
             ui64 count2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
-            AFL_VERIFY(rawBytes2 * 2 < rawBytes1,
+            YDB_LOG_VERIFY(rawBytes2 * 2 < rawBytes1,
                 {"f1", rawBytes1},
                 {"f2", rawBytes2});
-            AFL_VERIFY(bytes2 < bytes1 * 0.5,
+            YDB_LOG_VERIFY(bytes2 < bytes1 * 0.5,
                 {"f1", bytes1},
                 {"f2", bytes2});
         }
@@ -522,10 +522,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui64 bytes2;
             ui64 count2;
             helper.GetVolumes(rawBytes2, bytes2, count2, false, {"field"});
-            AFL_VERIFY(rawBytes2 == rawBytes1,
+            YDB_LOG_VERIFY(rawBytes2 == rawBytes1,
                 {"f1", rawBytes1},
                 {"f2", rawBytes2});
-            AFL_VERIFY(bytes2 < bytes1 * 1.01 && bytes1 < bytes2 * 1.01,
+            YDB_LOG_VERIFY(bytes2 < bytes1 * 1.01 && bytes1 < bytes2 * 1.01,
                 {"f1", bytes1},
                 {"f2", bytes2});
         }
@@ -563,23 +563,23 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 ui64 rawBytes2;
                 ui64 bytes2;
                 helper.GetVolumes(rawBytes2, bytes2, count2, false, { "field" });
-                AFL_VERIFY(rawBytes2 * 2 < rawBytes1,
+                YDB_LOG_VERIFY(rawBytes2 * 2 < rawBytes1,
                     {"f1", rawBytes1},
                     {"f2", rawBytes2});
-                AFL_VERIFY(bytes2 < bytes1 * 0.5,
+                YDB_LOG_VERIFY(bytes2 < bytes1 * 0.5,
                     {"f1", bytes1},
                     {"f2", bytes2});
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3,
+                YDB_LOG_VERIFY(stats.size() == 3,
                     {"count", stats.size()});
 //                for (auto&& i : stats) {
-//                    AFL_VERIFY(i.IsArray());
-//                    AFL_VERIFY(i.GetArraySafe().size() == 1);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
+//                    YDB_LOG_VERIFY(i.IsArray());
+//                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 1);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
 //                    YDB_LOG_INFO("",
 //                          {"json", i});
 //                }
@@ -592,10 +592,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             {
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3);
+                YDB_LOG_VERIFY(stats.size() == 3);
 //                for (auto&& i : stats) {
-//                    AFL_VERIFY(i.IsArray());
-//                    AFL_VERIFY(i.GetArraySafe().size() == 0,
+//                    YDB_LOG_VERIFY(i.IsArray());
+//                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 0,
                           {"json", i});
 //                }
             }
@@ -607,15 +607,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             {
                 std::vector<NJson::TJsonValue> stats;
                 helper.GetStats(stats, true);
-                AFL_VERIFY(stats.size() == 3);
+                YDB_LOG_VERIFY(stats.size() == 3);
 //                for (auto&& i : stats) {
-//                    AFL_VERIFY(i.IsArray());
-//                    AFL_VERIFY(i.GetArraySafe().size() == 1);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5,
+//                    YDB_LOG_VERIFY(i.IsArray());
+//                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 1);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5,
                           {"json", i});
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
-//                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
+//                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
 //                    YDB_LOG_INFO("",
 //                          {"json", i});
 //                }

@@ -15,7 +15,7 @@ TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 poin
     , Limit(limit)
     , Collection(collection)
 {
-    AFL_VERIFY(Collection);
+    YDB_LOG_VERIFY(Collection);
 }
 
 bool TSyncPointLimitControl::DrainToLimit() {
@@ -44,7 +44,7 @@ bool TSyncPointLimitControl::DrainToLimit() {
 }
 
 std::unique_ptr<NCommon::TDataSourceLease> TSyncPointLimitControl::OnAddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
-    AFL_VERIFY(FetchedCount < Limit,
+    YDB_LOG_VERIFY(FetchedCount < Limit,
         {"fetched", FetchedCount},
         {"limit", Limit});
     UnfilledIterators.emplace_back(TSourceIterator(lease->ShareReadOnly()));
@@ -63,7 +63,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
         return ESourceAction::Finish;
     }
 
-    AFL_VERIFY(UnfilledIterators.size());
+    YDB_LOG_VERIFY(UnfilledIterators.size());
 
     if (UnfilledIterators.front().GetSourceIdx() != source.GetSourceIdx()) {
         for (auto it : UnfilledIterators) {
@@ -81,7 +81,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
         if (FindIf(UnfilledIterators, [&](const auto& item) {
                 return item.GetSourceIdx() == source.GetSourceIdx();
             }) != UnfilledIterators.end()) {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
+            YDB_LOG_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
                 {"#_issue #28037", "portion is in UnfilledIterators"},
                 {"front", UnfilledIterators.front().DebugString()},
                 {"back", UnfilledIterators.back().DebugString()},
@@ -90,14 +90,14 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
         } else if (FindIf(FilledIterators, [&](const auto& item) {
                        return item.GetSourceIdx() == source.GetSourceIdx();
                    }) != FilledIterators.end()) {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
+            YDB_LOG_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
                 {"#_issue #28037", "portion is in FilledIterators"},
                 {"front", UnfilledIterators.front().DebugString()},
                 {"back", UnfilledIterators.back().DebugString()},
                 {"source", source.GetAs<IDataSource>()->GetFirstPK().DebugString()},
                 {"sourceIdx", source.GetSourceIdx()});
         } else {
-            AFL_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
+            YDB_LOG_VERIFY(UnfilledIterators.front().GetSourceIdx() == source.GetSourceIdx(),
                 {"#_issue #28037", "unknown portion"},
                 {"front", UnfilledIterators.front().DebugString()},
                 {"back", UnfilledIterators.back().DebugString()},
@@ -120,11 +120,11 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
             }
             arrs.emplace_back(acc);
         }
-        AFL_VERIFY(arrs.size());
+        YDB_LOG_VERIFY(arrs.size());
         if (!PKPrefixSize) {
             PKPrefixSize = arrs.size();
         } else {
-            AFL_VERIFY(*PKPrefixSize == arrs.size(),
+            YDB_LOG_VERIFY(*PKPrefixSize == arrs.size(),
                 {"prefix", PKPrefixSize},
                 {"arr", arrs.size()});
         }
@@ -134,7 +134,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(const NCommon::T
             {"fetched", FetchedCount},
             {"limit", Limit});
         TSourceIterator iterator(arrs, source.GetStageResult().GetNotAppliedFilter(), lease.ShareReadOnly());
-        AFL_VERIFY(iterator.IsFilled());
+        YDB_LOG_VERIFY(iterator.IsFilled());
         if (iterator.IsValid()) {
             hasRows = true;
             FilledIterators.emplace_back(std::move(iterator));

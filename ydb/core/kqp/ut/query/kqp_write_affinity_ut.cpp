@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(CS_WriteAffinity) {
      * (TConsistencySharding64) hash rows on these columns IN ORDER. A permuted
      * order (e.g. from iterating a THashSet of PK column names) makes the hashes
      * uncorrelated: every per-shard task then receives rows for all shards
-     * (AFL_VERIFY(splitResult.size() == 1) fires with actual=<shardCount> under
+     * (YDB_LOG_VERIFY(splitResult.size() == 1) fires with actual=<shardCount> under
      * KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK, and KeyColumns order in the plan
      * mismatches regardless of the flag).
      *

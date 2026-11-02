@@ -98,7 +98,7 @@ public:
 
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);
-        AFL_VERIFY(it != Cursors.end());
+        YDB_LOG_VERIFY(it != Cursors.end());
         return it->second;
     }
 
@@ -116,7 +116,7 @@ public:
     }
 
     void Confirm(const bool allowRepeat = false) {
-        AFL_VERIFY(!ConfirmedFlag || allowRepeat);
+        YDB_LOG_VERIFY(!ConfirmedFlag || allowRepeat);
         ConfirmedFlag = true;
     }
 

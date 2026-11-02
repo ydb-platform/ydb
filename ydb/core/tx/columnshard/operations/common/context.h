@@ -54,9 +54,9 @@ private:
 
 public:
     void MergeFrom(const TWritingContext& newContext) {
-        AFL_VERIFY(TabletId == newContext.TabletId);
-        AFL_VERIFY(TabletActorId == newContext.TabletActorId);
-        AFL_VERIFY(ActualSchema->GetVersion() == newContext.ActualSchema->GetVersion());
+        YDB_LOG_VERIFY(TabletId == newContext.TabletId);
+        YDB_LOG_VERIFY(TabletActorId == newContext.TabletActorId);
+        YDB_LOG_VERIFY(ActualSchema->GetVersion() == newContext.ActualSchema->GetVersion());
         if (ApplyToSnapshot < newContext.ApplyToSnapshot) {
             ApplyToSnapshot = newContext.ApplyToSnapshot;
         }
@@ -94,7 +94,7 @@ public:
         , NoTxWrite(noTxWrite)
         , IsBulk(isBulk)
     {
-        AFL_VERIFY(ActivityChecker);
+        YDB_LOG_VERIFY(ActivityChecker);
     }
 };
 }   // namespace NKikimr::NOlap

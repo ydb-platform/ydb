@@ -53,38 +53,38 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         TColumnFilter filter({ true, true, true, false, true, true, false });
         {
             TColumnFilter slice = filter.Slice(2, 3);
-            AFL_VERIFY(slice.DebugString() == "{1}[1,1,1]",
+            YDB_LOG_VERIFY(slice.DebugString() == "{1}[1,1,1]",
                 {"sliceDebug", slice.DebugString()});
         }
         {
             TColumnFilter slice = filter.Slice(2, 5);
-            AFL_VERIFY(slice.DebugString() == "{1}[1,1,2,1]",
+            YDB_LOG_VERIFY(slice.DebugString() == "{1}[1,1,2,1]",
                 {"sliceDebug", slice.DebugString()});
         }
         {
             TColumnFilter slice = filter.Slice(0, 3);
-            AFL_VERIFY(slice.DebugString() == "{1}[3]",
+            YDB_LOG_VERIFY(slice.DebugString() == "{1}[3]",
                 {"sliceDebug", slice.DebugString()});
         }
         {
             TColumnFilter slice = filter.Slice(3, 1);
-            AFL_VERIFY(slice.DebugString() == "{0}[1]",
+            YDB_LOG_VERIFY(slice.DebugString() == "{0}[1]",
                 {"sliceDebug", slice.DebugString()});
         }
         {
             TColumnFilter slice = filter.Slice(0, 7);
-            AFL_VERIFY(slice.DebugString() == filter.DebugString());
+            YDB_LOG_VERIFY(slice.DebugString() == filter.DebugString());
         }
     }
 
     Y_UNIT_TEST(FilterCheckSlice) {
         TColumnFilter filter({ true, true, true, false, true, true, false });
-        AFL_VERIFY(filter.CheckSlice(2, 3));
-        AFL_VERIFY(filter.CheckSlice(0, 3));
-        AFL_VERIFY(!filter.CheckSlice(3, 1));
-        AFL_VERIFY(filter.CheckSlice(4, 3));
-        AFL_VERIFY(filter.CheckSlice(4, 3));
-        AFL_VERIFY(!filter.CheckSlice(6, 1));
+        YDB_LOG_VERIFY(filter.CheckSlice(2, 3));
+        YDB_LOG_VERIFY(filter.CheckSlice(0, 3));
+        YDB_LOG_VERIFY(!filter.CheckSlice(3, 1));
+        YDB_LOG_VERIFY(filter.CheckSlice(4, 3));
+        YDB_LOG_VERIFY(filter.CheckSlice(4, 3));
+        YDB_LOG_VERIFY(!filter.CheckSlice(6, 1));
     }
 
     Y_UNIT_TEST(FilterSlice1) {
@@ -92,37 +92,37 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         filter.Add(true, 100);
         filter.Add(false, 1000);
         auto slice = filter.Slice(0, 130);
-        AFL_VERIFY(slice.DebugString() == "{1}[100,30]",
+        YDB_LOG_VERIFY(slice.DebugString() == "{1}[100,30]",
             {"sliceDebug", slice.DebugString()});
-        AFL_VERIFY(filter.CheckSlice(0, 100));
-        AFL_VERIFY(!filter.CheckSlice(100, 130));
-        AFL_VERIFY(filter.CheckSlice(0, 130));
+        YDB_LOG_VERIFY(filter.CheckSlice(0, 100));
+        YDB_LOG_VERIFY(!filter.CheckSlice(100, 130));
+        YDB_LOG_VERIFY(filter.CheckSlice(0, 130));
     }
 
     Y_UNIT_TEST(CutFilter1) {
         TColumnFilter filter = TColumnFilter::BuildAllowFilter();
         {
             auto cut = filter.Cut(1000, 10000, false);
-            AFL_VERIFY(cut.DebugString() == "{1}[]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{1}[]",
                 {"val", cut.DebugString()});
         }
         {
             auto cut = filter.Cut(100, 10, false);
-            AFL_VERIFY(cut.DebugString() == "{1}[10,90]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{1}[10,90]",
                 {"val", cut.DebugString()});
             auto cut1 = cut.Cut(100, 3, false);
-            AFL_VERIFY(cut1.DebugString() == "{1}[3,97]",
+            YDB_LOG_VERIFY(cut1.DebugString() == "{1}[3,97]",
                 {"val", cut1.DebugString()});
             auto cut2 = cut.Cut(100, 3, true);
-            AFL_VERIFY(cut2.DebugString() == "{0}[7,3,90]",
+            YDB_LOG_VERIFY(cut2.DebugString() == "{0}[7,3,90]",
                 {"val", cut2.DebugString()});
         }
         {
             auto cut = filter.Cut(100, 10, true);
-            AFL_VERIFY(cut.DebugString() == "{0}[90,10]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{0}[90,10]",
                 {"val", cut.DebugString()});
             auto cut1 = cut.Cut(100, 0, true);
-            AFL_VERIFY(cut1.DebugString() == "{0}[100]",
+            YDB_LOG_VERIFY(cut1.DebugString() == "{0}[100]",
                 {"val", cut1.DebugString()});
         }
     }
@@ -141,33 +141,33 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         filter.Add(false, 2);
         {
             auto cut = filter.Cut(filter.GetRecordsCountVerified(), 10, false);
-            AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,18]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,18]",
                 {"val", cut.DebugString()});
-            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+            YDB_LOG_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
             auto cut = filter.Cut(filter.GetRecordsCountVerified(), 1, false);
-            AFL_VERIFY(cut.DebugString() == "{1}[1,31]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{1}[1,31]",
                 {"val", cut.DebugString()});
-            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+            YDB_LOG_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
             auto cut = filter.Cut(filter.GetRecordsCountVerified(), 8, false);
-            AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,2,20]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{1}[4,3,2,1,2,20]",
                 {"val", cut.DebugString()});
-            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+            YDB_LOG_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
             auto cut = filter.Cut(filter.GetRecordsCountVerified(), 10, true);
-            AFL_VERIFY(cut.DebugString() == "{0}[13,1,6,6,1,3,2]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{0}[13,1,6,6,1,3,2]",
                 {"val", cut.DebugString()});
-            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+            YDB_LOG_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
         {
             auto cut = filter.Cut(filter.GetRecordsCountVerified(), 1000, true);
-            AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,6,6,1,3,2]",
+            YDB_LOG_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,6,6,1,3,2]",
                 {"val", cut.DebugString()});
-            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+            YDB_LOG_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
         }
     }
 
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         auto reversed = filter.CreateReversed();
         UNIT_ASSERT_VALUES_EQUAL(reversed.DebugString(), "{0}[1,2,1,1]");
     }
-    
+
     Y_UNIT_TEST(ReverseOdd) {
         TColumnFilter filter = TColumnFilter::BuildAllowFilter();
         filter.Add(true, 4);
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         UNIT_ASSERT_VALUES_EQUAL(filter.DebugString(), "{1}[4,3,2]");
         UNIT_ASSERT_VALUES_EQUAL(reversed.DebugString(), "{1}[2,3,4]");
     }
-    
+
     Y_UNIT_TEST(ReverseEven) {
         TColumnFilter filter = TColumnFilter::BuildAllowFilter();
         filter.Add(true, 4);
@@ -219,10 +219,10 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         filter.Add(false, 1);
         filter.Add(true, 3);
         filter.Add(false, 2);
-        
+
         auto reversed = filter.CreateReversed();
         auto doubleReversed = reversed.CreateReversed();
-        
+
         auto originalVec = filter.BuildSimpleFilter();
         auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
@@ -231,10 +231,10 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
     Y_UNIT_TEST(ReverseTotalAllow) {
         TColumnFilter filter = TColumnFilter::BuildAllowFilter();
         filter.Add(true, 100);
-        
+
         auto reversed = filter.CreateReversed();
         auto doubleReversed = reversed.CreateReversed();
-        
+
         auto originalVec = filter.BuildSimpleFilter();
         auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
@@ -243,10 +243,10 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
     Y_UNIT_TEST(ReverseTotalDeny) {
         TColumnFilter filter = TColumnFilter::BuildDenyFilter();
         filter.Add(false, 100);
-        
+
         auto reversed = filter.CreateReversed();
         auto doubleReversed = reversed.CreateReversed();
-        
+
         auto originalVec = filter.BuildSimpleFilter();
         auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         TColumnFilter filter({ true, false, true, false, true, false, true, false });
         auto reversed = filter.CreateReversed();
         auto doubleReversed = reversed.CreateReversed();
-        
+
         auto originalVec = filter.BuildSimpleFilter();
         auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         TColumnFilter filter({ true, true, true, true, true });
         auto reversed = filter.CreateReversed();
         auto doubleReversed = reversed.CreateReversed();
-        
+
         auto originalVec = filter.BuildSimpleFilter();
         auto doubleReversedVec = doubleReversed.BuildSimpleFilter();
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", originalVec), JoinSeq(",", doubleReversedVec));
@@ -275,14 +275,14 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
     Y_UNIT_TEST(ReversePreservesRecordsCount) {
         TColumnFilter filter({ true, false, true, true, false, true, false, true });
         auto reversed = filter.CreateReversed();
-        
+
         UNIT_ASSERT_VALUES_EQUAL(filter.GetRecordsCountVerified(), reversed.GetRecordsCountVerified());
     }
 
     Y_UNIT_TEST(ReversePreservesFilteredCount) {
         TColumnFilter filter({ true, false, true, true, false, true, false, true });
         auto reversed = filter.CreateReversed();
-        
+
         UNIT_ASSERT_VALUES_EQUAL(filter.GetFilteredCountVerified(), reversed.GetFilteredCountVerified());
     }
 }

@@ -63,29 +63,29 @@ private:
     }
 
     void Complete() {
-        AFL_VERIFY(!IsDone());
-        AFL_VERIFY(IsReady());
+        YDB_LOG_VERIFY(!IsDone());
+        YDB_LOG_VERIFY(IsReady());
         NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
         for (const auto& filter : Filters) {
-            AFL_VERIFY(!!filter);
+            YDB_LOG_VERIFY(!!filter);
             result.Append(*filter);
         }
         OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(result));
         Done = true;
-        AFL_VERIFY(IsDone());
+        YDB_LOG_VERIFY(IsDone());
     }
 
 public:
     void SetIntervalsCount(const ui32 cnt) {
-        AFL_VERIFY(Filters.empty());
-        AFL_VERIFY(cnt);
+        YDB_LOG_VERIFY(Filters.empty());
+        YDB_LOG_VERIFY(cnt);
         Filters.resize(cnt);
     }
 
     void AddFilter(const ui32 intervalIdx, const NArrow::TColumnFilter& filterExt) {
-        AFL_VERIFY(!IsDone());
-        AFL_VERIFY(intervalIdx < Filters.size());
-        AFL_VERIFY(!Filters[intervalIdx]);
+        YDB_LOG_VERIFY(!IsDone());
+        YDB_LOG_VERIFY(intervalIdx < Filters.size());
+        YDB_LOG_VERIFY(!Filters[intervalIdx]);
         Filters[intervalIdx].emplace(filterExt);
         ++FiltersAccumulated;
         if (IsReady()) {
@@ -109,7 +109,7 @@ public:
     TFilterAccumulator(const TEvRequestFilter::TPtr& request);
 
     ~TFilterAccumulator() {
-        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped(),
+        YDB_LOG_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped(),
             {"state", DebugString()});
     }
 
@@ -141,7 +141,7 @@ public:
         TResultInFlightGuard(const std::shared_ptr<TJobStatus>& owner)
             : Owner(owner)
         {
-            AFL_VERIFY(Owner);
+            YDB_LOG_VERIFY(Owner);
             Owner->ResultsInFlight.Inc();
         }
 
@@ -165,7 +165,7 @@ public:
     }
 
     void OnDone() {
-        AFL_VERIFY(!IsDoneFlag.exchange(true));
+        YDB_LOG_VERIFY(!IsDoneFlag.exchange(true));
     }
 };
 
@@ -208,15 +208,15 @@ public:
         , Status(std::make_shared<TJobStatus>())
         , SelfMemory(contextMemory)
     {
-        AFL_VERIFY(Owner);
-        AFL_VERIFY(RequiredPortions.size());
-        AFL_VERIFY(Columns.size());
-        AFL_VERIFY(PKSchema);
-        AFL_VERIFY(SnapshotSchema);
-        AFL_VERIFY(ColumnDataManager);
-        AFL_VERIFY(DataAccessorsManager);
-        AFL_VERIFY(Counters);
-        AFL_VERIFY(SelfMemory);
+        YDB_LOG_VERIFY(Owner);
+        YDB_LOG_VERIFY(RequiredPortions.size());
+        YDB_LOG_VERIFY(Columns.size());
+        YDB_LOG_VERIFY(PKSchema);
+        YDB_LOG_VERIFY(SnapshotSchema);
+        YDB_LOG_VERIFY(ColumnDataManager);
+        YDB_LOG_VERIFY(DataAccessorsManager);
+        YDB_LOG_VERIFY(Counters);
+        YDB_LOG_VERIFY(SelfMemory);
     }
 
     TBuildFilterContext(TBuildFilterContext&& other) = default;
@@ -257,7 +257,7 @@ public:
 
     TPortionInfo::TConstPtr GetPortion(const ui64 portionId) const {
         auto* findPortion = RequiredPortions.FindPtr(portionId);
-        AFL_VERIFY(findPortion,
+        YDB_LOG_VERIFY(findPortion,
             {"id", portionId},
             {"context", DebugString()});
         return *findPortion;

@@ -70,7 +70,7 @@ std::shared_ptr<arrow::Schema> GetTestPKSchema() {
 
 std::shared_ptr<arrow::RecordBatch> MakePKBatch(const std::vector<ui64>& keys) {
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(keys.data()), static_cast<int64_t>(keys.size())).ok());
+    YDB_LOG_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(keys.data()), static_cast<int64_t>(keys.size())).ok());
     auto array = builder.Finish().ValueOrDie();
     return arrow::RecordBatch::Make(GetTestPKSchema(), keys.size(), { array });
 }
@@ -235,7 +235,7 @@ public:
 
     void Handle(NConveyorComposite::TEvExecution::TEvNewTask::TPtr& ev) {
         auto task = ev->Get()->GetTask();
-        AFL_VERIFY(!!task);
+        YDB_LOG_VERIFY(!!task);
         task->Execute(nullptr, task);
     }
 };
@@ -255,7 +255,7 @@ void EnsureInlineDeduplicationConveyor(NActors::TTestActorRuntimeBase& runtime) 
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> MakeUInt64Column(const std::vector<ui64>& values) {
     arrow::UInt64Builder builder;
-    AFL_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(values.data()), static_cast<int64_t>(values.size())).ok());
+    YDB_LOG_VERIFY(builder.AppendValues(reinterpret_cast<const uint64_t*>(values.data()), static_cast<int64_t>(values.size())).ok());
     return std::make_shared<NArrow::NAccessor::TTrivialArray>(builder.Finish().ValueOrDie());
 }
 
@@ -334,7 +334,7 @@ NActors::TActorId SetupDuplicateManager(NActors::TTestActorRuntimeBase& runtime,
         return !!result.ManagerId;
     };
     runtime.DispatchEvents(options, TDuration::Seconds(1));
-    AFL_VERIFY(result.ManagerId);
+    YDB_LOG_VERIFY(result.ManagerId);
     runtime.EnableScheduleForActor(result.ManagerId);
     return result.ManagerId;
 }

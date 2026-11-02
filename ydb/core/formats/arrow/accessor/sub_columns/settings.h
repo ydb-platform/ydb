@@ -77,13 +77,13 @@ public:
         , OthersAllowedFraction(othersAllowedFraction)
         , DictionaryUniqueFraction(dictionaryUniqueFraction)
         , DataExtractor(dataExtractor) {
-        AFL_VERIFY(!!DataExtractor);
-        AFL_VERIFY(OthersAllowedFraction >= 0 && OthersAllowedFraction <= 1,
+        YDB_LOG_VERIFY(!!DataExtractor);
+        YDB_LOG_VERIFY(OthersAllowedFraction >= 0 && OthersAllowedFraction <= 1,
             {"othersFraction", OthersAllowedFraction});
     }
 
     TSettings& SetOthersAllowedFraction(const double value) {
-        AFL_VERIFY(value >= 0 && value <= 1,
+        YDB_LOG_VERIFY(value >= 0 && value <= 1,
             {"othersFractionValue", value});
         OthersAllowedFraction = value;
         return *this;
@@ -110,7 +110,7 @@ public:
 
     bool IsSparsed(const ui32 /*keyUsageCount*/, const ui32 /*recordsCount*/) const {
         // TODO: Return when sparsed is fixed
-        // AFL_VERIFY(recordsCount);
+        // YDB_LOG_VERIFY(recordsCount);
         // return keyUsageCount * SparsedDetectorKff < recordsCount;
         return false;
     }
@@ -187,7 +187,7 @@ public:
             DenseEncodingVersion = proto.GetDenseEncodingVersion();
         }
         if (!proto.HasDataExtractor()) {
-            AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
+            YDB_LOG_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {
             return false;
         }

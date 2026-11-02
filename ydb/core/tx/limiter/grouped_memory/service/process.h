@@ -101,7 +101,7 @@ private:
         if (fresh >= accounted) {
             AdmittedAllocatedBytes += fresh - accounted;
         } else {
-            AFL_VERIFY(AdmittedAllocatedBytes >= accounted - fresh);
+            YDB_LOG_VERIFY(AdmittedAllocatedBytes >= accounted - fresh);
             AdmittedAllocatedBytes -= accounted - fresh;
         }
         if (fresh == 0) {
@@ -114,7 +114,7 @@ private:
     void RevokeAdmission(const ui64 groupId) {
         auto it = AccountedBytesByAdmittedGroup.find(groupId);
         if (it != AccountedBytesByAdmittedGroup.end()) {
-            AFL_VERIFY(AdmittedAllocatedBytes >= it->second);
+            YDB_LOG_VERIFY(AdmittedAllocatedBytes >= it->second);
             AdmittedAllocatedBytes -= it->second;
             AccountedBytesByAdmittedGroup.erase(it);
         }
@@ -161,7 +161,7 @@ private:
 
     TAllocationInfo& GetAllocationInfoVerified(const ui64 allocationId) const {
         auto it = AllocationInfo.find(allocationId);
-        AFL_VERIFY(it != AllocationInfo.end());
+        YDB_LOG_VERIFY(it != AllocationInfo.end());
         return *it->second;
     }
 
@@ -179,7 +179,7 @@ private:
         for (auto&& allocation : data) {
             auto stage = allocation->GetStage();
             LWPROBE(Allocated, "on_unregister", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocation->GetAllocationTime(), false, false);
-            AFL_VERIFY(!allocation->Allocate(OwnerActorId));
+            YDB_LOG_VERIFY(!allocation->Allocate(OwnerActorId));
         }
     }
 
@@ -294,7 +294,7 @@ public:
                 return EUnrestrictedScheduleResult::Idle;
             }
             allocation = WaitAllocations.TakeOne(*groupId, any);
-            AFL_VERIFY(allocation);
+            YDB_LOG_VERIFY(allocation);
             if (HasFreeAdmissionSlot()) {
                 AdmittedGroupIds.insert(*groupId);
             }
@@ -342,15 +342,15 @@ public:
 
     void RegisterAllocation(const bool isPriorityProcess, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& allocation,
         const std::shared_ptr<TStageFeatures>& stage) {
-        AFL_VERIFY(allocation);
-        AFL_VERIFY(stage);
+        YDB_LOG_VERIFY(allocation);
+        YDB_LOG_VERIFY(stage);
         if (!GroupIds.HasExternalId(externalGroupId)) {
             LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), TDuration::Zero(), false, false);
-            AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation),
+            YDB_LOG_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation),
                 {"extGroup", externalGroupId},
                 {"minExtGroup", GroupIds.GetMinExternalIdOptional()},
                 {"stage", stage->GetName()});
-            AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
+            YDB_LOG_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
             auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
             if (UnrestrictedEnabled && allocationInfo->GetAllocationStatus() == EAllocationStatus::Waiting && allocationInfo->NeverFitsUnrestricted()) {
@@ -424,10 +424,10 @@ public:
         switch (it->second->GetAllocationStatus()) {
             case EAllocationStatus::Allocated:
             case EAllocationStatus::Failed:
-                AFL_VERIFY(!WaitAllocations.RemoveAllocationExt(externalGroupId, it->second));
+                YDB_LOG_VERIFY(!WaitAllocations.RemoveAllocationExt(externalGroupId, it->second));
                 break;
             case EAllocationStatus::Waiting:
-                AFL_VERIFY(WaitAllocations.RemoveAllocationExt(externalGroupId, it->second));
+                YDB_LOG_VERIFY(WaitAllocations.RemoveAllocationExt(externalGroupId, it->second));
                 waitFlag = true;
                 break;
         }
@@ -558,17 +558,17 @@ public:
 
     void RegisterAllocation(
         const ui64 externalScopeId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
-        AFL_VERIFY(task);
+        YDB_LOG_VERIFY(task);
         std::shared_ptr<TStageFeatures> stage;
         if (Stages.empty()) {
-            AFL_VERIFY(!stageIdx);
+            YDB_LOG_VERIFY(!stageIdx);
             stage = DefaultStage;
         } else {
-            AFL_VERIFY(stageIdx);
-            AFL_VERIFY(*stageIdx < Stages.size());
+            YDB_LOG_VERIFY(stageIdx);
+            YDB_LOG_VERIFY(*stageIdx < Stages.size());
             stage = Stages[*stageIdx];
         }
-        AFL_VERIFY(stage);
+        YDB_LOG_VERIFY(stage);
         auto& scope = GetAllocationScopeVerified(externalScopeId);
         scope.RegisterAllocation(IsPriorityProcess(), externalGroupId, task, stage);
         UpdateWaitingScopes(&scope);
@@ -601,7 +601,7 @@ public:
 
     void UnregisterScope(const ui64 externalScopeId) {
         auto it = AllocationScopes.find(externalScopeId);
-        AFL_VERIFY(it != AllocationScopes.end());
+        YDB_LOG_VERIFY(it != AllocationScopes.end());
         if (it->second->Unregister()) {
             AllocationScopes.erase(it);
             RefreshMemoryUsage();
@@ -612,14 +612,14 @@ public:
     void RegisterScope(const ui64 externalScopeId) {
         auto it = AllocationScopes.find(externalScopeId);
         if (it == AllocationScopes.end()) {
-            AFL_VERIFY(AllocationScopes.emplace(externalScopeId, std::make_shared<TProcessMemoryScope>(ExternalProcessId, externalScopeId, OwnerActorId, UnrestrictedEnabled, MaxUnrestrictedGroupsPerScope)).second);
+            YDB_LOG_VERIFY(AllocationScopes.emplace(externalScopeId, std::make_shared<TProcessMemoryScope>(ExternalProcessId, externalScopeId, OwnerActorId, UnrestrictedEnabled, MaxUnrestrictedGroupsPerScope)).second);
         } else {
             it->second->Register();
         }
     }
 
     void SetPriorityProcess() {
-        AFL_VERIFY(!PriorityProcessFlag);
+        YDB_LOG_VERIFY(!PriorityProcessFlag);
         PriorityProcessFlag = true;
     }
 
@@ -706,7 +706,7 @@ public:
         bool allocated = false;
         for (auto waitingIt = WaitingScopes.begin(); waitingIt != WaitingScopes.end();) {
             auto it = AllocationScopes.find(*waitingIt);
-            AFL_VERIFY(it != AllocationScopes.end());
+            YDB_LOG_VERIFY(it != AllocationScopes.end());
             auto* scope = it->second.get();
             if (scope->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
                 allocated = true;
@@ -730,7 +730,7 @@ public:
             Y_UNUSED(i.second->Unregister());
         }
         RefreshMemoryUsage();
-        //        AFL_VERIFY(MemoryUsage == 0,
+        //        YDB_LOG_VERIFY(MemoryUsage == 0,
 //                      {"usage", MemoryUsage});
         AllocationScopes.clear();
         WaitingScopes.clear();

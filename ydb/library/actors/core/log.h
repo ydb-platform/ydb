@@ -495,6 +495,187 @@ namespace NActors {
             std::move(structuredMessage));
     }
 
+    class TRecordWriter: public TStringBuilder {
+    private:
+        const TActorContext* ActorContext = nullptr;
+        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
+        ::NActors::NLog::EComponent Component = 0;
+    public:
+        TRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
+            : ActorContext(NActors::TlsActivationContext ? &NActors::TlsActivationContext->AsActorContext() : nullptr)
+            , Priority(priority)
+            , Component(component) {
+
+        }
+
+        ~TRecordWriter() {
+            if (ActorContext) {
+                ::NActors::MemLogAdapter(
+                    *ActorContext,
+                    Priority,
+                    Component,
+                    __FILE_NAME__,
+                    __LINE__,
+                    *this);
+            } else {
+                Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << static_cast<const TStringBuilder&>(*this) << Endl;
+            }
+        }
+    };
+
+    class TFormatedStreamWriter: TNonCopyable {
+    private:
+        TStringBuilder Builder;
+    protected:
+        template <class TKey, class TValue>
+        TFormatedStreamWriter& Write(const TKey& pName, const TValue& pValue) {
+            Builder << pName << "=" << pValue << ";";
+            return *this;
+        }
+
+        template <class TKey, class TValue>
+        TFormatedStreamWriter& Write(const TKey& pName, const std::optional<TValue>& pValue) {
+            if (pValue) {
+                Builder << pName << "=" << *pValue << ";";
+            } else {
+                Builder << pName << "=NO_VALUE_OPTIONAL;";
+            }
+            return *this;
+        }
+
+        TFormatedStreamWriter& WriteDirectly(const TString& data) {
+            Builder << data;
+            return *this;
+        }
+    public:
+        TFormatedStreamWriter() = default;
+        TFormatedStreamWriter(const TString& info) {
+            Builder << info;
+        }
+        const TString& GetResult() const {
+            return Builder;
+        }
+    };
+
+    class TLogContextBuilder: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        std::optional<::NActors::NLog::EComponent> Component;
+        TLogContextBuilder(std::optional<::NActors::NLog::EComponent> component)
+            : Component(component) {
+        }
+    public:
+
+        template <class TKey, class TValue>
+        TLogContextBuilder& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        const std::optional<::NActors::NLog::EComponent>& GetComponent() const {
+            return Component;
+        }
+
+        static TLogContextBuilder Build(std::optional<::NActors::NLog::EComponent> component = {}) {
+            return TLogContextBuilder(component);
+        }
+    };
+
+    class TLogContextGuard: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        std::optional<::NActors::NLog::EComponent> Component;
+        const ui64 Id = 0;
+    public:
+        TLogContextGuard(const TLogContextBuilder& builder);
+
+        ~TLogContextGuard();
+
+        static int GetCurrentComponent(const ::NActors::NLog::EComponent defComponent = 0);
+
+        const std::optional<::NActors::NLog::EComponent>& GetComponent() const {
+            return Component;
+        }
+
+        ui64 GetId() const {
+            return Id;
+        }
+
+        template <class TKey, class TValue>
+        TLogContextGuard& Write(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+    };
+
+    class TLogRecordConstructor: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+    public:
+
+        TLogRecordConstructor();
+
+        template <class TKey, class TValue>
+        TLogRecordConstructor& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+    };
+
+    class TFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TActorContext* ActorContext = nullptr;
+        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
+        ::NActors::NLog::EComponent Component = 0;
+    public:
+
+        TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component);
+
+        template <class TKey, class TValue>
+        TFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        ~TFormattedRecordWriter();
+    };
+
+    class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TString ConditionText;
+    public:
+
+        TVerifyFormattedRecordWriter(const TString& conditionText);
+
+        template <class TKey, class TValue>
+        TVerifyFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        [[noreturn]] ~TVerifyFormattedRecordWriter();
+    };
+
+    class TEnsureFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TString ConditionText;
+    public:
+
+        TEnsureFormattedRecordWriter(const TString& conditionText);
+
+        template <class TKey, class TValue>
+        TEnsureFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
+    };
+
     void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage);
 
@@ -502,7 +683,11 @@ namespace NActors {
         const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
 
-#define AFL_VERIFY(condition, ...)                                                                                              \
+
+#define AFL_VERIFY(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_ENSURE(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+
+#define YDB_LOG_VERIFY(condition, ...)                                                                                          \
     if (condition) {                                                                                                            \
         static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
     } else [[unlikely]] {                                                                                                       \
@@ -511,7 +696,7 @@ namespace NActors {
         NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
     }
 
-#define AFL_ENSURE(condition, ...)                                                                                              \
+#define YDB_LOG_ENSURE(condition, ...)                                                                                          \
     if (condition) {                                                                                                            \
         static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
     } else [[unlikely]] {                                                                                                       \
@@ -522,9 +707,9 @@ namespace NActors {
 
 #ifndef NDEBUG
 /// Assert that depend on NDEBUG macro and outputs message like printf
-#define AFL_VERIFY_DEBUG AFL_VERIFY
+#define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
 #else
-#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::LogVerifFailed(#condition, TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__)
+#define YDB_LOG_VERIFY_DEBUG(condition) if (true); else NActors::LogVerifFailed(#condition, TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__)
 #endif
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \

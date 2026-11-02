@@ -8,7 +8,7 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
-    AFL_VERIFY(ev->Get()->Key);
+    YDB_LOG_VERIFY(ev->Get()->Key);
     const TString& key = *ev->Get()->Key;
 
     if (!ev->Get()->IsSuccess()) {
@@ -42,14 +42,14 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     TLogoBlobID logoBlobId;
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
-    AFL_VERIFY(TObjectKey(GCTask->GetStorageId()).Parse(*ev->Get()->Key, logoBlobId, errorMessage),
+    YDB_LOG_VERIFY(TObjectKey(GCTask->GetStorageId()).Parse(*ev->Get()->Key, logoBlobId, errorMessage),
         {"error", errorMessage});
     BlobIdsToRemove.erase(logoBlobId);
     CheckFinished();
 }
 
 void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjectRequest::TPtr& ev) {
-    AFL_VERIFY(ev->Get()->Request.KeyHasBeenSet());
+    YDB_LOG_VERIFY(ev->Get()->Request.KeyHasBeenSet());
     StartDeletingObject(TString(ev->Get()->Request.GetKey()));
 }
 

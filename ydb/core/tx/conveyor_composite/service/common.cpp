@@ -6,7 +6,7 @@ namespace NKikimr::NConveyorComposite {
 
 void TCPUUsage::Exchange(const TDuration predicted, const TMonotonic start, const TMonotonic finish) {
     Duration += finish - start;
-    AFL_VERIFY(predicted <= PredictedDuration,
+    YDB_LOG_VERIFY(predicted <= PredictedDuration,
         {"predictedDelta", predicted},
         {"predictedSum", PredictedDuration});
     PredictedDuration -= predicted;

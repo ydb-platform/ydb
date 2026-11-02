@@ -6929,7 +6929,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvInitRootShard::TPtr& ev, const TAct
 
 void TSchemeShard::Handle(NKikimr::NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
     auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
-    AFL_VERIFY(!!txRemove);
+    YDB_LOG_VERIFY(!!txRemove);
     Execute(txRemove.release(), ctx);
 }
 

@@ -61,14 +61,14 @@ private:
             {"clientActorId", ClientActorId});
 
         if (MvccSnapshot) {
-            AFL_ENSURE(ev->Get()->Tables.empty());
+            YDB_LOG_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)),
                 0, 0, std::move(ev->TraceId));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
-            AFL_ENSURE(ev->Get()->TableIds.empty());
+            YDB_LOG_ENSURE(ev->Get()->TableIds.empty());
             auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
             req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
             req->Record.SetDatabaseName(Database);

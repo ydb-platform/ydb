@@ -109,7 +109,7 @@ public:
     }
 
     void RegisterBlobIdx(const ui16 blobIdx) {
-        AFL_VERIFY(!BlobRange.BlobIdx,
+        YDB_LOG_VERIFY(!BlobRange.BlobIdx,
             {"original", BlobRange.BlobIdx},
             {"new", blobIdx});
         BlobRange.BlobIdx = blobIdx;

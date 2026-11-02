@@ -48,7 +48,7 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
         } else {
             const ui32 localStart = std::max<ui32>(offset, currentIndex);
             const ui32 localFinish = std::min<ui32>(offset + count, currentIndex + arr->GetRecordsCount());
-            AFL_VERIFY(localStart < localFinish,
+            YDB_LOG_VERIFY(localStart < localFinish,
                 {"start", localStart},
                 {"finish", localFinish});
             chunks.emplace_back(arrAddress->GetArray()->ISlice(localStart - currentIndex, localFinish - localStart));
@@ -83,7 +83,7 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoApplyFilter(const TColu
 
 IChunkedArray::TLocalDataAddress TCompositeChunkedArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return IChunkedArray::TLocalDataAddress(nullptr, 0, 0);
 }
 
@@ -92,7 +92,7 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
     std::optional<IChunkedArray::TLocalChunkedArrayAddress> result;
     TCompositeChunkAccessor accessor(Chunks, result);
     SelectChunk(chunkCurrent, position, accessor);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 
@@ -110,7 +110,7 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
             return false;
         }
     }
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     value = result;
     return true;
 }

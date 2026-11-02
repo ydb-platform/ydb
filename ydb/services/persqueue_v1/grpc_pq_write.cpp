@@ -65,10 +65,10 @@ void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpda
 
 
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    AFL_ENSURE(ev->Get()->ClustersList,
+    YDB_LOG_ENSURE(ev->Get()->ClustersList,
         {"localCluster", LocalCluster},
         {"enabled", Enabled});
-    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size(),
+    YDB_LOG_ENSURE(ev->Get()->ClustersList->Clusters.size(),
         {"clusters", ev->Get()->ClustersList->Clusters.size()},
         {"localCluster", LocalCluster},
         {"enabled", Enabled});

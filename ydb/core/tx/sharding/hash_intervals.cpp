@@ -61,7 +61,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
             const ui64 from2 = GetOrderedShardIds()[2 * idx + 1];
             auto source1 = shardingInfo.GetShardingTabletVerified(from1);
             auto source2 = shardingInfo.GetShardingTabletVerified(from2);
-            AFL_VERIFY(source1.GetHashIntervalRightOpened() == source2.GetHashIntervalLeftClosed());
+            YDB_LOG_VERIFY(source1.GetHashIntervalRightOpened() == source2.GetHashIntervalLeftClosed());
             {
                 NKikimrSchemeOp::TAlterShards alter;
                 TSpecificShardingInfo::TConsistencyShardingTablet newInterval(i, source1.GetHashIntervalLeftClosed(), source2.GetHashIntervalRightOpened());
@@ -95,7 +95,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
 }
 
 NKikimr::TConclusionStatus TConsistencySharding64::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
-    AFL_VERIFY(!!SpecialShardingInfo);
+    YDB_LOG_VERIFY(!!SpecialShardingInfo);
     for (auto&& i : proto.GetDeleteShardIds()) {
         if (!DeleteShardInfo(i)) {
             return TConclusionStatus::Fail("no shard with same id on delete consistency interval");
@@ -129,7 +129,7 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoDeserializeFromProto(const 
     if (!proto.HasHashSharding()) {
         return TConclusionStatus::Fail("no data for consistency sharding");
     }
-    AFL_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+    YDB_LOG_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
     {
         TSpecificShardingInfo specSharding;
         auto parseResult = specSharding.DeserializeFromProto(proto, GetClosedWritingShardIds(), GetClosedReadingShardIds());
@@ -144,7 +144,7 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoDeserializeFromProto(const 
 }
 
 NKikimr::TConclusionStatus TConsistencySharding64::DoOnAfterModification() {
-    AFL_VERIFY(!!SpecialShardingInfo);
+    YDB_LOG_VERIFY(!!SpecialShardingInfo);
     auto result = SpecialShardingInfo->BuildActivityIndex(GetClosedWritingShardIds(), GetClosedReadingShardIds());
     if (result.IsFail()) {
         return result;
@@ -195,12 +195,12 @@ std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding6
 }
 
 ui64 TSpecificShardingInfo::GetUnifiedDistributionBorder(const ui32 idx, const ui64 shardsCount) const {
-    AFL_VERIFY(idx <= shardsCount);
+    YDB_LOG_VERIFY(idx <= shardsCount);
     if (idx == shardsCount) {
         return Max<ui64>();
     }
 #ifdef KIKIMR_DISABLE_WINDOWS
-    AFL_VERIFY(false,
+    YDB_LOG_VERIFY(false,
         {"error", "windows implementation doesn't works"});
     return 0;
 #else

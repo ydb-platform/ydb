@@ -23,9 +23,9 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::SharedBlobIds::StorageId>();
             auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::SharedBlobIds::BlobId>(), nullptr);
-            AFL_VERIFY(!!unifiedBlobId,
+            YDB_LOG_VERIFY(!!unifiedBlobId,
                 {"error", unifiedBlobId.GetErrorMessage()});
-            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second,
+            YDB_LOG_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second,
                 {"blobId", *unifiedBlobId},
                 {"storageId", storageId});
             if (!rowset.Next()) {
@@ -45,9 +45,9 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::BorrowedBlobIds::StorageId>();
             auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::BorrowedBlobIds::BlobId>(), nullptr);
-            AFL_VERIFY(!!unifiedBlobId,
+            YDB_LOG_VERIFY(!!unifiedBlobId,
                 {"error", unifiedBlobId.GetErrorMessage()});
-            AFL_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second,
+            YDB_LOG_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second,
                 {"blobId", *unifiedBlobId},
                 {"storageId", storageId});
             if (!rowset.Next()) {
@@ -62,14 +62,14 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
         auto storage = GetStorageManagerGuarantee(storageId);
         for (auto&& b : blobs) {
             for (auto&& t : b.second) {
-                AFL_VERIFY(storage->UpsertSharedBlobOnLoad(b.first, t));
+                YDB_LOG_VERIFY(storage->UpsertSharedBlobOnLoad(b.first, t));
             }
         }
     }
     for (auto&& [storageId, blobs] : borrowedBlobIds) {
         auto storage = GetStorageManagerGuarantee(storageId);
         for (auto&& b : blobs) {
-            AFL_VERIFY(storage->UpsertBorrowedBlobOnLoad(b.first, b.second));
+            YDB_LOG_VERIFY(storage->UpsertBorrowedBlobOnLoad(b.first, b.second));
         }
     }
     return true;
@@ -104,10 +104,10 @@ void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransa
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
         if (tabletIdTo == SelfTabletId) {
-            AFL_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
+            YDB_LOG_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
             db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Delete();
         } else {
-            AFL_VERIFY(it != BorrowedBlobIds.end(),
+            YDB_LOG_VERIFY(it != BorrowedBlobIds.end(),
                 {"blobId", i.ToStringNew()});
             db.Table<NColumnShard::Schema::BorrowedBlobIds>()
                 .Key(StorageId, i.ToStringNew())
@@ -121,13 +121,13 @@ void TStorageSharedBlobsManager::CASBorrowedBlobs(
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
         if (tabletIdTo == SelfTabletId) {
-            AFL_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
+            YDB_LOG_VERIFY(it == BorrowedBlobIds.end() || it->second == tabletIdFrom);
             if (it != BorrowedBlobIds.end()) {
                 BorrowedBlobIds.erase(it);
             }
         } else {
-            AFL_VERIFY(it != BorrowedBlobIds.end());
-            AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
+            YDB_LOG_VERIFY(it != BorrowedBlobIds.end());
+            YDB_LOG_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
             it->second = tabletIdTo;
         }
     }
@@ -161,7 +161,7 @@ void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobs
             {"tabletIdOwn", i.GetTabletId()},
             {"blobId", i.GetBlobId().ToStringNew()});
         auto it = BorrowedBlobIds.find(i.GetBlobId());
-        AFL_VERIFY(it != BorrowedBlobIds.end());
+        YDB_LOG_VERIFY(it != BorrowedBlobIds.end());
         BorrowedBlobIds.erase(it);
     }
 }

@@ -13,16 +13,16 @@ TChunkConstructionData::TChunkConstructionData(const ui32 recordsCount, const st
     , ColumnType(columnType)
     , DefaultSerializer(defaultSerializer)
     , AdditionalAccessorData(std::move(additionalAccessorData)) {
-    AFL_VERIFY(ColumnType);
-    AFL_VERIFY(RecordsCount);
-    AFL_VERIFY(!NotNullRecordsCount || *NotNullRecordsCount <= RecordsCount,
+    YDB_LOG_VERIFY(ColumnType);
+    YDB_LOG_VERIFY(RecordsCount);
+    YDB_LOG_VERIFY(!NotNullRecordsCount || *NotNullRecordsCount <= RecordsCount,
         {"records", RecordsCount},
         {"notNull", NotNullRecordsCount});
-    AFL_VERIFY(!!DefaultSerializer);
+    YDB_LOG_VERIFY(!!DefaultSerializer);
 }
 
 TChunkConstructionData TChunkConstructionData::GetSubset(const ui32 recordsCount, const std::optional<ui32>& notNullRecordsCount) const {
-    AFL_VERIFY(recordsCount <= RecordsCount,
+    YDB_LOG_VERIFY(recordsCount <= RecordsCount,
         {"sub", recordsCount},
         {"global", RecordsCount});
     return TChunkConstructionData(recordsCount, DefaultValue, ColumnType, DefaultSerializer, notNullRecordsCount, AdditionalAccessorData);
@@ -33,7 +33,7 @@ TChunkConstructionData TChunkConstructionData::WithAdditionalAccessorData(std::s
 }
 
 ui32 TChunkConstructionData::GetNullRecordsCountVerified() const {
-    AFL_VERIFY(NotNullRecordsCount);
+    YDB_LOG_VERIFY(NotNullRecordsCount);
     return RecordsCount - *NotNullRecordsCount;
 }
 

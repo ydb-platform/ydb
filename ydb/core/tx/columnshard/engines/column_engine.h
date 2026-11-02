@@ -97,8 +97,8 @@ public:
         : Request(request)
         , Processor(processor)
     {
-        AFL_VERIFY(Request);
-        AFL_VERIFY(Processor);
+        YDB_LOG_VERIFY(Request);
+        YDB_LOG_VERIFY(Processor);
     }
 };
 
@@ -139,7 +139,7 @@ public:
         }
 
         const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
-            AFL_VERIFY(Schema);
+            YDB_LOG_VERIFY(Schema);
             return *Schema;
         }
 
@@ -148,7 +148,7 @@ public:
         }
 
         const NKikimrSchemeOp::TColumnTableSchemaDiff& GetDiffVerified() const {
-            AFL_VERIFY(Diff);
+            YDB_LOG_VERIFY(Diff);
             return *Diff;
         }
 
@@ -156,7 +156,7 @@ public:
             if (Schema) {
                 return Schema->GetVersion();
             }
-            AFL_VERIFY(Diff);
+            YDB_LOG_VERIFY(Diff);
             return Diff->GetVersion();
         }
     };

@@ -55,7 +55,7 @@ public:
         for (auto&& i : point.GetStartSources()) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"addSource", i->GetSourceIdx()});
-            AFL_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second,
+            YDB_LOG_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second,
                 {"idx", i->GetSourceIdx()});
         }
     }
@@ -64,7 +64,7 @@ public:
         for (auto&& i : point.GetFinishSources()) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"removeSource", i->GetSourceIdx()});
-            AFL_VERIFY(CurrentSources.erase(i->GetSourceIdx()),
+            YDB_LOG_VERIFY(CurrentSources.erase(i->GetSourceIdx()),
                 {"idx", i->GetSourceIdx()});
         }
     }
@@ -97,7 +97,7 @@ private:
 
     IDataSource& MutableNotStartedSource(const ui32 sourceIdx) {
         auto it = NotStartedSources.find(sourceIdx);
-        AFL_VERIFY(it != NotStartedSources.end(),
+        YDB_LOG_VERIFY(it != NotStartedSources.end(),
             {"sourceIdx", sourceIdx});
         return *it->second->GetSource().MutableAs<IDataSource>();
     }

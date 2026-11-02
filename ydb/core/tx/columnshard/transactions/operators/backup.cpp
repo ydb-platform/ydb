@@ -44,7 +44,7 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     columns.reserve(columnsMap.size());
     for (const ui32 columnId : indexInfo.GetColumnIds(false)) {
         auto it = columnsMap.find(columnId);
-        AFL_VERIFY(it != columnsMap.end(),
+        YDB_LOG_VERIFY(it != columnsMap.end(),
             {"columnId", columnId});
         columns.emplace_back(it->second);
     }
@@ -66,7 +66,7 @@ TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartPr
                 {"event", "cannot_add_task"});
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Cannot add backup task");
         }
-        AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
+        YDB_LOG_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
     } else {
         TaskExists = true;
     }
@@ -101,7 +101,7 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     if (AlreadyCompleted) {
         return true;
     }
-    AFL_VERIFY(!TxRemove);
+    YDB_LOG_VERIFY(!TxRemove);
     const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
     auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
 
@@ -143,7 +143,7 @@ bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const T
         opResult.SetExplain(status.ErrorMessage);
         ctx.Send(subscriber, event.Release(), 0, 0);
     }
-    AFL_VERIFY(!!TxRemove);
+    YDB_LOG_VERIFY(!!TxRemove);
     TxRemove->Complete(NActors::TActivationContext::AsActorContext());
     return true;
 }

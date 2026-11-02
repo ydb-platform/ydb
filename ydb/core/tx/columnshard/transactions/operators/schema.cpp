@@ -29,7 +29,7 @@ protected:
                   {"event", "on_subscriber_event"},
                   {"txId", TxId},
                   {"ev", ev->DebugString()});
-        AFL_VERIFY(!IsFinished());
+        YDB_LOG_VERIFY(!IsFinished());
         DoOnEvent(ev);
         if (IsFinished()) {
             shard.Execute(new TTxFinishAsyncTransaction(shard, TxId));
@@ -56,7 +56,7 @@ public:
     }
 
     virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
-        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TablesErased);
+        YDB_LOG_VERIFY(ev->GetType() == NSubscriber::EEventType::TablesErased);
         auto* evErased = static_cast<const NSubscriber::TEventTablesErased*>(ev.get());
         for (auto&& i : evErased->GetPathIds()) {
             WaitTables.erase(i);
@@ -89,7 +89,7 @@ public:
     }
 
     virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
-        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
+        YDB_LOG_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
         const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
         // Subscribers receive every TxCompleted on the shard. Wait set is a snapshot from propose
         // time (GetTxs), so later/unrelated completions must be ignored — otherwise VERIFY fails
@@ -104,7 +104,7 @@ public:
 
 TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(
     TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_VERIFY(!WaitOnPropose);
+    YDB_LOG_VERIFY(!WaitOnPropose);
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
@@ -201,7 +201,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transaction for moving pathId only
             if (!txIdsToWait.empty()) {
-                AFL_VERIFY(!txIdsToWait.contains(GetTxId()),
+                YDB_LOG_VERIFY(!txIdsToWait.contains(GetTxId()),
                     {"txId", GetTxId()},
                     {"txIds", JoinSeq(",", txIdsToWait)});
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
@@ -314,7 +314,7 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTables(
 }
 
 void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
-    AFL_VERIFY(!WaitOnPropose);
+    YDB_LOG_VERIFY(!WaitOnPropose);
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
             break;
@@ -340,11 +340,11 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
 
-            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
-            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
+            YDB_LOG_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false));
+            YDB_LOG_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false));
             owner.TablesManager.MoveTablePropose(srcSchemeShardLocalPathId);
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();
-            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
+            YDB_LOG_VERIFY(txIdsToWait.erase(GetTxId()));
             if (!txIdsToWait.empty()) {
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
@@ -353,11 +353,11 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
             const auto srcInternalPathId = owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false);
-            AFL_VERIFY(srcInternalPathId);
+            YDB_LOG_VERIFY(srcInternalPathId);
             // CopyTablePlanStep persists dst in TableInfoV1 before progress completes. After tablet restart
             // dst is already in SchemeShardLocalToInternal, so replay must be idempotent (same as CopyTableProgress).
             if (const auto dstInternalPathId = owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
-                AFL_VERIFY(*dstInternalPathId == *srcInternalPathId,
+                YDB_LOG_VERIFY(*dstInternalPathId == *srcInternalPathId,
                     {"src", *srcInternalPathId},
                     {"dst", *dstInternalPathId});
             }

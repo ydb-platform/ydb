@@ -31,7 +31,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson:
     if (auto conc = DataExtractor.DeserializeFromJson(jsonInfo["data_extractor"]); conc.IsFail()) {
         return conc;
     }
-    AFL_VERIFY(DataExtractor);
+    YDB_LOG_VERIFY(DataExtractor);
     if (!jsonInfo.Has("column_name")) {
         return TConclusionStatus::Fail("column_name must be present in min_max index features");
     }
@@ -53,13 +53,13 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (!DataExtractor.DeserializeFromProto(bIndex.GetDataExtractor())) {
         return TConclusionStatus::Fail("cannot parse data extractor: " + bIndex.GetDataExtractor().DebugString());
     }
-    AFL_VERIFY(DataExtractor.HasObject());
+    YDB_LOG_VERIFY(DataExtractor.HasObject());
     return TConclusionStatus::Success();
 }
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableMinMaxIndex();
-    AFL_VERIFY(!!ColumnName,
+    YDB_LOG_VERIFY(!!ColumnName,
         {"problem", "not initialized min_max index info trying to serialize"});
     filterProto->SetColumnName(ColumnName);
     *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();

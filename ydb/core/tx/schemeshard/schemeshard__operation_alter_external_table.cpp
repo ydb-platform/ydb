@@ -289,7 +289,7 @@ public:
         TExternalDataSourceInfo::TPtr oldDataSource;
         {
             const auto oldExternalTableRecord = context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-            AFL_ENSURE(oldExternalTableRecord,
+            YDB_LOG_ENSURE(oldExternalTableRecord,
                 {"path", dstPath.PathString()},
                 {"pathId", dstPath->PathId});
             const auto oldDataSourcePath = TPath::Resolve(oldExternalTableRecord->DataSourcePath, context.SS);
@@ -306,7 +306,7 @@ public:
 
         const auto oldExternalTableInfo =
             context.SS->ExternalTables.Value(dstPath->PathId, nullptr);
-        AFL_ENSURE(oldExternalTableInfo,
+        YDB_LOG_ENSURE(oldExternalTableInfo,
             {"path", dstPath.PathString()},
             {"pathId", dstPath->PathId});
         auto [externalTableInfo, maybeError] =

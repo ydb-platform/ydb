@@ -28,7 +28,7 @@ std::vector<ui32> TSimilarPacker::SizesToRecordsCount(
     const double rowsPerByte = 1.0 * serializedRecordsCount / dataSerialization.size();
     i32 remainedParts = splitPartSizesLocal.size();
     for (ui32 idx = 0; idx < splitPartSizesLocal.size(); ++idx) {
-        AFL_VERIFY(remainedRecordsCount >= remainedParts,
+        YDB_LOG_VERIFY(remainedRecordsCount >= remainedParts,
             {"remainedRecordsCount", remainedRecordsCount},
             {"remainedParts", remainedParts},
             {"idx", idx},
@@ -56,8 +56,8 @@ std::vector<ui32> TSimilarPacker::SizesToRecordsCount(
 
 std::vector<i64> TSimilarPacker::SplitWithExpected(
     const i64 count, const ui32 expectation, const bool canDrop /*= true*/, const bool canGrow /*= true*/) {
-    AFL_VERIFY(canDrop || canGrow);
-    AFL_VERIFY(expectation);
+    YDB_LOG_VERIFY(canDrop || canGrow);
+    YDB_LOG_VERIFY(expectation);
     if (count <= expectation) {
         return { count };
     }
@@ -69,12 +69,12 @@ std::vector<i64> TSimilarPacker::SplitWithExpected(
 
     const i64 partResultCount = count / partsCount;
     const i64 sumResultCount = partsCount * partResultCount;
-    AFL_VERIFY(sumResultCount <= count,
+    YDB_LOG_VERIFY(sumResultCount <= count,
         {"count", count},
         {"expect", sumResultCount},
         {"propose", partResultCount});
     const ui32 delta = count - sumResultCount;
-    AFL_VERIFY(delta < partsCount,
+    YDB_LOG_VERIFY(delta < partsCount,
         {"delta", delta},
         {"partSize", partResultCount},
         {"expectation", expectation},

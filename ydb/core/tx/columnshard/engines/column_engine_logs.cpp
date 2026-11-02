@@ -99,7 +99,7 @@ public:
         TDuration timeOfCommitted = TAppData::TimeProvider->Now() - start;
 
         if (CalculateProbe) {
-            AFL_VERIFY(Orbit);
+            YDB_LOG_VERIFY(Orbit);
             LWTRACK(ColumnEngineForLogsSelect, *Orbit, PathId.GetRawValue(), TabletId, TxId, ScanId, timeOfInserted.MilliSeconds(),
                 timeOfCommitted.MilliSeconds(), TotalPortionsCount, TotalFilteredPortionsCount, Result.size());
         }
@@ -279,14 +279,14 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 }
 
 void TColumnEngineForLogs::InitDerivedState() {
-    AFL_VERIFY(SchemaObjectsCache);
+    YDB_LOG_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     Counters->SetSmallBlobThresholdBytes(StoragesManager->GetDefaultOperator()->GetSmallBlobThresholdBytes());
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(
     const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo) {
-    AFL_VERIFY(DataAccessorsManager);
+    YDB_LOG_VERIFY(DataAccessorsManager);
     bool switchOptimizer = false;
     bool switchAccessorsManager = false;
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(indexInfo->GetPresetId());
@@ -325,7 +325,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) {
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(presetId);
-    AFL_VERIFY(vIndex.IsEmpty() || schema.GetVersion() >= vIndex.GetLastSchema()->GetVersion(),
+    YDB_LOG_VERIFY(vIndex.IsEmpty() || schema.GetVersion() >= vIndex.GetLastSchema()->GetVersion(),
         {"empty", vIndex.IsEmpty()},
         {"current", schema.GetVersion()},
         {"last", vIndex.GetLastSchema()->GetVersion()});
@@ -341,17 +341,17 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     auto indexInfo = SchemaObjectsCache->FindIndexInfo(presetId, schema.GetVersion());
     if (schema.HasDiff() && !vIndex.IsEmpty()) {
         const auto& lastIndexInfo = vIndex.GetLastSchema()->GetIndexInfo();
-        AFL_VERIFY(presetId == lastIndexInfo.GetPresetId());
+        YDB_LOG_VERIFY(presetId == lastIndexInfo.GetPresetId());
         TSchemaDiffView diffView;
         diffView.DeserializeFromProto(schema.GetDiffVerified()).Validate();
         if (!indexInfo) {
             auto built = NOlap::TIndexInfo::BuildFromProto(diffView, lastIndexInfo, StoragesManager, SchemaObjectsCache);
-            AFL_VERIFY(built);
+            YDB_LOG_VERIFY(built);
             indexInfo.emplace(SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*built)));
         }
         if (diffView.IsCorrectToIgnorePreviouse(lastIndexInfo)) {
             MutableVersionedIndex().AddIgnoreSchemaVersionTo(lastIndexInfo.GetVersion(), schema.GetVersion());
-            AFL_VERIFY(schema.GetVersion() != lastIndexInfo.GetVersion());
+            YDB_LOG_VERIFY(schema.GetVersion() != lastIndexInfo.GetVersion());
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "schema_will_be_ignored"},
                 {"lastVersion", lastIndexInfo.GetVersion()},
@@ -365,12 +365,12 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
                 {"diff", schema.GetDiffVerified().DebugString()});
         }
     } else {
-        AFL_VERIFY(schema.HasSchema(),
+        YDB_LOG_VERIFY(schema.HasSchema(),
             {"hasDiff", schema.HasDiff()},
             {"isEmpty", vIndex.IsEmpty()});
         if (!indexInfo) {
             auto built = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
-            AFL_VERIFY(built);
+            YDB_LOG_VERIFY(built);
             indexInfo.emplace(SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*built)));
         }
     }
@@ -379,7 +379,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
 
 void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) {
     TVersionedIndex& vIndex = VersionedSchemas.MutableVersionedIndex(presetId);
-    AFL_VERIFY(!vIndex.IsEmpty());
+    YDB_LOG_VERIFY(!vIndex.IsEmpty());
 
     ui64 version = schema.GetVersion();
 
@@ -392,21 +392,21 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
 
     ISnapshotSchema::TPtr secondLast = vIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(vIndex.GetLastSchema()->GetVersion() - 1);
 
-    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version,
+    YDB_LOG_VERIFY(!secondLast || secondLast->GetVersion() <= version,
         {"reason", "incorrect schema registration order"});
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.HasDiff()) {
-        AFL_VERIFY(prevSchema,
+        YDB_LOG_VERIFY(prevSchema,
             {"reason", "no base schema to apply diff for"});
-        AFL_VERIFY(presetId == prevSchema->GetIndexInfo().GetPresetId());
+        YDB_LOG_VERIFY(presetId == prevSchema->GetIndexInfo().GetPresetId());
         indexInfoOptional =
             NOlap::TIndexInfo::BuildFromProto(schema.GetDiffVerified(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(presetId, schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
 
-    AFL_VERIFY(indexInfoOptional);
+    YDB_LOG_VERIFY(indexInfoOptional);
     vIndex.AddIndex(snapshot, SchemaObjectsCache->GetOrInsertIndexInfo(std::move(*indexInfoOptional)));
 }
 
@@ -458,7 +458,7 @@ ui64 TColumnEngineForLogs::GetCompactionPriority(
 
 std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
-    AFL_VERIFY(dataLocksManager);
+    YDB_LOG_VERIFY(dataLocksManager);
     auto granulesSortedDesc = GranulesStorage->GetGranulesForCompaction();
 
     std::shared_ptr<TGranuleMeta> granuleToCompact = nullptr;
@@ -500,7 +500,7 @@ bool TColumnEngineForLogs::UsesPullCompactionScheduling() const noexcept {
 
 std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> TColumnEngineForLogs::GetNextCompactionTask(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
-    AFL_VERIFY(dataLocksManager);
+    YDB_LOG_VERIFY(dataLocksManager);
     auto granulesSortedDesc = GranulesStorage->GetGranulesForCompaction();
     for (auto& orderedG : granulesSortedDesc) {
         auto granule = orderedG.GetGranule();
@@ -526,7 +526,7 @@ std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> TColumnEngineFo
 
 std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCleanupTables(
     const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
-    AFL_VERIFY(dataLocksManager);
+    YDB_LOG_VERIFY(dataLocksManager);
     if (pathsToDrop.empty()) {
         return nullptr;
     }
@@ -562,7 +562,7 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
 
 std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(const ISnapshotHolders& snapshotHolders,
     const std::map<TSnapshot, THashSet<TInternalPathId>>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
-    AFL_VERIFY(dataLocksManager);
+    YDB_LOG_VERIFY(dataLocksManager);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "StartCleanup"},
         {"portionsCount", CleanupPortions.size()});
@@ -688,7 +688,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
 
 std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept {
-    AFL_VERIFY(dataLocksManager);
+    YDB_LOG_VERIFY(dataLocksManager);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
         {"event", "StartTtl"},
         {"external", pathEviction.size()});
@@ -762,9 +762,9 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
 
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo) {
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
-    AFL_VERIFY(portionInfo);
+    YDB_LOG_VERIFY(portionInfo);
     auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
-    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
+    YDB_LOG_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
     Counters->AddPortion(*portionInfo);
     granule->AppendPortion(portionInfo);
     if (portionInfo->HasRemoveSnapshot()) {
@@ -776,7 +776,7 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo) {
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());
-    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
+    YDB_LOG_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
     Counters->AddPortion(portionInfo->GetPortionInfo());
     granule->AppendPortion(portionInfo);
     if (portionInfo->GetPortionInfo().HasRemoveSnapshot()) {
@@ -806,7 +806,7 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
 
 std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId,
     const NReader::TReadDescription& readDescription, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-    AFL_VERIFY(dataLocksManager);
+    YDB_LOG_VERIFY(dataLocksManager);
 
     auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
     if (!granuleMeta) {

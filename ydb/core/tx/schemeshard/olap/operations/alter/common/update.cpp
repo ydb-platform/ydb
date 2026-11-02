@@ -6,7 +6,7 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TColumnTableUpdate::DoRestore(const TUpdateRestoreContext& context) {
     const auto& table = context.GetOriginalEntityAsVerified<TColumnTableEntity>().GetTableInfoVerified();
-    AFL_VERIFY(table.AlterData && table.AlterData->AlterBody);
+    YDB_LOG_VERIFY(table.AlterData && table.AlterData->AlterBody);
     return DoRestoreImpl(context, table.AlterData);
 }
 
@@ -30,7 +30,7 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
         for (const auto& tier : oldDataSources) {
             if (!newDataSources.contains(tier)) {
                 auto tierPath = TPath::Resolve(tier, ssContext->SS);
-                AFL_VERIFY(tierPath.IsResolved(),
+                YDB_LOG_VERIFY(tierPath.IsResolved(),
                     {"path", tier});
                 ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
                 ssContext->SS->RemoveExternalDataSourceReference(tierPath->PathId, pathId);
@@ -40,7 +40,7 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
         for (const auto& tier : newDataSources) {
             if (!oldDataSources.contains(tier)) {
                 auto tierPath = TPath::Resolve(tier, ssContext->SS);
-                AFL_VERIFY(tierPath.IsResolved(),
+                YDB_LOG_VERIFY(tierPath.IsResolved(),
                     {"path", tier});
                 ssContext->MemChanges.GrabExternalDataSource(ssContext->SS, tierPath->PathId);
                 ssContext->SS->AddExternalDataSourceReference(

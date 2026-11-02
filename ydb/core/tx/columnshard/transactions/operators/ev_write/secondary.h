@@ -219,7 +219,7 @@ private:
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(
         TColumnShard& owner, const ui64 recvTabletId) const override {
-        AFL_VERIFY(recvTabletId == ArbiterTabletId,
+        YDB_LOG_VERIFY(recvTabletId == ArbiterTabletId,
             {"recv", recvTabletId},
             {"arbiter", ArbiterTabletId});
         return std::make_unique<TTxWriteReceivedAck>(owner, GetTxId());
@@ -227,7 +227,7 @@ private:
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
         TColumnShard& owner, const ui64 sendTabletId, const ui64 seqNo, const bool broken) const override {
-        AFL_VERIFY(ArbiterTabletId == sendTabletId);
+        YDB_LOG_VERIFY(ArbiterTabletId == sendTabletId);
         return std::make_unique<TTxWriteReceivedBrokenFlag>(&owner, GetTxId(), GetStep(), sendTabletId, seqNo, broken);
     }
 
@@ -237,7 +237,7 @@ private:
                 {"event", "skip_continue"});
             return;
         }
-        AFL_VERIFY(SelfBroken.has_value());
+        YDB_LOG_VERIFY(SelfBroken.has_value());
         NKikimrTx::TReadSetData readSetData;
         bool broken = SelfBroken.value();
         readSetData.SetDecision(broken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
@@ -270,7 +270,7 @@ public:
     using TBase::TBase;
 
     virtual bool IsTxBroken() const override {
-        AFL_VERIFY(TxBroken);
+        YDB_LOG_VERIFY(TxBroken);
         return *TxBroken;
     }
 

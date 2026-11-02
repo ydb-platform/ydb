@@ -38,7 +38,7 @@ public:
     }
 
     static std::shared_ptr<TLevelAgents> GetLevelAgents(const ui32 levelId) {
-        AFL_VERIFY(levelId < Singleton<TGlobalCounters>()->Levels.size());
+        YDB_LOG_VERIFY(levelId < Singleton<TGlobalCounters>()->Levels.size());
         return Singleton<TGlobalCounters>()->Levels[levelId];
     }
 
@@ -68,19 +68,19 @@ public:
     }
 
     const TLevelCounters& GetLevelCounters(const ui32 levelIdx) const {
-        AFL_VERIFY(levelIdx < Levels.size(),
+        YDB_LOG_VERIFY(levelIdx < Levels.size(),
             {"idx", levelIdx},
             {"count", Levels.size()});
         return Levels[levelIdx];
     }
 
     void AddPortion(const ui32 levelId, const std::shared_ptr<TPortionInfo>& portion) {
-        AFL_VERIFY(levelId < Levels.size());
+        YDB_LOG_VERIFY(levelId < Levels.size());
         Levels[levelId].Portions->AddPortion(portion);
     }
 
     void RemovePortion(const ui32 levelId, const std::shared_ptr<TPortionInfo>& portion) {
-        AFL_VERIFY(levelId < Levels.size());
+        YDB_LOG_VERIFY(levelId < Levels.size());
         Levels[levelId].Portions->RemovePortion(portion);
     }
 };

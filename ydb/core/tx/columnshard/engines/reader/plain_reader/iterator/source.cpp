@@ -20,7 +20,7 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
-    AFL_VERIFY(fetching);
+    YDB_LOG_VERIFY(fetching);
     FetchingPlan = fetching;
 }
 
@@ -28,7 +28,7 @@ void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sou
     auto& self = *sourceLease->GetSource().MutableAs<IDataSource>();
     self.OnStartProcessing();
     self.SetMemoryGroupId(memoryGroupId);
-    AFL_VERIFY(self.FetchingPlan);
+    YDB_LOG_VERIFY(self.FetchingPlan);
     self.InitStageData(std::make_unique<TFetchedData>(self.GetExclusiveIntervalOnly(), self.GetRecordsCount()));
     YDB_LOG_DEBUG("",
         {"initFetchingPlan", self.FetchingPlan->DebugString()},
@@ -48,7 +48,7 @@ void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sou
 }
 
 void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<NCommon::TDataSourceLease> self) {
-    AFL_VERIFY(!IsReadyFlag);
+    YDB_LOG_VERIFY(!IsReadyFlag);
     IsReadyFlag = true;
     static_cast<TPlainReadData&>(owner).MutableScanner().OnSourceReady(std::move(self));
 }
@@ -90,7 +90,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         auto itFilter = cFilter.GetBegin(false, Portion->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
-            AFL_VERIFY(!itFinished);
+            YDB_LOG_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
@@ -103,7 +103,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished,
+        YDB_LOG_VERIFY(itFinished,
             {"filter", itFilter.DebugString()},
             {"count", Portion->GetRecordsCount()});
     }
@@ -118,8 +118,8 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
 NCommon::TExecutionResult TPortionDataSource::DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     YDB_LOG_DEBUG("",
         {"event", step.GetName()});
-    AFL_VERIFY(columns.GetColumnsCount());
-    AFL_VERIFY(!GetStageData().GetAppliedFilter() || !GetStageData().GetAppliedFilter()->IsTotalDenyFilter());
+    YDB_LOG_VERIFY(columns.GetColumnsCount());
+    YDB_LOG_VERIFY(!GetStageData().GetAppliedFilter() || !GetStageData().GetAppliedFilter()->IsTotalDenyFilter());
     auto& columnIds = columns.GetColumnIds();
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -163,7 +163,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 }
 
 NCommon::TExecutionResult TPortionDataSource::DoStartFetchingAccessor(const TFetchingScriptCursor& step) {
-    AFL_VERIFY(!HasPortionAccessor());
+    YDB_LOG_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
         {"fetchingInfo", step.DebugString()});

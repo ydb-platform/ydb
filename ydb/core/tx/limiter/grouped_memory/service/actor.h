@@ -27,7 +27,7 @@ public:
 
     const T& Top() {
         auto loadLevelIt = Load.begin();
-        AFL_VERIFY(loadLevelIt != Load.end(),
+        YDB_LOG_VERIFY(loadLevelIt != Load.end(),
             {"error", "Load queue is empty. Please add at least one element to load queue"});
         return *loadLevelIt->second.begin();
     }
@@ -37,7 +37,7 @@ public:
             return;
         }
         auto it = Items.find(item);
-        AFL_VERIFY(it != Items.end(),
+        YDB_LOG_VERIFY(it != Items.end(),
             {"error", "Load item is not found"});
         TLoad& load = it->second;
         auto loadLevelIt = Load.find(load);
@@ -51,7 +51,7 @@ public:
 
     TLoad GetLoad(const T& item) const {
         auto it = Items.find(item);
-        AFL_VERIFY(it != Items.end(),
+        YDB_LOG_VERIFY(it != Items.end(),
             {"error", "Load item is not found"});
         return it->second;
     }
@@ -70,13 +70,13 @@ public:
 
     void SetConsumption(size_t managerIndex, ui64 newConsumption) {
         std::lock_guard lock(Mutex);
-        AFL_VERIFY(managerIndex < ManagerConsumption.size(),
+        YDB_LOG_VERIFY(managerIndex < ManagerConsumption.size(),
             {"error", "Manager index is out of range"},
             {"index", managerIndex},
             {"managersCount", ManagerConsumption.size()});
 
         auto& managerConsumption = ManagerConsumption[managerIndex];
-        AFL_VERIFY(managerConsumption <= TotalConsumption,
+        YDB_LOG_VERIFY(managerConsumption <= TotalConsumption,
             {"error", "Manager consumption is more than total consumption"},
             {"managerConsumption", managerConsumption},
             {"totalConsumption", TotalConsumption});
@@ -160,7 +160,7 @@ public:
             hFunc(NMemory::TEvConsumerLimit, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             default:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"evType", ev->GetTypeName()});
         }
     }

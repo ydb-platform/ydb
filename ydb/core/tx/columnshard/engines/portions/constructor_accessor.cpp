@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 
 void TPortionAccessorConstructor::ChunksValidation() const {
-    AFL_VERIFY(Records.size());
+    YDB_LOG_VERIFY(Records.size());
     CheckChunksOrder(Records);
     CheckChunksOrder(Indexes);
     std::set<ui32> blobIdxs;
@@ -22,18 +22,18 @@ void TPortionAccessorConstructor::ChunksValidation() const {
         }
     }
     if (GetBlobIdsCount()) {
-        AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
-        AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
+        YDB_LOG_VERIFY(GetBlobIdsCount() == blobIdxs.size());
+        YDB_LOG_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
     } else {
-        AFL_VERIFY(blobIdxs.empty());
+        YDB_LOG_VERIFY(blobIdxs.empty());
     }
 }
 
 std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const bool needChunksNormalization) {
-    AFL_VERIFY(!Constructed);
+    YDB_LOG_VERIFY(!Constructed);
     Constructed = true;
 
-    AFL_VERIFY(Records.size());
+    YDB_LOG_VERIFY(Records.size());
 
     PortionInfo->MetaConstructor.ColumnRawBytes = GetColumnRawBytes();
     PortionInfo->MetaConstructor.ColumnBlobBytes = GetColumnBlobBytes();
@@ -56,7 +56,7 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
         auto itBlobIdx = BlobIdxs.begin();
         while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
             if (itRecord->GetAddress() < itIndex->GetAddress()) {
-                AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+                YDB_LOG_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
                 itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
                 ++itRecord;
                 ++itBlobIdx;
@@ -65,35 +65,35 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
                     ++itIndex;
                     continue;
                 }
-                AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+                YDB_LOG_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
                 itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
                 ++itIndex;
                 ++itBlobIdx;
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
         }
         for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
-            AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+            YDB_LOG_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
             itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
         }
         for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
             if (itIndex->HasBlobData()) {
                 continue;
             }
-            AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+            YDB_LOG_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
             itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
             ++itBlobIdx;
         }
-        AFL_VERIFY(itRecord == Records.end());
-        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
+        YDB_LOG_VERIFY(itRecord == Records.end());
+        YDB_LOG_VERIFY(itBlobIdx == BlobIdxs.end());
     } else {
         for (auto&& i : Records) {
-            AFL_VERIFY(i.BlobRange.GetBlobIdxVerified() < GetBlobIdsCount());
+            YDB_LOG_VERIFY(i.BlobRange.GetBlobIdxVerified() < GetBlobIdsCount());
         }
         for (auto&& i : Indexes) {
             if (auto* blobId = i.GetBlobRangeOptional()) {
-                AFL_VERIFY(blobId->GetBlobIdxVerified() < GetBlobIdsCount());
+                YDB_LOG_VERIFY(blobId->GetBlobIdxVerified() < GetBlobIdsCount());
             }
         }
     }
@@ -102,11 +102,11 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
 }
 
 void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuildInfo&& buildInfo) {
-    AFL_VERIFY(BlobIds.empty());
+    YDB_LOG_VERIFY(BlobIds.empty());
     BlobIds = buildInfo.DetachBlobIds();
     for (auto&& rec : buildInfo.DetachRecords()) {
-        AFL_VERIFY(rec.GetBlobRange().GetBlobIdxVerified() < GetBlobIdsCount());
-        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())),
+        YDB_LOG_VERIFY(rec.GetBlobRange().GetBlobIdxVerified() < GetBlobIdsCount());
+        YDB_LOG_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())),
             {"blobs", JoinSeq(",", GetBlobIds())},
             {"range", rec.GetBlobRange()});
         Records.push_back(std::move(rec));
@@ -124,7 +124,7 @@ void TPortionAccessorConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext
 
 std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(
     const TPortionInfo::TConstPtr& portion, TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
-    AFL_VERIFY(portion);
+    YDB_LOG_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
     {
         const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) -> bool {

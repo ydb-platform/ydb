@@ -10,18 +10,18 @@ TFilterAccumulator::TFilterAccumulator(
     , Counters(counters)
     , StartTime(TInstant::Now())
 {
-    AFL_VERIFY(!!OriginalRequest);
+    YDB_LOG_VERIFY(!!OriginalRequest);
     Counters->OnRequestStart();
 }
 
 TFilterAccumulator::~TFilterAccumulator() {
-    AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped(),
+    YDB_LOG_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped(),
         {"state", DebugString()});
     Counters->OnRequestFinish((TInstant::Now() - StartTime).MilliSeconds());
 }
 
 void TFilterAccumulator::AddFilter(NArrow::TColumnFilter&& filter) {
-    AFL_VERIFY(!IsDone());
+    YDB_LOG_VERIFY(!IsDone());
     YDB_LOG_TRACE("",
         {"component", "duplicates_manager"},
         {"type", "filter_ready"},
@@ -30,7 +30,7 @@ void TFilterAccumulator::AddFilter(NArrow::TColumnFilter&& filter) {
         {"filter", filter.DebugString()});
     OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
     Done = true;
-    AFL_VERIFY(IsDone());
+    YDB_LOG_VERIFY(IsDone());
 }
 
 bool TFilterAccumulator::IsDone() const {
@@ -57,7 +57,7 @@ TString TFilterAccumulator::DebugString() const {
 
 void TFiltersBuilder::AddImpl(const ui64 portionId, const bool value) {
     auto filterIt = Filters.find(portionId);
-    AFL_VERIFY(filterIt != Filters.end());
+    YDB_LOG_VERIFY(filterIt != Filters.end());
     auto& filterInfo = filterIt->second;
     filterInfo.Filter.Add(value);
     if (filterInfo.RowsCount != filterInfo.Filter.GetRecordsCount().value_or(0)) {
@@ -96,7 +96,7 @@ bool TFiltersBuilder::IsBufferExhausted() const {
 }
 
 void TFiltersBuilder::AddSource(const ui64 portionId, ui64 rowsCount) {
-    AFL_VERIFY(Filters.emplace(portionId, TFilterInfo{rowsCount, NArrow::TColumnFilter::BuildAllowFilter()}).second);
+    YDB_LOG_VERIFY(Filters.emplace(portionId, TFilterInfo{rowsCount, NArrow::TColumnFilter::BuildAllowFilter()}).second);
 }
 
 ui64 TFiltersBuilder::CountSources() const {
@@ -143,12 +143,12 @@ bool TFiltersStore::AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&&
         return true;
     }
     Counters->OnReadyFilters(1, filter.GetDataSize());
-    AFL_VERIFY(ReadyFilters.emplace(portionId, std::move(filter)).second);
+    YDB_LOG_VERIFY(ReadyFilters.emplace(portionId, std::move(filter)).second);
     return false;
 }
 
 void TFiltersStore::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor) {
-    AFL_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
+    YDB_LOG_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
 }
 
 bool TFiltersStore::AbortWaitingPortion(const ui64 portionId, const TString& error) {

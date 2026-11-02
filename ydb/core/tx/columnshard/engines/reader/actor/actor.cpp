@@ -86,7 +86,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId) /*, "SCAN_TXID:" + ::ToString(TxId)*/))
     , ComputeShardingPolicy(computeShardingPolicy)
 {
-    AFL_VERIFY(ReadMetadataRange);
+    YDB_LOG_VERIFY(ReadMetadataRange);
     KeyYqlSchema = ReadMetadataRange->GetKeyYqlSchema();
 }
 
@@ -164,15 +164,15 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
     LWTRACK(AckReceived, *ScanOrbit, PathId, TabletId, TxId, ScanId,
         LastResultInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *LastResultInstant).MilliSeconds()) : TDuration::Zero());
 
-    AFL_VERIFY(!AckReceivedInstant);
+    YDB_LOG_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 
-    AFL_VERIFY(ev->Get()->Generation == ScanGen,
+    YDB_LOG_VERIFY(ev->Get()->Generation == ScanGen,
         {"evGen", ev->Get()->Generation},
         {"scanGen", ScanGen});
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
-    AFL_VERIFY(ev->Get()->MaxChunksCount == 1);
+    YDB_LOG_VERIFY(ev->Get()->MaxChunksCount == 1);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "TEvScanDataAck"},
         {"info", ChunksLimiter.DebugString()});
@@ -259,7 +259,7 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
             {"last", LastResultInstant});
     }
     const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
-    AFL_VERIFY_DEBUG(ok)
+    YDB_LOG_VERIFY_DEBUG(ok)
     ("finished", ScanIterator->Finished())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
         "debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
     if (!ok) {
@@ -368,7 +368,7 @@ bool TColumnShardScan::ProduceResults() noexcept {
             {"columns", batch->num_columns()},
             {"rows", batch->num_rows()});
 
-        AFL_VERIFY(DataFormat == NKikimrDataEvents::FORMAT_ARROW);
+        YDB_LOG_VERIFY(DataFormat == NKikimrDataEvents::FORMAT_ARROW);
 
         MakeResult(0);
         if (shardedBatch.IsSharded()) {
@@ -399,11 +399,11 @@ bool TColumnShardScan::ProduceResults() noexcept {
         auto pNew = result.GetScanCursor()->GetPKCursor();
         auto pOld = CurrentLastReadKey->GetPKCursor();
         if (ReadMetadataRange->IsAscSorted()) {
-            AFL_VERIFY(*pOld <= *pNew,
+            YDB_LOG_VERIFY(*pOld <= *pNew,
                 {"old", pOld->DebugString()},
                 {"new", pNew->DebugString()});
         } else if (ReadMetadataRange->IsDescSorted()) {
-            AFL_VERIFY(*pNew <= *pOld,
+            YDB_LOG_VERIFY(*pNew <= *pOld,
                 {"old", pOld->DebugString()},
                 {"new", pNew->DebugString()});
         }
@@ -544,9 +544,9 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
             {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
         Result->StatsOnFinished = std::make_shared<TScanStatsOwner>(ScanIterator->GetStats());
     } else {
-        AFL_VERIFY(ChunksLimiter.Take(Bytes));
+        YDB_LOG_VERIFY(ChunksLimiter.Take(Bytes));
         Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
-        AFL_VERIFY(AckReceivedInstant);
+        YDB_LOG_VERIFY(AckReceivedInstant);
         ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
     }
     ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
@@ -583,7 +583,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
 }
 
 void TColumnShardScan::SendScanError(const TString& reason) {
-    AFL_VERIFY(reason);
+    YDB_LOG_VERIFY(reason);
     const TString msg = TStringBuilder() << "Scan failed at tablet " << TabletId << ", reason: " + reason;
 
     auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
@@ -628,7 +628,7 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
         {"scanActorId", ScanActorId},
         {"tabletId", TabletId});
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
-    AFL_VERIFY(StartInstant);
+    YDB_LOG_VERIFY(StartInstant);
     FinishInstant = TMonotonic::Now();
     ScanCountersPool.OnScanFinished(status, *FinishInstant - *StartInstant);
     ReportStats();
@@ -653,13 +653,13 @@ void TColumnShardScan::ScheduleWakeup(const TMonotonic deadline) {
 }
 
 TMonotonic TColumnShardScan::GetScanDeadline() const {
-    AFL_VERIFY(!!AckReceivedInstant);
+    YDB_LOG_VERIFY(!!AckReceivedInstant);
     return *AckReceivedInstant + SCAN_HARD_TIMEOUT;
 }
 
 TMonotonic TColumnShardScan::GetComputeDeadline() const {
     auto result = GetComputeDeadlineOptional();
-    AFL_VERIFY(!!result);
+    YDB_LOG_VERIFY(!!result);
     return *result;
 }
 

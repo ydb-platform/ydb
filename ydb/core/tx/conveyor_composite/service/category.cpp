@@ -21,14 +21,14 @@ TProcessCategory::~TProcessCategory() {
 void TProcessCategory::RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope,
     const TSchedulerQueryIdentity& schedulerQueryIdentity) {
     scope->IncProcesses();
-    AFL_VERIFY(Processes.emplace(internalProcessId,
+    YDB_LOG_VERIFY(Processes.emplace(internalProcessId,
         std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount, schedulerQueryIdentity)).second);
-    AFL_VERIFY(ProcessesByIdentity[schedulerQueryIdentity].insert(internalProcessId).second);
+    YDB_LOG_VERIFY(ProcessesByIdentity[schedulerQueryIdentity].insert(internalProcessId).second);
 }
 
 TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId) {
     auto it = Processes.find(processId);
-    AFL_VERIFY(it != Processes.end());
+    YDB_LOG_VERIFY(it != Processes.end());
     if (const auto tasksCount = it->second->GetTasksCount()) {
         YDB_LOG_WARN("",
             {"event", "unregister_process_with_queued_tasks"},
@@ -38,14 +38,14 @@ TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId
     }
     const auto identity = it->second->GetSchedulerQueryIdentity();
     auto identityIt = ProcessesByIdentity.find(identity);
-    AFL_VERIFY(identityIt != ProcessesByIdentity.end());
-    AFL_VERIFY(identityIt->second.erase(processId) == 1);
+    YDB_LOG_VERIFY(identityIt != ProcessesByIdentity.end());
+    YDB_LOG_VERIFY(identityIt->second.erase(processId) == 1);
     if (identityIt->second.empty()) {
         ProcessesByIdentity.erase(identityIt);
     }
     Y_UNUSED(RemoveWeightedProcess(it->second));
     if (it->second->GetScope()->DecProcesses()) {
-        AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
+        YDB_LOG_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
     }
     Processes.erase(it);
     return identity;
@@ -56,7 +56,7 @@ bool TProcessCategory::HasTasks() const {
 }
 
 ui64 TProcessCategory::MoveProcessesToService(const TSchedulerQueryIdentity& identity) {
-    AFL_VERIFY(!identity.IsServiceQuery);
+    YDB_LOG_VERIFY(!identity.IsServiceQuery);
     auto it = ProcessesByIdentity.find(identity);
     if (it == ProcessesByIdentity.end()) {
         return 0;
@@ -66,7 +66,7 @@ ui64 TProcessCategory::MoveProcessesToService(const TSchedulerQueryIdentity& ide
     auto& serviceIds = ProcessesByIdentity[kServiceQueryIdentity];
     for (const auto processId : processIds) {
         Processes.at(processId)->MoveToServiceQuery();
-        AFL_VERIFY(serviceIds.insert(processId).second);
+        YDB_LOG_VERIFY(serviceIds.insert(processId).second);
     }
     return processIds.size();
 }
@@ -184,7 +184,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
 
 TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
     auto it = Scopes.find(scopeName);
-    AFL_VERIFY(it != Scopes.end(),
+    YDB_LOG_VERIFY(it != Scopes.end(),
         {"cat", GetCategory()},
         {"scope", scopeName});
     return *it->second;
@@ -192,7 +192,7 @@ TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
 
 std::shared_ptr<TProcessScope> TProcessCategory::GetProcessScopePtrVerified(const TString& scopeName) const {
     auto it = Scopes.find(scopeName);
-    AFL_VERIFY(it != Scopes.end());
+    YDB_LOG_VERIFY(it != Scopes.end());
     return it->second;
 }
 
@@ -208,7 +208,7 @@ TProcessScope* TProcessCategory::MutableProcessScopeOptional(const TString& scop
 std::shared_ptr<TProcessScope> TProcessCategory::RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits) {
     TCPUGroup::TPtr cpuGroup = std::make_shared<TCPUGroup>(processCpuLimits.GetCPUGroupThreadsLimitDef(256));
     auto info = Scopes.emplace(scopeId, std::make_shared<TProcessScope>(scopeId, std::move(cpuGroup), CPUUsage));
-    AFL_VERIFY(info.second);
+    YDB_LOG_VERIFY(info.second);
     return info.first->second;
 }
 
@@ -228,7 +228,7 @@ std::shared_ptr<TProcessScope> TProcessCategory::UpsertScope(const TString& scop
 
 void TProcessCategory::UnregisterScope(const TString& name) {
     auto it = Scopes.find(name);
-    AFL_VERIFY(it != Scopes.end());
+    YDB_LOG_VERIFY(it != Scopes.end());
     Scopes.erase(it);
 }
 
@@ -252,9 +252,9 @@ bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& pr
     if (!process->GetTasksCount()) {
         return false;
     }
-    AFL_VERIFY(WeightedProcesses.size());
+    YDB_LOG_VERIFY(WeightedProcesses.size());
     auto itW = WeightedProcesses.find(process->GetWeightedUsage());
-    AFL_VERIFY(itW != WeightedProcesses.end(),
+    YDB_LOG_VERIFY(itW != WeightedProcesses.end(),
         {"weight", process->GetWeightedUsage().GetValue()},
         {"size", WeightedProcesses.size()},
         {"first", WeightedProcesses.begin()->first.GetValue()});
@@ -270,7 +270,7 @@ bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& pr
         }
         return true;
     }
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return false;
 }
 

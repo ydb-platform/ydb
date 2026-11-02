@@ -303,7 +303,7 @@ bool TTopicSqsMetricsHandler::IsApplicable(const NKikimrPQ::TPQTabletConfig& tab
 }
 
 TTopicSqsMetricsHandler::TTopicSqsMetricsHandler(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
-    AFL_ENSURE(IsApplicable(tabletConfig),
+    YDB_LOG_ENSURE(IsApplicable(tabletConfig),
         {"sqsQueue", tabletConfig.GetSqsQueueName()},
         {"sqsExportMetrics", tabletConfig.GetSqsExportMetrics()});
 

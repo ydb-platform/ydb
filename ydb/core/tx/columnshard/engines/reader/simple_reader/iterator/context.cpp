@@ -49,7 +49,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
                 gInit->InitializationFinished(BuildColumnsFetchingPlan(
                     needConflictDetector, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
             }
-            AFL_VERIFY(!result.NeedInitialization());
+            YDB_LOG_VERIFY(!result.NeedInitialization());
         }
         return result.GetScriptVerified();
     }
@@ -114,10 +114,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 void TSpecialReadContext::RegisterActors(NCommon::ISourcesConstructor& sources) {
     TGuard<TSpinLock> g(DuplicatesManagerLock);
-    AFL_VERIFY(!DuplicatesManager);
+    YDB_LOG_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
         auto* casted_sources = dynamic_cast<TPortionsSources*>(&sources);
-        AFL_VERIFY(casted_sources);
+        YDB_LOG_VERIFY(casted_sources);
         auto portionsToDuplicateFilter = casted_sources->ExtractDuplicateFilterPortions();
         DuplicateFilterPortionCount = portionsToDuplicateFilter.size();
         DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));

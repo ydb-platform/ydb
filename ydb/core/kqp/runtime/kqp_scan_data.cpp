@@ -351,11 +351,11 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
         bool changed = false;
         if (!currentIdxFrom) {
             address = reader.GetReadChunk(rowIndexFrom);
-            AFL_ENSURE(rowIndexFrom == 0,
+            YDB_LOG_ENSURE(rowIndexFrom == 0,
                 {"real", rowIndexFrom});
             changed = true;
         } else {
-            AFL_ENSURE(rowIndexFrom == *currentIdxFrom + 1,
+            YDB_LOG_ENSURE(rowIndexFrom == *currentIdxFrom + 1,
                 {"next", rowIndexFrom},
                 {"current", *currentIdxFrom});
             if (!address->NextPosition()) {

@@ -72,7 +72,7 @@ private:
     }
 
     virtual void InitUsedRawBytes() override {
-        AFL_VERIFY(!UsedRawBytes);
+        YDB_LOG_VERIFY(!UsedRawBytes);
         UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
         InitRecordsCount(GetRecordsCount());
     }
@@ -82,7 +82,7 @@ private:
     }
 
     virtual ui32 GetRecordsCountVirtual() const override {
-        AFL_VERIFY(HasPortionAccessor(),
+        YDB_LOG_VERIFY(HasPortionAccessor(),
             {"tabletId", GetTabletId()},
             {"sourceId", GetSourceIdx()});
         return GetPortionAccessor().GetRecordsVerified().size() + GetPortionAccessor().GetIndexesVerified().size();

@@ -27,15 +27,15 @@ private:
 
 public:
     ui32 GetExpectedRowsCountVerified() const {
-        AFL_VERIFY(ExpectedRowsCount);
+        YDB_LOG_VERIFY(ExpectedRowsCount);
         return *ExpectedRowsCount;
     }
 
     void SetExpectedRecordsCount(const ui32 expectedRowsCount) {
-        AFL_VERIFY(!ExpectedRowsCount || ExpectedRowsCount == expectedRowsCount);
+        YDB_LOG_VERIFY(!ExpectedRowsCount || ExpectedRowsCount == expectedRowsCount);
         ExpectedRowsCount = expectedRowsCount;
         if (!Data) {
-            AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);
+            YDB_LOG_VERIFY(*ExpectedRowsCount == DefaultRowsCount);
         }
     }
 
@@ -51,13 +51,13 @@ public:
         : DefaultRowsCount(rowsCount)
         , DefaultValue(defValue)
     {
-        AFL_VERIFY(DefaultRowsCount);
+        YDB_LOG_VERIFY(DefaultRowsCount);
     }
 
     TAssembleBlobInfo(const TString& data)
         : Data(data)
     {
-        AFL_VERIFY(!!Data);
+        YDB_LOG_VERIFY(!!Data);
     }
 
     ui32 GetDefaultRowsCount() const noexcept {
@@ -102,7 +102,7 @@ public:
         : Loader(loader)
         , Blobs(std::move(blobs))
     {
-        AFL_VERIFY(Loader);
+        YDB_LOG_VERIFY(Loader);
     }
 
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess() const;
@@ -149,7 +149,7 @@ public:
                 return i.GetField();
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return nullptr;
     }
 
@@ -187,10 +187,10 @@ public:
         , DataLoader(dataLoader)
         , ResultLoader(resultLoader)
     {
-        AFL_VERIFY(ResultLoader);
+        YDB_LOG_VERIFY(ResultLoader);
         if (DataLoader) {
-            AFL_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
-            AFL_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()),
+            YDB_LOG_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
+            YDB_LOG_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()),
                 {"data", DataLoader->GetField()->ToString()},
                 {"result", ResultLoader->GetField()->ToString()});
         }
@@ -201,7 +201,7 @@ public:
     }
 
     void AddBlobInfo(const ui32 expectedChunkIdx, const ui32 expectedRecordsCount, TAssembleBlobInfo&& info) {
-        AFL_VERIFY(expectedChunkIdx == BlobsInfo.size());
+        YDB_LOG_VERIFY(expectedChunkIdx == BlobsInfo.size());
         info.SetExpectedRecordsCount(expectedRecordsCount);
         RecordsCountByChunks += expectedRecordsCount;
         BlobsInfo.emplace_back(std::move(info));
@@ -213,10 +213,10 @@ public:
                 TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
             return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
         } else {
-            AFL_VERIFY(RecordsCountByChunks == RecordsCount,
+            YDB_LOG_VERIFY(RecordsCountByChunks == RecordsCount,
                 {"byChunks", RecordsCountByChunks},
                 {"expected", RecordsCount});
-            AFL_VERIFY(DataLoader);
+            YDB_LOG_VERIFY(DataLoader);
             return TPreparedColumn(std::move(BlobsInfo), DataLoader);
         }
     }
@@ -238,12 +238,12 @@ private:
         ui32 chunkIdx = 0;
         for (auto&& i : chunks) {
             if (entityId != i.GetEntityId()) {
-                AFL_VERIFY(entityId < i.GetEntityId());
-                AFL_VERIFY(i.GetChunkIdx() == 0);
+                YDB_LOG_VERIFY(entityId < i.GetEntityId());
+                YDB_LOG_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
+                YDB_LOG_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
                     {"chunk", i.GetChunkIdx()},
                     {"idx", chunkIdx});
                 chunkIdx = i.GetChunkIdx();
@@ -283,7 +283,7 @@ public:
     }
 
     TPortionDataAccessor Extract(const TExtractContext& context) const {
-        AFL_VERIFY(Records);
+        YDB_LOG_VERIFY(Records);
         std::vector<TColumnRecord> extractedRecords;
         if (context.GetColumnIds()) {
             auto itRec = Records->begin();
@@ -302,7 +302,7 @@ public:
             extractedRecords = *Records;
         }
 
-        AFL_VERIFY(Indexes);
+        YDB_LOG_VERIFY(Indexes);
         std::vector<TIndexChunk> extractedIndexes;
         if (context.GetIndexIds()) {
             auto itIdx = Indexes->begin();
@@ -326,17 +326,17 @@ public:
     }
 
     const std::vector<TColumnRecord>& TestGetRecords() const {
-        AFL_VERIFY(Records);
+        YDB_LOG_VERIFY(Records);
         return std::move(*Records);
     }
 
     std::vector<TColumnRecord> ExtractRecords() {
-        AFL_VERIFY(Records);
+        YDB_LOG_VERIFY(Records);
         return std::move(*Records);
     }
 
     std::vector<TIndexChunk> ExtractIndexes() {
-        AFL_VERIFY(Indexes);
+        YDB_LOG_VERIFY(Indexes);
         return std::move(*Indexes);
     }
 
@@ -355,7 +355,7 @@ public:
                 if (itRecord->GetEntityId() < *itColumn) {
                     ++itRecord;
                 } else if (*itColumn < itRecord->GetEntityId()) {
-                    AFL_VERIFY(!validation || recordsInEntityCount,
+                    YDB_LOG_VERIFY(!validation || recordsInEntityCount,
                         {"problem", "validation"},
                         {"reason", "no_chunks_for_column"},
                         {"columnId", *itColumn});
@@ -381,7 +381,7 @@ public:
         , Records(std::move(records))
         , Indexes(std::move(indexes))
     {
-        AFL_VERIFY(BlobIds.size());
+        YDB_LOG_VERIFY(BlobIds.size());
         if (validate) {
             FullValidation();
         }
@@ -558,12 +558,12 @@ public:
     };
 
     const std::vector<TColumnRecord>& GetRecordsVerified() const {
-        AFL_VERIFY(Records);
+        YDB_LOG_VERIFY(Records);
         return *Records;
     }
 
     const std::vector<TIndexChunk>& GetIndexesVerified() const {
-        AFL_VERIFY(Indexes);
+        YDB_LOG_VERIFY(Indexes);
         return *Indexes;
     }
 
@@ -586,15 +586,15 @@ public:
             , RecordsCount(recordsCount)
             , MemoryUsage(memoryUsage)
         {
-            AFL_VERIFY(RecordsCount);
+            YDB_LOG_VERIFY(RecordsCount);
         }
     };
 
     std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
 
     ui32 GetSliceOffsetRows(const ui32 sliceBorderIdx) const {
-        AFL_VERIFY(SliceBorderOffsets);
-        AFL_VERIFY(sliceBorderIdx < SliceBorderOffsets->size(),
+        YDB_LOG_VERIFY(SliceBorderOffsets);
+        YDB_LOG_VERIFY(sliceBorderIdx < SliceBorderOffsets->size(),
             {"idx", sliceBorderIdx},
             {"size", SliceBorderOffsets->size()});
         return (*SliceBorderOffsets)[sliceBorderIdx];

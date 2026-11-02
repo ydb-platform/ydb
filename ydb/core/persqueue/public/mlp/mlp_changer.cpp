@@ -26,7 +26,7 @@ TEvPQ::TEvMLPChangeMessageDeadlineRequest* TChangerActor<TEvPQ::TEvMLPChangeMess
         for (size_t i = searchFrom; i < Settings.Messages.size(); ++i) {
             const auto& messageId = Settings.Messages[i];
             if (messageId.PartitionId == partitionId && messageId.Offset == offset) {
-                AFL_ENSURE(i < Settings.Deadlines.size(),
+                YDB_LOG_ENSURE(i < Settings.Deadlines.size(),
                     {"i", i},
                     {"deadlines", Settings.Deadlines.size()});
                 deadlines.push_back(Settings.Deadlines[i]);
@@ -35,7 +35,7 @@ TEvPQ::TEvMLPChangeMessageDeadlineRequest* TChangerActor<TEvPQ::TEvMLPChangeMess
                 break;
             }
         }
-        AFL_ENSURE(found,
+        YDB_LOG_ENSURE(found,
             {"partitionId", partitionId},
             {"offset", offset});
     }

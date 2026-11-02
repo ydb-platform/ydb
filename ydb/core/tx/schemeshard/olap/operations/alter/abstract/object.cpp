@@ -9,7 +9,7 @@ std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntity> ISSEntity::GetE
         TEntityInitializationContext iContext(&context);
         return readGuard->BuildEntity(path.Base()->PathId, iContext).DetachResult();
     }
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return nullptr;
 }
 

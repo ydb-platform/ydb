@@ -3546,7 +3546,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         t->State = ECommitState::Committed;
         return EProcessResult::Break;
     }
-    AFL_ENSURE(false,
+    YDB_LOG_ENSURE(false,
         {"reason", "unreachable transaction kind"},
         {"tabletId", TabletId},
         {"partitionId", Partition},
@@ -5441,11 +5441,11 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 }
 
 void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
-    AFL_ENSURE(!CompacterKvRequestInflight,
+    YDB_LOG_ENSURE(!CompacterKvRequestInflight,
         {"tabletId", TabletId},
         {"partitionId", Partition},
         {"topic", TopicName()});
-    AFL_ENSURE(!CompacterKvRequest,
+    YDB_LOG_ENSURE(!CompacterKvRequest,
         {"tabletId", TabletId},
         {"partitionId", Partition},
         {"topic", TopicName()});

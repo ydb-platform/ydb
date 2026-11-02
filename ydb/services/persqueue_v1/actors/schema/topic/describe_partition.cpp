@@ -92,7 +92,7 @@ private:
         auto* p = FindIfPtr(ev->Get()->TopicInfo.Info->Description.GetPartitions(), [partitionId](const auto& part) {
             return part.GetPartitionId() == partitionId;
         });
-        AFL_ENSURE(p,
+        YDB_LOG_ENSURE(p,
             {"partitionId", partitionId});
 
         auto& partition = *result.mutable_partition();

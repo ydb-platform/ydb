@@ -25,7 +25,7 @@ struct TMetricCollector {
 
     void Collect(auto begin, auto end) {
         ssize_t in_size = std::distance(begin, end);
-        AFL_ENSURE(in_size >= 0,
+        YDB_LOG_ENSURE(in_size >= 0,
             {"inSize", in_size});
 
         ssize_t count = std::min<ssize_t>(Counters.GetCounters().Size(), in_size);
@@ -54,7 +54,7 @@ struct THistogramMetricCollector {
 
     void Collect(auto begin, auto end) {
         ssize_t in_size = std::distance(begin, end);
-        AFL_ENSURE(in_size >= 0,
+        YDB_LOG_ENSURE(in_size >= 0,
             {"inSize", in_size});
 
         if (size_t(in_size) != Values.size()) {

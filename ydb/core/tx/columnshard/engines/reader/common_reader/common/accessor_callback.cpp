@@ -25,7 +25,7 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
         return;
     }
 
-    AFL_VERIFY(result.GetPortions().size() == 1,
+    YDB_LOG_VERIFY(result.GetPortions().size() == 1,
         {"count", result.GetPortions().size()});
     source.SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
     auto context = source.GetContext()->GetCommonContext();

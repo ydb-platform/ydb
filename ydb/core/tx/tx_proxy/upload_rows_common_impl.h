@@ -389,7 +389,7 @@ private:
     [[nodiscard]] TConclusionStatus BuildSchema(const NActors::TActorContext& ctx, bool makeYqbSchema, bool isColumnTable) {
         Y_UNUSED(ctx);
         Y_ABORT_UNLESS(ResolveNamesResult);
-        AFL_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
+        YDB_LOG_VERIFY(ResolveNamesResult->ResultSet.size() == 1);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
@@ -1497,7 +1497,7 @@ private:
     }
 
     void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {
-        AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
+        YDB_LOG_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
         YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Error",
             {"logPrefix", LogPrefix()},
             {"error", status.GetErrorMessage()});

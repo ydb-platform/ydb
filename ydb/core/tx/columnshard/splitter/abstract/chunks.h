@@ -44,13 +44,13 @@ protected:
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const = 0;
 
     virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& /*portionInfo*/) const {
-        AFL_VERIFY(false,
+        YDB_LOG_VERIFY(false,
             {"problem", "implemented only in index chunks"});
     }
 
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const ui32 /*rawBytes*/,
         const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& /*additionalData*/, const TSimpleColumnInfo& /*columnInfo*/) const {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return nullptr;
     }
 
@@ -85,13 +85,13 @@ public:
 
     ui64 GetRawBytesVerified() const {
         auto result = DoGetRawBytes();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
     ui32 GetRecordsCountVerified() const {
         auto result = DoGetRecordsCount();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -105,7 +105,7 @@ public:
     }
 
     ui16 GetChunkIdxVerified() const {
-        AFL_VERIFY(!!ChunkIdx);
+        YDB_LOG_VERIFY(!!ChunkIdx);
         return *ChunkIdx;
     }
 
@@ -124,13 +124,13 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
         auto result = DoGetFirstScalar();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return result;
     }
 
     std::shared_ptr<arrow::Scalar> GetLastScalar() const {
         auto result = DoGetLastScalar();
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return result;
     }
 
@@ -147,7 +147,7 @@ public:
     }
 
     void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
-        AFL_VERIFY(!bRange.IsValid());
+        YDB_LOG_VERIFY(!bRange.IsValid());
         return DoAddIntoPortionBeforeBlob(bRange, portionInfo);
     }
 

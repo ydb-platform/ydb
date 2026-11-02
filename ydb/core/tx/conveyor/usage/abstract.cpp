@@ -11,7 +11,7 @@
 
 namespace NKikimr::NConveyor {
 void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr) {
-    AFL_VERIFY(!ExecutedFlag);
+    YDB_LOG_VERIFY(!ExecutedFlag);
     ExecutedFlag = true;
     const TMonotonic start = TMonotonic::Now();
     try {
@@ -33,13 +33,13 @@ void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr
 }
 
 void ITask::DoOnCannotExecute(const TString& reason) {
-    AFL_VERIFY(false,
+    YDB_LOG_VERIFY(false,
         {"problem", "cannot execute conveyor task"},
         {"reason", reason});
 }
 
 void TProcessGuard::Finish() {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     Finished = true;
     if (ServiceActorId && NActors::TlsActivationContext) {
         auto& context = NActors::TActorContext::AsActorContext();

@@ -331,14 +331,14 @@ public:
     template <bool IsNullable>
     const ICodec* GetDefaultCodec() const {
         const ICodec* codec = IsNullable ? DefaultNullable : DefaultNonNullable;
-        AFL_ENSURE(codec,
+        YDB_LOG_ENSURE(codec,
             {"description", "No default codec."});
         return codec;
     }
 
     const ICodec* GetCodec(TCodecSig sig) const {
         auto iter = Codecs.find(sig);
-        AFL_ENSURE(iter != Codecs.end(),
+        YDB_LOG_ENSURE(iter != Codecs.end(),
             {"codec", ui16(sig)});
         return iter->second;
     }
@@ -351,14 +351,14 @@ public:
     const ICodec* AddCodec() {
         auto codec = Singleton<TCodec>();
         auto inserted = Codecs.insert(std::make_pair(TCodec::Sig(), codec));
-        AFL_ENSURE(inserted.second,
+        YDB_LOG_ENSURE(inserted.second,
             {"#_Codec signature collision", ui16(TCodec::Sig())});
         return codec;
     }
 
     const ICodec* AddAlias(TCodecSig from, TCodecSig to, bool force = false) {
         auto iter = Codecs.find(to);
-        AFL_ENSURE(iter != Codecs.end(),
+        YDB_LOG_ENSURE(iter != Codecs.end(),
             {"description", "Aliasing an unregistered codec"},
             {"from", ui16(from)},
             {"to", ui16(to)});
@@ -366,10 +366,10 @@ public:
     }
 
     const ICodec* AddAlias(TCodecSig from, const ICodec* to, bool force = false) {
-        AFL_ENSURE(to,
+        YDB_LOG_ENSURE(to,
             {"#_Aliasing an unregistered codec", ui16(from)});
         auto& alias = Codecs[from];
-        AFL_ENSURE(force || !alias,
+        YDB_LOG_ENSURE(force || !alias,
             {"#_Codec signature collision", ui16(from)});
         alias = to;
 
@@ -397,7 +397,7 @@ inline IChunkDecoder::TPtr IChunkDecoder::ReadChunk(const TDataRef& data, const 
     Y_DEBUG_ABORT_UNLESS(data.Size() >= sizeof(TCodecSig));
     const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
     auto codec = codecs->GetCodec(sig);
-    AFL_ENSURE(codec,
+    YDB_LOG_ENSURE(codec,
         {"#_Unregistered codec", ui16(sig)});
     return codec->ReadChunk(data);
 }

@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NDataAccessorControl {
 
 void IGranuleDataAccessor::AskData(
     THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) {
-    AFL_VERIFY(portions.size());
+    YDB_LOG_VERIFY(portions.size());
     DoAskData(std::move(portions), callback);
 }
 

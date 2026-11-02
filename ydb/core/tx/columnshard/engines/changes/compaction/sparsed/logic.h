@@ -25,9 +25,9 @@ private:
 
     public:
         bool AddRecord(const arrow::Array& colValue, const ui32 idx, const ui32 globalRecordIdx) {
-            AFL_VERIFY(NArrow::Append(*ValueBuilder, colValue, idx));
+            YDB_LOG_VERIFY(NArrow::Append(*ValueBuilder, colValue, idx));
             if (LastRecordIdx) {
-                AFL_VERIFY(*LastRecordIdx < globalRecordIdx);
+                YDB_LOG_VERIFY(*LastRecordIdx < globalRecordIdx);
             }
             LastRecordIdx = globalRecordIdx;
             NArrow::TStatusValidator::Validate(IndexBuilderImpl->Append(globalRecordIdx));
@@ -55,8 +55,8 @@ private:
 
         TString DebugString() const {
             TStringBuilder sb;
-            AFL_VERIFY(GlobalResultOffset);
-            AFL_VERIFY(RemapToGlobalResult);
+            YDB_LOG_VERIFY(GlobalResultOffset);
+            YDB_LOG_VERIFY(RemapToGlobalResult);
             sb << "{offset=" << *GlobalResultOffset << ";remap=" << RemapToGlobalResult->DebugString()
                << ";pos=" << GetGlobalResultIndexImpl().value_or(Max<i64>()) << "}";
             return sb;
@@ -75,8 +75,8 @@ private:
 
         [[nodiscard]] ui32 GetGlobalResultIndexVerified() const {
             std::optional<i64> result = GetGlobalResultIndexImpl();
-            AFL_VERIFY(result);
-            AFL_VERIFY(*result >= 0,
+            YDB_LOG_VERIFY(result);
+            YDB_LOG_VERIFY(*result >= 0,
                 {"result", result});
             return *result;
         }

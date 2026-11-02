@@ -13,9 +13,9 @@ namespace NKikimr::NOlap::NDataSharing {
 void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
     THashMap<TInternalPathId, NEvents::TPathIdData> result;
     auto itCurrentPath = PortionsForSend.find(StartPathId);
-    AFL_VERIFY(itCurrentPath != PortionsForSend.end());
+    YDB_LOG_VERIFY(itCurrentPath != PortionsForSend.end());
     auto itPortion = itCurrentPath->second.find(StartPortionId);
-    AFL_VERIFY(itPortion != itCurrentPath->second.end());
+    YDB_LOG_VERIFY(itPortion != itCurrentPath->second.end());
     ui32 count = 0;
     ui32 chunksCount = 0;
     bool selectMore = true;
@@ -39,8 +39,8 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
         }
     }
     if (selectMore) {
-        AFL_VERIFY(!NextPathId);
-        AFL_VERIFY(!NextPortionId);
+        YDB_LOG_VERIFY(!NextPathId);
+        YDB_LOG_VERIFY(!NextPortionId);
     }
 
     THashMap<TTabletId, TTaskForTablet> tabletTasksResult;
@@ -90,10 +90,10 @@ bool TSourceCursor::Next(const std::shared_ptr<IStoragesManager>& storagesManage
     LinksModifiedTablets.clear();
     Selected.clear();
     if (!NextPathId) {
-        AFL_VERIFY(!NextPortionId);
+        YDB_LOG_VERIFY(!NextPortionId);
         return false;
     } else {
-        AFL_VERIFY(NextPortionId);
+        YDB_LOG_VERIFY(NextPortionId);
     }
     StartPathId = *NextPathId;
     StartPortionId = *NextPortionId;
@@ -101,7 +101,7 @@ bool TSourceCursor::Next(const std::shared_ptr<IStoragesManager>& storagesManage
     NextPortionId = {};
     ++PackIdx;
     BuildSelection(storagesManager, index);
-    AFL_VERIFY(IsValid());
+    YDB_LOG_VERIFY(IsValid());
     return true;
 }
 
@@ -150,12 +150,12 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         return TConclusionStatus::Fail("Incorrect proto cursor PackIdx value: " + proto.DebugString());
     }
     if (proto.HasNextPathId()) {
-        AFL_VERIFY(proto.GetNextPathId() == NextPathId->GetRawValue(),
+        YDB_LOG_VERIFY(proto.GetNextPathId() == NextPathId->GetRawValue(),
             {"nextLocal", *NextPathId},
             {"proto", proto.GetNextPathId()});
     }
     if (proto.HasNextPortionId()) {
-        AFL_VERIFY(proto.GetNextPortionId() == *NextPortionId,
+        YDB_LOG_VERIFY(proto.GetNextPortionId() == *NextPortionId,
             {"nextLocal", *NextPortionId},
             {"proto", proto.GetNextPortionId()});
     }
@@ -205,7 +205,7 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
     THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
     std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
-    AFL_VERIFY(!IsStartedFlag);
+    YDB_LOG_VERIFY(!IsStartedFlag);
     std::map<TInternalPathId, std::map<ui32, std::shared_ptr<TPortionDataAccessor>>> local;
     NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
     for (auto&& i : portions) {
@@ -214,21 +214,21 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
         for (auto&& p : i.second) {
             const ui64 portionId = p->GetPortionInfo().GetPortionId();
             hashCalcer.Update((ui8*)&portionId, sizeof(portionId));
-            AFL_VERIFY(portionsMap.emplace(portionId, p).second);
+            YDB_LOG_VERIFY(portionsMap.emplace(portionId, p).second);
         }
         auto it = PathPortionHashes.find(i.first);
         const ui64 hash = hashCalcer.Finish();
         if (it == PathPortionHashes.end()) {
             PathPortionHashes.emplace(i.first, ::ToString(hash));
         } else {
-            AFL_VERIFY(::ToString(hash) == it->second);
+            YDB_LOG_VERIFY(::ToString(hash) == it->second);
         }
         local.emplace(i.first, std::move(portionsMap));
     }
     std::swap(PortionsForSend, local);
 
     if (PortionsForSend.empty()) {
-        AFL_VERIFY(!StartPortionId);
+        YDB_LOG_VERIFY(!StartPortionId);
         NextPathId = std::nullopt;
         NextPortionId = std::nullopt;
         // we don't need to send scheme history if we don't have data
@@ -236,10 +236,10 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
         SchemeHistory.clear();
         return true;
     } else if (!StartPathId) {
-        AFL_VERIFY(PortionsForSend.begin()->second.size());
+        YDB_LOG_VERIFY(PortionsForSend.begin()->second.size());
         NextPathId = PortionsForSend.begin()->first;
         NextPortionId = PortionsForSend.begin()->second.begin()->first;
-        AFL_VERIFY(Next(storagesManager, index));
+        YDB_LOG_VERIFY(Next(storagesManager, index));
     } else {
         BuildSelection(storagesManager, index);
     }

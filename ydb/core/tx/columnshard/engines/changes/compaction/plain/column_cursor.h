@@ -21,7 +21,7 @@ private:
 
 public:
     ~TPortionColumnCursor() {
-        AFL_VERIFY(!RecordIndexStart,
+        YDB_LOG_VERIFY(!RecordIndexStart,
             {"start", RecordIndexStart},
             {"finish", RecordIndexFinish});
     }
@@ -33,14 +33,14 @@ public:
     TPortionColumnCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnChunks)
         : BlobChunks(columnChunks)
     {
-        AFL_VERIFY(BlobChunks);
+        YDB_LOG_VERIFY(BlobChunks);
     }
 
     TPortionColumnCursor(const std::shared_ptr<arrow::DataType>& dataType, const std::shared_ptr<arrow::Scalar>& defaultValue)
         : DataType(dataType)
         , DefaultValue(defaultValue)
     {
-        AFL_VERIFY(DataType);
+        YDB_LOG_VERIFY(DataType);
     }
 };
 

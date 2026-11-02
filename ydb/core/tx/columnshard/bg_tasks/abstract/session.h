@@ -28,8 +28,8 @@ public:
         : SessionSelfPtr(sessionSelfPtr)
         , Adapter(adapter)
     {
-        AFL_VERIFY(!!SessionSelfPtr);
-        AFL_VERIFY(!!Adapter);
+        YDB_LOG_VERIFY(!!SessionSelfPtr);
+        YDB_LOG_VERIFY(!!Adapter);
     }
 };
 
@@ -87,12 +87,12 @@ public:
     }
 
     std::unique_ptr<NActors::IActor> CreateActor(const TStartContext& context) const {
-        AFL_VERIFY(IsReadyForStart());
-        AFL_VERIFY(!IsFinished());
-        AFL_VERIFY(!ActorConstructed);
+        YDB_LOG_VERIFY(IsReadyForStart());
+        YDB_LOG_VERIFY(!IsFinished());
+        YDB_LOG_VERIFY(!ActorConstructed);
         ActorConstructed = true;
         std::unique_ptr<NActors::IActor> result = DoCreateActor(context).DetachResult();
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 

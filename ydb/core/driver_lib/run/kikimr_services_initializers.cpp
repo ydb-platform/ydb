@@ -2791,7 +2791,7 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
@@ -2818,7 +2818,7 @@ void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSyste
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
@@ -2967,7 +2967,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     if (serviceConfig->IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");

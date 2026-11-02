@@ -107,7 +107,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
-            AFL_VERIFY(dbPortions.emplace(portion.GetPortionId(), portion).second);
+            YDB_LOG_VERIFY(dbPortions.emplace(portion.GetPortionId(), portion).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -124,7 +124,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContext chunk(rowset, &DsGroupSelector);
             const ui64 portionId = chunk.GetPortionId();
-            AFL_VERIFY(dbPortions.contains(portionId));
+            YDB_LOG_VERIFY(dbPortions.contains(portionId));
             recordsByPortion[portionId].emplace_back(std::move(chunk));
 
             if (!rowset.Next()) {
@@ -142,7 +142,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TIndexChunkLoadContext chunk(rowset, &DsGroupSelector);
             const ui64 portionId = chunk.GetPortionId();
-            AFL_VERIFY(dbPortions.contains(portionId));
+            YDB_LOG_VERIFY(dbPortions.contains(portionId));
             indexesByPortion[portionId].emplace_back(std::move(chunk));
 
             if (!rowset.Next()) {
@@ -150,12 +150,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             }
         }
     }
-    AFL_VERIFY(dbPortions.size() == recordsByPortion.size(),
+    YDB_LOG_VERIFY(dbPortions.size() == recordsByPortion.size(),
         {"portions", dbPortions.size()},
         {"records", recordsByPortion.size()});
 
     for (auto&& i : indexesByPortion) {
-        AFL_VERIFY(dbPortions.contains(i.first));
+        YDB_LOG_VERIFY(dbPortions.contains(i.first));
     }
 
     std::vector<INormalizerTask::TPtr> tasks;
@@ -170,7 +170,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             continue;
         }
         auto itRecords = recordsByPortion.find(portion.GetPortionId());
-        AFL_VERIFY(itRecords != recordsByPortion.end());
+        YDB_LOG_VERIFY(itRecords != recordsByPortion.end());
         auto itIndexes = indexesByPortion.find(portion.GetPortionId());
         auto indexes = (itIndexes == indexesByPortion.end()) ? Default<std::vector<TIndexChunkLoadContext>>() : itIndexes->second;
         package.emplace_back(std::move(portion), std::move(itRecords->second), std::move(indexes));

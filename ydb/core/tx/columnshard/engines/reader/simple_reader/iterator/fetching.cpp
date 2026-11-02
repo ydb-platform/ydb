@@ -40,9 +40,9 @@ void TConflictDetector::ReportTracing(NCommon::IDataSource& source, const TFetch
 }
 
 TConclusion<TExecutionResult> TConflictDetector::DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const {
-    AFL_VERIFY(source.IsConflicting());
+    YDB_LOG_VERIFY(source.IsConflicting());
     // the method returns true for conflicting portions, even if they are aborted already
-    AFL_VERIFY(source.AddTxConflict());
+    YDB_LOG_VERIFY(source.AddTxConflict());
     ReportTracing(source, step);
     return TExecutionResult::Done();
 }
@@ -63,7 +63,7 @@ TConclusion<TExecutionResult> TDeletionFilter::DoExecuteInplace(NCommon::IDataSo
         ReportTracing(source, step);
         return TExecutionResult::Done();
     }
-    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
+    YDB_LOG_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& i : filterTable->column(0)->chunks()) {
         auto filterFlags = static_pointer_cast<arrow::BooleanArray>(i);
@@ -242,7 +242,7 @@ void TStepAggregationSources::ReportTracing(NCommon::IDataSource& source, const 
 }
 
 TConclusion<TExecutionResult> TStepAggregationSources::DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const {
-    AFL_VERIFY(source.GetType() == IDataSource::EType::SimpleAggregation);
+    YDB_LOG_VERIFY(source.GetType() == IDataSource::EType::SimpleAggregation);
     const auto& aggrSource = static_cast<const TAggregationDataSource&>(source);
     std::vector<std::unique_ptr<NArrow::NSSA::TAccessorsCollection>> collections;
     for (auto&& i : aggrSource.GetSources()) {
@@ -264,7 +264,7 @@ void TCleanAggregationSources::ReportTracing(NCommon::IDataSource& source, const
 }
 
 TConclusion<TExecutionResult> TCleanAggregationSources::DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const {
-    AFL_VERIFY(source.GetType() == IDataSource::EType::SimpleAggregation);
+    YDB_LOG_VERIFY(source.GetType() == IDataSource::EType::SimpleAggregation);
     const auto& aggrSource = static_cast<const TAggregationDataSource&>(source);
     for (auto&& i : aggrSource.GetSources()) {
         i->GetSource().MutableAs<IDataSource>()->ClearResult();
@@ -308,8 +308,8 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(NCommon::ID
     if (!source.IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
     } else {
-        AFL_VERIFY(StartIndex == 0);
-        AFL_VERIFY(RecordsCount == source.GetStageResult().GetBatch()->num_rows(),
+        YDB_LOG_VERIFY(StartIndex == 0);
+        YDB_LOG_VERIFY(RecordsCount == source.GetStageResult().GetBatch()->num_rows(),
             {"recordsCount", RecordsCount},
             {"batch", source.GetStageResult().GetBatch()->num_rows()});
     }
@@ -355,9 +355,9 @@ TConclusion<TExecutionResult> TPrepareResultStep::DoExecuteInplace(NCommon::IDat
     const auto context = source.GetContext();
     NCommon::TFetchingScriptBuilder acc(*context);
     if (source.IsSourceInMemory()) {
-        AFL_VERIFY(source.GetStageResult().GetPagesToResultVerified().size() == 1);
+        YDB_LOG_VERIFY(source.GetStageResult().GetPagesToResultVerified().size() == 1);
     }
-    AFL_VERIFY(!source.GetStageResult().IsEmpty());
+    YDB_LOG_VERIFY(!source.GetStageResult().IsEmpty());
     auto* sSource = source.MutableAs<IDataSource>();
     if (sSource->GetIsStartedByCursor()) {
         const auto& scanCursor = context->GetCommonContext()->GetScanCursor();
@@ -384,7 +384,7 @@ TConclusion<TExecutionResult> TPrepareResultStep::DoExecuteInplace(NCommon::IDat
         YDB_LOG_DEBUG("",
             {"event", "TPrepareResultStep_AllPagesSkippedByCursor"},
             {"sourceIdx", source.GetSourceIdx()});
-        AFL_VERIFY(source.GetStageResult().IsFinished());
+        YDB_LOG_VERIFY(source.GetStageResult().IsFinished());
         source.MutableStageResult().SetEmptyResultChunk();
         context->GetCommonContext()->GetCounters().OnSourceFinished(source.GetRecordsCount(), sSource->GetUsedRawBytes(), 0);
         return TExecutionResult::Pending(std::make_shared<TApplySourceResult::TStartJob>(step, 0));
@@ -414,7 +414,7 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
     if (source.GetContext()->IsAborted()) {
         return;
     }
-    AFL_VERIFY(filter.GetRecordsCountVerified() == source.GetRecordsCount(),
+    YDB_LOG_VERIFY(filter.GetRecordsCountVerified() == source.GetRecordsCount(),
         {"filter", filter.GetRecordsCountVerified()},
         {"source", source.GetRecordsCount()});
 
@@ -452,7 +452,7 @@ TConclusion<TExecutionResult> TDuplicateFilter::DoExecuteInplace(NCommon::IDataS
     const auto context = std::static_pointer_cast<TSpecialReadContext>(source.GetContext());
     const auto duplicatesManager = context->GetDuplicatesManager();
     if (!duplicatesManager) {
-        AFL_VERIFY(!context->IsActive());
+        YDB_LOG_VERIFY(!context->IsActive());
         return TConclusionStatus::Fail("duplicates manager is unregistered by scan abort");
     }
     return TExecutionResult::Pending(std::make_shared<TFilterSubscriber::TStartJob>(duplicatesManager, step));

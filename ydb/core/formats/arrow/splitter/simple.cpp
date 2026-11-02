@@ -11,8 +11,8 @@ namespace NKikimr::NArrow::NSplitter {
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(
     const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const {
-    AFL_VERIFY(data);
-    AFL_VERIFY(field);
+    YDB_LOG_VERIFY(data);
+    YDB_LOG_VERIFY(field);
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
     auto batch = arrow::RecordBatch::Make(schema, data->length(), { data });
     return Split(batch, maxBlobSize);
@@ -34,8 +34,8 @@ public:
         , SplitFactor(baseSplitFactor)
         , MaxBlobSize(maxBlobSize)
         , ColumnSaver(columnSaver) {
-        AFL_VERIFY(Data && Data->num_rows());
-        AFL_VERIFY(SplitFactor);
+        YDB_LOG_VERIFY(Data && Data->num_rows());
+        YDB_LOG_VERIFY(SplitFactor);
     }
 
     TSplitChunk(const ui32 baseSplitFactor, const ui32 maxBlobSize, const std::shared_ptr<arrow::RecordBatch>& data, TString&& serializedData,
@@ -45,15 +45,15 @@ public:
         , SplitFactor(baseSplitFactor)
         , MaxBlobSize(maxBlobSize)
         , ColumnSaver(columnSaver) {
-        AFL_VERIFY(Data && Data->num_rows());
-        AFL_VERIFY(SplitFactor);
+        YDB_LOG_VERIFY(Data && Data->num_rows());
+        YDB_LOG_VERIFY(SplitFactor);
     }
 
     std::vector<TSplitChunk> Split() {
         while (true) {
-            AFL_VERIFY(!Result);
-            AFL_VERIFY(++Iterations < 100);
-            AFL_VERIFY(SplitFactor <= Data->num_rows(),
+            YDB_LOG_VERIFY(!Result);
+            YDB_LOG_VERIFY(++Iterations < 100);
+            YDB_LOG_VERIFY(SplitFactor <= Data->num_rows(),
                 {"factor", SplitFactor},
                 {"records", Data->num_rows()},
                 {"iteration", Iterations},
@@ -72,7 +72,7 @@ public:
                     if (SplitFactor == 1) {
                         SplitFactor = 2;
                     }
-                    AFL_VERIFY(Data->num_rows() > 1);
+                    YDB_LOG_VERIFY(Data->num_rows() > 1);
                 }
             } else {
                 TLinearSplitInfo linearSplitting = TSimpleSplitter::GetLinearSplittingByMax(Data->num_rows(), Data->num_rows() / SplitFactor);
@@ -94,7 +94,7 @@ public:
                         Y_ABORT_UNLESS(!linearSplitting.IsMinimalGranularity());
                     } else {
                         if (badStartPosition) {
-                            AFL_VERIFY(badBatchRecordsCount && badBatchCount,
+                            YDB_LOG_VERIFY(badBatchRecordsCount && badBatchCount,
                                 {"count", badBatchCount},
                                 {"records", badBatchRecordsCount});
                             auto badSlice = Data->Slice(*badStartPosition, badBatchRecordsCount);
@@ -125,18 +125,18 @@ public:
                 return result;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return {};
     }
 };
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const {
-    AFL_VERIFY(data->num_rows());
+    YDB_LOG_VERIFY(data->num_rows());
     TSplitChunk baseChunk(
         Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1, maxBlobSize, data, ColumnSaver);
     std::vector<TSplitChunk> chunks = { baseChunk };
     for (auto it = chunks.begin(); it != chunks.end();) {
-        AFL_VERIFY(chunks.size() < 100);
+        YDB_LOG_VERIFY(chunks.size() < 100);
         if (!!it->GetResult()) {
             ++it;
             continue;
@@ -151,7 +151,7 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<ar
     }
     std::vector<TSaverSplittedChunk> result;
     for (auto&& i : chunks) {
-        AFL_VERIFY(i.GetResult());
+        YDB_LOG_VERIFY(i.GetResult());
         result.emplace_back(*i.GetResult());
     }
     return result;

@@ -33,7 +33,7 @@ public:
     }
 
     void IncInFlight() {
-        AFL_VERIFY(CountInFlight.Inc() <= std::ceil(ScopeLimits->GetCPUThreadsLimit()),
+        YDB_LOG_VERIFY(CountInFlight.Inc() <= std::ceil(ScopeLimits->GetCPUThreadsLimit()),
             {"inFlight", CountInFlight.Inc()},
             {"limit", ScopeLimits->GetCPUThreadsLimit()});
     }

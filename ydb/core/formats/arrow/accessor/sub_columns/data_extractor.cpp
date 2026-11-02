@@ -11,7 +11,7 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const {
-    AFL_VERIFY(sourceArray->type()->id() == arrow::binary()->id(),
+    YDB_LOG_VERIFY(sourceArray->type()->id() == arrow::binary()->id(),
         {"sourceArrayTypeId", (int)sourceArray->type()->id()});
     if (!sourceArray->length()) {
         return TConclusionStatus::Success();

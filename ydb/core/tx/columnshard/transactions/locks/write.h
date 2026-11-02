@@ -33,8 +33,8 @@ public:
         : PathId(pathId)
         , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names()))
     {
-        AFL_VERIFY(PathId);
-        AFL_VERIFY(RecordBatch);
+        YDB_LOG_VERIFY(PathId);
+        YDB_LOG_VERIFY(RecordBatch);
     }
 };
 

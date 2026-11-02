@@ -50,7 +50,7 @@ TResourcesGuard::TResourcesGuard(
     , Context(context)
     , Priority(task.GetPriority())
 {
-    AFL_VERIFY(taskId || (!Memory && !Cpu));
+    YDB_LOG_VERIFY(taskId || (!Memory && !Cpu));
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
     YDB_LOG_DEBUG("",
         {"event", "allocate_resources"},
@@ -64,9 +64,9 @@ void TResourcesGuard::Update(const ui64 memNew) {
     if (!TaskId) {
         return;
     }
-    AFL_VERIFY(Memory);
+    YDB_LOG_VERIFY(Memory);
     Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
-    AFL_VERIFY(NActors::TlsActivationContext);
+    YDB_LOG_VERIFY(NActors::TlsActivationContext);
     YDB_LOG_DEBUG("",
         {"event", "update_resources"},
         {"taskId", TaskId},

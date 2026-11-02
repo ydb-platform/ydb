@@ -89,7 +89,7 @@ private:
             hFunc(TEvMergeBordersResult, Handle);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
             default:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"unexpectedEvent", ev->GetTypeName()});
         }
     }

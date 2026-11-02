@@ -154,9 +154,9 @@ private:
 
     void StartSchemaSecretsResolve(const NTiers::TExternalStorageId& tierId) {
         auto* state = SchemaSecretsResolveByTier.FindPtr(tierId);
-        AFL_VERIFY(state);
-        AFL_VERIFY(!state->InFlight);
-        AFL_VERIFY(!state->SecretNames.empty());
+        YDB_LOG_VERIFY(state);
+        YDB_LOG_VERIFY(!state->InFlight);
+        YDB_LOG_VERIFY(!state->SecretNames.empty());
         state->InFlight = true;
         state->InFlightSeqNo = state->LatestSeqNo;
 
@@ -217,7 +217,7 @@ private:
                 {"snapshot", "secrets"});
             Owner->UpdateSecretsSnapshot(secrets);
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
 
@@ -408,7 +408,7 @@ bool TManager::Stop() {
 }
 
 bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    AFL_VERIFY(!S3Settings,
+    YDB_LOG_VERIFY(!S3Settings,
         {"tier", TierId},
         {"event", "already started"});
     auto patchedConfig = config.GetPatchedConfig(secrets);
@@ -439,7 +439,7 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 
 NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto) {
     NArrow::NSerialization::TSerializerContainer container;
-    AFL_VERIFY(container.DeserializeFromProto(serializerProto));
+    YDB_LOG_VERIFY(container.DeserializeFromProto(serializerProto));
     return container;
 }
 }
@@ -447,7 +447,7 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 void TTiersManager::OnConfigsUpdated(bool notifyShard) {
     for (auto& [tierId, manager] : Managers) {
         auto* findTier = Tiers.FindPtr(tierId);
-        AFL_VERIFY(findTier,
+        YDB_LOG_VERIFY(findTier,
             {"id", tierId});
         if (Secrets && findTier->HasConfig()) {
             if (manager.IsReady()) {
@@ -475,7 +475,7 @@ void TTiersManager::OnConfigsUpdated(bool notifyShard) {
 
 void TTiersManager::RegisterTierManager(const NTiers::TExternalStorageId& tierId, std::optional<NTiers::TTierConfig> config) {
     auto emplaced = Managers.emplace(tierId, NTiers::TManager(TabletId, TabletActorId, tierId));
-    AFL_VERIFY(emplaced.second);
+    YDB_LOG_VERIFY(emplaced.second);
 
     if (Secrets && config) {
         emplaced.first->second.Start(*config, Secrets);
@@ -490,7 +490,7 @@ void TTiersManager::RegisterTierManager(const NTiers::TExternalStorageId& tierId
 
 void TTiersManager::UnregisterTierManager(const NTiers::TExternalStorageId& tierId) {
     auto findManager = Managers.find(tierId);
-    AFL_VERIFY(findManager != Managers.end());
+    YDB_LOG_VERIFY(findManager != Managers.end());
     findManager->second.Stop();
     Managers.erase(findManager);
 }
@@ -526,7 +526,7 @@ const NTiers::TManager* TTiersManager::GetManagerOptional(const NTiers::TExterna
 }
 
 void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& usedTiers, const bool resubscribeToConfig) {
-    AFL_VERIFY(Actor,
+    YDB_LOG_VERIFY(Actor,
         {"error", "tiers_manager_is_not_started"});
     for (const NTiers::TExternalStorageId& tierId : usedTiers) {
         auto findTier = Tiers.find(tierId);
@@ -536,7 +536,7 @@ void TTiersManager::ActivateTiers(const THashSet<NTiers::TExternalStorageId>& us
         }
         if (newTier || (findTier->second.GetState() != TTiersManager::ETierState::AVAILABLE && resubscribeToConfig)) {
             const auto& actorContext = NActors::TActivationContext::AsActorContext();
-            AFL_VERIFY(&actorContext,
+            YDB_LOG_VERIFY(&actorContext,
                 {"error", "no_actor_context"});
             actorContext.Send(Actor->SelfId(), new NTiers::TEvWatchSchemeObject({ tierId.GetConfigPath() }));
         }
@@ -548,7 +548,7 @@ void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TS
     YDB_LOG_INFO("",
         {"event", "update_secrets"},
         {"tablet", TabletId});
-    AFL_VERIFY(secrets);
+    YDB_LOG_VERIFY(secrets);
     Secrets = secrets;
     OnConfigsUpdated();
 }
@@ -574,7 +574,7 @@ void TTiersManager::UpdateTierConfig(
         }
     }
 
-    AFL_VERIFY(found,
+    YDB_LOG_VERIFY(found,
         {"tier", tierId});
     OnConfigsUpdated(notifyShard);
 }

@@ -36,7 +36,7 @@ public:
             {"tabletId", Self->TabletID()},
             {"txState", "TTxProgressTx::Execute"},
             {"txCurrent", Self->InProgressTxId});
-        AFL_VERIFY(Self->ProgressTxScheduled);
+        YDB_LOG_VERIFY(Self->ProgressTxScheduled);
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
         const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs();
@@ -74,7 +74,7 @@ public:
                 YDB_LOG_DEBUG("",
                     {"event", "PlannedItemContinue"},
                     {"opType", TxOperator->GetOpType()});
-                AFL_VERIFY(Self->InProgressTxId == txId);
+                YDB_LOG_VERIFY(Self->InProgressTxId == txId);
                 return true;
             } else {
                 YDB_LOG_DEBUG("",
@@ -86,14 +86,14 @@ public:
             StartExecution = TMonotonic::Now();
 
             LastCompletedTx = NOlap::TSnapshot(step, txId);
-            AFL_VERIFY(LastCompletedTx > Self->LastCompletedTx,
+            YDB_LOG_VERIFY(LastCompletedTx > Self->LastCompletedTx,
                 {"lastCompletedTx", Self->LastCompletedTx},
                 {"lastCompletedStep", LastCompletedTx});
             NIceDb::TNiceDb db(txc.DB);
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedStep, LastCompletedTx->GetPlanStep());
             Schema::SaveSpecialValue(db, Schema::EValueIds::LastCompletedTxId, LastCompletedTx->GetTxId());
 
-            AFL_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
+            YDB_LOG_VERIFY(TxOperator->ProgressOnExecute(*Self, NOlap::TSnapshot(step, txId), txc));
             Self->ProgressTxController->ProgressOnExecute(txId, txc);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PLANNED_TX_COMPLETED);
         }
@@ -116,7 +116,7 @@ public:
             Self->RescheduleWaitingReads();
         }
         if (PlannedQueueItem) {
-            AFL_VERIFY(TxOperator);
+            YDB_LOG_VERIFY(TxOperator);
             Self->GetProgressTxController().GetCounters().OnTxProgressLag(
                 TxOperator->GetOpType(), TMonotonic::Now() - TMonotonic::MilliSeconds(PlannedQueueItem->Step));
             Self->GetProgressTxController().ProgressOnComplete(*PlannedQueueItem);

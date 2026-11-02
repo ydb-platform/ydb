@@ -58,9 +58,9 @@ public:
         , ChannelContainer(channelContainer)
         , DescriptionContainer(descriptionContainer)
     {
-        AFL_VERIFY(!!Identifier);
-        AFL_VERIFY(!!ChannelContainer);
-        AFL_VERIFY(!!DescriptionContainer);
+        YDB_LOG_VERIFY(!!Identifier);
+        YDB_LOG_VERIFY(!!ChannelContainer);
+        YDB_LOG_VERIFY(!!DescriptionContainer);
     }
 
     NKikimrTxBackgroundProto::TTaskContainer SerializeToProto() const;

@@ -77,7 +77,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         return NArrow::FinishBuilder(std::move(builder));
     }
 
-    AFL_VERIFY(false,
+    YDB_LOG_VERIFY(false,
         {"columnId", columnId});
     return nullptr;
 }

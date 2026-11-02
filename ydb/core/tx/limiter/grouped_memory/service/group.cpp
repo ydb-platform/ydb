@@ -30,7 +30,7 @@ TString TGrouppedAllocations::DebugString() const {
     sb << "TGrouppedAllocations{" << Endl
        << "  AllocationsCount=" << Allocations.size() << Endl
        << "  Allocations=[" << Endl;
-    
+
     bool first = true;
     for (const auto& [id, allocation] : Allocations) {
         if (!first) {
@@ -39,7 +39,7 @@ TString TGrouppedAllocations::DebugString() const {
         first = false;
         sb << "    {Id=" << id << ";Info=" << allocation->DebugString() << "}";
     }
-    
+
     sb << Endl << "  ]" << Endl << "}";
     return sb;
 }
@@ -84,13 +84,13 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 } else {
                     scope.ReaccountAdmittedGroup(externalGroupId);
                     if (!forced) {
-                        AFL_VERIFY(++allocationsCount <= allocationsLimit,
+                        YDB_LOG_VERIFY(++allocationsCount <= allocationsLimit,
                             {"count", allocationsCount},
                             {"limit", allocationsLimit});
                     }
                 }
                 if (!forced) {
-                    AFL_VERIFY(groupedAllocations.Remove(i));
+                    YDB_LOG_VERIFY(groupedAllocations.Remove(i));
                 }
             }
             if (!groupedAllocations.IsEmpty()) {
@@ -116,7 +116,7 @@ TString TAllocationGroups::DebugString() const {
     sb << "TAllocationGroups{" << Endl
        << "  GroupsCount=" << Groups.size() << Endl
        << "  Groups=[" << Endl;
-    
+
     bool first = true;
     for (const auto& [groupId, groupedAllocations] : Groups) {
         if (!first) {
@@ -125,7 +125,7 @@ TString TAllocationGroups::DebugString() const {
         first = false;
         sb << "    {GroupId=" << groupId << ";Group=" << groupedAllocations.DebugString() << "}";
     }
-    
+
     sb << Endl << "  ]" << Endl << "}";
     return sb;
 }

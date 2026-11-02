@@ -14,7 +14,7 @@ private:
 
 public:
     TColumnDataSplitter(const THashMap<ui64, TSortableBorders>& sources) {
-        AFL_VERIFY(sources.size());
+        YDB_LOG_VERIFY(sources.size());
         for (const auto& [id, borders] : sources) {
             Borders.emplace_back(TIntervalBorder::First(borders.GetBegin(), id));
             Borders.emplace_back(TIntervalBorder::Last(borders.GetEnd(), id));
@@ -24,7 +24,7 @@ public:
 
     template <class Callback>
     void ForEachIntersectingInterval(Callback&& callback, const ui64 intersectingPortionId) const {
-        AFL_VERIFY(Borders.size());
+        YDB_LOG_VERIFY(Borders.size());
         THashSet<ui64> currentPortions;
         const TIntervalBorder* prevBorder = &Borders.front();
 
@@ -33,17 +33,17 @@ public:
             const auto& currentBorder = Borders[i];
 
             if (prevBorder->GetIsLast()) {
-                AFL_VERIFY(currentPortions.erase(prevBorder->GetPortionId()));
+                YDB_LOG_VERIFY(currentPortions.erase(prevBorder->GetPortionId()));
             } else {
-                AFL_VERIFY(currentPortions.insert(prevBorder->GetPortionId()).second);
+                YDB_LOG_VERIFY(currentPortions.insert(prevBorder->GetPortionId()).second);
             }
 
             if (prevBorder->GetPortionId() == intersectingPortionId) {
                 if (prevBorder->GetIsLast()) {
-                    AFL_VERIFY(intersectionsStarted);
+                    YDB_LOG_VERIFY(intersectionsStarted);
                     break;
                 } else {
-                    AFL_VERIFY(!intersectionsStarted);
+                    YDB_LOG_VERIFY(!intersectionsStarted);
                     intersectionsStarted = true;
                 }
             }
@@ -86,7 +86,7 @@ private:
             , FirstIntervalIdx(first)
             , LastIntervalIdx(last)
         {
-            AFL_VERIFY(FirstIntervalIdx <= LastIntervalIdx);
+            YDB_LOG_VERIFY(FirstIntervalIdx <= LastIntervalIdx);
         }
 
         auto operator==(const TPortionSpan& other) const {
@@ -130,13 +130,13 @@ public:
         if (NextInterval == Intervals.size()) {
             return false;
         }
-        AFL_VERIFY(NextInterval < Intervals.size());
+        YDB_LOG_VERIFY(NextInterval < Intervals.size());
 
         for (auto it = CurrentPortions.begin(); it != CurrentPortions.end() && it->GetLastIntervalIdx() < NextInterval;) {
             it = CurrentPortions.erase(it);
         }
         for (auto it = Portions.begin(); it != Portions.end() && it->GetFirstIntervalIdx() == NextInterval;) {
-            AFL_VERIFY(CurrentPortions.emplace(*it).second);
+            YDB_LOG_VERIFY(CurrentPortions.emplace(*it).second);
             it = Portions.erase(it);
         }
 
@@ -153,24 +153,24 @@ public:
     }
 
     TIntervalInfo GetCurrentInterval() const {
-        AFL_VERIFY(NextInterval <= Intervals.size());
-        AFL_VERIFY(NextInterval > 0);
+        YDB_LOG_VERIFY(NextInterval <= Intervals.size());
+        YDB_LOG_VERIFY(NextInterval > 0);
         return Intervals[NextInterval - 1];
     }
 
     THashSet<ui64> GetNeededPortions() const {
         THashSet<ui64> portions;
         for (const auto& portion : Portions) {
-            AFL_VERIFY(portions.emplace(portion.GetPortionId()).second);
+            YDB_LOG_VERIFY(portions.emplace(portion.GetPortionId()).second);
         }
         for (const auto& portion : CurrentPortions) {
-            AFL_VERIFY(portions.emplace(portion.GetPortionId()).second);
+            YDB_LOG_VERIFY(portions.emplace(portion.GetPortionId()).second);
         }
         return portions;
     }
 
     bool IsDone() const {
-        AFL_VERIFY(Portions.empty() == (NextInterval == Intervals.size()),
+        YDB_LOG_VERIFY(Portions.empty() == (NextInterval == Intervals.size()),
             {"portions", Portions.size()},
             {"current", CurrentPortions.size()},
             {"next", NextInterval},
@@ -187,7 +187,7 @@ private:
 
 public:
     void AppendInterval(const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& portions) {
-        AFL_VERIFY(Intervals.empty() || Intervals.back().GetEnd().IsEquivalent(begin) || Intervals.back().GetEnd() < begin,
+        YDB_LOG_VERIFY(Intervals.empty() || Intervals.back().GetEnd().IsEquivalent(begin) || Intervals.back().GetEnd() < begin,
             {"last", Intervals.back().GetEnd().DebugString()},
             {"new", begin.DebugString()});
         const ui64 currentIntervalIdx = Intervals.size();
@@ -197,7 +197,7 @@ public:
         for (const auto& [portion, firstInterval] : FirstIntervalByTrailingPortionId) {
             if (!portions.contains(portion)) {
                 completedPortions.emplace_back(portion);
-                AFL_VERIFY(Portions.emplace(portion, firstInterval, currentIntervalIdx - 1).second);
+                YDB_LOG_VERIFY(Portions.emplace(portion, firstInterval, currentIntervalIdx - 1).second);
             }
         }
         for (const auto& portion : completedPortions) {
@@ -211,7 +211,7 @@ public:
 
     TIntervalsIterator Build() {
         for (const auto& [portion, firstInterval] : FirstIntervalByTrailingPortionId) {
-            AFL_VERIFY(Portions.emplace(portion, firstInterval, Intervals.size() - 1).second);
+            YDB_LOG_VERIFY(Portions.emplace(portion, firstInterval, Intervals.size() - 1).second);
         }
         FirstIntervalByTrailingPortionId.clear();
 
@@ -230,7 +230,7 @@ public:
             }
 
             if (currentInterval != *intervalIt) {
-                AFL_VERIFY(currentInterval < *intervalIt);
+                YDB_LOG_VERIFY(currentInterval < *intervalIt);
                 ++currentInterval;
                 return true;
             }
@@ -243,7 +243,7 @@ public:
         };
 
         splitter.ForEachIntersectingInterval(callback, basePortionId);
-        AFL_VERIFY(builder.NumIntervals() == intervalIdxs.size(),
+        YDB_LOG_VERIFY(builder.NumIntervals() == intervalIdxs.size(),
             {"builder", builder.NumIntervals()},
             {"intervals", TStringBuilder() << '[' << JoinSeq(',', intervalIdxs) << ']'});
         return builder.Build();

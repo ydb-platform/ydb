@@ -34,7 +34,7 @@ public:
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleRetryTimer);
             default:
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
         }
     }
 

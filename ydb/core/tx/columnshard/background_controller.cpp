@@ -15,7 +15,7 @@ bool TBackgroundController::StartCompaction(const TInternalPathId pathId, const 
 
 void TBackgroundController::FinishCompaction(const TInternalPathId pathId, const TString& taskId) {
     auto it = ActiveCompactionInfo.find(std::make_pair(pathId, taskId));
-    AFL_VERIFY(it != ActiveCompactionInfo.end());
+    YDB_LOG_VERIFY(it != ActiveCompactionInfo.end());
     if (it->second.Finish()) {
         NOlap::NChanges::TGeneralCompactionCounters::OnCompactionFinished(it->second.GetDuration().MicroSeconds());
         ActiveCompactionInfo.erase(it);
@@ -31,7 +31,7 @@ void TBackgroundController::CheckDeadlines() {
                 {"pathId", i.first.first},
                 {"taskId", i.second.GetTaskId()});
             // uncomment it for debug purpose
-            // AFL_VERIFY_DEBUG(false);
+            // YDB_LOG_VERIFY_DEBUG(false);
         }
     }
 }

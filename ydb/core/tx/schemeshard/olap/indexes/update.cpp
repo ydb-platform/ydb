@@ -67,7 +67,7 @@ bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexReq
     if (indexSchema.HasInheritPortionStorage()) {
         InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
-    AFL_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema),
+    YDB_LOG_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema),
         {"incorrectProto", indexSchema.DebugString()});
     return true;
 }
@@ -93,7 +93,7 @@ bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& a
     TSet<TString> upsertIndexNames;
     for (auto& indexSchema : alterRequest.GetUpsertIndexes()) {
         TOlapIndexUpsert index;
-        AFL_VERIFY(index.DeserializeFromProto(indexSchema));
+        YDB_LOG_VERIFY(index.DeserializeFromProto(indexSchema));
         if (!upsertIndexNames.emplace(index.GetName()).second) {
             errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "index '" << index.GetName() << "' duplication for add");
             return false;

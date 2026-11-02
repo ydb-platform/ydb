@@ -138,7 +138,7 @@ NKikimrColumnShardProto::TBlobRange TBlobRange::SerializeToProto() const {
 }
 
 TString TBlobRange::GetData(const TString& blobData) const {
-    AFL_VERIFY(Offset + Size <= blobData.size(),
+    YDB_LOG_VERIFY(Offset + Size <= blobData.size(),
         {"offset", Offset},
         {"size", Size},
         {"blobDataSize", blobData.size()});
@@ -151,11 +151,11 @@ TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32
     , Size(size)
 {
     if (Size > 0) {
-        AFL_VERIFY(Offset < BlobId.BlobSize(),
+        YDB_LOG_VERIFY(Offset < BlobId.BlobSize(),
             {"offset", Offset},
             {"size", Size},
             {"blob", BlobId.ToStringNew()});
-        AFL_VERIFY(Offset + Size <= BlobId.BlobSize(),
+        YDB_LOG_VERIFY(Offset + Size <= BlobId.BlobSize(),
             {"offset", Offset},
             {"size", Size},
             {"blob", BlobId.ToStringNew()});
@@ -163,7 +163,7 @@ TBlobRange::TBlobRange(const TUnifiedBlobId& blobId /*= TUnifiedBlobId()*/, ui32
 }
 
 TBlobRange TBlobRange::BuildSubset(const ui32 offset, const ui32 size) const {
-    AFL_VERIFY(offset + size <= Size,
+    YDB_LOG_VERIFY(offset + size <= Size,
         {"offset", offset},
         {"reqSize", size},
         {"ownSize", Size});
@@ -196,7 +196,7 @@ NKikimrColumnShardProto::TBlobRangeLink16 TBlobRangeLink16::SerializeToProto() c
 }
 
 ui16 TBlobRangeLink16::GetBlobIdxVerified() const {
-    AFL_VERIFY(BlobIdx);
+    YDB_LOG_VERIFY(BlobIdx);
     return *BlobIdx;
 }
 
@@ -209,8 +209,8 @@ bool TBlobRangeLink16::CheckBlob(const TUnifiedBlobId& blobId) const {
 }
 
 TString TBlobRangeLink16::GetBlobData(const TString& blob) const {
-    AFL_VERIFY(Offset < blob.size());
-    AFL_VERIFY(Offset + Size <= blob.size());
+    YDB_LOG_VERIFY(Offset < blob.size());
+    YDB_LOG_VERIFY(Offset + Size <= blob.size());
     return blob.substr(Offset, Size);
 }
 

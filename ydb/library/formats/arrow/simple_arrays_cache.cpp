@@ -7,7 +7,7 @@
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetNullImpl(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
-    AFL_VERIFY(type);
+    YDB_LOG_VERIFY(type);
     const TString key = type->ToString();
     const auto initializer = [type](const ui32 recordsCount) {
         return TStatusValidator::GetValid(arrow::MakeArrayOfNull(type, recordsCount));
@@ -17,9 +17,9 @@ std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetNullImpl(const std::s
 
 std::shared_ptr<arrow::Array> TThreadSimpleArraysCache::GetConstImpl(
     const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount) {
-    AFL_VERIFY(type);
-    AFL_VERIFY(scalar);
-    AFL_VERIFY(scalar->type->id() == type->id(),
+    YDB_LOG_VERIFY(type);
+    YDB_LOG_VERIFY(scalar);
+    YDB_LOG_VERIFY(scalar->type->id() == type->id(),
         {"scalar", scalar->type->ToString()},
         {"field", type->ToString()});
     const auto initializer = [scalar](const ui32 recordsCount) {

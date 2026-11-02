@@ -23,7 +23,7 @@ void TTxFinishFromSource::DoComplete(const TActorContext& ctx) {
     Session->SendCurrentCursorAck(*Self, SourceTabletId);
 
     if (Finished) {
-        AFL_VERIFY(Session->GetSourcesInProgressCount() == 0);
+        YDB_LOG_VERIFY(Session->GetSourcesInProgressCount() == 0);
         if (Session->GetTransferContext().GetTxId()) {
             Self->GetProgressTxController().FinishProposeOnComplete(*Session->GetTransferContext().GetTxId(), ctx);
         }

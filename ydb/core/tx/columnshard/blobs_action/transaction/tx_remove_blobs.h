@@ -36,8 +36,8 @@ public:
                 {"blobId", it.GetBlobId()},
                 {"tabletId", it.GetTabletId()});
         }
-        AFL_VERIFY(categories.GetBorrowed().IsEmpty());
-        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize(),
+        YDB_LOG_VERIFY(categories.GetBorrowed().IsEmpty());
+        YDB_LOG_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize(),
             {"sharingCategory", categories.GetSharing().GetSize()},
             {"sharing", SharingBlobIds.GetSize()});
     }

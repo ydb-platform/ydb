@@ -20,7 +20,7 @@ public:
         , Adapter(adapter)
         , Session(session)
     {
-        AFL_VERIFY(!!Session);
+        YDB_LOG_VERIFY(!!Session);
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

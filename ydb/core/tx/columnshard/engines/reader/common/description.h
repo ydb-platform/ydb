@@ -44,7 +44,7 @@ inline NKikimrKqp::TEvKqpScanCursor::ESourcesSorting SourcesSortingToProto(const
         case ESourcesSorting::LastPkDesc:
             return NKikimrKqp::TEvKqpScanCursor::LAST_PK_DESC;
     }
-    AFL_VERIFY(false,
+    YDB_LOG_VERIFY(false,
         {"sourcesSorting", (ui64)sorting});
     return NKikimrKqp::TEvKqpScanCursor::SOURCE_ID_ASC;
 }
@@ -113,7 +113,7 @@ private:
                         break;
                 }
         }
-        AFL_VERIFY(false,
+        YDB_LOG_VERIFY(false,
             {"requestSorting", (ui64)RequestSorting},
             {"readerClass", (ui64)ReaderClass});
         return ESourcesSorting::SourceIdAsc;
@@ -135,7 +135,7 @@ public:
     std::optional<THashSet<TInsertWriteId>> ownPortions;
 
     bool NeedDuplicateFiltering() const {
-        AFL_VERIFY(TableMetadataAccessor);
+        YDB_LOG_VERIFY(TableMetadataAccessor);
         return DeduplicationEnabled && TableMetadataAccessor->NeedDuplicateFiltering();
     }
 
@@ -145,7 +145,7 @@ public:
             return TStringBuilder() << "scan:" << TxId << ":" << ScanId;
         } else {
             // internal scan
-            AFL_VERIFY(!ScanIdentifier.empty());
+            YDB_LOG_VERIFY(!ScanIdentifier.empty());
             return TStringBuilder() << "scan:" << GetScanIdentifier();
         }
     }
@@ -154,12 +154,12 @@ public:
     std::vector<ui32> ColumnIds;
 
     const std::shared_ptr<IScanCursor>& GetScanCursorVerified() const {
-        AFL_VERIFY(ScanCursor);
+        YDB_LOG_VERIFY(ScanCursor);
         return *ScanCursor;
     }
 
     void SetScanCursor(const std::shared_ptr<IScanCursor>& cursor) {
-        AFL_VERIFY(!ScanCursor);
+        YDB_LOG_VERIFY(!ScanCursor);
         ScanCursor = cursor;
     }
 
@@ -186,10 +186,10 @@ public:
         }
 
         // we want to read something, don't we?
-        AFL_VERIFY(readNonconflictingPortions || readConflictingPortions);
+        YDB_LOG_VERIFY(readNonconflictingPortions || readConflictingPortions);
         // we do not have cases (at the moment) when we need to read only conflicts for a scan with no transaction
         if (!LockId.has_value()) {
-            AFL_VERIFY(!readOnlyConflicts);
+            YDB_LOG_VERIFY(!readOnlyConflicts);
         }
     }
 
@@ -207,7 +207,7 @@ public:
         , TabletId(tabletId)
         , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
     {
-        AFL_VERIFY(TableMetadataAccessor);
+        YDB_LOG_VERIFY(TableMetadataAccessor);
     }
 
     void SetProgram(TProgramContainer&& value) {

@@ -13,13 +13,13 @@ NKikimr::NArrow::NMerger::TSortableBatchPosition::TFoundPosition TBatchIterator:
     const ui32 posStart = KeyColumns.GetPosition();
     auto result = KeyColumns.SkipToLower(pos);
     const i32 delta = IsReverse() ? (posStart - KeyColumns.GetPosition()) : (KeyColumns.GetPosition() - posStart);
-    AFL_VERIFY(delta >= 0);
-    AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()),
+    YDB_LOG_VERIFY(delta >= 0);
+    YDB_LOG_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()),
         {"pos", KeyColumns.GetPosition()},
         {"size", VersionColumns.GetRecordsCount()},
         {"keySize", KeyColumns.GetRecordsCount()});
     if (FilterIterator && delta) {
-        AFL_VERIFY(FilterIterator->Next(delta));
+        YDB_LOG_VERIFY(FilterIterator->Next(delta));
     }
     return result;
 }

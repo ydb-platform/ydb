@@ -427,7 +427,7 @@ TResult AddConsumer(
     }
 
     auto serviceTypeIt = supportedClientServiceTypes.find(serviceType);
-    AFL_ENSURE(serviceTypeIt != supportedClientServiceTypes.end(),
+    YDB_LOG_ENSURE(serviceTypeIt != supportedClientServiceTypes.end(),
         {"serviceType", serviceType},
         {"consumer", consumerConfig.name()});
 

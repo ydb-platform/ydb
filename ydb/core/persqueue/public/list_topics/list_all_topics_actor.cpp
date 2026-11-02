@@ -70,7 +70,7 @@ class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsAct
     }
 
     void TListAllTopicsActor::SendResponse() {
-        AFL_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
+        YDB_LOG_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
 
         for (TString& topic : Topics) {
             topic = TFsPath(topic).RelativePath(DatabasePath).GetPath();
@@ -128,7 +128,7 @@ class TListAllTopicsActor : public NActors::TActorBootstrapped<TListAllTopicsAct
             } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
                 || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
             {
-                AFL_ENSURE(entry.ListNodeEntry,
+                YDB_LOG_ENSURE(entry.ListNodeEntry,
                     {"reason", "ListNodeEntry is zero"});
                 for (const auto& child : entry.ListNodeEntry->Children) {
                     TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});

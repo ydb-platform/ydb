@@ -44,9 +44,9 @@ private:
 
 public:
     ui64 GetReadStat(const TString& paramName) const {
-        AFL_VERIFY(IsCorrectlyFinished());
+        YDB_LOG_VERIFY(IsCorrectlyFinished());
         auto it = ResultStats.find(paramName);
-        AFL_VERIFY(it != ResultStats.end());
+        YDB_LOG_VERIFY(it != ResultStats.end());
         return it->second;
     }
 
@@ -61,7 +61,7 @@ public:
     // Resumes the scan from a point another reader stopped at, the way kqp does it when it has to
     // restart a scan on a shard.
     TShardReader& SetScanCursor(const NKikimrKqp::TEvKqpScanCursor& cursor) {
-        AFL_VERIFY(!ScanActorId);
+        YDB_LOG_VERIFY(!ScanActorId);
         StartCursor = cursor;
         return *this;
     }
@@ -77,7 +77,7 @@ public:
     }
 
     ui32 GetRecordsCount() const {
-        AFL_VERIFY(IsFinished());
+        YDB_LOG_VERIFY(IsFinished());
         auto r = GetResult();
         return r ? r->num_rows() : 0;
     }
@@ -85,15 +85,15 @@ public:
     TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds);
 
     TShardReader& SetProgram(const NKikimrSSA::TProgram& p) {
-        AFL_VERIFY(!ProgramProto);
-        AFL_VERIFY(!SerializedProgram);
+        YDB_LOG_VERIFY(!ProgramProto);
+        YDB_LOG_VERIFY(!SerializedProgram);
         ProgramProto = p;
         return *this;
     }
 
     TShardReader& SetProgram(const TString& serializedProgram) {
-        AFL_VERIFY(!ProgramProto);
-        AFL_VERIFY(!SerializedProgram);
+        YDB_LOG_VERIFY(!ProgramProto);
+        YDB_LOG_VERIFY(!SerializedProgram);
         SerializedProgram = serializedProgram;
         return *this;
     }
@@ -123,13 +123,13 @@ public:
     }
 
     bool InitializeScanner() {
-        AFL_VERIFY(!ScanActorId);
+        YDB_LOG_VERIFY(!ScanActorId);
         const TActorId sender = Runtime.AllocateEdgeActor();
         ForwardToTablet(Runtime, TabletId, sender, BuildStartEvent().release());
         TAutoPtr<IEventHandle> handle;
         auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle);
         if (auto* evSuccess = std::get<0>(event)) {
-            AFL_VERIFY(evSuccess);
+            YDB_LOG_VERIFY(evSuccess);
             auto& msg = evSuccess->Record;
             ScanActorId = ActorIdFromProto(msg.GetScanActorId());
             return true;
@@ -139,20 +139,20 @@ public:
             }
             Finished = -1;
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
         return false;
     }
 
     void Ack() {
-        AFL_VERIFY(!Finished);
-        AFL_VERIFY(ScanActorId);
+        YDB_LOG_VERIFY(!Finished);
+        YDB_LOG_VERIFY(ScanActorId);
         Runtime.Send(*ScanActorId, *ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(8 * 1024 * 1024, 0, 1));
         ++IterationsCount;
     }
 
     bool Receive() {
-        AFL_VERIFY(!Finished);
+        YDB_LOG_VERIFY(!Finished);
         TAutoPtr<IEventHandle> handle;
         auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanData, NKqp::TEvKqpCompute::TEvScanError>(handle);
         if (auto* evData = std::get<0>(event)) {
@@ -161,10 +161,10 @@ public:
                 ResultBatches.push_back(NArrow::ToBatch(b));
                 NArrow::TStatusValidator::Validate(ResultBatches.back()->ValidateFull());
             } else {
-                AFL_VERIFY(evData->Finished);
+                YDB_LOG_VERIFY(evData->Finished);
             }
             if (evData->Finished) {
-                AFL_VERIFY(evData->StatsOnFinished);
+                YDB_LOG_VERIFY(evData->StatsOnFinished);
                 ResultStats = evData->StatsOnFinished->GetMetrics();
                 Finished = 1;
             } else {
@@ -176,7 +176,7 @@ public:
             }
             Finished = -1;
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
         return !Finished;
     }
@@ -197,7 +197,7 @@ public:
     }
 
     std::shared_ptr<arrow::RecordBatch> GetResult() const {
-        AFL_VERIFY(!!Finished);
+        YDB_LOG_VERIFY(!!Finished);
         if (IsError()) {
             return nullptr;
         }

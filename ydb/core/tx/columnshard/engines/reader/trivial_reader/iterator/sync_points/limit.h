@@ -16,7 +16,7 @@ private:
 
     virtual bool IsSourcePrepared(const NCommon::IDataSource& source) const override {
         if (source.IsSyncSection() && source.HasStageResult()) {
-            AFL_VERIFY(!source.GetStageResult().HasResultChunk());
+            YDB_LOG_VERIFY(!source.GetStageResult().HasResultChunk());
             return true;
         }
         return false;
@@ -35,13 +35,13 @@ private:
         bool IsValidFlag = true;
 
         bool ShiftWithFilter() const {
-            AFL_VERIFY(IsValidFlag);
+            YDB_LOG_VERIFY(IsValidFlag);
             while (!FilterIterator->GetCurrentAcceptance()) {
                 if (!FilterIterator->Next(1)) {
-                    AFL_VERIFY(!SortableRecord->NextPosition(Delta));
+                    YDB_LOG_VERIFY(!SortableRecord->NextPosition(Delta));
                     return false;
                 } else {
-                    AFL_VERIFY(SortableRecord->NextPosition(Delta));
+                    YDB_LOG_VERIFY(SortableRecord->NextPosition(Delta));
                 }
             }
             return true;
@@ -55,8 +55,8 @@ private:
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1)
         {
-            AFL_VERIFY(Source);
-            AFL_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo,
+            YDB_LOG_VERIFY(Source);
+            YDB_LOG_VERIFY(Source->GetType() == IDataSource::EType::SimplePortion || Source->GetType() == IDataSource::EType::SimpleSysInfo,
                 {"type", Source->GetType()});
             auto batch = Source->GetAs<IDataSource>()->GetFirstPK().ToBatch();
             SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
@@ -71,8 +71,8 @@ private:
             , Finish(Reverse ? 0 : (arrs.front()->GetRecordsCount() - 1))
             , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()))
         {
-            AFL_VERIFY(arrs.size());
-            AFL_VERIFY(arrs.front()->GetRecordsCount());
+            YDB_LOG_VERIFY(arrs.size());
+            YDB_LOG_VERIFY(arrs.front()->GetRecordsCount());
             FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetBegin(Reverse, arrs.front()->GetRecordsCount()));
             auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
@@ -82,7 +82,7 @@ private:
         }
 
         ui32 GetSourceIdx() const {
-            AFL_VERIFY(Source);
+            YDB_LOG_VERIFY(Source);
             return Source->GetSourceIdx();
         }
 
@@ -95,11 +95,11 @@ private:
         }
 
         bool Next() {
-            AFL_VERIFY(IsValidFlag);
-            AFL_VERIFY(!!SortableRecord);
-            AFL_VERIFY(!!Filter);
+            YDB_LOG_VERIFY(IsValidFlag);
+            YDB_LOG_VERIFY(!!SortableRecord);
+            YDB_LOG_VERIFY(!!Filter);
             IsValidFlag = SortableRecord->NextPosition(Delta);
-            AFL_VERIFY(FilterIterator->Next(1) == IsValidFlag);
+            YDB_LOG_VERIFY(FilterIterator->Next(1) == IsValidFlag);
             if (IsValidFlag) {
                 IsValidFlag = ShiftWithFilter();
             }

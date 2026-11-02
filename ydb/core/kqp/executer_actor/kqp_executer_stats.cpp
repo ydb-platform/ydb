@@ -23,7 +23,7 @@ void TMinStats::Resize(ui32 count) {
 
 void TMinStats::SetNonZero(ui32 index, ui64 value) {
     if (value) {
-        AFL_ENSURE(index < Values.size());
+        YDB_LOG_ENSURE(index < Values.size());
         auto maybeMin = Values[index] == MinValue;
         Values[index] = value;
         if (maybeMin) {
@@ -33,7 +33,7 @@ void TMinStats::SetNonZero(ui32 index, ui64 value) {
 }
 
 void TMinStats::Set(ui32 index, ui64 value) {
-    AFL_ENSURE(index < Values.size());
+    YDB_LOG_ENSURE(index < Values.size());
     auto maybeMin = Values[index] == MinValue;
     Values[index] = value;
     if (maybeMin) {
@@ -47,7 +47,7 @@ void TMaxStats::Resize(ui32 count) {
 
 void TMaxStats::SetNonZero(ui32 index, ui64 value) {
     if (value) {
-        AFL_ENSURE(index < Values.size());
+        YDB_LOG_ENSURE(index < Values.size());
         auto isMonotonic = value >= Values[index];
         Values[index] = value;
         MaxValue = isMonotonic ? (value > MaxValue ? value : MaxValue) : ExportMaxStats(Values);
@@ -60,7 +60,7 @@ void TSumStats::Resize(ui32 count) {
 
 void TSumStats::SetNonZero(ui32 index, ui64 value) {
     if (value) {
-        AFL_ENSURE(index < Values.size());
+        YDB_LOG_ENSURE(index < Values.size());
         Sum += value;
         Sum -= Values[index];
         Values[index] = value;
@@ -173,12 +173,12 @@ void TPartitionedStats::ResizeByParts(ui32 partCount, ui32 taskCount) {
 
 void TPartitionedStats::SetNonZeroAggSum(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
     if (value) {
-        AFL_ENSURE(partIndex < Parts.size());
+        YDB_LOG_ENSURE(partIndex < Parts.size());
         auto& part = Parts[partIndex];
         auto delta = value - part[taskIndex];
-        AFL_ENSURE(taskIndex < part.size());
+        YDB_LOG_ENSURE(taskIndex < part.size());
         part[taskIndex] = value;
-        AFL_ENSURE(partIndex < Values.size());
+        YDB_LOG_ENSURE(partIndex < Values.size());
         Values[partIndex] += delta;
         Sum += delta;
         if (recordTimeSeries) {
@@ -189,11 +189,11 @@ void TPartitionedStats::SetNonZeroAggSum(ui32 taskIndex, ui32 partIndex, ui64 va
 
 void TPartitionedStats::SetNonZeroAggMin(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
     if (value) {
-        AFL_ENSURE(partIndex < Parts.size());
+        YDB_LOG_ENSURE(partIndex < Parts.size());
         auto& part = Parts[partIndex];
-        AFL_ENSURE(taskIndex < part.size());
+        YDB_LOG_ENSURE(taskIndex < part.size());
         part[taskIndex] = value;
-        AFL_ENSURE(partIndex < Values.size());
+        YDB_LOG_ENSURE(partIndex < Values.size());
         if (Values[partIndex] == 0 || value < Values[partIndex]) {
             // Min/Max is related to Parts[] only, Values[] should kepp count Sum as well
             Sum = Sum + value - Values[partIndex];
@@ -207,11 +207,11 @@ void TPartitionedStats::SetNonZeroAggMin(ui32 taskIndex, ui32 partIndex, ui64 va
 
 void TPartitionedStats::SetNonZeroAggMax(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
     if (value) {
-        AFL_ENSURE(partIndex < Parts.size());
+        YDB_LOG_ENSURE(partIndex < Parts.size());
         auto& part = Parts[partIndex];
-        AFL_ENSURE(taskIndex < part.size());
+        YDB_LOG_ENSURE(taskIndex < part.size());
         part[taskIndex] = value;
-        AFL_ENSURE(partIndex < Values.size());
+        YDB_LOG_ENSURE(partIndex < Values.size());
         if (value > Values[partIndex]) {
             // Min/Max is related to Parts[] only, Values[] should kepp count Sum as well
             Sum = Sum + value - Values[partIndex];
@@ -425,7 +425,7 @@ void TOperatorStats::Resize(ui32 taskCount) {
 
 void TStageExecutionStats::Resize(ui32 taskCount) {
 
-    AFL_ENSURE((taskCount & 3) == 0);
+    YDB_LOG_ENSURE((taskCount & 3) == 0);
 
     CpuTimeUs.Resize(taskCount);
     SourceCpuTimeUs.resize(taskCount);
@@ -501,7 +501,7 @@ inline void SetNonZero(ui64& target, ui64 source) {
 }
 
 inline void SetNonZero(std::vector<ui64>& vector, ui32 index, ui64 value) {
-    AFL_ENSURE(index < vector.size());
+    YDB_LOG_ENSURE(index < vector.size());
     SetNonZero(vector[index], value);
 }
 
@@ -533,7 +533,7 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     aggrAsyncStats.WaitTimeUs.SetNonZero(index, asyncStats.GetWaitTimeUs());
     SetNonZero(aggrAsyncStats.WaitPeriods, index, asyncStats.GetWaitPeriods());
     if (firstMessageMs && lastMessageMs > firstMessageMs) {
-        AFL_ENSURE(index < aggrAsyncStats.ActiveTimeUs.size());
+        YDB_LOG_ENSURE(index < aggrAsyncStats.ActiveTimeUs.size());
         aggrAsyncStats.ActiveTimeUs[index] = lastMessageMs - firstMessageMs;
     }
 
@@ -541,7 +541,7 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
 }
 
 void TStageExecutionStats::SetTaskNode(ui32 index, ui32 nodeId) {
-    AFL_ENSURE(index < TaskNodeId.size());
+    YDB_LOG_ENSURE(index < TaskNodeId.size());
     if (nodeId && !TaskNodeId[index]) {
         TaskNodeId[index] = nodeId;
         auto& node = Nodes[nodeId];
@@ -557,7 +557,7 @@ ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTas
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
 
-    AFL_ENSURE(TaskCount >= Task2Index.size());
+    YDB_LOG_ENSURE(TaskCount >= Task2Index.size());
 
     ui32 index;
     if (it == Task2Index.end()) {
@@ -749,8 +749,8 @@ ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTas
                 continue;
             }
 
-            AFL_ENSURE(stats);
-            AFL_ENSURE(index < stats->size());
+            YDB_LOG_ENSURE(stats);
+            YDB_LOG_ENSURE(index < stats->size());
             (*stats)[index] = value;
         }
     }
@@ -1160,7 +1160,7 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
 
 void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats) {
     auto index = taskStats.GetTaskId() - 1;
-    AFL_ENSURE(index < TaskCount);
+    YDB_LOG_ENSURE(index < TaskCount);
     for (auto& tableStat : taskStats.GetTables()) {
         auto tablePath = tableStat.GetTablePath();
         auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
@@ -1241,7 +1241,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
 
     if (taskId) {
         if (CollectCurrentQueryStats) {
-            AFL_ENSURE(taskId <= TaskCount);
+            YDB_LOG_ENSURE(taskId <= TaskCount);
             CurrentTaskStats.resize(TaskCount);
             auto& current = CurrentTaskStats[taskId - 1];
             CurrentMemoryBytes -= current.MemoryBytes;
@@ -1255,8 +1255,8 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         if (stats.GetTasks().empty()) {
             return;
         }
-        AFL_ENSURE(stats.GetTasks().size() == 1);
-        AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+        YDB_LOG_ENSURE(stats.GetTasks().size() == 1);
+        YDB_LOG_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
         if (CollectCurrentQueryStats) {
             auto readIngressBytes = stats.GetTasks(0).GetIngressBytes();
             if (!CollectFullStats(StatsMode) && TasksGraph) {
@@ -1281,9 +1281,9 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
 
     for (auto& taskStats : stats.GetTasks()) {
         auto taskId = taskStats.GetTaskId();
-        // AFL_ENSURE(taskId > 0);
+        // YDB_LOG_ENSURE(taskId > 0);
         auto index = taskId ? taskId - 1 : 0;
-        AFL_ENSURE(index < TaskCount);
+        YDB_LOG_ENSURE(index < TaskCount);
 
         ComputeCpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
         if (taskId == 0) {
@@ -1390,7 +1390,7 @@ void TQueryExecutionStats::UpdateNodeStats(ui32 nodeId, const NYql::NDqProto::TE
 
 ui64 ExportMinStats(std::vector<ui64>& data) {
 
-    AFL_ENSURE((data.size() & 3) == 0);
+    YDB_LOG_ENSURE((data.size() & 3) == 0);
 
     ui64 min4[4] = {0, 0, 0, 0};
 
@@ -1409,7 +1409,7 @@ ui64 ExportMinStats(std::vector<ui64>& data) {
 
 ui64 ExportMaxStats(std::vector<ui64>& data) {
 
-    AFL_ENSURE((data.size() & 3) == 0);
+    YDB_LOG_ENSURE((data.size() & 3) == 0);
 
     ui64 max4[4] = {0, 0, 0, 0};
 
@@ -1428,7 +1428,7 @@ ui64 ExportMaxStats(std::vector<ui64>& data) {
 
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& stats, ui64 scale = 1) {
 
-    AFL_ENSURE((data.size() & 3) == 0);
+    YDB_LOG_ENSURE((data.size() & 3) == 0);
 
     ui64 count = 0;
     ui64 min4[4] = {0, 0, 0, 0};
@@ -1461,7 +1461,7 @@ void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& sta
 
 void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats, ui64 offset, ui64 scale = 1) {
 
-    AFL_ENSURE((data.size() & 3) == 0);
+    YDB_LOG_ENSURE((data.size() & 3) == 0);
 
     ui64 count = 0;
     ui64 sum = 0;
@@ -1506,7 +1506,7 @@ void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr&
 
 ui64 ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats, ui64 scale) {
 
-    AFL_ENSURE((data.size() & 3) == 0);
+    YDB_LOG_ENSURE((data.size() & 3) == 0);
 
     ui64 count = 0;
     ui64 sum = 0;

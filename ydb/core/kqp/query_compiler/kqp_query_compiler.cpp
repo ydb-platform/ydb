@@ -1136,7 +1136,7 @@ private:
                     YQL_ENSURE(maybeTransformNode);
                     auto transformNode = maybeTransformNode.Cast();
 
-                    AFL_ENSURE(IsTableSink(transformNode.DataSink().Cast<TCoDataSink>().Category()));
+                    YDB_LOG_ENSURE(IsTableSink(transformNode.DataSink().Cast<TCoDataSink>().Category()));
 
                     auto* transformProto = stageProto.AddOutputTransforms();
                     transformProto->MutableInternalSink()->SetType(TString(NYql::KqpTableSinkName));
@@ -1157,7 +1157,7 @@ private:
                     const auto outputRowType = transformNode.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
 
                     const auto programOutputType = GetSeqItemType(stage.Program().Ref().GetTypeAnn());
-                    AFL_ENSURE(inputRowType->Equals(*programOutputType));
+                    YDB_LOG_ENSURE(inputRowType->Equals(*programOutputType));
 
                     TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
                     transformProto->SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputRowType), TypeEnv));
@@ -1840,7 +1840,7 @@ private:
             if (usedColumns.contains(columnName)
                     && !columnToOrder.contains(columnName)
                     && !localDefaultColumnsIds.contains(columnName)) {
-                AFL_ENSURE(isDefaultColumn(columnName));
+                YDB_LOG_ENSURE(isDefaultColumn(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1848,8 +1848,8 @@ private:
         // Default columns with local processing
         for (const auto& columnName : tableMeta->ColumnOrder) {
             if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
-                AFL_ENSURE(isDefaultColumn(columnName));
-                AFL_ENSURE(localDefaultColumnsIds.contains(columnName));
+                YDB_LOG_ENSURE(isDefaultColumn(columnName));
+                YDB_LOG_ENSURE(localDefaultColumnsIds.contains(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1908,18 +1908,18 @@ private:
                     return false;
                 }
             }
-            AFL_ENSURE(names.contains("new"));
-            AFL_ENSURE(names.contains("old"));
+            YDB_LOG_ENSURE(names.contains("new"));
+            YDB_LOG_ENSURE(names.contains("old"));
             return true;
         }();
 
         if (shape.IsStructOfNewAndOldValues) {
-            AFL_ENSURE(Config->GetEnableIndexStreamWrite());
-            AFL_ENSURE(settings.Mode().StringValue() == "update_conditional");
+            YDB_LOG_ENSURE(Config->GetEnableIndexStreamWrite());
+            YDB_LOG_ENSURE(settings.Mode().StringValue() == "update_conditional");
 
             settingsProto.SetInputRowFormat(NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS);
 
-            AFL_ENSURE(structType->GetSize() == 2);
+            YDB_LOG_ENSURE(structType->GetSize() == 2);
             for (const auto& item : structType->GetItems()) {
                 if (item->GetName() == "new") {
                     shape.NewStructType = item->GetItemType()->Cast<TStructExprType>();
@@ -2054,13 +2054,13 @@ private:
             }
             const auto& implTable = tableMeta->ImplTables[index];
 
-            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+            YDB_LOG_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
             for (const auto& columnName : implTable->KeyColumnNames) {
                 if (mode == "insert") {
                     // In case of INSERT we assume that row doesn't exist (otherwise, query will fail),
                     // so we don't need to lookup existing rows.
-                    AFL_ENSURE(columnsSet.contains(columnName));
+                    YDB_LOG_ENSURE(columnsSet.contains(columnName));
                 } else if (mode == "delete" && columnsSet.contains(columnName)) {
                     // In case of DELETE we assume that forwarded rows are from WHERE
                 } else if (!mainKeyColumnsSet.contains(columnName)) {
@@ -2096,7 +2096,7 @@ private:
             const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape,
             const THashSet<TStringBuf>& columnsSet, const THashSet<TStringBuf>& mainKeyColumnsSet, THashSet<TStringBuf>& localDefaultColumns,
             const bool streamIndexWrite) {
-        AFL_ENSURE(settings.Mode().StringValue() != "insert");
+        YDB_LOG_ENSURE(settings.Mode().StringValue() != "insert");
 
         THashSet<TStringBuf> lookupColumnsSet;
         if (streamIndexWrite) {
@@ -2151,7 +2151,7 @@ private:
             // Register them as LookupColumns only to provide runtime metadata for indexes and RETURNING.
             for (const auto& item : shape.OldStructType->GetItems()) {
                 const auto& columnName = item->GetName();
-                AFL_ENSURE(!mainKeyColumnsSet.contains(columnName));
+                YDB_LOG_ENSURE(!mainKeyColumnsSet.contains(columnName));
 
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
                 YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
@@ -2397,7 +2397,7 @@ private:
                 YQL_ENSURE(implTable->Name.EndsWith(NTableIndex::ImplTable));
             }
 
-            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+            YDB_LOG_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
             auto indexSettings = settingsProto.AddIndexes();
             indexSettings->SetIndexName(indexDescription.Name);
@@ -2441,7 +2441,7 @@ private:
             localDefaultColumns = CollectLocalDefaultColumns(settings, tableMeta);
         }
 
-        AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+        YDB_LOG_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
         THashSet<TStringBuf> columnsSet;
         for (const auto& columnName : shape.Columns) {
@@ -2450,7 +2450,7 @@ private:
         THashSet<TStringBuf> mainKeyColumnsSet;
         for (const auto& columnName : tableMeta->KeyColumnNames) {
             mainKeyColumnsSet.insert(columnName);
-            AFL_ENSURE(columnsSet.contains(columnName));
+            YDB_LOG_ENSURE(columnsSet.contains(columnName));
         }
 
         const auto affectedIndexes = ComputeAffectedIndexes(settings, tableMeta, columnsSet, mainKeyColumnsSet, streamIndexWrite);
@@ -2515,7 +2515,7 @@ private:
             FillColumnProto(columnName, columnMeta, columnProto);
         }
 
-        AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+        YDB_LOG_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
         const auto columnToOrder = CreateColumnToOrder(
             shape.Columns,
             tableMeta,
@@ -2525,7 +2525,7 @@ private:
             settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
         }
 
-        AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+        YDB_LOG_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
                     || localDefaultColumns.Ids.empty());
         for (const auto& defaultColumnId : localDefaultColumns.Ids) { // from plan!!!
             settingsProto.AddDefaultColumnsIds(defaultColumnId);
@@ -2534,7 +2534,7 @@ private:
         settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
 
         const bool inconsistentWrite = settings.InconsistentWrite().Value() == "true"sv;
-        AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+        YDB_LOG_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
         settingsProto.SetInconsistentTx(inconsistentWrite);
     }
 
@@ -2547,11 +2547,11 @@ private:
             settingsProto.AddInputColumns(TString(column));
         }
 
-        AFL_ENSURE(settings.InconsistentWrite().StringValue() == "true");
+        YDB_LOG_ENSURE(settings.InconsistentWrite().StringValue() == "true");
         settingsProto.SetInconsistentTx(true);
 
-        AFL_ENSURE(settings.Priority().StringValue() == "0");
-        AFL_ENSURE(settings.StreamWrite().StringValue() == "true");
+        YDB_LOG_ENSURE(settings.Priority().StringValue() == "0");
+        YDB_LOG_ENSURE(settings.StreamWrite().StringValue() == "true");
     }
 
     // Trailing flags common to all sink modes (priority, stream-write, batch, impl-table).
@@ -2577,7 +2577,7 @@ private:
         const TSinkInputShape shape = DetermineInputRowFormat(settings, settingsProto, stage);
 
         if (settings.Mode().StringValue() != "fill_table") {
-            AFL_ENSURE(settings.Table().PathId() != "");
+            YDB_LOG_ENSURE(settings.Table().PathId() != "");
             FillTableId(settings.Table(), *settingsProto.MutableTable());
             FillTablesMap(settings.Table(), shape.Columns, tablesMap);
 

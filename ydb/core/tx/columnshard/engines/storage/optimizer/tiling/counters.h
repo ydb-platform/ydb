@@ -143,7 +143,7 @@ public:
 
     static std::shared_ptr<TPortionCategoryCounters> BuildClient(
         const std::vector<std::shared_ptr<TLevelAgents>>& agentList, const ui32 idx, const TString& debugName) {
-        AFL_VERIFY(idx < agentList.size(),
+        YDB_LOG_VERIFY(idx < agentList.size(),
             {"idx", idx},
             {"limit", agentList.size()},
             {"type", debugName});
@@ -182,7 +182,7 @@ public:
     explicit TLevelCounters(std::shared_ptr<TPortionCategoryCounters> portions)
         : Portions(std::move(portions))
     {
-        AFL_VERIFY(Portions);
+        YDB_LOG_VERIFY(Portions);
     }
 };
 
@@ -208,14 +208,14 @@ public:
     }
 
     const TLevelCounters& GetLevelCounters(const ui32 levelIdx) const {
-        AFL_VERIFY(levelIdx < Levels.size(),
+        YDB_LOG_VERIFY(levelIdx < Levels.size(),
             {"idx", levelIdx},
             {"count", Levels.size()});
         return Levels[levelIdx];
     }
 
     const TLevelCounters& GetAccumulatorCounters(const ui32 accIdx) const {
-        AFL_VERIFY(accIdx < Accumulators.size(),
+        YDB_LOG_VERIFY(accIdx < Accumulators.size(),
             {"idx", accIdx},
             {"count", Accumulators.size()});
         return Accumulators[accIdx];

@@ -53,7 +53,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableMaxIndex();
-    AFL_VERIFY(!!ColumnName,
+    YDB_LOG_VERIFY(!!ColumnName,
         {"problem", "not initialized max index info trying to serialize"});
     filterProto->SetColumnName(ColumnName);
 }

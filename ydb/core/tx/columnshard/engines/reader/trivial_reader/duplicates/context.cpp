@@ -49,14 +49,14 @@ TBuildFilterContext::TBuildFilterContext(const TActorId owner, const std::shared
     , RequestGuard(std::move(requestGuard))
     , SelfMemory(contextMemory)
 {
-    AFL_VERIFY(Owner);
-    AFL_VERIFY(Columns.size());
-    AFL_VERIFY(PKSchema);
-    AFL_VERIFY(SnapshotSchema);
-    AFL_VERIFY(ColumnDataManager);
-    AFL_VERIFY(DataAccessorsManager);
-    AFL_VERIFY(Counters);
-    AFL_VERIFY(SelfMemory);
+    YDB_LOG_VERIFY(Owner);
+    YDB_LOG_VERIFY(Columns.size());
+    YDB_LOG_VERIFY(PKSchema);
+    YDB_LOG_VERIFY(SnapshotSchema);
+    YDB_LOG_VERIFY(ColumnDataManager);
+    YDB_LOG_VERIFY(DataAccessorsManager);
+    YDB_LOG_VERIFY(Counters);
+    YDB_LOG_VERIFY(SelfMemory);
 }
 
 std::set<ui32> TBuildFilterContext::GetFetchingColumnIds() const {
@@ -85,7 +85,7 @@ ui64 TBuildFilterContext::GetDataSize() const {
 
 TPortionInfo::TConstPtr TBuildFilterContext::GetPortion(const ui64 portionId) const {
     auto* findPortion = RequiredPortions.FindPtr(portionId);
-    AFL_VERIFY(findPortion,
+    YDB_LOG_VERIFY(findPortion,
         {"id", portionId},
         {"context", DebugString()});
     return *findPortion;

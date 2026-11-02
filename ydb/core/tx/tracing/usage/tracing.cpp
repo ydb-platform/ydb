@@ -60,7 +60,7 @@ TTraceClient::TDurationGuard::~TDurationGuard() {
     if (!Owner) {
         return;
     }
-    AFL_VERIFY(GuardedClients.Get().size() && GuardedClients.Get().back()->GetClientId() == Owner->GetClientId());
+    YDB_LOG_VERIFY(GuardedClients.Get().size() && GuardedClients.Get().back()->GetClientId() == Owner->GetClientId());
     GuardedClients.Get().pop_back();
     Guards.Get().pop_back();
     Stat->Finish(TMonotonic::Now());
@@ -154,12 +154,12 @@ bool TTraceClient::CheckChildrenFree() const {
 }
 
 TMonotonic TStatInfo::GetFirstVerified() const {
-    AFL_VERIFY(First);
+    YDB_LOG_VERIFY(First);
     return *First;
 }
 
 TMonotonic TStatInfo::GetLastVerified() const {
-    AFL_VERIFY(Last);
+    YDB_LOG_VERIFY(Last);
     return *Last;
 }
 

@@ -26,7 +26,7 @@ void TAccessorsCollection::AddCalculated(const ui32 columnId, const arrow::Datum
 
 void TAccessorsCollection::AddInput(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
     if (data.is_scalar()) {
-        AFL_VERIFY(!withFilter);
+        YDB_LOG_VERIFY(!withFilter);
         AddConstantVerified(columnId, data.scalar());
         RecordsCountActual = 1;
     } else {
@@ -39,11 +39,11 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const std::shared_pt
 }
 
 void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter) {
-    AFL_VERIFY(columnId);
+    YDB_LOG_VERIFY(columnId);
     if (UseFilter && withFilter && !Filter->IsTotalAllowFilter()) {
         auto filtered = Filter->Apply(data.GetData());
         RecordsCountActual = filtered->GetRecordsCount();
-        AFL_VERIFY(Accessors.emplace(columnId, filtered).second,
+        YDB_LOG_VERIFY(Accessors.emplace(columnId, filtered).second,
             {"id", columnId});
     } else {
         if (Filter->IsTotalAllowFilter()) {
@@ -51,7 +51,7 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
         } else {
             RecordsCountActual = Filter->GetFilteredCount();
         }
-        AFL_VERIFY(Accessors.emplace(columnId, data).second);
+        YDB_LOG_VERIFY(Accessors.emplace(columnId, data).second);
     }
 }
 
@@ -66,7 +66,7 @@ std::shared_ptr<arrow::Array> TAccessorsCollection::GetArrayVerified(const ui32 
 }
 
 std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<ui32>& columnIds) const {
-    AFL_VERIFY(columnIds.size());
+    YDB_LOG_VERIFY(columnIds.size());
     auto accessors = GetAccessors(columnIds);
     std::vector<std::shared_ptr<arrow::Field>> fields;
     std::vector<std::shared_ptr<arrow::ChunkedArray>> arrays;
@@ -78,11 +78,11 @@ std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<u
         if (!recordsCount) {
             recordsCount = arr->GetRecordsCount();
         } else {
-            AFL_VERIFY(*recordsCount == arr->GetRecordsCount());
+            YDB_LOG_VERIFY(*recordsCount == arr->GetRecordsCount());
         }
         ++idx;
     }
-    AFL_VERIFY(recordsCount);
+    YDB_LOG_VERIFY(recordsCount);
     return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(arrays), *recordsCount);
 }
 
@@ -111,13 +111,13 @@ std::vector<std::shared_ptr<IChunkedArray>> TAccessorsCollection::GetAccessors(c
         if (!recordsCount) {
             recordsCount = accessor->GetRecordsCount();
         } else {
-            AFL_VERIFY(*recordsCount == accessor->GetRecordsCount(),
+            YDB_LOG_VERIFY(*recordsCount == accessor->GetRecordsCount(),
                 {"rc", recordsCount},
                 {"accessor", accessor->GetRecordsCount()});
         }
         result.emplace_back(accessor);
     }
-    AFL_VERIFY(recordsCount);
+    YDB_LOG_VERIFY(recordsCount);
     return result;
 }
 
@@ -155,8 +155,8 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(
         if (it == Accessors.end()) {
             result.AddScalar(GetConstantScalarVerified(i));
         } else if (specialArgument) {
-            AFL_VERIFY(specialArgumentIndex);
-            AFL_VERIFY(*specialArgumentIndex == index);
+            YDB_LOG_VERIFY(specialArgumentIndex);
+            YDB_LOG_VERIFY(*specialArgumentIndex == index);
             if (specialArgument->GetType() == IChunkedArray::EType::Dictionary) {
                 result.AddDictionary(std::static_pointer_cast<TDictionaryArray>(specialArgument), index);
             } else {
@@ -172,13 +172,13 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(
 
 std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const ui32 columnId, const ui32 recordsCount) const {
     auto it = Constants.find(columnId);
-    AFL_VERIFY(it != Constants.end());
+    YDB_LOG_VERIFY(it != Constants.end());
     return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*it->second, recordsCount)));
 }
 
 const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
-    AFL_VERIFY(it != Constants.end(),
+    YDB_LOG_VERIFY(it != Constants.end(),
         {"id", columnId});
     return it->second;
 }
@@ -308,7 +308,7 @@ void TAccessorsCollection::RemainOnly(const std::vector<ui32>& columns, const bo
             columnIds.erase(i);
         }
     }
-    AFL_VERIFY(columnIds.empty());
+    YDB_LOG_VERIFY(columnIds.empty());
     for (auto&& i : toRemove) {
         Remove(i);
     }
@@ -335,7 +335,7 @@ TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& dat
             Data = std::make_shared<TTrivialChunkedArray>(data.chunked_array());
         }
     } else {
-        AFL_VERIFY(false,
+        YDB_LOG_VERIFY(false,
             {"kind", data});
     }
 }

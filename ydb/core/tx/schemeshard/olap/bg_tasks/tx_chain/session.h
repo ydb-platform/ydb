@@ -9,7 +9,7 @@
 namespace NKikimr::NSchemeShard::NOlap::NBackground {
 
 class TTxChainSession: public NKikimr::NOlap::NBackground::TSessionProtoAdapter<
-    NKikimrSchemeShardTxBackgroundProto::TTxChainSessionLogic, 
+    NKikimrSchemeShardTxBackgroundProto::TTxChainSessionLogic,
     NKikimrSchemeShardTxBackgroundProto::TTxChainSessionProgress,
     NKikimrSchemeShardTxBackgroundProto::TTxChainSessionState> {
 public:
@@ -60,17 +60,17 @@ public:
     }
 
     ui64 GetCurrentTxIdVerified() const {
-        AFL_VERIFY(!!CurrentTxId);
+        YDB_LOG_VERIFY(!!CurrentTxId);
         return *CurrentTxId;
     }
 
     void SetCurrentTxId(const ui64 value) {
-        AFL_VERIFY(!CurrentTxId);
+        YDB_LOG_VERIFY(!CurrentTxId);
         CurrentTxId = value;
     }
 
     void ResetCurrentTxId() {
-        AFL_VERIFY(!!CurrentTxId);
+        YDB_LOG_VERIFY(!!CurrentTxId);
         CurrentTxId.reset();
     }
 
@@ -79,7 +79,7 @@ public:
     }
 
     void NextStep() {
-        AFL_VERIFY(++StepForExecute <= GetTxData().GetTransactions().size());
+        YDB_LOG_VERIFY(++StepForExecute <= GetTxData().GetTransactions().size());
     }
 
     virtual TString GetClassName() const override {
@@ -89,7 +89,7 @@ public:
         return true;
     }
     virtual bool IsFinished() const override {
-        AFL_VERIFY(StepForExecute <= GetTxData().GetTransactions().size());
+        YDB_LOG_VERIFY(StepForExecute <= GetTxData().GetTransactions().size());
         return StepForExecute == GetTxData().GetTransactions().size();
     }
     virtual bool IsReadyForRemoveOnFinished() const override {

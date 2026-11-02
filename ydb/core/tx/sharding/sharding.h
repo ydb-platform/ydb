@@ -78,7 +78,7 @@ public:
     }
 
     const NKikimr::NOlap::TSnapshot& GetOpenForWriteSnapshotVerified() const {
-        AFL_VERIFY(OpenForWriteSnapshot);
+        YDB_LOG_VERIFY(OpenForWriteSnapshot);
         return *OpenForWriteSnapshot;
     }
 
@@ -131,11 +131,11 @@ protected:
         ui32 idx = 0;
         for (auto&& i : ids) {
             auto* shardInfo = GetShardInfo(i);
-            AFL_VERIFY(shardInfo);
+            YDB_LOG_VERIFY(shardInfo);
             shardInfo->SetSequenceIdx(idx++);
         }
         OrderedShardIds = ids;
-        AFL_VERIFY(OrderedShardIds.size() == Shards.size());
+        YDB_LOG_VERIFY(OrderedShardIds.size() == Shards.size());
     }
 
     const std::vector<ui64>& GetOrderedShardIds() const {
@@ -181,13 +181,13 @@ public:
 
     TShardInfo& GetShardInfoVerified(const ui64 tabletId) {
         auto it = Shards.find(tabletId);
-        AFL_VERIFY(it != Shards.end());
+        YDB_LOG_VERIFY(it != Shards.end());
         return it->second;
     }
 
     const TShardInfo& GetShardInfoVerified(const ui64 tabletId) const {
         auto it = Shards.find(tabletId);
-        AFL_VERIFY(it != Shards.end());
+        YDB_LOG_VERIFY(it != Shards.end());
         return it->second;
     }
 
@@ -273,7 +273,7 @@ public:
     }
 
     ui64 GetShardIdByOrderIdx(const ui32 shardIdx) const {
-        AFL_VERIFY(shardIdx < OrderedShardIds.size());
+        YDB_LOG_VERIFY(shardIdx < OrderedShardIds.size());
         return OrderedShardIds[shardIdx];
     }
 

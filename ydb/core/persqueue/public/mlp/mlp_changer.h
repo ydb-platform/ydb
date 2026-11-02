@@ -75,7 +75,7 @@ private:
         ChildActorId = {};
 
         auto& topics = ev->Get()->Topics;
-        AFL_ENSURE(topics.size() == 1,
+        YDB_LOG_ENSURE(topics.size() == 1,
             {"s", topics.size()});
 
         auto& topic = topics.begin()->second;

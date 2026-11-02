@@ -28,11 +28,11 @@ protected:
         return GetLocalChunkedArray(std::nullopt, 0).GetArray()->VisitDistinctValues(visitor);
     }
     virtual ui32 DoGetNullsCount() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
@@ -40,12 +40,12 @@ protected:
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual TLocalDataAddress DoGetLocalData(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TLocalDataAddress(nullptr, 0, 0);
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
-        AFL_VERIFY(false,
+        YDB_LOG_VERIFY(false,
             {"problem", "cannot use method"});
         return nullptr;
     }
@@ -57,7 +57,7 @@ protected:
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         if (!ForLazyInitialization) {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
             return nullptr;
         } else {
             return TBase::GetChunkedArrayTrivial();
@@ -74,7 +74,7 @@ public:
         , ForLazyInitialization(forLazyInitialization)
         , AdditionalAccessorData(std::move(additionalAccessorData))
     {
-        AFL_VERIFY(Loader);
+        YDB_LOG_VERIFY(Loader);
     }
 
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TStringBuf data,
@@ -85,7 +85,7 @@ public:
         , ForLazyInitialization(forLazyInitialization)
         , AdditionalAccessorData(std::move(additionalAccessorData))
     {
-        AFL_VERIFY(Loader);
+        YDB_LOG_VERIFY(Loader);
     }
 
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const std::shared_ptr<IChunkedArray>& data,
@@ -95,7 +95,7 @@ public:
         , PredefinedArray(data)
         , ForLazyInitialization(forLazyInitialization)
     {
-        AFL_VERIFY(Loader);
+        YDB_LOG_VERIFY(Loader);
     }
 };
 

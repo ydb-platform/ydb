@@ -273,7 +273,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
                 "unauthenticated access is forbidden, please provide credentials");
         }
     } else {
-        AFL_ENSURE(Request->GetYdbToken());
+        YDB_LOG_ENSURE(Request->GetYdbToken());
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
@@ -336,7 +336,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
         }
 
         if (IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+            YDB_LOG_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
         } else {
             InitSession(ctx);
         }
@@ -452,7 +452,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
             }
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res);
+                YDB_LOG_ENSURE(res);
             }
 
             break;
@@ -461,7 +461,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
         case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res);
+                YDB_LOG_ENSURE(res);
             } else {
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, "throughput limit exceeded");
             }
@@ -487,7 +487,7 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 
 
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
-    AFL_ENSURE(!AuthInitActor);
+    YDB_LOG_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));

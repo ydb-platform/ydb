@@ -16,9 +16,9 @@ private:
 
 public:
     void InUsage(const ui32 stepIdx) {
-        AFL_VERIFY(!!Construct);
+        YDB_LOG_VERIFY(!!Construct);
         if (!!LastUsage) {
-            AFL_VERIFY(*LastUsage < stepIdx);
+            YDB_LOG_VERIFY(*LastUsage < stepIdx);
         }
         LastUsage = stepIdx;
     }
@@ -27,7 +27,7 @@ public:
         if (!Construct) {
             Construct = stepIdx;
         } else {
-            AFL_VERIFY(Construct < stepIdx);
+            YDB_LOG_VERIFY(Construct < stepIdx);
         }
     }
 };
@@ -38,7 +38,7 @@ private:
 
 public:
     void OnLastUsage(const ui32 resourceId) {
-        AFL_VERIFY(LastUsageResources.emplace(resourceId).second);
+        YDB_LOG_VERIFY(LastUsageResources.emplace(resourceId).second);
     }
 };
 
@@ -48,10 +48,10 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
     }
     for (auto&& n : original.GetNodes()) {
         auto itTo = Nodes.find(n.first);
-        AFL_VERIFY(itTo != Nodes.end());
+        YDB_LOG_VERIFY(itTo != Nodes.end());
         for (auto&& from : n.second->GetInputEdges()) {
             auto itFrom = Nodes.find(from.first.GetNodeId());
-            AFL_VERIFY(itFrom != Nodes.end());
+            YDB_LOG_VERIFY(itFrom != Nodes.end());
             itFrom->second->ConnectTo(itTo->second.get());
         }
     }
@@ -72,7 +72,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
                 if (!nextNodeIds.emplace(neighbor->GetIdentifier()).second) {
                     continue;
                 }
-                AFL_VERIFY(!neighbor->HasWeight());
+                YDB_LOG_VERIFY(!neighbor->HasWeight());
                 bool hasWeight = true;
                 ui64 sumWeight = 0;
                 for (auto&& test : neighbor->GetInputEdges()) {
@@ -91,12 +91,12 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         for (auto&& i : nextNodes) {
             ++nodesCount;
             auto it = weightByNode.find(i->GetIdentifier());
-            AFL_VERIFY(it != weightByNode.end());
+            YDB_LOG_VERIFY(it != weightByNode.end());
             i->CalcWeight(resolver, it->second);
         }
         currentNodes = std::move(nextNodes);
     }
-    AFL_VERIFY(nodesCount == Nodes.size(),
+    YDB_LOG_VERIFY(nodesCount == Nodes.size(),
         {"init", nodesCount},
         {"nodes", Nodes.size()});
 
@@ -107,10 +107,10 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             if (!i.second->GetOutputEdges().size()) {
                 if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter ||
                     i.second->GetProcessor()->GetProcessorType() == EProcessorType::DistinctMarker) {
-                    AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
+                    YDB_LOG_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
                 } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
-                    AFL_VERIFY(!ResultRoot,
+                    YDB_LOG_VERIFY(!ResultRoot,
                         {"debug", DebugDOT()});
                     ResultRoot = i.second;
                 } else {
@@ -151,7 +151,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             ++currentIndex;
         }
     }
-    AFL_VERIFY(sortedNodes.size() == Nodes.size(),
+    YDB_LOG_VERIFY(sortedNodes.size() == Nodes.size(),
         {"debug", DebugDOT()});
     THashMap<ui32, TStepResourcesUsage> stepInfo;
     for (auto&& u : usage) {
@@ -160,7 +160,7 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         }
     }
     for (auto&& i : stepInfo) {
-        AFL_VERIFY(i.first < sortedNodes.size());
+        YDB_LOG_VERIFY(i.first < sortedNodes.size());
         auto* node = sortedNodes[i.first];
         if (i.first + 1 != sortedNodes.size()) {
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
@@ -181,7 +181,7 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
             if (conclusion.IsFail()) {
                 return conclusion;
             } else {
-                AFL_VERIFY(!conclusion->IsPending());
+                YDB_LOG_VERIFY(!conclusion->IsPending());
             }
         }
         if (visitor->MutableContext().GetResources().HasDataAndResultIsEmpty()) {
@@ -313,7 +313,7 @@ TString TCompiledGraph::DebugStats() const {
 
 TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
     while (true) {
-        AFL_VERIFY(CurrentNode);
+        YDB_LOG_VERIFY(CurrentNode);
         if (Visitor) {
             auto conclusion = Visitor->OnEnter(*CurrentNode);
             if (conclusion.IsFail()) {
@@ -323,7 +323,7 @@ TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
         NodesStack.emplace_back(CurrentNode);
         auto it = Statuses.find(CurrentNode->GetIdentifier());
         if (it == Statuses.end()) {
-            AFL_VERIFY(Statuses.emplace(CurrentNode->GetIdentifier(), ENodeStatus::InProgress).second);
+            YDB_LOG_VERIFY(Statuses.emplace(CurrentNode->GetIdentifier(), ENodeStatus::InProgress).second);
             bool needInput = false;
             for (auto&& input : CurrentNode->GetInputEdges()) {
                 auto it = Statuses.find(input->GetIdentifier());
@@ -332,14 +332,14 @@ TConclusionStatus TCompiledGraph::TIterator::ProvideCurrentToExecute() {
                     needInput = true;
                     break;
                 } else {
-                    AFL_VERIFY(it->second == ENodeStatus::Finished);
+                    YDB_LOG_VERIFY(it->second == ENodeStatus::Finished);
                 }
             }
             if (!needInput) {
                 break;
             }
         } else {
-            AFL_VERIFY(it->second == ENodeStatus::Finished);
+            YDB_LOG_VERIFY(it->second == ENodeStatus::Finished);
             NodesStack.pop_back();
             if (NodesStack.size()) {
                 CurrentNode = NodesStack.back();
@@ -393,11 +393,11 @@ TConclusion<bool> TCompiledGraph::TIterator::Reset(std::vector<std::shared_ptr<T
 }
 
 TConclusion<bool> TCompiledGraph::TIterator::Next() {
-    AFL_VERIFY(CurrentNode);
-    AFL_VERIFY(NodesStack.size());
+    YDB_LOG_VERIFY(CurrentNode);
+    YDB_LOG_VERIFY(NodesStack.size());
     bool skipFlag = false;
     if (Visitor) {
-        AFL_VERIFY(NodesStack.back());
+        YDB_LOG_VERIFY(NodesStack.back());
         auto conclusion = Visitor->OnExit(*NodesStack.back());
         if (conclusion.IsFail()) {
             return conclusion;
@@ -412,7 +412,7 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
     TNode* nextNode = nullptr;
     if (NodesStack.size() > 1) {
         auto owner = NodesStack[NodesStack.size() - 2];
-        AFL_VERIFY(owner);
+        YDB_LOG_VERIFY(owner);
         bool found = false;
         for (ui32 idx = 0; idx < owner->GetInputEdges().size(); ++idx) {
             if (found) {
@@ -421,7 +421,7 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
                     nextNode = owner->GetInputEdges()[idx];
                     break;
                 } else {
-                    AFL_VERIFY(itStatus->second == ENodeStatus::Finished);
+                    YDB_LOG_VERIFY(itStatus->second == ENodeStatus::Finished);
                 }
             } else if (owner->GetInputEdges()[idx]->GetIdentifier() == CurrentNode->GetIdentifier()) {
                 if (Visitor) {
@@ -431,7 +431,7 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
                             columnsInput.emplace_back(out.GetColumnId());
                         }
                     }
-                    AFL_VERIFY(columnsInput.size());
+                    YDB_LOG_VERIFY(columnsInput.size());
                     auto conclusion = Visitor->OnComeback(*owner, columnsInput);
                     if (conclusion.IsFail()) {
                         return conclusion;
@@ -440,13 +440,13 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
                 found = true;
             }
         }
-        AFL_VERIFY(found);
+        YDB_LOG_VERIFY(found);
     }
-    AFL_VERIFY(NodesStack.size());
+    YDB_LOG_VERIFY(NodesStack.size());
     NodesStack.pop_back();
     auto itStatus = Statuses.find(CurrentNode->GetIdentifier());
-    AFL_VERIFY(itStatus != Statuses.end());
-    AFL_VERIFY(itStatus->second == ENodeStatus::InProgress);
+    YDB_LOG_VERIFY(itStatus != Statuses.end());
+    YDB_LOG_VERIFY(itStatus->second == ENodeStatus::InProgress);
     if (skipFlag) {
         Statuses.erase(itStatus);
     } else {
@@ -469,21 +469,21 @@ TConclusion<bool> TCompiledGraph::TIterator::Next() {
 }
 
 TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TCompiledGraph::IVisitor::OnExit(const TCompiledGraph::TNode& node) {
-    AFL_VERIFY(node.GetProcessor());
+    YDB_LOG_VERIFY(node.GetProcessor());
     auto conclusion = DoOnExit(node);
     if (conclusion.IsFail()) {
         return conclusion;
     }
     if (*conclusion == EVisitStatus::Finished) {
-        AFL_VERIFY(Current.erase(node.GetIdentifier()),
+        YDB_LOG_VERIFY(Current.erase(node.GetIdentifier()),
             {"id", node.GetIdentifier()});
     } else if (*conclusion == EVisitStatus::Skipped) {
-        AFL_VERIFY(Current.erase(node.GetIdentifier()),
+        YDB_LOG_VERIFY(Current.erase(node.GetIdentifier()),
             {"id", node.GetIdentifier()});
-        AFL_VERIFY(Visited.erase(node.GetIdentifier()),
+        YDB_LOG_VERIFY(Visited.erase(node.GetIdentifier()),
             {"id", node.GetIdentifier()});
     } else {
-        AFL_VERIFY(Executed.emplace(node.GetIdentifier()).second,
+        YDB_LOG_VERIFY(Executed.emplace(node.GetIdentifier()).second,
             {"id", node.GetIdentifier()});
     }
     return conclusion;

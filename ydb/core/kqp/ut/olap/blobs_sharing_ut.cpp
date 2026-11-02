@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         static const inline auto Registrator = TFactory::TRegistrator<TTestController>("test");
     protected:
         virtual void DoProposeError(const TString& sessionId, const TString& message) const override {
-            AFL_VERIFY(false,
+            YDB_LOG_VERIFY(false,
                 {"sessionId", sessionId},
                 {"message", message});
         }
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
             Helper.CreateTestOlapTable(ShardsCount, ShardsCount);
             ShardIds = Controller->GetShardActualIds();
-            AFL_VERIFY(ShardIds.size() == ShardsCount,
+            YDB_LOG_VERIFY(ShardIds.size() == ShardsCount,
                 {"count", ShardIds.size()},
                 {"ids", JoinSeq(",", ShardIds)});
             std::set<NColumnShard::TInternalPathId> pathIdsSet;
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 pathIdsSet.insert(pathIds.begin(), pathIds.end());
             }
             PathIds = std::vector<NColumnShard::TInternalPathId>(pathIdsSet.begin(), pathIdsSet.end());
-            AFL_VERIFY(PathIds.size() == 1,
+            YDB_LOG_VERIFY(PathIds.size() == 1,
                 {"count", PathIds.size()},
                 {"ids", JoinSeq(",", PathIds)});
         }
@@ -143,24 +143,24 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 Cerr << "WAIT_TRIVIAL_LINKS..." << Endl;
                 Sleep(TDuration::Seconds(1));
             }
-            AFL_VERIFY(Controller->IsTrivialLinks());
+            YDB_LOG_VERIFY(Controller->IsTrivialLinks());
             Controller->CheckInvariants();
             Controller->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
         }
 
         void Execute(const ui64 destinationIdx, const std::vector<ui64>& sourceIdxs, const bool move, const NOlap::TSnapshot& snapshot, const std::set<ui64>& pathIdxs) {
             Controller->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
-            AFL_VERIFY(destinationIdx < ShardIds.size());
+            YDB_LOG_VERIFY(destinationIdx < ShardIds.size());
             const ui64 destination = ShardIds[destinationIdx];
             std::vector<ui64> sources;
             for (auto&& i : sourceIdxs) {
-                AFL_VERIFY(i < ShardIds.size());
+                YDB_LOG_VERIFY(i < ShardIds.size());
                 sources.emplace_back(ShardIds[i]);
             }
             std::set<NColumnShard::TInternalPathId> pathIds;
             for (auto&& i : pathIdxs) {
-                AFL_VERIFY(i < PathIds.size());
-                AFL_VERIFY(pathIds.emplace(PathIds[i]).second);
+                YDB_LOG_VERIFY(i < PathIds.size());
+                YDB_LOG_VERIFY(pathIds.emplace(PathIds[i]).second);
             }
             Cerr << "SHARING: " << JoinSeq(",", sources) << "->" << destination << Endl;
             THashMap<NColumnShard::TInternalPathId, NColumnShard::TInternalPathId> pathIdsRemap;
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             }
             THashSet<NOlap::TTabletId> sourceTablets;
             for (auto&& i : sources) {
-                AFL_VERIFY(sourceTablets.emplace((NOlap::TTabletId)i).second);
+                YDB_LOG_VERIFY(sourceTablets.emplace((NOlap::TTabletId)i).second);
             }
             const TString sessionId = TGUID::CreateTimebased().AsUuidString();
             NOlap::NDataSharing::TTransferContext transferContext((NOlap::TTabletId)destination, sourceTablets, snapshot, move);
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                     Sleep(TDuration::Seconds(1));
                     Cerr << "WAIT_PROPOSING..." << Endl;
                 }
-                AFL_VERIFY(CSTransferStatus->GetProposed());
+                YDB_LOG_VERIFY(CSTransferStatus->GetProposed());
             }
             if (RebootTablet) {
                 Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                     Sleep(TDuration::Seconds(1));
                     Cerr << "WAIT_CONFIRMED..." << Endl;
                 }
-                AFL_VERIFY(CSTransferStatus->GetConfirmed());
+                YDB_LOG_VERIFY(CSTransferStatus->GetConfirmed());
             }
             if (RebootTablet) {
                 Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(
@@ -212,10 +212,10 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                     Sleep(TDuration::Seconds(1));
                     Cerr << "WAIT_FINISHED..." << Endl;
                 }
-                AFL_VERIFY(CSTransferStatus->GetFinished());
+                YDB_LOG_VERIFY(CSTransferStatus->GetFinished());
             }
             CSTransferStatus->Reset();
-            AFL_VERIFY(!Controller->IsTrivialLinks());
+            YDB_LOG_VERIFY(!Controller->IsTrivialLinks());
             Controller->CheckInvariants();
             Controller->SetOverrideMaxReadStaleness(TDuration::Minutes(5));
         }
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 Sleep(TDuration::Seconds(1));
                 Cerr << "RESHARDING_WAIT_FINISHED... (" << hint << ")" << Endl;
             }
-            AFL_VERIFY(clean);
+            YDB_LOG_VERIFY(clean);
         }
 
         void CheckCount(const ui32 expectation) {
@@ -366,10 +366,10 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
-            AFL_VERIFY(CSController->GetShardingFiltersCount().Val() == 0);
+            YDB_LOG_VERIFY(CSController->GetShardingFiltersCount().Val() == 0);
             CheckCount(230000);
             i64 count = CSController->GetShardingFiltersCount().Val();
-            AFL_VERIFY(count >= 16,
+            YDB_LOG_VERIFY(count >= 16,
                 {"count", count});
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->WaitCompactions(TDuration::Seconds(3));
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
             CheckCount(230000);
 
-            AFL_VERIFY(count == CSController->GetShardingFiltersCount().Val(),
+            YDB_LOG_VERIFY(count == CSController->GetShardingFiltersCount().Val(),
                 {"count", count},
                 {"val", CSController->GetShardingFiltersCount().Val()});
             const ui32 portionsCount = 16;
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 //            CSController->WaitCleaning(TDuration::Seconds(5));
 
                 CheckCount(230000);
-                AFL_VERIFY(count + portionsCount == CSController->GetShardingFiltersCount().Val(),
+                YDB_LOG_VERIFY(count + portionsCount == CSController->GetShardingFiltersCount().Val(),
                     {"count", count},
                     {"val", CSController->GetShardingFiltersCount().Val()});
                 count += portionsCount;

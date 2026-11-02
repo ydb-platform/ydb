@@ -45,7 +45,7 @@ public:
         if (Proto.HasSchema()) {
             return Proto.GetSchema().ColumnsSize();
         }
-        AFL_VERIFY(Proto.HasDiff());
+        YDB_LOG_VERIFY(Proto.HasDiff());
         return Proto.GetDiff().UpsertColumnsSize() + Proto.GetDiff().UpsertIndexesSize();
     }
 };

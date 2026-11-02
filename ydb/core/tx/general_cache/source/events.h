@@ -41,19 +41,19 @@ struct TEvents {
         }
 
         THashMap<TAddress, TObject> ExtractObjects() {
-            AFL_VERIFY(!ObjectsExtracted);
+            YDB_LOG_VERIFY(!ObjectsExtracted);
             ObjectsExtracted = true;
             return std::move(Objects);
         }
 
         THashSet<TAddress> ExtractRemoved() {
-            AFL_VERIFY(!RemovedExtracted);
+            YDB_LOG_VERIFY(!RemovedExtracted);
             RemovedExtracted = true;
             return std::move(Removed);
         }
 
         THashMap<TAddress, TString> ExtractErrors() {
-            AFL_VERIFY(!ErrorsExtracted);
+            YDB_LOG_VERIFY(!ErrorsExtracted);
             ErrorsExtracted = true;
             return std::move(Errors);
         }
@@ -83,13 +83,13 @@ struct TEvents {
         }
 
         THashMap<TAddress, TObject> ExtractAddObjects() {
-            AFL_VERIFY(!AddObjectsExtracted);
+            YDB_LOG_VERIFY(!AddObjectsExtracted);
             AddObjectsExtracted = true;
             return std::move(AddObjects);
         }
 
         THashSet<TAddress> ExtractRemoveObjects() {
-            AFL_VERIFY(!RemoveObjectsExtracted);
+            YDB_LOG_VERIFY(!RemoveObjectsExtracted);
             RemoveObjectsExtracted = true;
             return std::move(RemoveObjects);
         }

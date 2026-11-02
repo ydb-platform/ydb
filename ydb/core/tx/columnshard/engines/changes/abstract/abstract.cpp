@@ -33,7 +33,7 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
     YDB_LOG_CREATE_CONTEXT(
         {"taskId", GetTaskIdentifier()},
         {"taskClass", TypeString()});
-    AFL_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started,
+    YDB_LOG_VERIFY(StateGuard.GetStage() == NChanges::EStage::ReadyForConstruct || StateGuard.GetStage() == NChanges::EStage::Started,
         {"actualStage", StateGuard.GetStage()});
 
     context.Counters.CompactionInputSize(Blobs.GetTotalBlobsSize());
@@ -49,9 +49,9 @@ TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& con
 }
 
 void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
-    AFL_VERIFY(StateGuard.GetStage() <= NChanges::EStage::Written);
-    AFL_VERIFY(StateGuard.GetStage() >= NChanges::EStage::Compiled);
+    YDB_LOG_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
+    YDB_LOG_VERIFY(StateGuard.GetStage() <= NChanges::EStage::Written);
+    YDB_LOG_VERIFY(StateGuard.GetStage() >= NChanges::EStage::Compiled);
 
     DoWriteIndexOnExecute(self, context);
     SetStage(NChanges::EStage::Written);
@@ -72,7 +72,7 @@ void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
+    YDB_LOG_VERIFY(StateGuard.GetStage() != NChanges::EStage::Aborted);
 
     DoCompile(context);
     DoOnAfterCompile(context);
@@ -81,14 +81,14 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    //    AFL_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
+    //    YDB_LOG_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     YDB_LOG_WARN("",
         {"event", "Abort"},
         {"reason", context.ErrorMessage});
-    AFL_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted,
+    YDB_LOG_VERIFY(StateGuard.GetStage() != NChanges::EStage::Finished && StateGuard.GetStage() != NChanges::EStage::Created && StateGuard.GetStage() != NChanges::EStage::Aborted,
         {"stage", StateGuard.GetStage()},
         {"reason", context.ErrorMessage},
         {"prevReason", AbortedReason});
@@ -98,7 +98,7 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
 }
 
 void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
-    AFL_VERIFY(!LockGuard);
+    YDB_LOG_VERIFY(!LockGuard);
     LockGuard = self.DataLocksManager->RegisterLock(BuildDataLock());
     Y_ABORT_UNLESS(StateGuard.GetStage() == NChanges::EStage::Created);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(self.TabletID(), *this);

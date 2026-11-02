@@ -35,12 +35,12 @@ protected:
 
 public:
     void AddColumnId(const ui32 columnId) {
-        AFL_VERIFY(ColumnIds.emplace(columnId).second);
-        AFL_VERIFY(ColumnIds.size() == 1);
+        YDB_LOG_VERIFY(ColumnIds.emplace(columnId).second);
+        YDB_LOG_VERIFY(ColumnIds.size() == 1);
     }
 
     ui32 GetColumnId() const {
-        AFL_VERIFY(ColumnIds.size() == 1,
+        YDB_LOG_VERIFY(ColumnIds.size() == 1,
             {"size", ColumnIds.size()});
         return *ColumnIds.begin();
     }

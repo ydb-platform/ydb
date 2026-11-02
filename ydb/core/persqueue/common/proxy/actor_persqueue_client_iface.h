@@ -26,7 +26,7 @@ public:
         NActors::TActorSystem* actorSystem,
         const NKikimrPQ::TPQConfig::TPQLibSettings& settings
     ) const {
-        AFL_ENSURE(!ActorSystemPtr->load(std::memory_order_relaxed),
+        YDB_LOG_ENSURE(!ActorSystemPtr->load(std::memory_order_relaxed),
             {"d", "Double init"});
         ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
 

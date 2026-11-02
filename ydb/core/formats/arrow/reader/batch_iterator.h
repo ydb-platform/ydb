@@ -37,7 +37,7 @@ private:
     std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;
 
     i32 GetPosition(const ui64 position) const {
-        AFL_VERIFY((i64)position < RecordsCount);
+        YDB_LOG_VERIFY((i64)position < RecordsCount);
         if (ReverseSortKff > 0) {
             return position;
         } else {
@@ -86,11 +86,11 @@ public:
         , ReverseSortKff(order.GetIsReversed() ? -1 : 1)
         , SourceId(sourceId)
         , Filter(filter) {
-        AFL_VERIFY(batch);
-        AFL_VERIFY(KeyColumns.IsSameSortingSchema(keySchema),
+        YDB_LOG_VERIFY(batch);
+        YDB_LOG_VERIFY(KeyColumns.IsSameSortingSchema(keySchema),
             {"batch", KeyColumns.DebugJson()},
             {"schema", keySchema});
-        AFL_VERIFY(KeyColumns.IsSameDataSchema(dataSchema),
+        YDB_LOG_VERIFY(KeyColumns.IsSameDataSchema(dataSchema),
             {"batch", KeyColumns.DebugJson()},
             {"schema", dataSchema});
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetPosition(order.GetStart())));

@@ -135,7 +135,7 @@ public:
     }
 
     ~TCPUGroup() {
-        AFL_VERIFY(ProcessesCount == 0);
+        YDB_LOG_VERIFY(ProcessesCount == 0);
     }
 
     bool DecProcesses() {
@@ -161,7 +161,7 @@ public:
     }
 
     bool DecRegistration() {
-        AFL_VERIFY(LinksCount);
+        YDB_LOG_VERIFY(LinksCount);
         --LinksCount;
         return LinksCount == 0;
     }
@@ -173,7 +173,7 @@ public:
     TProcess(const ui64 processId, TCPUGroup::TPtr cpuGroup)
         : ProcessId(processId)
         , CPUGroup(std::move(cpuGroup)) {
-        AFL_VERIFY(CPUGroup);
+        YDB_LOG_VERIFY(CPUGroup);
         IncRegistration();
     }
 
@@ -205,12 +205,12 @@ class TWorkersPool {
         }
 
         void OnStartTask() {
-            AFL_VERIFY(!RunningTask);
+            YDB_LOG_VERIFY(!RunningTask);
             RunningTask = true;
         }
 
         void OnStopTask() {
-            AFL_VERIFY(RunningTask);
+            YDB_LOG_VERIFY(RunningTask);
             RunningTask = false;
         }
     };

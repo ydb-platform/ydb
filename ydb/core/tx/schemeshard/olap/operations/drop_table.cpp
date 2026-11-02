@@ -225,8 +225,8 @@ private:
                                 const TPathId& newOwner) {
         auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
         auto sharedIt = context.SS->SharedShards.find(shardIdx);
-        AFL_VERIFY(sharedIt != context.SS->SharedShards.end());
-        AFL_VERIFY(sharedIt->second.contains(newOwner));
+        YDB_LOG_VERIFY(sharedIt != context.SS->SharedShards.end());
+        YDB_LOG_VERIFY(sharedIt->second.contains(newOwner));
 
         shardInfo.PathId = newOwner;
         context.SS->PersistShardPathId(db, shardIdx, newOwner);
@@ -240,7 +240,7 @@ private:
     void RemoveSharedShard(TOperationContext& context, const TShardIdx& shardIdx, const TPathId& pathId) {
         auto& sharedShards = context.SS->SharedShards;
         auto sharedPathsIt = sharedShards.find(shardIdx);
-        AFL_VERIFY(sharedPathsIt != sharedShards.end());
+        YDB_LOG_VERIFY(sharedPathsIt != sharedShards.end());
         auto& sharedPaths = sharedPathsIt->second;
         sharedPaths.erase(pathId);
         if (sharedPaths.empty()) {
@@ -297,7 +297,7 @@ private:
 
             for (const auto& tier : tableInfo->GetUsedTiers()) {
                 auto tierPath = TPath::Resolve(tier, context.SS);
-                AFL_VERIFY(tierPath.IsResolved(),
+                YDB_LOG_VERIFY(tierPath.IsResolved(),
                     {"path", tier});
                 context.SS->PersistRemoveExternalDataSourceReference(db, tierPath->PathId, txState->TargetPathId);
             }
@@ -319,7 +319,7 @@ private:
                     context.OnComplete.DeleteShard(shardIdx);
                 } else {
                     // Owner, there are dependents - transfer ownership
-                    AFL_VERIFY(newOwner.has_value());
+                    YDB_LOG_VERIFY(newOwner.has_value());
                     TransferShardOwnership(context, db, shardIdx, targetPathId, *newOwner);
                 }
             }

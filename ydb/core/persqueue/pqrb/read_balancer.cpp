@@ -22,7 +22,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
-#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
+#define PQ_ENSURE(condition) YDB_LOG_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
 
 namespace NKikimr {
 namespace NPQ {
@@ -1057,8 +1057,8 @@ void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
     TReceiveAttemptPartitionsWriteBatch batch,
     const TActorContext& ctx
 ) {
-    AFL_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
-    AFL_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
+    YDB_LOG_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
+    YDB_LOG_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
 
     PendingReceiveAttemptPartitionsWrites.pop_front();
     ReceiveAttemptPartitionsWriteInProgress = false;

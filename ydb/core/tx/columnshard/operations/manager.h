@@ -108,7 +108,7 @@ public:
     }
 
     void OnWriteOperationFinished() {
-        AFL_VERIFY(OperationsInProgress > 0,
+        YDB_LOG_VERIFY(OperationsInProgress > 0,
             {"operationsInProgress", OperationsInProgress});
         --OperationsInProgress;
     }
@@ -146,7 +146,7 @@ public:
     }
 
     void SetAborting() {
-        AFL_VERIFY(ReadyForAborting(),
+        YDB_LOG_VERIFY(ReadyForAborting(),
             {"lockId", GetLockId()},
             {"needsAborting", NeedsAborting()},
             {"operationsInProgress", OperationsInProgress},
@@ -159,7 +159,7 @@ public:
     }
 
     void SetAborted(const ui64 txId) {
-        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId,
+        YDB_LOG_VERIFY(IsAborting() && !Aborted && TxId == txId,
             {"argTxId", txId},
             {"assignedTxId", TxId},
             {"lockId", GetLockId()},
@@ -224,7 +224,7 @@ public:
 
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
-        AFL_VERIFY(it != InsertWriteIdToOpWriteId.end(),
+        YDB_LOG_VERIFY(it != InsertWriteIdToOpWriteId.end(),
             {"writeId", insertWriteId});
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
             {"event", "ask_by_insert_id"},
@@ -235,7 +235,7 @@ public:
 
     void LinkInsertWriteIdToOperationWriteId(const std::vector<TInsertWriteId>& insertions, const TOperationWriteId operationId) {
         const auto op = GetOperationVerified(operationId);
-        AFL_VERIFY(op->GetInsertWriteIds() == insertions,
+        YDB_LOG_VERIFY(op->GetInsertWriteIds() == insertions,
             {"operationData", JoinSeq(", ", op->GetInsertWriteIds())},
             {"expected", JoinSeq(", ", insertions)});
         for (auto&& i : insertions) {
@@ -258,7 +258,7 @@ public:
 
     TWriteOperation::TPtr GetOperationVerified(const TOperationWriteId writeId) const {
         auto result = GetOperationOptional(writeId);
-        AFL_VERIFY(!!result,
+        YDB_LOG_VERIFY(!!result,
             {"opId", writeId});
         return result;
     }
@@ -298,14 +298,14 @@ public:
 
     TLockFeatures& GetLockFeaturesForTxVerified(const ui64 txId) {
         auto lockId = GetLockForTxOptional(txId);
-        AFL_VERIFY(lockId,
+        YDB_LOG_VERIFY(lockId,
             {"txId", txId});
         return GetLockVerified(*lockId);
     }
 
     ui64 GetLockForTxVerified(const ui64 txId) const {
         auto result = GetLockForTxOptional(txId);
-        AFL_VERIFY(result,
+        YDB_LOG_VERIFY(result,
             {"txId", txId});
         return *result;
     }
@@ -326,7 +326,7 @@ public:
 
     TLockFeatures& GetLockVerified(const ui64 lockId) {
         auto result = GetLockOptional(lockId);
-        AFL_VERIFY(result,
+        YDB_LOG_VERIFY(result,
             {"lockId", lockId});
         return *result;
     }

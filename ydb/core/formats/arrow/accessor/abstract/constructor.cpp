@@ -10,11 +10,11 @@ TConstructorContainer TConstructorContainer::GetDefaultConstructor() {
 
 TBlobWithAdditionalAccessorData IConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    AFL_VERIFY(columnData);
-    AFL_VERIFY(columnData->GetType() == Type,
+    YDB_LOG_VERIFY(columnData);
+    YDB_LOG_VERIFY(columnData->GetType() == Type,
         {"column", columnData->GetType()},
         {"current", Type});
-    AFL_VERIFY(columnData->GetDataType()->Equals(externalInfo.GetColumnType()),
+    YDB_LOG_VERIFY(columnData->GetDataType()->Equals(externalInfo.GetColumnType()),
         {"column", columnData->GetDataType()->ToString()},
         {"external", externalInfo.GetColumnType()->ToString()});
     return DoSerializeToBlobAndMeta(columnData, externalInfo);

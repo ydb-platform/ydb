@@ -24,7 +24,7 @@ public:
 
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo.GetPortionInfo().GetPortionId());
-            AFL_VERIFY(!!schema,
+            YDB_LOG_VERIFY(!!schema,
                 {"portionId", portionInfo.GetPortionInfo().GetPortionId()});
             portionInfo.SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }

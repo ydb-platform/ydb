@@ -525,7 +525,7 @@ public:
                 continue;
             }
             auto it = alterData->SchemaPresets.find(table->Description.GetSchemaPresetId());
-            AFL_VERIFY(it != alterData->SchemaPresets.end(),
+            YDB_LOG_VERIFY(it != alterData->SchemaPresets.end(),
                 {"presetInfo", table->Description.DebugString()});
             if (!it->second.ValidateTtlSettings(table->Description.GetTtlSettings(), context, errors)) {
                 return result;

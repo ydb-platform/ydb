@@ -60,29 +60,29 @@ TDictStats TDictStats::Merge(const std::vector<TDictStats>& stats, const TSettin
 }
 
 ui32 TDictStats::GetColumnRecordsCount(const ui32 index) const {
-    AFL_VERIFY(index < DataRecordsCount->length());
+    YDB_LOG_VERIFY(index < DataRecordsCount->length());
     return DataRecordsCount->Value(index);
 }
 
 ui32 TDictStats::GetColumnSize(const ui32 index) const {
-    AFL_VERIFY(index < DataSize->length());
+    YDB_LOG_VERIFY(index < DataSize->length());
     return DataSize->Value(index);
 }
 
 std::string_view TDictStats::GetColumnName(const ui32 index) const {
-    AFL_VERIFY(index < DataNames->length());
+    YDB_LOG_VERIFY(index < DataNames->length());
     auto view = DataNames->GetView(index);
     return std::string_view(view.data(), view.size());
 }
 
 TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     : Original(original) {
-    AFL_VERIFY(Original->num_columns() == 4 || Original->num_columns() == 5,
+    YDB_LOG_VERIFY(Original->num_columns() == 4 || Original->num_columns() == 5,
         {"count", Original->num_columns()});
-    AFL_VERIFY(Original->column(0)->type()->id() == arrow::binary()->id());
-    AFL_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
+    YDB_LOG_VERIFY(Original->column(0)->type()->id() == arrow::binary()->id());
+    YDB_LOG_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
     if (Original->num_columns() == 4) {
         // Legacy stats (pre native scalar columns): synthesize an all-BinaryJson value_type column.
         auto valueTypeArray = NArrow::TThreadSimpleArraysCache::Get(
@@ -90,7 +90,7 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
         Original = arrow::RecordBatch::Make(GetStatsSchema(), Original->num_rows(),
             { Original->column(0), Original->column(1), Original->column(2), Original->column(3), valueTypeArray });
     }
-    AFL_VERIFY(Original->column(4)->type()->id() == arrow::uint8()->id());
+    YDB_LOG_VERIFY(Original->column(4)->type()->id() == arrow::uint8()->id());
     DataNames = std::static_pointer_cast<arrow::BinaryArray>(Original->column(0));
     DataRecordsCount = std::static_pointer_cast<arrow::UInt32Array>(Original->column(1));
     DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
@@ -99,7 +99,7 @@ TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     ColumnIndexes.reserve(DataNames->length());
     for (ui32 i = 0; i < DataNames->length(); ++i) {
         const auto insertResult = ColumnIndexes.emplace(GetColumnName(i), i);
-        AFL_VERIFY(insertResult.second,
+        YDB_LOG_VERIFY(insertResult.second,
             {"name", GetColumnName(i)});
     }
 }
@@ -126,7 +126,7 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex,
         case IChunkedArray::EType::SubColumnsArray:
         case IChunkedArray::EType::SubColumnsPartialArray:
         case IChunkedArray::EType::ChunkedArray:
-            AFL_VERIFY(false,
+            YDB_LOG_VERIFY(false,
                 {"type", type});
             return TConstructorContainer();
     }
@@ -144,14 +144,14 @@ TDictStats TDictStats::DeserializeFromBlob(const TString& blob) {
         return TDictStats(*result);
     }
     auto legacy = serializer.Deserialize(blob, GetStatsSchemaLegacy());
-    AFL_VERIFY(legacy.ok(),
+    YDB_LOG_VERIFY(legacy.ok(),
         {"error", legacy.status()});
     return TDictStats(*legacy);
 }
 
 TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const {
     if (serializer) {
-        AFL_VERIFY(serializer);
+        YDB_LOG_VERIFY(serializer);
         return serializer->SerializePayload(Original);
     } else {
         return NArrow::SerializeBatchNoCompression(Original);
@@ -159,23 +159,23 @@ TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISer
 }
 
 IChunkedArray::EType TDictStats::GetAccessorType(const ui32 columnIndex) const {
-    AFL_VERIFY(columnIndex < AccessorType->length());
+    YDB_LOG_VERIFY(columnIndex < AccessorType->length());
     return (IChunkedArray::EType)AccessorType->Value(columnIndex);
 }
 
 EValueType TDictStats::GetValueType(const ui32 columnIndex) const {
-    AFL_VERIFY(columnIndex < ValueType->length());
+    YDB_LOG_VERIFY(columnIndex < ValueType->length());
     return (EValueType)ValueType->Value(columnIndex);
 }
 
 TDictStats::TBuilder::TBuilder() {
     Builders = NArrow::MakeBuilders(GetStatsSchema());
-    AFL_VERIFY(Builders.size() == 5);
-    AFL_VERIFY(Builders[0]->type()->id() == arrow::binary()->id());
-    AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());
-    AFL_VERIFY(Builders[4]->type()->id() == arrow::uint8()->id());
+    YDB_LOG_VERIFY(Builders.size() == 5);
+    YDB_LOG_VERIFY(Builders[0]->type()->id() == arrow::binary()->id());
+    YDB_LOG_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
+    YDB_LOG_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());
+    YDB_LOG_VERIFY(Builders[4]->type()->id() == arrow::uint8()->id());
     Names = static_cast<arrow::BinaryBuilder*>(Builders[0].get());
     Records = static_cast<arrow::UInt32Builder*>(Builders[1].get());
     DataSize = static_cast<arrow::UInt32Builder*>(Builders[2].get());
@@ -185,16 +185,16 @@ TDictStats::TBuilder::TBuilder() {
 
 void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
     const EValueType valueType) {
-    AFL_VERIFY(Builders.size());
+    YDB_LOG_VERIFY(Builders.size());
     if (!LastKeyName) {
         LastKeyName = name;
     } else {
-        AFL_VERIFY(*LastKeyName < name,
+        YDB_LOG_VERIFY(*LastKeyName < name,
             {"last", LastKeyName},
             {"name", name});
     }
-    AFL_VERIFY(recordsCount);
-    AFL_VERIFY(accessorType == IChunkedArray::EType::Array || accessorType == IChunkedArray::EType::SparsedArray ||
+    YDB_LOG_VERIFY(recordsCount);
+    YDB_LOG_VERIFY(accessorType == IChunkedArray::EType::Array || accessorType == IChunkedArray::EType::SparsedArray ||
                accessorType == IChunkedArray::EType::Dictionary,
         {"type", accessorType});
     TStatusValidator::Validate(Names->Append(name.data(), name.size()));
@@ -211,7 +211,7 @@ void TDictStats::TBuilder::Add(
 }
 
 TDictStats TDictStats::TBuilder::Finish() {
-    AFL_VERIFY(Builders.size());
+    YDB_LOG_VERIFY(Builders.size());
     auto arrays = NArrow::Finish(std::move(Builders));
     return TDictStats(arrow::RecordBatch::Make(GetStatsSchema(), RecordsCount, std::move(arrays)));
 }

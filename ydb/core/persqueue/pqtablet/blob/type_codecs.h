@@ -16,7 +16,7 @@ public:
 
 public:
     TCodecImpl() {
-        AFL_ENSURE(TCoder::Sig() == TDecoder::Sig(),
+        YDB_LOG_ENSURE(TCoder::Sig() == TDecoder::Sig(),
             {"description", "Codecs signatures mismatch"},
             {"cd", ui16(TCoder::Sig())},
             {"dc", ui16(TDecoder::Sig())});

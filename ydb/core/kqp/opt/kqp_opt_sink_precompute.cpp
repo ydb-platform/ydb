@@ -57,7 +57,7 @@ public:
 
             auto markCommonStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right, bool markNonDeterministic) {
                 for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
-                    AFL_ENSURE(exprNode);
+                    YDB_LOG_ENSURE(exprNode);
                     TExprBase node(exprNode);
                     const auto stage = node.Cast<TDqStage>();
                     if ((markNonDeterministic && HasNonDeterministicFunction(stage)) || !IsKqpPureInputs(stage.Inputs())) {
@@ -158,7 +158,7 @@ public:
 
             if (stage.Outputs()) {
                 const auto outputs = stage.Outputs().Cast();
-                AFL_ENSURE(outputs.Size() == 1);
+                YDB_LOG_ENSURE(outputs.Size() == 1);
                 for (const auto& output : outputs) {
                     if (auto maybeSink = output.Maybe<TDqSink>()) {
                         const auto sink = maybeSink.Cast();
@@ -166,13 +166,13 @@ public:
                             const auto executedAsSingleEffect = sinkSettings.Cast().Mode() == "fill_table"
                                 || (KqpCtx->Tables->ExistingTable(KqpCtx->Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Olap);
                             if (!executedAsSingleEffect) {
-                                AFL_ENSURE(stage.Inputs().Size() == 1);
-                                AFL_ENSURE(stage.Inputs().Item(0).Maybe<TDqCnUnionAll>());
-                                AFL_ENSURE(stage.Settings().Empty());
+                                YDB_LOG_ENSURE(stage.Inputs().Size() == 1);
+                                YDB_LOG_ENSURE(stage.Inputs().Item(0).Maybe<TDqCnUnionAll>());
+                                YDB_LOG_ENSURE(stage.Settings().Empty());
 
-                                AFL_ENSURE(stage.Program().Args().Size() == 1);
-                                AFL_ENSURE(stage.Program().Body().Maybe<TCoArgument>());
-                                AFL_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
+                                YDB_LOG_ENSURE(stage.Program().Args().Size() == 1);
+                                YDB_LOG_ENSURE(stage.Program().Body().Maybe<TCoArgument>());
+                                YDB_LOG_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
                                     stage.Program().Args().Arg(0).Cast<TCoArgument>().Name());
 
                                 replaces[node.Raw()] = BuildNewStageWithSink(ctx, node.Pos(), stage, sink, sinkSettings.Cast());
@@ -181,15 +181,15 @@ public:
                     } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
                         const auto transform = maybeTransform.Cast();
                         if (const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>()) {
-                            AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
-                            AFL_ENSURE(KqpCtx->Tables->ExistingTable(KqpCtx->Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
-                            AFL_ENSURE(stage.Inputs().Size() == 1);
-                            AFL_ENSURE(stage.Inputs().Item(0).Maybe<TDqCnUnionAll>());
-                            AFL_ENSURE(stage.Settings().Empty());
+                            YDB_LOG_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
+                            YDB_LOG_ENSURE(KqpCtx->Tables->ExistingTable(KqpCtx->Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
+                            YDB_LOG_ENSURE(stage.Inputs().Size() == 1);
+                            YDB_LOG_ENSURE(stage.Inputs().Item(0).Maybe<TDqCnUnionAll>());
+                            YDB_LOG_ENSURE(stage.Settings().Empty());
 
-                            AFL_ENSURE(stage.Program().Args().Size() == 1);
-                            AFL_ENSURE(stage.Program().Body().Maybe<TCoArgument>());
-                            AFL_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
+                            YDB_LOG_ENSURE(stage.Program().Args().Size() == 1);
+                            YDB_LOG_ENSURE(stage.Program().Body().Maybe<TCoArgument>());
+                            YDB_LOG_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
                                 stage.Program().Args().Arg(0).Cast<TCoArgument>().Name());
 
                             replaces[node.Raw()] = BuildNewStageWithTransform(ctx, node.Pos(), stage, transform, sinkSettings.Cast());
@@ -300,7 +300,7 @@ private:
             for (const auto& input : stage.Inputs()) {
                 if (auto maybePrecompute = input.Maybe<TDqPhyPrecompute>()) {
                     const auto precomputeStage = maybePrecompute.Cast().Connection().Output().Stage();
-                    AFL_ENSURE(precomputeStage.Raw() != stage.Raw());
+                    YDB_LOG_ENSURE(precomputeStage.Raw() != stage.Raw());
                     precomputeStages.emplace(precomputeStage.Raw(), precomputeStage.Ptr());
                 } else if (auto maybeSource = input.Maybe<TDqSource>()) {
                     VisitExpr(maybeSource.Cast().Ptr(),
@@ -308,7 +308,7 @@ private:
                             TExprBase node(ptr);
                             if (auto maybePrecompute = node.Maybe<TDqPhyPrecompute>()) {
                                 const auto precomputeStage = maybePrecompute.Cast().Connection().Output().Stage();
-                                AFL_ENSURE(precomputeStage.Raw() != stage.Raw());
+                                YDB_LOG_ENSURE(precomputeStage.Raw() != stage.Raw());
                                 precomputeStages.emplace(precomputeStage.Raw(), precomputeStage.Ptr());
                                 return false;
                             }
@@ -336,15 +336,15 @@ private:
                     } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
                         const auto transform = maybeTransform.Cast();
                         const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>();
-                        AFL_ENSURE(sinkSettings);
+                        YDB_LOG_ENSURE(sinkSettings);
                         sinkOrTransformOutputsCount++;
-                        AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
-                        AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
+                        YDB_LOG_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
+                        YDB_LOG_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
                         returningStages.emplace(stage.Raw(), stage.Ptr());
                     }
                 }
 
-                AFL_ENSURE(sinkOrTransformOutputsCount <= 1,
+                YDB_LOG_ENSURE(sinkOrTransformOutputsCount <= 1,
                     {"sinkOrTransformOutputsCount", sinkOrTransformOutputsCount});
             }
 
@@ -497,7 +497,7 @@ private:
             std::function<void(const TDqStage&)> postVisitor) {
         TExprBase node(exprNode);
         const auto maybeStage = node.Maybe<TDqStage>();
-        AFL_ENSURE(maybeStage.IsValid());
+        YDB_LOG_ENSURE(maybeStage.IsValid());
 
         const auto stage = maybeStage.Cast();
         if (visitor(stage)) {

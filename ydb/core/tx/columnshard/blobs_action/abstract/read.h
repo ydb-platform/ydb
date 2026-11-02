@@ -24,7 +24,7 @@ public:
         : Blobs(std::move(blobs))
     {
         for (auto&& i : Blobs) {
-            AFL_VERIFY(i.second.size());
+            YDB_LOG_VERIFY(i.second.size());
         }
     }
 
@@ -52,14 +52,14 @@ public:
 
     void Add(THashMap<TBlobRange, TString>&& blobs) {
         for (auto&& i : blobs) {
-            AFL_VERIFY(i.second.size());
-            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
+            YDB_LOG_VERIFY(i.second.size());
+            YDB_LOG_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
     }
 
     void Add(const TBlobRange& range, TString&& data) {
-        AFL_VERIFY(data.size());
-        AFL_VERIFY(Blobs.emplace(range, std::move(data)).second);
+        YDB_LOG_VERIFY(data.size());
+        YDB_LOG_VERIFY(Blobs.emplace(range, std::move(data)).second);
     }
 
     bool Contains(const TBlobRange& bRange) const {
@@ -86,14 +86,14 @@ public:
 
     TString ExtractVerified(const TBlobRange& bRange) {
         auto result = ExtractOptional(bRange);
-        AFL_VERIFY(result,
+        YDB_LOG_VERIFY(result,
             {"range", bRange});
         return std::move(*result);
     }
 
     const TString& GetBlobRangeVerified(const TBlobRange& bRange) const {
         auto it = Blobs.find(bRange);
-        AFL_VERIFY(it != Blobs.end());
+        YDB_LOG_VERIFY(it != Blobs.end());
         return it->second;
     }
 
@@ -133,20 +133,20 @@ public:
         std::optional<TBlobRange> currentRange;
         std::vector<TBlobRange> currentList;
         auto flushCurrent = [&]() {
-            AFL_VERIFY(currentRange);
-            AFL_VERIFY(currentList.size());
+            YDB_LOG_VERIFY(currentRange);
+            YDB_LOG_VERIFY(currentList.size());
             for (const auto& sub : currentList) {
-                AFL_VERIFY(currentRange->GetBlobId() == sub.GetBlobId(),
+                YDB_LOG_VERIFY(currentRange->GetBlobId() == sub.GetBlobId(),
                     {"group", currentRange->ToString()},
                     {"sub", sub});
-                AFL_VERIFY(currentRange->Offset <= sub.Offset,
+                YDB_LOG_VERIFY(currentRange->Offset <= sub.Offset,
                     {"group", currentRange->ToString()},
                     {"sub", sub});
-                AFL_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize(),
+                YDB_LOG_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize(),
                     {"group", currentRange->ToString()},
                     {"sub", sub});
             }
-            AFL_VERIFY(result.emplace(*currentRange, std::move(currentList)).second,
+            YDB_LOG_VERIFY(result.emplace(*currentRange, std::move(currentList)).second,
                 {"group", currentRange->ToString()});
             currentList.clear();
         };
@@ -191,7 +191,7 @@ protected:
 
     virtual void DoRetryRead(const TBlobRange& range) {
         Y_UNUSED(range);
-        AFL_VERIFY(false,
+        YDB_LOG_VERIFY(false,
             {"error", "DoRetryRead not implemented for this storage"});
     }
 
@@ -226,8 +226,8 @@ public:
     }
 
     void Merge(const std::shared_ptr<IBlobsReadingAction>& action) {
-        AFL_VERIFY(action);
-        AFL_VERIFY(!Started);
+        YDB_LOG_VERIFY(action);
+        YDB_LOG_VERIFY(!Started);
         for (auto&& i : action->RangesForResult) {
             RangesForResult.emplace(i.first, i.second);
             auto it = RangesForRead.find(i.first);
@@ -246,9 +246,9 @@ public:
     }
 
     TActionReadBlobs ExtractBlobsData() {
-        AFL_VERIFY(Started);
-        AFL_VERIFY(IsFinished());
-        AFL_VERIFY(!DataExtracted);
+        YDB_LOG_VERIFY(Started);
+        YDB_LOG_VERIFY(IsFinished());
+        YDB_LOG_VERIFY(!DataExtracted);
         DataExtracted = true;
         auto result = TActionReadBlobs(std::move(Replies));
         RangesForResult.clear();

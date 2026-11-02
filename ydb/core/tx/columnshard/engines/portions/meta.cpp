@@ -17,19 +17,19 @@ std::vector<ui32> TPortionMetaBase::DoCalcSliceBorderOffsets(
     TChunksByEntityId chunks;
 
     for (const auto& chunk : records) {
-        AFL_VERIFY(chunks[chunk.GetColumnId()].emplace(chunk.GetChunkIdx(), chunk.GetMeta().GetRecordsCount()).second);
+        YDB_LOG_VERIFY(chunks[chunk.GetColumnId()].emplace(chunk.GetChunkIdx(), chunk.GetMeta().GetRecordsCount()).second);
     }
     for (const auto& chunk : indexes) {
-        AFL_VERIFY(chunks[chunk.GetIndexId()].emplace(chunk.GetChunkIdx(), chunk.GetRecordsCount()).second);
+        YDB_LOG_VERIFY(chunks[chunk.GetIndexId()].emplace(chunk.GetChunkIdx(), chunk.GetRecordsCount()).second);
     }
 
     std::list<ui32> borderOffsets;
     {
-        AFL_VERIFY(chunks.size());
+        YDB_LOG_VERIFY(chunks.size());
         ui32 nextIdx = 0;
         ui32 offset = 0;
         for (const auto& [idx, rows] : chunks.begin()->second) {
-            AFL_VERIFY(idx == nextIdx);
+            YDB_LOG_VERIFY(idx == nextIdx);
             ++nextIdx;
 
             offset += rows;
@@ -41,7 +41,7 @@ std::vector<ui32> TPortionMetaBase::DoCalcSliceBorderOffsets(
         ui32 nextIdx = 0;
         ui32 offset = 0;
         for (const auto& [idx, rows] : itChunks->second) {
-            AFL_VERIFY(idx == nextIdx);
+            YDB_LOG_VERIFY(idx == nextIdx);
             ++nextIdx;
 
             offset += rows;
@@ -53,7 +53,7 @@ std::vector<ui32> TPortionMetaBase::DoCalcSliceBorderOffsets(
             } else if (offset == *itBorders) {
                 // Do nothing
             } else {
-                AFL_VERIFY_DEBUG(offset > *itBorders);
+                YDB_LOG_VERIFY_DEBUG(offset > *itBorders);
                 itBorders = borderOffsets.erase(itBorders);
                 continue;
             }
@@ -66,7 +66,7 @@ std::vector<ui32> TPortionMetaBase::DoCalcSliceBorderOffsets(
 
 NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(
     const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const {
-    AFL_VERIFY(blobIds.size());
+    YDB_LOG_VERIFY(blobIds.size());
     FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
@@ -141,13 +141,13 @@ TString TPortionAddress::DebugString() const {
 
 void TPortionMetaBase::FullValidation() const {
     for (auto&& i : BlobIds) {
-        AFL_VERIFY(i.BlobSize());
+        YDB_LOG_VERIFY(i.BlobSize());
     }
-    AFL_VERIFY(BlobIds.size());
+    YDB_LOG_VERIFY(BlobIds.size());
 }
 
 std::optional<TBlobRangeLink16::TLinkId> TPortionMetaBase::GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
-    AFL_VERIFY(blobId.IsValid());
+    YDB_LOG_VERIFY(blobId.IsValid());
     TBlobRangeLink16::TLinkId idx = 0;
     for (auto&& i : BlobIds) {
         if (i == blobId) {
@@ -160,12 +160,12 @@ std::optional<TBlobRangeLink16::TLinkId> TPortionMetaBase::GetBlobIdxOptional(co
 
 TBlobRangeLink16::TLinkId TPortionMetaBase::GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
     auto result = GetBlobIdxOptional(blobId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 
 const TUnifiedBlobId& TPortionMetaBase::GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-    AFL_VERIFY(linkId < GetBlobIds().size());
+    YDB_LOG_VERIFY(linkId < GetBlobIds().size());
     return BlobIds[linkId];
 }
 
@@ -193,7 +193,7 @@ std::vector<TUnifiedBlobId> TPortionMetaBase::ExtractBlobIds() {
 
 TBlobRangeLink16::TLinkId TPortionMetaBase::GetBlobIdxVerifiedPrivate(const TUnifiedBlobId& blobId) const {
     auto result = GetBlobIdxOptional(blobId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 
@@ -220,14 +220,14 @@ TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& m
     , RecordSnapshotMin(min)
     , RecordSnapshotMax(max)
 {
-    AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())
+    YDB_LOG_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())
     ("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
 }
 
 void TPortionMeta::FullValidation() const {
-    AFL_VERIFY(RecordsCount);
-    AFL_VERIFY(ColumnRawBytes);
-    AFL_VERIFY(ColumnBlobBytes);
+    YDB_LOG_VERIFY(RecordsCount);
+    YDB_LOG_VERIFY(ColumnRawBytes);
+    YDB_LOG_VERIFY(ColumnBlobBytes);
 }
 
 NArrow::TSimpleRow TPortionMeta::IndexKeyStart() const {

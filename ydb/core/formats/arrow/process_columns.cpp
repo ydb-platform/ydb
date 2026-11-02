@@ -62,8 +62,8 @@ std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(
 template <class TDataContainer, class TSchemaImpl>
 TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
     const std::shared_ptr<TDataContainer>& srcBatch, const std::shared_ptr<TSchemaImpl>& dstSchema, TSchemaSubset* subset) {
-    AFL_VERIFY(srcBatch);
-    AFL_VERIFY(dstSchema);
+    YDB_LOG_VERIFY(srcBatch);
+    YDB_LOG_VERIFY(dstSchema);
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
     columns.reserve(dstSchema->num_fields());
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -107,12 +107,12 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
 template <class TDataContainer, class TStringContainer>
 std::shared_ptr<TDataContainer> ExtractImpl(const TColumnOperator::EAbsentFieldPolicy& policy,
     const std::shared_ptr<TDataContainer>& incoming, const std::vector<TStringContainer>& columnNames) {
-    AFL_VERIFY(incoming);
-    AFL_VERIFY(columnNames.size());
+    YDB_LOG_VERIFY(incoming);
+    YDB_LOG_VERIFY(columnNames.size());
     auto result = ExtractColumnsValidateImpl(incoming, columnNames);
     switch (policy) {
         case TColumnOperator::EAbsentFieldPolicy::Verify:
-            AFL_VERIFY((ui32)result->num_columns() == columnNames.size(),
+            YDB_LOG_VERIFY((ui32)result->num_columns() == columnNames.size(),
                 {"schema", incoming->schema()->ToString()},
                 {"required", TColumnNameAccessor<TStringContainer>::DebugString(columnNames)});
             break;
@@ -130,8 +130,8 @@ std::shared_ptr<TDataContainer> ExtractImpl(const TColumnOperator::EAbsentFieldP
 template <class TDataContainer, class TStringType>
 TConclusion<std::shared_ptr<TDataContainer>> ReorderImpl(
     const std::shared_ptr<TDataContainer>& incoming, const std::vector<TStringType>& columnNames) {
-    AFL_VERIFY(!!incoming);
-    AFL_VERIFY(columnNames.size());
+    YDB_LOG_VERIFY(!!incoming);
+    YDB_LOG_VERIFY(columnNames.size());
     if ((ui32)incoming->num_columns() < columnNames.size()) {
         return TConclusionStatus::Fail("not enough columns for exact reordering");
     }
@@ -139,7 +139,7 @@ TConclusion<std::shared_ptr<TDataContainer>> ReorderImpl(
         return TConclusionStatus::Fail("need extraction before reorder call");
     }
     auto result = ExtractColumnsValidateImpl(incoming, columnNames);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     if ((ui32)result->num_columns() != columnNames.size()) {
         return TConclusionStatus::Fail("not enough fields for exact reordering");
     }
@@ -151,14 +151,14 @@ TConclusion<std::shared_ptr<TDataContainer>> ReorderImpl(
 TOrderedColumnIndexesImpl::TOrderedColumnIndexesImpl(const std::vector<ui32>& columnIndexes)
     : ColumnIndexes(columnIndexes) {
     for (ui32 i = 0; i + 1 < columnIndexes.size(); ++i) {
-        AFL_VERIFY(ColumnIndexes[i] < ColumnIndexes[i + 1]);
+        YDB_LOG_VERIFY(ColumnIndexes[i] < ColumnIndexes[i + 1]);
     }
 }
 
 TOrderedColumnIndexesImpl::TOrderedColumnIndexesImpl(std::vector<ui32>&& columnIndexes)
     : ColumnIndexes(std::move(columnIndexes)) {
     for (ui32 i = 0; i + 1 < ColumnIndexes.size(); ++i) {
-        AFL_VERIFY(ColumnIndexes[i] < ColumnIndexes[i + 1]);
+        YDB_LOG_VERIFY(ColumnIndexes[i] < ColumnIndexes[i + 1]);
     }
 }
 
@@ -241,7 +241,7 @@ namespace {
 template <class TDataContainer>
 TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TDataContainer>& srcBatch, const TSchemaLiteView& dstSchema,
     const TColumnOperator::ECheckFieldTypesPolicy checkFieldTypesPolicy) {
-    AFL_VERIFY(srcBatch);
+    YDB_LOG_VERIFY(srcBatch);
     if (dstSchema.num_fields() < srcBatch->schema()->num_fields()) {
         YDB_LOG_ERROR("",
             {"event", "incorrect columns set: destination must been wider than source"},
@@ -268,14 +268,14 @@ TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TData
                         return TConclusionStatus::Fail("incompatible column types");
                     }
                     case TColumnOperator::ECheckFieldTypesPolicy::Verify: {
-                        AFL_VERIFY(false,
+                        YDB_LOG_VERIFY(false,
                             {"event", "cannot_use_incoming_batch"},
                             {"reason", "invalid_column_type"},
                             {"columnType", (*itDst)->ToString(true)},
                             {"incomingType", (*itSrc)->ToString(true)});
                     }
                     case TColumnOperator::ECheckFieldTypesPolicy::Ignore:
-                        AFL_VERIFY(false);
+                        YDB_LOG_VERIFY(false);
                 }
             }
 
@@ -311,7 +311,7 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
             return Index < item.Index;
         }
     };
-    AFL_VERIFY(incoming);
+    YDB_LOG_VERIFY(incoming);
     std::vector<TFieldData> resultColumns;
     resultColumns.reserve(incoming->num_columns());
     ui32 idx = 0;
@@ -321,7 +321,7 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
             const auto& dstField = dstSchema.GetFieldByIndexVerified(dstIndex);
             switch (differentColumnTypesPolicy) {
                 case TColumnOperator::ECheckFieldTypesPolicy::Verify:
-                    AFL_VERIFY(dstField->type()->Equals(srcField->type()),
+                    YDB_LOG_VERIFY(dstField->type()->Equals(srcField->type()),
                         {"event", "cannot_use_incoming_batch"},
                         {"reason", "invalid_column_type"},
                         {"dstColumn", dstField->ToString(true)},
@@ -348,7 +348,7 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
             resultColumns.emplace_back(TFieldData{ .Index = (ui32)dstIndex, .Column = incoming->column(idx) });
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Skip) {
         } else if (absentColumnPolicy == TColumnOperator::EAbsentFieldPolicy::Verify) {
-            AFL_VERIFY(false,
+            YDB_LOG_VERIFY(false,
                 {"event", "cannot_use_incoming_batch"},
                 {"reason", "absent_field"},
                 {"dstColumn", srcField->ToString(true)});
@@ -359,7 +359,7 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
                 {"dstColumn", srcField->ToString(true)});
             return TConclusionStatus::Fail("not found column '" + srcField->name() + "'");
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
         ++idx;
     }

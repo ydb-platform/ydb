@@ -143,17 +143,17 @@ public:
     }
 
     TTestHelper& GetTestHelper() {
-        AFL_VERIFY(TestHelper);
+        YDB_LOG_VERIFY(TestHelper);
         return *TestHelper;
     }
 
     TLocalHelper& GetOlapHelper() {
-        AFL_VERIFY(OlapHelper);
+        YDB_LOG_VERIFY(OlapHelper);
         return *OlapHelper;
     }
 
     TCtrlGuard& GetCsController() {
-        AFL_VERIFY(CsController);
+        YDB_LOG_VERIFY(CsController);
         return *CsController;
     }
 
@@ -856,7 +856,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         testHelper.CreateTier(DEFAULT_TIER_NAME);
 
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
-        
+
         {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=MAX,
@@ -981,10 +981,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
 
         {
-            auto alterQuery = InheritPortionStorage ? 
+            auto alterQuery = InheritPortionStorage ?
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
                     FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": true, "column_name": "level"}`);
-                )" : 
+                )" :
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MIN_MAX,
                     FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": false, "column_name": "level"}`);
                 )";
@@ -1022,7 +1022,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             }
         }
     }
-    
+
     Y_UNIT_TEST_DUO(ExtendedTtlTypes, UseIndex) {
         TTieringTestHelper tieringHelper{true, [](TKikimrSettings& settings) {
             settings.FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
@@ -1084,16 +1084,16 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();
 
-        // "inherit_portion_storage": false(defaults to true in alter object ddl) and 
-        // "storage_id": "__LOCAL_METADATA"(defaults to "__LOCAL_METADATA" in alter object ddl) 
-        // are mandatory because ttl only works with min_max index stored in local database, 
-        // and both of these options move data out of local db            
+        // "inherit_portion_storage": false(defaults to true in alter object ddl) and
+        // "storage_id": "__LOCAL_METADATA"(defaults to "__LOCAL_METADATA" in alter object ddl)
+        // are mandatory because ttl only works with min_max index stored in local database,
+        // and both of these options move data out of local db
         auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
         CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
             id Int32 NOT NULL,
             ts Timestamp NOT NULL,
             PRIMARY KEY(id)
-        ) PARTITION BY HASH (`id`) 
+        ) PARTITION BY HASH (`id`)
         WITH ( STORE = COLUMN );
         ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` ADD INDEX `min_max_ts` LOCAL USING min_max ON(`ts`);
         )").GetValueSync();
@@ -1149,10 +1149,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 id Int32 NOT NULL,
                 ts Timestamp NOT NULL,
                 PRIMARY KEY(id)
-            ) PARTITION BY HASH (`id`) 
+            ) PARTITION BY HASH (`id`)
             WITH ( STORE = COLUMN );
             )").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());            
+            UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());
         }
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         {
@@ -1164,7 +1164,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
                 TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
             ).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());
             auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
                 ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
             )").GetValueSync();
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
                 TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
             ).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());
             auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
                 ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
             )").GetValueSync();
@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
                 TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
             ).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());
             auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
                 ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
             )").GetValueSync();
@@ -1212,7 +1212,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
                 TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
             ).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString()); 
+            UNIT_ASSERT_VALUES_EQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());
             // A second min_max index on column `ts`, which already has `index_minmax_ts`, must be
             // rejected: a column cannot have two indexes of the same type.
             auto addDuplicateIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
@@ -1222,7 +1222,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL_C(addDuplicateIndex.GetStatus(), NYdb::EStatus::SUCCESS, addDuplicateIndex.GetIssues().ToString());
 
         }
-        
+
     }
 
 

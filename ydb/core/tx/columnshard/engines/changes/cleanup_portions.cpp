@@ -20,7 +20,7 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
 }
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
-    AFL_VERIFY(FetchedDataAccessors);
+    YDB_LOG_VERIFY(FetchedDataAccessors);
     PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
 
     THashSet<TInternalPathId> pathIds;

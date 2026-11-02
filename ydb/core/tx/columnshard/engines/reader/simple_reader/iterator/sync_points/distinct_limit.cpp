@@ -14,7 +14,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
         return ESourceAction::Finish;
     }
 
-    AFL_VERIFY(source.HasStageResult());
+    YDB_LOG_VERIFY(source.HasStageResult());
     const auto& sr = source.GetStageResult();
 
     if (sr.IsEmpty()) {
@@ -35,7 +35,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
     }
 
     const auto keyAccessor = batch->GetAccessorByNameOptional(std::string(columnName.data(), columnName.size()));
-    AFL_VERIFY(keyAccessor,
+    YDB_LOG_VERIFY(keyAccessor,
         {"column", columnName},
         {"keyColumnId", KeyColumnId});
 
@@ -56,7 +56,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
         // Dictionary-only accessors are indexed by dictionary entries: portion-row deny filters (PK range, duplicates,
         // deletions) are excluded by the fetch guards, so a filter here was produced by the program over the same
         // entries (e.g. the projection cut to the requested limit) and its length must match the accessor.
-        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount,
+        YDB_LOG_VERIFY(existing->GetRecordsCountVerified() == recordsCount,
             {"filter", existing->GetRecordsCountVerified()},
             {"records", recordsCount},
             {"dictionaryOnly", isDictionaryOnlyFetch});
@@ -98,7 +98,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NC
         }
     }
 
-    AFL_VERIFY(distinctFilter.GetRecordsCountVerified() == recordsCount);
+    YDB_LOG_VERIFY(distinctFilter.GetRecordsCountVerified() == recordsCount);
 
     if (existing && applyRowFilter) {
         distinctFilter = existing->And(distinctFilter);

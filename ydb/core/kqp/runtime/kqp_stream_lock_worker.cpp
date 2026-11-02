@@ -20,7 +20,7 @@ TKqpStreamLockWorker::TKqpStreamLockWorker(TKqpStreamLockSettings&& settings)
     for (size_t i = 0; i < Settings.KeyColumns.size(); ++i) {
         const auto& col = Settings.KeyColumns[i];
         KeyColumnIds[i] = col.GetId();
-        
+
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(
             col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
@@ -33,7 +33,7 @@ TKqpStreamLockWorker::TKqpStreamLockWorker(TKqpStreamLockSettings&& settings)
     for (size_t i = 0; i < Settings.Columns.size(); ++i) {
         const auto& col = Settings.Columns[i];
         ColumnIds[i] = col.GetId();
-        
+
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(
             col.GetTypeId(),
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
@@ -64,12 +64,12 @@ void TKqpStreamLockWorker::Clear() {
 void TKqpStreamLockWorker::AddInputRow(NUdf::TUnboxedValue row) {
     std::vector<TCell> cells(ColumnTypes.size());
     NMiniKQL::TStringProviderBackend backend;
-    
+
     for (size_t colIdx = 0; colIdx < ColumnTypes.size(); ++colIdx) {
         auto value = row.GetElement(colIdx);
         cells[colIdx] = MakeCell(ColumnTypes[colIdx], value, backend, true);
     }
-    
+
     InputRows.emplace_back(std::move(cells));
 }
 
@@ -83,7 +83,7 @@ void TKqpStreamLockWorker::AddInputRow(TConstArrayRef<TCell> inputRow) {
 
         InputRows.emplace_back(TOwnedCellVec::Make(cells));
     } else {
-        AFL_ENSURE(inputRow.size() == ColumnTypes.size());
+        YDB_LOG_ENSURE(inputRow.size() == ColumnTypes.size());
         InputRows.emplace_back(TOwnedCellVec::Make(inputRow));
     }
 }
@@ -105,7 +105,7 @@ TVector<TCell> TKqpStreamLockWorker::SerializeKeysToCellVec(const std::vector<TO
 }
 
 NUdf::TUnboxedValue TKqpStreamLockWorker::ConvertRowToUnboxedValue(const TOwnedCellVec& row) const {
-    AFL_ENSURE(row.size() == ColumnTypes.size());
+    YDB_LOG_ENSURE(row.size() == ColumnTypes.size());
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto result = Settings.HolderFactory.CreateDirectArrayHolder(ColumnTypes.size(), rowItems);
 
@@ -158,7 +158,7 @@ void TKqpStreamLockWorker::BuildLockRequests(
 
     for (ui64 rowIndex = 0; rowIndex < InputRows.size(); ++rowIndex) {
         const auto& row = InputRows[rowIndex];
-        
+
         TVector<TCell> keyCellsData;
         keyCellsData.reserve(keyColumnCount);
         for (size_t keyIdx = 0; keyIdx < KeyColumnIds.size(); ++keyIdx) {
@@ -177,13 +177,13 @@ void TKqpStreamLockWorker::BuildLockRequests(
                     range.IsInclusive || range.IsPoint, true, KeyColumnTypes);
             });
 
-        AFL_ENSURE(shardIter != partitioning->end());
+        YDB_LOG_ENSURE(shardIter != partitioning->end());
         ui64 shardId = shardIter->ShardId;
         keysByShard[shardId].push_back({rowIndex, std::move(keyCells)});
     }
 
     for (auto& [shardId, keys] : keysByShard) {
-        AFL_ENSURE(!keys.empty());
+        YDB_LOG_ENSURE(!keys.empty());
 
         const size_t batchSize = keys.size();
         size_t batchBytes = 0;
@@ -304,7 +304,7 @@ void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::T
     auto& batchInfo = requestIt->second;
 
     const auto& record = result->Record;
-    
+
     const auto& lockedKeys = record.GetLockedKeys();
     const auto& modifiedKeys = record.GetModifiedKeys();
     const auto& skippedAbsentKeys = record.GetSkippedAbsentKeys();
@@ -318,7 +318,7 @@ void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::T
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
         const bool locked = lockedSet.contains(i);
         const bool skippedAbsent = skippedAbsentSet.contains(i);
-        AFL_ENSURE(locked || skippedAbsent);
+        YDB_LOG_ENSURE(locked || skippedAbsent);
         batchInfo.LockedFlags[i] = locked;
         batchInfo.ModifiedFlags[i] = modifiedSet.contains(i);
     }
@@ -333,7 +333,7 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     }
 
     auto& batchInfo = it->second;
-    AFL_ENSURE(batchInfo.LockResultReceived);
+    YDB_LOG_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
         if (batchInfo.LockedFlags[i]) {
@@ -354,7 +354,7 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     }
 
     auto& batchInfo = it->second;
-    AFL_ENSURE(batchInfo.LockResultReceived);
+    YDB_LOG_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
         callback(

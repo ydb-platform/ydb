@@ -38,16 +38,16 @@ private:
 
 public:
     TConclusionStatus HandleResult(const Ydb::Table::ExecuteQueryResult& result) const override {
-        AFL_VERIFY(result.result_sets_size() == 1,
+        YDB_LOG_VERIFY(result.result_sets_size() == 1,
             {"size", result.result_sets_size()});
         const auto& resultSet = result.result_sets(0);
         TSecret::TDecoder decoder(resultSet);
 
         for (const auto& row : resultSet.rows()) {
             TSecret secret;
-            AFL_VERIFY(secret.DeserializeFromRecord(decoder, row));
+            YDB_LOG_VERIFY(secret.DeserializeFromRecord(decoder, row));
             auto findOwner = SecretNameToOwner.FindPtr(secret.GetSecretId());
-            AFL_VERIFY(findOwner);
+            YDB_LOG_VERIFY(findOwner);
             if (*findOwner != secret.GetOwnerUserId()) {
                 return TConclusionStatus::Fail("Secret already exists: " + secret.GetSecretId());
             }
@@ -60,7 +60,7 @@ public:
         : TModificationStage(BuildRequest(secrets))
     {
         for (const auto& id : secrets) {
-            AFL_VERIFY(SecretNameToOwner.emplace(id.GetSecretId(), id.GetOwnerUserId()).second);
+            YDB_LOG_VERIFY(SecretNameToOwner.emplace(id.GetSecretId(), id.GetOwnerUserId()).second);
         }
     }
 };

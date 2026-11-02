@@ -23,7 +23,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
     const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings, const std::shared_ptr<arrow::DataType>& columnType) {
-    AFL_VERIFY(sourceArray);
+    YDB_LOG_VERIFY(sourceArray);
     NSubColumns::TDataBuilder builder(columnType, settings);
     IChunkedArray::TReader reader(sourceArray);
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
@@ -33,7 +33,7 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
             return conclusion;
         }
         i += address.GetArray()->length();
-        AFL_VERIFY(i <= reader.GetRecordsCount());
+        YDB_LOG_VERIFY(i <= reader.GetRecordsCount());
     }
     return builder.Finish();
 }
@@ -43,7 +43,7 @@ TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type,
     , ColumnsData(NSubColumns::TColumnsData::BuildEmpty(recordsCount))
     , OthersData(NSubColumns::TOthersData::BuildEmpty())
     , Settings(settings) {
-    AFL_VERIFY(type->id() == arrow::binary()->id(),
+    YDB_LOG_VERIFY(type->id() == arrow::binary()->id(),
         {"type", type->ToString()},
         {"error", "currently supported JsonDocument only"});
 }
@@ -54,7 +54,7 @@ TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColu
     , ColumnsData(std::move(columns))
     , OthersData(std::move(others))
     , Settings(settings) {
-    AFL_VERIFY(type->id() == arrow::binary()->id(),
+    YDB_LOG_VERIFY(type->id() == arrow::binary()->id(),
         {"type", type->ToString()},
         {"error", "currently supported JsonDocument only"});
 }
@@ -147,7 +147,7 @@ std::vector<NSubColumns::TSplittedJsonPath> BuildResolvedPathsByIndex(const NSub
     for (ui32 index = 0; index < stats.GetColumnsCount(); ++index) {
         const auto path = stats.GetColumnName(index);
         auto parsedResult = NSubColumns::ParseJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path));
-        AFL_VERIFY(parsedResult.IsSuccess(),
+        YDB_LOG_VERIFY(parsedResult.IsSuccess(),
             {"error", parsedResult.GetErrorMessage()},
             {"path", path});
         result.emplace_back(std::move(parsedResult.DetachResult().Items));
@@ -175,7 +175,7 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
         it.SkipRecordTo(recordIndex);
         TJsonRestorer value;
         auto onStartRecord = [&](const ui32 index) {
-            AFL_VERIFY(recordIndex == index,
+            YDB_LOG_VERIFY(recordIndex == index,
                 {"count", recordIndex},
                 {"index", index});
         };
@@ -229,11 +229,11 @@ const NJson::TJsonValue& TJsonRestorer::GetResult() const {
 void TJsonRestorer::SetValueByPath(const NSubColumns::TSplittedJsonPath& path, const NJson::TJsonValue& jsonValue) {
     const auto& pathItems = path.PathItems;
     const auto& pathTypes = path.PathTypes;
-    AFL_VERIFY(pathItems.size() > 0);
-    AFL_VERIFY(pathItems.size() == pathTypes.size());
+    YDB_LOG_VERIFY(pathItems.size() > 0);
+    YDB_LOG_VERIFY(pathItems.size() == pathTypes.size());
     NJson::TJsonValue* current = &Result;
     for (decltype(path.PathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
-        AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
+        YDB_LOG_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
         NJson::TJsonValue* currentNext = nullptr;
         if (current->GetValuePointer(pathItems[i], &currentNext)) {
             current = currentNext;

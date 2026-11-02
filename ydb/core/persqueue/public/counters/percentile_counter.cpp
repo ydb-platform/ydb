@@ -18,15 +18,15 @@ TMultiCounter::TMultiCounter(::NMonitoring::TDynamicCounterPtr counters,
                              bool expiring)
     : Value(0)
 {
-    AFL_ENSURE(counters);
+    YDB_LOG_ENSURE(counters);
 
     for (const auto& counter : counter_names) {
         for (ui32 i = 0; i <= labels.size(); ++i) {
             auto cc = counters;
             for (ui32 j = 0; j < labels.size(); ++j) {
-                AFL_ENSURE(!labels[j].Labels.empty());
+                YDB_LOG_ENSURE(!labels[j].Labels.empty());
                 for (ui32 k = 0; k < labels[j].Labels.size(); ++k) {
-                    AFL_ENSURE(labels[j].Labels.size() == labels[j].AggrNames.size());
+                    YDB_LOG_ENSURE(labels[j].Labels.size() == labels[j].AggrNames.size());
                     const TString& res = (j < i) ? labels[j].Labels[k].second : labels[j].AggrNames[k];
                     cc = cc->GetSubgroup(labels[j].Labels[k].first, res);
                 }
@@ -69,7 +69,7 @@ TPercentileCounter::TPercentileCounter(
         const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
         const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring
 ) {
-    AFL_ENSURE(!intervals.empty());
+    YDB_LOG_ENSURE(!intervals.empty());
     Counters.reserve(intervals.size());
     Ranges.reserve(intervals.size());
     for (auto& interval : intervals) {
@@ -198,7 +198,7 @@ TVector<ui64> TPartitionHistogramWrapper::GetValues() const {
     return res;
 }
 const TVector<ui64>& TPartitionHistogramWrapper::GetRanges() const {
-    AFL_ENSURE(!IsSupportivePartition);
+    YDB_LOG_ENSURE(!IsSupportivePartition);
     return Histogram->Ranges;
 }
 

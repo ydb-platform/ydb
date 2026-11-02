@@ -13,7 +13,7 @@ private:
 
 public:
     void AddColumn(const ui32 columnId, const std::shared_ptr<IChunkedArray>& arr) {
-        AFL_VERIFY(ColumnsData.emplace(columnId, arr).second);
+        YDB_LOG_VERIFY(ColumnsData.emplace(columnId, arr).second);
     }
 
     bool HasColumn(const ui32 columnId) const {
@@ -22,7 +22,7 @@ public:
 
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified(const ui32 columnId) const {
         auto it = ColumnsData.find(columnId);
-        AFL_VERIFY(it != ColumnsData.end(),
+        YDB_LOG_VERIFY(it != ColumnsData.end(),
             {"id", columnId});
         return it->second;
     }
@@ -30,14 +30,14 @@ public:
     TPartialColumnsData ApplyFilter(const TColumnFilter& filter) const {
         TPartialColumnsData result;
         for (auto&& i : ColumnsData) {
-            AFL_VERIFY(result.ColumnsData.emplace(i.first, filter.Apply(i.second)).second);
+            YDB_LOG_VERIFY(result.ColumnsData.emplace(i.first, filter.Apply(i.second)).second);
         }
         return result;
     }
     TPartialColumnsData Slice(const ui32 offset, const ui32 count) const {
         TPartialColumnsData result;
         for (auto&& i : ColumnsData) {
-            AFL_VERIFY(result.ColumnsData.emplace(i.first, i.second->ISlice(offset, count)).second);
+            YDB_LOG_VERIFY(result.ColumnsData.emplace(i.first, i.second->ISlice(offset, count)).second);
         }
         return result;
     }
@@ -54,16 +54,16 @@ private:
     TString StoreOthersString;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& /*visitor*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return 0;
     }
 
@@ -73,7 +73,7 @@ protected:
 
     virtual TLocalDataAddress DoGetLocalData(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TLocalDataAddress(nullptr, 0, 0);
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
@@ -135,7 +135,7 @@ public:
 
     bool NeedFetch(const std::string_view colName) const {
         auto pathResult = NSubColumns::ResolveBestPath(Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName));
-        AFL_VERIFY(pathResult.IsSuccess(),
+        YDB_LOG_VERIFY(pathResult.IsSuccess(),
             {"column", colName},
             {"error", pathResult.GetErrorMessage()});
         const auto path = pathResult.DetachResult();

@@ -34,7 +34,7 @@ public:
 
     void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
         auto it = Processes.find(internalProcessId);
-        AFL_VERIFY(it != Processes.end(),
+        YDB_LOG_VERIFY(it != Processes.end(),
             {"processId", internalProcessId});
         if (!it->second->GetTasks().size()) {
             if (!WeightedProcesses.empty() && !it->second->GetInProgressTasksCount()) {

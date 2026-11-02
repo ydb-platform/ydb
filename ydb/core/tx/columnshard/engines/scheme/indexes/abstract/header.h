@@ -53,7 +53,7 @@ public:
 
     TBlobRange GetAddressRangeVerified(const TIndexDataAddress& address, const TBlobRange& blobRange) const {
         auto result = GetAddressRangeOptional(address, blobRange);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 };
@@ -63,7 +63,7 @@ private:
     const ui32 Size;
 
     virtual std::optional<TBlobRangeLink16> DoGetAddressForCategory(const std::optional<ui64> /*cat*/) const override {
-        //        AFL_VERIFY(!cat, {"cat", cat});
+        //        YDB_LOG_VERIFY(!cat, {"cat", cat});
         return TBlobRangeLink16(0, Size);
     }
 

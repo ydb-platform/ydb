@@ -39,7 +39,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 return false;
 
             while (!dataRowset.EndOfSet()) { //found out topic info
-                AFL_ENSURE(!Self->Inited,
+                YDB_LOG_ENSURE(!Self->Inited,
                     {"tabletId", Self->TabletID()});
                 Self->PathId  = dataRowset.GetValue<Schema::Data::PathId>();
                 Self->Topic   = dataRowset.GetValue<Schema::Data::Topic>();
@@ -57,7 +57,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
                 if (!config.empty()) {
                     bool res = Self->TabletConfig.ParseFromString(config);
-                    AFL_ENSURE(res,
+                    YDB_LOG_ENSURE(res,
                         {"tabletId", Self->TabletID()},
                         {"path", Self->Path},
                         {"topic", Self->Topic});
@@ -121,7 +121,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
         } catch (const TNotReadyTabletException&) {
             return false;
         } catch (...) {
-            AFL_ENSURE(false,
+            YDB_LOG_ENSURE(false,
                 {"reason", "there must be no leaked exceptions"},
                 {"exception", CurrentExceptionMessage()},
                 {"tabletId", Self->TabletID()},

@@ -14,7 +14,7 @@
 namespace NKikimr::NOlap {
 
 std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
-    AFL_VERIFY(!Constructed);
+    YDB_LOG_VERIFY(!Constructed);
     Constructed = true;
     std::shared_ptr<TPortionInfo> result;
     const bool enableGranularMemoryProfile = IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY);
@@ -27,16 +27,16 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     }
     {
         TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()), enableGranularMemoryProfile);
-        AFL_VERIFY(PathId);
+        YDB_LOG_VERIFY(PathId);
         result->PathId = PathId;
         result->PortionId = GetPortionIdVerified();
 
         if (RemoveSnapshot) {
-            AFL_VERIFY(RemoveSnapshot->Valid());
+            YDB_LOG_VERIFY(RemoveSnapshot->Valid());
             result->SetRemoveSnapshot(*RemoveSnapshot);
         }
 
-        AFL_VERIFY(SchemaVersion && *SchemaVersion);
+        YDB_LOG_VERIFY(SchemaVersion && *SchemaVersion);
         result->SchemaVersion = *SchemaVersion;
         result->ShardingVersion = ShardingVersion;
     }
@@ -53,9 +53,9 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
 }
 
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
-    AFL_VERIFY(SchemaVersion);
+    YDB_LOG_VERIFY(SchemaVersion);
     auto schema = index.GetSchemaVerified(SchemaVersion.value());
-    AFL_VERIFY(!!schema,
+    YDB_LOG_VERIFY(!!schema,
         {"details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value()});
     return schema;
 }
@@ -65,14 +65,14 @@ std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(T
     if (CommitSnapshot) {
         result->CommitSnapshot.Set(*CommitSnapshot);
     }
-    AFL_VERIFY(InsertWriteId);
+    YDB_LOG_VERIFY(InsertWriteId);
     result->InsertWriteId = *InsertWriteId;
     return result;
 }
 
 std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
     auto result = std::make_shared<TCompactedPortionInfo>(std::move(meta));
-    AFL_VERIFY(AppearanceSnapshot);
+    YDB_LOG_VERIFY(AppearanceSnapshot);
     result->AppearanceSnapshot = *AppearanceSnapshot;
     return result;
 }

@@ -118,10 +118,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                     return;
                 }
                 NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                AFL_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
+                YDB_LOG_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
 
 
-                AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
+                YDB_LOG_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
                 if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     hasInsert = true;
                     ++readPhases;
@@ -268,7 +268,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows
                     || tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                    AFL_ENSURE(false);
+                    YDB_LOG_ENSURE(false);
                 }
             }
 
@@ -380,7 +380,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 }
 
                 if (settings.GetNeedLookup() && tableModifiedBefore) {
-                    AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+                    YDB_LOG_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                     return true;
                 }
 
@@ -414,8 +414,8 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             }
 
             for (const auto& transform : stage.GetOutputTransforms()) {
-                AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
-                AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                YDB_LOG_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                YDB_LOG_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                 NKikimrKqp::TKqpTableSinkSettings settings;
                 YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 

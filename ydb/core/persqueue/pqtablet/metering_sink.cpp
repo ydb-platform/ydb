@@ -233,7 +233,7 @@ TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMetering
     }
 
     default:
-        AFL_ENSURE(false,
+        YDB_LOG_ENSURE(false,
             {"type", static_cast<int>(type)},
             {"tabletId", Parameters_.TabletId},
             {"stream", Parameters_.StreamName});

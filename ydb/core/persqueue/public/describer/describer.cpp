@@ -252,7 +252,7 @@ public:
 private:
     const TVector<TString>& OriginalsFor(const TString& realPath) const {
         auto it = PathToOriginalPaths.find(realPath);
-        AFL_ENSURE(it != PathToOriginalPaths.end(),
+        YDB_LOG_ENSURE(it != PathToOriginalPaths.end(),
             {"realPath", realPath});
         return it->second;
     }

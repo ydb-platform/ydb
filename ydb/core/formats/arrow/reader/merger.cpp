@@ -8,7 +8,7 @@
 namespace NKikimr::NArrow::NMerger {
 
 void TMergePartialStream::PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy) {
-    AFL_VERIFY(point.IsSameSortingSchema(*SortSchema),
+    YDB_LOG_VERIFY(point.IsSameSortingSchema(*SortSchema),
         {"point", point.DebugJson()},
         {"schema", SortSchema->ToString()});
     Y_ABORT_UNLESS(point.IsReverseSort() == Reverse);
@@ -31,7 +31,7 @@ void TMergePartialStream::CheckSequenceInDebug(const TRWSortableBatchPosition& n
         const bool linearExecutionCorrectness = nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::greater;
         if (!linearExecutionCorrectness) {
             const bool newSegmentScan = nextKeyColumnsPosition.GetPosition() == 0;
-            AFL_VERIFY(newSegmentScan && nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::less,
+            YDB_LOG_VERIFY(newSegmentScan && nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::less,
                 {"mergeDebug", DebugJson()},
                 {"currentExt", nextKeyColumnsPosition.DebugJson()},
                 {"newSegmentScan", newSegmentScan});
@@ -56,7 +56,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         return nullptr;
     }
     bool include = false;
-    AFL_VERIFY(delta >= 0);
+    YDB_LOG_VERIFY(delta >= 0);
     if (pos.IsEqual()) {
         if (includeFinish) {
             finished = !SortHeap.MutableCurrent().Next();
@@ -164,7 +164,7 @@ ui64 TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const b
         const ui64 currentPosIndex = SortHeap.Current().GetPositionIndex();
         const ui64 sourceId = SortHeap.Current().GetSourceId();
         const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
-        AFL_VERIFY(SortHeap.Current().GetSourceId() == sourceId);
+        YDB_LOG_VERIFY(SortHeap.Current().GetSourceId() == sourceId);
         recordsSkipped += SortHeap.Current().GetPositionIndex() - currentPosIndex;
         YDB_LOG_DEBUG("",
             {"pos", pos.DebugJson().GetStringRobust()},

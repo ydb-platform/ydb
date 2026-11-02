@@ -54,7 +54,7 @@ private:
                     if (it != Arrays.End()) {
                         Arrays.Erase(it);
                     }
-                    AFL_VERIFY(Arrays.Insert(key, result));
+                    YDB_LOG_VERIFY(Arrays.Insert(key, result));
                 } else {
                     YDB_LOG_INFO_COMP(NKikimrServices::ARROW_HELPER, "",
                         {"event", "too_big_to_add"},
@@ -66,8 +66,8 @@ private:
                 result = it->GetArray();
             }
         }
-        AFL_VERIFY(result);
-        AFL_VERIFY(recordsCountExt <= result->length(),
+        YDB_LOG_VERIFY(result);
+        YDB_LOG_VERIFY(recordsCountExt <= result->length(),
             {"result", result->length()},
             {"ext", recordsCountExt});
         YDB_LOG_INFO_COMP(NKikimrServices::ARROW_HELPER, "",

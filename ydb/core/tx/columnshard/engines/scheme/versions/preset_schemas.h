@@ -20,7 +20,7 @@ public:
     }
 
     void RegisterPreset(const ui64 presetId) {
-        AFL_VERIFY(PresetVersionedIndex.emplace(presetId, std::make_shared<TVersionedIndex>()).second,
+        YDB_LOG_VERIFY(PresetVersionedIndex.emplace(presetId, std::make_shared<TVersionedIndex>()).second,
             {"presetId", presetId});
     }
 
@@ -30,25 +30,25 @@ public:
 
     TVersionedIndex& MutableVersionedIndex(const ui64 presetId) {
         auto it = PresetVersionedIndex.find(presetId);
-        AFL_VERIFY(it != PresetVersionedIndex.end());
+        YDB_LOG_VERIFY(it != PresetVersionedIndex.end());
         return *it->second;
     }
 
     TVersionedIndex& MutableDefaultVersionedIndex() {
         auto it = PresetVersionedIndex.find(DefaultPresetId);
-        AFL_VERIFY(it != PresetVersionedIndex.end());
+        YDB_LOG_VERIFY(it != PresetVersionedIndex.end());
         return *it->second;
     }
 
     const TVersionedIndex& GetVersionedIndex(const ui64 presetId) const {
         auto it = PresetVersionedIndex.find(presetId);
-        AFL_VERIFY(it != PresetVersionedIndex.end());
+        YDB_LOG_VERIFY(it != PresetVersionedIndex.end());
         return *it->second;
     }
 
     const std::shared_ptr<const TVersionedIndex>& GetVersionedIndexCopy(const ui64 presetId) {
         auto itOriginal = PresetVersionedIndex.find(presetId);
-        AFL_VERIFY(itOriginal != PresetVersionedIndex.end());
+        YDB_LOG_VERIFY(itOriginal != PresetVersionedIndex.end());
         auto itCopy = PresetVersionedIndexCopy.find(presetId);
         if (itCopy == PresetVersionedIndexCopy.end()) {
             itCopy = PresetVersionedIndexCopy.emplace(presetId, itOriginal->second->DeepCopy()).first;

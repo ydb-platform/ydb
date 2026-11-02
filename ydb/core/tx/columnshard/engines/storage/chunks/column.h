@@ -74,7 +74,7 @@ public:
         , Record(columnChunk)
         , ColumnInfo(columnInfo)
     {
-        AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0,
+        YDB_LOG_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0,
             {"data", Data.size()},
             {"record", Record.BlobRange.Size});
     }

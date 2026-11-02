@@ -54,8 +54,8 @@ public:
     bool IsReady() const;
 
     void Merge(const std::shared_ptr<IBlobsWritingAction>& action) {
-        AFL_VERIFY(action);
-        AFL_VERIFY(!WritingStarted);
+        YDB_LOG_VERIFY(action);
+        YDB_LOG_VERIFY(!WritingStarted);
         CacheAfterWrite = CacheAfterWrite || action->CacheAfterWrite;
         for (auto&& i : action->BlobsForWrite) {
             AddDataForWrite(i.first, i.second);

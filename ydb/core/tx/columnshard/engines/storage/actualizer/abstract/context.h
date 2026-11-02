@@ -38,7 +38,7 @@ public:
 
     const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
         auto it = Portions.find(portionId);
-        AFL_VERIFY(it != Portions.end());
+        YDB_LOG_VERIFY(it != Portions.end());
         return it->second;
     }
 };
@@ -72,7 +72,7 @@ public:
 
     const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
         auto it = Portions.find(portionId);
-        AFL_VERIFY(it != Portions.end());
+        YDB_LOG_VERIFY(it != Portions.end());
         return it->second;
     }
 

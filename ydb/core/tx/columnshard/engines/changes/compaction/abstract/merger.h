@@ -23,23 +23,23 @@ public:
                << ";res=[" << *MinResultIndex << "," << *MaxResultIndex << "]"
                << ";size=" << Remapper.size() << "}";
         } else {
-            AFL_VERIFY(!MaxSourceIndex);
-            AFL_VERIFY(Remapper.empty());
+            YDB_LOG_VERIFY(!MaxSourceIndex);
+            YDB_LOG_VERIFY(Remapper.empty());
             sb << "{EMPTY}";
         }
         return sb;
     }
 
     std::optional<i64> RemapSourceIndex(const ui32 index) const {
-        AFL_VERIFY(MinSourceIndex);
-        AFL_VERIFY(*MaxSourceIndex - *MinSourceIndex + 1 == Remapper.size());
+        YDB_LOG_VERIFY(MinSourceIndex);
+        YDB_LOG_VERIFY(*MaxSourceIndex - *MinSourceIndex + 1 == Remapper.size());
         if (index < *MinSourceIndex) {
             return std::nullopt;
         }
         if (*MaxSourceIndex < index) {
             return std::nullopt;
         }
-        AFL_VERIFY(index - *MinSourceIndex < Remapper.size());
+        YDB_LOG_VERIFY(index - *MinSourceIndex < Remapper.size());
         return Remapper[index - *MinSourceIndex];
     }
 
@@ -48,22 +48,22 @@ public:
     }
 
     ui32 GetMinSourceIndex() const {
-        AFL_VERIFY(MinSourceIndex);
+        YDB_LOG_VERIFY(MinSourceIndex);
         return *MinSourceIndex;
     }
 
     ui32 GetMaxSourceIndex() const {
-        AFL_VERIFY(MaxSourceIndex);
+        YDB_LOG_VERIFY(MaxSourceIndex);
         return *MaxSourceIndex;
     }
 
     ui32 GetMinResultIndex() const {
-        AFL_VERIFY(MinResultIndex);
+        YDB_LOG_VERIFY(MinResultIndex);
         return *MinResultIndex;
     }
 
     ui32 GetMaxResultIndex() const {
-        AFL_VERIFY(MaxResultIndex);
+        YDB_LOG_VERIFY(MaxResultIndex);
         return *MaxResultIndex;
     }
 
@@ -85,25 +85,25 @@ public:
         if (!MinSourceIndex) {
             MinSourceIndex = sourceIndex;
         } else {
-            AFL_VERIFY(*MinSourceIndex < sourceIndex);
+            YDB_LOG_VERIFY(*MinSourceIndex < sourceIndex);
         }
         if (MaxSourceIndex) {
-            AFL_VERIFY(*MaxSourceIndex < sourceIndex);
+            YDB_LOG_VERIFY(*MaxSourceIndex < sourceIndex);
         }
         MaxSourceIndex = sourceIndex;
 
         if (!MinResultIndex) {
             MinResultIndex = resultIndex;
         } else {
-            AFL_VERIFY(*MinResultIndex < resultIndex);
+            YDB_LOG_VERIFY(*MinResultIndex < resultIndex);
         }
         if (MaxResultIndex) {
-            AFL_VERIFY(*MaxResultIndex < resultIndex);
+            YDB_LOG_VERIFY(*MaxResultIndex < resultIndex);
         }
         MaxResultIndex = resultIndex;
 
         if (sourceIndex != Remapper.size() + *MinSourceIndex) {
-            AFL_VERIFY(Remapper.size() + *MinSourceIndex < sourceIndex);
+            YDB_LOG_VERIFY(Remapper.size() + *MinSourceIndex < sourceIndex);
             while (Remapper.size() + *MinSourceIndex < sourceIndex) {
                 Remapper.emplace_back(-1);
             }
@@ -140,7 +140,7 @@ public:
         std::vector<TSourceReverseRemap> result;
         result.resize(sourcesCount);
         for (ui32 recordIdx = 0; recordIdx < GetRecordsCount(); ++recordIdx) {
-            AFL_VERIFY(IdxArray->Value(recordIdx) < result.size());
+            YDB_LOG_VERIFY(IdxArray->Value(recordIdx) < result.size());
             result[IdxArray->Value(recordIdx)].AddRemap(RecordIdxArray->Value(recordIdx), recordIdx);
         }
         ReverseIndexes = std::move(result);
@@ -177,8 +177,8 @@ public:
         }
 
         const TSourceReverseRemap& GetReverseIndexes(const ui32 idx) const {
-            AFL_VERIFY(Owner->ReverseIndexes);
-            AFL_VERIFY(idx < Owner->ReverseIndexes->size());
+            YDB_LOG_VERIFY(Owner->ReverseIndexes);
+            YDB_LOG_VERIFY(idx < Owner->ReverseIndexes->size());
             return (*Owner->ReverseIndexes)[idx];
         }
 
@@ -187,8 +187,8 @@ public:
             , Offset(offset)
             , Size(size)
         {
-            AFL_VERIFY(offset + size <= Owner->GetRecordsCount());
-            AFL_VERIFY(size);
+            YDB_LOG_VERIFY(offset + size <= Owner->GetRecordsCount());
+            YDB_LOG_VERIFY(size);
             IdxArray = std::static_pointer_cast<arrow::UInt16Array>(Owner->IdxArray->Slice(offset, size));
             RecordIdxArray = std::static_pointer_cast<arrow::UInt32Array>(Owner->RecordIdxArray->Slice(offset, size));
         }
@@ -275,7 +275,7 @@ public:
                     GlobalPosition = globalPosition;
                     return false;
                 }
-                AFL_VERIFY(globalPosition < Input->GetRecordsCount(),
+                YDB_LOG_VERIFY(globalPosition < Input->GetRecordsCount(),
                     {"pos", globalPosition},
                     {"size", Input->GetRecordsCount()});
                 CurrentChunk = Input->GetArray(CurrentChunk, globalPosition, Input);
@@ -292,7 +292,7 @@ public:
                 OnInitArray(CurrentArray);
                 return true;
             } else {
-                AFL_VERIFY(globalPosition == 0);
+                YDB_LOG_VERIFY(globalPosition == 0);
                 GlobalPosition = globalPosition;
                 return false;
             }
@@ -305,7 +305,7 @@ public:
         virtual ~TBaseIterator() = default;
 
         ui32 GetGlobalPosition(const ui32 localPosition) const {
-            AFL_VERIFY(CurrentChunk);
+            YDB_LOG_VERIFY(CurrentChunk);
             return CurrentChunk->GetAddress().GetGlobalIndex(localPosition);
         }
 
@@ -329,12 +329,12 @@ public:
             : Input(input)
             , Loader(loader)
         {
-            AFL_VERIFY(Loader);
+            YDB_LOG_VERIFY(Loader);
             InitArray(0);
         }
 
         const TArrayImpl& GetCurrentDataChunk() const {
-            AFL_VERIFY(CurrentArray);
+            YDB_LOG_VERIFY(CurrentArray);
             return *CurrentArray;
         }
 
@@ -342,8 +342,8 @@ public:
             if (GlobalPosition == globalPosition) {
                 return GlobalPosition < Input->GetRecordsCount();
             }
-            AFL_VERIFY(Input);
-            AFL_VERIFY(GlobalPosition < globalPosition,
+            YDB_LOG_VERIFY(Input);
+            YDB_LOG_VERIFY(GlobalPosition < globalPosition,
                 {"old", GlobalPosition},
                 {"new", globalPosition},
                 {"count", Input->GetRecordsCount()});
@@ -371,8 +371,8 @@ public:
         }
 
         void AddChunk(const std::shared_ptr<TArrayImpl>& cArray, const TColumnMergeContext& cmContext) {
-            AFL_VERIFY(cArray);
-            AFL_VERIFY(cArray->GetRecordsCount());
+            YDB_LOG_VERIFY(cArray);
+            YDB_LOG_VERIFY(cArray->GetRecordsCount());
             auto accContext = cmContext.GetLoader()->BuildAccessorContext(cArray->GetRecordsCount());
             auto blobAndMeta = Constructor.SerializeToBlobAndMeta(cArray, accContext);
             Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(std::move(blobAndMeta.Blob), cArray,
@@ -399,7 +399,7 @@ public:
 
     TColumnPortionResult Execute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
         auto result = DoExecute(context, mergeContext);
-        AFL_VERIFY(result.GetRecordsCount() == context.GetRemapper().GetSize(),
+        YDB_LOG_VERIFY(result.GetRecordsCount() == context.GetRemapper().GetSize(),
             {"result", result.GetRecordsCount()},
             {"remapper", context.GetRemapper().GetSize()});
         return result;

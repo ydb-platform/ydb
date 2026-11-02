@@ -10,7 +10,7 @@ std::optional<NArrow::NAccessor::NSubColumns::TResolvedPathMatch> ResolveIndexPa
     const NArrow::NAccessor::TSubColumnsArray& subColumns, const TStringBuf keyName) {
     auto result = NArrow::NAccessor::NSubColumns::ResolveBestPath(
         subColumns.GetColumnsData().GetStats(), subColumns.GetOthersData().GetStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(keyName));
-    AFL_VERIFY(result.IsSuccess(),
+    YDB_LOG_VERIFY(result.IsSuccess(),
         {"key", keyName},
         {"error", result.GetErrorMessage()});
     auto path = result.DetachResult();
@@ -24,7 +24,7 @@ std::optional<NArrow::NAccessor::NSubColumns::TResolvedPathMatch> ResolveIndexPa
 
 void TSubColumnDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray,
     const TChunkVisitor& /*chunkVisitor*/, const TRecordVisitor& recordVisitor) const {
-    AFL_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
+    YDB_LOG_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
     const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
     const auto path = ResolveIndexPath(*subColumns, SubColumnName);
     if (path && path->IsColumn) {
@@ -44,7 +44,7 @@ void TSubColumnDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor
 }
 
 THashMap<ui64, ui32> TSubColumnDataExtractor::DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
-    AFL_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
+    YDB_LOG_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
     const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
     THashMap<ui64, ui32> result;
     const auto path = ResolveIndexPath(*subColumns, SubColumnName);

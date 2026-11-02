@@ -19,25 +19,25 @@ public:
         : Header(header)
         , RecordsCount(recordsCount)
     {
-        AFL_VERIFY(RecordsCount);
-        AFL_VERIFY(Header);
+        YDB_LOG_VERIFY(RecordsCount);
+        YDB_LOG_VERIFY(Header);
     }
 
     void AddData(const std::optional<ui64> category, const TString& data) {
         if (!category) {
-            AFL_VERIFY(!UncategorizedData);
+            YDB_LOG_VERIFY(!UncategorizedData);
             UncategorizedData = data;
         } else {
-            AFL_VERIFY(DataByCategory.emplace(*category, data).second);
+            YDB_LOG_VERIFY(DataByCategory.emplace(*category, data).second);
         }
     }
 
     void RemoveData(const std::optional<ui64> category) {
         if (!category) {
-            AFL_VERIFY(!!UncategorizedData);
+            YDB_LOG_VERIFY(!!UncategorizedData);
             UncategorizedData.reset();
         } else {
-            AFL_VERIFY(DataByCategory.erase(*category));
+            YDB_LOG_VERIFY(DataByCategory.erase(*category));
         }
     }
 
@@ -52,11 +52,11 @@ public:
 
     const TString& GetData(const std::optional<ui64> category) const {
         if (!category) {
-            AFL_VERIFY(!!UncategorizedData);
+            YDB_LOG_VERIFY(!!UncategorizedData);
             return *UncategorizedData;
         } else {
             auto it = DataByCategory.find(*category);
-            AFL_VERIFY(it != DataByCategory.end());
+            YDB_LOG_VERIFY(it != DataByCategory.end());
             return it->second;
         }
     }
@@ -64,12 +64,12 @@ public:
     TString ExtractData(const std::optional<ui64> category) {
         TString result;
         if (!category) {
-            AFL_VERIFY(!!UncategorizedData);
+            YDB_LOG_VERIFY(!!UncategorizedData);
             result = *UncategorizedData;
             UncategorizedData.reset();
         } else {
             auto it = DataByCategory.find(*category);
-            AFL_VERIFY(it != DataByCategory.end());
+            YDB_LOG_VERIFY(it != DataByCategory.end());
             result = it->second;
             DataByCategory.erase(it);
         }
@@ -93,7 +93,7 @@ public:
     }
 
     const std::shared_ptr<IIndexHeader>& GetHeader(const ui32 idx) const {
-        AFL_VERIFY(idx < Chunks.size(),
+        YDB_LOG_VERIFY(idx < Chunks.size(),
             {"idx", idx},
             {"chunks", Chunks.size()});
         return Chunks[idx].GetHeader();
@@ -107,7 +107,7 @@ public:
     }
 
     void AddData(const std::optional<ui64> category, const std::vector<TString>& data) {
-        AFL_VERIFY(Chunks.size() == data.size());
+        YDB_LOG_VERIFY(Chunks.size() == data.size());
         for (ui32 i = 0; i < data.size(); ++i) {
             Chunks[i].AddData(category, data[i]);
         }
@@ -123,10 +123,10 @@ public:
             if (!hasData) {
                 hasData = i.GetDataByCategory().contains(category);
             } else {
-                AFL_VERIFY(*hasData == i.GetDataByCategory().contains(category));
+                YDB_LOG_VERIFY(*hasData == i.GetDataByCategory().contains(category));
             }
         }
-        AFL_VERIFY(hasData);
+        YDB_LOG_VERIFY(hasData);
         return *hasData;
     }
 };
@@ -154,7 +154,7 @@ public:
 
     const TIndexColumnChunked& GetIndexDataVerified(const ui32 indexId) const {
         auto* result = GetIndexDataOptional(indexId);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -169,7 +169,7 @@ public:
 
     TIndexColumnChunked& MutableIndexDataVerified(const ui32 indexId) {
         auto* result = MutableIndexDataOptional(indexId);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -184,7 +184,7 @@ public:
 
     void AddData(const NRequest::TOriginalDataAddress& dataAddress, const TIndexDataAddress& indexAddress, const std::vector<TString>& data) {
         auto& index = MutableIndexDataVerified(indexAddress.GetIndexId());
-        AFL_VERIFY(IndexByOriginalData[dataAddress].emplace(indexAddress.GetIndexId(), &index).second,
+        YDB_LOG_VERIFY(IndexByOriginalData[dataAddress].emplace(indexAddress.GetIndexId(), &index).second,
             {"address", dataAddress.DebugString()},
             {"index", indexAddress.DebugString()});
         index.AddData(indexAddress.GetCategory(), data);

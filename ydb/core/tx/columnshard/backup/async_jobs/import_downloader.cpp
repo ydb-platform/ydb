@@ -106,14 +106,14 @@ public:
         for (ui32 i = 0; i < rowScheme.KeyColumnIdsSize(); ++i) {
             const ui32 colId = rowScheme.GetKeyColumnIds(i);
             auto it = YdbSchema.find(colId);
-            AFL_VERIFY(it != YdbSchema.end());
+            YDB_LOG_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
         for (ui32 i = 0; i < rowScheme.ValueColumnIdsSize(); ++i) {
             const ui32 colId = rowScheme.GetValueColumnIds(i);
             auto it = YdbSchema.find(colId);
-            AFL_VERIFY(it != YdbSchema.end());
+            YDB_LOG_VERIFY(it != YdbSchema.end());
             auto [name, typeInfo] = it->second;
             rowSchemaOrder.emplace_back(std::move(name), typeInfo);
         }
@@ -154,7 +154,7 @@ public:
                 totalBytes += cell.Size();
             }
 
-            AFL_VERIFY(allCells.size() == rowSchemaOrder.size(),
+            YDB_LOG_VERIFY(allCells.size() == rowSchemaOrder.size(),
                 {"allCellsSize", allCells.size()},
                 {"schemaSize", rowSchemaOrder.size()});
 

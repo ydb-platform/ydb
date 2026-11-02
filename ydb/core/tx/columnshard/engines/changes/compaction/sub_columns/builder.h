@@ -104,7 +104,7 @@ public:
     void FinishRecord();
 
     ui32 AddColumnKV(const ui32 commonKeyIndex, const TGeneralIterator& iter) {
-        AFL_VERIFY(commonKeyIndex < ColumnBuilders.size());
+        YDB_LOG_VERIFY(commonKeyIndex < ColumnBuilders.size());
         const ui32 storedSize = ColumnBuilders[commonKeyIndex].AddRecord(RecordIndex, iter);
         SumValuesSize += storedSize;
         return storedSize;

@@ -51,9 +51,9 @@ public:
         Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
         RecordsCount -= p->GetRecordsCount();
-        AFL_VERIFY(Bytes >= 0);
-        AFL_VERIFY(Count >= 0);
-        AFL_VERIFY(RecordsCount >= 0);
+        YDB_LOG_VERIFY(Bytes >= 0);
+        YDB_LOG_VERIFY(Count >= 0);
+        YDB_LOG_VERIFY(RecordsCount >= 0);
     }
 };
 
@@ -219,39 +219,39 @@ public:
 
     bool Validate(const std::shared_ptr<TPortionInfo>& portion) const {
         if (portion) {
-            AFL_VERIFY(!PreActuals.contains(portion->GetPortionId()));
-            AFL_VERIFY(!Actuals.contains(portion->GetPortionId()));
+            YDB_LOG_VERIFY(!PreActuals.contains(portion->GetPortionId()));
+            YDB_LOG_VERIFY(!Actuals.contains(portion->GetPortionId()));
             for (auto&& f : Futures) {
-                AFL_VERIFY(!f.second.contains(portion->GetPortionId()));
+                YDB_LOG_VERIFY(!f.second.contains(portion->GetPortionId()));
             }
         }
         //        auto b = GetFutureBorder();
         //        if (!b) {
-        //            AFL_VERIFY(PreActuals.empty());
+        //            YDB_LOG_VERIFY(PreActuals.empty());
         //        }// else {
         //            for (auto&& i : PreActuals) {
-        //                AFL_VERIFY(*b <= i.second->IndexKeyEnd());
+        //                YDB_LOG_VERIFY(*b <= i.second->IndexKeyEnd());
         //            }
         //            for (auto&& i : Actuals) {
-        //                AFL_VERIFY(i.second->IndexKeyEnd() < *b);
+        //                YDB_LOG_VERIFY(i.second->IndexKeyEnd() < *b);
         //            }
         //        }
         for (auto&& f : Futures) {
             for (auto&& p : f.second) {
-                AFL_VERIFY(!Actuals.contains(p.first));
-                AFL_VERIFY(!PreActuals.contains(p.first));
+                YDB_LOG_VERIFY(!Actuals.contains(p.first));
+                YDB_LOG_VERIFY(!PreActuals.contains(p.first));
             }
         }
         for (auto&& i : PreActuals) {
-            AFL_VERIFY(!Actuals.contains(i.first));
+            YDB_LOG_VERIFY(!Actuals.contains(i.first));
             for (auto&& f : Futures) {
-                AFL_VERIFY(!f.second.contains(i.first));
+                YDB_LOG_VERIFY(!f.second.contains(i.first));
             }
         }
         for (auto&& i : Actuals) {
-            AFL_VERIFY(!PreActuals.contains(i.first));
+            YDB_LOG_VERIFY(!PreActuals.contains(i.first));
             for (auto&& f : Futures) {
-                AFL_VERIFY(!f.second.contains(i.first));
+                YDB_LOG_VERIFY(!f.second.contains(i.first));
             }
         }
         return true;
@@ -401,11 +401,11 @@ public:
     void Add(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         portion->RemoveRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
         if (now < portion->RecordSnapshotMin().GetPlanInstant() + FutureDetector) {
-            AFL_VERIFY(AddFuture(portion));
+            YDB_LOG_VERIFY(AddFuture(portion));
         } else if (now < portion->RecordSnapshotMax().GetPlanInstant() + FutureDetector) {
-            AFL_VERIFY(AddPreActual(portion));
+            YDB_LOG_VERIFY(AddPreActual(portion));
         } else {
-            AFL_VERIFY(AddActual(portion));
+            YDB_LOG_VERIFY(AddActual(portion));
         }
     }
 
@@ -444,7 +444,7 @@ public:
             for (auto&& i : Futures) {
                 if (i.first + FutureDetector <= currentInstant) {
                     for (auto&& p : i.second) {
-                        AFL_VERIFY(AddPreActual(p.second));
+                        YDB_LOG_VERIFY(AddPreActual(p.second));
                     }
                 } else {
                     result = std::min(result, i.first + FutureDetector);
@@ -458,12 +458,12 @@ public:
             std::vector<std::shared_ptr<TPortionInfo>> remove;
             for (auto&& p : PreActuals) {
                 if (p.second->RecordSnapshotMax().GetPlanInstant() + FutureDetector < currentInstant) {
-                    AFL_VERIFY(AddActual(p.second));
+                    YDB_LOG_VERIFY(AddActual(p.second));
                     remove.emplace_back(p.second);
                 }
             }
             for (auto&& i : remove) {
-                AFL_VERIFY(RemovePreActual(i));
+                YDB_LOG_VERIFY(RemovePreActual(i));
             }
         }
         return result;
@@ -477,15 +477,15 @@ public:
                 if (i.second->IndexKeyEnd() < destStart) {
                     continue;
                 }
-                AFL_VERIFY(newPortions.emplace(i.first, i.second).second);
+                YDB_LOG_VERIFY(newPortions.emplace(i.first, i.second).second);
                 if (destStart <= i.second->IndexKeyStart()) {
                     futuresForRemove[f.first].emplace_back(i.second);
                 }
             }
-            AFL_VERIFY(dest.AddFutures(f.first, newPortions));
+            YDB_LOG_VERIFY(dest.AddFutures(f.first, newPortions));
         }
         for (auto&& i : futuresForRemove) {
-            AFL_VERIFY(RemoveFutures(i.first, i.second));
+            YDB_LOG_VERIFY(RemoveFutures(i.first, i.second));
         }
         {
             std::vector<std::shared_ptr<TPortionInfo>> portionsForRemove;
@@ -493,13 +493,13 @@ public:
                 if (i.second->IndexKeyEnd() < destStart) {
                     continue;
                 }
-                AFL_VERIFY(dest.AddPreActual(i.second));
+                YDB_LOG_VERIFY(dest.AddPreActual(i.second));
                 if (destStart <= i.second->IndexKeyStart()) {
                     portionsForRemove.emplace_back(i.second);
                 }
             }
             for (auto&& i : portionsForRemove) {
-                AFL_VERIFY(RemovePreActual(i));
+                YDB_LOG_VERIFY(RemovePreActual(i));
             }
         }
         {
@@ -508,13 +508,13 @@ public:
                 if (i.second->IndexKeyEnd() < destStart) {
                     continue;
                 }
-                AFL_VERIFY(dest.AddActual(i.second));
+                YDB_LOG_VERIFY(dest.AddActual(i.second));
                 if (destStart <= i.second->IndexKeyStart()) {
                     portionsForRemove.emplace_back(i.second);
                 }
             }
             for (auto&& i : portionsForRemove) {
-                AFL_VERIFY(RemoveActual(i));
+                YDB_LOG_VERIFY(RemoveActual(i));
             }
         }
     }
@@ -572,7 +572,7 @@ public:
             TStringBuilder sb;
             std::shared_ptr<TPortionInfo> oldestPortion = GetOldestPortion(true);
             std::shared_ptr<TPortionInfo> youngestPortion = GetYoungestPortion(true);
-            AFL_VERIFY(oldestPortion && youngestPortion);
+            YDB_LOG_VERIFY(oldestPortion && youngestPortion);
             sb << "{"
                << "oldest="
                << "(" << oldestPortion->IndexKeyStart().DebugString() << ":" << oldestPortion->IndexKeyEnd().DebugString() << ":"
@@ -709,11 +709,11 @@ public:
             , IsEmptyOthers(Owner.Others.ActualsEmpty())
             , HasNextBorder(Owner.NextBorder)
         {
-            AFL_VERIFY_DEBUG(Owner.Validate());
+            YDB_LOG_VERIFY_DEBUG(Owner.Validate());
         }
 
         ~TModificationGuard() {
-            AFL_VERIFY_DEBUG(Owner.Validate());
+            YDB_LOG_VERIFY_DEBUG(Owner.Validate());
             Owner.NextActualizeInstant = TInstant::Zero();
             if (!Owner.MainPortion) {
                 return;
@@ -799,7 +799,7 @@ public:
     }
 
     const std::shared_ptr<TPortionInfo>& GetPortion() const {
-        AFL_VERIFY(MainPortion);
+        YDB_LOG_VERIFY(MainPortion);
         return MainPortion;
     }
 
@@ -821,13 +821,13 @@ public:
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IStoragesManager>& storagesManager) const {
         auto youngestPortion = GetYoungestPortion(nextBorder);
         auto oldestPortion = GetOldestPortion(nextBorder);
-        AFL_VERIFY(youngestPortion && oldestPortion);
+        YDB_LOG_VERIFY(youngestPortion && oldestPortion);
         Counters->OnNewTask(!NextBorder, TInstant::MilliSeconds(youngestPortion->RecordSnapshotMax().GetPlanStep()),
             TInstant::MilliSeconds(oldestPortion->RecordSnapshotMax().GetPlanStep()));
-        AFL_VERIFY(!!NextBorder == !!nextBorder);
+        YDB_LOG_VERIFY(!!NextBorder == !!nextBorder);
         if (nextBorder) {
-            AFL_VERIFY(NextBorder);
-            AFL_VERIFY(nextBorder->CompareNotNull(*NextBorder) == std::partial_ordering::equivalent);
+            YDB_LOG_VERIFY(NextBorder);
+            YDB_LOG_VERIFY(nextBorder->CompareNotNull(*NextBorder) == std::partial_ordering::equivalent);
         }
         std::optional<NArrow::TSimpleRow> stopPoint;
         std::optional<TInstant> stopInstant;
@@ -844,7 +844,7 @@ public:
         } else {
             if (MainPortion) {
                 if (portions.size() == 1) {
-                    AFL_VERIFY(NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force);
+                    YDB_LOG_VERIFY(NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force);
                     forceMergeForTests = true;
                     portions.emplace_back(MainPortion);
                 } else {
@@ -861,7 +861,7 @@ public:
                 stopInstant = Others.GetFutureStartInstant();
             }
         }
-        AFL_VERIFY(portions.size() > 1,
+        YDB_LOG_VERIFY(portions.size() > 1,
             {"size", portions.size()});
         ui64 size = 0;
         for (auto&& i : portions) {
@@ -903,11 +903,11 @@ public:
     void AddOther(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
         auto gChartsThis = StartModificationGuard();
         if (NextBorder && MainPortion) {
-            AFL_VERIFY(portion->CrossPKWith(MainPortion->IndexKeyStart(), *NextBorder));
+            YDB_LOG_VERIFY(portion->CrossPKWith(MainPortion->IndexKeyStart(), *NextBorder));
 #ifndef NDEBUG
             auto oldPortionInfo = GetOldestPortion(true);
             auto youngPortionInfo = GetYoungestPortion(true);
-            AFL_VERIFY(oldPortionInfo && youngPortionInfo);
+            YDB_LOG_VERIFY(oldPortionInfo && youngPortionInfo);
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "other_not_final"},
                 {"delta", youngPortionInfo->RecordSnapshotMax().GetPlanStep() - oldPortionInfo->RecordSnapshotMax().GetPlanStep()},
@@ -924,7 +924,7 @@ public:
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto gChartsThis = StartModificationGuard();
-        AFL_VERIFY(Others.Remove(portion),
+        YDB_LOG_VERIFY(Others.Remove(portion),
             {"portion", portion->DebugString()},
             {"bucketStart", MainPortion ? MainPortion->DebugString(true) : "-inf"},
             {"bucketFinish", NextBorder ? NextBorder->DebugString() : "undef"});
@@ -951,9 +951,9 @@ public:
         auto gChartsDest = dest.StartModificationGuard();
         auto gChartsThis = StartModificationGuard();
         MoveNextBorderTo(dest);
-        AFL_VERIFY(dest.MainPortion);
+        YDB_LOG_VERIFY(dest.MainPortion);
         if (MainPortion) {
-            AFL_VERIFY(MainPortion->IndexKeyEnd() < dest.MainPortion->IndexKeyStart());
+            YDB_LOG_VERIFY(MainPortion->IndexKeyEnd() < dest.MainPortion->IndexKeyStart());
         }
         Others.SplitTo(dest.Others, dest.MainPortion->IndexKeyStart());
     }
@@ -996,20 +996,20 @@ private:
 
     void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket, const i64 rating) {
         auto it = BucketsByWeight.find(rating);
-        AFL_VERIFY(it != BucketsByWeight.end());
-        AFL_VERIFY(it->second.erase(bucket.get()));
+        YDB_LOG_VERIFY(it != BucketsByWeight.end());
+        YDB_LOG_VERIFY(it->second.erase(bucket.get()));
         if (it->second.empty()) {
             BucketsByWeight.erase(it);
         }
     }
 
     void AddBucketToRating(const std::shared_ptr<TPortionsBucket>& bucket) {
-        AFL_VERIFY(BucketsByWeight[bucket->GetWeight()].emplace(bucket.get()).second);
+        YDB_LOG_VERIFY(BucketsByWeight[bucket->GetWeight()].emplace(bucket.get()).second);
     }
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto buckets = GetAffectedBuckets(portion->IndexKeyStart(), portion->IndexKeyEnd());
-        AFL_VERIFY(buckets.size());
+        YDB_LOG_VERIFY(buckets.size());
         for (auto&& i : buckets) {
             RemoveBucketFromRating(i);
             i->RemoveOther(portion);
@@ -1052,7 +1052,7 @@ private:
 
     void AddBucket(const std::shared_ptr<TPortionInfo>& portion) {
         auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
-        AFL_VERIFY(insertInfo.second);
+        YDB_LOG_VERIFY(insertInfo.second);
         if (insertInfo.first == Buckets.begin()) {
             RemoveBucketFromRating(LeftBucket);
             LeftBucket->SplitOthersWith(*insertInfo.first->second);
@@ -1104,7 +1104,7 @@ public:
     }
 
     i64 GetWeight() const {
-        AFL_VERIFY(BucketsByWeight.size());
+        YDB_LOG_VERIFY(BucketsByWeight.size());
         return BucketsByWeight.begin()->first;
     }
 
@@ -1119,11 +1119,11 @@ public:
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> BuildOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-        AFL_VERIFY(BucketsByWeight.size());
+        YDB_LOG_VERIFY(BucketsByWeight.size());
         if (!BucketsByWeight.begin()->first) {
             return {};
         }
-        AFL_VERIFY(BucketsByWeight.begin()->second.size());
+        YDB_LOG_VERIFY(BucketsByWeight.begin()->second.size());
         const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
         if (bucketForOptimization == LeftBucket.get()) {
             if (Buckets.size()) {
@@ -1134,7 +1134,7 @@ public:
             }
         } else {
             auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
-            AFL_VERIFY(it != Buckets.end());
+            YDB_LOG_VERIFY(it != Buckets.end());
             ++it;
             if (it != Buckets.end()) {
                 return bucketForOptimization->BuildOptimizationTasks(granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager);
@@ -1191,7 +1191,7 @@ public:
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const {
         NArrow::NMerger::TIntervalPositions result;
         for (auto&& i : Buckets) {
-            AFL_VERIFY(i.second->GetStartPos());
+            YDB_LOG_VERIFY(i.second->GetStartPos());
             result.AddPosition(*i.second->GetStartPos(), false);
         }
         return result;

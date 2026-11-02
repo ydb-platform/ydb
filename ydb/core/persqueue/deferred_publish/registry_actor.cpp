@@ -226,7 +226,7 @@ private:
         const TString& createdBy,
         const NActors::TActorId& replyTo)
     {
-        AFL_ENSURE(!ShuttingDown,
+        YDB_LOG_ENSURE(!ShuttingDown,
             {"reason", "registry is shutting down"});
         ++InFlightInserts;
         Register(CreateInsertPublicationQueryActor(replyTo, database, extPublicationId, writerIdentity, createdBy));

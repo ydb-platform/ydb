@@ -172,7 +172,7 @@ size_t TMemoryLimiterActor::AcquireManager(ui64 externalProcessId) {
 
 size_t TMemoryLimiterActor::ReleaseManager(ui64 externalProcessId) {
     auto it = ProcessMapping.find(externalProcessId);
-    AFL_VERIFY(it != ProcessMapping.end());
+    YDB_LOG_VERIFY(it != ProcessMapping.end());
     size_t id = it->second.ManagerIndex;
     it->second.Counter--;
     if (it->second.Counter == 0) {

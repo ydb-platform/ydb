@@ -63,7 +63,7 @@ public:
     }
 
     std::shared_ptr<TSourceCursor> GetCursorVerified() const {
-        AFL_VERIFY(!!Cursor);
+        YDB_LOG_VERIFY(!!Cursor);
         return Cursor;
     }
 

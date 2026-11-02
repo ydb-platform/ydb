@@ -48,7 +48,7 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
         NIceDb::TNiceDb db(txc.DB);
         TString config;
         bool res = Self->TabletConfig.SerializeToString(&config);
-        AFL_ENSURE(res,
+        YDB_LOG_ENSURE(res,
             {"tabletId", Self->TabletID()},
             {"path", Self->Path},
             {"topic", Self->Topic});

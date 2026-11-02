@@ -6,7 +6,7 @@ namespace NKikimr::NArrow::NSSA {
 
 TString TSchemaResolverColumnsOnly::GetColumnName(ui32 id, bool required /*= true*/) const {
     auto* column = Schema->GetColumns().GetById(id);
-    AFL_VERIFY(!required || !!column);
+    YDB_LOG_VERIFY(!required || !!column);
     if (column) {
         return column->GetName();
     } else {

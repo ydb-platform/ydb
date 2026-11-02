@@ -29,7 +29,7 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) 
 
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndexVerified(const int index) const {
     auto schema = GetSchema();
-    AFL_VERIFY(!!schema && index >= 0 && index < schema->num_fields());
+    YDB_LOG_VERIFY(!!schema && index >= 0 && index < schema->num_fields());
     return schema->field(index);
 }
 
@@ -47,7 +47,7 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
     const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const {
-    AFL_VERIFY(dataSchema.GetSnapshot() <= GetSnapshot());
+    YDB_LOG_VERIFY(dataSchema.GetSnapshot() <= GetSnapshot());
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         if (batch->GetColumnsCount() == GetColumnsCount()) {
             return batch;
@@ -71,7 +71,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
             }
         }
         if (restoreColumnIds.contains(columnId)) {
-            AFL_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId),
+            YDB_LOG_VERIFY(!!GetExternalDefaultValueVerified(columnId) || GetIndexInfo().IsNullableVerified(columnId),
                 {"columnName", GetIndexInfo().GetColumnName(columnId, false)},
                 {"id", columnId});
             result->AddField(resultField, GetColumnLoaderVerified(columnId)->BuildDefaultAccessor(batch->num_rows())).Validate();
@@ -137,8 +137,8 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             }
         }
         if (pkFieldIdx) {
-            AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
-            AFL_VERIFY(!pkColumns[*pkFieldIdx]);
+            YDB_LOG_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+            YDB_LOG_VERIFY(!pkColumns[*pkFieldIdx]);
             pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
             ++pkColumnsCount;
         }
@@ -178,7 +178,7 @@ std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr
 std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const {
     std::vector<ui32> columnIndexes;
     for (const auto& id : idxs) {
-        AFL_VERIFY(HasColumnId(id));
+        YDB_LOG_VERIFY(HasColumnId(id));
         columnIndexes.emplace_back(GetFieldIndex(id));
     }
     return columnIndexes;
@@ -186,7 +186,7 @@ std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32
 
 ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
     auto id = GetColumnIdOptional(columnName);
-    AFL_VERIFY(id,
+    YDB_LOG_VERIFY(id,
         {"columnName", columnName},
         {"schema", JoinSeq(",", GetSchema()->field_names())});
     return *id;
@@ -194,7 +194,7 @@ ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
 
 std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
     auto result = GetFieldByColumnIdOptional(columnId);
-    AFL_VERIFY(result,
+    YDB_LOG_VERIFY(result,
         {"event", "unknown_column"},
         {"columnId", columnId},
         {"schema", DebugString()});
@@ -203,13 +203,13 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const 
 
 std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
     auto result = GetColumnLoaderOptional(columnId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return result;
 }
 
 std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
     auto result = GetColumnLoaderOptional(columnName);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return result;
 }
 
@@ -321,7 +321,7 @@ public:
     }
 
     const std::shared_ptr<arrow::Field>& GetValue() const {
-        AFL_VERIFY(IsValid());
+        YDB_LOG_VERIFY(IsValid());
         return *Current;
     }
 };
@@ -330,7 +330,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
     TWriteBlobPrepareStats* prepareStats) const {
-    AFL_VERIFY(incomingBatch->num_rows());
+    YDB_LOG_VERIFY(incomingBatch->num_rows());
     const TMonotonic dataStart = TMonotonic::Now();
     auto itIncoming = incomingBatch->schema()->fields().begin();
     auto itIncomingEnd = incomingBatch->schema()->fields().end();
@@ -367,12 +367,12 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             auto blobAndMeta = accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext);
             std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
                 std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, std::move(blobAndMeta.Meta)) };
-            AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
+            YDB_LOG_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
             ++itIncoming;
         }
         ++itIndex;
     }
-    AFL_VERIFY(itIncoming == itIncomingEnd);
+    YDB_LOG_VERIFY(itIncoming == itIncomingEnd);
 
     TGeneralSerializedSlice slice(chunks, schemaDetails, splitterCounters);
     const auto groups = NSplitter::TEntityGroups(

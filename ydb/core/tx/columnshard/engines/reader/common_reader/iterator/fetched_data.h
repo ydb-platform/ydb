@@ -42,32 +42,32 @@ public:
     }
 
     const NArrow::NAccessor::TAccessorsCollection& GetTable() const {
-        AFL_VERIFY(!!Table);
+        YDB_LOG_VERIFY(!!Table);
         return *Table;
     }
 
     NArrow::NAccessor::TAccessorsCollection& MutableTable() {
-        AFL_VERIFY(!!Table);
+        YDB_LOG_VERIFY(!!Table);
         return *Table;
     }
 
     std::unique_ptr<NArrow::NAccessor::TAccessorsCollection> ExtractTable() {
-        AFL_VERIFY(!!Table);
+        YDB_LOG_VERIFY(!!Table);
         return std::move(Table);
     }
 
     void ReturnTable(std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& table) {
-        AFL_VERIFY(!Table);
+        YDB_LOG_VERIFY(!Table);
         Table = std::move(table);
     }
 
     void AddRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
-        AFL_VERIFY(DataAddrToIndex.emplace(addr, index).second);
+        YDB_LOG_VERIFY(DataAddrToIndex.emplace(addr, index).second);
     }
 
     std::shared_ptr<NIndexes::IIndexMeta> GetRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr) const {
         auto it = DataAddrToIndex.find(addr);
-        AFL_VERIFY(it != DataAddrToIndex.end());
+        YDB_LOG_VERIFY(it != DataAddrToIndex.end());
         return it->second;
     }
 
@@ -87,7 +87,7 @@ public:
 
     std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 entityId) {
         auto result = ExtractFetcherOptional(entityId);
-        AFL_VERIFY(!!result,
+        YDB_LOG_VERIFY(!!result,
             {"columnId", entityId});
         return result;
     }
@@ -115,8 +115,8 @@ public:
     }
 
     void InitRecordsCount(const ui32 recordsCount) {
-        AFL_VERIFY(!!Table);
-        AFL_VERIFY(!Table->HasData());
+        YDB_LOG_VERIFY(!!Table);
+        YDB_LOG_VERIFY(!Table->HasData());
         Table.reset(new NArrow::NAccessor::TAccessorsCollection(recordsCount));
     }
 
@@ -140,8 +140,8 @@ public:
 
     TString ExtractBlob(const TChunkAddress& address) {
         auto it = Blobs.find(address);
-        AFL_VERIFY(it != Blobs.end());
-        AFL_VERIFY(it->second.IsBlob());
+        YDB_LOG_VERIFY(it != Blobs.end());
+        YDB_LOG_VERIFY(it->second.IsBlob());
         auto result = it->second.GetData();
         Blobs.erase(it);
         return result;
@@ -154,13 +154,13 @@ public:
 
     void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {
         for (auto&& i : blobData) {
-            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
+            YDB_LOG_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
     }
 
     void AddDefaults(THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>&& blobs) {
         for (auto&& i : blobs) {
-            AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
+            YDB_LOG_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
     }
 
@@ -212,12 +212,12 @@ private:
 
 public:
     const std::shared_ptr<arrow::Table>& GetTable() const {
-        AFL_VERIFY(Table);
+        YDB_LOG_VERIFY(Table);
         return Table;
     }
 
     std::shared_ptr<arrow::Table>&& ExtractTable() {
-        AFL_VERIFY(Table);
+        YDB_LOG_VERIFY(Table);
         return std::move(Table);
     }
 
@@ -276,20 +276,20 @@ public:
     }
 
     TPortionDataAccessor::TReadPage ExtractPageForResult() {
-        AFL_VERIFY(PagesToResult);
-        AFL_VERIFY(PagesToResult->size());
+        YDB_LOG_VERIFY(PagesToResult);
+        YDB_LOG_VERIFY(PagesToResult->size());
         auto result = PagesToResult->front();
         PagesToResult->pop_front();
         return result;
     }
 
     const std::deque<TPortionDataAccessor::TReadPage>& GetPagesToResultVerified() const {
-        AFL_VERIFY(PagesToResult);
+        YDB_LOG_VERIFY(PagesToResult);
         return *PagesToResult;
     }
 
     void SetPages(std::vector<TPortionDataAccessor::TReadPage>&& pages) {
-        AFL_VERIFY(!PagesToResult);
+        YDB_LOG_VERIFY(!PagesToResult);
         PagesToResult = std::deque<TPortionDataAccessor::TReadPage>(pages.begin(), pages.end());
     }
 
@@ -297,19 +297,19 @@ public:
 
     void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 indexStart, const ui32 recordsCount) {
         auto page = ExtractPageForResult();
-        AFL_VERIFY(page.GetIndexStart() == indexStart,
+        YDB_LOG_VERIFY(page.GetIndexStart() == indexStart,
             {"real", page.GetIndexStart()},
             {"expected", indexStart});
-        AFL_VERIFY(page.GetRecordsCount() == recordsCount,
+        YDB_LOG_VERIFY(page.GetRecordsCount() == recordsCount,
             {"real", page.GetRecordsCount()},
             {"expected", recordsCount});
-        AFL_VERIFY(!ChunkToReply);
+        YDB_LOG_VERIFY(!ChunkToReply);
         ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, std::move(table));
     }
 
     void SetEmptyResultChunk(const ui32 indexStart = 0, const ui32 recordsCount = 0) {
-        AFL_VERIFY(!ChunkToReply);
-        AFL_VERIFY(IsFinished());
+        YDB_LOG_VERIFY(!ChunkToReply);
+        YDB_LOG_VERIFY(IsFinished());
         ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, nullptr);
     }
 
@@ -329,7 +329,7 @@ public:
     }
 
     std::optional<TSourceChunkToReply> ExtractResultChunk() {
-        AFL_VERIFY(!!ChunkToReply);
+        YDB_LOG_VERIFY(!!ChunkToReply);
         auto result = std::move(*ChunkToReply);
         ChunkToReply.reset();
         return result;

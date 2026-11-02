@@ -48,12 +48,12 @@ std::shared_ptr<TValueAggregationClient> TCommonCountersOwner::GetValueAutoAggre
 }
 
 void TCommonCountersOwner::DeepSubGroup(const TString& id, const TString& value) {
-    AFL_VERIFY(SignalKeys.emplace(id, value).second)(id, value);
+    YDB_LOG_VERIFY(SignalKeys.emplace(id, value).second)(id, value);
     SubGroup = SubGroup->GetSubgroup(id, value);
 }
 
 void TCommonCountersOwner::DeepSubGroup(const TString& componentName) {
-    AFL_VERIFY(SignalKeys.emplace("component", componentName).second,
+    YDB_LOG_VERIFY(SignalKeys.emplace("component", componentName).second,
         {"component", componentName});
     SubGroup = SubGroup->GetSubgroup("component", componentName);
 }

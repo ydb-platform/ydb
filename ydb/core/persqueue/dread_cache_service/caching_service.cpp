@@ -835,7 +835,7 @@ private:
                 // If write time and source id are the same, the rest fields will be the same too.
                 currentBatch = partitionData->add_batches();
                 i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
-                AFL_ENSURE(write_ts >= 0);
+                YDB_LOG_ENSURE(write_ts >= 0);
                 *currentBatch->mutable_written_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(write_ts);
                 // Use shared helper to properly encode non-UTF-8 source IDs
                 NGRpcProxy::V1::SetBatchSourceId(currentBatch, std::move(sourceId));

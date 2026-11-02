@@ -300,7 +300,7 @@ void TArrowBatchBuilder::AppendValue(const NUdf::TUnboxedValue& value, ui32 colN
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
-    AFL_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size(),
+    YDB_LOG_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size(),
         {"key", key.ColumnCount},
         {"value", value.ColumnCount},
         {"schema", YdbSchema.size()});
@@ -310,7 +310,7 @@ void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value
         for (size_t i = 0; i < tuple.ColumnCount; ++i) {
             auto ydbType = tuple.Types[i];
             const ui32 colNum =  offsetInRow + i;
-            AFL_VERIFY(colNum < YdbSchema.size(),
+            YDB_LOG_VERIFY(colNum < YdbSchema.size(),
                 {"column", colNum},
                 {"schema", YdbSchema.size()});
             Y_ABORT_UNLESS(ydbType == YdbSchema[colNum].second);

@@ -208,7 +208,7 @@ private:
 
 protected:
     ECursorTag GetLegacyTag() const {
-        AFL_VERIFY(SourcesSorting);
+        YDB_LOG_VERIFY(SourcesSorting);
         return LegacyCursorTag(*SourcesSorting);
     }
 
@@ -216,7 +216,7 @@ protected:
         if (!entity.GetSourceRecordsCount()) {
             usage = false;
         } else {
-            AFL_VERIFY(recordIndex <= entity.GetSourceRecordsCount(),
+            YDB_LOG_VERIFY(recordIndex <= entity.GetSourceRecordsCount(),
                 {"index", recordIndex},
                 {"count", entity.GetSourceRecordsCount()});
             usage = recordIndex < entity.GetSourceRecordsCount();
@@ -234,12 +234,12 @@ public:
     }
 
     bool CheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const {
-        AFL_VERIFY(IsInitialized());
+        YDB_LOG_VERIFY(IsInitialized());
         return DoCheckSourceIntervalUsage(sourceIdx, indexStart, recordsCount);
     }
 
     bool CheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const {
-        AFL_VERIFY(IsInitialized());
+        YDB_LOG_VERIFY(IsInitialized());
         return DoCheckEntityIsBorder(entity, usage);
     }
 
@@ -301,7 +301,7 @@ private:
     }
 
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
-        AFL_VERIFY(SourceIdx);
+        YDB_LOG_VERIFY(SourceIdx);
         switch (GetLegacyTag()) {
             case ECursorTag::PkOrderedSources:
                 return FillProto(*proto.MutableColumnShardSimple());
@@ -329,23 +329,23 @@ private:
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(SourceIdx);
-        AFL_VERIFY(sourceIdx == *SourceIdx);
+        YDB_LOG_VERIFY(SourceIdx);
+        YDB_LOG_VERIFY(sourceIdx == *SourceIdx);
         if (indexStart >= RecordIndex) {
             return true;
         }
-        AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
+        YDB_LOG_VERIFY(indexStart + recordsCount <= RecordIndex);
         return false;
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceIdx);
+        YDB_LOG_VERIFY(SourceIdx);
         if (*SourceIdx != entity.GetSourceIdx()) {
             return false;
         }
         // Identity before position: a slot number only names this source while the sources set is the one
         // the cursor was taken on, and comparing a record index against another source explains nothing.
-        AFL_VERIFY(!PortionId || *PortionId == entity.GetSourceId(),
+        YDB_LOG_VERIFY(!PortionId || *PortionId == entity.GetSourceId(),
             {"sourceIdx", *SourceIdx},
             {"cursorPortionId", *PortionId},
             {"foundSourceId", entity.GetSourceId()});
@@ -393,7 +393,7 @@ private:
     }
 
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
-        AFL_VERIFY(SourceId);
+        YDB_LOG_VERIFY(SourceId);
         switch (GetLegacyTag()) {
             case ECursorTag::PkOrderedSources:
                 return FillProto(*proto.MutableDeprecatedColumnShardSimple());
@@ -421,16 +421,16 @@ private:
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 /*sourceIdx*/, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(SourceId);
+        YDB_LOG_VERIFY(SourceId);
         if (indexStart >= RecordIndex) {
             return true;
         }
-        AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
+        YDB_LOG_VERIFY(indexStart + recordsCount <= RecordIndex);
         return false;
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceId);
+        YDB_LOG_VERIFY(SourceId);
         if (*SourceId != entity.GetSourceId()) {
             return false;
         }
@@ -454,7 +454,7 @@ private:
     }
 
     virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
-        AFL_VERIFY(!!PrimaryKey);
+        YDB_LOG_VERIFY(!!PrimaryKey);
         return PrimaryKey;
     }
 
@@ -477,7 +477,7 @@ public:
     TPlainScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk)
         : PrimaryKey(pk)
     {
-        AFL_VERIFY(PrimaryKey);
+        YDB_LOG_VERIFY(PrimaryKey);
     }
 };
 
@@ -502,7 +502,7 @@ class TRangesBuilder {
                 return std::nullopt;
             }
             auto columns = schema->field_names();
-            AFL_VERIFY(columns.size() >= NumColumns,
+            YDB_LOG_VERIFY(columns.size() >= NumColumns,
                 {"schema", columns.size()},
                 {"predicate", NumColumns});
             columns.resize(NumColumns);
@@ -533,7 +533,7 @@ public:
         : YdbPK(ExtractTypes(ydbPk))
         , ArrPK(arrPk)
     {
-        AFL_VERIFY((i64)ydbPk.size() == arrPk->num_fields());
+        YDB_LOG_VERIFY((i64)ydbPk.size() == arrPk->num_fields());
         NArrow::TStatusValidator::Validate(BatchBuilder.Start(ydbPk, arrPk));
     }
 

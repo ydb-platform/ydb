@@ -82,7 +82,7 @@ public:
     TWrittenPortionInfo(TPortionMeta&& meta)
         : TBase(std::move(meta))
     {
-        //        AFL_VERIFY(!GetMeta().GetTierName());
+        //        YDB_LOG_VERIFY(!GetMeta().GetTierName());
     }
 
     bool HasCommitSnapshot() const {
@@ -96,7 +96,7 @@ public:
     virtual bool IsAborted() const override;
 
     const TSnapshot& GetCommitSnapshotVerified() const {
-        AFL_VERIFY(HasCommitSnapshot());
+        YDB_LOG_VERIFY(HasCommitSnapshot());
         return CommitSnapshot.Get();
     }
 
@@ -105,14 +105,14 @@ public:
     }
 
     TInsertWriteId GetInsertWriteId() const {
-        AFL_VERIFY(!!InsertWriteId);
+        YDB_LOG_VERIFY(!!InsertWriteId);
         return *InsertWriteId;
     }
 
     void SetCommitSnapshot(const TSnapshot& value) {
-        AFL_VERIFY(!!InsertWriteId);
-        AFL_VERIFY(!HasCommitSnapshot());
-        AFL_VERIFY(value.Valid());
+        YDB_LOG_VERIFY(!!InsertWriteId);
+        YDB_LOG_VERIFY(!HasCommitSnapshot());
+        YDB_LOG_VERIFY(value.Valid());
         CommitSnapshot.Set(value);
     }
 
@@ -120,7 +120,7 @@ public:
         if (CommitSnapshot.Has()) {
             return CommitSnapshot.Get();
         } else {
-            AFL_VERIFY(snapshotDefault);
+            YDB_LOG_VERIFY(snapshotDefault);
             return *snapshotDefault;
         }
     }
@@ -129,7 +129,7 @@ public:
         if (CommitSnapshot.Has()) {
             return CommitSnapshot.Get();
         } else {
-            AFL_VERIFY(snapshotDefault);
+            YDB_LOG_VERIFY(snapshotDefault);
             return *snapshotDefault;
         }
     }

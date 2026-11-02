@@ -36,11 +36,11 @@ public:
         , PackSize(packSize)
         , ObjectsCount(objectsCount)
     {
-        AFL_VERIFY(objectsCount >= packsCount,
+        YDB_LOG_VERIFY(objectsCount >= packsCount,
             {"objectsCount", objectsCount},
             {"packsCount", packsCount});
-        AFL_VERIFY(PackSize);
-        AFL_VERIFY(PacksCount);
+        YDB_LOG_VERIFY(PackSize);
+        YDB_LOG_VERIFY(PacksCount);
     }
 
     class TIterator {

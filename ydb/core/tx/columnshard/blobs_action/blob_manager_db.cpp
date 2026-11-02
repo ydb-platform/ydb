@@ -67,7 +67,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            AFL_VERIFY(unifiedBlobId.IsValid(),
+            YDB_LOG_VERIFY(unifiedBlobId.IsValid(),
                 {"event", "cannot_parse_blob"},
                 {"error", error},
                 {"originalString", blobIdStr});
@@ -92,7 +92,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            AFL_VERIFY(unifiedBlobId.IsValid(),
+            YDB_LOG_VERIFY(unifiedBlobId.IsValid(),
                 {"event", "cannot_parse_blob"},
                 {"error", error},
                 {"originalString", blobIdStr});
@@ -117,7 +117,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDeleteWT::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
-            AFL_VERIFY(unifiedBlobId.IsValid(),
+            YDB_LOG_VERIFY(unifiedBlobId.IsValid(),
                 {"event", "cannot_parse_blob"},
                 {"error", error},
                 {"originalString", blobIdStr});
@@ -178,7 +178,7 @@ bool TBlobManagerDb::LoadTierLists(
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            AFL_VERIFY(unifiedBlobId.IsValid(),
+            YDB_LOG_VERIFY(unifiedBlobId.IsValid(),
                 {"event", "cannot_parse_blob"},
                 {"error", error},
                 {"originalString", blobIdStr});
@@ -201,7 +201,7 @@ bool TBlobManagerDb::LoadTierLists(
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDeleteWT::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            AFL_VERIFY(unifiedBlobId.IsValid(),
+            YDB_LOG_VERIFY(unifiedBlobId.IsValid(),
                 {"event", "cannot_parse_blob"},
                 {"error", error},
                 {"originalString", blobIdStr});
@@ -224,7 +224,7 @@ bool TBlobManagerDb::LoadTierLists(
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::TierBlobsDraft::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
-            AFL_VERIFY(unifiedBlobId.IsValid(),
+            YDB_LOG_VERIFY(unifiedBlobId.IsValid(),
                 {"event", "cannot_parse_blob"},
                 {"error", error},
                 {"originalString", blobIdStr});

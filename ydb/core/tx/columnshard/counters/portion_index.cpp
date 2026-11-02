@@ -25,7 +25,7 @@ void TPortionIndexStats::RemovePortion(const NOlap::TPortionInfo& portion) {
 
     {
         auto findClass = TotalStats.find(portionClass);
-        AFL_VERIFY(findClass != TotalStats.end(),
+        YDB_LOG_VERIFY(findClass != TotalStats.end(),
             {"pathId", portion.GetPathId()});
         findClass->second.RemovePortion(portion);
         if (findClass->second.IsEmpty()) {
@@ -35,10 +35,10 @@ void TPortionIndexStats::RemovePortion(const NOlap::TPortionInfo& portion) {
 
     {
         auto findPathId = StatsByPathId.find(portion.GetPathId());
-        AFL_VERIFY(findPathId != StatsByPathId.end(),
+        YDB_LOG_VERIFY(findPathId != StatsByPathId.end(),
             {"pathId", portion.GetPathId()});
         auto findClass = findPathId->second.find(portionClass);
-        AFL_VERIFY(findClass != findPathId->second.end(),
+        YDB_LOG_VERIFY(findClass != findPathId->second.end(),
             {"pathId", portion.GetPathId()});
         findClass->second.RemovePortion(portion);
         if (findClass->second.IsEmpty()) {

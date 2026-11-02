@@ -92,7 +92,7 @@ public:
 
     bool DeserializeFromString(const TString& data) {
         if (!TBase::DeserializeFromString(data)) {
-            AFL_VERIFY(Initialize(TFakeStatusChannel::GetClassNameStatic()));
+            YDB_LOG_VERIFY(Initialize(TFakeStatusChannel::GetClassNameStatic()));
             return false;
         }
         return true;

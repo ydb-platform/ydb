@@ -27,7 +27,7 @@ private:
             : RecordsCount(partSize)
             , SourceIdx(source.GetSourceIdx())
         {
-            AFL_VERIFY(partSize < source.GetResultRecordsCount());
+            YDB_LOG_VERIFY(partSize < source.GetResultRecordsCount());
         }
     };
 

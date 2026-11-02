@@ -388,7 +388,7 @@ private:
             return;
         }
         for (auto&& i : CSBlobIds) {
-            AFL_VERIFY(BSBlobIds.erase(i),
+            YDB_LOG_VERIFY(BSBlobIds.erase(i),
                 {"error", "have to use broken blobs repair"},
                 {"blobId", i});
         }
@@ -447,13 +447,13 @@ public:
 
     void Handle(TEvBlobStorage::TEvRangeResult::TPtr& ev, const TActorContext& /*ctx*/) {
         TEvBlobStorage::TEvRangeResult* msg = ev->Get();
-        AFL_VERIFY(msg->Status == NKikimrProto::OK,
+        YDB_LOG_VERIFY(msg->Status == NKikimrProto::OK,
             {"status", msg->Status},
             {"error", msg->ErrorReason});
-        AFL_VERIFY(--WaitingCount >= 0);
-        AFL_VERIFY(WaitingRequests.erase(ev->Cookie));
+        YDB_LOG_VERIFY(--WaitingCount >= 0);
+        YDB_LOG_VERIFY(WaitingRequests.erase(ev->Cookie));
         for (auto& resp : msg->Responses) {
-            AFL_VERIFY(!resp.Buffer);
+            YDB_LOG_VERIFY(!resp.Buffer);
             DoNotKeepCount += resp.DoNotKeep;
             KeepCount += resp.Keep;
             if (resp.DoNotKeep && !resp.Keep) {
@@ -496,7 +496,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             default:
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
         }
     }
 };
@@ -575,7 +575,7 @@ TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::T
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
-    AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+    YDB_LOG_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
 
     NIceDb::TNiceDb db(txc.DB);
     NColumnShard::TTablesManager tablesManager(
@@ -639,7 +639,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(TDbWrapper& wrapper
                 conclusion = LoadColumns(wrapper);
                 break;
             case TProcessPortionsStep::Finished:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"error", "finished step"});
         }
         if (conclusion.IsFail()) {
@@ -727,7 +727,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadColumns(TDbWrapper& wrapper) {
         const auto& blobIds = columnChunk.GetBlobIds();
         if (!portion.GetDeferredIndexBlobIdxs().empty()) {
             for (auto& idx : portion.GetDeferredIndexBlobIdxs()) {
-                AFL_VERIFY(idx < blobIds.size(),
+                YDB_LOG_VERIFY(idx < blobIds.size(),
                     {"idx", idx},
                     {"blobIdsSize", blobIds.size()},
                     {"pathId", portion.GetPathId()},
@@ -761,11 +761,11 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadBlobsToDelete(NIceDb::TNiceDb& db)
         const TString& blobIdStr = rowset.GetValue<NColumnShard::Schema::BlobsToDeleteWT::BlobId>();
         TString error;
         TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(blobIdStr, &DsGroupSelector, error);
-        AFL_VERIFY(blobId.IsValid(),
+        YDB_LOG_VERIFY(blobId.IsValid(),
             {"event", "cannot_parse_blob"},
             {"error", error},
             {"originalString", blobIdStr});
-        AFL_VERIFY(!Result.contains(blobId.GetLogoBlobId()),
+        YDB_LOG_VERIFY(!Result.contains(blobId.GetLogoBlobId()),
             {"blobId", blobId.GetLogoBlobId()},
             {"error", "blob id is in both IndexColumnsV2 and BlobsToDeleteWT tables"});
         ResultToDelete.emplace(blobId.GetLogoBlobId());
@@ -822,7 +822,7 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
     for (ui32 i = 1; i < tokens.size(); ++i) {
         const TStringBuf token = tokens[i];
         const size_t eqPos = token.find('=');
-        AFL_VERIFY(eqPos != TStringBuf::npos,
+        YDB_LOG_VERIFY(eqPos != TStringBuf::npos,
             {"error", "invalid param format, expected key=value"},
             {"token", token},
             {"description", description});
@@ -831,11 +831,11 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
         const TStringBuf value = token.SubStr(eqPos + 1);
         if (key == "batch_size") {
             const auto parsed = TryFromString<size_t>(TString(value));
-            AFL_VERIFY(parsed.Defined(),
+            YDB_LOG_VERIFY(parsed.Defined(),
                 {"error", "cannot parse batch_size"},
                 {"value", TString(value)},
                 {"description", description});
-            AFL_VERIFY(*parsed > 0,
+            YDB_LOG_VERIFY(*parsed > 0,
                 {"error", "batch_size has to be > 0"},
                 {"value", *parsed},
                 {"description", description});
@@ -846,20 +846,20 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
             } else if (value == "false") {
                 PrintLeakedBlobIds = false;
             } else {
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"error", "cannot parse print_leaked_blob_ids"},
                     {"value", TString(value)},
                     {"description", description});
             }
         } else if (key == "log_level") {
             NActors::NLog::EPriority parsedPriority = NActors::NLog::PRI_WARN;
-            AFL_VERIFY(TryParseLogPriority(value, parsedPriority),
+            YDB_LOG_VERIFY(TryParseLogPriority(value, parsedPriority),
                 {"error", "cannot parse log_level"},
                 {"value", TString(value)},
                 {"description", description});
             LogLevel = parsedPriority;
         } else {
-            AFL_VERIFY(false,
+            YDB_LOG_VERIFY(false,
                 {"error", "unknown param key"},
                 {"key", key},
                 {"description", description});

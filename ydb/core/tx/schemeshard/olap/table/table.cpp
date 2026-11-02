@@ -7,7 +7,7 @@
 namespace NKikimr::NSchemeShard {
 
 TPathId TColumnTableInfo::GetOlapStorePathIdVerified() const {
-    AFL_VERIFY(!IsStandalone());
+    YDB_LOG_VERIFY(!IsStandalone());
     return TPathId::FromProto(Description.GetColumnStorePathId());
 }
 
@@ -28,9 +28,9 @@ const google::protobuf::RepeatedField<arc_ui64>& TColumnTableInfo::GetPartitions
 }
 
 void TColumnTableInfo::SetColumnShards(const std::vector<ui64>& columnShards) {
-    AFL_VERIFY(GetColumnShards().empty(),
+    YDB_LOG_VERIFY(GetColumnShards().empty(),
         {"original", Description.DebugString()});
-    AFL_VERIFY(columnShards.size());
+    YDB_LOG_VERIFY(columnShards.size());
 
     Description.MutableSharding()->MutableColumnShards()->Clear();
     Description.MutableSharding()->MutableColumnShards()->Reserve(columnShards.size());
@@ -62,12 +62,12 @@ TColumnTableInfo::TColumnTableInfo(
 }
 
 const NKikimrSchemeOp::TColumnStoreSharding& TColumnTableInfo::GetStandaloneShardingVerified() const {
-    AFL_VERIFY(!!StandaloneSharding);
+    YDB_LOG_VERIFY(!!StandaloneSharding);
     return *StandaloneSharding;
 }
 
 const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TShardIdx>& TColumnTableInfo::GetOwnedColumnShardsVerified() const {
-    AFL_VERIFY(IsStandalone());
+    YDB_LOG_VERIFY(IsStandalone());
     return StandaloneSharding->GetColumnShards();
 }
 

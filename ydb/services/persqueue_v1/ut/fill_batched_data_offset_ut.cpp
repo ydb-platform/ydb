@@ -66,7 +66,7 @@ Y_UNIT_TEST(BatchedResultCoversAndAdvancesReadOffset) {
     UNIT_ASSERT(BatchedResultCoversReadOffset(parentKeyOffset, /*lmc=*/5, parentKeyOffset + 4));
     UNIT_ASSERT(!BatchedResultCoversReadOffset(parentKeyOffset, /*lmc=*/5, parentKeyOffset + 5));
 
-    // Supportive header leak (production bug: 391 vs ReadOffset ~547189849) → !Covers → AFL_ENSURE.
+    // Supportive header leak (production bug: 391 vs ReadOffset ~547189849) → !Covers → YDB_LOG_ENSURE.
     UNIT_ASSERT(!BatchedResultCoversReadOffset(supportiveLeakOffset, /*lmc=*/1, readOffset));
     UNIT_ASSERT(!BatchedResultCoversReadOffset(supportiveLeakOffset + 2, /*lmc=*/1, readOffset));
 
@@ -125,7 +125,7 @@ Y_UNIT_TEST(FillBatchedDataLoopAfterTxKeyRenameMidRead) {
 }
 
 // Real FillBatchedData (Topic API): parent-space mid-blob CmdReadResult must pass ENSURE
-// and emit message offsets in key space. Supportive leak must not Cover (would AFL_ENSURE).
+// and emit message offsets in key space. Supportive leak must not Cover (would YDB_LOG_ENSURE).
 Y_UNIT_TEST(FillBatchedDataTopicApiAfterTxKeyRenameMidRead) {
     constexpr ui64 parentKeyOffset = 547'189'849;
     constexpr ui64 readOffsetStart = parentKeyOffset + 2;
@@ -147,7 +147,7 @@ Y_UNIT_TEST(FillBatchedDataTopicApiAfterTxKeyRenameMidRead) {
         r->SetData(MakeRegularDataChunk(TString(1, static_cast<char>('a' + i))));
     }
 
-    // Negative contract before calling FillBatchedData (AFL_ENSURE would abort the process).
+    // Negative contract before calling FillBatchedData (YDB_LOG_ENSURE would abort the process).
     UNIT_ASSERT(!BatchedResultCoversReadOffset(/*resultOffset=*/393, /*lmc=*/1, readOffsetStart));
 
     Ydb::Topic::StreamReadMessage::ReadResponse response;

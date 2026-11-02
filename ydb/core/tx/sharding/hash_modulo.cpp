@@ -40,8 +40,8 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
         alter.MutableModification()->MutableModulo()->SetPartsCount(2 * GetOrderedShardIds().size());
         for (auto&& i : GetOrderedShardIds()) {
             auto specSharding = info.GetShardingTabletVerified(i);
-            AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
-            AFL_VERIFY(specSharding.MutableAppropriateMods().emplace(*specSharding.MutableAppropriateMods().begin() + GetOrderedShardIds().size()).second);
+            YDB_LOG_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
+            YDB_LOG_VERIFY(specSharding.MutableAppropriateMods().emplace(*specSharding.MutableAppropriateMods().begin() + GetOrderedShardIds().size()).second);
             *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
         }
 
@@ -55,7 +55,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 alter.MutableModification()->AddOpenWriteIds(newTabletIds[idx]);
                 auto specSharding = info.GetShardingTabletVerified(i);
                 specSharding.SetTabletId(newTabletIds[idx]);
-                AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
+                YDB_LOG_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
                 *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
                 result.emplace_back(alter);
             }
@@ -71,7 +71,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 NKikimrSchemeOp::TAlterShards alter;
                 alter.MutableModification()->AddOpenReadIds(newTabletIds[idx]);
                 auto specSharding = info.GetShardingTabletVerified(i);
-                AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
+                YDB_LOG_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
                 const ui32 original = *specSharding.MutableAppropriateMods().begin();
                 specSharding.MutableAppropriateMods().erase(original);
                 specSharding.MutableAppropriateMods().emplace(original + GetOrderedShardIds().size());
@@ -85,7 +85,7 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
 }
 
 NKikimr::TConclusionStatus THashShardingModuloN::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
-    AFL_VERIFY(!!SpecialShardingInfo);
+    YDB_LOG_VERIFY(!!SpecialShardingInfo);
     for (auto&& i : proto.GetDeleteShardIds()) {
         if (!DeleteShardInfo(i)) {
             return TConclusionStatus::Fail("no shard with same id on delete modulo interval");
@@ -116,7 +116,7 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoApplyModification(const NKiki
 }
 
 NKikimr::TConclusionStatus THashShardingModuloN::DoOnAfterModification() {
-    AFL_VERIFY(!!SpecialShardingInfo);
+    YDB_LOG_VERIFY(!!SpecialShardingInfo);
 
     auto result = SpecialShardingInfo->BuildActivityIndex(GetClosedWritingShardIds(), GetClosedReadingShardIds());
     if (result.IsFail()) {
@@ -140,7 +140,7 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(const NK
     if (!proto.HasHashSharding()) {
         return TConclusionStatus::Fail("no data for modulo n sharding");
     }
-    AFL_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+    YDB_LOG_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
     {
         TSpecificShardingInfo specialInfo;
         auto result = specialInfo.DeserializeFromProto(proto, GetClosedWritingShardIds(), GetClosedReadingShardIds());
@@ -179,9 +179,9 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
             const ui64 from2 = GetOrderedShardIds()[idx + newTabletIds.size()];
             auto source1 = shardingInfo.GetShardingTabletVerified(from1);
             auto source2 = shardingInfo.GetShardingTabletVerified(from2);
-            AFL_VERIFY(source1.GetAppropriateMods().size() == 1);
-            AFL_VERIFY(source2.GetAppropriateMods().size() == 1);
-            AFL_VERIFY(*source1.GetAppropriateMods().begin() + newTabletIds.size() == *source2.GetAppropriateMods().begin());
+            YDB_LOG_VERIFY(source1.GetAppropriateMods().size() == 1);
+            YDB_LOG_VERIFY(source2.GetAppropriateMods().size() == 1);
+            YDB_LOG_VERIFY(*source1.GetAppropriateMods().begin() + newTabletIds.size() == *source2.GetAppropriateMods().begin());
             {
                 NKikimrSchemeOp::TAlterShards alter;
                 TSpecificShardingInfo::TModuloShardingTablet newInterval(i, { *source1.GetAppropriateMods().begin() ,*source2.GetAppropriateMods().begin() });

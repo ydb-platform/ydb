@@ -30,8 +30,8 @@ TConclusionStatus TGeneralContainer::MergeColumnsStrictly(const TGeneralContaine
 }
 
 TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data) {
-    AFL_VERIFY(f);
-    AFL_VERIFY(data);
+    YDB_LOG_VERIFY(f);
+    YDB_LOG_VERIFY(data);
     if (RecordsCount && data->GetRecordsCount() != *RecordsCount) {
         return TConclusionStatus::Fail(TStringBuilder() << "inconsistency records count in new column: " << f->name()
                                                         << ". expected: " << RecordsCount << ", reality: " << data->GetRecordsCount());
@@ -69,24 +69,24 @@ void TGeneralContainer::Initialize() {
     if (Schema->num_fields() == 0) {
         recordsCount = 0;
     }
-    AFL_VERIFY(Schema->num_fields() == (i32)Columns.size(),
+    YDB_LOG_VERIFY(Schema->num_fields() == (i32)Columns.size(),
         {"schema", Schema->num_fields()},
         {"columns", Columns.size()});
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
-        AFL_VERIFY(Columns[i]);
-        AFL_VERIFY(Schema->field(i)->type()->Equals(Columns[i]->GetDataType()));
+        YDB_LOG_VERIFY(Columns[i]);
+        YDB_LOG_VERIFY(Schema->field(i)->type()->Equals(Columns[i]->GetDataType()));
         if (!recordsCount) {
             recordsCount = Columns[i]->GetRecordsCount();
         } else {
-            AFL_VERIFY(*recordsCount == Columns[i]->GetRecordsCount(),
+            YDB_LOG_VERIFY(*recordsCount == Columns[i]->GetRecordsCount(),
                 {"event", "inconsistency_records_count"},
                 {"expect", *recordsCount},
                 {"real", Columns[i]->GetRecordsCount()},
                 {"fieldName", Schema->field(i)->name()});
         }
     }
-    AFL_VERIFY(recordsCount);
-    AFL_VERIFY(!RecordsCount || *RecordsCount == *recordsCount);
+    YDB_LOG_VERIFY(recordsCount);
+    YDB_LOG_VERIFY(!RecordsCount || *RecordsCount == *recordsCount);
     RecordsCount = *recordsCount;
 }
 
@@ -114,7 +114,7 @@ TGeneralContainer::TGeneralContainer(
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
     : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
     , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
-    AFL_VERIFY(table);
+    YDB_LOG_VERIFY(table);
     for (auto&& i : table->columns()) {
         if (i->num_chunks() == 1) {
             Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i->chunk(0)));
@@ -128,7 +128,7 @@ TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
 TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table)
     : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
     , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
-    AFL_VERIFY(table);
+    YDB_LOG_VERIFY(table);
     for (auto&& i : table->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
     }
@@ -142,7 +142,7 @@ TGeneralContainer::TGeneralContainer(const ui32 recordsCount)
 
 std::shared_ptr<NAccessor::IChunkedArray> TGeneralContainer::GetAccessorByNameVerified(const std::string& fieldId) const {
     auto result = GetAccessorByNameOptional(fieldId);
-    AFL_VERIFY(result,
+    YDB_LOG_VERIFY(result,
         {"event", "cannot_find_accessor_in_general_container"},
         {"fieldId", fieldId},
         {"schema", Schema->ToString()});
@@ -169,7 +169,7 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTable
         if (!count) {
             count = columns.back()->length();
         } else {
-            AFL_VERIFY(*count == columns.back()->length(),
+            YDB_LOG_VERIFY(*count == columns.back()->length(),
                 {"count", count},
                 {"local", columns.back()->length()});
         }
@@ -178,14 +178,14 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTable
     if (fields.empty()) {
         return nullptr;
     }
-    AFL_VERIFY(count);
+    YDB_LOG_VERIFY(count);
     return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *count);
 }
 
 std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
     auto result = BuildTableOptional(context);
-    AFL_VERIFY(result);
-    AFL_VERIFY(!context.GetColumnNames() || result->schema()->num_fields() == (i32)context.GetColumnNames()->size());
+    YDB_LOG_VERIFY(result);
+    YDB_LOG_VERIFY(!context.GetColumnNames() || result->schema()->num_fields() == (i32)context.GetColumnNames()->size());
     return result;
 }
 
@@ -194,7 +194,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessor
     if (idx == -1) {
         return nullptr;
     }
-    AFL_VERIFY((ui32)idx < Columns.size(),
+    YDB_LOG_VERIFY((ui32)idx < Columns.size(),
         {"idx", idx},
         {"count", Columns.size()});
     return Columns[idx];
@@ -253,7 +253,7 @@ NJson::TJsonValue TGeneralContainer::DebugJson(const bool withData) const {
 
 TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(
     const std::shared_ptr<arrow::Field>& field, const bool force) const {
-    AFL_VERIFY(field);
+    YDB_LOG_VERIFY(field);
     auto result = DoGetDefaultColumnElementValue(field->name());
     if (result) {
         return result;

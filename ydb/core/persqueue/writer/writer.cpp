@@ -71,7 +71,7 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
 }
 
 TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
-    AFL_ENSURE(!IsSuccess());
+    YDB_LOG_ENSURE(!IsSuccess());
 
     return TStringBuilder() << "Error {"
         << " SessionId: " << SessionId
@@ -169,7 +169,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     TWriteId MakeDeferredWriteIdFromOpts() const {
-        AFL_ENSURE(Opts.DeferredPublish,
+        YDB_LOG_ENSURE(Opts.DeferredPublish,
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId});
         NKikimrPQ::TWriteId proto;
@@ -394,7 +394,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void AbortDeferredStaging() {
-        AFL_ENSURE(HasWriteId(),
+        YDB_LOG_ENSURE(HasWriteId(),
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId});
 
@@ -493,10 +493,10 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void StartUpsertDestination() {
-        AFL_ENSURE(IsDeferredPublishWriter(),
+        YDB_LOG_ENSURE(IsDeferredPublishWriter(),
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId});
-        AFL_ENSURE(!Opts.Database.empty(),
+        YDB_LOG_ENSURE(!Opts.Database.empty(),
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId});
 
@@ -537,10 +537,10 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
     }
 
     void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
-        AFL_ENSURE(HasWriteId(),
+        YDB_LOG_ENSURE(HasWriteId(),
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId});
-        AFL_ENSURE(HasSupportivePartitionId(),
+        YDB_LOG_ENSURE(HasSupportivePartitionId(),
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId});
 
@@ -631,7 +631,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
             }
         }
 
-        AFL_ENSURE(sourceIdInfo.GetSeqNo() >= 0,
+        YDB_LOG_ENSURE(sourceIdInfo.GetSeqNo() >= 0,
             {"topic", Opts.TopicPath},
             {"tabletId", TabletId},
             {"sourceId", SourceId},

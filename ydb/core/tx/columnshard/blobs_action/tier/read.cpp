@@ -18,7 +18,7 @@ void TReadingAction::DoRetryRead(const TBlobRange& range) {
     TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvGetObjectRequest>> evPtr(
         (TEventHandle<NWrappers::NExternalStorage::TEvGetObjectRequest>*)hRequest.release());
     auto storageOperator = ExternalStorageOperator->Get();
-    AFL_VERIFY(storageOperator);
+    YDB_LOG_VERIFY(storageOperator);
     storageOperator->Execute(evPtr);
 }
 

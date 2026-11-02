@@ -511,7 +511,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         // pass a short timeout so the blocked write fails fast instead of waiting in the queue indefinitely.
         std::vector<ui64> writeIds;
         ++txId;
-        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+        YDB_LOG_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
             NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
         NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
     }
@@ -540,7 +540,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         GracefulRestartTablet(runtime, shardId, sender);
         std::vector<ui64> writeIds;
         ++txId;
-        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+        YDB_LOG_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
             NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
         NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
     }
@@ -2594,7 +2594,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             // Check that writes will fail if quota is exceeded
             std::vector<ui64> writeIds;
             ++txId;
-            AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId));
+            YDB_LOG_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId));
             NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
         }
 

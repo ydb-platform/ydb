@@ -12,7 +12,7 @@ IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters& params, TIntrusiveP
 void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 {
     TAppData * appData = AppData(ctx);
-    AFL_ENSURE(appData);
+    YDB_LOG_ENSURE(appData);
 
     auto mon = appData->Mon;
     if (mon) {
@@ -28,7 +28,7 @@ void TPersQueueCacheL2::Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TA
     THolder<TCacheL2Request> request(ev->Get()->Data.Release());
     ui64 tabletId = request->TabletId;
 
-    AFL_ENSURE(tabletId != 0,
+    YDB_LOG_ENSURE(tabletId != 0,
         {"d", "PQ L2. Empty tabletID in L2"});
 
     TouchBlobs(ctx, tabletId, request->RequestedBlobs);
@@ -58,7 +58,7 @@ void TPersQueueCacheL2::SendResponses(const TActorContext& ctx, const THashMap<T
             resp->TabletId = key.TabletId;
         }
 
-        AFL_ENSURE(key.TabletId == resp->TabletId,
+        YDB_LOG_ENSURE(key.TabletId == resp->TabletId,
             {"d", "PQ L2. Multiple topics in one PQ tablet."});
         resp->Removed.emplace_back(key.Partition, key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.Suffix, evicted);
 
@@ -89,7 +89,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
     Y_UNUSED(ctx);
     ui32 numUnused = 0;
     for (const TCacheBlobL2& blob : blobs) {
-        AFL_ENSURE(blob.Value->GetDataSize(),
+        YDB_LOG_ENSURE(blob.Value->GetDataSize(),
             {"d", "Trying to place empty blob into L2 cache"});
 
         TKey key(tabletId, blob);
@@ -101,7 +101,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             continue;
         }
 
-        AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE,
+        YDB_LOG_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE,
             {"key", key},
             {"currentSize", CurrentSize},
             {"cacheSize", Cache.Size()},
@@ -112,7 +112,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         // manualy manage LRU size
         while (CurrentSize > MaxSize) {
             auto oldest = Cache.FindOldest();
-            AFL_ENSURE(oldest != Cache.End(),
+            YDB_LOG_ENSURE(oldest != Cache.End(),
                 {"tablet", tabletId},
                 {"cacheSize", Cache.Size()},
                 {"currentSize", CurrentSize},

@@ -56,7 +56,7 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
         Counters->OnCSFailed(code);
         FailsCount.Inc();
         if (AtomicCas(&HasCodeFail, 1, 0)) {
-            AFL_VERIFY(!Code);
+            YDB_LOG_VERIFY(!Code);
             Issues.AddIssue(message);
             Code = code;
         }
@@ -150,11 +150,11 @@ EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId
     void TShardWriter::Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        AFL_VERIFY(RetryBySubscription);
-        AFL_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo,
+        YDB_LOG_VERIFY(RetryBySubscription);
+        YDB_LOG_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo,
             {"eventSeqNo", record.GetSeqNo()},
             {"lastOverloadSeqNo", LastOverloadSeqNo});
-        AFL_VERIFY(record.GetTabletID() == ShardId,
+        YDB_LOG_VERIFY(record.GetTabletID() == ShardId,
             {"evTabletId", record.GetTabletID()},
             {"shardId", ShardId});
         if (record.GetSeqNo() != LastOverloadSeqNo) {

@@ -159,13 +159,13 @@ struct Tiling: ICompactionUnit<TPortion> {
                 // Evicted portions (e.g. tier deletion) are not tracked by the optimizer.
                 return;
             case NPortion::INACTIVE:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"reason", "Unexpected portion type"},
                     {"type", "INACTIVE"});
                 break;
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"reason", "Legacy portions"});
                 break;
             default:
@@ -173,7 +173,7 @@ struct Tiling: ICompactionUnit<TPortion> {
         }
 
         const ui64 portionId = p->GetPortionId();
-        AFL_VERIFY(!InternalLevel.contains(portionId),
+        YDB_LOG_VERIFY(!InternalLevel.contains(portionId),
             {"portionId", portionId},
             {"existingLevel", (ui32)InternalLevel[portionId].Level},
             {"existingWidth", InternalLevel[portionId].Width},
@@ -243,7 +243,7 @@ struct Tiling: ICompactionUnit<TPortion> {
             case NPortion::INACTIVE:
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"reason", "Remove not tracked portions"});
                 break;
             default:
@@ -253,7 +253,7 @@ struct Tiling: ICompactionUnit<TPortion> {
         const ui64 portionId = p->GetPortionId();
         auto lit = InternalLevel.find(portionId);
         if (lit == InternalLevel.end()) {
-            AFL_VERIFY(false,
+            YDB_LOG_VERIFY(false,
                 {"reason", "Remove unknown portion"});
             return;
         }
@@ -268,7 +268,7 @@ struct Tiling: ICompactionUnit<TPortion> {
                 mit->second.UnregisterRoutingWidth(portionId);
                 mit->second.RemovePortion(p);
             } else {
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"reason", "Bad level info"});
             }
         }
@@ -314,7 +314,7 @@ struct Tiling: ICompactionUnit<TPortion> {
                 continue;
             }
             const ui8 currentLevel = lit->second.Level;
-            AFL_VERIFY(currentLevel >= 2,
+            YDB_LOG_VERIFY(currentLevel >= 2,
                 {"reason", "only_middle_levels_should_have_aging_timers"},
                 {"portionId", portionId},
                 {"level", (ui32)currentLevel});
@@ -389,7 +389,7 @@ struct Tiling: ICompactionUnit<TPortion> {
                 return std::nullopt;
             }
             GeneratedTasksPriorityLevel->Collect(result->Priority.GetLevel());
-            AFL_VERIFY(result->Portions.size() > 1,
+            YDB_LOG_VERIFY(result->Portions.size() > 1,
                 {"reason", "zero_or_one_sized_task"});
         }
 

@@ -13,7 +13,7 @@ TAllocationGuard::~TAllocationGuard() {
 }
 
 void TAllocationGuard::Release() {
-    AFL_VERIFY(!Released);
+    YDB_LOG_VERIFY(!Released);
     if (TlsActivationContext) {
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(ServiceActorId, new TEvExecution::TEvFree(ClientId, Count));

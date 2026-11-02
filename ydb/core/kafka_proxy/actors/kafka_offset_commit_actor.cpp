@@ -143,14 +143,14 @@ void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 
 void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx) {
     auto cookiesIt = TabletIdToCookies.find(tabletId);
-    AFL_ENSURE(cookiesIt != TabletIdToCookies.end(),
+    YDB_LOG_ENSURE(cookiesIt != TabletIdToCookies.end(),
         {"tabletId", tabletId},
         {"group", Message->GroupId.value()},
         {"database", Context->DatabasePath});
 
     for (auto cookie: cookiesIt->second) {
         auto requestInfoIt = CookieToRequestInfo.find(cookie);
-        AFL_ENSURE(requestInfoIt != CookieToRequestInfo.end(),
+        YDB_LOG_ENSURE(requestInfoIt != CookieToRequestInfo.end(),
             {"tabletId", tabletId},
             {"cookie", cookie},
             {"database", Context->DatabasePath});
@@ -325,7 +325,7 @@ void TKafkaOffsetCommitActor::SendCommits(const TActorContext& ctx) {
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());
-    AFL_ENSURE(requestInfo != CookieToRequestInfo.end(),
+    YDB_LOG_ENSURE(requestInfo != CookieToRequestInfo.end(),
         {"cookie", partitionResult.GetCookie()},
         {"database", Context->DatabasePath});
 

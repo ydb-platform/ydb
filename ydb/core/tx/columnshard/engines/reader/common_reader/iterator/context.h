@@ -53,12 +53,12 @@ public:
     template <class T>
     std::shared_ptr<T> GetReadMetadataVerifiedAs() const {
         auto result = std::dynamic_pointer_cast<T>(ReadMetadata);
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return result;
     }
 
     ui64 GetProcessMemoryControlId() const {
-        AFL_VERIFY(ProcessMemoryGuard);
+        YDB_LOG_VERIFY(ProcessMemoryGuard);
         return ProcessMemoryGuard->GetProcessId();
     }
 

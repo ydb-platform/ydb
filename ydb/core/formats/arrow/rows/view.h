@@ -56,10 +56,10 @@ public:
     NMerger::TSortableBatchPosition BuildSortablePosition(const bool reverse = false) const;
 
     TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex) {
-        AFL_VERIFY(batch);
+        YDB_LOG_VERIFY(batch);
         Schema = batch->schema();
         Data = TSimpleRowViewV0::BuildString(batch, recordIndex);
-        AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
+        YDB_LOG_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
     }
 
     std::shared_ptr<arrow::RecordBatch> ToBatch() const;
@@ -74,7 +74,7 @@ public:
     template <class T>
     std::optional<T> GetValue(const TString& columnName) const {
         const int fIndex = Schema->GetFieldIndex(columnName);
-        AFL_VERIFY(fIndex >= 0);
+        YDB_LOG_VERIFY(fIndex >= 0);
         return GetValue<T>(fIndex);
     }
 
@@ -85,7 +85,7 @@ public:
     template <class T>
     T GetValueVerified(const TString& columnName) const {
         const int fIndex = Schema->GetFieldIndex(columnName);
-        AFL_VERIFY(fIndex >= 0);
+        YDB_LOG_VERIFY(fIndex >= 0);
         return GetValueVerified<T>(fIndex);
     }
 
@@ -97,14 +97,14 @@ public:
     template <class T>
     T GetValueVerified(const ui32 columnIndex) const {
         const auto result = TSimpleRowViewV0(Data).GetValue<T>(columnIndex, Schema).DetachResult();
-        AFL_VERIFY(!!result);
+        YDB_LOG_VERIFY(!!result);
         return *result;
     }
 
     TSimpleRow(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
         : Data(data)
         , Schema(schema) {
-        AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
+        YDB_LOG_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
     }
 
     TString DebugString() const {
@@ -132,7 +132,7 @@ public:
     }
 
     std::partial_ordering operator<=>(const TSimpleRowRef& item) const {
-        AFL_VERIFY_DEBUG(Schema.Equals(item.Schema));
+        YDB_LOG_VERIFY_DEBUG(Schema.Equals(item.Schema));
         return Row.Compare(item.Row, Schema).GetResult();
     }
 

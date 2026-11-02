@@ -6,8 +6,8 @@ namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TExecutionVisitor::DoOnExit(const TCompiledGraph::TNode& node) {
     if (!SkipActivity.size()) {
         if (ExecutionNode) {
-            AFL_VERIFY(Executed);
-            AFL_VERIFY(ExecutionNode->GetIdentifier() == node.GetIdentifier());
+            YDB_LOG_VERIFY(Executed);
+            YDB_LOG_VERIFY(ExecutionNode->GetIdentifier() == node.GetIdentifier());
             ExecutionNode = nullptr;
             for (auto&& i : node.GetRemoveResourceIds()) {
                 Context.MutableResources().Remove(i, true);
@@ -19,14 +19,14 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TExecutionVisitor::DoOnExit(
             return EVisitStatus::NeedExecute;
         }
     } else {
-        AFL_VERIFY(!ExecutionNode);
+        YDB_LOG_VERIFY(!ExecutionNode);
         SkipActivity.erase(node.GetIdentifier());
         return EVisitStatus::Skipped;
     }
 }
 
 TConclusionStatus TExecutionVisitor::DoOnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) {
-    AFL_VERIFY(!ExecutionNode,
+    YDB_LOG_VERIFY(!ExecutionNode,
         {"id", node.GetIdentifier()},
         {"ready", JoinSeq(",", TColumnChainInfo::ExtractColumnIds(readyInputs))});
     if (SkipActivity.empty() && node.GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {

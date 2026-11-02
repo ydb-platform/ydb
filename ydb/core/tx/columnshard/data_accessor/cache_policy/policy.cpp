@@ -19,7 +19,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             THashMap<TAddress, TObject> objects;
             for (auto&& i : accessors) {
                 const TAddress address(OwnerActorId, i->GetPortionInfo().GetAddress());
-                AFL_VERIFY(RequestedAddresses.erase(address));
+                YDB_LOG_VERIFY(RequestedAddresses.erase(address));
                 objects.emplace(address, std::move(i));
             }
             Callback->OnReceiveData(OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
@@ -65,7 +65,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         public:
             void Add(const EConsumer consumer, const TAddress& addr) {
                 Data[addr.GetPathId()].UpsertConsumer(consumer).AddPortion(addr.GetPortionId());
-                AFL_VERIFY(Requested.emplace(addr).second);
+                YDB_LOG_VERIFY(Requested.emplace(addr).second);
             }
 
             THashMap<TInternalPathId, NDataAccessorControl::TPortionsByConsumer> ExtractRequest() {
@@ -151,7 +151,7 @@ TPortionsMetadataCachePolicy::EConsumer TPortionsMetadataCachePolicy::DefaultCon
 }
 
 size_t TPortionsMetadataCachePolicy::TSizeCalcer::operator()(const TObject& data) {
-    AFL_VERIFY(data);
+    YDB_LOG_VERIFY(data);
     return sizeof(TAddress) + data->GetMetadataSize();
 }
 

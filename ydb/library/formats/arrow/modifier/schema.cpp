@@ -6,13 +6,13 @@
 namespace NKikimr::NArrow::NModifier {
 
 std::shared_ptr<arrow::Schema> TSchema::Finish() {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     Finished = true;
     return std::make_shared<arrow::Schema>(Fields);
 }
 
 const std::shared_ptr<arrow::Field>& TSchema::GetFieldByName(const std::string& name) const {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     auto it = IndexByName.find(name);
     if (it == IndexByName.end()) {
         return Default<std::shared_ptr<arrow::Field>>();
@@ -22,7 +22,7 @@ const std::shared_ptr<arrow::Field>& TSchema::GetFieldByName(const std::string& 
 }
 
 TConclusionStatus TSchema::AddField(const std::shared_ptr<arrow::Field>& f) {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     if (!IndexByName.emplace(f->name(), Fields.size()).second) {
         return TConclusionStatus::Fail("field name duplication: " + f->name());
     }
@@ -31,8 +31,8 @@ TConclusionStatus TSchema::AddField(const std::shared_ptr<arrow::Field>& f) {
 }
 
 void TSchema::DeleteFieldsByIndex(const std::vector<ui32>& idxs) {
-    AFL_VERIFY(Initialized);
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(Initialized);
+    YDB_LOG_VERIFY(!Finished);
     NUtil::EraseItems(Fields, idxs, TFieldsErasePolicy(this));
 }
 
@@ -45,17 +45,17 @@ TString TSchema::ToString() const {
 }
 
 const std::shared_ptr<arrow::Field>& TSchema::field(const ui32 index) const {
-    AFL_VERIFY(index < Fields.size());
+    YDB_LOG_VERIFY(index < Fields.size());
     return Fields[index];
 }
 
 const std::shared_ptr<arrow::Field>& TSchema::GetFieldVerified(const ui32 index) const {
-    AFL_VERIFY(index < Fields.size());
+    YDB_LOG_VERIFY(index < Fields.size());
     return Fields[index];
 }
 
 void TSchema::Initialize(const std::vector<std::shared_ptr<arrow::Field>>& fields) {
-    AFL_VERIFY(!Initialized);
+    YDB_LOG_VERIFY(!Initialized);
     Initialized = true;
     for (auto&& i : fields) {
         IndexByName.emplace(i->name(), Fields.size());
@@ -64,12 +64,12 @@ void TSchema::Initialize(const std::vector<std::shared_ptr<arrow::Field>>& field
 }
 
 TSchema::TSchema(const std::shared_ptr<TSchema>& schema) {
-    AFL_VERIFY(schema);
+    YDB_LOG_VERIFY(schema);
     Initialize(schema->Fields);
 }
 
 TSchema::TSchema(const std::shared_ptr<arrow::Schema>& schema) {
-    AFL_VERIFY(schema);
+    YDB_LOG_VERIFY(schema);
     Initialize(schema->fields());
 }
 

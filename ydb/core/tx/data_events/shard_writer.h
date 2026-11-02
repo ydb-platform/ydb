@@ -141,7 +141,7 @@ private:
     void SendReply() {
         if (FailsCount.Val()) {
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
-            AFL_VERIFY(Code);
+            YDB_LOG_VERIFY(Code);
             LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(*Code, Issues));
         } else {
             Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);

@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 if (notDefaultIds) {
                     std::set<ui32> result;
                     for (auto&& i : rows) {
-                        AFL_VERIFY(result.emplace(GetInt64(i.at("pk_int"))).second);
+                        YDB_LOG_VERIFY(result.emplace(GetInt64(i.at("pk_int"))).second);
                     }
                     *notDefaultIds = result;
                 }
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
             ui64 defCounts[FIELD_NAMES.size() * grCount];
             const ui32 count = GetCount();
-            AFL_VERIFY(count == countExpectation,
+            YDB_LOG_VERIFY(count == countExpectation,
                 {"expect", countExpectation},
                 {"count", count});
             GetAllDefaultsCount(defCounts, SKIP_GROUPS);
@@ -128,12 +128,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 if (firstCall) {
                     defCountStart[i] = defCounts[i];
                 } else {
-                    AFL_VERIFY(defCountStart[i] == defCounts[i]);
+                    YDB_LOG_VERIFY(defCountStart[i] == defCounts[i]);
                 }
-                AFL_VERIFY(1.0 * defCounts[i] / count < 0.95,
+                YDB_LOG_VERIFY(1.0 * defCounts[i] / count < 0.95,
                     {"def", defCounts[i]},
                     {"count", count});
-                AFL_VERIFY(1.0 * defCounts[i] / count > 0.85,
+                YDB_LOG_VERIFY(1.0 * defCounts[i] / count > 0.85,
                     {"def", defCounts[i]},
                     {"count", count});
             }
@@ -148,14 +148,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                     *notDefaultValues = ndvLocal;
                 }
             } else {
-                AFL_VERIFY(defCountStart == defCount,
+                YDB_LOG_VERIFY(defCountStart == defCount,
                     {"start", defCountStart},
                     {"current", defCount});
                 if (notDefaultValues) {
                     auto it1 = ndvLocal.begin();
                     auto it2 = notDefaultValues->begin();
                     while (it1 != ndvLocal.end() && it2 != notDefaultValues->end()) {
-                        AFL_VERIFY(*it1 == *it2,
+                        YDB_LOG_VERIFY(*it1 == *it2,
                             {"local", *it1},
                             {"check", *it2},
                             {"localSize", ndvLocal.size()},
@@ -163,19 +163,19 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                         ++it1;
                         ++it2;
                     }
-                    AFL_VERIFY(ndvLocal.size() == notDefaultValues->size(),
+                    YDB_LOG_VERIFY(ndvLocal.size() == notDefaultValues->size(),
                         {"local", ndvLocal.size()},
                         {"check", notDefaultValues->size()});
                 }
             }
             const ui32 count = GetCount();
-            AFL_VERIFY(count == countExpectation,
+            YDB_LOG_VERIFY(count == countExpectation,
                 {"expect", countExpectation},
                 {"count", count});
-            AFL_VERIFY(1.0 * defCount / count < 0.95,
+            YDB_LOG_VERIFY(1.0 * defCount / count < 0.95,
                 {"def", defCount},
                 {"count", count});
-            AFL_VERIFY(1.0 * defCount / count > 0.85,
+            YDB_LOG_VERIFY(1.0 * defCount / count > 0.85,
                 {"def", defCount},
                 {"count", count});
         }

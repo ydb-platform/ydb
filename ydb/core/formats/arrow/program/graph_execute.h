@@ -38,7 +38,7 @@ public:
                 }
             }
             for (auto&& i : OutputEdges) {
-                AFL_VERIFY(i->GetIdentifier() != to->GetIdentifier());
+                YDB_LOG_VERIFY(i->GetIdentifier() != to->GetIdentifier());
             }
             to->InputEdges.emplace_back(this);
             OutputEdges.emplace_back(to);
@@ -57,7 +57,7 @@ public:
         }
 
         void SetSequentialIdx(const ui32 idx) {
-            AFL_VERIFY(!SequentialIdx);
+            YDB_LOG_VERIFY(!SequentialIdx);
             SequentialIdx = idx;
         }
 
@@ -67,7 +67,7 @@ public:
             } else if (!!defValue) {
                 return *defValue;
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
                 return 0;
             }
         }
@@ -81,7 +81,7 @@ public:
         }
 
         ui64 GetWeight() const {
-            AFL_VERIFY(!!Weight);
+            YDB_LOG_VERIFY(!!Weight);
             return *Weight;
         }
 
@@ -121,14 +121,14 @@ public:
         }
         [[nodiscard]] TConclusion<EVisitStatus> OnExit(const TCompiledGraph::TNode& node);
         [[nodiscard]] TConclusionStatus OnEnter(const TCompiledGraph::TNode& node) {
-            AFL_VERIFY(node.GetProcessor());
-            AFL_VERIFY(Visited.emplace(node.GetIdentifier()).second);
-            AFL_VERIFY(Current.emplace(node.GetIdentifier()).second);
+            YDB_LOG_VERIFY(node.GetProcessor());
+            YDB_LOG_VERIFY(Visited.emplace(node.GetIdentifier()).second);
+            YDB_LOG_VERIFY(Current.emplace(node.GetIdentifier()).second);
             return DoOnEnter(node);
         }
         [[nodiscard]] TConclusionStatus OnComeback(const TCompiledGraph::TNode& node, const std::vector<TColumnChainInfo>& readyInputs) {
-            AFL_VERIFY(node.GetProcessor());
-            AFL_VERIFY(Current.contains(node.GetIdentifier()));
+            YDB_LOG_VERIFY(node.GetProcessor());
+            YDB_LOG_VERIFY(Current.contains(node.GetIdentifier()));
             return DoOnComeback(node, readyInputs);
         }
     };
@@ -211,17 +211,17 @@ public:
         }
 
         const std::shared_ptr<TCompiledGraph::TNode>& GetCurrentGraphNode() const {
-            AFL_VERIFY(CurrentGraphNode);
+            YDB_LOG_VERIFY(CurrentGraphNode);
             return CurrentGraphNode;
         }
 
         const TCompiledGraph::TNode& GetCurrentNode() const {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return *CurrentNode;
         }
 
         TCompiledGraph::TNode& MutableCurrentNode() {
-            AFL_VERIFY(IsValid());
+            YDB_LOG_VERIFY(IsValid());
             return *CurrentNode;
         }
 
@@ -232,7 +232,7 @@ public:
         }
 
         const std::shared_ptr<IResourceProcessor>& GetProcessorVerified() const {
-            AFL_VERIFY(!!CurrentNode);
+            YDB_LOG_VERIFY(!!CurrentNode);
             return CurrentNode->GetProcessor();
         }
 

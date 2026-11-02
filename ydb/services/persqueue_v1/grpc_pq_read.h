@@ -129,7 +129,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         return;
     } else {
 
-        AFL_ENSURE(TopicsHandler != nullptr,
+        YDB_LOG_ENSURE(TopicsHandler != nullptr,
             {"localCluster", LocalCluster},
             {"haveClusters", HaveClusters});
         const ui64 cookie = NextCookie();

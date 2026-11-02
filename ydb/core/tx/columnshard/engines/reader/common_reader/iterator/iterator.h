@@ -30,7 +30,7 @@ public:
     }
 
     const std::unique_ptr<TPartialReadResult>& emplace_back(std::unique_ptr<TPartialReadResult>&& v) {
-        AFL_VERIFY(!!v);
+        YDB_LOG_VERIFY(!!v);
         RecordsCount += v->GetRecordsCount();
         Data.emplace_back(std::move(v));
         return Data.back();
@@ -42,7 +42,7 @@ public:
         }
         auto result = std::move(Data.front());
         RecordsCount -= result->GetRecordsCount();
-        AFL_VERIFY(RecordsCount >= 0);
+        YDB_LOG_VERIFY(RecordsCount >= 0);
         Data.pop_front();
         return std::move(result);
     }
@@ -73,7 +73,7 @@ public:
     ~TColumnShardScanIterator();
 
     virtual TConclusionStatus Start() override {
-        AFL_VERIFY(IndexedData);
+        YDB_LOG_VERIFY(IndexedData);
         return IndexedData->Start();
     }
 

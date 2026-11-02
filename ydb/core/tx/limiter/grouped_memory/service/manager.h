@@ -57,16 +57,16 @@ private:
             , Processes(&processes)
             , WaitingProcesses(&waitingProcesses)
             , Start(Process.BuildUsageAddress()) {
-            AFL_VERIFY(Processes->contains(Start));
+            YDB_LOG_VERIFY(Processes->contains(Start));
         }
 
         ~TOrderedProcessesGuard() {
             if (Released) {
                 return;
             }
-            AFL_VERIFY(Processes->erase(Start),
+            YDB_LOG_VERIFY(Processes->erase(Start),
                 {"start", Start.DebugString()});
-            AFL_VERIFY(Processes->emplace(Process.BuildUsageAddress(), &Process).second);
+            YDB_LOG_VERIFY(Processes->emplace(Process.BuildUsageAddress(), &Process).second);
             WaitingProcesses->erase(Start);
             if (Process.HasWaitingAllocations()) {
                 WaitingProcesses->emplace(Process.BuildUsageAddress());
@@ -74,7 +74,7 @@ private:
         }
 
         void Release() {
-            AFL_VERIFY(!Released);
+            YDB_LOG_VERIFY(!Released);
             Released = true;
         }
     };
@@ -85,7 +85,7 @@ private:
 
     TProcessMemory& GetProcessMemoryVerified(const ui64 internalProcessId) {
         auto it = Processes.find(internalProcessId);
-        AFL_VERIFY(it != Processes.end());
+        YDB_LOG_VERIFY(it != Processes.end());
         return it->second;
     }
 

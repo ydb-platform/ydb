@@ -112,7 +112,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     PathId.InternalPathId = TInternalPathId::FromProto(proto);
-    AFL_VERIFY(PathId.InternalPathId);
+    YDB_LOG_VERIFY(PathId.InternalPathId);
     if (proto.HasSchemeShardLocalPathId()) {   //TODO remove this check in 25.3
         PathId.SchemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(proto);
     }

@@ -32,9 +32,9 @@ public:
         , Filter(filter)
         , LockIdsForCheck(lockIdsForCheck)
     {
-        AFL_VERIFY(PathId.IsValid());
-        AFL_VERIFY(Schema);
-        AFL_VERIFY(Filter);
+        YDB_LOG_VERIFY(PathId.IsValid());
+        YDB_LOG_VERIFY(Schema);
+        YDB_LOG_VERIFY(Filter);
     }
 };
 
@@ -72,9 +72,9 @@ public:
         , Schema(schema)
         , Filter(filter)
     {
-        AFL_VERIFY(PathId.IsValid());
-        AFL_VERIFY(Schema);
-        AFL_VERIFY(Filter);
+        YDB_LOG_VERIFY(PathId.IsValid());
+        YDB_LOG_VERIFY(Schema);
+        YDB_LOG_VERIFY(Filter);
     }
 };
 

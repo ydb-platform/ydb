@@ -125,7 +125,7 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Settings.Path);
-        AFL_ENSURE(it != ev->Get()->Topics.end(),
+        YDB_LOG_ENSURE(it != ev->Get()->Topics.end(),
             {"path", Settings.Path});
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::Success) {
@@ -137,7 +137,7 @@ private:
             return ReplyError(Ydb::StatusIds::UNAUTHORIZED, "access denied");
         }
 
-        AFL_ENSURE(topicInfo.Info);
+        YDB_LOG_ENSURE(topicInfo.Info);
 
         const TString& selectRowToken = !Settings.SelectRowToken.empty()
             ? Settings.SelectRowToken
@@ -251,7 +251,7 @@ private:
             return ScheduleStatusRetry(tabletId);
         }
 
-        AFL_ENSURE(Response);
+        YDB_LOG_ENSURE(Response);
         for (const auto& part : record.GetPartResult()) {
             const auto partitionId = static_cast<ui32>(part.GetPartition());
             if (!RequestedPartitions.empty() && !RequestedPartitions.contains(partitionId)) {

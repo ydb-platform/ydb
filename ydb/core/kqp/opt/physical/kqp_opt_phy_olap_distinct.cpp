@@ -191,7 +191,7 @@ std::optional<TString> TryGetDistinctColumnFromCombineKey(const TExprBase& combi
 }
 
 TExprBase GetPhyHashCombineOrCombineCoreInput(const TExprBase& combineNode) {
-    AFL_VERIFY(combineNode.Maybe<TDqPhyHashCombine>() || combineNode.Maybe<TCoCombineCore>());
+    YDB_LOG_VERIFY(combineNode.Maybe<TDqPhyHashCombine>() || combineNode.Maybe<TCoCombineCore>());
     if (combineNode.Maybe<TDqPhyHashCombine>()) {
         return combineNode.Cast<TDqPhyHashCombine>().Input();
     }

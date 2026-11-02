@@ -69,7 +69,7 @@ TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 par
 }
 
 void TPartitionCompaction::TryCompactionIfPossible() {
-    AFL_ENSURE(PartitionActor->Config.GetEnableCompactification(),
+    YDB_LOG_ENSURE(PartitionActor->Config.GetEnableCompactification(),
         {"tabletId", PartitionActor->TabletId},
         {"partitionId", PartitionActor->Partition},
         {"topic", PartitionActor->TopicName()});
@@ -93,7 +93,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         } else if (step == EStep::COMPACTING) {
             Step = EStep::COMPACTING;
             CompactState.ConstructInPlace(std::move(ReadState->GetData()), FirstUncompactedOffset, ReadState->GetLastOffset(), PartitionActor, &Counters);
-            AFL_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset(),
+            YDB_LOG_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset(),
                 {"firstUncompactedOffset", FirstUncompactedOffset},
                 {"lastOffset", ReadState->GetLastOffset()},
                 {"tabletId", PartitionActor->TabletId},
@@ -145,19 +145,19 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     bool processResponseResult = true;
     switch (Step) {
         case EStep::READING: {
-            AFL_ENSURE(ReadState);
+            YDB_LOG_ENSURE(ReadState);
             processResponseResult = ReadState->ProcessResponse(ev);
             break;
         }
         case EStep::COMPACTING: {
-            AFL_ENSURE(CompactState);
+            YDB_LOG_ENSURE(CompactState);
             processResponseResult = CompactState->ProcessResponse(ev);
             break;
         }
         case EStep::PENDING:
             break;
         default:
-            AFL_ENSURE(false,
+            YDB_LOG_ENSURE(false,
                 {"step", static_cast<int>(Step)},
                 {"tabletId", PartitionActor->TabletId},
                 {"partitionId", PartitionActor->Partition},
@@ -193,7 +193,7 @@ void TPartitionCompaction::ProcessResponse(NBatching::TEvProcessBatchKeysResult:
 
 void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     //Partition must reset this flag;
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
+    YDB_LOG_ENSURE(!PartitionActor->CompacterKvRequestInflight);
     LOG_D(
         "Compaction for topic Process KV response",
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()});
@@ -261,7 +261,7 @@ ui64 GetLogicalMessageCount(const NKikimrClient::TCmdReadResult::TResult& messag
 }
 
 void TPartitionCompaction::TReadState::ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev) {
-    AFL_ENSURE(BatchKeysRequestsInflight > 0);
+    YDB_LOG_ENSURE(BatchKeysRequestsInflight > 0);
     --BatchKeysRequestsInflight;
 
     for (auto& [offset, key] : ev->Get()->OffsetToKey) {
@@ -303,7 +303,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             }
             // otherwise it's a single part message, will parse it in place
         } else { //glue to last res
-            AFL_ENSURE(LastMessage.Defined());
+            YDB_LOG_ENSURE(LastMessage.Defined());
             //auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
             if (LastMessage->GetSeqNo() != res.GetSeqNo()
                 || LastMessage->GetPartNo() + 1 != res.GetPartNo()
@@ -317,7 +317,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
                                     {"partNo", res.GetPartNo()}
                 );
             }
-            AFL_ENSURE(LastMessage->GetSeqNo() == res.GetSeqNo());
+            YDB_LOG_ENSURE(LastMessage->GetSeqNo() == res.GetSeqNo());
             (*LastMessage->MutableData()) += res.GetData();
             LastMessage->SetPartitionKey(res.GetPartitionKey());
             LastMessage->SetPartNo(res.GetPartNo());
@@ -325,7 +325,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             LastMessage->SetLogicalMessageCount(res.GetLogicalMessageCount());
             LastMessage->SetIsBatch(res.GetIsBatch());
             if (res.HasTotalParts() && res.GetPartNo() + 1 == res.GetTotalParts()) {
-                AFL_ENSURE((ui32)LastMessage->GetTotalSize() == (ui32)LastMessage->GetData().size());
+                YDB_LOG_ENSURE((ui32)LastMessage->GetTotalSize() == (ui32)LastMessage->GetData().size());
             }
         }
         if (isLastPart) {
@@ -361,7 +361,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
 
             LastMessage = Nothing();
         } else {
-            AFL_ENSURE(LastMessage.Defined());
+            YDB_LOG_ENSURE(LastMessage.Defined());
             OffsetToRead = LastMessage->GetOffset();
             NextPartNo = LastMessage->GetPartNo() + 1;
         }
@@ -465,7 +465,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
     if (BatchKeysRequestInflight) {
         return EStep::COMPACTING;
     }
-    AFL_ENSURE(!PartitionActor->CompacterPartitionRequestInflight && !PartitionActor->CompacterKvRequestInflight);
+    YDB_LOG_ENSURE(!PartitionActor->CompacterPartitionRequestInflight && !PartitionActor->CompacterKvRequestInflight);
 
     bool doFinalize = false;
     while (KeysIter != DataKeysBody.end()) {
@@ -594,8 +594,8 @@ bool TPartitionCompaction::TCompactState::MaybeRequestBatchKeys(NKikimrClient::T
 }
 
 bool TPartitionCompaction::TCompactState::ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev) {
-    AFL_ENSURE(BatchKeysRequestInflight);
-    AFL_ENSURE(PendingReadResult);
+    YDB_LOG_ENSURE(BatchKeysRequestInflight);
+    YDB_LOG_ENSURE(PendingReadResult);
 
     BatchKeysRequestInflight = false;
     PendingBatchOffsetKeys = std::move(ev->Get()->OffsetToKey);
@@ -687,7 +687,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
         if (haveTruncatedMessage && isNewMsg) {
             // Probably previous message was deleted (do we really expect this to happen though?)
             // Drop it anyway.
-            AFL_ENSURE(false,
+            YDB_LOG_ENSURE(false,
                 {"reason", "truncated message before new message"},
                 {"tabletId", PartitionActor->TabletId},
                 {"partitionId", PartitionActor->Partition},
@@ -696,7 +696,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                 {"seqNo", res.GetSeqNo()});
             CurrentMessage = Nothing();
         }
-        AFL_ENSURE(res.GetData().size() != 0);
+        YDB_LOG_ENSURE(res.GetData().size() != 0);
 
         bool isLastPart = !res.HasTotalParts()
                           || res.GetTotalParts() == res.GetPartNo() + 1;
@@ -705,7 +705,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
         if (isNewMsg) {
             CurrentMessage.ConstructInPlace().CopyFrom(res);
         } else { //glue to last res
-            AFL_ENSURE(CurrentMessage.Defined());
+            YDB_LOG_ENSURE(CurrentMessage.Defined());
             if (CurrentMessage->GetSeqNo() != res.GetSeqNo()
                 || CurrentMessage->GetPartNo() + 1 != res.GetPartNo()
             ) {
@@ -718,7 +718,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                                     {"partNo", res.GetPartNo()}
                 );
             }
-            AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
+            YDB_LOG_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
             (*CurrentMessage->MutableData()) += res.GetData();
             CurrentMessage->SetPartitionKey(res.GetPartitionKey());
             CurrentMessage->SetPartNo(res.GetPartNo());
@@ -731,7 +731,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
 
         if (isLastPart) {
             LastProcessedOffset = res.GetOffset();
-            AFL_ENSURE(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size());
+            YDB_LOG_ENSURE(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size());
             auto offset = CurrentMessage->GetOffset();
             bool keepMessage = false;
             if (CurrentMessage->GetIsBatch()) {
@@ -753,7 +753,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                 auto proto(GetDeserializedData(CurrentMessage->GetData()));
                 if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
                     CurrentMessage = Nothing();
-                    AFL_ENSURE(false,
+                    YDB_LOG_ENSURE(false,
                         {"reason", "unexpected chunk type"},
                         {"chunkType", static_cast<int>(proto.GetChunkType())},
                         {"tabletId", PartitionActor->TabletId},
@@ -822,13 +822,13 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
             {"isMiddlePartOfMessage", isMiddlePartOfMessage}
     );
 
-    AFL_ENSURE(KeysIter->Key.GetInternalPartsCount() == internalPartsCount,
+    YDB_LOG_ENSURE(KeysIter->Key.GetInternalPartsCount() == internalPartsCount,
         {"keyInternalParts", KeysIter->Key.GetInternalPartsCount()},
         {"internalPartsCount", internalPartsCount},
         {"key", KeysIter->Key},
         {"tabletId", PartitionActor->TabletId},
         {"partitionId", PartitionActor->Partition});
-    AFL_ENSURE(KeysIter->Key.GetCount() == offsetSpan)
+    YDB_LOG_ENSURE(KeysIter->Key.GetCount() == offsetSpan)
         ("key_count", KeysIter->Key.GetCount())
         ("offset_span", offsetSpan)
         ("key", KeysIter->Key.ToString())
@@ -889,8 +889,8 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
 void TPartitionCompaction::TCompactState::RunKvRequest() {
     // TODO verify that the last message is full
     CurrentMessage.Clear();
-    AFL_ENSURE(Request);
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
+    YDB_LOG_ENSURE(Request);
+    YDB_LOG_ENSURE(!PartitionActor->CompacterKvRequestInflight);
 
     for (const auto&[offset, key] : EmptyBlobs) {
         AddDeleteRange(key);
@@ -904,7 +904,7 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
 
 
 bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
+    YDB_LOG_ENSURE(!PartitionActor->CompacterKvRequestInflight);
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         LOG_C("Partition compaction state: Got not OK KV response");
@@ -946,7 +946,7 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
 }
 
 void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
-    AFL_ENSURE(UpdatedKeys || DeletedKeys);
+    YDB_LOG_ENSURE(UpdatedKeys || DeletedKeys);
 
     auto itUpdated = UpdatedKeys.begin();
     auto itDeleted = DeletedKeys.begin();
@@ -984,13 +984,13 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
             addCurrentKey();
             itUpdated++;
         } else {
-            AFL_ENSURE(itUpdated == UpdatedKeys.end() || itUpdated->first.GetOffset() > itExisting->Key.GetOffset()
+            YDB_LOG_ENSURE(itUpdated == UpdatedKeys.end() || itUpdated->first.GetOffset() > itExisting->Key.GetOffset()
                 || itUpdated->first.GetOffset() == itExisting->Key.GetOffset() && itUpdated->first.GetPartNo() > itExisting->Key.GetPartNo(),
                 {"offsetL", itUpdated->first.GetOffset()},
                 {"offsetR", itExisting->Key.GetOffset()},
                 {"partNoL", itUpdated->first.GetPartNo()},
                 {"partNoR", itExisting->Key.GetPartNo()});
-            AFL_ENSURE(itDeleted == DeletedKeys.end() || itDeleted->GetOffset() > itExisting->Key.GetOffset()
+            YDB_LOG_ENSURE(itDeleted == DeletedKeys.end() || itDeleted->GetOffset() > itExisting->Key.GetOffset()
                 || itDeleted->GetOffset() == itExisting->Key.GetOffset() && itDeleted->GetPartNo() > itExisting->Key.GetPartNo(),
                 {"offsetL", itDeleted->GetOffset()},
                 {"offsetR", itExisting->Key.GetOffset()},
@@ -1001,13 +1001,13 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
         itExisting++;
     }
 
-    AFL_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys,
+    YDB_LOG_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys,
         {"dataKeysBodySize", PartitionActor->CompactionBlobEncoder.DataKeysBody.size()},
         {"oldDataKeysSize", oldDataKeys.size()},
         {"zeroedKeys", zeroedKeys},
         {"tabletId", PartitionActor->TabletId},
         {"partitionId", PartitionActor->Partition});
-    AFL_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff,
+    YDB_LOG_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff,
         {"currCumulSize", currCumulSize},
         {"bodySize", PartitionActor->CompactionBlobEncoder.BodySize},
         {"sizeDiff", sizeDiff},

@@ -188,7 +188,7 @@ public:
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
         const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
-        AFL_ENSURE(oldExternalDataSourceInfo,
+        YDB_LOG_ENSURE(oldExternalDataSourceInfo,
             {"path", dstPath.PathString()},
             {"pathId", dstPath->PathId});
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(

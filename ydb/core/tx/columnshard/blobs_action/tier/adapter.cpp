@@ -15,17 +15,17 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
     std::unique_ptr<NWrappers::NExternalStorage::TEvGetObjectResponse>&& ev) const {
     TLogoBlobID logoBlobId;
     TString error;
-    AFL_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error),
+    YDB_LOG_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error),
         {"error", error},
         {"strBlobId", *ev->Key});
     TBlobRange bRange(TUnifiedBlobId(Max<ui32>(), logoBlobId), ev->GetReadInterval().first, ev->GetReadIntervalLength());
     if (ev->IsSuccess()) {
-        AFL_VERIFY(ev->Body.size() == ev->GetReadIntervalLength(),
+        YDB_LOG_VERIFY(ev->Body.size() == ev->GetReadIntervalLength(),
             {"bodySize", ev->Body.size()},
             {"result", ev->GetReadIntervalLength()});
     }
     if (ev->IsSuccess()) {
-        AFL_VERIFY(!!ev->Body,
+        YDB_LOG_VERIFY(!!ev->Body,
             {"key", ev->Key},
             {"intervalFrom", ev->GetReadInterval().first},
             {"intervalTo", ev->GetReadInterval().second});
@@ -55,7 +55,7 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
     TLogoBlobID logoBlobId;
     TString error;
     Y_ABORT_UNLESS(ev->Key);
-    AFL_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error),
+    YDB_LOG_VERIFY(TObjectKey(StorageId).Parse(*ev->Key, logoBlobId, error),
         {"error", error},
         {"strBlobId", *ev->Key});
     if (ev->IsSuccess()) {

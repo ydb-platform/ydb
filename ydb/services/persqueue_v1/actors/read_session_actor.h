@@ -88,7 +88,7 @@ struct TPartitionActorInfo {
         , NodeId(0)
         , ReadingFinished(false)
     {
-        AFL_ENSURE(partition.DiscoveryConverter != nullptr,
+        YDB_LOG_ENSURE(partition.DiscoveryConverter != nullptr,
             {"partition", partition.Partition},
             {"assignId", partition.AssignId});
     }

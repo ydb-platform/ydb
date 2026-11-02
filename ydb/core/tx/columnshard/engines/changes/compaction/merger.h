@@ -21,7 +21,7 @@ private:
 
 public:
     void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
-        AFL_VERIFY(batch);
+        YDB_LOG_VERIFY(batch);
         Batches.emplace_back(batch);
         Filters.emplace_back(filter);
     }
@@ -39,7 +39,7 @@ public:
         , Context(context)
         , SaverContext(saverContext)
     {
-        AFL_VERIFY(Batches.size() == Filters.size());
+        YDB_LOG_VERIFY(Batches.size() == Filters.size());
     }
 
     std::vector<TWritePortionInfoWithBlobsResult> Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,

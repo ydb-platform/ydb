@@ -63,7 +63,7 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
     auto awsRange = ev->Get()->GetRequest().GetRange();
     Y_ABORT_UNLESS(awsRange.size());
     const TString strRange(awsRange.data(), awsRange.size());
-    AFL_VERIFY(TEvGetObjectResponse::TryParseRange(strRange, range),
+    YDB_LOG_VERIFY(TEvGetObjectResponse::TryParseRange(strRange, range),
         {"original", strRange});
 
     if (!!object) {

@@ -194,7 +194,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
-            AFL_ENSURE(topicInfo.Info,
+            YDB_LOG_ENSURE(topicInfo.Info,
                 {"path", FullTopicPath_});
             PQGroup = topicInfo.Info->Description;
             SelfInfo = topicInfo.Self->Info;

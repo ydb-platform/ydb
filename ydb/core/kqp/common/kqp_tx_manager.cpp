@@ -49,7 +49,7 @@ struct TKqpLock {
     TKey GetKey() const { return std::make_tuple(Proto.GetLockId(), Proto.GetDataShard(), Proto.GetSchemeShard(), Proto.GetPathId()); }
 
     bool Invalidated(const TKqpLock& newLock) const {
-        AFL_ENSURE(GetKey() == newLock.GetKey());
+        YDB_LOG_ENSURE(GetKey() == newLock.GetKey());
         return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
     }
 
@@ -94,7 +94,7 @@ public:
         : CollectOnly(collectOnly) {}
 
     void AddShard(ui64 shardId, bool isOlap, const TString& path, const TShardMeta& meta) override {
-        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        YDB_LOG_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(shardId);
         auto& shardInfo = ShardsInfo[shardId];
         shardInfo.IsOlap = isOlap;
@@ -110,7 +110,7 @@ public:
         if (meta.IsKnown()) {
             auto& stored = shardInfo.Meta;
             if (stored.IsKnown()) {
-                AFL_ENSURE(stored.TableId == meta.TableId,
+                YDB_LOG_ENSURE(stored.TableId == meta.TableId,
                     {"stored", stored.TableId},
                     {"incoming", meta.TableId});
                 // Metadata may arrive as borders-with-version or version-only (the
@@ -125,7 +125,7 @@ public:
                 const bool bordersKnown = stored.Borders.From.size() > 0 || stored.Borders.To.size() > 0;
                 const bool incomingBorders = meta.Borders.From.size() > 0 || meta.Borders.To.size() > 0;
                 if (bordersKnown && incomingBorders) {
-                    AFL_ENSURE(SameBorders(stored.Borders, meta.Borders),
+                    YDB_LOG_ENSURE(SameBorders(stored.Borders, meta.Borders),
                         {"shardId", shardId},
                         {"storedFrom", stored.Borders.From.size()},
                         {"storedTo", stored.Borders.To.size()},
@@ -160,7 +160,7 @@ public:
     }
 
     void AddAction(ui64 shardId, ui8 action, ui64 querySpanId) override {
-        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        YDB_LOG_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         auto& shardInfo = ShardsInfo.at(shardId);
         shardInfo.Flags |= action;
         if (action & (EAction::WRITE | EAction::PESSIMISTIC_LOCK)) {
@@ -172,7 +172,7 @@ public:
     }
 
     void AddTopic(ui64 topicId, const TString& path) override {
-        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        YDB_LOG_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(topicId);
         auto& shardInfo = ShardsInfo[topicId];
 
@@ -198,7 +198,7 @@ public:
     }
 
     bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto, ui64 querySpanId, ui64 deferredVictimQuerySpanId) override {
-        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
+        YDB_LOG_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         TKqpLock lock(lockProto);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
         bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
@@ -269,7 +269,7 @@ public:
                 MakeLocksIssue(shardInfo);
                 return false;
             }
-            AFL_ENSURE(false);
+            YDB_LOG_ENSURE(false);
         }
 
         return true;
@@ -278,26 +278,26 @@ public:
     // A shard removed by a split/merge had its participant state moved to every shard
     // covering its range
     bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
-        AFL_ENSURE(State == ETransactionState::COLLECTING);
-        AFL_ENSURE(!toShardIds.empty());
+        YDB_LOG_ENSURE(State == ETransactionState::COLLECTING);
+        YDB_LOG_ENSURE(!toShardIds.empty());
 
         // The removed shard's tablet id is gone: GetDeletedShards only returns shards
         // absent from the new partitioning, so the targets cannot contain it. A target
         // equal to the removed shard would corrupt the participant state on the erase
         // below — fail closed.
-        AFL_ENSURE(!FindPtr(toShardIds, fromShardId));
+        YDB_LOG_ENSURE(!FindPtr(toShardIds, fromShardId));
         auto fromIt = ShardsInfo.find(fromShardId);
-        AFL_ENSURE(fromIt != ShardsInfo.end());
+        YDB_LOG_ENSURE(fromIt != ShardsInfo.end());
         const TShardInfo from = std::move(fromIt->second);
         ShardsInfo.erase(fromIt);
         ShardsIds.erase(fromShardId);
-        AFL_ENSURE(from.State == EShardState::PROCESSING);
-        AFL_ENSURE(!from.IsOlap);
-        AFL_ENSURE(from.Meta.IsKnown());
+        YDB_LOG_ENSURE(from.State == EShardState::PROCESSING);
+        YDB_LOG_ENSURE(!from.IsOlap);
+        YDB_LOG_ENSURE(from.Meta.IsKnown());
 
         bool locksConsistent = true;
         for (const ui64 toShardId : toShardIds) {
-            AFL_ENSURE(toShardId != fromShardId);
+            YDB_LOG_ENSURE(toShardId != fromShardId);
             // MoveShard to may be called for toShardIds several times in case of merge.
             auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
             auto& to = toIt->second;
@@ -316,20 +316,20 @@ public:
             const bool toMetaUsable = to.Meta.IsKnown() && !to.Meta.Borders.From.empty();
             if (fromMetaUsable && toMetaUsable) {
                 const auto* tableMeta = TableMetas.FindPtr(from.Meta.TableId);
-                AFL_ENSURE(tableMeta,
+                YDB_LOG_ENSURE(tableMeta,
                     {"tableId", from.Meta.TableId});
                 const auto& keyColumnTypes = tableMeta->KeyColumnTypes;
-                AFL_ENSURE(from.Meta.TableId == to.Meta.TableId,
+                YDB_LOG_ENSURE(from.Meta.TableId == to.Meta.TableId,
                     {"fromShardId", fromShardId},
                     {"toShardId", toShardId},
                     {"fromTableId", from.Meta.TableId},
                     {"toTableId", to.Meta.TableId});
-                AFL_ENSURE(from.Meta.PartitioningVersion < to.Meta.PartitioningVersion,
+                YDB_LOG_ENSURE(from.Meta.PartitioningVersion < to.Meta.PartitioningVersion,
                     {"fromShardId", fromShardId},
                     {"toShardId", toShardId},
                     {"fromVersion", from.Meta.PartitioningVersion},
                     {"toVersion", to.Meta.PartitioningVersion});
-                AFL_ENSURE(!Intersect(keyColumnTypes, from.Meta.Borders, to.Meta.Borders).IsEmptyRange(keyColumnTypes),
+                YDB_LOG_ENSURE(!Intersect(keyColumnTypes, from.Meta.Borders, to.Meta.Borders).IsEmptyRange(keyColumnTypes),
                     {"fromShardId", fromShardId},
                     {"toShardId", toShardId},
                     {"keyColumnsCount", keyColumnTypes.size()});
@@ -437,7 +437,7 @@ public:
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
-        AFL_ENSURE(TopicOperations.GetSize() == 0);
+        YDB_LOG_ENSURE(TopicOperations.GetSize() == 0);
         TopicOperations = std::move(topicOperations);
         TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
@@ -673,8 +673,8 @@ public:
     }
 
     bool NeedCommit() const override {
-        AFL_ENSURE(ActionsCount != 1 || IsSingleShard() || ShardsTransferred);
-        AFL_ENSURE(HasSnapshot() || IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(ActionsCount != 1 || IsSingleShard() || ShardsTransferred);
+        YDB_LOG_ENSURE(HasSnapshot() || IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         const bool dontNeedCommit = IsEmpty() || (IsReadOnly() && ((ActionsCount == 1) || HasSnapshot()));
         return !dontNeedCommit;
     }
@@ -684,10 +684,10 @@ public:
     }
 
     void StartPrepare() override {
-        AFL_ENSURE(!CollectOnly);
-        AFL_ENSURE(State == ETransactionState::COLLECTING);
-        AFL_ENSURE(NeedCommit());
-        AFL_ENSURE(!BrokenLocks());
+        YDB_LOG_ENSURE(!CollectOnly);
+        YDB_LOG_ENSURE(State == ETransactionState::COLLECTING);
+        YDB_LOG_ENSURE(NeedCommit());
+        YDB_LOG_ENSURE(!BrokenLocks());
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
@@ -696,7 +696,7 @@ public:
             if (!ParticipatesInCommit(shardInfo)) {
                 // Phantom shard holds no reads/writes/locks and does not take
                 // part in the distributed commit; it stays in PROCESSING.
-                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                YDB_LOG_ENSURE(shardInfo.State == EShardState::PROCESSING);
                 continue;
             }
             if ((shardInfo.Flags & EAction::WRITE)) {
@@ -715,7 +715,7 @@ public:
                 }
             }
 
-            AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+            YDB_LOG_ENSURE(shardInfo.State == EShardState::PROCESSING);
             shardInfo.State = EShardState::PREPARING;
         }
 
@@ -739,7 +739,7 @@ public:
         }
 
         if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
-            AFL_ENSURE(!IsVolatile());
+            YDB_LOG_ENSURE(!IsVolatile());
             const auto& shards = receivingColumnShardsSet.empty()
                 ? sendingColumnShardsSet
                 : receivingColumnShardsSet;
@@ -761,8 +761,8 @@ public:
     }
 
     TPrepareInfo GetPrepareTransactionInfo() override {
-        AFL_ENSURE(State == ETransactionState::PREPARING);
-        AFL_ENSURE(!ReceivingShards.empty() || !SendingShards.empty());
+        YDB_LOG_ENSURE(State == ETransactionState::PREPARING);
+        YDB_LOG_ENSURE(!ReceivingShards.empty() || !SendingShards.empty());
 
         TPrepareInfo result {
             .SendingShards = SendingShards,
@@ -775,9 +775,9 @@ public:
     }
 
     bool ConsumePrepareTransactionResult(TPrepareResult&& result) override {
-        AFL_ENSURE(State == ETransactionState::PREPARING);
+        YDB_LOG_ENSURE(State == ETransactionState::PREPARING);
         auto& shardInfo = ShardsInfo.at(result.ShardId);
-        AFL_ENSURE(shardInfo.State == EShardState::PREPARING);
+        YDB_LOG_ENSURE(shardInfo.State == EShardState::PREPARING);
         shardInfo.State = EShardState::PREPARED;
 
         ShardsToWait.erase(result.ShardId);
@@ -789,7 +789,7 @@ public:
             Coordinator = result.Coordinator;
         }
 
-        AFL_ENSURE(Coordinator && Coordinator == result.Coordinator,
+        YDB_LOG_ENSURE(Coordinator && Coordinator == result.Coordinator,
             {"prevCoordinator", Coordinator},
             {"newCoordinator", result.Coordinator});
 
@@ -797,20 +797,20 @@ public:
     }
 
     void StartExecute() override {
-        AFL_ENSURE(!CollectOnly);
-        AFL_ENSURE(State == ETransactionState::PREPARING
+        YDB_LOG_ENSURE(!CollectOnly);
+        YDB_LOG_ENSURE(State == ETransactionState::PREPARING
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
-        AFL_ENSURE(NeedCommit());
-        AFL_ENSURE(!BrokenLocks());
+        YDB_LOG_ENSURE(NeedCommit());
+        YDB_LOG_ENSURE(!BrokenLocks());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
             if (!ParticipatesInCommit(shardInfo)) {
-                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                YDB_LOG_ENSURE(shardInfo.State == EShardState::PROCESSING);
                 continue;
             }
-            AFL_ENSURE(shardInfo.State == EShardState::PREPARED
+            YDB_LOG_ENSURE(shardInfo.State == EShardState::PREPARED
                 || (shardInfo.State == EShardState::PROCESSING
                     && IsSingleShard()));
             shardInfo.State = EShardState::EXECUTING;
@@ -818,11 +818,11 @@ public:
 
         ShardsToWait = GetParticipatingShards();
 
-        AFL_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
+        YDB_LOG_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
     }
 
     TCommitInfo GetCommitInfo() override {
-        AFL_ENSURE(State == ETransactionState::EXECUTING);
+        YDB_LOG_ENSURE(State == ETransactionState::EXECUTING);
         TCommitInfo result;
         result.MinStep = MinStep;
         result.MaxStep = MaxStep;
@@ -830,7 +830,7 @@ public:
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if (!ParticipatesInCommit(shardInfo)) {
-                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                YDB_LOG_ENSURE(shardInfo.State == EShardState::PROCESSING);
                 continue;
             }
 
@@ -842,7 +842,7 @@ public:
             // Every participant holds at least one action; a lock-only shard
             // always registers an action together with its locks (see AddLock
             // call sites).
-            AFL_ENSURE(shardInfo.Flags != 0,
+            YDB_LOG_ENSURE(shardInfo.Flags != 0,
                 {"shardId", shardId},
                 {"lockCount", shardInfo.Locks.size()});
             flags |= (shardInfo.Flags & EAction::PESSIMISTIC_LOCK) ? EAction::WRITE : 0;
@@ -853,15 +853,15 @@ public:
                 .AffectedFlags = affectedFlags,
             });
 
-            AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
+            YDB_LOG_ENSURE(shardInfo.State == EShardState::EXECUTING);
         }
         return result;
     }
 
     bool ConsumeCommitResult(ui64 shardId) override {
-        AFL_ENSURE(State == ETransactionState::EXECUTING);
+        YDB_LOG_ENSURE(State == ETransactionState::EXECUTING);
         auto& shardInfo = ShardsInfo.at(shardId);
-        AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
+        YDB_LOG_ENSURE(shardInfo.State == EShardState::EXECUTING);
         shardInfo.State = EShardState::FINISHED;
 
         ShardsToWait.erase(shardId);
@@ -869,7 +869,7 @@ public:
     }
 
     const THashSet<ui64>& StartRollback() override {
-        AFL_ENSURE(State != ETransactionState::ROLLINGBACK);
+        YDB_LOG_ENSURE(State != ETransactionState::ROLLINGBACK);
         State = ETransactionState::ROLLINGBACK;
         ShardsToWait.clear();
         for (auto& [shardId, shardInfo] : ShardsInfo) {
@@ -885,7 +885,7 @@ public:
     }
 
     bool ConsumeRollbackResult(ui64 shardId) override {
-        AFL_ENSURE(State == ETransactionState::ROLLINGBACK);
+        YDB_LOG_ENSURE(State == ETransactionState::ROLLINGBACK);
         ShardsToWait.erase(shardId);
         return ShardsToWait.empty();
     }

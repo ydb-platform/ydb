@@ -53,7 +53,7 @@ public:
     ui64 GetDataBlobBytes() const {
         const ui64 blob = BlobBytes.Val();
         const ui64 index = IndexBlobBytes.Val();
-        AFL_VERIFY(blob >= index,
+        YDB_LOG_VERIFY(blob >= index,
             {"blob", blob},
             {"index", index});
         return blob - index;
@@ -98,14 +98,14 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
-        AFL_VERIFY(p);
+        YDB_LOG_VERIFY(p);
         AddPortion(*p);
     }
 
     void AddPortion(const TPortionInfo& p);
 
     void RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
-        AFL_VERIFY(p);
+        YDB_LOG_VERIFY(p);
         RemovePortion(*p);
     }
 
@@ -113,13 +113,13 @@ public:
 
     bool IsEmpty() const {
         if (!Count.Val()) {
-            AFL_VERIFY(!BlobBytes.Val(),
+            YDB_LOG_VERIFY(!BlobBytes.Val(),
                 {"this", DebugString()});
-            AFL_VERIFY(!IndexBlobBytes.Val(),
+            YDB_LOG_VERIFY(!IndexBlobBytes.Val(),
                 {"this", DebugString()});
-            AFL_VERIFY(!RawBytes.Val(),
+            YDB_LOG_VERIFY(!RawBytes.Val(),
                 {"this", DebugString()});
-            AFL_VERIFY(!RecordsCount.Val(),
+            YDB_LOG_VERIFY(!RecordsCount.Val(),
                 {"this", DebugString()});
             return true;
         }
@@ -176,9 +176,9 @@ public:
 
     bool IsEmpty() const {
         if (TBase::IsEmpty()) {
-            AFL_VERIFY(!Blobs,
+            YDB_LOG_VERIFY(!Blobs,
                 {"this", DebugString()});
-            AFL_VERIFY(BytesByChannel.empty(),
+            YDB_LOG_VERIFY(BytesByChannel.empty(),
                 {"this", DebugString()});
             return true;
         }

@@ -14,14 +14,14 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 std::optional<NArrow::NMerger::TCursor> TBaseMergeTask::DrainMergerLinearScan(const std::optional<ui32> resultBufferLimit) {
     std::optional<NArrow::NMerger::TCursor> lastResultPosition;
-    AFL_VERIFY(!ResultBatch);
+    YDB_LOG_VERIFY(!ResultBatch);
     auto rbBuilder = std::make_shared<NArrow::NMerger::TRecordBatchBuilder>(Context->GetProgramInputColumns()->GetSchema()->fields());
     rbBuilder->SetMemoryBufferLimit(resultBufferLimit);
     if (!Merger->DrainToControlPoint(*rbBuilder, MergingContext->GetIncludeFinish(), &lastResultPosition)) {
         if (Merger->IsEmpty()) {
             Merger = nullptr;
         } else {
-            AFL_VERIFY(rbBuilder->IsBufferExhausted());
+            YDB_LOG_VERIFY(rbBuilder->IsBufferExhausted());
         }
     } else {
         Merger = nullptr;
@@ -42,7 +42,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
     const ui64 memorySizeBefore = NArrow::GetTableMemorySize(ResultBatch);
     {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
-        AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
+        YDB_LOG_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         auto accessors = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
         auto conclusion = Context->GetReadMetadata()->GetProgram().ApplyProgram(std::move(accessors));
         if (conclusion.IsFail()) {
@@ -70,7 +70,7 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
             {"afterData", NArrow::GetTableDataSize(ResultBatch)},
             {"guard", AllocationGuard->GetMemory()});
         //        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
-        AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount(),
+        YDB_LOG_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount(),
             {"lpk", !!LastPK},
             {"sb", ShardedBatch->GetRecordsCount()});
     } else {
@@ -132,11 +132,11 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
             }
         }
         Sources.clear();
-        AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
+        YDB_LOG_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
         return true;
     }
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::COMMON", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    AFL_VERIFY(!Merger);
+    YDB_LOG_VERIFY(!Merger);
     Merger = Context->BuildMerger();
     {
         bool isEmpty = true;
@@ -149,7 +149,7 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
                     NArrow::NMerger::TIterationOrder(Context->GetCommonContext()->IsReverse(), 0));
             }
         }
-        AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
+        YDB_LOG_VERIFY(Merger->GetSourcesCount() <= Sources.size());
         if (Merger->GetSourcesCount() == 0 || isEmpty) {
             ResultBatch = nullptr;
             return true;
@@ -169,12 +169,12 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
         ResultBatch = Merger->SingleSourceDrain(MergingContext->GetFinish(), MergingContext->GetIncludeFinish(), &lastResultPosition);
         if (ResultBatch) {
             Context->GetCommonContext()->GetCounters().OnLogScanInterval(ResultBatch->num_rows());
-            AFL_VERIFY(ResultBatch->schema()->Equals(Context->GetProgramInputColumns()->GetSchema()),
+            YDB_LOG_VERIFY(ResultBatch->schema()->Equals(Context->GetProgramInputColumns()->GetSchema()),
                 {"res", ResultBatch->schema()->ToString()},
                 {"ctx", Context->GetProgramInputColumns()->GetSchema()->ToString()});
         }
         if (MergingContext->GetIncludeFinish() && originalSourcesCount == 1) {
-            AFL_VERIFY(Merger->IsEmpty(),
+            YDB_LOG_VERIFY(Merger->IsEmpty(),
                 {"mergingContextFinish", MergingContext->GetFinish().DebugJson().GetStringRobust()},
                 {"merger", Merger->DebugString()});
         }
@@ -186,7 +186,7 @@ TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
     if (lastResultPosition) {
         LastPK = lastResultPosition->ExtractSortingPosition(MergingContext->GetFinish().GetSortFields());
     }
-    AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
+    YDB_LOG_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
     auto statusConclusion = PrepareResultBatch();
     if (statusConclusion.IsFail()) {
         return statusConclusion;
@@ -200,7 +200,7 @@ TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& merging
     , Sources(std::move(sources))
 {
     for (auto&& s : Sources) {
-        AFL_VERIFY(s.second->IsDataReady());
+        YDB_LOG_VERIFY(s.second->IsDataReady());
     }
     for (auto&& [_, i] : Sources) {
         if (!i->GetStageResult().IsEmpty()) {
@@ -215,7 +215,7 @@ TConclusion<bool> TContinueMergeTask::DoExecuteImpl() {
     if (lastResultPosition) {
         LastPK = lastResultPosition->ExtractSortingPosition(MergingContext->GetFinish().GetSortFields());
     }
-    AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
+    YDB_LOG_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
     auto statusConclusion = PrepareResultBatch();
     if (statusConclusion.IsFail()) {
         return statusConclusion;

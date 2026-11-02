@@ -12,14 +12,14 @@ namespace {
 
 std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard::TIndexPortionMeta> MakePortionInfoConstructor(
     const auto& rowset) {
-    AFL_VERIFY(rowset.IsReady());
-    AFL_VERIFY(!rowset.EndOfSet());
+    YDB_LOG_VERIFY(rowset.IsReady());
+    YDB_LOG_VERIFY(!rowset.EndOfSet());
 
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     std::unique_ptr<NOlap::TPortionInfoConstructor> portion;
     NKikimrTxColumnShard::TIndexPortionMeta metaProto;
     const TString metadata = rowset.template GetValue<IndexPortions::Metadata>();
-    AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()),
+    YDB_LOG_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()),
         {"event", "cannot parse metadata as protobuf"});
 
     if (rowset.template GetValueOrDefault<IndexPortions::InsertWriteId>(0)) {
@@ -31,12 +31,12 @@ std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard:
             portionImpl->SetCommitSnapshot(
                 TSnapshot(rowset.template GetValue<IndexPortions::CommitPlanStep>(), rowset.template GetValue<IndexPortions::CommitTxId>()));
         } else {
-            AFL_VERIFY(!rowset.template GetValueOrDefault<IndexPortions::CommitTxId>(0));
+            YDB_LOG_VERIFY(!rowset.template GetValueOrDefault<IndexPortions::CommitTxId>(0));
         }
         portion.reset(portionImpl.release());
     } else {
-        AFL_VERIFY(metaProto.HasCompactedPortion());
-        AFL_VERIFY(metaProto.GetCompactedPortion().HasAppearanceSnapshot());
+        YDB_LOG_VERIFY(metaProto.HasCompactedPortion());
+        YDB_LOG_VERIFY(metaProto.GetCompactedPortion().HasAppearanceSnapshot());
         auto cPortion =
             std::make_unique<TCompactedPortionInfoConstructor>(TInternalPathId::FromRawValue(rowset.template GetValue<IndexPortions::PathId>()),
                 rowset.template GetValue<IndexPortions::PortionId>());
@@ -140,7 +140,7 @@ bool TDbWrapper::LoadColumns(const std::function<void(TColumnChunkLoadContextV2&
         }
 
         while (!rowset.EndOfSet()) {
-            AFL_VERIFY(DsGroupSelector);
+            YDB_LOG_VERIFY(DsGroupSelector);
             NOlap::TColumnChunkLoadContextV2 chunkLoadContext(rowset, *DsGroupSelector);
             callback(std::move(chunkLoadContext));
 
@@ -205,7 +205,7 @@ void TDbWrapper::WriteIndex(const TPortionDataAccessor& acc, const TPortionInfo&
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     NIceDb::TNiceDb db(Database);
     if (auto bRange = row.GetBlobRangeOptional()) {
-        AFL_VERIFY(bRange->IsValid());
+        YDB_LOG_VERIFY(bRange->IsValid());
         db.Table<IndexIndexes>()
             .Key(portion.GetPathId().GetRawValue(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx())
             .Update(NIceDb::TUpdate<IndexIndexes::Blob>(acc.GetBlobId(bRange->GetBlobIdxVerified()).SerializeBinary()),
@@ -218,7 +218,7 @@ void TDbWrapper::WriteIndex(const TPortionDataAccessor& acc, const TPortionInfo&
             .Update(NIceDb::TUpdate<IndexIndexes::BlobData>(*bData), NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()),
                 NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes()));
     } else {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
     }
 }
 
@@ -292,7 +292,7 @@ TConclusion<THashMap<TInternalPathId, std::map<NOlap::TSnapshot, TGranuleShardin
         logic.DeserializeFromString(rowset.GetValue<Schema::ShardingInfo::Logic>()).Validate();
         TGranuleShardingInfo gShardingInfo(logic, snapshot, rowset.GetValue<Schema::ShardingInfo::VersionId>(),
             TInternalPathId::FromRawValue(rowset.GetValue<Schema::ShardingInfo::PathId>()));
-        AFL_VERIFY(result[gShardingInfo.GetPathId()].emplace(gShardingInfo.GetSinceSnapshot(), gShardingInfo).second);
+        YDB_LOG_VERIFY(result[gShardingInfo.GetPathId()].emplace(gShardingInfo.GetSinceSnapshot(), gShardingInfo).second);
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("cannot read rowset");

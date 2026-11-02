@@ -34,7 +34,7 @@ TString MakeDeletePublicationSql() {
         DELETE FROM `)" << DestinationsTablePath() << R"(`
         WHERE `int_publication_id` = $int_publication_id;
 
-        DELETE FROM `)" << PublicationsTablePath() << R"(` 
+        DELETE FROM `)" << PublicationsTablePath() << R"(`
         WHERE `int_publication_id` = $int_publication_id
         RETURNING `int_publication_id`;
     )";
@@ -47,7 +47,7 @@ NKikimrKqp::TTopicDeferredPublicationRequest::EOp MapFinalizeOp(EFinalizePublica
         case EFinalizePublicationOp::Cancel:
             return NKikimrKqp::TTopicDeferredPublicationRequest::Cancel;
         default:
-            AFL_ENSURE(false,
+            YDB_LOG_ENSURE(false,
                 {"reason", "unexpected EFinalizePublicationOp"},
                 {"op", static_cast<int>(op)});
     }
@@ -60,10 +60,10 @@ bool BuildDeferredPublicationRequest(
     NKikimrKqp::TTopicDeferredPublicationRequest* request,
     NYql::TIssues* issues)
 {
-    AFL_ENSURE(request != nullptr,
+    YDB_LOG_ENSURE(request != nullptr,
         {"op", static_cast<int>(op)},
         {"intPublicationId", intPublicationId});
-    AFL_ENSURE(issues != nullptr,
+    YDB_LOG_ENSURE(issues != nullptr,
         {"op", static_cast<int>(op)},
         {"intPublicationId", intPublicationId});
 
@@ -257,7 +257,7 @@ private:
             return ReplyAndPassAway(response.Status, response.Issues);
         }
 
-        AFL_ENSURE(response.Data.Defined(),
+        YDB_LOG_ENSURE(response.Data.Defined(),
             {"database", Database},
             {"intPublicationId", IntPublicationId},
             {"op", static_cast<int>(Op)});
@@ -305,7 +305,7 @@ private:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        AFL_ENSURE(!KqpSessionId.empty(),
+        YDB_LOG_ENSURE(!KqpSessionId.empty(),
             {"database", Database},
             {"intPublicationId", IntPublicationId},
             {"op", static_cast<int>(Op)});
@@ -321,7 +321,7 @@ private:
         switch (Step) {
             case EStep::KqpBeginTx: {
                 TxId = record.GetResponse().GetTxMeta().id();
-                AFL_ENSURE(!TxId.empty(),
+                YDB_LOG_ENSURE(!TxId.empty(),
                     {"database", Database},
                     {"intPublicationId", IntPublicationId},
                     {"op", static_cast<int>(Op)},

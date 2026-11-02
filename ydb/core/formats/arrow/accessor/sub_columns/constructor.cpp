@@ -22,7 +22,7 @@ TConclusionStatus ValidateSettings(const TSettings& settings) {
 }   // namespace
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
-    AFL_VERIFY(externalInfo.GetDefaultValue() == nullptr);
+    YDB_LOG_VERIFY(externalInfo.GetDefaultValue() == nullptr);
     return std::make_shared<TSubColumnsArray>(externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
 }
 
@@ -42,7 +42,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     {
         std::vector<std::shared_ptr<IChunkedArray>> columns;
         auto schema = headerConclusion->GetColumnStats().BuildColumnsSchema();
-        AFL_VERIFY(headerConclusion->GetColumnStats().GetColumnsCount() == (ui32)proto.GetKeyColumns().size(),
+        YDB_LOG_VERIFY(headerConclusion->GetColumnStats().GetColumnsCount() == (ui32)proto.GetKeyColumns().size(),
             {"schema", headerConclusion->GetColumnStats().GetColumnsCount()},
             {"proto", proto.GetKeyColumns().size()});
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
@@ -60,7 +60,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     }
     TOthersData otherData = TOthersData::BuildEmpty();
     if (proto.GetOtherColumns().size() && proto.GetOtherRecordsCount()) {
-        AFL_VERIFY(currentIndex < originalData.size());
+        YDB_LOG_VERIFY(currentIndex < originalData.size());
         std::shared_ptr<TGeneralContainer> otherKeysContainer =
             BuildOthersContainer(TStringBuf(originalData.data() + currentIndex, headerConclusion->GetOthersSize()), proto, externalInfo, false)
                 .DetachResult();
@@ -71,7 +71,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto result = std::make_shared<TSubColumnsArray>(
         std::move(columnData), std::move(otherData), externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
     result->StoreSourceString(originalData);
-    AFL_VERIFY(currentIndex == originalData.size(),
+    YDB_LOG_VERIFY(currentIndex == originalData.size(),
         {"index", currentIndex},
         {"size", originalData.size()});
     return result;
@@ -105,7 +105,7 @@ TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
 TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContainer(const TStringBuf data,
     const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize) {
     std::vector<std::shared_ptr<IChunkedArray>> columns;
-    AFL_VERIFY(TOthersData::GetSchema()->num_fields() == proto.GetOtherColumns().size(),
+    YDB_LOG_VERIFY(TOthersData::GetSchema()->num_fields() == proto.GetOtherColumns().size(),
         {"proto", proto.GetOtherColumns().size()},
         {"schema", TOthersData::GetSchema()->num_fields()});
     auto schema = TOthersData::GetSchema();

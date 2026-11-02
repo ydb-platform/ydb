@@ -27,30 +27,30 @@ private:
     void Handle(NEvents::TEvDeleteSharedBlobsFinished::TPtr& ev) {
         const TTabletId sourceTabletId = (TTabletId)ev->Get()->Record.GetTabletId();
         auto* blobIds = BlobIdsByTablets.Find(sourceTabletId);
-        AFL_VERIFY(blobIds);
+        YDB_LOG_VERIFY(blobIds);
         switch (ev->Get()->Record.GetStatus()) {
             case NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::Success:
-                AFL_VERIFY(BlobIdsByTablets.Remove(sourceTabletId));
+                YDB_LOG_VERIFY(BlobIdsByTablets.Remove(sourceTabletId));
                 break;
             case NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::DestinationCurrenlyLocked:
                 for (auto&& i : *blobIds) {
                     GCAction->AddSharedBlobToNextIteration(i, sourceTabletId);
                 }
-                AFL_VERIFY(BlobIdsByTablets.Remove(sourceTabletId));
+                YDB_LOG_VERIFY(BlobIdsByTablets.Remove(sourceTabletId));
                 break;
             case NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobsFinished::NeedRetry:
                 SendToTablet(*blobIds, sourceTabletId);
                 break;
         }
         if (BlobIdsByTablets.IsEmpty()) {
-            AFL_VERIFY(!SharedRemovingFinished);
+            YDB_LOG_VERIFY(!SharedRemovingFinished);
             OnSharedRemovingFinished();
         }
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         auto* blobIds = BlobIdsByTablets.Find((TTabletId)ev->Cookie);
-        AFL_VERIFY(blobIds);
+        YDB_LOG_VERIFY(blobIds);
         SendToTablet(*blobIds, (TTabletId)ev->Cookie);
     }
 
@@ -71,7 +71,7 @@ public:
         , SelfTabletId(selfTabletId)
         , GCAction(gcAction)
     {
-        AFL_VERIFY(GCAction);
+        YDB_LOG_VERIFY(GCAction);
     }
 
     STFUNC(StateWork) {
@@ -79,7 +79,7 @@ public:
             hFunc(NEvents::TEvDeleteSharedBlobsFinished, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             default:
-                AFL_VERIFY(false,
+                YDB_LOG_VERIFY(false,
                     {"problem", "unexpected event"},
                     {"eventType", ev->GetTypeName()});
         }

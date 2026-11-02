@@ -10,7 +10,7 @@
 namespace NKikimr::NOlap::NExport {
 
 void TActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from,
+    YDB_LOG_VERIFY(Stage == from,
         {"from", (ui32)from},
         {"real", (ui32)Stage},
         {"to", (ui32)to});
@@ -139,7 +139,7 @@ void TActor::PassAway() {
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     SwitchStage(EStage::Initialization, EStage::WaitData);
-    AFL_VERIFY(!ScanActorId);
+    YDB_LOG_VERIFY(!ScanActorId);
     auto& msg = ev->Get()->Record;
     ScanActorId = ActorIdFromProto(msg.GetScanActorId());
     AllowScanPings = msg.GetAllowPings();
@@ -177,7 +177,7 @@ void TActor::OnTxCompleted(const ui64 /*txId*/) {
 void TActor::OnSessionProgressSaved() {
     Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
     if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
-        AFL_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor,
+        YDB_LOG_VERIFY(Stage == EStage::WaitData || Stage == EStage::WaitSaveCursor,
             {"real", (ui32)Stage});
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
@@ -192,10 +192,10 @@ void TActor::OnSessionProgressSaved() {
         SaveSessionState();
         SwitchStage(EStage::WaitSaveCursor, EStage::Finished);
     } else {
-        AFL_VERIFY(Stage == EStage::WaitSaveCursor,
+        YDB_LOG_VERIFY(Stage == EStage::WaitSaveCursor,
             {"real", (ui32)Stage});
         SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
-        AFL_VERIFY(ScanActorId);
+        YDB_LOG_VERIFY(ScanActorId);
         Counters.OnReadStarted();
         Counters.OnAckSent();
         ReadStartTime = TInstant::Now();
@@ -206,7 +206,7 @@ void TActor::OnSessionProgressSaved() {
 void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/) {
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
     SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
-    AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
+    YDB_LOG_VERIFY(ExportSession->GetCursor().HasLastKey());
     Counters.OnSaveCursorStarted();
     SaveCursorStartTime = TInstant::Now();
     SaveSessionProgress();
@@ -273,7 +273,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
     SwitchStage(EStage::WaitData, EStage::WaitWriting);
     auto data = ev->Get()->ArrowBatch;
-    AFL_VERIFY(!!data || ev->Get()->Finished);
+    YDB_LOG_VERIFY(!!data || ev->Get()->Finished);
     Counters.OnWriteStarted();
     WriteStartTime = TInstant::Now();
     if (data) {
@@ -283,7 +283,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(nullptr, true)));
     }
     TOwnedCellVec lastKey = ev->Get()->LastKey;
-    AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
+    YDB_LOG_VERIFY(!ExportSession->GetCursor().IsFinished());
     ExportSession->MutableCursor().InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
 
@@ -305,7 +305,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
     // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
     const auto txId = ExportSession->GetTxId();
-    AFL_VERIFY(txId,
+    YDB_LOG_VERIFY(txId,
         {"reason", "export_session_has_no_tx_id"});
     ev->Record.SetTxId(*txId);
     ev->Record.SetTablePath(backupTask.GetTableName());
@@ -345,7 +345,7 @@ public:
 };
 
 void TActor::OnSessionStateSaved() {
-    AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished());
+    YDB_LOG_VERIFY(ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
         YDB_LOG_INFO("",

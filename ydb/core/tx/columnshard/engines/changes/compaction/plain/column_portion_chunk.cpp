@@ -12,14 +12,14 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     Y_ABORT_UNLESS(a);
     Y_ABORT_UNLESS(length);
     Y_ABORT_UNLESS(startIndex + length <= a->length());
-    AFL_VERIFY(Type->id() == a->type_id(),
+    YDB_LOG_VERIFY(Type->id() == a->type_id(),
         {"own", Type->ToString()},
         {"a", a->type()->ToString()});
     ui32 i = startIndex;
     const ui32 packedRecordSize = Context.GetColumnStat() ? Context.GetColumnStat()->GetPackedRecordSize() : 0;
     for (; i < startIndex + length; ++i) {
         ui64 recordSize = 0;
-        AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize),
+        YDB_LOG_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize),
             {"a", a->ToString()},
             {"aType", a->type()->ToString()},
             {"builderType", Builder->type()->ToString()});

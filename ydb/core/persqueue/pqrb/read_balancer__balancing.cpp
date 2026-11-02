@@ -506,7 +506,7 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     Y_DEBUG_ABORT_UNLESS(!HasSpecialSession(),
         "Cannot merge into a special-session family %zu", Id);
 
-    AFL_ENSURE(this != other,
+    YDB_LOG_ENSURE(this != other,
         {"thisId", Id},
         {"otherId", other->Id},
         {"thisPartitions", Partitions.size()},
@@ -1037,7 +1037,7 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
     }
     Y_DEBUG_ABORT_UNLESS(!lhs->HasSpecialSession(),
         "Cannot merge into a special-session family %zu", lhs->Id);
-    AFL_ENSURE(lhs != rhs,
+    YDB_LOG_ENSURE(lhs != rhs,
         {"lhsId", lhs->Id},
         {"rhsId", rhs->Id},
         {"lhsPartitions", lhs->Partitions.size()},

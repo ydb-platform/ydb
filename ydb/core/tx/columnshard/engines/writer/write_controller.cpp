@@ -16,7 +16,7 @@ void IWriteController::UpdateChannelApproximateFreeSpace(const TEvBlobStorage::T
 void IWriteController::OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
     NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
     auto it = WaitingActions.find(result.StorageId ? result.StorageId : NOlap::IStoragesManager::DefaultStorageId);
-    AFL_VERIFY(it != WaitingActions.end());
+    YDB_LOG_VERIFY(it != WaitingActions.end());
     it->second->OnBlobWriteResult(blobId, result.Status);
     if (it->second->IsReady()) {
         WaitingActions.erase(it);

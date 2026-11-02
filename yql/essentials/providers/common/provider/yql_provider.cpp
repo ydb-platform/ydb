@@ -1819,13 +1819,33 @@ bool TransformPgSetItemOption(
     const TCoPgSelect& pgSelect,
     TStringBuf optionName,
     std::function<void(const TExprBase&)> lambda) {
+    return TransformSqlSetItemOption(pgSelect, optionName, std::move(lambda));
+}
+
+bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {
+    return NeedToRenameSqlSelectColumns(pgSelect);
+}
+
+bool RenamePgSelectColumns(
+    const TCoPgSelect& node,
+    TExprNode::TPtr& output,
+    const TMaybe<TColumnOrder>& tableColumnOrder,
+    TExprContext& ctx,
+    TTypeAnnotationContext& types) {
+    return RenameSqlSelectColumns(node, output, tableColumnOrder, ctx, types);
+}
+
+bool TransformSqlSetItemOption(
+    const TExprBase& sqlSelect,
+    TStringBuf optionName,
+    std::function<void(const TExprBase&)> lambda) {
     bool applied = false;
-    for (const auto& option : pgSelect.SelectOptions()) {
-        if (option.Name() == "set_items") {
-            auto pgSetItems = option.Value().Cast<TExprList>();
-            for (const auto& setItem : pgSetItems) {
-                auto setItemNode = setItem.Cast<TCoPgSetItem>();
-                for (const auto& setItemOption : setItemNode.SetItemOptions()) {
+    YQL_ENSURE(sqlSelect.Ref().IsCallable({"PgSelect", "YqlSelect"}));
+    for (const auto& option : sqlSelect.Ref().Head().Children()) {
+        if (option->Head().Content() == "set_items") {
+            for (const auto& setItem : option->Tail().Children()) {
+                for (const auto& child : setItem->Head().Children()) {
+                    const TExprBase setItemOption(child);
                     if (MatchesSetItemOption(setItemOption, optionName)) {
                         applied = true;
                         lambda(setItemOption);
@@ -1837,9 +1857,9 @@ bool TransformPgSetItemOption(
     return applied;
 }
 
-TExprNode::TPtr GetSetItemOption(const TCoPgSelect& pgSelect, TStringBuf optionName) {
+TExprNode::TPtr GetSetItemOption(const TExprBase& sqlSelect, TStringBuf optionName) {
     TExprNode::TPtr nodePtr = nullptr;
-    TransformPgSetItemOption(pgSelect, optionName, [&nodePtr](const TExprBase& option) {
+    TransformSqlSetItemOption(sqlSelect, optionName, [&nodePtr](const TExprBase& option) {
         nodePtr = option.Ptr();
     });
     return nodePtr;
@@ -1852,13 +1872,17 @@ TExprNode::TPtr GetSetItemOptionValue(const TExprBase& setItemOption) {
     return nullptr;
 }
 
-bool NeedToRenamePgSelectColumns(const TCoPgSelect& pgSelect) {
-    auto fill = NCommon::GetSetItemOption(pgSelect, "fill_target_columns");
-    return fill && !NCommon::GetSetItemOptionValue(TExprBase(fill));
+bool NeedToRenameSqlSelectColumns(const TExprBase& sqlSelect) {
+    auto fill = NCommon::GetSetItemOption(sqlSelect, "fill_target_columns");
+    if (!fill) {
+        return false;
+    }
+    auto value = NCommon::GetSetItemOptionValue(TExprBase(fill));
+    return !value || value->IsAtom("strict");
 }
 
-bool RenamePgSelectColumns(
-    const TCoPgSelect& node,
+bool RenameSqlSelectColumns(
+    const TExprBase& node,
     TExprNode::TPtr& output,
     const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,
@@ -1880,7 +1904,11 @@ bool RenamePgSelectColumns(
         insertColumnOrder = *tableColumnOrder;
     }
     YQL_ENSURE(selectorColumnOrder);
-    if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
+    auto fill = GetSetItemOption(node, "fill_target_columns");
+    auto fillMode = GetSetItemOptionValue(TExprBase(fill));
+    const bool strict = fillMode && fillMode->IsAtom("strict");
+    if ((strict && selectorColumnOrder->Size() != insertColumnOrder.Size()) ||
+        selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
                                                              "%s have %zu columns, INSERT INTO expects: %zu",
                                                              optionName.data(),
@@ -1924,8 +1952,6 @@ bool RenamePgSelectColumns(
             .Build()
             .Build();
     }
-
-    auto fill = GetSetItemOption(node, "fill_target_columns");
 
     output = Build<TCoMap>(ctx, node.Pos())
                  .Input(node)

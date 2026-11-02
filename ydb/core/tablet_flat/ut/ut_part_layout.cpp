@@ -1,4 +1,5 @@
 #include <ydb/core/tablet_flat/flat_part_loader.h>
+#include <ydb/core/tablet_flat/flat_part_index_iter_iface.h>
 #include <ydb/core/tablet_flat/flat_part_writer.h>
 #include <ydb/core/tablet_flat/flat_writer_bundle.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
@@ -436,8 +437,9 @@ namespace {
         TSet<ui32> FetchedSlots;
     };
 
-    // Loads the part from page collections without any cached pages, serving fetches from the written pages
-    TPartView LoadBundlePart(const TBundlePart& bundlePart, bool withSlices, bool preloadData, TLoadStats& stats, ui32 dropSlots = 0) {
+    // Serves fetches from the written pages, optionally reusing page collections with cached pages
+    TPartView LoadBundlePart(const TBundlePart& bundlePart, bool withSlices, bool preloadData, TLoadStats& stats,
+            ui32 dropSlots = 0, const TPartView& cachedPart = { }) {
         const auto& result = bundlePart.Result;
 
         TVector<THashMap<NPage::TPageOffset, TSharedData>> pages(result.PageCollections.size());
@@ -449,7 +451,8 @@ namespace {
                     pages[slot][page.Location.Offset] = page.Data;
                 }
             }
-            collections.push_back(MakeIntrusive<NTable::TLoader::TPageCollection>(written.PageCollection));
+            collections.push_back(cachedPart ? cachedPart.As<NTable::TPartStore>()->PageCollections[slot]
+                : MakeIntrusive<NTable::TLoader::TPageCollection>(written.PageCollection));
         }
         collections.resize(collections.size() - dropSlots);
 
@@ -565,6 +568,67 @@ Y_UNIT_TEST_SUITE(TPartLayoutLoader) {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SliceBoundsWithPendingPagesInDifferentSlots) {
+        for (EIndex index : { EIndex::V1, EIndex::V2, EIndex::V2WithV1Shadow }) {
+            for (const auto& layout : SeparateLayouts) {
+                if (!layout.KeyIndexInDescriptor) {
+                    continue;
+                }
+                const auto message = Describe(layout, index);
+                Cerr << "Checking " << message << Endl;
+
+                const auto bundlePart = WriteBundlePart(layout, index);
+                TLoadStats initialStats;
+                const auto cachedPart = LoadBundlePart(bundlePart, true, false, initialStats);
+                const auto* part = cachedPart.As<NTable::TPartStore>();
+                const ui32 indexSlot = part->IndexSlot({ });
+                const ui32 dataSlot = part->DataSlot({ });
+                UNIT_ASSERT_VALUES_UNEQUAL(indexSlot, dataSlot);
+                UNIT_ASSERT(!initialStats.FetchedSlots.contains(dataSlot));
+
+                THashMap<NPage::TPageOffset, TSharedData> indexPages;
+                const auto& written = bundlePart.Result.PageCollections[indexSlot];
+                for (const auto* pages : { &written.RegularPages, &written.StickyPages }) {
+                    for (const auto& page : *pages) {
+                        indexPages[page.Location.Offset] = page.Data;
+                    }
+                }
+
+                // Cache only the rightmost index path, without loading any data pages.
+                NTable::TLoader::TLoaderEnv env(part->PageCollections, part->Slots);
+                env.ProvidePart(part);
+                auto iter = CreateIndexIter(part, &env, { });
+                ui32 indexFetches = 0;
+                for (;;) {
+                    const auto ready = iter->SeekLast();
+                    if (ready != EReady::Page) {
+                        UNIT_ASSERT_VALUES_EQUAL(ready, EReady::Data);
+                        break;
+                    }
+                    auto fetch = env.GetFetch();
+                    UNIT_ASSERT(fetch);
+                    UNIT_ASSERT_VALUES_EQUAL(fetch.PageCollection->Label(), written.PageCollection->Label());
+                    for (const auto& location : fetch.Pages) {
+                        auto* data = indexPages.FindPtr(location.Offset);
+                        UNIT_ASSERT(data);
+                        env.Save({ location.Offset, location.Size, NSharedCache::TSharedPageRef::MakePrivate(*data) });
+                    }
+                    ++indexFetches;
+                }
+                UNIT_ASSERT_C(indexFetches > 0, message);
+                env.EnsureNoNeedPages();
+
+                // The last key now misses a data page, while the first key misses an index page.
+                // A single keys-loader pass queues both slots, but a fetch serves only one of them.
+                TLoadStats stats;
+                const auto partView = LoadBundlePart(bundlePart, false, false, stats, 0, cachedPart);
+                CheckLoadedPart(bundlePart, partView, layout, message);
+                UNIT_ASSERT_C(stats.FetchedSlots.contains(indexSlot), message);
+                UNIT_ASSERT_C(stats.FetchedSlots.contains(dataSlot), message);
             }
         }
     }

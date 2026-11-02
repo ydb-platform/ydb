@@ -434,6 +434,12 @@ bool TColumnEngineForLogs::FinishLoading() {
     return true;
 }
 
+void TColumnEngineForLogs::PrefetchPortionsMetadata() {
+    for (auto&& [_, granule] : GranulesStorage->GetTables()) {
+        granule->PrefetchPortionsMetadata();
+    }
+}
+
 ui64 TColumnEngineForLogs::GetCompactionPriority(
     const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept {
     auto granules = GranulesStorage->GetGranulesForCompaction(pathIds, waitingPriority);

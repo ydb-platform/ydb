@@ -1,9 +1,5 @@
 YQL_UDF_CONTRIB(json_udf)
 
-IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
-    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
-ENDIF()
-
 INCLUDE(ya.make.inc)
 
 END()

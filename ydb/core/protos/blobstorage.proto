@@ -901,9 +901,12 @@ message TEvVStatusResult {
     optional NKikimrBlobStorage.TVDiskID VDiskID = 8;
     optional uint32 StatusFlags = 9; // flags from EStatusFlags
     optional bool JoinedGroup = 10;
+    // Ordinary replication completion is retained when D changes.
     optional bool Replicated = 11 [default = false];
     optional float ApproximateFreeSpaceShare = 12; // must contain valid value if set
     optional bool IsReadOnly = 13 [default = false];
+    // Includes repeated Osiris and replication for the current durability target D.
+    optional bool DurabilityReplicated = 14 [default = false];
     optional fixed64 IncarnationGuid = 30;
     optional NKikimrBlobStorage.TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
@@ -1782,6 +1785,10 @@ message TEvInterpilePutResult {
     message TItem {
         optional NKikimrProto.EReplyStatus Status = 1;
         optional string ErrorReason = 2;
+        optional uint32 RacingGeneration = 3;
+        optional bool WrittenBeyondBarrier = 4;
+        optional uint32 StatusFlags = 5;
+        optional float ApproximateFreeSpaceShare = 6;
     }
 
     repeated TItem Items = 1;

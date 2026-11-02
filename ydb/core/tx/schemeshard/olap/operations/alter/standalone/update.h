@@ -15,6 +15,8 @@ private:
     bool UpdateTTL = false;
     std::shared_ptr<TStandaloneTable> TargetStandalone;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoRestoreImpl(
+        const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) override;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetStandalone->GetTableInfoPtrVerified();

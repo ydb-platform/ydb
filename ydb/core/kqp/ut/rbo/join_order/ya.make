@@ -5,7 +5,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
-    ../kqp_join_order_ut.cpp
+    kqp_join_order_ut.cpp
 )
 
 PEERDIR(

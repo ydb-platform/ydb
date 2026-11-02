@@ -11,9 +11,12 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/builder.h>
 
 namespace NKikimr::NReplication::NService {
 
@@ -970,6 +973,121 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.Send(new IEventHandle(latestWriter, edge, new TEvents::TEvWakeup()));
         auto released = runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(edge);
         UNIT_ASSERT_VALUES_EQUAL(released->Sender, latestWriter);
+    }
+
+    // Model receiver rollback using a table with old rows and deduplication offsets.
+    void CheckReceiverRollbackState(bool restoreSnapshot) {
+        TEnv env;
+        auto& runtime = env.GetRuntime();
+        const TString topicPath = "/Root/topic";
+        const TString consumer = "consumer";
+        const TString baseline = R"({"key":[1],"update":{"value":"before-snapshot"}})";
+
+        NYdb::NTopic::TTopicClient topicClient(env.GetDriver());
+        const auto created = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer().ConsumerName(consumer).EndAddConsumer()).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        for (const TString& name : {TString("Live"), TString("Snapshot")}) {
+            UNIT_ASSERT_VALUES_EQUAL(env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+                .Name = name,
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            })), NMsgBusProxy::MSTATUS_OK);
+        }
+
+        auto waitCommitted = [&](ui64 offset, bool sessionClosed = false) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+            while (TInstant::Now() < deadline) {
+                const auto result = topicClient.DescribeConsumer(topicPath, consumer,
+                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
+                        .ClientTimeout(TDuration::Seconds(5))).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                const auto& partitions = result.GetConsumerDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                const auto& stats = partitions.front().GetPartitionConsumerStats();
+                UNIT_ASSERT(stats);
+                if (stats->GetCommittedOffset() == offset && (!sessionClosed || stats->GetReadSessionId().empty())) {
+                    return;
+                }
+            }
+            UNIT_FAIL("Timed out waiting for offset " << offset << ", sessionClosed=" << sessionClosed);
+        };
+
+        NYdb::NTable::TTableClient tableClient(env.GetDriver());
+        const auto sessionResult = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto readKeys = [&](const TString& tablePath) {
+            const auto result = session.ExecuteDataQuery(
+                TStringBuilder() << "SELECT key FROM `" << tablePath << "` ORDER BY key",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto parser = result.GetResultSetParser(0);
+            TVector<ui32> keys;
+            while (parser.TryNextRow()) {
+                keys.push_back(parser.ColumnParser(0).GetOptionalUint32().value());
+            }
+            return keys;
+        };
+
+        auto startWorker = [&](const TString& tablePath) {
+            return runtime.Register(CreateWorker(env.GetSender(),
+                [ydbProxy = env.GetYdbProxy(), topicPath, consumer] {
+                    return CreateRemoteTopicReader(ydbProxy, TEvYdbProxy::TTopicReaderSettings()
+                        .ConsumerName(consumer)
+                        .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(topicPath).AppendPartitionIds(0)));
+                },
+                [tablePathId = env.GetPathId(tablePath)] {
+                    return CreateLocalTableWriter("/Root", tablePathId);
+                }));
+        };
+
+        // Seed both the old row and its durable offset using the reader's source identity.
+        const auto snapshotWriter = runtime.Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Snapshot")));
+        env.Send<TEvWorker::TEvHandshake>(snapshotWriter, new TEvWorker::TEvHandshake());
+        env.Send<TEvWorker::TEvPoll>(snapshotWriter, new TEvWorker::TEvData(0, "0", {TTopicMessage(0, baseline)}));
+        env.SendAsync(snapshotWriter, new TEvents::TEvPoison());
+
+        auto worker = startWorker("/Root/Live");
+        UNIT_ASSERT(WriteTopic(env, topicPath, baseline));
+        TVector<ui32> allKeys{1};
+        for (ui32 key = 2; key <= 31; ++key) {
+            UNIT_ASSERT(WriteTopic(env, topicPath,
+                TStringBuilder() << R"({"key":[)" << key << R"(],"update":{"value":"after-snapshot"}})"));
+            allKeys.push_back(key);
+        }
+        waitCommitted(31);
+        UNIT_ASSERT_VALUES_EQUAL(readKeys("/Root/Live"), allKeys);
+        UNIT_ASSERT_VALUES_EQUAL(readKeys("/Root/Snapshot"), (TVector<ui32>{1}));
+
+        env.SendAsync(worker, new TEvents::TEvPoison());
+        // Close the old SDK read session before assigning the partition again.
+        waitCommitted(31, true);
+        const TString resumedTable = restoreSnapshot ? "/Root/Snapshot" : "/Root/Live";
+        worker = startWorker(resumedTable);
+        UNIT_ASSERT(WriteTopic(env, topicPath, R"({"key":[32],"update":{"value":"after-restart"}})"));
+        waitCommitted(32);
+        const auto keys = readKeys(resumedTable);
+        env.SendAsync(worker, new TEvents::TEvPoison());
+        waitCommitted(32, true);
+
+        // Characterize the existing bug: rollback loses the 30 acknowledged rows.
+        allKeys.push_back(32);
+        if (restoreSnapshot) {
+            UNIT_ASSERT_VALUES_EQUAL(keys, (TVector<ui32>{1, 32}));
+            UNIT_ASSERT_VALUES_UNEQUAL(keys, allKeys);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(keys, allKeys);
+        }
+    }
+
+    Y_UNIT_TEST(ReceiverRollbackStateSkipsCommittedRows) {
+        CheckReceiverRollbackState(true);
+    }
+
+    Y_UNIT_TEST(OrdinaryWorkerRestartPreservesCommittedRows) {
+        CheckReceiverRollbackState(false);
     }
 
     Y_UNIT_TEST(Basic) {

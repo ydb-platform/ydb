@@ -443,7 +443,7 @@ namespace {
         });
     }
 
-    void CheckDecommitResolveTimeout(bool holdPut) {
+    void CheckDecommitResolveDeadline(bool holdPut) {
         TEnvironmentSetup env(MakeUnbridgedSettings(true));
         env.CreatePool(2);
         env.Sim(TDuration::Seconds(30));
@@ -464,7 +464,7 @@ namespace {
             if (type == TEvBlobDepot::TEvResolveResult::EventType) {
                 const auto& record = ev->Get<TEvBlobDepot::TEvResolveResult>()->Record;
                 resolveTimedOut |= record.GetStatus() == NKikimrProto::ERROR &&
-                    record.GetErrorReason().Contains("decommission resolve timed out");
+                    record.GetErrorReason().Contains("decommission resolve deadline exceeded");
             } else if (type == TEvBlobStorage::EvGet || type == TEvBlobStorage::EvPut) {
                 auto *sender = env.Runtime->GetActor(ev->Sender);
                 if (sender && TypeName(*sender).EndsWith("::TResolveDecommitActor")) {
@@ -485,21 +485,22 @@ namespace {
         });
         RunDecommission(env, chain, checker, groupId, {}, {
             .InProgress = [&] {
-                const auto started = env.Runtime->GetClock();
+                const auto deadline = env.Runtime->GetClock() + TDuration::Minutes(1);
                 env.Runtime->WrapInActorContext(edge, [&] {
-                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, deadline,
                         NKikimrBlobStorage::FastRead, true /*mustRestoreFirst*/));
                 });
-                // The caller has no deadline: the tablet-side actor must bound its own attempt.
+                // The physical replies never come: the tablet-side actor must stop at the caller's deadline.
                 auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false,
-                    started + TDuration::Minutes(6));
-                UNIT_ASSERT_C(result, "decommission resolve retained a silent dependency indefinitely");
-                UNIT_ASSERT(resolveTimedOut);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::ERROR);
+                    deadline + TDuration::Seconds(5));
+                UNIT_ASSERT_C(result, "decommission read outlived its deadline");
+                const auto *msg = result->Get();
+                UNIT_ASSERT_C(msg->Status != NKikimrProto::OK || msg->Responses[0].Status != NKikimrProto::OK,
+                    msg->ToString());
+                WaitUntil(env, [&] { return resolveTimedOut; }, "tablet-side resolve failure");
                 UNIT_ASSERT(responseHold.HasHeld());
-                UNIT_ASSERT(physicalDeadline && *physicalDeadline <= started + TDuration::Minutes(6));
+                UNIT_ASSERT(physicalDeadline);
+                UNIT_ASSERT_VALUES_EQUAL(*physicalDeadline, deadline);
                 UNIT_ASSERT(!env.Runtime->GetActor(resolver));
                 timedOut = true;
                 responseHold.Release();
@@ -512,8 +513,8 @@ namespace {
 
 Y_UNIT_TEST_SUITE(BridgeDecommit) {
 
-    Y_UNIT_TEST_TWIN(ResolveTimeout, holdPut) {
-        CheckDecommitResolveTimeout(holdPut);
+    Y_UNIT_TEST_TWIN(ResolveFollowsCallerDeadline, holdPut) {
+        CheckDecommitResolveDeadline(holdPut);
     }
 
     Y_UNIT_TEST(CheckIntegrityUsesCachedMappingAfterDone) {

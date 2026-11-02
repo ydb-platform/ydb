@@ -47,7 +47,7 @@ class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None,
                  fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None, fuzz_universal=False,
-                 patch_cfg_file=None, secure_params={}, udfs=None):
+                 patch_cfg_file=None, secure_params={}, udfs=None, ignore_extra_config=False):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
@@ -91,7 +91,9 @@ class YQLRun(object):
         if gateway_config is not None:
             text_format.Merge(gateway_config, self.gateway_config)
 
-        yql_utils.merge_default_gateway_cfg(cfg_dir or 'yql/essentials/cfg/tests', self.gateway_config)
+        yql_utils.merge_default_gateway_cfg(
+            cfg_dir or 'yql/essentials/cfg/tests', self.gateway_config, ignore_extra_config=ignore_extra_config
+        )
         yql_utils.merge_gateway_cfg_patch(patch_cfg_file, self.gateway_config)
 
         self.fs_config = file_storage_pb2.TFileStorageConfig()

@@ -110,6 +110,12 @@ namespace NKikimr {
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
             ev->Record.SetGroupSizeInUnits(Config->GroupSizeInUnits);
+            const bool reinforced = ReplMonGroup.ReplReinforced() && !HasUnreadableBlobs;
+            ev->Record.SetReinforced(reinforced);
+            ev->Record.SetReinforcementGeneration(0);
+            if (reinforced) {
+                ev->Record.SetReinforcementGeneration(GInfo->GroupGeneration);
+            }
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
             const ui64 bytesRead = QueryCtx ? QueryCtx->PDiskReadBytes.exchange(0) : 0;
@@ -1765,9 +1771,11 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvVStatus",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS20"});
-            auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
+            const bool durabilityReplDone = DurabilityReplDone && !RepeatRecoveryPending && !HasUnreadableBlobs;
+            const TActorId aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
                 IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now,
-                ReplMonGroup.ReplRecoveryDone() && !HasUnreadableBlobs, Config->BaseInfo.ReadOnly));
+                ReplMonGroup.ReplRecoveryDone() && !HasUnreadableBlobs, durabilityReplDone,
+                Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2263,6 +2271,7 @@ namespace NKikimr {
             }
             RepeatRecoveryPending = false;
             ReplDone = false;
+            DurabilityReplDone = false;
             ReplOnlyPhantomsRemain = false;
             ReplReinforcementGeneration = ReinforcementGeneration;
             UpdateReplState();
@@ -2584,6 +2593,7 @@ namespace NKikimr {
             if (!runRepl) {
                 ReplDone = true;
                 ReplMonGroup.ReplRecoveryDone() = 1;
+                DurabilityReplDone = true;
             }
             UpdateReplState();
             RunBalancing(ctx);
@@ -3301,12 +3311,8 @@ namespace NKikimr {
                         reinforcementChanged |= GInfo->GetActorId(disk) != msg->NewInfo->GetActorId(disk);
                     }
                 }
-                // A reinforcement pass already targets two copies, including before
-                // the optional N1 guarantee is published. That upgrade needs no rescan.
-                if (!ReinforcementRequired() || reinforcementChanged) {
-                    RepeatRecoveryPending |= previousDurability && nextDurability
-                        && previousDurability != nextDurability;
-                }
+                RepeatRecoveryPending |= previousDurability && nextDurability
+                    && previousDurability != nextDurability;
             }
 
             // Save locally
@@ -3383,6 +3389,7 @@ namespace NKikimr {
             } else {
                 ReplDone = true;
                 ReplMonGroup.ReplRecoveryDone() = 1;
+                DurabilityReplDone = true;
                 if (!RepeatRecoveryPending && ReplReinforcementGeneration
                         && ReplReinforcementGeneration == ReinforcementGeneration) {
                     ReplMonGroup.ReplReinforced() = 1;
@@ -3492,7 +3499,9 @@ namespace NKikimr {
         }
 
         void UpdateReplState() {
-            const bool ready = ReplMonGroup.ReplRecoveryDone() && !HasUnreadableBlobs;
+            const bool replicationComplete = DurabilityReplDone
+                || (ReinforcementRequired() && ReplMonGroup.ReplRecoveryDone());
+            const bool ready = replicationComplete && !HasUnreadableBlobs;
             UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING);
         }
 
@@ -4099,6 +4108,7 @@ namespace NKikimr {
         ui64 PendingSyncGenerationLsn = 0;
         TActorId RepeatOsirisId;
         bool ReplDone = false;
+        bool DurabilityReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();

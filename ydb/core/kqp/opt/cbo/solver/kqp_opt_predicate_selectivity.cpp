@@ -1560,7 +1560,7 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ComputeImpl(
     // Process boolean literals
     else if (auto boolLiteral = input.Maybe<TCoBool>()) {
         const bool value = FromString<bool>(boolLiteral.Cast().Literal().Value());
-        return ProcessBoolLiteralPredicate(value, underNot, collectMembers);;
+        return ProcessBoolLiteralPredicate(value, underNot, collectMembers);
     }
 
     // Process regular expression and StringContainsIgnoreCase (ILIKE %value%)

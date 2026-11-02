@@ -262,6 +262,12 @@ namespace NKikimr::NBlobDepot {
         return true;
     }
 
+    void TBlobDepotAgent::TQuery::SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const {
+        if (Deadline != TInstant::Max()) {
+            resolve.SetDeadlineUs(Deadline.MicroSeconds());
+        }
+    }
+
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
             bool isTabletStorageInfoVersionObsolete, ui32 actualGeneration) {
         YDB_LOG_INFO("Query ends with error",

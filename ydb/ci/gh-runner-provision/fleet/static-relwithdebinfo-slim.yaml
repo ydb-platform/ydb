@@ -1,6 +1,6 @@
 shape: ../shapes/static-relwithdebinfo-slim.yaml
 name: static-relwithdebinfo-slim-a
-count: 2
+count: 1
 zone: ru-central1-a
 subnet_id: e9b1l2j8tlnpph34qcn8
 labels:

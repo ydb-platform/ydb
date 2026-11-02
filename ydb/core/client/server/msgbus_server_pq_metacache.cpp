@@ -266,7 +266,19 @@ private:
                 }
             } else {
                 for (auto& t : Topics) {
-                    ret.push_back(std::make_pair(t->GetPrimaryPath(), t->GetDatabase().GetOrElse("")));
+                    const auto& account = t->GetAccount_();
+                    if (DbRoot == "/Root/logbroker-federation"
+                        && account.Defined()
+                        && *account == "SourceIdMeta2"
+                        && t->GetPrimaryPath() == t->GetOriginalPath()
+                        && t->GetFullModernName() == "replication")
+                    {
+                        ret.emplace_back(
+                            "/Root/logbroker/shared/federation-1/PQ/SourceIdMeta2/replication",
+                            "/Root/logbroker/shared/federation-1");
+                    } else {
+                        ret.emplace_back(t->GetPrimaryPath(), t->GetDatabase().GetOrElse(""));
+                    }
                 }
             }
             return ret;
@@ -338,7 +350,6 @@ private:
         Y_ABORT_UNLESS(inserted);
 
         TMaybe<TString> db = {};
-
         for (const auto& [path, database] : waiter->GetTopics()) {
             if (!db) db = database;
             if (*db != database) db = "";

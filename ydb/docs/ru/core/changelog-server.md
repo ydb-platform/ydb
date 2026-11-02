@@ -432,7 +432,7 @@
 
 ### Исправления ошибок
 
-* Добавлена проверка на размер локальной транзакции до ее коммита, чтобы исправить [ошибки](https://github.com/ydb-platform/ydb/issues/6677) в работе схемных операции при выполнении экспорта/бекапа больших баз.
+* Добавлена проверка на размер локальной транзакции до ее коммита, чтобы исправить [ошибки](https://github.com/db-platform/ydb/issues/6677) в работе схемных операции при выполнении экспорта/бекапа больших баз.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/7709) [ошибка](https://github.com/ydb-platform/ydb/issues/7674) дублирования результатов SELECT-запроса при уменьшении квоты в [DataShard](./concepts/glossary#data-shard).
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/6461) [ошибки](https://github.com/ydb-platform/ydb/issues/6220), возникающие при изменении состояния [координатора](./concepts/glossary#coordinator).
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/5992) ошибки, возникающие в момент первичного сканирования [CDC](./dev/cdc).

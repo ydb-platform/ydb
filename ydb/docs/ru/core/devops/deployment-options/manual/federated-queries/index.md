@@ -1,4 +1,4 @@
-﻿# Развёртывание {{ ydb-short-name }} с функцией Federated Query
+# Развёртывание {{ ydb-short-name }} с функцией Federated Query
 
 {% note warning %}
 

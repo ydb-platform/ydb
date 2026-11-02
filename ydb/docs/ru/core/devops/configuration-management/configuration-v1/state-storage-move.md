@@ -1,4 +1,4 @@
-﻿# Перемещение State Storage
+# Перемещение State Storage
 
 
 Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/domains_config.md#domains-state), необходимо переместить её на другой хост.

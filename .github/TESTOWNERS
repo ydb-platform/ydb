@@ -145,7 +145,6 @@
 /ydb/core/mind/bscontroller @ydb-platform/blobstorage
 /ydb/library/actors @ydb-platform/blobstorage
 /ydb/core/actorlib_impl @ydb-platform/blobstorage
-/ydb/core/keyvalue @ydb-platform/blobstorage
 /ydb/core/test_tablet @ydb-platform/blobstorage
 /ydb/core/blob_depot @ydb-platform/blobstorage
 /ydb/core/erasure @ydb-platform/blobstorage

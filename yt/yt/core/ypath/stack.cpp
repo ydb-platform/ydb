@@ -10,6 +10,15 @@
 #include <library/cpp/yt/string/string.h>
 
 namespace NYT::NYPath {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr int InitialItemCapacity = 8;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,11 +27,13 @@ void TYPathStack::Push(TStringBuf key)
     if (PathMaterialized_) {
         auto keyLiteral = ToYPathLiteral(key);
         PreviousPathLengths_.push_back(Path_.size());
-        Path_.reserve(Path_.size() + keyLiteral.length() + 1);
         Path_ += "/";
         Path_ += keyLiteral;
     }
-    Items_.push_back(std::string(key));
+    if (Items_.capacity() == 0) {
+        Items_.reserve(InitialItemCapacity);
+    }
+    Items_.emplace_back(std::in_place_type<std::string>, key);
 }
 
 void TYPathStack::Push(int index)
@@ -31,6 +42,9 @@ void TYPathStack::Push(int index)
         PreviousPathLengths_.push_back(Path_.size());
         Path_ += "/";
         Path_ += std::to_string(index);
+    }
+    if (Items_.capacity() == 0) {
+        Items_.reserve(InitialItemCapacity);
     }
     Items_.emplace_back(index);
 }

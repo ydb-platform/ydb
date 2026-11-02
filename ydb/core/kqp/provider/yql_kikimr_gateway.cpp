@@ -15,6 +15,7 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -634,6 +635,28 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type&
         return false;
     }
     }
+}
+
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull,
+    NKikimrKqp::TKqpColumnMetadataProto& column, TString& error)
+{
+    Ydb::Type type;
+    if (!SetColumnType(typeNode, notNull, type, error)) {
+        return false;
+    }
+    const auto& itemType = type.has_optional_type() ? type.optional_type().item() : type;
+    NKikimr::NScheme::TTypeInfoMod typeInfoMod;
+    if (!NKikimr::NScheme::TypeInfoFromProto(itemType, typeInfoMod, error)) {
+        return false;
+    }
+    column.SetType(NKikimr::NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod));
+    const auto columnType = NKikimr::NScheme::ProtoColumnTypeFromTypeInfoMod(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
+    column.SetTypeId(columnType.TypeId);
+    if (columnType.TypeInfo) {
+        column.MutableTypeInfo()->CopyFrom(*columnType.TypeInfo);
+    }
+    column.SetNotNull(notNull);
+    return true;
 }
 
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,

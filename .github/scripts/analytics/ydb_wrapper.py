@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import datetime
 import inspect
 import json
 import os
@@ -51,13 +50,24 @@ class YDBWrapper:
     when exiting the ``with`` block.
     """
 
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = None):
+    def __init__(
+        self,
+        config_path: str = None,
+        enable_statistics: bool = None,
+        script_name: str = None,
+        silent: bool = False,
+        use_local_config: bool = None,
+        verbose: bool = False,
+    ):
         # use_local_config=None (default): YDB_QA_CONFIG env if set, else local config file
         # use_local_config=True: only local config file (ignore YDB_QA_CONFIG env)
         # use_local_config=False: YDB_QA_CONFIG env > config file (JSON)
         # By default logs go to stdout (as before)
         # If silent=True, logs go to stderr (for scripts called from other scripts)
         self._log_stream = sys.stderr if silent else sys.stdout
+        self._verbose = verbose or os.environ.get("YDB_WRAPPER_DEBUG", "").lower() in (
+            "true", "1", "yes"
+        )
 
         _explicit_local = use_local_config  # remember if caller forced the choice
         if use_local_config is None:
@@ -250,12 +260,10 @@ class YDBWrapper:
     
     def _log(self, level: str, message: str, details: str = ""):
         """Universal logging"""
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        icons = {"start": "🚀", "progress": "⏳", "success": "✅", "error": "❌", "info": "ℹ️", "warning": "⚠️", "stats": "📊"}
-        if details:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}", file=self._log_stream)
-        else:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}", file=self._log_stream)
+        # CI log collectors already add timestamps; plain text avoids duplicate metadata and decorative noise.
+        prefix = {"error": "ERROR: ", "warning": "WARNING: "}.get(level, "")
+        suffix = f" | {details}" if details else ""
+        print(f"{prefix}{message}{suffix}", file=self._log_stream, flush=True)
     
     def _setup_credentials(self):
         """Setup YDB credentials"""
@@ -500,10 +508,9 @@ class YDBWrapper:
         # Log operation start
         self._log("start", f"Executing {operation_type}")
         
-        if query:
-            # For bulk_upsert don't show details for each batch
-            if operation_type != "bulk_upsert":
-                self._log("info", f"Query details:\n{query}")
+        # Full queries are debug-only because schemas and value lists overwhelm routine CI logs.
+        if query and self._verbose and operation_type != "bulk_upsert":
+            self._log("info", f"Query details:\n{query}")
         
         status = "success"
         error = None

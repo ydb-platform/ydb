@@ -1,0 +1,68 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     WTFPL                168411d1dfae65ebedc997bbe1344b2b
+BELONGS ya.make
+    License text:
+        This product is released under the terms of the WTFPL. Read
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        libintl-stub.c [7:7]
+        libintl.h [7:7]
+    Scancode info:
+        Original SPDX id: WTFPL
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://sam.zoy.org/wtfpl/, http://sam.zoy.org/wtfpl/COPYING, https://spdx.org/licenses/WTFPL
+    Files with this license:
+        libintl-stub.c [7:7]
+        libintl.h [7:7]
+
+KEEP     WTFPL                5535a5f9bc11be964c9c761fc19cd9e2
+BELONGS ya.make
+    License text:
+        http://sam.zoy.org/wtfpl for more details.
+    Scancode info:
+        Original SPDX id: WTFPL
+        Score           : 27.00
+        Match type      : REFERENCE
+        Links           : http://sam.zoy.org/wtfpl/, http://sam.zoy.org/wtfpl/COPYING, https://spdx.org/licenses/WTFPL
+    Files with this license:
+        libintl-stub.c [8:8]
+        libintl.h [8:8]

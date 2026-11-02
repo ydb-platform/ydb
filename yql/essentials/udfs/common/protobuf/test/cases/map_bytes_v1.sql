@@ -1,3 +1,7 @@
+$input = [
+    <|TestField: Just(@@{"map1": [{"key": "key1", "value": ""}], "map2": [{"key": "key3", "value": {"map1": [{"key": "nestedKey", "value": "nestedValue"}], "map2": [{"key": "key4"}]}}]}@@)|>,
+];
+
 /*
 
 syntax='proto3';
@@ -26,5 +30,4 @@ $config = @@{
 $udfPar = Udf(Protobuf::Parse, $config as TypeConfig);
 $udfSer = Udf(Protobuf::Serialize, $config as TypeConfig);
 
-SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)) FROM plato.Input;
-
+SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)) FROM AS_TABLE($input);

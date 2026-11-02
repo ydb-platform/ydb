@@ -1,0 +1,21 @@
+[options]
+work_mode = "sys"
+library = "GdkPixbuf"
+version = "2.0"
+min_cfg_version = "2.36.8"
+single_version_file = "."
+girs_directories = ["../../gir-files"]
+
+external_libraries = [
+    "GLib",
+    "GObject",
+    "Gio",
+]
+
+ignore = [
+    "GdkPixbuf.PIXBUF_FEATURES_H",
+    "GdkPixbuf.PIXBUF_MAJOR",
+    "GdkPixbuf.PIXBUF_MICRO",
+    "GdkPixbuf.PIXBUF_MINOR",
+    "GdkPixbuf.PIXBUF_VERSION",
+]

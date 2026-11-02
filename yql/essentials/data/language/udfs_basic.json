@@ -1071,12 +1071,6 @@
       "name": "ToString"
     }
   ],
-  "Json": [
-    {
-      "isTypeAwareness": true,
-      "name": "GetField"
-    }
-  ],
   "Math": [
     {
       "argCount": 1,

@@ -42,6 +42,8 @@ struct TJoinMetadata {
     TKeyTypes KeyTypes;
 };
 
+void EnsureNoPgTypes(TType* type);
+
 TKeyTypes KeyTypesFromColumns(const TMKQLVector<TType*>& types, const TMKQLVector<ui32>& keyIndexes);
 
 template <EJoinKind Kind> struct TRenamedOutput {
@@ -394,6 +396,8 @@ template <typename Source> class TInMemoryHashJoin {
     ui32 ResumeIndex_ = 0;
     size_t BuildCursor_ = 0;
 };
+
+constexpr size_t PrefetchBatchRows = 32;
 
 template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class THybridHashJoin {
     struct Logger {
@@ -870,9 +874,42 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
                 ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
+                const TPackResult& fetchedPack = *state.FetchedPack;
+                const size_t packWidth = fetchedPack.NTuples ? fetchedPack.PackedTuples.size() / fetchedPack.NTuples : 0;
+                std::array<const TTable*, PrefetchBatchRows> batchTables;
+                ui32 batchEnd = 0;
+                auto prefetchBatch = [&](ui32 first) {
+                    const ui32 count = std::min<ui32>(PrefetchBatchRows, fetchedPack.NTuples - first);
+                    const ui8* rows[PrefetchBatchRows];
+                    for (ui32 i = 0; i < count; ++i) {
+                        const TSingleTuple ahead{fetchedPack.PackedTuples.data() + packWidth * (first + i),
+                                                 fetchedPack.Overflow.data()};
+                        rows[i] = ahead.PackedData;
+                        batchTables[i] = std::get_if<TTable>(&state.Spiller.GetState().Buckets[Settings.BucketIndex(ahead)]);
+                        if (batchTables[i]) {
+                            batchTables[i]->PrefetchDirectory(rows[i]);
+                        }
+                    }
+                    for (ui32 i = 0; i < count; ++i) {
+                        if (batchTables[i]) {
+                            batchTables[i]->PrefetchBuffer(rows[i]);
+                        }
+                    }
+                    for (ui32 i = 0; i < count; ++i) {
+                        if (batchTables[i]) {
+                            batchTables[i]->PrefetchTuple(rows[i]);
+                        }
+                    }
+                    batchEnd = first + count;
+                };
+                for (TSingleTuple tuple : fetchedPack) {
                     if (idx++ < state.ResumeIndex) {
                         continue;
+                    }
+                    if constexpr (!IsGrid) {
+                        if (idx > batchEnd) {
+                            prefetchBatch(idx - 1);
+                        }
                     }
                     if constexpr (IsGrid) {
                         if (!MatchGridRowInMemory(state, tuple, lookupToTable, finishProbeRow, isFull)) {

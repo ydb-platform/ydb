@@ -386,6 +386,25 @@ message TChangeGroupSizeInUnits {
     uint64 ItemConfigGeneration = 100;
 }
 
+// Change BridgeMode of the storage pool of the bridged cluster with non-uniform storage enabled; groups created
+// afterwards follow the new mode, while existing groups keep their ids and data. Making the pool bridged turns its
+// ordinary groups into inline piles in the piles they reside in (each group must reside in a single pile), then the
+// groups get their parts in other piles, which are synced in the background. Making the pool ordinary leaves every
+// bridged group with its part in a single pile, the other parts are deleted in the background.
+message TChangeStoragePoolBridgeMode {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    bool BridgeMode = 3;
+
+    // the pile which bridged groups keep their parts in when the pool is made ordinary; by default, the group keeps
+    // the part it relies on (e.g. the one it has been made bridged from), its inline pile, or its part in the primary
+    // pile
+    string RetainPileName = 4;
+
+    // item's generation to prevent concurrent modification
+    uint64 ItemConfigGeneration = 100;
+}
+
 message TAddMigrationPlan {
     string Name = 1;
     repeated TMoveCommand MoveCommand = 2;
@@ -709,6 +728,44 @@ message TDeleteSpecificGroups {
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Persistent cluster-wide states of physical DataCenters for dynamic mirror-3-dc groups.
+message TDefineDataCenterStates {
+    message TDataCenter {
+        enum EDataCenterState {
+            INCLUDED = 0;
+            EXCLUDED = 1;
+        }
+        optional string Name = 1;
+        optional EDataCenterState State = 2;
+    }
+    // Replaces the entire list. Unlisted DataCenters are INCLUDED.
+    repeated TDataCenter DataCenter = 1;
+}
+
+// Clear the states and publish a new generation of every dynamic mirror-3-dc group (test use only).
+message TTestResetDataCenterStates {}
+
+// Set persisted group realm states; IgnoreGroupFailModelChecks bypasses transition validation.
+message TDefineFailRealmStates {
+    message TGroupDefinition {
+        enum EFailRealmState {
+            INVARIANT0 = 0;
+            INVARIANT1 = 1;
+            INVARIANT2 = 2;
+            EXCLUDED = 3;
+            RECOVERING = 4;
+        }
+
+        optional uint32 GroupId = 1;
+        // Exactly three states, indexed by physical fail realm.
+        repeated EFailRealmState FailRealmStates = 2;
+        // If set, apply only to this group generation.
+        optional uint32 ExpectedGroupGeneration = 3;
+    }
+
+    repeated TGroupDefinition Groups = 1;
+}
+
 message TConfigRequest {
     message TCommand {
         oneof Command {
@@ -764,9 +821,13 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
+            TChangeStoragePoolBridgeMode ChangeStoragePoolBridgeMode = 64;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
+            TDefineDataCenterStates DefineDataCenterStates = 65;
+            TTestResetDataCenterStates TestResetDataCenterStates = 66;
+            TDefineFailRealmStates DefineFailRealmStates = 67;
         }
     }
 
@@ -899,6 +960,8 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
+        // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
+        repeated TFailRealmInfo FailRealms = 14;
     }
     message TNode {
         uint32 NodeId = 1;

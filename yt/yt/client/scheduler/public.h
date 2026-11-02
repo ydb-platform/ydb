@@ -79,6 +79,7 @@ YT_DEFINE_ERROR_ENUM(
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
     ((OperationLaunchedInNonexistentPool)     (223))
     ((OperationHasNoController)               (224))
+    ((AgentUnregistered)                      (225))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,

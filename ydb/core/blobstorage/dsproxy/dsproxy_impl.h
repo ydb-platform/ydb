@@ -518,6 +518,7 @@ public:
             case TEvBlobStorage::EvPatch:
             case TEvBlobStorage::EvAssimilate:
             case TEvBlobStorage::EvCheckIntegrity:
+            case TEvBlobStorage::EvBunchOfEvents:
                 TActivationContext::Send(IEventHandle::Forward(ev, BridgeProxyId));
                 break;
         }

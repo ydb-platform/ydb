@@ -16,7 +16,7 @@ struct TCommonPushdownSettings: public NPushdown::TSettings {
             EFlag::JustPassthroughOperators | EFlag::DivisionExpressions | EFlag::CastExpression | EFlag::ToBytesFromStringExpressions |
             EFlag::ToStringFromStringExpressions | EFlag::FlatMapOverOptionals | EFlag::PredicateAsExpression |
             // EFlag::UnaryOperators | // TODO: no support in connector protocol/Format/Serialize
-            EFlag::StructOperators |
+            EFlag::StructOperators | EFlag::LikeOperatorComplex |
 
             // Type features
             EFlag::DateCtor | EFlag::DateTimeTypes | EFlag::TimestampCtor | EFlag::DecimalType | EFlag::IntervalCtor | 0);

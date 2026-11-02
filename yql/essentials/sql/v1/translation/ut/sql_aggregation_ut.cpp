@@ -462,3 +462,48 @@ Y_UNIT_TEST(HopStartEndWithGroupByWithoutHopping) {
 }
 
 } // Y_UNIT_TEST_SUITE(HoppingWindow)
+
+Y_UNIT_TEST_SUITE(GroupByWhereVisibility) {
+namespace {
+
+void CheckWhereColumnReference(NYql::TLangVersion langVer, const TString& groupBy, TStringBuf callable) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = langVer;
+    auto res = SqlToYqlWithSettings(
+        "SELECT value, COUNT(*) FROM plato.Input AS a "
+        "JOIN plato.Input2 AS b ON a.key = b.key "
+        "WHERE value != 'excluded' GROUP BY " +
+            groupBy + ";", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    auto filter = FindNodeByChildAtomContent(res.Root, 0, "OrderedFilter");
+    if (!filter) {
+        filter = FindNodeByChildAtomContent(res.Root, 0, "Filter");
+    }
+    UNIT_ASSERT(filter);
+    // A source column must go through JOIN column resolution, whereas a
+    // precomputed GROUP BY alias can be accessed directly with Member.
+    UNIT_ASSERT_C(FindNodeByChildAtomContent(filter, 0, callable), GetPrettyPrint(res));
+    auto unexpected = callable == "SqlColumn" ? "Member" : "SqlColumn";
+    UNIT_ASSERT_C(!FindNodeByChildAtomContent(filter, 0, unexpected), GetPrettyPrint(res));
+}
+
+} // namespace
+
+Y_UNIT_TEST(SourceColumnWithSameNameAsGroupByAlias) {
+    CheckWhereColumnReference(NYql::NFeature::GroupByExprAfterWhere.MinLangVer, "a.value AS value", "SqlColumn");
+}
+
+Y_UNIT_TEST(SourceColumnShadowedByDifferentGroupByExpression) {
+    CheckWhereColumnReference(NYql::NFeature::GroupByExprAfterWhere.MinLangVer, "a.key AS value", "SqlColumn");
+}
+
+Y_UNIT_TEST(LegacyGroupByAliasInWhere) {
+    CheckWhereColumnReference(NYql::MinLangVersion, "a.value AS value", "Member");
+}
+
+Y_UNIT_TEST(LegacyGroupByExpressionInWhere) {
+    CheckWhereColumnReference(NYql::MinLangVersion, "a.key AS value", "Member");
+}
+
+} // Y_UNIT_TEST_SUITE(GroupByWhereVisibility)

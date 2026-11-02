@@ -305,6 +305,7 @@ protected:
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
     ui64 MoveDataBlobsMoved = 0;
     // trash checking stage
+    ui64 MoveDataTrashCheckingVacuumResetGeneration = 0;
     std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
     TLogoBlobID MoveDataTrashCheckingBlobId;
     bool MoveDataTrashCheckingWaitingForGC = false;

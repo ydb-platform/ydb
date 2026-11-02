@@ -1563,6 +1563,12 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
                     }
                 }
                 if (!found) { // we found a candidate for trash
+                    // MoveData registers the new copy in RefCounts only after PUT.
+                    // Do not classify an in-flight copy as leaked while awaiting its result.
+                    if (id.Generation() == ExecutorGeneration && InFlightForStep.contains(id.Step())) {
+                        ++numUntrimmed;
+                        continue;
+                    }
                     if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
                         YDB_LOG_WARN("Trimming",
                             {"keyValue", TabletId},

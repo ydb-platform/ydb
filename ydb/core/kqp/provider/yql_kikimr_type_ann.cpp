@@ -257,7 +257,8 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
             sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
 
-        auto lambda = CompileGeneratedExpr(generatedQuery, name, ctx, settingsBuilder, typeCtx.Modules);
+        auto lambda = CompileGeneratedExpr(generatedQuery, name, ctx, settingsBuilder.Build(ctx), typeCtx.Modules,
+            settingsBuilder.GetIsAmbiguityError());
         if (!lambda) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -770,7 +771,8 @@ namespace {
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
 
-            auto lambda = CompileGeneratedExpr(generatedQuery, columnName, ctx, settingsBuilder, typeCtx.Modules);
+            auto lambda = CompileGeneratedExpr(generatedQuery, columnName, ctx, settingsBuilder.Build(ctx), typeCtx.Modules,
+                settingsBuilder.GetIsAmbiguityError());
             if (!lambda) {
                 return IGraphTransformer::TStatus::Error;
             }

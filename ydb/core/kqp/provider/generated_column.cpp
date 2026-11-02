@@ -1,8 +1,6 @@
 #include "generated_column.h"
 #include "yql_kikimr_provider.h"
 
-#include <ydb/core/kqp/host/kqp_translate.h>
-
 namespace NYql {
 
 bool IsGeneratedColumn(const TKikimrColumnMetadata* column) {
@@ -52,14 +50,6 @@ const NKikimr::NGeneratedColumns::TGeneratedColumnDependencyGraph* TKikimrTableD
         GeneratedColumnGraph = std::move(graph);
     }
     return GeneratedColumnGraph.Get();
-}
-
-
-TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& columnName, TExprContext& ctx,
-    NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder, const IModuleResolver::TPtr& moduleResolver)
-{
-    return CompileGeneratedExpr(sqlText, columnName, ctx, settingsBuilder.Build(ctx), moduleResolver,
-        settingsBuilder.GetIsAmbiguityError());
 }
 
 } // namespace NYql

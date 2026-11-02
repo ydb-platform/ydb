@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/tools/stress_tool/lib)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
 
 SRCS(
     ../ut/device_test_tool_cli_ut.cpp
@@ -14,4 +13,5 @@ PEERDIR(
     ydb/library/pdisk_io
 )
 
+REQUIREMENTS(cpu:1)
 END()

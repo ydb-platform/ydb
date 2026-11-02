@@ -38,11 +38,12 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     YDB_LOG_VERIFY(!!PackBehaviour);
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     const ui64 firstPKColumnId = Self->TablesManager.GetIndexInfo(*CommitSnapshot).GetPKFirstColumnId();
+    NOlap::TDbWrapper dbWrapper(txc.DB, nullptr);
     for (auto&& portion : Pack.MutablePortions()) {
         YDB_LOG_VERIFY(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetType() == NOlap::EPortionType::Written);
         auto* constructor =
             static_cast<NOlap::TWrittenPortionInfoConstructor*>(&portion.GetPortionInfoConstructor()->MutablePortionConstructor());
-        constructor->SetInsertWriteId(granule.BuildNextInsertWriteId());
+        constructor->SetInsertWriteId(index.BuildNextInsertWriteId(dbWrapper));
         InsertWriteIds.emplace_back(constructor->GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {

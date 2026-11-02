@@ -4108,15 +4108,13 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         )", "Generated columns are not supported in column tables");
     }
 
-    Y_UNIT_TEST(StoredTypesPgDecimalStringUtf8) {
+    Y_UNIT_TEST(StoredTypesDecimalStringUtf8) {
         TTestFixture fixture(R"(
             CREATE TABLE TestTable (
                 k Int32 NOT NULL,
-                pg_value PgText NOT NULL,
                 decimal_value Decimal(22, 9) NOT NULL,
                 string_value String NOT NULL,
                 utf8_value Utf8 NOT NULL,
-                g_pg PgText NOT NULL GENERATED ALWAYS AS (pg_value) STORED,
                 g_decimal Decimal(22, 9) NOT NULL GENERATED ALWAYS AS (decimal_value) STORED,
                 g_string String NOT NULL GENERATED ALWAYS AS (string_value) STORED,
                 g_utf8 Utf8 NOT NULL GENERATED ALWAYS AS (utf8_value) STORED,
@@ -4125,24 +4123,23 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         )");
 
         fixture.Exec(R"(
-            INSERT INTO TestTable (k, pg_value, decimal_value, string_value, utf8_value)
-            VALUES (1, 'pg-one'pt, Decimal("12.34", 22, 9), "bytes-one", Utf8("Utf8-One"));
+            INSERT INTO TestTable (k, decimal_value, string_value, utf8_value)
+            VALUES (1, Decimal("12.34", 22, 9), "bytes-one", Utf8("Utf8-One"));
         )");
         fixture.Check(R"(
-            SELECT g_pg, g_decimal, g_string, g_utf8 FROM TestTable;
-        )", R"([["pg-one";"12.34";"bytes-one";"Utf8-One"]])");
+            SELECT g_decimal, g_string, g_utf8 FROM TestTable;
+        )", R"([["12.34";"bytes-one";"Utf8-One"]])");
 
         fixture.Exec(R"(
             UPDATE TestTable SET
-                pg_value = 'pg-two'pt,
                 decimal_value = Decimal("98.765", 22, 9),
                 string_value = "bytes-two",
                 utf8_value = Utf8("Utf8-Two")
             WHERE k = 1;
         )");
         fixture.Check(R"(
-            SELECT g_pg, g_decimal, g_string, g_utf8 FROM TestTable;
-        )", R"([["pg-two";"98.765";"bytes-two";"Utf8-Two"]])");
+            SELECT g_decimal, g_string, g_utf8 FROM TestTable;
+        )", R"([["98.765";"bytes-two";"Utf8-Two"]])");
     }
 
     Y_UNIT_TEST(StoredTypesTemporal) {
@@ -5261,13 +5258,12 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             fixture.Check("SELECT v FROM VNull WHERE k = 2;", "[[[5]]]");
         }
 
-        Y_UNIT_TEST(ReadVirtualColumnsWithParameterizedAndPgTypes) {
+        Y_UNIT_TEST(ReadVirtualColumnsWithParameterizedTypes) {
             TTestFixture fixture(R"(
                 CREATE TABLE VTypes (
                     k Int32 NOT NULL,
                     nullable_int Int32,
                     nonnull_int Int32 NOT NULL,
-                    pg_payload PgText NOT NULL,
                     decimal_value Decimal(22, 9) NOT NULL,
                     string_value String NOT NULL,
                     date_value Date NOT NULL,
@@ -5275,7 +5271,6 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                     timestamp_value Timestamp NOT NULL,
                     v_nullable Int32 GENERATED ALWAYS AS (nullable_int + 1) VIRTUAL,
                     v_nonnull Int32 NOT NULL GENERATED ALWAYS AS (nonnull_int + 1) VIRTUAL,
-                    v_pg PgText NOT NULL GENERATED ALWAYS AS (pg_payload) VIRTUAL,
                     v_decimal Decimal(22, 9) NOT NULL GENERATED ALWAYS AS (decimal_value) VIRTUAL,
                     v_string String NOT NULL GENERATED ALWAYS AS (string_value) VIRTUAL,
                     v_date Date NOT NULL GENERATED ALWAYS AS (date_value) VIRTUAL,
@@ -5285,10 +5280,10 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
                 );
             )", R"(
                 UPSERT INTO VTypes (
-                    k, nullable_int, nonnull_int, pg_payload, decimal_value, string_value,
+                    k, nullable_int, nonnull_int, decimal_value, string_value,
                     date_value, datetime_value, timestamp_value
                 ) VALUES (
-                    1, NULL, 7, 'pg-value'pt, Decimal("12.34", 22, 9), "bytes",
+                    1, NULL, 7, Decimal("12.34", 22, 9), "bytes",
                     Date("2021-01-01"), Datetime("2021-01-01T01:02:03Z"),
                     Timestamp("2021-01-01T01:02:03.123456Z")
                 );
@@ -5296,10 +5291,10 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
 
             fixture.Check(R"(
                 SELECT
-                    v_nullable, v_nonnull, v_pg, v_decimal, v_string,
+                    v_nullable, v_nonnull, v_decimal, v_string,
                     v_date, v_datetime, v_timestamp
                 FROM VTypes;
-            )", R"([[#;8;"pg-value";"12.34";"bytes";18628u;1609462923u;1609462923123456u]])");
+            )", R"([[#;8;"12.34";"bytes";18628u;1609462923u;1609462923123456u]])");
         }
 
         Y_UNIT_TEST(ReturningNoMatchDoesNotSynthesizeVirtualRows) {
@@ -5946,22 +5941,6 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
             exec("ALTER TABLE `/Root/TestTable` DROP COLUMN virtual_value;");
         }
 
-        Y_UNIT_TEST(NotNullPgVirtualDoesNotBecomeWriteConstraint) {
-            TTestFixture fixture(R"(
-                CREATE TABLE TestTable (
-                    k Int32 NOT NULL,
-                    payload PgText NOT NULL,
-                    virtual_value PgText NOT NULL GENERATED ALWAYS AS (payload) VIRTUAL,
-                    PRIMARY KEY (k)
-                );
-            )");
-
-            fixture.Exec("INSERT INTO TestTable (k, payload) VALUES (1, 'one'pt);");
-            fixture.Exec("UPSERT INTO TestTable (k, payload) VALUES (1, 'updated'pt);");
-            fixture.Exec("REPLACE INTO TestTable (k, payload) VALUES (2, 'two'pt);");
-            fixture.Exec("UPDATE TestTable SET payload = 'again'pt WHERE k = 1;");
-            fixture.Check("SELECT k FROM TestTable ORDER BY k;", "[[1];[2]]");
-        }
 
         Y_UNIT_TEST(UnsupportedVirtualColumnUsagesAreRejected) {
             auto appConfig = GeneratedColumnsAppConfig();

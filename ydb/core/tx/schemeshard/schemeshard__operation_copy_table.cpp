@@ -720,7 +720,6 @@ public:
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
 
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
-            .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,

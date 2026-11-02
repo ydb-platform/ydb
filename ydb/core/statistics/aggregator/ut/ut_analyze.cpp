@@ -1388,31 +1388,6 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         CheckTableSummaryRowCount(runtime, tableInfo.PathId, 3);
     }
 
-    Y_UNIT_TEST(AnalyzePgKeyFallsBackToWholeTableScan) {
-        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.SetEnableTablePgTypes(true);
-            settings.AppConfig->MutableFeatureFlags()->SetEnableTablePgTypes(true);
-            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
-        });
-        auto& runtime = *env.GetServer().GetRuntime();
-        CreateDatabase(env, "Database");
-        ExecuteYqlScript(env, R"(
-            CREATE TABLE `Root/Database/Table` (
-                Key pgint8,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )");
-        ExecuteYqlScript(env, R"(
-            UPSERT INTO `Root/Database/Table` (Key, Value) VALUES
-                (1pb, "one"),
-                (2pb, "two");
-        )");
-
-        const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
-        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
-        CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
-    }
 }
 
 } // NStat

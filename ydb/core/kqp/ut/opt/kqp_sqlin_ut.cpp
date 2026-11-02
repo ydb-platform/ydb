@@ -573,42 +573,6 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         AssertTableReads(result, "/Root/SecondaryKeys", 2);
     }
 
-    Y_UNIT_TEST(SecondaryIndex_PgKey) {
-        TKikimrRunner kikimr = GetKikimrRunner();
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        CreateSampleTablesWithIndex(session, true, true);
-
-        auto test = [&](bool disableOpt, std::function<void(const TDataQueryResult&)> assertFn) {
-            const TString query = Q1_(Sprintf(R"(
-                    %s
-                    DECLARE $in AS List<pgint4>;
-                    SELECT Value FROM `/Root/SecondaryPgTypeKeys` VIEW Index WHERE Fk IN $in
-                    ORDER BY Value
-                )", FormatPragma(disableOpt)));
-
-            auto params = TParamsBuilder().AddParam("$in").BeginList()
-                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4")))
-                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "2", TPgType("pgint4")))
-                    .AddListItem().Pg(TPgValue(TPgValue::VK_TEXT, "42", TPgType("pgint4")))
-                    .AddListItem().Pg(TPgValue(TPgValue::VK_NULL, "", TPgType("pgint4")))
-                    .EndList().Build().Build();
-
-            auto result = ExecQueryAndTestResult(session, query, params, R"([[["Payload1"]];[["Payload2"]]])");
-            assertFn(result);
-        };
-
-        test(DisableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryPgTypeKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryPgTypeKeys", 2);
-        });
-
-        test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryPgTypeKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryPgTypeKeys", 2);
-        });
-    }
 
     Y_UNIT_TEST(SecondaryIndex_SimpleKey) {
         TKikimrRunner kikimr = GetKikimrRunner();

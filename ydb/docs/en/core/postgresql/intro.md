@@ -36,7 +36,8 @@ Removing PostgreSQL compatibility does **not** affect these separate features:
 
 * **[Federated Query](../concepts/query_execution/federated_query/postgresql.md)** — run YQL queries against **external** PostgreSQL clusters
 * **[Pg:: UDFs](../yql/reference/udf/list/index.md)** — PostgreSQL-style functions and literals inside YQL
-* **PostgreSQL column types** (`pgint4`, `pgtext`, and others) — optional table column types in YQL, controlled by the `enable_table_pg_types` setting
+
+PostgreSQL types (`pgint4`, `pgtext`, and others) remain available in query computations. They are not supported for columns of stored row or column tables, or for sequences.
 
 ## Questions and feedback
 

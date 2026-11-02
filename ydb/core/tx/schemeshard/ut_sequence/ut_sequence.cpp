@@ -8,6 +8,41 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequence) {
 
+    Y_UNIT_TEST(PgSequenceTypesRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "seq"
+            DataType: "Int64"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const TString type : {"pgint2", "pgint4", "pgint8", "pgtext"}) {
+            const TString error = TStringBuilder() << "Type '" << type << "' specified for sequence 'pg_seq' is not supported";
+            TestCreateSequence(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "pg_seq"
+                DataType: "%s"
+            )", type.c_str()), {{NKikimrScheme::StatusInvalidParameter, error}});
+            TestLs(runtime, "/MyRoot/pg_seq", false, NLs::PathNotExist);
+
+            TestAlterSequence(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "seq"
+                DataType: "%s"
+            )", type.c_str()), {{NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "Type '" << type << "' specified for sequence 'seq' is not supported"}});
+        }
+
+        // Failed ALTERs must not affect the existing sequence.
+        UNIT_ASSERT_VALUES_EQUAL(DoNextVal(runtime, "/MyRoot/seq"), 1);
+        TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
+            Name: "pg_seq"
+            DataType: "Int32"
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(CreateSequence) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -1,8 +1,8 @@
 """HTML dashboard rendering for tests resource dashboard.
 
 Contains build_html_dashboard which takes a pre-computed payload and writes
-the self-contained HTML file with Plotly.js charts, CPU suggestions table
-and ya.make update script generator.
+the HTML shell plus a sibling *_data.json (fetched at runtime) with Plotly.js
+charts, CPU suggestions table and ya.make update script generator.
 """
 
 from __future__ import annotations
@@ -10,13 +10,14 @@ from __future__ import annotations
 import html as html_lib
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import quote
 
 try:
     from .dashboard_html_payload import build_dashboard_payload
-    from .html_embed import js_script_json
+    from .html_embed import js_script_json, write_dashboard_data_json
 except ImportError:
     from dashboard_html_payload import build_dashboard_payload  # type: ignore[no-redef]
-    from html_embed import js_script_json  # type: ignore[no-redef]
+    from html_embed import js_script_json, write_dashboard_data_json  # type: ignore[no-redef]
 
 
 def build_html_dashboard(
@@ -35,6 +36,7 @@ def build_html_dashboard(
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
     issues_summary: Optional[dict[str, int]] = None,
     suite_chunk_issues_summary: Optional[dict[str, int]] = None,
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> None:
     payload = build_dashboard_payload(
         suite_filter=suite_filter,
@@ -51,6 +53,7 @@ def build_html_dashboard(
         tests_per_chunk_by_label=tests_per_chunk_by_label,
         issues_summary=issues_summary,
         suite_chunk_issues_summary=suite_chunk_issues_summary,
+        ya_activity_deltas=ya_activity_deltas,
     )
 
     rf = (run_config or {}).get("runner_footprint") or {}
@@ -58,273 +61,269 @@ def build_html_dashboard(
     rf_ram = rf.get("ram_gb", "?")
     rf_budget = rf.get("mem_budget_gb", "?")
     rf_ya_mem = rf.get("ya_make_mem_limit_gb", "?")
-    payload_js = js_script_json(payload)
+    out_data = out_html.with_name(out_html.stem + "_data.json")
+    write_dashboard_data_json(out_data, payload)
+    data_url_js = js_script_json(out_data.name)
+    suggestions_name = out_html.stem + "_suggestions.json"
+    suggestions_href = html_lib.escape(suggestions_name, quote=True)
+    suggestions_label = html_lib.escape(suggestions_name)
     suite_filter_html = html_lib.escape(suite_filter or "ALL SUITES", quote=True)
+
+    # Inline SVG favicon (data URI).
+    favicon_svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+        "<rect width='32' height='32' rx='6' fill='#0f172a'/>"
+        "<rect x='5' y='18' width='5' height='9' rx='1' fill='#38bdf8'/>"
+        "<rect x='13' y='11' width='5' height='16' rx='1' fill='#34d399'/>"
+        "<rect x='21' y='7' width='5' height='20' rx='1' fill='#fbbf24'/>"
+        "<path d='M5 14l6-5 5 3 8-7' fill='none' stroke='#e2e8f0' stroke-width='2' "
+        "stroke-linecap='round' stroke-linejoin='round'/>"
+        "</svg>"
+    )
+    favicon_href = "data:image/svg+xml," + quote(favicon_svg, safe="")
 
     html = f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Chunk Resource Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="{favicon_href}" />
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 16px; }}
-    .toolbar {{ position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; margin: 8px 0 10px 0; padding: 8px 0; background: rgba(255,255,255,0.96); backdrop-filter: blur(2px); }}
-    .toolbar input[type="text"] {{ min-width: 340px; padding: 6px 8px; border: 1px solid #d0d7de; border-radius: 6px; }}
-    .toolbar button {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
-    .cpu-help {{ display: none; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d0d7de; background: #f6f8fa; font-size: 12px; line-height: 1.45; }}
+    :root {{
+      --fg:#1f2328; --muted:#656d76; --line:#e6e8eb; --soft:#f6f8fa;
+      --accent:#0969da; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0 auto; padding: 16px 20px 28px; max-width: 1400px;
+      color: var(--fg); background: #fff;
+      font: 14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    }}
+    a {{ color: var(--accent); text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    button, .tabbtn, .help-btn, select, input[type="text"] {{
+      font: inherit; color: inherit; border: 1px solid var(--line); border-radius: 4px;
+      background: #fff; padding: 5px 9px;
+    }}
+    button, .tabbtn, .help-btn {{ cursor: pointer; background: var(--soft); }}
+    button:hover, .tabbtn:hover, .help-btn:hover {{ background: #eef1f4; }}
+    input[type="text"] {{ background: #fff; min-width: 280px; }}
+    .dash-header {{
+      margin: 0 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--line);
+    }}
+    .dash-header-row {{
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+    }}
+    .dash-header-meta {{ margin-top: 6px; font-size: 13px; color: var(--muted); }}
+    .dash-header-meta + .dash-header-meta {{ margin-top: 2px; }}
+    .mono {{ font-family: var(--mono); font-size: 12px; }}
+    .toolbar {{
+      position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap;
+      gap: 8px; align-items: center; margin: 8px 0 12px; padding: 8px 0;
+      background: rgba(255,255,255,.94);
+    }}
+    .toolbar-group {{
+      display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+      font-size: 12px; color: var(--muted);
+    }}
+    .cpu-help {{ margin-top: 6px; padding: 8px 0; font-size: 12px; color: var(--muted); }}
     .cpu-help ol, .cpu-help ul {{ margin: 6px 0 6px 18px; padding: 0; }}
-    .metrics-help {{ margin: 8px 0 12px 0; }}
-    .metrics-help .box {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.45; }}
-    .metrics-help ul {{ margin: 6px 0 0 18px; padding: 0; }}
-    .tabs {{ display: flex; gap: 8px; margin: 8px 0 12px 0; }}
-    .tabbtn {{ padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; }}
-    .tabbtn.active {{ background: #e7f3ff; border-color: #8cc8ff; }}
+    details.aux-fold {{ margin: 4px 0 8px; }}
+    details.aux-fold > summary,
+    details.quiet-link-fold > summary,
+    .chart-secondary > summary,
+    .dash-footer > summary {{
+      cursor: pointer; list-style: none; font-size: 12px; font-weight: 500; color: var(--muted);
+    }}
+    details.aux-fold > summary::-webkit-details-marker,
+    details.quiet-link-fold > summary::-webkit-details-marker,
+    .chart-secondary > summary::-webkit-details-marker,
+    .dash-footer > summary::-webkit-details-marker {{ display: none; }}
+    details.aux-fold > summary::before,
+    details.quiet-link-fold > summary::before,
+    .chart-secondary > summary::before,
+    .dash-footer > summary::before {{ content: "▸ "; color: #8c959f; font-weight: 400; }}
+    details.aux-fold[open] > summary::before,
+    details.quiet-link-fold[open] > summary::before,
+    .chart-secondary[open] > summary::before,
+    .dash-footer[open] > summary::before {{ content: "▾ "; }}
+    details.quiet-link-fold {{ display: none; margin: 2px 0 0; }}
+    details.quiet-link-fold.is-visible {{ display: block; }}
+    details.quiet-link-fold > summary {{ font-weight: 400; font-size: 11px; color: #8c959f; }}
+    details.quiet-link-fold[open] > summary {{ color: var(--muted); }}
+    details.quiet-link-fold .clickbox {{ margin: 6px 0 0; max-height: 280px; }}
+    .dash-footer {{ margin: 28px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); }}
+    .dash-footer-body {{ margin-top: 8px; font-size: 12px; color: var(--muted); }}
+    .dash-footer-body .cpu-help {{ display: block; margin-top: 6px; }}
+    .dash-footer-body .box {{ padding: 8px 0; font-size: 12px; line-height: 1.45; }}
+    .dash-footer-body ul {{ margin: 6px 0 0 18px; padding: 0; }}
+    .tabs {{ display: flex; gap: 2px; margin: 4px 0 12px; border-bottom: 1px solid var(--line); }}
+    .tabbtn {{
+      border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+      background: transparent; padding: 7px 12px; color: var(--muted);
+    }}
+    .tabbtn:hover {{ background: transparent; color: var(--fg); }}
+    .tabbtn.active {{ color: var(--fg); border-bottom-color: var(--fg); font-weight: 600; }}
     .tab {{ display: none; }}
     .tab.active {{ display: block; }}
     .row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }}
     .row1 {{ display: grid; grid-template-columns: 1fr; gap: 16px; }}
     .chart {{ width: 100%; height: 420px; min-width: 0; }}
     .wide {{ width: 100%; height: 520px; }}
+    .chart-grid {{
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px;
+      margin: 4px 0 18px; align-items: start;
+    }}
+    @media (max-width: 1100px) {{ .chart-grid {{ grid-template-columns: 1fr; gap: 18px; }} }}
+    .chart-tile {{
+      min-width: 0; display: flex; flex-direction: column;
+      background: transparent; border: 0; box-shadow: none; padding: 0;
+    }}
+    .chart-tile-head {{
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin: 0 0 4px; min-height: 22px;
+    }}
+    .chart-tile-title {{ font-size: 14px; font-weight: 600; color: var(--fg); }}
+    .chart-tile-sub {{ display: block; margin-top: 1px; font-size: 12px; font-weight: 400; color: var(--muted); }}
+    .chart-tile-expand {{
+      padding: 0; border: 0; background: transparent; cursor: pointer;
+      font-size: 11px; color: var(--accent); opacity: .75;
+    }}
+    .chart-tile-expand:hover {{ opacity: 1; text-decoration: underline; }}
+    .chart-pane {{ width: 100%; height: 280px; min-width: 0; overflow: hidden; }}
+    .chart-tile.span-2,
+    .chart-tile.expanded {{ grid-column: 1 / -1; width: 100%; }}
+    .chart-tile.span-2 .chart-pane,
+    .chart-tile.expanded .chart-pane {{ height: 520px; }}
+    .chart-tile-meta {{ display: block; margin-top: 8px; }}
+    .chart-tile-meta .hoverbox,
+    .chart-tile-meta .clickbox {{ margin: 6px 0 12px; max-height: 180px; }}
+    .chart-tile.expanded .chart-tile-meta .hoverbox {{ max-height: 220px; }}
+    .chart-tile.expanded .chart-tile-meta .clickbox {{ max-height: 320px; }}
+    .chart-secondary {{
+      margin: 0 0 16px; border: 0; border-top: 1px solid var(--line);
+      padding: 10px 0 0; background: transparent;
+    }}
+    .chart-secondary > summary {{ font-weight: 600; }}
+    .chart-secondary .chart-grid {{ margin: 12px 0 0; }}
     .tz-hover .hoverlayer g.legend {{ display: none !important; }}
-    #chartTip {{ position: fixed; z-index: 40; display: none; pointer-events: none; background: #fff; border: 1px solid #444; padding: 6px 8px; font: 12px Arial, sans-serif; line-height: 1.35; white-space: pre; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }}
-    .hoverbox {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 16px 0; max-height: 220px; overflow: auto; font-size: 12px; }}
-    .clickbox {{ background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 8px 10px; margin: 6px 0 20px 0; max-height: 320px; overflow: auto; font-size: 12px; }}
+    #chartTip {{
+      position: fixed; z-index: 40; display: none; pointer-events: none;
+      background: #fff; border: 1px solid var(--line); padding: 6px 8px;
+      font: 12px/1.35 var(--mono); white-space: pre;
+    }}
+    .hoverbox, .clickbox {{
+      background: var(--soft); border: 0; border-top: 1px solid var(--line);
+      border-radius: 0; padding: 8px 0; margin: 6px 0 16px;
+      max-height: 220px; overflow: auto; font-size: 12px;
+    }}
+    .hoverbox {{ white-space: pre-wrap; }}
+    .clickbox {{ background: transparent; max-height: 320px; margin-bottom: 20px; }}
+    /* Empty until hover/click fills them — no instructional placeholders. */
+    .hoverbox:empty, .clickbox:empty {{ display: none; margin: 0; padding: 0; border: 0; }}
+    .chart-tile-meta:not(:has(.hoverbox:not(:empty), .clickbox:not(:empty))) {{ display: none; }}
     .clickbox table {{ width: 100%; border-collapse: collapse; }}
-    .clickbox th, .clickbox td {{ border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; vertical-align: top; }}
-    .clickbox th {{ position: sticky; top: 0; background: #fafafa; }}
-    .clickbox thead tr:first-child th {{ background: #f2f4f7; }}
-    .clickbox thead tr:nth-child(2) th {{ background: #f8fafc; }}
-    /* Visual separators between logical column groups in CPU suggestions. */
+    .clickbox th, .clickbox td {{
+      border-bottom: 1px solid var(--line); padding: 4px 6px;
+      text-align: left; vertical-align: top;
+    }}
+    .clickbox th {{ position: sticky; top: 0; background: #fff; color: var(--muted); font-weight: 600; }}
     #cpuSuggestionsInner td.group-end, #cpuSuggestionsInner th.group-end {{
-      position: relative;
-      border-right: 1px solid #c9d1db;
+      border-right: 1px solid var(--line);
     }}
-    #cpuSuggestionsInner td.group-end::after, #cpuSuggestionsInner th.group-end::after {{
-      content: "";
-      position: absolute;
-      top: -1px;
-      right: -10px;
-      width: 10px;
-      height: calc(100% + 2px);
-      pointer-events: none;
-      background: linear-gradient(to right, rgba(144, 158, 176, 0.28), rgba(144, 158, 176, 0.0));
-    }}
-    pre {{ background: #f6f8fa; padding: 12px; border-radius: 8px; }}
-    .time-link {{ cursor: pointer; color: #2563eb; text-decoration: underline dotted; white-space: nowrap; }}
-    .time-link:hover {{ color: #e53e3e; }}
-    .monitor-box {{
-      display: none;
-      margin: -4px 0 12px 0;
-      padding: 8px 10px;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
-      background: #f8fafc;
-      font-size: 13px;
-      line-height: 1.35;
-    }}
-    .monitor-box a {{
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: 600;
-    }}
-    .monitor-box a:hover {{ text-decoration: underline; }}
-    .monitor-url {{
-      margin-left: 8px;
-      color: #6b7280;
-      font-size: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    }}
-    .headline-stats {{
-      margin-bottom: 12px;
-      padding: 10px 12px;
-      border: 1px solid #d0d7de;
-      border-radius: 8px;
-      background: #f8fafc;
-    }}
+    pre {{ background: var(--soft); padding: 10px 12px; border-radius: 4px; overflow: auto; }}
+    .time-link {{ cursor: pointer; color: var(--accent); text-decoration: underline dotted; white-space: nowrap; }}
+    .time-link:hover {{ color: #cf222e; }}
+    .monitor-box {{ display: none; margin-top: 6px; font-size: 12px; color: var(--muted); }}
+    .monitor-box a {{ font-weight: 500; }}
+    .monitor-url {{ margin-left: 8px; color: #8c959f; font-size: 11px; font-family: var(--mono); word-break: break-all; }}
+    .headline-stats {{ margin: 0 0 16px; padding: 0 0 14px; border-bottom: 1px solid var(--line); }}
     .headline-stats-title {{
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 8px;
+      font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px;
     }}
     .headline-run {{
-      display: flex;
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: 6px 16px;
-      font-size: 13px;
-      line-height: 1.4;
-      margin-bottom: 12px;
+      display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+      font-size: 13px; color: var(--muted);
     }}
-    .headline-run b {{ font-variant-numeric: tabular-nums; }}
-    .headline-run .muted {{ color: #64748b; font-weight: 400; }}
-    .headline-run .group {{ white-space: nowrap; }}
-    .headline-run .group + .group {{
-      padding-left: 16px;
-      border-left: 1px solid #cbd5e1;
+    .headline-run-row {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 0; }}
+    .headline-run b {{
+      font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600;
+      color: var(--fg); margin-right: .3em;
     }}
-    .headline-tables {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px 28px;
-      align-items: flex-start;
-    }}
-    .headline-block {{
-      margin-top: 0;
-    }}
-    .headline-block h4 {{
-      margin: 0 0 4px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #475569;
-    }}
+    .headline-run .muted {{ color: #8c959f; font-weight: 400; }}
+    .headline-run .group {{ white-space: nowrap; padding: 0 14px; border-right: 1px solid var(--line); }}
+    .headline-run .group:first-child {{ padding-left: 0; }}
+    .headline-run .group:last-child {{ border-right: 0; padding-right: 0; }}
+    .headline-tables {{ display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-start; margin-top: 8px; }}
+    #cpuSuggestionsSection .clickbox {{ max-height: 420px; }}
+    .headline-block h4 {{ margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }}
     .headline-table {{
-      width: auto;
-      border-collapse: collapse;
-      background: #fff;
-      font-size: 12px;
+      width: auto; border-collapse: collapse; font-size: 12px;
       font-variant-numeric: tabular-nums;
     }}
     .headline-table th, .headline-table td {{
-      border: 1px solid #e2e8f0;
-      padding: 4px 10px;
-      text-align: right;
-      white-space: nowrap;
+      border: 0; border-bottom: 1px solid var(--line); padding: 5px 12px 5px 0;
+      text-align: right; white-space: nowrap;
     }}
-    .headline-table th:first-child, .headline-table td:first-child {{
-      text-align: left;
-      font-weight: 600;
-    }}
-    .headline-table th {{
-      background: #fff;
-      color: #64748b;
-      font-weight: 600;
-    }}
-    .headline-card {{
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background: #fff;
-      padding: 8px 10px;
-      font-size: 12px;
-      line-height: 1.45;
-    }}
-    .headline-card-name {{
-      color: #334155;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }}
+    .headline-table th:first-child, .headline-table td:first-child {{ text-align: left; font-weight: 600; padding-right: 16px; }}
+    .headline-table th {{ color: var(--muted); font-weight: 500; }}
+    .headline-card {{ padding: 0; font-size: 12px; line-height: 1.45; }}
+    .headline-card-name {{ color: var(--fg); font-weight: 600; margin-bottom: 4px; }}
     .btn-primary {{
-      padding: 7px 12px;
-      border: 1px solid #1d4ed8;
-      border-radius: 7px;
-      background: #2563eb;
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
+      border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600;
     }}
-    .btn-primary:hover {{ background: #1d4ed8; }}
-    .btn-primary:active {{ background: #1e40af; }}
-    .layer-toggle-box {{
-      display: inline-flex;
-      align-items: flex-start;
-      gap: 10px;
-    }}
-    .layer-toggle-list {{
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }}
+    .btn-primary:hover {{ background: #0550ae; border-color: #0550ae; }}
+    .layer-toggle-box {{ display: inline-flex; align-items: flex-start; gap: 10px; }}
+    .layer-toggle-list {{ display: flex; flex-direction: column; gap: 4px; }}
     .layer-toggle-item {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-width: 160px;
-      white-space: nowrap;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; min-width: 160px; white-space: nowrap;
     }}
-    .layer-toggle-item input {{
-      margin: 0;
-      flex: 0 0 auto;
+    .layer-toggle-item input {{ margin: 0; flex: 0 0 auto; }}
+    #dashboardLoadError {{
+      display: none; margin: 0 0 12px; padding: 10px 12px;
+      border: 1px solid #ffbeba; background: #ffebe9; border-radius: 4px;
+      color: #a40e26; font-size: 13px;
     }}
   </style>
 </head>
 <body>
+  <div id="dashboardLoadError"></div>
   <div id="chartTip"></div>
-  <div id="dashboardHeader" style="margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%);border-radius:8px;border:1px solid #e2e8f0;">
-    <div id="headerRow1" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;font-size:14px;line-height:1.5;">
+  <div id="dashboardHeader" class="dash-header">
+    <div id="headerRow1" class="dash-header-row">
       <span id="headerPr" style="display:none;"></span>
       <span id="headerBranch" style="display:none;"></span>
-      <span id="headerCommit" style="display:none;font-family:ui-monospace,monospace;font-size:13px;"></span>
-      <span style="flex:1;min-width:80px;"></span>
-      <span id="headerLinks" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></span>
+      <span id="headerCommit" class="mono" style="display:none;"></span>
+      <span style="flex:1;min-width:48px;"></span>
+      <span id="headerLinks" class="dash-header-row"></span>
     </div>
-    <div style="margin-top:8px;font-size:13px;color:#64748b;">
-      Suite filter: {suite_filter_html}
+    <div class="dash-header-meta">Suite filter: {suite_filter_html}</div>
+    <div id="overlayStatus" class="dash-header-meta"></div>
+    <div id="monitoringLinkWrap" class="monitor-box">
+      <span>Runner monitoring:</span>
+      <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
+      <span id="monitoringLinkMeta" class="monitor-url"></span>
     </div>
-    <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
   </div>
   <div id="headlineStats" class="headline-stats" style="display:none;">
     <div class="headline-stats-title">Resource summary</div>
     <div id="headlineStatsGrid" class="headline-stats-grid"></div>
   </div>
-  <details style="margin: 8px 0 12px 0;">
-    <summary><b>Run stats</b></summary>
-    <pre id="stats"></pre>
-  </details>
-  <details style="margin: 8px 0 12px 0;">
-    <summary><b>Config</b></summary>
-    <pre id="runConfig"></pre>
-  </details>
-  <div id="monitoringLinkWrap" class="monitor-box">
-    <b>Runner monitoring:</b>
-    <a id="monitoringLink" href="#" target="_blank" rel="noopener noreferrer">Open dashboard</a>
-    <span id="monitoringLinkMeta" class="monitor-url"></span>
-  </div>
-  <div id="cpuSuggestionsSection" style="display: none; margin: 16px 0;">
-    <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-      <span>CPU suggestions (recommended_cpu for runner)</span>
-      <button id="cpuHelpToggle" type="button" title="Show recommendation logic" style="padding:0 8px;min-width:auto;">?</button>
-    </h3>
-    <div id="cpuHelpText" class="cpu-help">
-      <ol>
-        <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
-        <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
-        <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>. It reflects <b>only observed per-chunk core usage</b>. <code>REQUIREMENTS(cpu)</code> is a per-chunk scheduler slot (reserved cores that cap how many chunks run in parallel), not a request for more raw CPU.</li>
-        <li>Long test duration and timeouts drive <b>recommended_split</b>, <b>not</b> CPU. A single long test at/above the size threshold (<b>SMALL=60s, MEDIUM=600s, LARGE=3600s</b>) is flagged as a split hint only; it no longer bumps the CPU tier.</li>
-        <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
-        <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help. In that case, if the test is only marginally over budget <b>and the runner was CPU-saturated</b> during the suite window (<code>single_test_contention_suspected</code>, from <code>resources_monitor.jsonl</code>), it is likely contention-inflated — TRY raising <code>REQUIREMENTS(cpu)</code> (fewer parallel chunks → decontention) before a test-level fix; otherwise (genuinely long) the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
-        <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
-        <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (provisioned runner ≈ <b>{rf_vcpu} cores / {rf_ram} GB</b>, per-suite budget ≈ <b>{rf_budget} GB</b>). Purple dashed lines on system charts mark provisioned limits from <code>.github/config/runners_footprints.yml</code>; the red monitor line is actual <code>/proc</code> usage (may be lower). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
-      </ol>
-      <ul>
-        <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
-        <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests, suite aggregate row excluded). <b>total</b> = all such rows, <b>passed</b> = status OK/PASS.</li>
-        <li><b>timeouts</b>: <code>error_type == TIMEOUT</code> (fallback: status contains <code>timeout</code>).</li>
-        <li><b>muted</b>: <code>muted/is_muted</code> or status <code>MUTE</code>.</li>
-        <li><b>skipped</b>: status <code>SKIP</code> or <code>SKIPPED</code>.</li>
-        <li><b>fails_total</b>: <code>errors + timeouts</code>.</li>
-      </ul>
-    </div>
-    <p id="syntheticNote" style="display: none; font-size: 12px; color: #b8860b; margin: 4px 0;"></p>
-    <div id="cpuSuggestionsTable" class="clickbox"></div>
-    <details id="heavyTestsDetails" style="margin: 8px 0 12px 0;">
-      <summary><b>Long/heavy tests near timeout</b></summary>
-      <div id="cpuHeavyTestsTable" class="clickbox"></div>
-    </details>
-  </div>
   <div class="toolbar">
-    <label for="suiteSearch"><b>Search suite:</b></label>
+    <label for="suiteSearch">Search suite</label>
     <input id="suiteSearch" type="text" placeholder="e.g. ydb/core/tx/schemeshard/ut_cdc_stream_reboots" />
-    <button onclick="clearSuiteSearch()">Clear</button>
-    <label for="tzSelect"><b>Timezone:</b></label>
-    <select id="tzSelect" onchange="applyTimezoneToAllCharts()" style="padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;">
+    <button type="button" onclick="clearSuiteSearch()">Clear</button>
+    <label for="tzSelect">Timezone</label>
+    <select id="tzSelect" onchange="applyTimezoneToAllCharts()">
       <option value="Europe/Moscow">MSK</option>
       <option value="UTC">UTC</option>
       <option value="local" selected>Local</option>
     </select>
-    <button onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
-    <span style="display:flex;align-items:center;gap:6px;font-size:12px;border:1px solid #d0d7de;border-radius:6px;padding:3px 6px;background:#fff;">
-      <b>Marker types:</b>
+    <button type="button" onclick="clearAllMarkers()" title="Remove all suite markers from charts">Clear markers</button>
+    <span class="toolbar-group">
+      <span>Markers</span>
       <label><input type="checkbox" id="mkStart" checked onchange="applyMarkersToCharts()">start</label>
       <label><input type="checkbox" id="mkEnd" checked onchange="applyMarkersToCharts()">end</label>
       <label><input type="checkbox" id="mkPar" onchange="applyMarkersToCharts()">par</label>
@@ -334,27 +333,22 @@ def build_html_dashboard(
       <label><input type="checkbox" id="mkError" onchange="applyMarkersToCharts()">errors</label>
       <label><input type="checkbox" id="mkTimeout" onchange="applyMarkersToCharts()">timeouts</label>
     </span>
-    <span id="markersLegend" style="display:none;font-size:11px;line-height:1.5;border:1px solid #d0d7de;border-radius:6px;padding:4px 8px;background:#fafafa;">
-      <b>Markers:</b>
-      <span style="margin-left:6px;">&#9135;&#9135; start</span>
-      <span style="margin-left:6px;">&#8209;&#8209;&#8209; end</span>
-      <span style="margin-left:6px;">&#183;&#183;&#183; par/others peak</span>
-      <span style="margin-left:6px;">&#8209;&#183;&#8209; CPU/RAM peak</span>
-      <span style="margin-left:6px;color:#b00020;">&#9473;&#9473; errors</span>
-      <span style="margin-left:6px;color:#e65100;">&#9473;&#9473; timeouts</span>
-      &nbsp;|&nbsp;
+    <span id="markersLegend" class="toolbar-group" style="display:none;font-size:11px;">
+      <span>&#9135;&#9135; start</span>
+      <span>&#8209;&#8209;&#8209; end</span>
+      <span>&#183;&#183;&#183; par/others</span>
+      <span>&#8209;&#183;&#8209; CPU/RAM</span>
+      <span style="color:#cf222e;">&#9473;&#9473; errors</span>
+      <span style="color:#bc4c00;">&#9473;&#9473; timeouts</span>
       <span id="markersLegendSuites"></span>
-      <span id="markersLegendStats" style="margin-left:6px;color:#586069;"></span>
+      <span id="markersLegendStats"></span>
     </span>
-    <span id="syntheticCheckboxWrap" style="margin-left: 16px;" title="When enabled, suites without report CPU/RAM use ya.make REQUIREMENTS as estimated chart values.">
-      <label style="display:flex;align-items:center;gap:6px;">
-        <input type="checkbox" id="includeSyntheticCb" checked />
-        <span>Include estimated (from ya.make) CPU/RAM</span>
-      </label>
+    <span id="syntheticCheckboxWrap" class="toolbar-group" title="When enabled, suites without report CPU/RAM use ya.make REQUIREMENTS as estimated chart values.">
+      <label><input type="checkbox" id="includeSyntheticCb" checked /> Include estimated CPU/RAM</label>
     </span>
-    <span id="layerTogglesWrap" style="display:none;margin-left:16px;font-size:12px;border:1px solid #d0d7de;border-radius:8px;padding:6px 10px;background:#fff;">
+    <span id="layerTogglesWrap" class="toolbar-group" style="display:none;">
       <span class="layer-toggle-box">
-        <b>Layers:</b>
+        <span>Layers</span>
         <span class="layer-toggle-list">
           <label class="layer-toggle-item"><span>Metrics by suite</span><input type="checkbox" id="layerBySuite" checked onchange="applyLayerToggles()"></label>
           <label class="layer-toggle-item"><span>System CPU</span><input type="checkbox" id="layerSystemCpu" checked onchange="applyLayerToggles()"></label>
@@ -363,67 +357,64 @@ def build_html_dashboard(
       </span>
     </span>
   </div>
-  <details class="metrics-help">
-    <summary><b>How CPU/RAM chart metrics are calculated</b></summary>
-    <div class="box">
-      <ul>
-        <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
-        <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-        <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
-        <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
-        <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
-        <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
-        <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
-        <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
-        <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
-        <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
-        <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is the <b>effective</b> split from ya.make (with <code>FORK_TEST_FILES</code>: <code>TEST_SRCS count × SPLIT_FACTOR(N)</code>). Column <code>chunks</code> is real runtime chunk count. Hover cells for details. Highlight on <code>chunks</code> means mismatch with ya.make.</li>
-        <li><b>Recommended split formula:</b>
-          let <code>T = size_timeout_sec</code> (from SIZE), <code>B = 0.98 * T</code> (chunk timeout budget),
-          and <code>L = 0.5 * T</code> (target chunk load). For each chunk we compute
-          <code>sum_duration_sec(chunk)</code> from test durations in that chunk.
-          Overloaded chunks are those with <code>sum_duration_sec &gt; B</code>.
-          Then:
-          <code>overloaded_total = Σ sum_duration_sec(overloaded chunks)</code>,
-          <code>needed = ceil(overloaded_total / L)</code>,
-          <code>extra = max(0, needed - overloaded_chunks_count)</code>.
-          A single heavy chunk also forces <code>single_chunk_extra = ceil(max_chunk_load / L) - 1</code>,
-          and <code>recommended_split = chunks_real + max(extra, single_chunk_extra)</code>.
-          Overloaded chunks are detected regardless of timeouts: <code>split_severity</code> is
-          <code>at_risk</code> when a chunk is over budget without a timeout, <code>timeout</code> once a
-          timeout occurs. If no chunk exceeds the budget, split is not raised.
-        </li>
-      </ul>
-      <details style="margin-top:8px;">
-        <summary><b>Detailed CPU calculation (why chart value ≠ total_cpu_sec / total_dur_sec)</b></summary>
-        <div style="margin:6px 0;">
-          <p><b>Per run</b> (we use <code>dur_sec = max(duration_report_sec, duration_evlog_sec)</code> so cores are not inflated when evlog span is short):</p>
-          <p><code>cpu_cores_est<sub>run</sub> = cpu_sec_report / dur_sec</code></p>
-          <p><b>Chart value at time t</b> (we use all runs, not one chunk):</p>
-          <p><code>value(t) = Σ cpu_cores_est<sub>run</sub></code> over all runs of this suite where <code>start_us ≤ t &lt; end_us</code>.</p>
-          <p>So at each moment we sum estimated cores of every run that is active. If a suite has many parallel runs (e.g. part0..part19), the chart shows the sum of all of them at that time.</p>
-          <p><b>Table columns total_cpu_sec / total_dur_sec</b> are from the <i>deduplicated</i> set (one run per suite+chunk for recommendations). So e.g. total_cpu_sec=89.4 and total_dur_sec=135.3 refer to one representative run; 89.4/135.3 ≈ 0.66 cores is the average for that run. The chart value (e.g. 373 cores) is <i>not</i> 89.4/135.3 — it is the sum of <code>cpu_sec_report/dur_sec</code> over all runs of the suite active at the cursor time (e.g. 40 runs × ~9.3 cores ≈ 373).</p>
-        </div>
-      </details>
-    </div>
-  </details>
-  <div id="activeChunks" class="wide"></div>
-  <div id="activeChunksClick" class="clickbox">Click chart to see how many tests (chunks) were running at that time</div>
   <div class="tabs" id="tabsBar" style="display: none;">
     <button id="tabBtnChunk" class="tabbtn active" onclick="showTab('chunkTab')">By Suite+Chunk</button>
     <button id="tabBtnSuite" class="tabbtn" onclick="showTab('suiteTab')">By Suite</button>
   </div>
   <div id="chunkTab" class="tab active" style="display: none;">
-    <div id="activeLayerChunk" class="wide"></div>
-    <div id="activeHoverChunk" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-    <div id="activeClickChunk" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
-    <div id="cpuLayer" class="wide"></div>
-    <div id="cpuHover" class="hoverbox">Hover CPU chart to see sorted contributors</div>
-    <div id="cpuClick" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
-    <div id="ramLayer" class="wide"></div>
-    <div id="ramHover" class="hoverbox">Hover RAM chart to see sorted contributors</div>
-    <div id="ramClick" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
-    <div id="diskLayer" class="wide" style="display:none;"></div>
+    <div class="chart-grid" id="chunkChartGrid">
+      <div class="chart-tile" data-pane="yaActivityChunk">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">ya make<span class="chart-tile-sub">active jobs by phase</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="yaActivityChunk" class="chart-pane"></div>
+      </div>
+      <div class="chart-tile" data-pane="cpuLayer">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">CPU<span class="chart-tile-sub">cores by suite+chunk · red = host</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="cpuLayer" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="cpuHover" class="hoverbox"></div>
+          <div id="cpuClick" class="clickbox"></div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="ramLayer">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">RAM<span class="chart-tile-sub">GB by suite+chunk · red = host</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="ramLayer" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="ramHover" class="hoverbox"></div>
+          <div id="ramClick" class="clickbox"></div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="diskLayer" id="diskTileChunk" style="display:none;">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Disk I/O<span class="chart-tile-sub">MB/s · write up, read down</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="diskLayer" class="chart-pane"></div>
+      </div>
+    </div>
+    <details class="chart-secondary" id="activeByChunkDetails">
+      <summary>Active chunks</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="activeLayerChunk">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">suite+chunk processes over time</span></span>
+          </div>
+          <div id="activeLayerChunk" class="chart-pane"></div>
+          <div class="chart-tile-meta">
+            <div id="activeHoverChunk" class="hoverbox"></div>
+            <div id="activeClickChunk" class="clickbox"></div>
+          </div>
+        </div>
+      </div>
+    </details>
     <div class="row">
       <div id="cpuPie" class="chart"></div>
       <div id="ramPie" class="chart"></div>
@@ -433,27 +424,74 @@ def build_html_dashboard(
     </div>
   </div>
   <div id="suiteTab" class="tab">
-    <div id="activeLayerSuite" class="wide"></div>
-    <div id="activeHoverSuite" class="hoverbox">Hover active-layer chart to see sorted contributors</div>
-    <div id="activeClickSuite" class="clickbox">Click active-layer chart to pin a time and show sorted table</div>
-    <div id="testsLayerSuite" class="wide"></div>
-    <div id="testsHoverSuite" class="hoverbox">Hover tests chart to see sorted contributors</div>
-    <div id="testsClickSuite" class="clickbox">Click tests chart to pin a time and show sorted table</div>
-    <div id="cpuLayerSuite" class="wide"></div>
-    <div id="cpuHoverSuite" class="hoverbox">Hover CPU chart to see sorted contributors</div>
-    <div id="cpuClickSuite" class="clickbox">Click CPU chart to pin a time and show sorted table</div>
-    <details class="metrics-help" style="font-size:11px;color:#6b7280;margin:4px 0 0 0;">
-      <summary><b>How the CPU value at cursor is calculated</b></summary>
-      <div style="margin:4px 0;">
-        <p><b>Per run:</b> <code>cpu_cores_est = cpu_sec_report / dur_sec</code> (we have real report for every run).</p>
-        <p><b>At time t:</b> value = Σ <code>cpu_cores_est</code> over all runs of this suite with <code>start_us ≤ t &lt; end_us</code>. We do not use one chunk — we sum over all active runs.</p>
-        <p><b>Why value (e.g. 373) ≠ total_cpu_sec/total_dur_sec (e.g. 89.4/135.3):</b> The table totals are from the deduplicated run (one row per suite); the chart value is the instantaneous sum over all runs active at that moment (e.g. many parts in parallel).</p>
+    <div class="chart-grid" id="suiteChartGrid">
+      <div class="chart-tile" data-pane="yaActivity">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">ya make<span class="chart-tile-sub">active jobs by phase</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="yaActivity" class="chart-pane"></div>
+      </div>
+      <div class="chart-tile" data-pane="cpuLayerSuite">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">CPU<span class="chart-tile-sub">cores by suite · red = host</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="cpuLayerSuite" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="cpuHoverSuite" class="hoverbox"></div>
+          <div id="cpuClickSuite" class="clickbox"></div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="ramLayerSuite">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">RAM<span class="chart-tile-sub">GB by suite · red = host</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="ramLayerSuite" class="chart-pane"></div>
+        <div class="chart-tile-meta">
+          <div id="ramHoverSuite" class="hoverbox"></div>
+          <div id="ramClickSuite" class="clickbox"></div>
+        </div>
+      </div>
+      <div class="chart-tile" data-pane="diskLayerSuite" id="diskTileSuite" style="display:none;">
+        <div class="chart-tile-head">
+          <span class="chart-tile-title">Disk I/O<span class="chart-tile-sub">MB/s · write up, read down</span></span>
+          <button type="button" class="chart-tile-expand" onclick="toggleChartTile(this)" title="Expand to full width" aria-expanded="false">expand</button>
+        </div>
+        <div id="diskLayerSuite" class="chart-pane"></div>
+      </div>
+    </div>
+    <details class="chart-secondary" id="testsBySuiteDetails">
+      <summary>Tests in parallel</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="testsLayerSuite">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Tests<span class="chart-tile-sub">in parallel by suite</span></span>
+          </div>
+          <div id="testsLayerSuite" class="chart-pane"></div>
+          <div class="chart-tile-meta">
+            <div id="testsHoverSuite" class="hoverbox"></div>
+            <div id="testsClickSuite" class="clickbox"></div>
+          </div>
+        </div>
       </div>
     </details>
-    <div id="ramLayerSuite" class="wide"></div>
-    <div id="ramHoverSuite" class="hoverbox">Hover RAM chart to see sorted contributors</div>
-    <div id="ramClickSuite" class="clickbox">Click RAM chart to pin a time and show sorted table</div>
-    <div id="diskLayerSuite" class="wide" style="display:none;"></div>
+    <details class="chart-secondary" id="activeBySuiteDetails">
+      <summary>Active chunks</summary>
+      <div class="chart-grid">
+        <div class="chart-tile span-2 expanded" data-pane="activeLayerSuite">
+          <div class="chart-tile-head">
+            <span class="chart-tile-title">Active chunks<span class="chart-tile-sub">by suite over time</span></span>
+          </div>
+          <div id="activeLayerSuite" class="chart-pane"></div>
+          <div class="chart-tile-meta">
+            <div id="activeHoverSuite" class="hoverbox"></div>
+            <div id="activeClickSuite" class="clickbox"></div>
+          </div>
+        </div>
+      </div>
+    </details>
     <div class="row">
       <div id="cpuPieSuite" class="chart"></div>
       <div id="ramPieSuite" class="chart"></div>
@@ -463,7 +501,142 @@ def build_html_dashboard(
       <div id="testsPieSuite" class="chart"></div>
     </div>
   </div>
+  <details class="dash-footer" id="docsFooter">
+    <summary>Docs &amp; debug</summary>
+    <div class="dash-footer-body">
+      <details class="aux-fold" id="cpuSuggestionsSection" style="display:none;">
+        <summary>CPU suggestions</summary>
+        <p id="syntheticNote" style="display:none;font-size:12px;color:#9a6700;margin:4px 0;"></p>
+        <p class="dash-header-meta" style="margin:4px 0 8px;">Full cell hover explanations: <a href="{suggestions_href}">{suggestions_label}</a></p>
+        <div id="cpuSuggestionsTable" class="clickbox"></div>
+        <details id="heavyTestsDetails" class="quiet-link-fold">
+          <summary>Long/heavy near timeout (0)</summary>
+          <div id="cpuHeavyTestsTable" class="clickbox"></div>
+        </details>
+      </details>
+      <details class="aux-fold" id="cpuHelpDetails">
+        <summary>CPU recommendation logic</summary>
+        <div id="cpuHelpText" class="cpu-help">
+          <ol>
+            <li><b>cores_est</b> for a chunk is calculated as <code>cpu_sec_report / duration_sec</code>.</li>
+            <li>Per suite, recommendations use the distribution of chunk <b>cores_est</b> values.</li>
+            <li><b>recommended_cpu</b> is p95 rounded to runner tiers: <code>1/2/4/8/16</code>. It reflects <b>only observed per-chunk core usage</b>. <code>REQUIREMENTS(cpu)</code> is a per-chunk scheduler slot (reserved cores that cap how many chunks run in parallel), not a request for more raw CPU.</li>
+            <li>Long test duration and timeouts drive <b>recommended_split</b>, <b>not</b> CPU. A single long test at/above the size threshold (<b>SMALL=60s, MEDIUM=600s, LARGE=3600s</b>) is flagged as a split hint only; it no longer bumps the CPU tier.</li>
+            <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
+            <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help. In that case, if the test is only marginally over budget <b>and the runner was CPU-saturated</b> during the suite window (<code>single_test_contention_suspected</code>, from <code>resources_monitor.jsonl</code>), it is likely contention-inflated — TRY raising <code>REQUIREMENTS(cpu)</code> (fewer parallel chunks → decontention) before a test-level fix; otherwise (genuinely long) the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
+            <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
+            <li><b>memory → cpu</b>: on a single runner the local <code>ya make -t</code> scheduler caps parallelism <b>only</b> by cpu (sum of <code>REQUIREMENTS(cpu)</code> ≤ cores). <code>REQUIREMENTS(ram)</code> is <b>not honored locally</b>, so it is never recommended. Instead <b>max_chunk_ram</b> (physical peak of the heaviest chunk) is turned into <b>cpu_for_memory</b>: allow at most <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, i.e. <code>cpu ≈ ceil(cores / that)</code> (provisioned runner ≈ <b>{rf_vcpu} cores / {rf_ram} GB</b>, per-suite budget ≈ <b>{rf_budget} GB</b>). Purple dashed lines on system charts mark provisioned limits from <code>.github/config/runners_footprints.yml</code>; the red monitor line is actual <code>/proc</code> usage (may be lower). When <code>cpu_for_memory &gt; p95 cpu</code>, <b>recommended_cpu</b> is raised to it (shown red) to prevent OOM.</li>
+          </ol>
+          <ul>
+            <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
+            <li><b>status tests</b>: counters from report rows where <code>chunk=false</code> (regular tests, suite aggregate row excluded). <b>total</b> = all such rows, <b>passed</b> = status OK/PASS.</li>
+            <li><b>timeouts</b>: <code>error_type == TIMEOUT</code> (fallback: status contains <code>timeout</code>).</li>
+            <li><b>muted</b>: <code>muted/is_muted</code> or status <code>MUTE</code>.</li>
+            <li><b>skipped</b>: status <code>SKIP</code> or <code>SKIPPED</code>.</li>
+            <li><b>fails_total</b>: <code>errors + timeouts</code>.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="aux-fold">
+        <summary>How charts are calculated</summary>
+        <div class="box">
+          <ul>
+            <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
+            <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
+            <li><b>Limits (purple dashed):</b> Provisioned runner maximum from <code>runners_footprints.yml</code> for this build preset. Optional dotted line: ya.make cgroup RAM cap (~{rf_ya_mem} GB).</li>
+            <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
+            <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
+            <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+            <li><b>RAM per chunk (report):</b> <code>ram_kb_report = max(0, suite_max_proc_tree_memory_consumption_kb − suite_initial_maxrss_(kb))</code> when both suite metrics exist (memory attributed to the test run); else <code>suite_max_proc_tree_memory_consumption_kb</code>; else <code>ru_maxrss</code>; fallback <code>ru_rss / 1024</code>.</li>
+            <li><b>RAM shown on charts:</b> <code>ram_gb = ram_kb_report / (1024 * 1024)</code>. Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>
+            <li><b>Estimated mode (from ya.make):</b> if report metrics are missing and checkbox is enabled, script uses <code>REQUIREMENTS(cpu:X ram:Y)</code>: <code>cpu_sec_report = X * evlog_dur_sec</code>, <code>ram_kb_report = Y * 1024 * 1024</code>.</li>
+            <li><b>Tests at cursor time:</b> in click tables, <code>tests</code> means tests in chunks that are active at that cursor moment (not total tests in suite).</li>
+            <li><b>SPLIT_FACTOR:</b> <code>ya_split_factor</code> is the <b>effective</b> split from ya.make (with <code>FORK_TEST_FILES</code>: <code>TEST_SRCS count × SPLIT_FACTOR(N)</code>). Column <code>chunks</code> is real runtime chunk count. Hover cells for details. Highlight on <code>chunks</code> means mismatch with ya.make.</li>
+            <li><b>Recommended split formula:</b>
+              let <code>T = size_timeout_sec</code> (from SIZE), <code>B = 0.98 * T</code> (chunk timeout budget),
+              and <code>L = 0.5 * T</code> (target chunk load). For each chunk we compute
+              <code>sum_duration_sec(chunk)</code> from test durations in that chunk.
+              Overloaded chunks are those with <code>sum_duration_sec &gt; B</code>.
+              Then:
+              <code>overloaded_total = Σ sum_duration_sec(overloaded chunks)</code>,
+              <code>needed = ceil(overloaded_total / L)</code>,
+              <code>extra = max(0, needed - overloaded_chunks_count)</code>.
+              A single heavy chunk also forces <code>single_chunk_extra = ceil(max_chunk_load / L) - 1</code>,
+              and <code>recommended_split = chunks_real + max(extra, single_chunk_extra)</code>.
+              Overloaded chunks are detected regardless of timeouts: <code>split_severity</code> is
+              <code>at_risk</code> when a chunk is over budget without a timeout, <code>timeout</code> once a
+              timeout occurs. If no chunk exceeds the budget, split is not raised.
+            </li>
+            <li><b>CPU at cursor vs table totals:</b> chart value at time <code>t</code> is Σ <code>cpu_sec_report / dur_sec</code> over all runs of the suite active at <code>t</code>. Table <code>total_cpu_sec / total_dur_sec</code> is from one deduplicated run — so e.g. 89.4/135.3 ≈ 0.66 cores is not the same as a stacked chart reading of hundreds of cores from many parallel parts.</li>
+          </ul>
+        </div>
+      </details>
+      <details class="aux-fold">
+        <summary>Run stats</summary>
+        <pre id="stats"></pre>
+      </details>
+      <details class="aux-fold">
+        <summary>Config</summary>
+        <pre id="runConfig"></pre>
+      </details>
+    </div>
+  </details>
   <script>
+    // Stubs for inline handlers before/without a successful data fetch.
+    window.showTab = function() {{}};
+    window.clearSuiteSearch = function() {{}};
+    window.clearAllMarkers = function() {{}};
+    window.applyTimezoneToAllCharts = function() {{}};
+    window.applyMarkersToCharts = function() {{}};
+    window.toggleSuiteMarkers = function() {{}};
+    window.applyLayerToggles = function() {{}};
+    window.toggleChartTile = function() {{}};
+
+    (async function() {{
+    const dataUrl = {data_url_js};
+    let data;
+    try {{
+      const resp = await fetch(dataUrl);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      data = await resp.json();
+    }} catch (err) {{
+      const el = document.getElementById('dashboardLoadError');
+      if (el) {{
+        el.style.display = 'block';
+        el.textContent = 'Failed to load ' + dataUrl + ': ' + err +
+          '. Open via HTTP with the sibling *_data.json next to this HTML (file:// fetch is blocked).';
+      }}
+      return;
+    }}
+
+    function resizeChartPanes(ids) {{
+      (ids || []).forEach(cid => {{
+        const el = document.getElementById(cid);
+        if (el && window.Plotly) {{
+          try {{ Plotly.Plots.resize(el); }} catch (e) {{ /* chart may not be plotted yet */ }}
+        }}
+      }});
+    }}
+
+    function toggleChartTile(btn) {{
+      const tile = btn && btn.closest ? btn.closest('.chart-tile') : null;
+      if (!tile) return;
+      const open = tile.classList.toggle('expanded');
+      btn.textContent = open ? 'collapse' : 'expand';
+      btn.title = open ? 'Collapse to half-width tile' : 'Expand to full width';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const paneId = tile.getAttribute('data-pane');
+      const grid = tile.parentElement;
+      const panes = grid
+        ? Array.from(grid.querySelectorAll('.chart-pane')).map(el => el.id).filter(Boolean)
+        : (paneId ? [paneId] : []);
+      setTimeout(() => {{
+        resizeChartPanes(panes);
+        if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+      }}, 0);
+    }}
+    window.toggleChartTile = toggleChartTile;
+
     function showTab(id) {{
       const tabs = ['chunkTab', 'suiteTab'];
       tabs.forEach(t => {{
@@ -477,20 +650,44 @@ def build_html_dashboard(
       // Hidden-tab Plotly charts need explicit resize after becoming visible.
       setTimeout(() => {{
         const ids = id === 'suiteTab'
-          ? ['activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite', 'activeChunks']
-          : ['activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie', 'activeChunks'];
-        ids.forEach(cid => {{
-          const el = document.getElementById(cid);
-          if (el && window.Plotly) {{
-            Plotly.Plots.resize(el);
-          }}
-        }});
+          ? ['yaActivity', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayerSuite', 'cpuPieSuite', 'ramPieSuite', 'activePieSuite', 'testsPieSuite']
+          : ['yaActivityChunk', 'activeLayerChunk', 'cpuLayer', 'ramLayer', 'diskLayer', 'cpuPie', 'ramPie', 'activePie'];
+        resizeChartPanes(ids);
         // Re-apply markers after resize (charts lose shapes on hidden→visible transition).
         applyMarkersToCharts();
       }}, 0);
     }}
 
-    const data = {payload_js};
+    // Defer Plotly until <details> opens (closed panes have width≈0).
+    const _plottedDetailPanes = new Set();
+    function ensureDetailsPlot(detailsId, paneId, plotFn) {{
+      const details = document.getElementById(detailsId);
+      const run = () => {{
+        if (_plottedDetailPanes.has(paneId)) {{
+          setTimeout(() => {{
+            resizeChartPanes([paneId]);
+            if (typeof syncChartGroupXRange === 'function') syncChartGroupXRange(ALL_TIME_CHART_IDS);
+            if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+          }}, 0);
+          return;
+        }}
+        try {{ plotFn(); }} catch (e) {{ console.warn('deferred plot failed', paneId, e); return; }}
+        _plottedDetailPanes.add(paneId);
+        setTimeout(() => {{
+          resizeChartPanes([paneId]);
+          if (typeof syncChartGroupXRange === 'function') syncChartGroupXRange(ALL_TIME_CHART_IDS);
+          if (typeof applyMarkersToCharts === 'function') applyMarkersToCharts();
+        }}, 0);
+      }};
+      if (details && !details.open) {{
+        details.addEventListener('toggle', () => {{
+          if (details.open) run();
+        }});
+        return;
+      }}
+      run();
+    }}
+
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
     function formatHeadlineNumber(metric, value) {{
@@ -507,7 +704,7 @@ def build_html_dashboard(
       if (metric === 'ram') return n.toFixed(3) + ' GB';
       if (metric === 'ram_host') return n.toFixed(1) + ' GB';
       if (metric === 'disk') return n.toFixed(1) + ' MB/s';
-      if (metric === 'total_duration_sec') {{
+      if (metric === 'total_duration_sec' || metric === 'build_duration_sec' || metric === 'test_duration_sec') {{
         const sec = Math.max(0, Math.round(n));
         const h = Math.floor(sec / 3600);
         const m = Math.floor((sec % 3600) / 60);
@@ -518,6 +715,62 @@ def build_html_dashboard(
         return hh + ':' + mm + ':' + ss + ' (' + sec + 's)';
       }}
       return String(Math.round(n));
+    }}
+    function activitySpanSec(kinds) {{
+      const activity = data.ya_activity || {{}};
+      let lo = Number.POSITIVE_INFINITY;
+      let hi = Number.NEGATIVE_INFINITY;
+      (kinds || []).forEach((kind) => {{
+        const series = activity[kind] || {{}};
+        const xs = Array.isArray(series.xs) ? series.xs : [];
+        const ys = Array.isArray(series.ys) ? series.ys : [];
+        for (let i = 0; i < xs.length; i++) {{
+          const x = Number(xs[i]);
+          const y = Number(ys[i]);
+          if (!Number.isFinite(x) || !Number.isFinite(y) || y <= 0) continue;
+          if (x < lo) lo = x;
+          if (x > hi) hi = x;
+        }}
+      }});
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi < lo) return null;
+      return {{ start: lo, end: hi }};
+    }}
+    function resolvePhaseDurations(hs) {{
+      const hasBuild = Number.isFinite(Number(hs.build_duration_sec));
+      const hasTest = Number.isFinite(Number(hs.test_duration_sec));
+      const hasTotal = Number.isFinite(Number(hs.total_duration_sec));
+      if (hasBuild && hasTest && hasTotal) {{
+        return {{
+          totalSec: Math.max(0, Number(hs.total_duration_sec)),
+          buildSec: Math.max(0, Number(hs.build_duration_sec)),
+          testSec: Math.max(0, Number(hs.test_duration_sec)),
+        }};
+      }}
+      // Legacy payload: only total_duration_sec (= test wall); derive the rest.
+      let testSec = hasTest ? Math.max(0, Number(hs.test_duration_sec))
+        : (hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0);
+      let buildSec = hasBuild ? Math.max(0, Number(hs.build_duration_sec)) : 0;
+      let totalSec = hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0;
+      const buildSpan = activitySpanSec(['build', 'archive', 'cache', 'link']);
+      const testSpan = activitySpanSec(['test_tm', 'test_report']);
+      // Honest independent spans (overlap allowed; do not clip build at test start).
+      if (!hasBuild && buildSpan) {{
+        buildSec = Math.max(0, buildSpan.end - buildSpan.start);
+      }}
+      if (!hasTest && testSpan) {{
+        testSec = Math.max(0, testSpan.end - testSpan.start);
+      }}
+      const starts = [];
+      const ends = [];
+      if (buildSpan) {{ starts.push(buildSpan.start); ends.push(buildSpan.end); }}
+      if (testSpan) {{ starts.push(testSpan.start); ends.push(testSpan.end); }}
+      if (starts.length && ends.length) {{
+        totalSec = Math.max(0, Math.max.apply(null, ends) - Math.min.apply(null, starts));
+      }} else if (!totalSec) {{
+        // Last resort when spans are missing: do not double-count overlap.
+        totalSec = Math.max(buildSec, testSec, 0);
+      }}
+      return {{ totalSec, buildSec, testSec }};
     }}
     function renderHeadlineStats() {{
       const wrap = document.getElementById('headlineStats');
@@ -549,18 +802,55 @@ def build_html_dashboard(
       const cRegularMuted = cRegularMutedBase + cMutedOther;
       const cFailedTotal = cTimeoutTotal + cRegularTotal;
       const cFailedMuted = cTimeoutMuted + cRegularMuted;
-      const wallExact = formatHeadlineValue('total_duration_sec', hs.total_duration_sec).split(' (')[0];
+      const phases = resolvePhaseDurations(hs);
+      const wallExact = formatHeadlineValue('total_duration_sec', phases.totalSec).split(' (')[0];
+      const buildExact = formatHeadlineValue('build_duration_sec', phases.buildSec).split(' (')[0];
+      const testExact = formatHeadlineValue('test_duration_sec', phases.testSec).split(' (')[0];
+      const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
+      const unalignedNote = activityUnaligned
+        ? ('<span class="group" style="color:#b45309;" title="No report↔evlog chunk matches; '
+          + 'build/archive/cache/link/TM activity uses raw evlog timestamps (offset 0). '
+          + 'If clocks differ, the yaActivity chart may look empty or misaligned.">'
+          + '⚠ ya activity clock unaligned</span>')
+        : '';
+      // build_* comes from whole-job ya_activity; test_* from (possibly filtered) runs.
+      const suiteFilterRaw = (data.suite_filter == null) ? '' : String(data.suite_filter).trim();
+      const suiteFiltered = !!(suiteFilterRaw && suiteFilterRaw.toUpperCase() !== 'ALL SUITES');
+      const filterScopeNote = suiteFiltered
+        ? ('<span class="group muted" title="Suite filter is active: test duration / suite counts '
+          + 'cover matching suites only; build duration is still the whole-job compile/link phase '
+          + 'from ya activity.">build = whole job</span>')
+        : '';
+      const buildTip = suiteFiltered
+        ? 'Whole-job build/archive/cache/link: first → last activity (overlap with tests allowed)'
+        : 'First → last build/archive/cache/link activity (overlap with tests allowed)';
+      const testTip = suiteFiltered
+        ? 'Filtered suites only: first matching test start → last matching test end (overlap with build allowed)'
+        : 'First → last test start/end (overlap with build allowed)';
+      const totalTip = suiteFiltered
+        ? 'Earliest of whole-job build / filtered test start → latest end (overlap not summed)'
+        : 'Earliest of build/test start → latest of build/test end (overlap not summed)';
       const runLine =
         '<div class="headline-run">' +
-          '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites</span>' +
-          '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks</span>' +
-          '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests</span>' +
-          '<span class="group" title="From the first test start to the last test end">' +
-            '<b>' + wallExact + '</b> total duration</span>' +
-          '<span class="group">tests <b>' + String(failedTotal) + '</b> failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
-            ' · <b>' + String(timeoutTotal) + '</b> timeout · <b>' + String(skippedTotal) + '</b> skipped</span>' +
-          '<span class="group">chunks <b>' + String(cFailedTotal) + '</b> failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
-            ' · <b>' + String(cTimeoutTotal) + '</b> timeout</span>' +
+          '<div class="headline-run-row">' +
+            '<span class="group"><b>' + String(Math.round(Number(total.suites || 0))) + '</b>suites</span>' +
+            '<span class="group"><b>' + String(Math.round(Number(total.chunks || 0))) + '</b>chunks</span>' +
+            '<span class="group"><b>' + String(Math.round(Number(total.tests || 0))) + '</b>tests</span>' +
+            '<span class="group" title="' + totalTip + '">' +
+              '<b>' + wallExact + '</b>total</span>' +
+            '<span class="group" title="' + buildTip + '">' +
+              '<b>' + buildExact + '</b>build</span>' +
+            '<span class="group" title="' + testTip + '">' +
+              '<b>' + testExact + '</b>test</span>' +
+            filterScopeNote +
+          '</div>' +
+          '<div class="headline-run-row">' +
+            '<span class="group">tests <b>' + String(failedTotal) + '</b>failed <span class="muted">(' + String(failedMuted) + ' muted)</span>' +
+              ' · <b>' + String(timeoutTotal) + '</b>timeout · <b>' + String(skippedTotal) + '</b>skipped</span>' +
+            '<span class="group">chunks <b>' + String(cFailedTotal) + '</b>failed <span class="muted">(' + String(cFailedMuted) + ' muted)</span>' +
+              ' · <b>' + String(cTimeoutTotal) + '</b>timeout</span>' +
+            unalignedNote +
+          '</div>' +
         '</div>';
       function statCell(metric, stats, field) {{
         const s = (stats && typeof stats === 'object') ? stats : {{}};
@@ -577,13 +867,14 @@ def build_html_dashboard(
             statCell(metric, stats, 'max') +
             statCell(metric, stats, 'p95') +
             statCell(metric, stats, 'median') +
+            statCell(metric, stats, 'avg') +
           '</tr>';
         }}).join('');
         return (
           '<table class="headline-table"><thead><tr>' +
             '<th></th>' +
             (withLimit ? '<th title="CPU cores and MemTotal from /proc on this host. Disk rows are throughput, so they have no capacity limit.">limit</th>' : '') +
-            '<th>max</th><th>p95</th><th>median</th>' +
+            '<th>max</th><th>p95</th><th>median</th><th>avg</th>' +
           '</tr></thead><tbody>' + body + '</tbody></table>'
         );
       }}
@@ -606,29 +897,36 @@ def build_html_dashboard(
         ['Active chunks', 'count', hs.active_chunks],
         ['Tests in parallel', 'count', hs.tests],
       ]);
-      const cpuHost = hs.cpu_host;
-      const ramHost = hs.ram_host;
-      const diskRead = hs.disk_read_host;
-      const diskWrite = hs.disk_write_host;
-      let hostBlock = '';
-      if (cpuHost || ramHost || diskRead || diskWrite) {{
+      function hostProcBlock(title, cpuHost, ramHost, diskRead, diskWrite) {{
+        if (!(cpuHost || ramHost || diskRead || diskWrite)) return '';
         const samples = Math.round(Number((cpuHost || ramHost || diskRead || {{}}).samples || 0));
         const sampleNote = samples ? ' · ' + String(samples) + ' samples' : '';
-        hostBlock =
-          '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
+        return (
+          '<div class="headline-block"><h4>' + title + sampleNote + '</h4>' +
           statTable([
             ['CPU, cores', 'cpu', cpuHost, hostCapacity('cpu')],
             ['RAM, GB', 'ram', ramHost, hostCapacity('ram')],
             ['Disk read, MB/s', 'disk', diskRead, null],
             ['Disk write, MB/s', 'disk', diskWrite, null],
           ], true) +
-          '</div>';
+          '</div>'
+        );
       }}
+      // Full job /proc (build+tests+tail) vs tests-only window (first→last chunk).
+      const hostFullBlock = hostProcBlock(
+        'Host · /proc · full job',
+        hs.cpu_host, hs.ram_host, hs.disk_read_host, hs.disk_write_host
+      );
+      const hostTestsBlock = hostProcBlock(
+        'Host · /proc · tests',
+        hs.cpu_host_tests, hs.ram_host_tests, hs.disk_read_host_tests, hs.disk_write_host_tests
+      );
       grid.innerHTML =
         runLine +
         '<div class="headline-tables">' +
           '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
-          hostBlock +
+          hostTestsBlock +
+          hostFullBlock +
         '</div>';
       wrap.style.display = 'block';
     }}
@@ -758,7 +1056,6 @@ def build_html_dashboard(
       else if (plotId === 'cpuLayer') xs = data.xs_cpu;
       else if (plotId === 'ramLayer') xs = data.xs_ram;
       else if (plotId === 'activeLayerChunk') xs = data.xs_active_chunk;
-      else if (plotId === 'activeChunks') xs = data.xs_active;
       if (!Array.isArray(xs) || i >= xs.length) return null;
       const tSec = Number(xs[i]);
       return Number.isFinite(tSec) ? tSec : null;
@@ -789,7 +1086,7 @@ def build_html_dashboard(
       }}
       return total > 0 ? String(Math.round(total)) : '';
     }}
-    function axisLayout(xsDisp) {{
+    function axisLayout(xsDisp, useFullMakeRange) {{
       const msVals = Array.isArray(xsDisp) ? xsDisp.map(_toMs).filter(v => v != null) : [];
       let tickVals = null;
       let tickText = null;
@@ -804,7 +1101,7 @@ def build_html_dashboard(
         tickVals = ticks.map(ms => new Date(ms).toISOString());
         tickText = ticks.map(ms => _formatTick(ms));
       }}
-      return {{
+      const layout = {{
         title: axisTitle(),
         type: 'date',
         tickmode: tickVals ? 'array' : 'auto',
@@ -812,24 +1109,86 @@ def build_html_dashboard(
         ticktext: tickText || undefined,
         hoverformat: '',
       }};
+      if (useFullMakeRange) {{
+        const full = fullEvlogRangeMs();
+        if (full) {{
+          layout.range = [new Date(full[0]).toISOString(), new Date(full[1]).toISOString()];
+        }}
+      }}
+      return layout;
     }}
-    function applyTimezoneToAllCharts() {{
-      const ids = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
-      for (const id of ids) {{
-        const el = document.getElementById(id);
-        if (!el || !el.data || !el.layout || !window.Plotly) continue;
-        const xs = [];
-        for (const tr of el.data) {{
-          if (tr && Array.isArray(tr.x)) {{
-            for (const v of tr.x) {{
-              const n = _toMs(v);
-              if (n != null) xs.push(n);
-            }}
+    function fullEvlogRangeMs() {{
+      const fullRange = data.resources_overlay && data.resources_overlay.evlog_range_sec;
+      if (Array.isArray(fullRange) && fullRange.length >= 2) {{
+        const a = _toMs(xToDisplay(Number(fullRange[0])));
+        const b = _toMs(xToDisplay(Number(fullRange[1])));
+        if (a != null && b != null && a < b) return [a, b];
+      }}
+      // Fallback: union of ya_activity series (same wall clock as evlog).
+      const activity = data.ya_activity || {{}};
+      let minMs = Number.POSITIVE_INFINITY;
+      let maxMs = Number.NEGATIVE_INFINITY;
+      for (const kind of Object.keys(activity)) {{
+        for (const x of (activity[kind] && activity[kind].xs) || []) {{
+          const n = _toMs(xToDisplay(Number(x)));
+          if (n == null) continue;
+          if (n < minMs) minMs = n;
+          if (n > maxMs) maxMs = n;
+        }}
+      }}
+      if (minMs < maxMs) return [minMs, maxMs];
+      return null;
+    }}
+    function _collectPlotMs(el) {{
+      const xs = [];
+      if (!el || !el.data) return xs;
+      for (const tr of el.data) {{
+        if (!tr || !Array.isArray(tr.x)) continue;
+        for (const v of tr.x) {{
+          const n = _toMs(v);
+          if (n != null) xs.push(n);
+        }}
+      }}
+      return xs;
+    }}
+    function syncChartGroupXRange(ids) {{
+      if (!window.Plotly) return;
+      let span = fullEvlogRangeMs();
+      if (!span) {{
+        let minMs = Number.POSITIVE_INFINITY;
+        let maxMs = Number.NEGATIVE_INFINITY;
+        for (const id of ids) {{
+          for (const n of _collectPlotMs(document.getElementById(id))) {{
+            if (n < minMs) minMs = n;
+            if (n > maxMs) maxMs = n;
           }}
         }}
-        if (xs.length === 0) continue;
-        const ax = axisLayout(xs);
+        if (!(minMs < maxMs)) return;
+        span = [minMs, maxMs];
+      }}
+      const range = [new Date(span[0]).toISOString(), new Date(span[1]).toISOString()];
+      const ticks = _buildTickVals(span[0], span[1], 8);
+      const tickVals = ticks.map(ms => new Date(ms).toISOString());
+      const tickText = ticks.map(ms => _formatTick(ms));
+      for (const id of ids) {{
+        const el = document.getElementById(id);
+        if (!el || !el.data || !el.layout) continue;
         Plotly.relayout(el, {{
+          'xaxis.range': range,
+          'xaxis.tickmode': 'array',
+          'xaxis.tickvals': tickVals,
+          'xaxis.ticktext': tickText,
+        }});
+      }}
+    }}
+    const ALL_TIME_CHART_IDS = ['yaActivity', 'yaActivityChunk', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+    function applyTimezoneToAllCharts() {{
+      for (const id of ALL_TIME_CHART_IDS) {{
+        const el = document.getElementById(id);
+        if (!el || !el.data || !el.layout || !window.Plotly) continue;
+        const xs = _collectPlotMs(el);
+        const ax = axisLayout(xs.map(ms => new Date(ms).toISOString()), true);
+        const patch = {{
           'xaxis.title': ax.title,
           'xaxis.type': 'date',
           'xaxis.tickmode': ax.tickmode,
@@ -838,9 +1197,12 @@ def build_html_dashboard(
           'xaxis.hoverformat': '',
           'hoverdistance': -1,
           'spikedistance': -1,
-        }});
+        }};
+        if (ax.range) patch['xaxis.range'] = ax.range;
+        Plotly.relayout(el, patch);
       }}
-      for (const id of ids) {{
+      syncChartGroupXRange(ALL_TIME_CHART_IDS);
+      for (const id of ALL_TIME_CHART_IDS) {{
         const el = document.getElementById(id);
         if (el && el.data && window.Plotly) Plotly.Plots.resize(el);
       }}
@@ -871,18 +1233,28 @@ def build_html_dashboard(
     }}
     const cfg = data.run_config || {{}};
     const pr = cfg.pr != null && String(cfg.pr).trim() !== '' ? String(cfg.pr) : null;
+    const prTitle = cfg.pr_title != null && String(cfg.pr_title).trim() !== '' ? String(cfg.pr_title).trim() : null;
     const branch = cfg.branch != null && String(cfg.branch).trim() !== '' ? String(cfg.branch).trim() : null;
     const commit = cfg.commit != null && String(cfg.commit).trim() !== '' ? String(cfg.commit).trim() : null;
-      const artifactsUrl = (cfg.artifacts_url || '').trim();
+    const artifactsUrl = (cfg.artifacts_url || '').trim();
+    const reportUrlRaw = (cfg.report_url || '').trim();
     const tryLinks = Array.isArray(cfg.try_links) ? cfg.try_links : [];
-    const hasCiData = pr || branch || commit || artifactsUrl;
+    const hasCiData = pr || prTitle || branch || commit || artifactsUrl || reportUrlRaw;
     const repo = escapeHtml((cfg.repo || 'ydb-platform/ydb').trim());
-    if (pr) {{
+    if (pr || prTitle) {{
       const el = document.getElementById('headerPr');
-      const prSafe = escapeHtml(pr);
-      el.textContent = 'PR #' + pr;
       el.style.display = '';
-      el.innerHTML = '<a href="https://github.com/' + repo + '/pull/' + prSafe + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + prSafe + '</a>';
+      let html = '';
+      if (pr) {{
+        const prSafe = escapeHtml(pr);
+        html += '<a href="https://github.com/' + repo + '/pull/' + prSafe + '" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600;text-decoration:none;">PR #' + prSafe + '</a>';
+      }} else {{
+        html += '<span style="color:#2563eb;font-weight:600;">PR</span>';
+      }}
+      if (prTitle) {{
+        html += ' <span style="color:#0f172a;font-weight:600;">' + escapeHtml(prTitle) + '</span>';
+      }}
+      el.innerHTML = html;
     }}
     if (branch) {{
       const el = document.getElementById('headerBranch');
@@ -899,27 +1271,61 @@ def build_html_dashboard(
       el.innerHTML = '<a href="https://github.com/' + repo + '/commit/' + commitSafe + '" target="_blank" rel="noopener" style="color:#0f172a;text-decoration:none;">' + shortSafe + '</a>';
       el.style.display = '';
     }}
+    if (pr && prTitle) {{
+      document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard';
+    }} else if (prTitle) {{
+      document.title = prTitle + ' · Resource dashboard';
+    }} else if (pr) {{
+      document.title = 'PR #' + pr + ' · Resource dashboard';
+    }}
     const linksEl = document.getElementById('headerLinks');
-    const artifactsBase = safeHttpBase(artifactsUrl);
-    if (artifactsBase) {{
+    const linkStyle = 'color:var(--accent);font-size:13px;text-decoration:none;';
+    const appendHeaderLink = (href, text) => {{
+      if (!href || !linksEl) return;
+      if (linksEl.childNodes.length) linksEl.appendChild(document.createTextNode(' · '));
       const a = document.createElement('a');
-      a.href = artifactsBase + '/index.html';
+      a.href = href;
       a.target = '_blank';
       a.rel = 'noopener';
-      a.textContent = 'Artifacts';
-      a.style.cssText = 'color:#2563eb;font-size:13px;text-decoration:none;';
+      a.textContent = text;
+      a.style.cssText = linkStyle;
       linksEl.appendChild(a);
-      if (tryLinks.length) linksEl.appendChild(document.createTextNode(' · '));
+    }};
+    const artifactsBase = safeHttpBase(artifactsUrl);
+    if (artifactsBase) {{
+      appendHeaderLink(artifactsBase + '/index.html', 'Artifacts');
     }}
-    if (artifactsBase && tryLinks.length) {{
+    let testsReportHref = '';
+    try {{
+      if (reportUrlRaw) {{
+        const u = new URL(reportUrlRaw);
+        if (u.protocol === 'http:' || u.protocol === 'https:') testsReportHref = u.href;
+      }}
+    }} catch (e) {{}}
+    if (!testsReportHref && artifactsBase) {{
+      for (const path of tryLinks) {{
+        const m = String(path || '').match(/^(try_\\d+)\\//);
+        if (m) {{
+          testsReportHref = artifactsBase + '/' + m[1] + '/ya-test.html';
+          break;
+        }}
+      }}
+    }}
+    if (testsReportHref) {{
+      appendHeaderLink(testsReportHref, 'Test report');
+    }}
+    // Hide lone try self-link; show only when there are multiple attempts.
+    if (artifactsBase && tryLinks.length > 1) {{
       tryLinks.forEach((path, i) => {{
-        if (i > 0) linksEl.appendChild(document.createTextNode('\u00a0'));
+        if (!linksEl) return;
+        if (linksEl.childNodes.length) linksEl.appendChild(document.createTextNode(' · '));
         const a = document.createElement('a');
         a.href = artifactsBase + '/' + String(path || '').split('/').filter(Boolean).join('/');
         a.target = '_blank';
         a.rel = 'noopener';
         a.textContent = 'try ' + (i + 1);
-        a.style.cssText = 'color:#2563eb;font-size:13px;text-decoration:none;';
+        a.title = 'Resource dashboard for CI try ' + (i + 1) + ' (retry attempt)';
+        a.style.cssText = linkStyle;
         linksEl.appendChild(a);
       }});
     }}
@@ -990,7 +1396,7 @@ def build_html_dashboard(
     setupMonitoringLink();
 
     // Marker state lives at top scope so all functions can access it.
-    const _markerChartIds = ['activeChunks', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
+    const _markerChartIds = ['yaActivity', 'yaActivityChunk', 'activeLayerChunk', 'activeLayerSuite', 'testsLayerSuite', 'cpuLayer', 'ramLayer', 'cpuLayerSuite', 'ramLayerSuite', 'diskLayer', 'diskLayerSuite'];
     // Each entry: {{ shapes: [...], annotations: [...] }} by suite_path.
     const _suiteMarkerData = {{}};
 
@@ -1006,7 +1412,8 @@ def build_html_dashboard(
     }}
 
     if (data.cpu_suggestions && data.cpu_suggestions.length > 0) {{
-      document.getElementById('cpuSuggestionsSection').style.display = 'block';
+      const sugSection = document.getElementById('cpuSuggestionsSection');
+      if (sugSection) sugSection.style.display = '';
       const nSyn = (data.stats && data.stats.runs_with_synthetic_metrics) ? Number(data.stats.runs_with_synthetic_metrics) : 0;
       const synEl = document.getElementById('syntheticNote');
       if (nSyn > 0 && synEl) {{
@@ -1300,23 +1707,27 @@ def build_html_dashboard(
         }}).join('');
         const heavyWrap = document.getElementById('cpuHeavyTestsTable');
         const heavyDetails = document.getElementById('heavyTestsDetails');
-        const heavySummaryLabel = document.querySelector('#heavyTestsDetails summary b');
+        const heavySummaryLabel = document.querySelector('#heavyTestsDetails summary');
         const heavyMarker = (col) => (col === heavySortCol ? (heavySortAsc ? ' ▲' : ' ▼') : '');
+        const heavyCount = heavyTestsFlat.length;
         if (heavySummaryLabel) {{
-          heavySummaryLabel.textContent = 'Long/heavy tests near timeout (' + heavyTestsFlat.length + ')';
+          heavySummaryLabel.textContent = 'Long/heavy near timeout (' + heavyCount + ')';
         }}
-        if (heavyDetails && !heavyDetails.dataset.initCollapsed) {{
-          heavyDetails.open = false;
-          heavyDetails.dataset.initCollapsed = '1';
+        if (heavyDetails) {{
+          heavyDetails.classList.toggle('is-visible', heavyCount > 0);
+          if (!heavyDetails.dataset.initCollapsed) {{
+            heavyDetails.open = false;
+            heavyDetails.dataset.initCollapsed = '1';
+          }}
+          if (!heavyCount) heavyDetails.open = false;
         }}
         if (heavyWrap) {{
-          if (!heavyTestsFlat.length) {{
-            heavyWrap.innerHTML = '<b>Long/heavy tests near timeout</b><div style=\"margin-top:6px;color:#64748b;\">No tests at >=97% of the chunk timeout budget in current filter.</div>';
-            if (heavyDetails) heavyDetails.open = false;
+          if (!heavyCount) {{
+            heavyWrap.innerHTML = '';
           }} else {{
             heavyWrap.innerHTML =
-              '<b>Long/heavy tests near timeout (>=97% of the chunk timeout budget)</b>' +
-              '<table style=\"width:100%;border-collapse:collapse;margin-top:8px;\">' +
+              '<div style=\"font-size:11px;color:#8c959f;margin-bottom:4px;\">&gt;=97% of the chunk timeout budget</div>' +
+              '<table style=\"width:100%;border-collapse:collapse;margin-top:4px;\">' +
               '<thead><tr><th>#</th><th data-hcol=\"1\" style=\"cursor:pointer;user-select:none;\">suite_path' + heavyMarker(1) + '</th><th data-hcol=\"2\" style=\"cursor:pointer;user-select:none;\">ya_size' + heavyMarker(2) + '</th><th data-hcol=\"3\" style=\"cursor:pointer;user-select:none;\">threshold' + heavyMarker(3) + '</th><th data-hcol=\"4\" style=\"cursor:pointer;user-select:none;\">test' + heavyMarker(4) + '</th><th data-hcol=\"5\" style=\"cursor:pointer;user-select:none;\">duration' + heavyMarker(5) + '</th><th data-hcol=\"6\" style=\"cursor:pointer;user-select:none;\">chunk' + heavyMarker(6) + '</th></tr></thead>' +
               '<tbody>' + heavyBody + '</tbody></table>';
             const hths = heavyWrap.querySelectorAll('thead th[data-hcol]');
@@ -1365,13 +1776,6 @@ def build_html_dashboard(
         }});
       }}
 
-      const helpBtn = document.getElementById('cpuHelpToggle');
-      const helpBox = document.getElementById('cpuHelpText');
-      if (helpBtn && helpBox) {{
-        helpBtn.addEventListener('click', () => {{
-          helpBox.style.display = helpBox.style.display === 'block' ? 'none' : 'block';
-        }});
-      }}
       window.renderSuggestionsTable = renderSuggestionsTable;
       renderSuggestionsTable();
     }}
@@ -1796,14 +2200,32 @@ def build_html_dashboard(
           hoverinfo: 'none',
         }};
       }});
+      const ax = axisLayout(xDisp, true);
       Plotly.newPlot(divId, traces, {{
-        title,
-        xaxis: axisLayout(xDisp),
-        yaxis: {{title: yTitle}},
+        title: false,
+        xaxis: Object.assign(ax, {{
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+        }}),
+        yaxis: {{
+          title: yTitle,
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+          rangemode: 'tozero',
+        }},
         hovermode: 'x unified',
         showlegend: false,
-        margin: {{l: 60, r: 20, t: 50, b: 50}},
-      }}, {{responsive: true}});
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#fcfcfd',
+        // Match ya/disk bottom margin so 2×2 plot areas align.
+        margin: {{l: 48, r: 8, t: 8, b: 72}},
+      }}, {{responsive: true, displayModeBar: 'hover', displaylogo: false}});
     }}
 
     function formatValue(y, unit) {{
@@ -1889,8 +2311,10 @@ def build_html_dashboard(
       return Number.isFinite(Number(sec)) ? Number(sec) : null;
     }}
     function activeCountAtSec(tSec) {{
-      const xs = data.xs_active;
-      const ys = data.ys_active;
+      const xs = Array.isArray(data.xs_active_exact) && data.xs_active_exact.length
+        ? data.xs_active_exact : data.xs_active;
+      const ys = Array.isArray(data.ys_active_exact) && data.ys_active_exact.length
+        ? data.ys_active_exact : data.ys_active;
       if (!Array.isArray(xs) || !Array.isArray(ys) || !Number.isFinite(Number(tSec))) return null;
       let idx = -1;
       for (let i = 0; i < xs.length; i++) {{
@@ -1921,7 +2345,7 @@ def build_html_dashboard(
         showChartTip(ev);
       }});
       plot.on('plotly_unhover', () => {{
-        panel.textContent = 'Move cursor over chart to see sorted contributors';
+        panel.textContent = '';
         hideChartTipSoon();
       }});
     }}
@@ -2043,37 +2467,88 @@ def build_html_dashboard(
       }});
     }}
 
-    Plotly.newPlot('activeChunks', [{{
-      x: (data.xs_active || []).map(xToDisplay),
-      y: data.ys_active,
-      mode: 'lines',
-      name: 'active_chunks',
-      line: {{color: '#444', width: 2, shape: 'hv'}},
-      hoverinfo: 'none',
-    }}], {{
-      title: 'Concurrent running chunks',
-      xaxis: axisLayout((data.xs_active || []).map(xToDisplay)),
-      yaxis: {{title: 'count'}},
-      hovermode: 'x unified',
-    }}, {{responsive: true}});
     (function() {{
-      const plot = document.getElementById('activeChunks');
-      const panel = document.getElementById('activeChunksClick');
-      if (plot && panel) {{
-        plot.on('plotly_click', (ev) => {{
-          if (!ev || !ev.points || !ev.points.length) return;
-          const t = ev.points[0].x;
-          const y = Number(ev.points[0].y);
-          const n = Number.isFinite(y) ? Math.round(y) : activeCountAtTime(t);
-          panel.innerHTML = '<b>t=' + formatPointTime(ev.points[0]) + '</b>: ' + (n != null ? n + ' tests (chunks) running' : '—');
+      const activity = data.ya_activity || {{}};
+      const specs = [
+        ['build', 'Build/codegen (CC/AS/PY/…)', '#2563eb', 'solid'],
+        ['archive', 'Archives (AR)', '#0891b2', 'solid'],
+        ['cache', 'Cache (From/Put cache)', '#f59e0b', 'solid'],
+        ['test_report', 'Test chunks (report)', '#16a34a', 'solid'],
+        ['test_tm', 'Test workers (TM)', '#4ade80', 'dash'],
+        ['link', 'Links (LD)', '#9333ea', 'solid'],
+      ];
+      const traces = [];
+      const allX = [];
+      for (const [kind, name, color, dash] of specs) {{
+        const series = activity[kind] || {{}};
+        const xs = (series.xs || []).map(xToDisplay);
+        if (!xs.length) continue;
+        allX.push(...xs);
+        traces.push({{
+          x: xs,
+          y: series.ys || [],
+          mode: 'lines',
+          name,
+          line: {{color, width: 2, shape: 'hv', dash}},
+          hovertemplate: name + ': %{{y:.0f}}<extra></extra>',
         }});
+      }}
+      const activityUnaligned = !!(data.stats && data.stats.evlog_activity_offset_unaligned);
+      const mainTitle = activityUnaligned ? 'ya make (clock unaligned)' : 'ya make';
+      const yaLayout = {{
+        title: false,
+        xaxis: Object.assign(axisLayout(allX, true), {{
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+        }}),
+        yaxis: {{
+          title: 'active jobs',
+          rangemode: 'tozero',
+          titlefont: {{size: 11, color: '#8c959f'}},
+          tickfont: {{size: 10, color: '#656d76'}},
+          gridcolor: '#eef1f4',
+          zerolinecolor: '#eaeef2',
+          linecolor: '#d8dee4',
+        }},
+        hovermode: 'x unified',
+        showlegend: true,
+        legend: {{
+          orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
+          font: {{size: 10}}, itemsizing: 'constant', tracegroupgap: 4,
+        }},
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: '#fcfcfd',
+        margin: {{l: 48, r: 8, t: 8, b: 72}},
+      }};
+      const yaOpts = {{responsive: true, displayModeBar: 'hover', displaylogo: false}};
+      for (const plotId of ['yaActivity', 'yaActivityChunk']) {{
+        const el = document.getElementById(plotId);
+        if (!el) continue;
+        const tile = el.closest ? el.closest('.chart-tile') : null;
+        if (!traces.length) {{
+          if (tile) tile.style.display = 'none';
+          else el.style.display = 'none';
+          continue;
+        }}
+        const titleEl = tile ? tile.querySelector('.chart-tile-title') : null;
+        if (titleEl) {{
+          titleEl.innerHTML = mainTitle + '<span class="chart-tile-sub">active jobs by phase</span>';
+        }}
+        // Clone per plot — Plotly mutates traces/layout in place.
+        const clone = (obj) => JSON.parse(JSON.stringify(obj));
+        Plotly.newPlot(plotId, clone(traces), clone(yaLayout), yaOpts);
       }}
     }})();
 
     if (data.by_chunk && data.xs_active_chunk && data.xs_active_chunk.length > 0) {{
-      stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);
-      attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
-      attachSortedClick('activeLayerChunk', 'activeClickChunk', 'active');
+      ensureDetailsPlot('activeByChunkDetails', 'activeLayerChunk', () => {{
+        stackedArea('activeLayerChunk', data.xs_active_chunk, data.active_tracks_chunk, 'Layered active chunks by suite+chunk', 'active chunks', true);
+        attachSortedHover('activeLayerChunk', 'activeHoverChunk', 'active');
+        attachSortedClick('activeLayerChunk', 'activeClickChunk', 'active');
+      }});
       stackedArea('cpuLayer', data.xs_cpu, data.cpu_tracks, 'Layered CPU (estimated cores) by suite+chunk', 'cores');
       stackedArea('ramLayer', data.xs_ram, data.ram_tracks, 'Layered RAM by suite+chunk', 'GB');
       if (data.resources_overlay) {{
@@ -2092,23 +2567,42 @@ def build_html_dashboard(
         Plotly.relayout('cpuLayer', {{ hovermode: 'x unified' }});
         Plotly.relayout('ramLayer', {{ hovermode: 'x unified' }});
         const diskEl = document.getElementById('diskLayer');
+        const diskTile = document.getElementById('diskTileChunk');
         if (diskEl) {{
+          if (diskTile) diskTile.style.display = '';
           diskEl.style.display = '';
-          const evlogRange = ro.evlog_range_sec || [];
-          const xaxisOpt = Object.assign({{}}, axisLayout(xDisp));
-          if (evlogRange.length >= 2) {{
-            xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
-          }}
+          const diskAx = axisLayout(xDisp, true);
           Plotly.newPlot('diskLayer', [
             {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
             {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
           ], {{
-            title: 'Disk bandwidth (+Write, -Read)',
-            xaxis: xaxisOpt,
-            yaxis: {{ title: 'MB/s' }},
+            title: false,
+            xaxis: Object.assign(diskAx, {{
+              titlefont: {{size: 11, color: '#8c959f'}},
+              tickfont: {{size: 10, color: '#656d76'}},
+              gridcolor: '#eef1f4',
+              zerolinecolor: '#eaeef2',
+              linecolor: '#d8dee4',
+            }}),
+            yaxis: {{
+              title: 'MB/s',
+              titlefont: {{size: 11, color: '#8c959f'}},
+              tickfont: {{size: 10, color: '#656d76'}},
+              gridcolor: '#eef1f4',
+              zerolinecolor: '#eaeef2',
+              linecolor: '#d8dee4',
+            }},
             hovermode: 'x unified',
             hoverlabel: {{ namelength: -1 }},
-          }}, {{ responsive: true }});
+            showlegend: true,
+            legend: {{
+              orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
+              font: {{size: 10}}, itemsizing: 'constant', tracegroupgap: 4,
+            }},
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: '#fcfcfd',
+            margin: {{l: 48, r: 8, t: 8, b: 72}},
+          }}, {{ responsive: true, displayModeBar: 'hover', displaylogo: false }});
         }}
       }}
       attachSortedHover('cpuLayer', 'cpuHover', 'cores');
@@ -2117,12 +2611,16 @@ def build_html_dashboard(
       attachSortedClick('ramLayer', 'ramClick', 'GB');
     }}
 
-    stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
-    attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
-    attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
-    stackedArea('testsLayerSuite', data.xs_tests_suite, data.tests_tracks_suite, 'Layered tests running by suite', 'tests', true);
-    attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
-    attachSortedClick('testsLayerSuite', 'testsClickSuite', 'tests');
+    ensureDetailsPlot('testsBySuiteDetails', 'testsLayerSuite', () => {{
+      stackedArea('testsLayerSuite', data.xs_tests_suite, data.tests_tracks_suite, 'Layered tests running by suite', 'tests', true);
+      attachSortedHover('testsLayerSuite', 'testsHoverSuite', 'tests');
+      attachSortedClick('testsLayerSuite', 'testsClickSuite', 'tests');
+    }});
+    ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite', () => {{
+      stackedArea('activeLayerSuite', data.xs_active_suite, data.active_tracks_suite, 'Layered active chunks by suite', 'active chunks', true);
+      attachSortedHover('activeLayerSuite', 'activeHoverSuite', 'active');
+      attachSortedClick('activeLayerSuite', 'activeClickSuite', 'active');
+    }});
 
     stackedArea('cpuLayerSuite', data.xs_cpu_suite, data.cpu_tracks_suite, 'Layered CPU (estimated cores) by suite', 'cores');
     stackedArea('ramLayerSuite', data.xs_ram_suite, data.ram_tracks_suite, 'Layered RAM by suite', 'GB');
@@ -2142,29 +2640,49 @@ def build_html_dashboard(
       Plotly.relayout('cpuLayerSuite', {{ hovermode: 'x unified' }});
       Plotly.relayout('ramLayerSuite', {{ hovermode: 'x unified' }});
       const diskEl = document.getElementById('diskLayerSuite');
+      const diskTile = document.getElementById('diskTileSuite');
       if (diskEl) {{
+        if (diskTile) diskTile.style.display = '';
         diskEl.style.display = '';
-        const evlogRange = ro.evlog_range_sec || [];
-        const xaxisOpt = Object.assign({{}}, axisLayout(xDisp));
-        if (evlogRange.length >= 2) {{
-          xaxisOpt.range = [xToDisplay(Number(evlogRange[0])), xToDisplay(Number(evlogRange[1]))];
-        }}
+        const diskAx = axisLayout(xDisp, true);
         Plotly.newPlot('diskLayerSuite', [
           {{ x: xDisp, y: (ro.disk_write_mb || []).map(v => Number(v) || 0), mode: 'lines', name: 'Disk write (+MB/s)', line: {{ color: '#65a30d' }}, hovertemplate: 'Disk write: %{{y:.2f}} MB/s<extra></extra>' }},
           {{ x: xDisp, y: (ro.disk_read_mb || []).map(v => -(Number(v) || 0)), mode: 'lines', name: 'Disk read (-MB/s)', line: {{ color: '#0284c7' }}, hovertemplate: 'Disk read: %{{y:.2f}} MB/s<extra></extra>' }}
         ], {{
-          title: 'Disk bandwidth (+Write, -Read)',
-          xaxis: xaxisOpt,
-          yaxis: {{ title: 'MB/s' }},
+          title: false,
+          xaxis: Object.assign(diskAx, {{
+            titlefont: {{size: 11, color: '#8c959f'}},
+            tickfont: {{size: 10, color: '#656d76'}},
+            gridcolor: '#eef1f4',
+            zerolinecolor: '#eaeef2',
+            linecolor: '#d8dee4',
+          }}),
+          yaxis: {{
+            title: 'MB/s',
+            titlefont: {{size: 11, color: '#8c959f'}},
+            tickfont: {{size: 10, color: '#656d76'}},
+            gridcolor: '#eef1f4',
+            zerolinecolor: '#eaeef2',
+            linecolor: '#d8dee4',
+          }},
           hovermode: 'x unified',
           hoverlabel: {{ namelength: -1 }},
-        }}, {{ responsive: true }});
+          showlegend: true,
+          legend: {{
+            orientation: 'h', x: 0, y: -0.22, xanchor: 'left', yanchor: 'top',
+            font: {{size: 10}}, itemsizing: 'constant', tracegroupgap: 4,
+          }},
+          paper_bgcolor: 'rgba(0,0,0,0)',
+          plot_bgcolor: '#fcfcfd',
+          margin: {{l: 48, r: 8, t: 8, b: 72}},
+        }}, {{ responsive: true, displayModeBar: 'hover', displaylogo: false }});
       }}
     }}
     attachSortedHover('cpuLayerSuite', 'cpuHoverSuite', 'cores');
     attachSortedHover('ramLayerSuite', 'ramHoverSuite', 'GB');
     attachSortedClick('cpuLayerSuite', 'cpuClickSuite', 'cores');
     attachSortedClick('ramLayerSuite', 'ramClickSuite', 'GB');
+    syncChartGroupXRange(ALL_TIME_CHART_IDS);
 
     if (data.by_chunk && data.pie_cpu_labels && data.pie_cpu_labels.length > 0) {{
       Plotly.newPlot('cpuPie', [{{
@@ -2178,7 +2696,7 @@ def build_html_dashboard(
         automargin: true,
         sort: false,
         hovertemplate: '%{{label}}<br>cpu_sec=%{{value:.2f}}<br>cpu_human=%{{customdata}}<extra></extra>',
-      }}], {{title: 'CPU consumers (top suite+chunk + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      }}], {{title: 'CPU by suite+chunk', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
       Plotly.newPlot('ramPie', [{{
         type: 'pie',
         labels: data.pie_ram_labels,
@@ -2190,7 +2708,7 @@ def build_html_dashboard(
         automargin: true,
         sort: false,
         hovertemplate: '%{{label}}<br>ram_kb_sum=%{{value:.0f}} KB<br>ram_human=%{{customdata}}<extra></extra>',
-      }}], {{title: 'RAM consumers (top suite+chunk + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      }}], {{title: 'RAM by suite+chunk', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
       Plotly.newPlot('activePie', [{{
         type: 'pie',
         labels: data.pie_active_labels,
@@ -2202,7 +2720,7 @@ def build_html_dashboard(
         automargin: true,
         sort: false,
         hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
-      }}], {{title: 'Active time share (suite+chunk, top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+      }}], {{title: 'Active time by suite+chunk', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
     }}
 
     Plotly.newPlot('cpuPieSuite', [{{
@@ -2216,7 +2734,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>cpu_sec=%{{value:.2f}}<br>cpu_human=%{{customdata}}<extra></extra>',
-    }}], {{title: 'CPU consumers by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'CPU by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     Plotly.newPlot('ramPieSuite', [{{
       type: 'pie',
@@ -2229,7 +2747,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>ram_kb_sum=%{{value:.0f}} KB<br>ram_human=%{{customdata}}<extra></extra>',
-    }}], {{title: 'RAM consumers by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'RAM by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     Plotly.newPlot('activePieSuite', [{{
       type: 'pie',
@@ -2242,7 +2760,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>active_time_sec=%{{value:.2f}}<br>active_human=%{{customdata}}<extra></extra>',
-    }}], {{title: 'Active time share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'Active time by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     Plotly.newPlot('testsPieSuite', [{{
       type: 'pie',
@@ -2254,7 +2772,7 @@ def build_html_dashboard(
       automargin: true,
       sort: false,
       hovertemplate: '%{{label}}<br>tests=%{{value:.0f}}<extra></extra>',
-    }}], {{title: 'Tests count share by suite (top + other)', showlegend: false, margin: {{l: 20, r: 20, t: 50, b: 20}}}}, {{responsive: true}});
+    }}], {{title: 'Tests by suite', showlegend: false, margin: {{l: 20, r: 20, t: 40, b: 20}}}}, {{responsive: true}});
 
     if (data.resources_overlay) {{
       document.getElementById('layerTogglesWrap').style.display = '';
@@ -2296,6 +2814,17 @@ def build_html_dashboard(
       suiteSearchEl.addEventListener('input', applySuiteSearch);
     }}
     applySuiteSearch();
+
+    // Export handlers used by inline HTML attributes.
+    window.showTab = showTab;
+    window.clearSuiteSearch = clearSuiteSearch;
+    window.clearAllMarkers = clearAllMarkers;
+    window.applyTimezoneToAllCharts = applyTimezoneToAllCharts;
+    window.applyMarkersToCharts = applyMarkersToCharts;
+    window.toggleSuiteMarkers = toggleSuiteMarkers;
+    window.applyLayerToggles = applyLayerToggles;
+    window.toggleChartTile = toggleChartTile;
+    }})();
   </script>
 </body>
 </html>

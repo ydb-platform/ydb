@@ -11,7 +11,7 @@ from _paths import TEST_METRICS, add_product_paths
 
 add_product_paths(TEST_METRICS)
 
-from dashboard_html_payload import _build_headline_stats
+from dashboard_html_payload import _build_headline_stats, _phase_durations_sec
 
 
 class HeadlineHostStatsTest(unittest.TestCase):
@@ -26,6 +26,7 @@ class HeadlineHostStatsTest(unittest.TestCase):
             issues_summary=None,
             suite_chunk_issues_summary=None,
             resources_overlay={
+                "xs_evlog_sec": [0.5, 1.0, 1.5, 2.0, 3.0],
                 "cpu_total_cores": [10.0, 20.0, 30.0, 40.0, 50.0],
                 "ram_gb": [100.0, 110.0, 120.0, 130.0, 200.0],
                 "disk_read_mb": [1.0, 2.0, 3.0, 4.0, 100.0],
@@ -33,13 +34,24 @@ class HeadlineHostStatsTest(unittest.TestCase):
             },
         )
         self.assertEqual(stats["cpu"]["max"], 2.0)
+        self.assertEqual(stats["cpu"]["avg"], 1.5)
         self.assertEqual(stats["cpu_host"]["max"], 50.0)
         self.assertEqual(stats["cpu_host"]["median"], 30.0)
+        self.assertEqual(stats["cpu_host"]["avg"], 30.0)
         self.assertAlmostEqual(stats["cpu_host"]["p95"], 48.0)
         self.assertNotIn("p90", stats["cpu_host"])
         self.assertEqual(stats["ram_host"]["max"], 200.0)
         self.assertEqual(stats["disk_read_host"]["max"], 100.0)
         self.assertEqual(stats["disk_write_host"]["samples"], 5.0)
+        # Tests window [1.0, 2.0] drops the 0.5 preamble and 3.0 post samples.
+        self.assertEqual(stats["cpu_host_tests"]["samples"], 3.0)
+        self.assertEqual(stats["cpu_host_tests"]["max"], 40.0)
+        self.assertEqual(stats["cpu_host_tests"]["median"], 30.0)
+        self.assertEqual(stats["ram_host_tests"]["max"], 130.0)
+        self.assertNotEqual(stats["cpu_host_tests"]["max"], stats["cpu_host"]["max"])
+        self.assertEqual(stats["test_duration_sec"], 1.0)
+        self.assertEqual(stats["total_duration_sec"], 1.0)
+        self.assertEqual(stats["build_duration_sec"], 0.0)
 
     def test_missing_monitor_omits_host_keys(self):
         stats = _build_headline_stats(
@@ -55,6 +67,69 @@ class HeadlineHostStatsTest(unittest.TestCase):
         )
         self.assertNotIn("cpu_host", stats)
         self.assertNotIn("disk_read_host", stats)
+        self.assertNotIn("cpu_host_tests", stats)
+        self.assertNotIn("disk_read_host_tests", stats)
+
+    def test_phase_durations_split_build_and_test(self):
+        # Build/archive 0..4.5s, tests 5..15s → build=4.5, test=10, total=15.
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 5_000_000, "end_us": 15_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (4_000_000, -1)],
+                "archive": [(1_000_000, 1), (4_500_000, -1)],
+                "cache": [],
+                "link": [],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 4.5)
+        self.assertAlmostEqual(phases["test_duration_sec"], 10.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 15.0)
+
+    def test_phase_durations_overlap_build_and_test(self):
+        # Build/link continue after tests start: both phases keep full wall spans.
+        # build 0..9, test 3..10 → build=9, test=7, total=10 (overlap not summed).
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 3_000_000, "end_us": 10_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (8_000_000, -1)],
+                "link": [(1_000_000, 1), (9_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 9.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 7.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 10.0)
+
+    def test_phase_durations_late_link_and_build_only(self):
+        # Link after compile, no tests → build span only.
+        phases = _phase_durations_sec(
+            runs=[],
+            ya_activity_deltas={
+                "build": [(0, 1), (2_000_000, -1)],
+                "link": [(3_000_000, 1), (5_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 0.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 5.0)
+
+    def test_phase_durations_suite_filter_uses_filtered_runs_only_for_tests(self):
+        # Mimic --suite-path: runs already filtered, deltas still whole-job.
+        # Honest build span stays 0..10; test is filtered 20..25; total 0..25.
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "only/filtered", "chunk": 0, "start_us": 20_000_000, "end_us": 25_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (10_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 10.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 25.0)
 
 
 if __name__ == "__main__":

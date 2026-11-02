@@ -7,6 +7,7 @@ from typing import Any, Optional
 try:
     from .dashboard_html_series import (
         build_active_series,
+        build_active_series_from_deltas,
         build_step_series,
         downsample_active_series,
         downsample_step_series,
@@ -14,9 +15,11 @@ try:
         palette,
         topn_other_map,
     )
+    from .html_embed import strip_suggestion_hover_text
 except ImportError:
     from dashboard_html_series import (
         build_active_series,
+        build_active_series_from_deltas,
         build_step_series,
         downsample_active_series,
         downsample_step_series,
@@ -24,6 +27,7 @@ except ImportError:
         palette,
         topn_other_map,
     )
+    from html_embed import strip_suggestion_hover_text  # type: ignore[no-redef]
 
 
 def _percentile(values: list[float], p: float) -> float:
@@ -54,11 +58,12 @@ def _series_total_values(tracks: dict[str, list[float]]) -> list[float]:
 def _describe_distribution(values: list[float]) -> dict[str, float]:
     vals = [float(v or 0.0) for v in values]
     if not vals:
-        return {"max": 0.0, "p95": 0.0, "median": 0.0, "samples": 0.0}
+        return {"max": 0.0, "p95": 0.0, "median": 0.0, "avg": 0.0, "samples": 0.0}
     return {
         "max": float(max(vals)),
         "p95": _percentile(vals, 0.95),
         "median": _percentile(vals, 0.5),
+        "avg": float(sum(vals) / len(vals)),
         "samples": float(len(vals)),
     }
 
@@ -73,22 +78,155 @@ def _numeric_series(values: Any) -> list[float]:
     return out
 
 
-def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
-    """max / p95 / median of /proc samples (host), not the stacked test model."""
+def _test_window_sec(runs: list[dict[str, Any]]) -> Optional[tuple[float, float]]:
+    """First suite/chunk start → last end, in the same seconds domain as overlay xs."""
+    starts = [
+        float(r.get("start_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("start_us", 0.0) or 0.0) > 0.0
+    ]
+    ends = [
+        float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("end_us", 0.0) or 0.0) > 0.0
+    ]
+    if not starts or not ends:
+        return None
+    start = min(starts)
+    end = max(ends)
+    if end < start:
+        return None
+    return (start, end)
+
+
+def _host_resource_stats(
+    resources_overlay: Optional[dict[str, Any]],
+    *,
+    window_sec: Optional[tuple[float, float]] = None,
+    key_suffix: str = "",
+) -> dict[str, Any]:
+    """max / p95 / median of /proc samples (host), not the stacked test model.
+
+    When window_sec=(lo, hi) is set, only samples with xs_evlog_sec in that
+    inclusive range are kept (e.g. test phase only, excluding build preamble).
+    key_suffix appends to output keys ("" → cpu_host; "_tests" → cpu_host_tests).
+    """
     if not resources_overlay:
         return {}
+    xs = resources_overlay.get("xs_evlog_sec") or []
     series = {
-        "cpu_host": resources_overlay.get("cpu_total_cores"),
-        "ram_host": resources_overlay.get("ram_gb"),
-        "disk_read_host": resources_overlay.get("disk_read_mb"),
-        "disk_write_host": resources_overlay.get("disk_write_mb"),
+        f"cpu_host{key_suffix}": resources_overlay.get("cpu_total_cores"),
+        f"ram_host{key_suffix}": resources_overlay.get("ram_gb"),
+        f"disk_read_host{key_suffix}": resources_overlay.get("disk_read_mb"),
+        f"disk_write_host{key_suffix}": resources_overlay.get("disk_write_mb"),
     }
     out: dict[str, Any] = {}
     for key, values in series.items():
-        nums = _numeric_series(values)
+        vals = list(values or [])
+        if window_sec is not None and xs:
+            lo, hi = window_sec
+            clipped: list[Any] = []
+            n = min(len(xs), len(vals))
+            for i in range(n):
+                try:
+                    t = float(xs[i])
+                except (TypeError, ValueError):
+                    continue
+                if lo <= t <= hi:
+                    clipped.append(vals[i])
+            vals = clipped
+        nums = _numeric_series(vals)
         if nums:
             out[key] = _describe_distribution(nums)
     return out
+
+
+def _first_last_active_sec(
+    deltas: list[tuple[float, int]],
+) -> Optional[tuple[float, float]]:
+    """Return (first_active_sec, last_active_sec) from (+1/-1) activity deltas."""
+    if not deltas:
+        return None
+    count = 0
+    first: Optional[float] = None
+    last: Optional[float] = None
+    # Same (ts, sign) order as build_active_series_from_deltas (closes first).
+    for t_us, sign in sorted(deltas, key=lambda p: (float(p[0]), int(p[1]))):
+        try:
+            t = float(t_us) / 1_000_000.0
+            step = int(sign)
+        except (TypeError, ValueError):
+            continue
+        prev = count
+        count += step
+        if prev <= 0 and count > 0 and first is None:
+            first = t
+        if count > 0:
+            last = t
+        elif prev > 0 and count <= 0:
+            last = t
+    if first is None or last is None or last < first:
+        return None
+    return (first, last)
+
+
+def _phase_durations_sec(
+    runs: list[dict[str, Any]],
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
+) -> dict[str, float]:
+    """Independent wall clocks for build / test / whole job.
+
+    Overlap is allowed and counted in both phases:
+    - test: first suite/chunk start → last end (report/evlog runs)
+    - build: first → last build/archive/cache/link activity (not clipped
+      at test start — late link/compile still counts as build)
+    - total: earliest phase start → latest phase end (overlap is not summed)
+    """
+    starts = [
+        float(r.get("start_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("start_us", 0.0) or 0.0) > 0.0
+    ]
+    ends = [
+        float(r.get("end_us", 0.0) or 0.0) / 1_000_000.0
+        for r in runs
+        if float(r.get("end_us", 0.0) or 0.0) > 0.0
+    ]
+    test_start = min(starts) if starts else None
+    test_end = max(ends) if ends else None
+    test_duration = (
+        max(0.0, float(test_end) - float(test_start))
+        if test_start is not None and test_end is not None
+        else 0.0
+    )
+
+    deltas_by_kind = ya_activity_deltas or {}
+    build_points: list[float] = []
+    for kind in ("build", "archive", "cache", "link"):
+        span = _first_last_active_sec(list(deltas_by_kind.get(kind) or []))
+        if span is None:
+            continue
+        build_points.extend(span)
+    build_start = min(build_points) if build_points else None
+    build_end = max(build_points) if build_points else None
+    build_duration = (
+        max(0.0, float(build_end) - float(build_start))
+        if build_start is not None and build_end is not None
+        else 0.0
+    )
+
+    phase_starts = [t for t in (build_start, test_start) if t is not None]
+    phase_ends = [t for t in (build_end, test_end) if t is not None]
+    if phase_starts and phase_ends:
+        total_duration = max(0.0, max(phase_ends) - min(phase_starts))
+    else:
+        total_duration = test_duration
+
+    return {
+        "total_duration_sec": float(total_duration),
+        "build_duration_sec": float(build_duration),
+        "test_duration_sec": float(test_duration),
+    }
 
 
 def _build_headline_stats(
@@ -101,13 +239,8 @@ def _build_headline_stats(
     issues_summary: Optional[dict[str, int]],
     suite_chunk_issues_summary: Optional[dict[str, int]],
     resources_overlay: Optional[dict[str, Any]] = None,
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> dict[str, Any]:
-    starts = [float(r.get("start_us", 0.0) or 0.0) for r in runs if float(r.get("start_us", 0.0) or 0.0) > 0.0]
-    ends = [float(r.get("end_us", 0.0) or 0.0) for r in runs if float(r.get("end_us", 0.0) or 0.0) > 0.0]
-    duration_sec = 0.0
-    if starts and ends:
-        duration_sec = max(0.0, (max(ends) - min(starts)) / 1_000_000.0)
-
     suite_total = len(set(str(r.get("suite_path") or "") for r in runs if str(r.get("suite_path") or "")))
     chunk_labels = set()
     for r in runs:
@@ -142,6 +275,7 @@ def _build_headline_stats(
         "affected_chunks": int((suite_chunk_issues_summary or {}).get("affected_chunks", 0) or 0),
     }
 
+    test_window = _test_window_sec(runs)
     return {
         "total": {
             "suites": suite_total,
@@ -154,8 +288,13 @@ def _build_headline_stats(
         "ram": _describe_distribution(_series_total_values(ram_tracks_suite)),
         "active_chunks": _describe_distribution([float(v or 0.0) for v in ys_active]),
         "tests": _describe_distribution(_series_total_values(tests_tracks_suite)),
-        "total_duration_sec": duration_sec,
+        **_phase_durations_sec(runs, ya_activity_deltas),
+        # Full monitor span (build + tests + post).
         **_host_resource_stats(resources_overlay),
+        # Same /proc series, clipped to first→last test chunk.
+        **_host_resource_stats(
+            resources_overlay, window_sec=test_window, key_suffix="_tests"
+        ),
     }
 
 
@@ -174,6 +313,7 @@ def build_dashboard_payload(
     tests_per_chunk_by_label: Optional[dict[str, int]] = None,
     issues_summary: Optional[dict[str, int]] = None,
     suite_chunk_issues_summary: Optional[dict[str, int]] = None,
+    ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> dict[str, Any]:
     cpu_by_suite: dict[str, float] = defaultdict(float)
     ram_by_suite: dict[str, float] = defaultdict(float)
@@ -217,25 +357,40 @@ def build_dashboard_payload(
         )
     top_tests_suite = topn_other_map(tests_time_by_suite, top_n)
     xs_tests_suite, tests_tracks_suite = build_step_series(enriched, "tests_in_chunk", set(top_tests_suite), label_mode="suite")
-    xs_active, ys_active = build_active_series(enriched)
+    xs_active_exact, ys_active_exact = build_active_series(enriched)
+    activity_series: dict[str, dict[str, list[float]]] = {}
+    deltas_by_kind = ya_activity_deltas or {}
+    for kind in ("build", "archive", "cache", "link", "test_report", "test_tm"):
+        if kind == "test_report":
+            # Same series as click-table exact counts (already epoch-aligned).
+            activity_xs, activity_ys = xs_active_exact, ys_active_exact
+        else:
+            activity_xs, activity_ys = build_active_series_from_deltas(
+                deltas_by_kind.get(kind) or []
+            )
+        activity_xs, activity_ys = downsample_active_series(
+            activity_xs, activity_ys, max_points
+        )
+        activity_series[kind] = {"xs": activity_xs, "ys": activity_ys}
 
     headline_stats = _build_headline_stats(
         cpu_tracks_suite=cpu_tracks_suite,
         ram_tracks_suite=ram_tracks_suite,
-        ys_active=ys_active,
+        ys_active=ys_active_exact,
         tests_tracks_suite=tests_tracks_suite,
         runs=runs,
         tests_per_suite=tests_per_suite,
         issues_summary=issues_summary,
         suite_chunk_issues_summary=suite_chunk_issues_summary,
         resources_overlay=resources_overlay,
+        ya_activity_deltas=deltas_by_kind,
     )
 
     xs_cpu_suite, cpu_tracks_suite = downsample_step_series(xs_cpu_suite, cpu_tracks_suite, max_points)
     xs_ram_suite, ram_tracks_suite = downsample_step_series(xs_ram_suite, ram_tracks_suite, max_points)
     xs_active_suite, active_tracks_suite = downsample_step_series(xs_active_suite, active_tracks_suite, max_points)
     xs_tests_suite, tests_tracks_suite = downsample_step_series(xs_tests_suite, tests_tracks_suite, max_points)
-    xs_active, ys_active = downsample_active_series(xs_active, ys_active, max_points)
+    xs_active, ys_active = downsample_active_series(xs_active_exact, ys_active_exact, max_points)
 
     has_synthetic = (stats.get("runs_with_synthetic_metrics") or 0) > 0
 
@@ -425,7 +580,7 @@ def build_dashboard_payload(
         "ram_tracks_suite_no_synthetic": ram_tracks_suite_no_synthetic,
         "cpu_tracks_no_synthetic": cpu_tracks_no_synthetic,
         "ram_tracks_no_synthetic": ram_tracks_no_synthetic,
-        "cpu_suggestions": cpu_suggestions or [],
+        "cpu_suggestions": strip_suggestion_hover_text(cpu_suggestions or []),
         "run_config": run_config or {},
         "xs_cpu": xs_cpu,
         "cpu_tracks": cpu_tracks,
@@ -443,6 +598,11 @@ def build_dashboard_payload(
         "tests_tracks_suite": tests_tracks_suite,
         "xs_active": xs_active,
         "ys_active": ys_active,
+        # Keep undownsampled series for click-table counts. On large (~x4) runs
+        # this is still small vs suite tracks (cold ~7k pts / ~0.1MB; x4 ~0.5MB).
+        "xs_active_exact": xs_active_exact,
+        "ys_active_exact": ys_active_exact,
+        "ya_activity": activity_series,
         "pie_cpu_labels": top_cpu + (["other"] if len(cpu_by_label) > len(top_cpu) else []),
         "pie_cpu_vals": [cpu_by_label.get(lb, 0.0) for lb in top_cpu]
         + (

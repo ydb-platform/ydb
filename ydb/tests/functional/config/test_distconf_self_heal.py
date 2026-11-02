@@ -4,6 +4,7 @@ from hamcrest import assert_that
 import requests
 import time
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
@@ -100,12 +101,22 @@ class KiKiMRDistConfSelfHealTest(object):
 
     def do_request(self, json_req):
         url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
-        return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
+        return requests.post(url, headers={'content-type': 'application/json'}, json=json_req, timeout=60).json()
 
     def do_request_config(self, recommended=False):
         resp = self.do_request({"GetStateStorageConfig": {"Recommended": recommended}})
         logger.info(f"Config:{resp}")
         return resp["StateStorageConfig"]
+
+    def wait_for_config(self, config_name, predicate, timeout=30):
+        deadline = time.monotonic() + timeout
+        config = None
+        while time.monotonic() < deadline:
+            config = self.do_request_config()[f"{config_name}Config"]
+            if predicate(config):
+                return config
+            time.sleep(0.1)
+        assert_that(False, f"Timed out waiting for {config_name}: {config}")
 
     def change_state_storage(self, defaultRingGroup, newRingGroup, configName="StateStorage"):
         logger.info(f"Current {configName} config: {defaultRingGroup}")
@@ -222,20 +233,32 @@ class TestKiKiMRDistConfSelfHealParallelCall(KiKiMRDistConfSelfHealTest):
     def do_test(self, configName):
         self.do_bad_config(configName)
 
-        logger.info("Start SelfHeal")
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}}))
-        time.sleep(1)
-        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
-        assert_eq(len(rg), 2)
-        assert_that("WriteOnly" not in rg[0])
-        assert_eq(rg[1]["WriteOnly"], True)
+        # POST waits for the terminal outcome; observe the migration separately.
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(self.do_request, {
+                "SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}})
+            config = self.wait_for_config(configName, lambda config:
+                len(config.get("RingGroups", [])) == 2
+                and not config["RingGroups"][0].get("WriteOnly", False)
+                and config["RingGroups"][1].get("WriteOnly", False))
+            first_offset = config["RingGroups"][1].get("RingGroupActorIdOffset", 0)
+            assert_that(not first.done(), "the first self-heal answered before completing")
 
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
-        time.sleep(1)
-        assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 2)
-        time.sleep(10)
+            second = executor.submit(self.do_request, {
+                "SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}})
+            cancelled = first.result(timeout=30)
+            assert_eq(cancelled.get("Status"), "RACE")
+            assert_that("cancelled" in cancelled.get("ErrorReason", ""), cancelled)
+            self.wait_for_config(configName, lambda config:
+                len(config.get("RingGroups", [])) == 2
+                and config["RingGroups"][1].get("WriteOnly", False)
+                and config["RingGroups"][1].get("RingGroupActorIdOffset", 0) != first_offset)
+            assert_that(not second.done(), "the second self-heal answered before completing")
+            result = second.result(timeout=60)
+            # Proto3 omits the default OK status from JSON.
+            assert_that(result.get("Status", "OK") == "OK", result)
 
-        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        rg = self.wait_for_config(configName, lambda config: "Ring" in config)["Ring"]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
 
@@ -247,21 +270,36 @@ class TestKiKiMRDistConfSelfHealParallelCall2(KiKiMRDistConfSelfHealTest):
 
     def do_test(self, configName):
         self.do_bad_config(configName)
+        # Keep source selection deterministic: every node in this cluster is running.
+        # This test exercises cancellation rather than Sentinel's classification delay.
+        logger.info(self.do_request({"SelfHealNodesStateUpdate": {
+            "NodesState": [{"NodeId": node_id, "State": 0} for node_id in self.cluster.nodes],
+        }}))
 
-        logger.info("Start SelfHeal")
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}}))
-        time.sleep(4)
-        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"]
-        assert_eq(len(rg), 2)
-        assert_that("WriteOnly" not in rg[0])
-        assert_that("WriteOnly" not in rg[1])
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first = executor.submit(self.do_request, {
+                "SelfHealStateStorage": {"WaitForConfigStep": 3, "ForceHeal": True}})
+            config = self.wait_for_config(configName, lambda config:
+                len(config.get("RingGroups", [])) == 2
+                and all(not group.get("WriteOnly", False) for group in config["RingGroups"]))
+            previous_offsets = {group.get("RingGroupActorIdOffset", 0) for group in config["RingGroups"]}
+            assert_that(not first.done(), "the first self-heal answered before completing")
+            second = executor.submit(self.do_request, {
+                "SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}})
+            cancelled = first.result(timeout=30)
+            assert_eq(cancelled.get("Status"), "RACE")
+            assert_that("cancelled" in cancelled.get("ErrorReason", ""), cancelled)
+            # Retire the extra readable version before introducing the fresh group.
+            self.wait_for_config(configName, lambda config:
+                len(config.get("RingGroups", [])) == 2
+                and config["RingGroups"][1].get("WriteOnly", False)
+                and config["RingGroups"][1].get("RingGroupActorIdOffset", 0) not in previous_offsets)
+            assert_that(not second.done(), "the second self-heal answered before completing")
+            result = second.result(timeout=60)
+            # Proto3 omits the default OK status from JSON.
+            assert_that(result.get("Status", "OK") == "OK", result)
 
-        logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 2, "ForceHeal": True}}))
-        time.sleep(1)
-        assert_eq(len(self.do_request_config()[f"{configName}Config"]["RingGroups"]), 3)
-        time.sleep(10)
-
-        rg = self.do_request_config()[f"{configName}Config"]["Ring"]
+        rg = self.wait_for_config(configName, lambda config: "Ring" in config)["Ring"]
         assert_eq(rg["NToSelect"], 9)
         assert_eq(len(rg["Ring"]), 9)
 

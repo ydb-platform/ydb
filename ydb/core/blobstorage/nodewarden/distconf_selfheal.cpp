@@ -331,9 +331,13 @@ namespace NKikimr::NStorage {
         TActorBootstrapped::PassAway();
     }
 
+    void TStateStorageSelfhealActor::HandlePoison() {
+        Finish(TResult::RACE, "State storage self-heal cancelled");
+    }
+
     STFUNC(TStateStorageSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
-            cFunc(TEvents::TSystem::Poison, PassAway);
+            cFunc(TEvents::TSystem::Poison, HandlePoison);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )
@@ -416,9 +420,13 @@ namespace NKikimr::NStorage {
         Schedule(WaitForConfigStep, new TEvents::TEvWakeup());
     }
 
+    void TStateStorageReassignNodeSelfhealActor::HandlePoison() {
+        Finish(TResult::RACE, "State storage self-heal cancelled");
+    }
+
     STFUNC(TStateStorageReassignNodeSelfhealActor::StateFunc) {
         STRICT_STFUNC_BODY(
-            cFunc(TEvents::TSystem::Poison, PassAway);
+            cFunc(TEvents::TSystem::Poison, HandlePoison);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         )

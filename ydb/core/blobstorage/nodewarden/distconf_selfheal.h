@@ -33,6 +33,7 @@ namespace NKikimr::NStorage {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
         void HandleWakeup();
+        void HandlePoison();
         void Finish(TResult::EStatus result, const TString& errorReason = "");
         void RequestChangeStateStorage();
         void PassAway();
@@ -65,6 +66,7 @@ namespace NKikimr::NStorage {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
         void HandleWakeup();
+        void HandlePoison();
         void Finish(TResult::EStatus result, const TString& errorReason = "");
         void RequestChangeStateStorage(bool disable);
         void HandleResult(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev);

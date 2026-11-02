@@ -8,7 +8,6 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <util/generic/map.h>
-#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
 #include <memory>

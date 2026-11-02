@@ -98,7 +98,7 @@ enum EEv {
     // local DB backup actor <-> tablet, see local_db_backup/events.h
     EvLocalDbBackupStart,
     EvLocalDbBackupStarted,
-    EvLocalDbBackupCancelScans,
+    EvLocalDbBackupCancel,
 
     EvEnd
 };

@@ -156,11 +156,12 @@ runs:
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
         # Random delimiter so a hostile title cannot close the GITHUB_ENV block.
+        # printf (not echo): titles starting with -n/-e/-E must not be echo flags.
         PR_TITLE_DELIM="ghadelimiter_$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
         {
-          echo "PR_TITLE<<${PR_TITLE_DELIM}"
-          echo "$PR_TITLE"
-          echo "${PR_TITLE_DELIM}"
+          printf 'PR_TITLE<<%s\n' "${PR_TITLE_DELIM}"
+          printf '%s\n' "$PR_TITLE"
+          printf '%s\n' "${PR_TITLE_DELIM}"
         } >> "$GITHUB_ENV"
         if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
           echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"

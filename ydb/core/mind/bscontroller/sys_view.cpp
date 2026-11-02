@@ -81,8 +81,8 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             totalSize = Min(totalSize.value_or(Max<ui64>()), slotSize);
         }
     }
-    const ui64 a = totalSize.value_or(0) * disks.size() * type.DataParts() / type.TotalPartCount();
-    const ui64 b = allocatedSize * disks.size() * type.DataParts() / type.TotalPartCount();
+    const ui64 a = TBlobStorageController::TGroupInfo::ScaleGroupResource(totalSize.value_or(0), disks.size(), type);
+    const ui64 b = TBlobStorageController::TGroupInfo::ScaleGroupResource(allocatedSize, disks.size(), type);
     info->SetAllocatedSize(b);
     info->SetAvailableSize(b < a ? a - b : 0);
 }

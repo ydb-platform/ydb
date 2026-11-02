@@ -933,6 +933,7 @@ public:
             }
         }
 
+        static ui64 ScaleGroupResource(ui64 value, size_t numVDisks, TBlobStorageGroupType type);
         ui64 ScaleGroupResource(ui64 value) const;
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,

@@ -386,6 +386,7 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
+        TActorId ReadSessionActor;
 
         bool IsInternal() {
             return !!ReplyTo;

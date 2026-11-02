@@ -217,6 +217,25 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
+<<<<<<< HEAD
+=======
+    if (InitDone && !record.GetSessionId().empty()) {
+        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+        if (!userInfo.NoConsumer) {
+            // Prefer pending session: CommitTransaction clears it before persist applies to UsersInfoStorage.
+            const TUserInfoBase* pending = GetPendingUserIfExists(record.GetClientId());
+            const TString& session = pending ? pending->Session : userInfo.Session;
+            if (session != record.GetSessionId()) {
+                auto response = MakeHasDataInfoResponse(0, cookie);
+                response->Record.SetSessionInvalidated(true);
+                ctx.Send(sender, response.Release());
+                return;
+            }
+            RestoreReadSessionActor(userInfo, record.GetSessionId(), sender, ctx);
+        }
+    }
+
+>>>>>>> 884d8a2ee56 (fix)
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
 
@@ -878,6 +897,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                 TStringBuilder() << "no such session '" << read->SessionId << "'", replyTo);
             return;
         }
+        RestoreReadSessionActor(userInfo, read->SessionId, read->ReadSessionActor, ctx);
     }
     userInfo.ReadsInQuotaQueue++;
     Send(ReadQuotaTrackerActor,

@@ -110,6 +110,22 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
+            if (!IsSelfStatic && Cfg->BridgeConfig) {
+                const auto registry = GetPileRegistry(config, Cfg->BridgeConfig.get());
+                const auto *nodeInfo = Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo()
+                    ? &Cfg->DynamicNodeConfig->GetNodeInfo() : nullptr;
+                const auto pileName = nodeInfo && nodeInfo->HasLocation()
+                    ? TNodeLocation(nodeInfo->GetLocation()).GetBridgePileName() : std::nullopt;
+                if (!registry || !nodeInfo || !nodeInfo->HasLocation() || !NBridge::ResolvePileId(*registry, pileName)) {
+                    YDB_LOG_ERROR("Storage configuration rejected: dynamic node's location does not resolve to a bridge pile",
+                        {"marker", "NWDC92"},
+                        {"nodeId", SelfId().NodeId()},
+                        {"pileName", pileName.value_or("<none>")},
+                        {"generation", config.GetGeneration()});
+                    return false;
+                }
+            }
+
             // extract the main config from newly applied section
             MainConfigYaml = MainConfigFetchYaml = {};
             MainConfigYamlVersion.reset();

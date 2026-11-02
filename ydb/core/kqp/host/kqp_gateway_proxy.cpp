@@ -3199,6 +3199,9 @@ public:
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);
             }
+            if (const auto& availabilityPeriod = settings.Settings.AvailabilityPeriod) {
+                config.MutableAvailabilityPeriod()->CopyFrom(*availabilityPeriod);
+            }
 
             if (params.GetDatabase().empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));

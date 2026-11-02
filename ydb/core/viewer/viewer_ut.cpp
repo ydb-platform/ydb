@@ -1,6 +1,7 @@
 #include "ut/ut_utils.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -20,6 +21,7 @@
 #include "query_autocomplete_helper.h"
 #include "viewer_database_stats.h"
 #include "viewer_groups.h"
+#include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -372,6 +374,69 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         auto handler = std::make_unique<TStorageGroups>(nullptr, ev);
         UNIT_ASSERT(handler);
+        ev = IEventHandle::Downcast<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(
+            new IEventHandle(TActorId(), TActorId(), new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        ev->Get()->Database = "/Root/resolved_database";
+        auto healthcheck = std::make_unique<TJsonHealthCheck>(nullptr, ev);
+        UNIT_ASSERT_VALUES_EQUAL(healthcheck->MakeSelfCheckRequest()->Database, "/Root/resolved_database");
+    }
+
+    Y_UNIT_TEST_TWIN(QueryDatabaseResolvedBeforeLookup, enableRelativePaths) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+        auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/Root/folder");
+        rule->SetDst("/Root/resolved_folder");
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+
+        const std::pair<TString, TString> databases[] = {
+            {"viewer_relative_database", "Root/viewer_relative_database"},
+            {"folder/viewer_relative_database", "Root/resolved_folder/viewer_relative_database"},
+            {"Root/viewer_relative_database", "Root/Root/viewer_relative_database"},
+            {"/Root/viewer_relative_database", "Root/viewer_relative_database"},
+        };
+        for (const auto& [database, resolved] : databases) {
+            for (bool jsonBody : {false, true}) {
+                TVector<TString> navigatedPaths;
+                auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
+                    for (const auto& entry : ev->Get()->Request->ResultSet) {
+                        if (!entry.Path.empty() && entry.Path.back() == "viewer_relative_database") {
+                            navigatedPaths.push_back(JoinPath(entry.Path));
+                        }
+                    }
+                });
+                NJson::TJsonValue body;
+                body["query"] = "SELECT 1;";
+                TString url = "/viewer/query?direct=1";
+                if (jsonBody) {
+                    body["database"] = database;
+                } else {
+                    url += "&database=" + database;
+                }
+                const TString serializedBody = NJson::WriteJson(body, false);
+                auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+                NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                    TStringBuilder() << "POST " << url << " HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: "
+                        << serializedBody.size() << "\r\n\r\n" << serializedBody,
+                    endpoint, {});
+                auto sender = runtime.AllocateEdgeActor();
+                auto requestEvent = new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request);
+                requestEvent->PathNormalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
+                    [normalizer = runtime.GetAppData().GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
+                runtime.Send(new IEventHandle(MakeViewerID(0), sender, requestEvent));
+                TAutoPtr<IEventHandle> handle;
+                UNIT_ASSERT(runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle, TDuration::Seconds(30)));
+                UNIT_ASSERT_VALUES_EQUAL(navigatedPaths.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(navigatedPaths.front(), enableRelativePaths ? resolved : JoinPath(SplitPath(database)));
+            }
+        }
     }
 
     Y_UNIT_TEST(TraceVerbosityLimitControl) {
@@ -3103,6 +3168,120 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodesPageHasWhiteboardDataOffloaded) {
         TestNodesWhiteboardData(true);
+    }
+
+    void CheckNodesStorageFilterCase(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
+                                    const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots) {
+        vslotsResponses = 0;
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=NodeId&offload_merge=false"
+                << "&use_cache=false&timeout=1000&limit=20&offset=0&with=all" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const TString context = TStringBuilder() << query << ": " << result->Response->Body;
+        UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
+        bool hasVSlotsError = false;
+        for (const auto& problem : json["Problems"].GetArray()) {
+            hasVSlotsError |= problem.GetString() == "bsc-storage-slots-no-data";
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(hasVSlotsError, expectVSlots && !vslotsAvailable, context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["TotalNodes"].GetString(), ToString(expectedNodeIds.size()), context);
+        UNIT_ASSERT_VALUES_EQUAL_C(json["FoundNodes"].GetString(), ToString(expectedNodeIds.size()), context);
+        UNIT_ASSERT_C(!json["NeedFilter"].GetBoolean(), context);
+        const auto& nodes = json["Nodes"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), expectedNodeIds.size(), context);
+        for (size_t i = 0; i < nodes.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(nodes[i]["NodeId"].GetUInteger(), expectedNodeIds[i], context);
+        }
+    }
+
+    void CheckNodesStorageFilter(bool vslotsAvailable) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TNodeId firstNodeId = runtime.GetNodeId(0);
+        const TNodeId secondNodeId = runtime.GetNodeId(1);
+        const TNodeId nodeWithoutVSlotsId = runtime.GetNodeId(2);
+        size_t vslotsResponses = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
+                ++vslotsResponses;
+                if (!vslotsAvailable) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                auto* event = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                auto& record = (*event)->Get()->Record;
+                record.ClearEntries();
+                for (ui32 i = 0; i < 2; ++i) {
+                    AddSysViewVDisk(event, runtime.GetNodeId(i), 1, 1000, "READY", "OK");
+                    record.MutableEntries(i)->MutableInfo()->SetGroupId(10 + i);
+                }
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetBoxId(1);
+                entry->MutableKey()->SetStoragePoolId(7);
+                entry->MutableInfo()->SetName("test-pool");
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                for (ui32 i = 0; i < 2; ++i) {
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetGroupId(10 + i);
+                    entry->MutableInfo()->SetBoxId(1);
+                    entry->MutableInfo()->SetStoragePoolId(7 + i);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const std::vector<TNodeId> allNodeIds = {firstNodeId, secondNodeId, nodeWithoutVSlotsId};
+        const std::vector<TNodeId> selectedNodeIds = {firstNodeId, secondNodeId};
+        const std::vector<TNodeId> groupNodeIds = {firstNodeId};
+        const std::pair<TString, bool> fieldCases[] = {
+            {"&fields_required=NodeId,PDisks", false},
+            {"&fields_required=NodeId,VDisks", true},
+            {"&fields_required=NodeId,PDisks&storage=true", true},
+        };
+        for (const auto& [fields, expectVSlots] : fieldCases) {
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable, fields, allNodeIds, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                TStringBuilder() << fields << "&node_id=" << firstNodeId, {firstNodeId}, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                TStringBuilder() << fields << "&node_id=" << nodeWithoutVSlotsId, {nodeWithoutVSlotsId}, expectVSlots);
+            CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                TStringBuilder() << fields << "&node_id=" << firstNodeId << ',' << secondNodeId,
+                selectedNodeIds, expectVSlots);
+            for (const TString& filter : {TString("&group_id=10"), TString("&pool=test-pool")}) {
+                // Without VSlots, keep the explicit node filter even when group membership is unavailable.
+                CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                    fields + filter, vslotsAvailable ? groupNodeIds : allNodeIds, true);
+                CheckNodesStorageFilterCase(runtime, vslotsResponses, vslotsAvailable,
+                    TStringBuilder() << fields << filter << "&node_id=" << firstNodeId << ',' << secondNodeId,
+                    vslotsAvailable ? groupNodeIds : selectedNodeIds, true);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWithStorageDetails) {
+        CheckNodesStorageFilter(true);
+    }
+
+    Y_UNIT_TEST(NodesPageKeepsNodeIdFilterWhenVSlotsUnavailable) {
+        CheckNodesStorageFilter(false);
     }
 
     void TestNodesCpuSortWithMissingStats(bool offloadMerge) {

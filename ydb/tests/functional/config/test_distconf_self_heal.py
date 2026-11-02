@@ -61,6 +61,7 @@ class KiKiMRDistConfSelfHealTest(object):
     # once at node startup and is NOT affected by dynamic ReplaceConfig calls, so options like
     # automatic_*_management / *_self_heal_allowed_nodes must be set here, before cluster start.
     self_management_extra_options = {}
+    cms_config = None
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -84,6 +85,7 @@ class KiKiMRDistConfSelfHealTest(object):
             use_self_management=True,
             extra_grpc_services=['config'],
             additional_log_configs=log_configs,
+            cms_config=cls.cms_config,
             n_to_select=cls.n_to_select,
             state_storage_rings=cls.state_storage_rings)
 

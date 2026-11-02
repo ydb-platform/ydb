@@ -1431,6 +1431,7 @@ IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     }
     YDB_LOG_ENSURE(false,
         {"#_Unsupported primary key type", columnTypes[prefixSize + 1].GetTypeId()});
+    return {};
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch, const size_t offset) {

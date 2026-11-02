@@ -10147,7 +10147,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
         void OnRedoCommit(ui32, ui64, TRowVersion) override {}
         void OnRedoRemove(ui32, ui64) override {}
 
-        void OnRedoTruncate(ui32 table) override {
+        void OnTruncate(ui32 table) override {
             UNIT_ASSERT_VALUES_EQUAL(table, ui32(TRowsModel::TableId));
             Keys.clear();
             Events.push_back(-1);

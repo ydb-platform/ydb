@@ -203,7 +203,6 @@ message TTablePartSwitch {
 
     repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16;
     optional TLogTxStatusSnap IntroducedTxStatus = 17;
-    optional bool Truncated = 18;
 }
 
 message TExternalGcEntry {
@@ -219,6 +218,8 @@ message TFollowerPartSwitchAux {
     }
 
     repeated TBySwitch BySwitchAux = 1;
+    // Follower notifications to deliver before replaying this update's redo.
+    repeated uint32 TruncatedTables = 2;
 }
 
 message TFollowerAux {

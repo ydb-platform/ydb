@@ -559,7 +559,7 @@ void TExecutor::Active(const TActorContext &ctx) {
         auto alter = Database->GetScheme().GetSnapshot();
         alter->SetRewrite(true);
         auto change = alter->SerializeAsString();
-        Database->RollUp(stamp, change, {}, {});
+        Database->RollUp(stamp, change, {}, {}, {});
         auto commit = CommitManager->Begin(true, ECommit::Misc, {});
         LogicAlter->Clear();
         LogicAlter->WriteLog(*commit, std::move(change));
@@ -1207,7 +1207,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
 
     TString schemeUpdate;
     TString dataUpdate;
-    TStackVec<TProtoBox<NKikimrExecutorFlat::TTablePartSwitch>> partSwitches;
+    TStackVec<TString> partSwitches;
     TStackVec<TLogoBlob> loanPartInfos;
     TVector<NPageCollection::TMemGlob> annex;
 
@@ -1244,7 +1244,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
                     schemeUpdate = body;
                 break;
             case NBoot::TCookie::EIdx::TurnLz4:
-                partSwitches.emplace_back(NPageCollection::TSlicer::Lz4()->Decode(body));
+                partSwitches.push_back(body);
                 break;
             case NBoot::TCookie::EIdx::Loan:
                 loanPartInfos.push_back(TLogoBlob(id, body));
@@ -1258,19 +1258,20 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         }
     }
 
-    TVector<ui32> truncatedTables;
-    for (const auto& proto : partSwitches) {
-        if (proto.GetTruncated()) {
-            truncatedTables.push_back(proto.GetTableId());
-        }
+    NKikimrExecutorFlat::TFollowerPartSwitchAux auxProto;
+    if (update->AuxPayload) {
+        const TString auxBody = NPageCollection::TSlicer::Lz4()->Decode(update->AuxPayload);
+        Y_ENSURE(auxProto.ParseFromString(auxBody));
+        Y_ENSURE(auxProto.BySwitchAuxSize() <= partSwitches.size());
     }
 
+    const TArrayRef<const ui32> truncatedTables = auxProto.GetTruncatedTables();
     if (schemeUpdate || dataUpdate || annex || truncatedTables) {
         if (dataUpdate)
             dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
 
         for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex,
-                Owner->GetFollowerRedoObserver(), truncatedTables))
+                truncatedTables, Owner->GetFollowerRedoObserver()))
             for (auto &partView: subset->Flatten)
                 DropPartStorePageCollections(*partView);
 
@@ -1297,19 +1298,13 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     }
 
     if (partSwitches) {
-        NKikimrExecutorFlat::TFollowerPartSwitchAux auxProto;
-
-        if (update->AuxPayload) {
-            const TString auxBody = NPageCollection::TSlicer::Lz4()->Decode(update->AuxPayload);
-            Y_ENSURE(auxProto.ParseFromString(auxBody));
-            Y_ENSURE(auxProto.BySwitchAuxSize() <= partSwitches.size());
-        }
-
         bool hadPendingPartSwitches = bool(PendingPartSwitches);
 
         ui32 nextAuxIdx = 0;
         for (ui32 idx : xrange(partSwitches.size())) {
-            const auto& proto = partSwitches[idx];
+            const TString uncompressed = NPageCollection::TSlicer::Lz4()->Decode(partSwitches[idx]);
+
+            const TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(uncompressed);
 
             const NKikimrExecutorFlat::TFollowerPartSwitchAux::TBySwitch *aux = nullptr;
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
@@ -2806,11 +2801,11 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             for (auto& record : truncated) {
                 ui32 table = record.Table;
                 TAutoPtr<NTable::TSubset> subset = std::move(record.Subset);
+                aux.AddTruncatedTables(table);
 
                 // Serialize removed subset as if it was compacted into nothing
                 NKikimrExecutorFlat::TTablePartSwitch proto;
                 proto.SetTableId(table);
-                proto.SetTruncated(true);
 
                 NTable::TSnapEdge edge(change->Stamp - 1, subset->Head);
                 LogicRedo->CutLog(table, edge, commit->GcDelta);
@@ -3064,7 +3059,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             ApplyReadyPartSwitches(); // safe to apply switches right now
         }
 
-        if (aux.BySwitchAuxSize()) {
+        if (aux.BySwitchAuxSize() || aux.TruncatedTablesSize()) {
             commit->FollowerAux = NPageCollection::TSlicer::Lz4()->Encode(aux.SerializeAsString());
         }
 

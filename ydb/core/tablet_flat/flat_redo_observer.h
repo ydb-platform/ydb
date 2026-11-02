@@ -17,7 +17,7 @@ struct IRedoObserver {
         TRowVersion version, ui64 txId, ui32 savepoint) = 0;
     virtual void OnRedoCommit(ui32 table, ui64 txId, TRowVersion version) = 0;
     virtual void OnRedoRemove(ui32 table, ui64 txId) = 0;
-    virtual void OnRedoTruncate(ui32 /*table*/) {}
+    virtual void OnTruncate(ui32 /*table*/) {}
 };
 
 } // namespace NKikimr::NTable

@@ -523,7 +523,7 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
             continue;
         }
-        
+
         offsetsByConsumersToSend[consumer] = offsetToSend;
     }
 
@@ -543,7 +543,8 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         }
     }
 
-    LOG_D("Sending replication data to consumers",
+    YDB_LOG_DEBUG("Sending replication data to consumers",
+        {"logPrefix", NPQ_LOG_PREFIX},
         {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
         {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
         {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
@@ -763,7 +764,9 @@ void TMirrorer::AddMessagesToQueue(
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
                 LastReplicationDataTimestamp = TActivationContext::Now();
-                LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
+                YDB_LOG_DEBUG("Received replication data",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"replicationData", replicationData.DebugString()});
 
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
                     auto& pendingOffset = OffsetsByConsumers[consumer];

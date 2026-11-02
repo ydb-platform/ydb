@@ -91,9 +91,9 @@ void TPartition::RestoreReadSessionActor(TUserInfo& userInfo, const TString& ses
     }
     userInfo.ReadSessionActor = readSessionActor;
 
-    LOG_D("Restored read session actor",
-        {"consumer", userInfo.User},
-        {"readSessionActor", readSessionActor});
+    LOG_D("Restored read session actor"
+        << " consumer=" << userInfo.User
+        << " readSessionActor=" << readSessionActor);
 
     if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
         SendOffsetsToReplicationConsumer(ctx);

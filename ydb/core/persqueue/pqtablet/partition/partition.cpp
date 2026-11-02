@@ -3905,7 +3905,6 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.Step = 0;
                 userInfo.PipeClient = {};
                 userInfo.ReadSessionActor = {};
-                FailStaleSessionReadRequests(operation.GetConsumer(), ActorContext());
             }
         }
 
@@ -4663,7 +4662,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Step = 0;
             userInfo.PipeClient = {};
             userInfo.ReadSessionActor = {};
-            FailStaleSessionReadRequests(user, ctx);
         }
 
         PQ_ENSURE(offset <= (ui64)Max<i64>())("Unexpected Offset", offset);

@@ -217,19 +217,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
-    if (InitDone && !record.GetSessionId().empty()) {
-        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
-        if (!userInfo.NoConsumer) {
-            // Prefer pending session: CommitTransaction clears it before persist applies to UsersInfoStorage.
-            const TUserInfoBase* pending = GetPendingUserIfExists(record.GetClientId());
-            const TString& session = pending ? pending->Session : userInfo.Session;
-            if (session != record.GetSessionId()) {
-                auto response = MakeHasDataInfoResponse(0, cookie);
-                response->Record.SetSessionInvalidated(true);
-                ctx.Send(sender, response.Release());
-                return;
-            }
-            RestoreReadSessionActor(userInfo, record.GetSessionId(), sender, ctx);
+    if (InitDone && record.HasClientId() && !record.GetSessionId().empty()) {
+        auto* userInfo = UsersInfoStorage->GetIfExists(record.GetClientId());
+        if (userInfo && !userInfo->NoConsumer) {
+            RestoreReadSessionActor(*userInfo, record.GetSessionId(), sender, ctx);
         }
     }
 

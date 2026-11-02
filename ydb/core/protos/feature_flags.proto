@@ -462,4 +462,7 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     optional bool EnableUnsafeTruncateTable = 373 [default = false];
     optional bool EnableCsPatternIndexHints = 374 [default = false];
+    // Allows persisting Waiting for column-table imports with unresolved dependencies.
+    // Enable only after the rollback version supports resuming these imports.
+    optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
 }

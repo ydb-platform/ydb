@@ -363,9 +363,23 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         YDB_LOG_NOTICE("[STATE] next offset to read current end offset",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"offsetToRead", OffsetToRead},
+<<<<<<< HEAD
             {"endOffset", EndOffset});
         YDB_LOG_NOTICE("[STATE] bytes in flight messages in write request queue",
             {"logPrefix", NPQ_LOG_PREFIX},
+=======
+            {"endOffset", EndOffset}
+        );
+        LOG_N(
+            "[STATE] replication offsets",
+            {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+            {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp},
+            {"replicationDataInFlight", ReplicationDataInFlight}
+        );
+        LOG_N(
+            "[STATE] bytes in flight messages in write request queue",
+>>>>>>> 49c37378b5e (fix)
             {"bytesInFlight", BytesInFlight},
             {"writeInFlightSize", WriteInFlight.size()},
             {"toWrite", Queue.size()});
@@ -752,12 +766,15 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
+void TMirrorer::AddMessagesToQueue(
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
+                LastReplicationDataTimestamp = TActivationContext::Now();
                 LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
 
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {

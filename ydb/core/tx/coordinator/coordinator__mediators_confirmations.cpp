@@ -44,7 +44,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                         {"volatileTx", txid},
                         {"mediatorId", mediatorId},
                         {"tabletId", tabletId},
-                        {"removed", removed}};
+                        {"removed", removed});
                 }
 
                 if (unconfirmed.empty()) {

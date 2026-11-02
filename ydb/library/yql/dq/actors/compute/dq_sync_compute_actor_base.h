@@ -59,6 +59,23 @@ protected:
         }
     }
 
+    void CheckRunStatus() override {
+        // A reader inside the program may yield without an input actor to wake us.
+        // Retry an empty drain only when every output channel can accept data;
+        // otherwise wait for the consumer's acknowledgement instead of busy-polling.
+        auto& outputs = this->ProcessOutputsState;
+        outputs.LastPopReturnedNoData = this->Channels && outputs.ChannelsReady && !outputs.DataWasSent;
+        if (outputs.LastPopReturnedNoData) {
+            for (const auto& [channelId, channel] : this->OutputChannelsMap) {
+                if (!channel.Finished && !this->Channels->HasFreeMemoryInChannel(channelId)) {
+                    outputs.LastPopReturnedNoData = false;
+                    break;
+                }
+            }
+        }
+        TBase::CheckRunStatus();
+    }
+
     void DoTerminateImpl() override {
         // we want to log debug output info only for long running (OLAP) tasks
         if (TaskRunner && TBase::State == NDqProto::COMPUTE_STATE_FAILURE && TBase::RuntimeSettings.CollectFull()) {

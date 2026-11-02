@@ -2,6 +2,7 @@
 
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
+#include <util/system/event.h>
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
@@ -25,6 +26,7 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -345,7 +347,45 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(TMockSinkState::TPtr sinkState
     return factory;
 }
 
+// Models a reader inside the program: Yield is not followed by an input actor event.
+class TYieldingStreamWrapper : public TMutableComputationNode<TYieldingStreamWrapper> {
+    using TBase = TMutableComputationNode<TYieldingStreamWrapper>;
+public:
+    class TValue : public TComputationValue<TValue> {
+        using TBase = TComputationValue<TValue>;
+    public:
+        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue stream, TSystemEvent fetched)
+            : TBase(memInfo), Stream(std::move(stream)), Fetched(std::move(fetched)) {}
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            if (YieldsRemaining) {
+                --YieldsRemaining;
+                return NUdf::EFetchStatus::Yield;
+            }
+            const auto status = Stream.Fetch(result);
+            if (status == NUdf::EFetchStatus::Ok) {
+                Fetched.Signal();
+            }
+            return status;
+        }
+        NUdf::TUnboxedValue Stream;
+        TSystemEvent Fetched;
+        ui32 YieldsRemaining = 3;
+    };
+
+    TYieldingStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, TSystemEvent fetched)
+        : TBase(mutables), Stream(stream), Fetched(std::move(fetched)) {}
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), Fetched);
+    }
+private:
+    void RegisterDependencies() const final { DependsOn(Stream); }
+    IComputationNode* Stream;
+    TSystemEvent Fetched;
+};
+
 struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
+    TSystemEvent YieldingStreamFetched;
     static constexpr ui64 InputChannelId = 1000;
     static constexpr ui64 OutputChannelId = 2000;
     static constexpr ui32 InputStageId = 123;
@@ -716,6 +756,12 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
     auto CreateTaskRunnerActorFactory() {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
+            [fetched = YieldingStreamFetched](NKikimr::NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+                if (callable.GetType()->GetName() == "TestYieldingStream") {
+                    return new TYieldingStreamWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), fetched);
+                }
+                return nullptr;
+            },
             NYql::GetCommonDqFactory(),
             NKikimr::NMiniKQL::GetYqlFactory()
         };
@@ -1696,6 +1742,37 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
+    Y_UNIT_TEST_F(ResumesYieldingProgramWithoutInputs, TSyncComputeActorTestFixture) {
+        NDqProto::TDqTask task;
+        task.SetId(ThisTaskId);
+        TProgramBuilder pb(TypeEnv, *FunctionRegistry);
+        auto row = pb.NewStruct({{"id", pb.NewDataLiteral<i32>(42)}, {"ts", pb.NewDataLiteral<ui64>(7)}});
+        auto stream = pb.Iterator(pb.NewList(RowType, {row}), {});
+        TCallableBuilder yielding(TypeEnv, "TestYieldingStream", stream.GetStaticType());
+        yielding.Add(stream);
+        TStructLiteralBuilder program(TypeEnv);
+        program.Add("Program", TRuntimeNode(yielding.Build(), false));
+        program.Add("Inputs", pb.NewTuple({}));
+        program.Add("Parameters", pb.Arg(pb.NewEmptyStructType()));
+        task.MutableProgram()->SetRaw(SerializeNode(program.Build(), TypeEnv));
+        task.MutableProgram()->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+        auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
+        CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
+        UNIT_ASSERT_C(YieldingStreamFetched.WaitT(TDuration::Seconds(5)), "Program was not resumed after Yield");
+
+        ui32 rows = 0;
+        while (ReceiveData([&](const NUdf::TUnboxedValue& value, ui32 column) {
+            if (column == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(value.Get<i32>(), 42);
+                ++rows;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(value.Get<ui64>(), 7);
+            }
+            return true;
+        }, [](const auto&) {}, [] {}, output)) {}
+        UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+    }
+
     Y_UNIT_TEST_F(Empty, TSyncComputeActorTestFixture) { }
 
     Y_UNIT_TEST_F(Basic, TSyncComputeActorTestFixture) {

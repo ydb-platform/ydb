@@ -357,16 +357,9 @@ message TFeatureFlags {
     // Bumps GROUP BY HOP state version to 3
     optional bool EnableHoppingWindowStartCheck = 346 [default = false];
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
-<<<<<<< HEAD
-    // Allows client data writes and schema modifications.
-    optional bool EnableClientModifications = 368 [default = true];
-=======
-    // Use optimized compaction selection strategy.
-    optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
-    // Skip StorageRatio calculation at compaction rank >= 10 while continuing compaction selection.
-    optional bool EnableHullCompStorageRatioHighRankSkip = 365 [default = false];
     // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
     // Existing TTL settings continue to execute when the flag is disabled.
     optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
->>>>>>> 09de569157a (Reserve feature flag for extended ColumnShard TTL types (#55843))
+    // Allows client data writes and schema modifications.
+    optional bool EnableClientModifications = 368 [default = true];
 }

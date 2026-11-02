@@ -7,16 +7,16 @@
 ## Ключевые возможности плагина {#features}
 
 - Подключение к {{ ydb-name }} со всеми способами [аутентификации](../../security/authentication.md): анонимная, статическая, по токену, по сервисному аккаунту, по метаданным.
-- Иерархический навигатор объектов: таблицы ([строковые](../../concepts/glossary.md#row-oriented-table) и [колоночные](../../concepts/glossary.md#column-oriented-table)), [топики](../../concepts/datamodel/topic.md), [представления](../../concepts/datamodel/view.md), [внешние источники данных](../../concepts/glossary.md#external-data-source), [внешние таблицы](../../concepts/glossary.md#external-table), [трансферы](../../concepts/transfer.md), [потоковые запросы](../../concepts/glossary.md#streaming-query).
+- Иерархический навигатор объектов: таблицы ([строковые](../../concepts/glossary.md#row-oriented-table) и [колоночные](../../concepts/glossary.md#column-oriented-table)), [топики](../../concepts/datamodel/topic.md), [представления](../../concepts/datamodel/view.md), [внешние источники данных](../../concepts/glossary.md#external-data-source), [внешние таблицы](../../concepts/glossary.md#external-table), [трансферы](../../concepts/transfer.md), потоковые запросы.
 - Системные объекты: [системные представления](../../dev/system-views.md) (`.sys`), [пулы ресурсов](../../concepts/glossary.md#resource-pool).
 - Редактор [YQL](../../concepts/glossary.md#yql) с подсветкой синтаксиса, автодополнением таблиц и колонок.
 - Выполнение запросов и визуализация результатов: таблица, JSON, диаграмма.
 - Визуализация плана выполнения запроса (`EXPLAIN`).
-- Мониторинг активных сессий через [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
+- Мониторинг активных сессий через [`.sys/query_sessions`](../../dev/system-views.md).
 - Дашборд кластера на базе [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): загрузка CPU, использование памяти, сетевой трафик (обновление каждые 10 секунд).
 - Управление [правами доступа (ACL)](../../security/authorization.md#right): просмотр разрешений на объекты базы данных.
 - Генерация DDL-скриптов ([`CREATE`](../../yql/reference/syntax/create_table/index.md)) для любого объекта базы данных.
-- Управление [потоковыми запросами](../../concepts/glossary.md#streaming-query): просмотр, запуск, остановка.
+- Управление потоковыми запросами: просмотр, запуск, остановка.
 - [Конвертер SQL-запросов](../sql-translation/sql-dialect-converter.md) из других диалектов (PostgreSQL, MySQL, ClickHouse и других) в YQL.
 - Встроенный [MCP-сервер](#mcp) — прямой доступ к базам данных из AI-ассистентов (Claude Code и других).
 - [Семантический поиск по документации YQL](#rag) (RAG) для AI-assisted написания запросов.
@@ -148,7 +148,7 @@ IAM-токен имеет ограниченный [срок жизни — не
 - **External Tables** — [внешние таблицы](../../concepts/glossary.md#external-table).
 - **Resource Pools** — [пулы ресурсов](../../concepts/glossary.md#resource-pool).
 - **Transfers** — трансферы данных.
-- **Streaming Queries** — [потоковые запросы](../../concepts/glossary.md#streaming-query).
+- **Streaming Queries** — потоковые запросы.
 
 Правый клик на любом объекте в навигаторе открывает контекстное меню с доступными действиями.
 
@@ -186,7 +186,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### Менеджер сессий {#session-manager}
 
-В панели **Sessions** (Activity Bar → YDB) отображаются все активные сессии с текущим запросом, состоянием и длительностью (данные из системного представления [`.sys/query_sessions`](../../dev/system-views.md#query-sessions)). Кнопка **Toggle Hide Idle** скрывает сессии без активного запроса.
+В панели **Sessions** (Activity Bar → YDB) отображаются все активные сессии с текущим запросом, состоянием и длительностью (данные из системного представления [`.sys/query_sessions`](../../dev/system-views.md)). Кнопка **Toggle Hide Idle** скрывает сессии без активного запроса.
 
 ### Дашборд кластера {#cluster-dashboard}
 

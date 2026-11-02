@@ -521,7 +521,6 @@ public:
     const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
     void AddAncestorLock(TAncestorLock lock);
 
-    ui64 GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const;
     const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
     bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
     void SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db);
@@ -1026,9 +1025,6 @@ struct TLocksUpdate {
         // Same for operations that touched ancestor shards;
         THashMap<ui64, ui64> SetAncestorWriteSeqNums;
 
-        bool ThisShardDuplicateWrite = false;
-        absl::flat_hash_set<ui64> AncestorShardsWithDuplicateWrites;
-
         explicit TWriteSeqNumUpdate(ui64 writerIndex)
             : WriterIndex(writerIndex)
         {}
@@ -1070,8 +1066,7 @@ struct TLocksUpdate {
     ~TLocksUpdate();
 
     bool HasLocks() const {
-        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks)
-            || HasSeqNumDuplicateWrites();
+        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
     }
 
     void AddRangeLock(const TRangeKey& range) {
@@ -1151,14 +1146,6 @@ struct TLocksUpdate {
 
     void BreakSetLocks() {
         BreakOwn = true;
-    }
-
-    bool HasSeqNumDuplicateWrites() const {
-        if (!WriteSeqNumUpdate) {
-            return false;
-        }
-        return WriteSeqNumUpdate->ThisShardDuplicateWrite
-            || !WriteSeqNumUpdate->AncestorShardsWithDuplicateWrites.empty();
     }
 
     bool HasSeqNumUpdates() const {

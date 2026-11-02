@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -12,6 +13,13 @@ namespace NActors::NStructuredLog {
 
 template <typename T>
 class TNativeValueExtractor {
+    static_assert(
+        !std::is_same_v<T, TStringBuf>,
+        "TNativeValueExtractor does not support TStringBuf; use TNativeValueExtractor<TString> or TStringValueExtractor");
+    static_assert(
+        !std::is_same_v<T, std::string_view>,
+        "TNativeValueExtractor does not support std::string_view; use TNativeValueExtractor<TString> or TStringValueExtractor");
+
 public:
     TNativeValueExtractor() = default;
     TNativeValueExtractor(const TNativeValueExtractor&) = delete;
@@ -57,6 +65,18 @@ public:
     static bool IsSafeNumericCast(const TSrc& value) {
         if constexpr (std::is_same_v<TDst, TSrc>) {
             return true;
+        } else if constexpr (std::is_floating_point_v<TSrc> && std::is_same_v<TDst, bool>) {
+            if (!std::isfinite(value)) {
+                return false;
+            }
+
+            TSrc intValue;
+            std::modf(value, &intValue);
+            if (value != intValue) {
+                return false;
+            }
+
+            return value == TSrc(0) || value == TSrc(1);
         } else if constexpr (std::is_floating_point_v<TSrc> && std::numeric_limits<TDst>::is_integer) {
             if (!std::isfinite(value)) {
                 return false;
@@ -118,11 +138,5 @@ protected:
     TResult Result;
     TInvokerMap TypeValueMap = TTypesMapping::CreateInvokerMap(*this);
 };
-
-template <>
-class TNativeValueExtractor<TStringBuf> {};
-
-template <>
-class TNativeValueExtractor<std::string_view> {};
 
 }

@@ -2278,6 +2278,7 @@ private:
             TSyncerProgress Progress;
             bool Reconcile = false; // the pass reconciling the part of HOT_STANDBY pile
             bool Thorough = false;
+            bool Promote = false; // the reconciliation completes the sync of the part promoted from HOT_STANDBY
         };
         const TGroupId BridgeProxyGroupId;
         const TGroupId TargetGroupId;
@@ -2295,6 +2296,13 @@ private:
         // the pile rejoining doesn't wait for them
         TMonotonic StandbyNotBefore;
         TBackoffTimer StandbyRetryBackoff{100, 30000};
+
+        // When the pile goes NOT_SYNCHRONIZED_2 right from HOT_STANDBY, the part has to have missed nothing written before
+        // its fence to be taken for synced: every registered node reports when its bridge proxies have resolved their
+        // background writes to it.
+        ui64 StandbySealId = 0;
+        THashSet<TNodeId> StandbySealPendingNodes;
+        TMonotonic StandbySealDeadline;
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2402,6 +2410,18 @@ private:
     static void MarkStandbyDirty(TSyncerState& syncerState, bool data) {
         syncerState.StandbyDirty = Max(syncerState.StandbyDirty, data ? EStandbyDirty::Data : EStandbyDirty::Garbage);
     }
+
+    // the node has lost its pipe (or registered anew): it may have restarted with background writes in flight, or its
+    // reports of the parts that missed them may have got lost
+    void OnStandbyWriterLost();
+
+    // the seal of the part promoted from HOT_STANDBY is given up when a node can't resolve its writes in this time, and
+    // the part gets thoroughly reconciled; a write to the standby may hang with no event to tell
+    static constexpr TDuration StandbySealTimeout = TDuration::Seconds(30);
+    ui64 NextStandbySealId = 0;
+
+    // switch the part promoted from HOT_STANDBY to SYNCED, as it has missed nothing
+    void CommitStandbyPromotion(TSyncerState& syncerState, TGroupId groupId, const TGroupInfo& group);
 
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;

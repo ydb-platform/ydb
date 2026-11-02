@@ -1133,6 +1133,14 @@ message TEvControllerUpdateSyncerState {
         optional bool Data = 2; // a blob write may have been lost, not just garbage collection
     }
     repeated TStandbyDirty StandbyDirty = 2;
+
+    // the bridge proxies of the node hold no writes to the part of the pile promoted from HOT_STANDBY, issued before its
+    // fence, and have reported every one they have lost (in StandbyDirty of this message or of a previous one)
+    message TStandbySealed {
+        optional uint32 TargetGroupId = 1;
+        optional uint64 SealId = 2;
+    }
+    repeated TStandbySealed StandbySealed = 3;
 }
 
 message TEvControllerRegisterNode {
@@ -1213,6 +1221,16 @@ message TEvControllerNodeServiceSetUpdate {
     optional TYamlConfig YamlConfig = 10;
     repeated TSyncerInfo Syncers = 11; // start missing ones, terminate excessive ones; update group infos for changed ones
     optional bool UpdateSyncers = 12;
+
+    // report when the bridge proxies of the node have resolved their background writes to the part of the pile promoted
+    // from HOT_STANDBY, as they do once they have the group generation given
+    message TStandbySeal {
+        optional uint32 BridgeProxyGroupId = 1;
+        optional uint32 BridgeProxyGroupGeneration = 2;
+        optional uint32 TargetGroupId = 3;
+        optional uint64 SealId = 4;
+    }
+    repeated TStandbySeal StandbySeals = 13;
 }
 
 message TEvControllerConfigRequest {

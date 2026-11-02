@@ -36,6 +36,8 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenQueryCacheResult;
     struct TEvNodeWardenNotifySyncerFinished;
     struct TEvNodeWardenStandbyDirty;
+    struct TEvNodeWardenRegisterBridgeProxy;
+    struct TEvNodeWardenStandbySealed;
     struct TEvNodeWardenAcquireBlobDepotS3Router;
     struct TEvNodeWardenReleaseBlobDepotS3Router;
 
@@ -904,12 +906,29 @@ namespace NKikimr::NStorage {
         // with the syncer progress; the value tells whether a blob write may have been lost
         THashMap<TGroupId, bool> StandbyDirty;
 
+        // the bridge proxies running on this node by the group they serve, and the seals of the parts promoted from
+        // HOT_STANDBY being waited for from them (by cookie)
+        THashMap<TGroupId, THashSet<TActorId>> BridgeProxies;
+        struct TStandbySealInProgress {
+            TGroupId TargetGroupId;
+            ui64 SealId;
+            ui32 ProxiesPending;
+        };
+        THashMap<ui64, TStandbySealInProgress> StandbySealsInProgress;
+        ui64 LastStandbySealCookie = 0;
+        std::vector<std::tuple<TGroupId, ui64>> StandbySealed; // the seals to report to BSC
+
         TReplQuoter::TPtr SyncRateQuoter;
 
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbyDirty>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenRegisterBridgeProxy>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbySealed>> ev);
+        void ApplyStandbySeals(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
+        void OnStandbySealResolved(ui64 cookie);
+        bool FillInStandbyReports(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update);
         bool FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, TWorkingSyncer& syncer,
             bool forceProgress);
         void NotifySyncersProgress();

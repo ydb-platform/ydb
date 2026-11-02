@@ -122,7 +122,18 @@ namespace NKikimr::NStorage {
         }
         clusterState->CopyFrom(newClusterState);
 
-        auto markPileUnsynced = [&](size_t pileIndex) {
+        for (const auto& [changedPileIndex, prevState] : changedPiles) {
+            if (prevState == NKikimrBridge::TClusterState::HOT_STANDBY &&
+                    clusterState->GetPerPileState(changedPileIndex) == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 &&
+                    Self->HasConnectedPileQuorum(TBridgePileId::FromPileIndex(changedPileIndex))) {
+                // Rejoin of the standby that is connected: the pile takes part in data quorum at once, as it would when
+                // switching to NOT_SYNCHRONIZED_2 the next moment. Writers that don't know it yet send it their writes in
+                // background (instead of skipping it), so the parts reconciled while in standby can be taken for synced.
+                clusterState->SetPerPileState(changedPileIndex, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+            }
+        }
+
+        auto markPileUnsynced = [&](size_t pileIndex) -> NKikimrBridge::TClusterStateDetails::TPileSyncState& {
             for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
                 const auto& item = details->GetPileSyncState(i);
                 const auto bridgePileId = TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId);
@@ -137,6 +148,7 @@ namespace NKikimr::NStorage {
                 &std::decay_t<decltype(*state)>::SetBridgePileId);
             state->SetBecameUnsyncedGeneration(clusterState->GetGeneration());
             state->SetUnsyncedBSC(true);
+            return *state;
         };
 
         std::vector<size_t> resetPileIndices;
@@ -163,8 +175,13 @@ namespace NKikimr::NStorage {
                     }
                     break;
 
-                case NKikimrBridge::TClusterState::SYNCHRONIZED:
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                    Y_ABORT_UNLESS(prevState == NKikimrBridge::TClusterState::HOT_STANDBY);
+                    markPileUnsynced(changedPileIndex).SetFromHotStandby(true);
+                    resetPileIndices.push_back(changedPileIndex);
+                    break;
+
+                case NKikimrBridge::TClusterState::SYNCHRONIZED:
                 case NKikimrBridge::TClusterState::INACTIVE:
                     Y_ABORT("invalid transition");
 

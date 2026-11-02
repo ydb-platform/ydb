@@ -320,6 +320,39 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, b, dataB), NKikimrProto::NODATA);
     }
 
+    // The standby having missed nothing since its last reconciliation is promoted without a scan of its parts, and the
+    // rejoin doesn't make it skip writes in NOT_SYNCHRONIZED_1.
+    Y_UNIT_TEST(CleanStandbyIsPromotedWithoutSync) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 3; ++i) {
+            checker.Write(groupId);
+        }
+        for (const auto& [group, id, data] : checker.GetWritten()) {
+            WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
+                "background write reaches standby");
+        }
+        env.Sim(TDuration::Minutes(2)); // the reconciliation that started with the standby is over
+
+        ui32 scans = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            scans += ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate &&
+                ev->Recipient == MakeBlobStorageProxyID(piles[1]);
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        UNIT_ASSERT_UNEQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        checker.Write(groupId); // made while the part is being promoted
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        env.Runtime->FilterFunction = {};
+
+        checker.Write(groupId);
+        CheckPileData(env, checker, 1, 9);
+    }
+
     // A pile out of sync can't be suspended: the suspended pile would take part in configuration quorum and count its
     // state storage rings as synchronized ones.
     Y_UNIT_TEST(StandbyCannotBeSuspended) {

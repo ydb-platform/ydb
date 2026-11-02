@@ -55,6 +55,9 @@ message TClusterStateDetails {
         uint32 BridgePileId = 1;
         uint64 BecameUnsyncedGeneration = 2; // when did it become unsynced?
         bool UnsyncedBSC = 3; // true if BSC-managed part is not synced with this configuration yet
+        // the pile has gone to NOT_SYNCHRONIZED_2 right from HOT_STANDBY, writers taking it into account from now on and
+        // the background ones before, so BSC may take the part reconciled while in standby for synced
+        bool FromHotStandby = 4;
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
 

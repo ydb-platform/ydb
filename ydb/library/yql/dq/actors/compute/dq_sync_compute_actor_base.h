@@ -71,7 +71,8 @@ protected:
                     continue;
                 }
                 const bool canAcceptData = this->Channels
-                    ? this->Channels->HasFreeMemoryInChannel(channelId)
+                    ? this->Channels->CanSendChannelData(channelId)
+                        && this->Channels->HasFreeMemoryInChannel(channelId)
                     : channel.Channel->GetFillLevel() == EDqFillLevel::NoLimit;
                 if (!canAcceptData) {
                     outputs.LastPopReturnedNoData = false;

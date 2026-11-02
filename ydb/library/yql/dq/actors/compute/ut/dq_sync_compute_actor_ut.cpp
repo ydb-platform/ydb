@@ -350,6 +350,7 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(TMockSinkState::TPtr sinkState
 
 struct TBackpressureTestState {
     std::atomic<bool> KeepYielding = false;
+    std::atomic<bool> YieldAfterRow = false;
     std::atomic<ui64> FetchCalls = 0;
     std::atomic<i64> FreeSpace = -(1LL << 30);
     std::atomic<ui64> Rows = 0;
@@ -446,6 +447,9 @@ public:
             }
             const auto status = Stream.Fetch(result);
             if (status == NUdf::EFetchStatus::Ok) {
+                if (State->YieldAfterRow) {
+                    State->KeepYielding = true;
+                }
                 Fetched.Signal();
             }
             return status;
@@ -470,6 +474,7 @@ private:
 
 struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TSystemEvent YieldingStreamFetched;
+    bool FailOnUndelivery = true;
     std::shared_ptr<TBackpressureTestState> BackpressureState = std::make_shared<TBackpressureTestState>();
     std::shared_ptr<IDqChannelService> ChannelService;
 
@@ -894,6 +899,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
+        runtimeSettings.FailOnUndelivery = FailOnUndelivery;
         runtimeSettings.ChannelService = ChannelService;
         runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
         auto actor = CreateDqComputeActor(
@@ -1620,6 +1626,54 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         UNIT_ASSERT_VALUES_EQUAL(BackpressureState->Rows.load(), 1);
     }
 
+    void CheckYieldDuringChannelRetry() {
+        NDqProto::TDqTask task;
+        task.SetId(ThisTaskId);
+        GenerateYieldingProgram(task);
+        AddDummyOutputChannel(task, OutputChannelId, RowType);
+        const auto otherConsumer = ActorSystem.AllocateEdgeActor();
+        auto* otherChannel = task.MutableOutputs(0)->AddChannels();
+        otherChannel->CopyFrom(task.GetOutputs(0).GetChannels(0));
+        otherChannel->SetId(OutputChannelId + 1);
+        ActorIdToProto(otherConsumer, otherChannel->MutableDstEndpoint()->MutableActorId());
+        BackpressureState->YieldAfterRow = true;
+        FailOnUndelivery = false;
+        const auto actor = CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
+        auto first = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>(DstEdgeActor, TDuration::Seconds(5));
+        auto second = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>(otherConsumer, TDuration::Seconds(5));
+        UNIT_ASSERT(first && second);
+        // An in-flight message enters retry while both peers still have space.
+        // The healthy second output keeps the task in PendingInput.
+        ActorSystem.Send(new NActors::IEventHandle(first->Sender, DstEdgeActor,
+            new NActors::TEvents::TEvUndelivered(TEvDqCompute::TEvChannelData::EventType,
+                NActors::TEvents::TEvUndelivered::Disconnected), 0, OutputChannelId));
+        // Channels and the compute actor share a mailbox: monitoring round trips
+        // order the retry transition and any already queued resume events.
+        for (ui32 i = 0; i < 2; ++i) {
+            DumpMonPage(actor, [](const auto&) {});
+        }
+        const auto callsDuringRetry = BackpressureState->FetchCalls.load();
+        DumpMonPage(actor, [](const auto&) {});
+        UNIT_ASSERT_VALUES_EQUAL_C(BackpressureState->FetchCalls.load(), callsDuringRetry,
+            "Reader was polled while channel delivery was retrying");
+
+        BackpressureState->KeepYielding = false;
+        auto acknowledge = [&](const auto& data) {
+            auto ack = MakeHolder<TEvDqCompute::TEvChannelDataAck>();
+            ack->Record.SetChannelId(data->Get()->Record.GetChannelData().GetChannelId());
+            ack->Record.SetSeqNo(data->Get()->Record.GetSeqNo());
+            ack->Record.SetFreeSpace(1_MB);
+            ActorSystem.Send(data->Sender, data->Recipient, ack.Release());
+        };
+        acknowledge(first); // Clearing RetryState must wake the producer again.
+        acknowledge(second);
+        for (ui32 i = 0; i < 2; ++i) {
+            DumpMonPage(actor, [](const auto&) {});
+        }
+        UNIT_ASSERT_C(BackpressureState->FetchCalls.load() > callsDuringRetry,
+            "Reader was not resumed after channel delivery recovered");
+    }
+
     void CheckYieldingProgram(ui32 channelVersion) {
         NDqProto::TDqTask task;
         task.SetId(ThisTaskId);
@@ -1956,6 +2010,10 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
+    Y_UNIT_TEST_F(WaitsForChannelDeliveryRetryAfterYield, TSyncComputeActorTestFixture) {
+        CheckYieldDuringChannelRetry();
+    }
+
     Y_UNIT_TEST_F(WaitsForBackpressuredSinkAfterYield, TSyncComputeActorTestFixture) {
         CheckBackpressuredYield(false);
     }

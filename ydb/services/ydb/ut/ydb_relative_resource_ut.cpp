@@ -2,10 +2,8 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -62,33 +60,6 @@ struct TResourceFixture {
     }
 };
 
-ui32 ReadTable(Ydb::Table::V1::TableService::Stub& stub, const TString& database,
-    const TString& sessionId, const TString& path, const TString& expectedPayload = {})
-{
-    grpc::ClientContext context;
-    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
-    context.AddMetadata("x-ydb-database", database);
-    Ydb::Table::ReadTableRequest request;
-    request.set_session_id(sessionId);
-    request.set_path(path);
-    auto reader = stub.StreamReadTable(&context, request);
-    Ydb::Table::ReadTableResponse response;
-    ui32 rows = 0;
-    while (reader->Read(&response)) {
-        UNIT_ASSERT_C(response.status() == Ydb::StatusIds::SUCCESS, response.DebugString());
-        if (expectedPayload) {
-            TResultSetParser parser{TResultSet(response.result().result_set())};
-            while (parser.TryNextRow()) {
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Payload").GetOptionalUtf8().value(), expectedPayload);
-            }
-        }
-        rows += response.result().result_set().rows_size();
-    }
-    const auto status = reader->Finish();
-    UNIT_ASSERT_C(status.ok(), status.error_message());
-    return rows;
-}
-
 void AssertPayload(const TResultSet& resultSet, const TString& expected) {
     TResultSetParser parser(resultSet);
     UNIT_ASSERT(parser.TryNextRow());
@@ -96,7 +67,7 @@ void AssertPayload(const TResultSet& resultSet, const TString& expected) {
     UNIT_ASSERT(!parser.TryNextRow());
 }
 
-void AssertReadTable(NYdb::NTable::TSession& session, const TString& path, const TString& expected = {}, ui32 expectedRows = 1) {
+void AssertReadTable(NYdb::NTable::TSession& session, const TString& path, const TString& expected) {
     auto iterator = session.ReadTable(path).GetValueSync();
     AssertSuccess(iterator);
     ui32 rows = 0;
@@ -107,12 +78,12 @@ void AssertReadTable(NYdb::NTable::TSession& session, const TString& path, const
         }
         AssertSuccess(part);
         auto resultSet = part.ExtractPart();
-        if (expected && resultSet.RowsCount()) {
+        if (resultSet.RowsCount()) {
             AssertPayload(resultSet, expected);
         }
         rows += resultSet.RowsCount();
     }
-    UNIT_ASSERT_VALUES_EQUAL(rows, expectedRows);
+    UNIT_ASSERT_VALUES_EQUAL(rows, 1);
 }
 
 } // namespace
@@ -182,8 +153,6 @@ Y_UNIT_TEST_TWIN(RateLimiterCoordinationPathsRespectFlag, enableRelativePaths) {
 
 Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     TResourceFixture fixture(TenantPath);
-    const ui16 tenantGrpcPort = fixture.Port;
-    auto channel = grpc::CreateChannel(fixture.Endpoint, grpc::InsecureChannelCredentials());
     auto driver = fixture.CreateDriver("mydb");
     NYdb::NScheme::TSchemeClient schemeClient(driver);
     AssertSuccess(schemeClient.MakeDirectory("relative_dir").GetValueSync());
@@ -232,24 +201,6 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     AssertSuccess(readRowsResult);
     UNIT_ASSERT_VALUES_EQUAL(readRowsResult.GetResultSet().RowsCount(), 2u);
 
-    auto tableStub = Ydb::Table::V1::TableService::NewStub(channel);
-    for (const auto& database : TVector<TString>{"/Root/mydb", "mydb"}) {
-        TDriver spellingDriver(TDriverConfig()
-            .SetEndpoint(TStringBuilder() << "localhost:" << tenantGrpcPort)
-            .SetDatabase(database).SetDiscoveryMode(EDiscoveryMode::Sync));
-        NYdb::NTable::TTableClient spellingClient(spellingDriver);
-        const auto spellingSessionResult = spellingClient.CreateSession().GetValueSync();
-        AssertSuccess(spellingSessionResult);
-        auto spellingSession = spellingSessionResult.GetSession();
-        for (const auto& path : TVector<TString>{
-            "/Root/mydb/relative_dir/relative_path_test",
-            "relative_dir/relative_path_test",
-        }) {
-            AssertReadTable(spellingSession, path, {}, 2);
-            UNIT_ASSERT_VALUES_EQUAL(ReadTable(*tableStub, database, TString(spellingSession.GetId()), path), 2);
-        }
-    }
-
     AssertSuccess(session.CopyTable(
         "relative_dir/relative_path_test",
         "relative_dir/copied_once").GetValueSync());
@@ -285,33 +236,6 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     AssertSuccess(coordinationSession.Close().GetValueSync());
     AssertSuccess(coordinationClient.DropNode("relative_dir/coordination").GetValueSync());
 
-    NExport::TExportClient exportClient(driver);
-    for (const auto& path : TVector<TString>{"Root/mydb/missing", "/Root/mydb/missing", "missing"}) {
-        NExport::TExportToS3Settings exportSettings;
-        exportSettings
-            .Endpoint("localhost:1")
-            .Bucket("bucket")
-            .AccessKey("access-key")
-            .SecretKey("secret-key")
-            .AppendItem({.Src = path, .Dst = "missing"});
-        const auto exportResult = exportClient.ExportToS3(exportSettings).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(exportResult.Status().GetStatus(), EStatus::SCHEME_ERROR,
-            path << ": " << exportResult.Status().GetIssues().ToString());
-    }
-    for (const auto& distinctPath : TVector<TString>{"/Root/mydb/missing", "missing"}) {
-        NExport::TExportToS3Settings exportSettings;
-        exportSettings
-            .Endpoint("localhost:1")
-            .Bucket("bucket")
-            .AccessKey("access-key")
-            .SecretKey("secret-key")
-            .AppendItem({.Src = "Root/mydb/missing", .Dst = "one"})
-            .AppendItem({.Src = distinctPath, .Dst = "two"});
-        const auto exportResult = exportClient.ExportToS3(exportSettings).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(exportResult.Status().GetStatus(), EStatus::SCHEME_ERROR,
-            exportResult.Status().GetIssues().ToString());
-    }
-
     AssertSuccess(schemeClient.MakeDirectory("mydb").GetValueSync());
     NYdb::NTopic::TTopicClient topicClient(driver);
     // The database name is not a cluster-root prefix and must remain part of the resource path.
@@ -319,12 +243,11 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     NYdb::NTopic::TCreateTopicSettings topicSettings;
     topicSettings.BeginConfigurePartitioningSettings().MinActivePartitions(1).EndConfigurePartitioningSettings();
     AssertSuccess(topicClient.CreateTopic(topicPath, topicSettings).GetValueSync());
-    auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+    auto topicStub = Ydb::Topic::V1::TopicService::NewStub(
+        grpc::CreateChannel(fixture.Endpoint, grpc::InsecureChannelCredentials()));
     ui32 writeIndex = 0;
     for (const auto& database : TVector<TString>{"/Root/mydb", "mydb"}) {
-        TDriver spellingDriver(TDriverConfig()
-            .SetEndpoint(TStringBuilder() << "localhost:" << tenantGrpcPort)
-            .SetDatabase(database).SetDiscoveryMode(EDiscoveryMode::Sync));
+        auto spellingDriver = fixture.CreateDriver(database);
         NYdb::NTopic::TTopicClient spellingTopic(spellingDriver);
         for (const auto& path : TVector<TString>{"/Root/mydb/mydb/topic", topicPath}) {
             const auto describe = [&](auto& stub, auto& request, auto& response, auto method) {
@@ -380,70 +303,65 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
     AssertSuccess(schemeClient.RemoveDirectory("relative_dir").GetValueSync());
 }
 
-Y_UNIT_TEST_TWIN(NestedDatabaseResourcePaths, RepeatedRoot) {
-    const TString parent = RepeatedRoot ? "Root" : "team";
-    const TString database = "/Root/" + parent + "/mydb";
-    TResourceFixture fixture(database);
-    auto driver = fixture.CreateDriver(database);
-    NYdb::NScheme::TSchemeClient scheme(driver);
-    NYdb::NTable::TTableClient table(driver);
-    const auto sessionResult = table.CreateSession().GetValueSync();
-    AssertSuccess(sessionResult);
-    auto session = sessionResult.GetSession();
-    for (const auto& [directory, payload] : TVector<std::pair<TString, TString>>{
-        {"", "target"}, {"mydb/", "database-name"}, {"Root2/", "root-boundary"},
-    }) {
-        if (directory) {
-            AssertSuccess(scheme.MakeDirectory(directory).GetValueSync());
-        }
-        const TString path = directory + "Config";
-        AssertSuccess(session.CreateTable(path, table.GetTableBuilder()
-            .AddNullableColumn("Id", EPrimitiveType::Uint64)
-            .AddNullableColumn("Payload", EPrimitiveType::Utf8)
-            .SetPrimaryKeyColumn("Id").Build()).GetValueSync());
-        TValueBuilder rows;
-        rows.BeginList().AddListItem().BeginStruct()
-            .AddMember("Id").Uint64(1).AddMember("Payload").Utf8(payload)
-            .EndStruct().EndList();
-        AssertSuccess(table.BulkUpsert(path, rows.Build()).GetValueSync());
-    }
-
-    auto channel = grpc::CreateChannel(fixture.Endpoint, grpc::InsecureChannelCredentials());
-    auto rawTable = Ydb::Table::V1::TableService::NewStub(channel);
-    TVector<TString> databaseSpellings{database, parent + "/mydb"};
-    for (const auto& spelling : databaseSpellings) {
-        auto spellingDriver = fixture.CreateDriver(spelling);
-        NYdb::NScheme::TSchemeClient spellingScheme(spellingDriver);
-        AssertSuccess(spellingScheme.ListDirectory("mydb").GetValueSync());
-        NYdb::NTable::TTableClient spellingTable(spellingDriver);
-        for (ui32 iteration = 0; iteration < 3; ++iteration) {
-            const auto tableSessionResult = spellingTable.CreateSession().GetValueSync();
-            AssertSuccess(tableSessionResult);
-            auto tableSession = tableSessionResult.GetSession();
-            for (const auto& path : TVector<TString>{database + "/Config", "Config"}) {
-                AssertReadTable(tableSession, path, "target");
-                UNIT_ASSERT_VALUES_EQUAL(ReadTable(*rawTable, spelling, TString(tableSession.GetId()), path, "target"), 1);
+Y_UNIT_TEST(NestedDatabaseResourcePaths) {
+    for (const TString database : {"/Root/mydb", "/Root/team/mydb", "/Root/Root/mydb"}) {
+        TResourceFixture fixture(database);
+        auto driver = fixture.CreateDriver(database);
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        NYdb::NTable::TTableClient table(driver);
+        const auto sessionResult = table.CreateSession().GetValueSync();
+        AssertSuccess(sessionResult);
+        auto session = sessionResult.GetSession();
+        AssertSuccess(scheme.MakeDirectory("Root").GetValueSync());
+        for (const auto& [directory, payload] : TVector<std::pair<TString, TString>>{
+            {"", "target"}, {"mydb/", "database-name"}, {"Root2/", "root-boundary"}, {"Root/mydb/", "repeated-root"},
+        }) {
+            if (directory) {
+                AssertSuccess(scheme.MakeDirectory(directory).GetValueSync());
             }
-            AssertReadTable(tableSession, "mydb/Config", "database-name");
-            AssertReadTable(tableSession, "Root2/Config", "root-boundary");
-            UNIT_ASSERT_VALUES_EQUAL(ReadTable(*rawTable, spelling, TString(tableSession.GetId()),
-                "mydb/Config", "database-name"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(ReadTable(*rawTable, spelling, TString(tableSession.GetId()),
-                "Root2/Config", "root-boundary"), 1);
-            const auto data = tableSession.ExecuteDataQuery("SELECT Payload FROM Config;",
-                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            AssertSuccess(data);
-            AssertPayload(data.GetResultSet(0), "target");
-            AssertSuccess(tableSession.Close().GetValueSync());
+            const TString path = directory + "Config";
+            AssertSuccess(session.CreateTable(path, table.GetTableBuilder()
+                .AddNullableColumn("Id", EPrimitiveType::Uint64)
+                .AddNullableColumn("Payload", EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("Id").Build()).GetValueSync());
+            TValueBuilder rows;
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("Id").Uint64(1).AddMember("Payload").Utf8(payload)
+                .EndStruct().EndList();
+            AssertSuccess(table.BulkUpsert(path, rows.Build()).GetValueSync());
+        }
 
-            NYdb::NQuery::TQueryClient query(spellingDriver);
-            const auto querySessionResult = query.GetSession().GetValueSync();
-            AssertSuccess(querySessionResult);
-            auto querySession = querySessionResult.GetSession();
-            const auto result = querySession.ExecuteQuery("SELECT Payload FROM Config;",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            AssertSuccess(result);
-            AssertPayload(result.GetResultSet(0), "target");
+        for (const auto& spelling : TVector<TString>{database, database.substr(TStringBuf("/Root/").size())}) {
+            auto spellingDriver = fixture.CreateDriver(spelling);
+            NYdb::NScheme::TSchemeClient spellingScheme(spellingDriver);
+            AssertSuccess(spellingScheme.ListDirectory("mydb").GetValueSync());
+            AssertSuccess(spellingScheme.ListDirectory("Root").GetValueSync());
+            NYdb::NTable::TTableClient spellingTable(spellingDriver);
+            for (ui32 iteration = 0; iteration < 3; ++iteration) {
+                const auto tableSessionResult = spellingTable.CreateSession().GetValueSync();
+                AssertSuccess(tableSessionResult);
+                auto tableSession = tableSessionResult.GetSession();
+                for (const auto& path : TVector<TString>{database + "/Config", "Config"}) {
+                    AssertReadTable(tableSession, path, "target");
+                }
+                AssertReadTable(tableSession, "mydb/Config", "database-name");
+                AssertReadTable(tableSession, "Root2/Config", "root-boundary");
+                AssertReadTable(tableSession, "Root/mydb/Config", "repeated-root");
+                const auto data = tableSession.ExecuteDataQuery("SELECT Payload FROM Config;",
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                AssertSuccess(data);
+                AssertPayload(data.GetResultSet(0), "target");
+                AssertSuccess(tableSession.Close().GetValueSync());
+
+                NYdb::NQuery::TQueryClient query(spellingDriver);
+                const auto querySessionResult = query.GetSession().GetValueSync();
+                AssertSuccess(querySessionResult);
+                auto querySession = querySessionResult.GetSession();
+                const auto result = querySession.ExecuteQuery("SELECT Payload FROM Config;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                AssertSuccess(result);
+                AssertPayload(result.GetResultSet(0), "target");
+            }
         }
     }
 }

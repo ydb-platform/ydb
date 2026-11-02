@@ -137,9 +137,11 @@ namespace {
 
     std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
         NYdb::TDriverConfig cfg;
+        constexpr ui64 maxMessageSize = 136314880;   //  logbroker default grpc max message size
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
         cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+        cfg.SetMaxMessageSize(maxMessageSize);
 
         auto driver = std::make_unique<NYdb::TDriver>(cfg);
 

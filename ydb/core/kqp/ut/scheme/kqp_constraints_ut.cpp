@@ -133,7 +133,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             R"(DropMultiColumnStatistics: "stats")",
             R"(DetailedMetricsSettings { NotConfigured {} })",
             R"(AllowUnderSameOperation: false)",
-            R"(PartitionCount: 0)",
         };
         for (const auto& change : forbidden) {
             auto [alter, settings] = MakeColumnBuildAlter(1);

@@ -8,6 +8,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_kind.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/util/pb.h>
 
@@ -350,6 +351,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
                 return EValidationResult::Error;
             }
         }
+        std::map<TString, const NKikimrBlobStorage::TPDiskConfig*> pdiskKinds;
+        for (const auto& kind : blobStorageConfig.GetPDiskKinds()) {
+            CHECK_ERR(!kind.GetName().empty(), "PDisk kind name must not be empty");
+            CHECK_ERR(pdiskKinds.emplace(kind.GetName(), &kind.GetPDiskConfig()).second,
+                TStringBuilder() << "Duplicate PDisk kind Name# " << kind.GetName());
+        }
         for (ui32 hostConfigIndex = 0; hostConfigIndex < blobStorageConfig.DefineHostConfigSize(); ++hostConfigIndex) {
             const auto& hostConfig = blobStorageConfig.GetDefineHostConfig(hostConfigIndex);
             if (hostConfig.HasDefaultHostPDiskConfig() && !ValidatePDiskConfig(
@@ -361,8 +368,16 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
             }
             for (ui32 driveIndex = 0; driveIndex < hostConfig.DriveSize(); ++driveIndex) {
                 const auto& drive = hostConfig.GetDrive(driveIndex);
-                if (drive.HasPDiskConfig() && !ValidatePDiskConfig(
-                        drive.GetPDiskConfig(),
+                const auto* pdiskConfig = &drive.GetPDiskConfig();
+                NKikimrBlobStorage::TPDiskConfig effective;
+                if (const auto& name = drive.GetKindName(); !name.empty()) {
+                    const auto kind = pdiskKinds.find(name);
+                    CHECK_ERR(kind != pdiskKinds.end(), TStringBuilder() << "Unknown PDisk kind Name# " << name);
+                    effective = MergePDiskKindConfig(*kind->second, drive.GetPDiskConfig());
+                    pdiskConfig = &effective;
+                }
+                if (!ValidatePDiskConfig(
+                        *pdiskConfig,
                         TStringBuilder() << "BlobStorageConfig.DefineHostConfig[" << hostConfigIndex
                             << "].Drive[" << driveIndex << "].PDiskConfig",
                         msg)) {

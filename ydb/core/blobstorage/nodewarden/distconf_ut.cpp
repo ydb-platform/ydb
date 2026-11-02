@@ -13,6 +13,7 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/protos/blobstorage_pdisk_kind.pb.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/util/random.h>
 
@@ -10299,6 +10300,81 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT_VALUES_EQUAL(serviceSet.GroupsSize(), 1);
     }
 
+    Y_UNIT_TEST(NamedPDiskKindsAreExcludedFromStaticAllocation) {
+        for (bool fromBaseConfig : {false, true}) {
+            NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+            NKikimrBlobStorage::TStorageConfig config;
+            auto* node = config.AddAllNodes();
+            node->SetNodeId(1);
+            node->MutableLocation()->SetDataCenter("dc");
+            node->MutableLocation()->SetRack("rack");
+            node->MutableLocation()->SetUnit("unit");
+            auto* sm = config.MutableSelfManagementConfig();
+            sm->SetPDiskType(NKikimrBlobStorage::NVME);
+            sm->MutableGeometry()->SetNumFailRealms(1);
+            sm->MutableGeometry()->SetNumFailDomainsPerFailRealm(1);
+            sm->MutableGeometry()->SetNumVDisksPerFailDomain(1);
+            auto* bs = config.MutableBlobStorageConfig();
+            auto* hostConfig = bs->AddDefineHostConfig();
+            hostConfig->SetHostConfigId(1);
+            auto* host = bs->MutableDefineBox()->AddHost();
+            host->SetHostConfigId(1);
+            host->SetEnforcedNodeId(1);
+            NKikimrBlobStorage::TBaseConfig base;
+            for (ui32 id : {1, 2}) {
+                const TString path = id == 1 ? "/dev/named" : "/dev/plain";
+                if (fromBaseConfig) {
+                    auto* drive = base.AddPDisk();
+                    drive->SetNodeId(1);
+                    drive->SetPDiskId(id);
+                    drive->SetPath(path);
+                    drive->SetGuid(id);
+                    drive->SetType(NKikimrBlobStorage::NVME);
+                    drive->SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+                    drive->SetDecommitStatus(NKikimrBlobStorage::DECOMMIT_NONE);
+                    if (id == 1) {
+                        drive->SetKindName("qlc");
+                    }
+                } else {
+                    auto* drive = hostConfig->AddDrive();
+                    drive->SetPath(path);
+                    drive->SetType(NKikimrBlobStorage::NVME);
+                    if (id == 1) {
+                        drive->SetKindName("qlc"); // unresolved numeric Kind is zero
+                        drive->MutablePDiskConfig()->SetMaxSlots(4); // only overrides
+                    }
+                }
+            }
+            // With the named disk as the only candidate the failure names the cause.
+            {
+                NKikimrBlobStorage::TStorageConfig onlyNamed = config;
+                NKikimrBlobStorage::TBaseConfig onlyNamedBase = base;
+                if (fromBaseConfig) {
+                    onlyNamedBase.MutablePDisk()->DeleteSubrange(1, 1);
+                } else {
+                    onlyNamed.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->MutableDrive()->DeleteSubrange(1, 1);
+                }
+                UNIT_ASSERT_EXCEPTION_CONTAINS(keeper.AllocateStaticGroup({
+                    .Config = &onlyNamed,
+                    .GroupId = TGroupId::Zero(),
+                    .GroupGeneration = 1,
+                    .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                    .BaseConfig = fromBaseConfig ? &onlyNamedBase : nullptr,
+                }), NStorage::TDistributedConfigKeeper::TExConfigError, "ExcludedPDisks# 1");
+            }
+
+            keeper.AllocateStaticGroup({
+                .Config = &config,
+                .GroupId = TGroupId::Zero(),
+                .GroupGeneration = 1,
+                .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                .BaseConfig = fromBaseConfig ? &base : nullptr,
+            });
+            UNIT_ASSERT_VALUES_EQUAL(config.GetBlobStorageConfig().GetServiceSet().PDisksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetBlobStorageConfig().GetServiceSet().GetPDisks(0).GetPath(), "/dev/plain");
+        }
+    }
+
     NKikimrConfig::TStateStorageConfig GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {},
             ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200,
             std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr,
@@ -10975,6 +11051,55 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigCleanupTest) {
             return false;
         }
     };
+
+    Y_UNIT_TEST(NamedPDiskKindOnExistingStaticDiskIsRejected) {
+        for (bool explicitServiceSet : {false, true}) {
+            TTestSetup s;
+            s.EnableSelfManagement();
+            s.AddNode(1);
+            s.AddPDisk(1, 1);
+            s.AddDefineBoxHost(1);
+            s.SyncAppConfigBlobStorage();
+            if (explicitServiceSet) {
+                s.MirrorServiceSetIntoAppConfig();
+            }
+            auto* bs = s.AppConfig.MutableBlobStorageConfig();
+            auto* kind = bs->AddPDiskKinds();
+            kind->SetName("qlc");
+            kind->MutablePDiskConfig()->SetExpectedSlotSize(600000000000ULL);
+            kind->MutablePDiskConfig()->SetMaxSlots(8);
+            auto* host = bs->AddDefineHostConfig();
+            host->SetHostConfigId(1);
+            auto* drive = host->AddDrive();
+            drive->SetPath("/dev/disk");
+            drive->SetType(NKikimrBlobStorage::NVME);
+            drive->SetKindName("qlc");
+            drive->MutablePDiskConfig()->SetMaxSlots(4);
+            TString error;
+            UNIT_ASSERT(!s.Derive(&error));
+            UNIT_ASSERT_C(error.Contains("named PDisk kinds are not supported for static PDisks"), error);
+
+            // A dynamic drive on another path is allowed and its catalog survives derivation.
+            drive->SetPath("/dev/dynamic");
+            UNIT_ASSERT_C(s.Derive(&error), error);
+            UNIT_ASSERT_VALUES_EQUAL(s.StorageConfig.GetBlobStorageConfig().PDiskKindsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(s.StorageConfig.GetBlobStorageConfig().GetPDiskKinds(0).GetName(), "qlc");
+            UNIT_ASSERT(!NStorage::ValidateStaticPDiskKinds(s.StorageConfig));
+            UNIT_ASSERT(NStorage::UsesPDiskKinds(s.StorageConfig));
+            auto* filter = s.StorageConfig.MutableSelfManagementConfig()->AddPDiskFilter();
+            filter->AddProperty()->SetType(NKikimrBlobStorage::ROT); // an earlier mismatch must not hide KindName
+            filter->AddProperty()->SetKindName("qlc");
+            UNIT_ASSERT(NStorage::ValidateStaticPDiskKinds(s.StorageConfig));
+
+            // Without any kind definition or reference the detector must stay false (cheap path for legacy configs).
+            NKikimrBlobStorage::TStorageConfig legacy = s.StorageConfig;
+            legacy.MutableBlobStorageConfig()->ClearPDiskKinds();
+            legacy.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->MutableDrive(0)->ClearKindName();
+            legacy.MutableSelfManagementConfig()->ClearPDiskFilter();
+            UNIT_ASSERT(!NStorage::UsesPDiskKinds(legacy));
+            UNIT_ASSERT(!NStorage::ValidateStaticPDiskKinds(legacy));
+        }
+    }
 
     Y_UNIT_TEST(DestroyVDiskAndPDiskCleanedOnNodeRemoval) {
         TTestSetup s;

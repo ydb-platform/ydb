@@ -2,6 +2,8 @@
 #include "config.h"
 #include "select_groups.h"
 
+#include <algorithm>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
@@ -236,6 +238,11 @@ namespace NKikimr::NBsController {
                 }
                 State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
                     storageConfig ? &storageConfig.value() : nullptr);
+                // Traverse payloads rather than maintaining a separate list of commands carrying Kind.
+                if (std::any_of(Cmd.GetCommand().begin(), Cmd.GetCommand().end(),
+                        [](const auto& command) { return command.HasDefinePDiskKind(); })) {
+                    ReservePDiskKindIds(Cmd, State->ReservedPDiskKindIds);
+                }
                 State->CheckConsistency();
 
                 TString m;
@@ -392,6 +399,52 @@ namespace NKikimr::NBsController {
                     {"operationLogIndex", operationLogIndex});
             }
 
+            // Numeric PDisk kinds carried by this request: a kind defined in the same request must not be allocated
+            // one of these ids. Storage-pool Kind is a string, not a PDisk kind, and is not reserved.
+            static void ReservePDiskKindIds(const NKikimrBlobStorage::TConfigRequest& request, THashSet<TPDiskKindId>& ids) {
+                const auto reserve = [&](ui64 kind) {
+                    if (kind) {
+                        ids.insert(kind);
+                    }
+                };
+                const auto reserveFilters = [&](const auto& filters) {
+                    for (const auto& filter : filters) {
+                        // A filter naming a kind has its numeric Kind checked against that kind, not reserved.
+                        if (AnyOf(filter.GetProperty(), [](const auto& property) { return property.HasKindName(); })) {
+                            continue;
+                        }
+                        for (const auto& property : filter.GetProperty()) {
+                            if (property.HasKind()) {
+                                reserve(property.GetKind());
+                            }
+                        }
+                    }
+                };
+                using TCommand = NKikimrBlobStorage::TConfigRequest::TCommand;
+                for (const auto& command : request.GetCommand()) {
+                    switch (command.GetCommandCase()) {
+                        case TCommand::kDefineHostConfig:
+                            for (const auto& drive : command.GetDefineHostConfig().GetDrive()) {
+                                if (drive.GetKindName().empty()) {
+                                    reserve(drive.GetKind());
+                                }
+                            }
+                            break;
+                        case TCommand::kAddDriveSerial:
+                            reserve(command.GetAddDriveSerial().GetKind());
+                            break;
+                        case TCommand::kDefineStoragePool:
+                            reserveFilters(command.GetDefineStoragePool().GetPDiskFilter());
+                            break;
+                        case TCommand::kDefineDDiskPool:
+                            reserveFilters(command.GetDefineDDiskPool().GetPDiskFilter());
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
                     NKikimrBlobStorage::TConfigResponse::TStatus& status) {
                 state.SanitizingRequests.clear();
@@ -404,6 +457,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DefineHostConfig)
                     HANDLE_COMMAND(ReadHostConfig)
                     HANDLE_COMMAND(DeleteHostConfig)
+                    HANDLE_COMMAND(DefinePDiskKind)
+                    HANDLE_COMMAND(DeletePDiskKind)
                     HANDLE_COMMAND(DefineBox)
                     HANDLE_COMMAND(ReadBox)
                     HANDLE_COMMAND(DeleteBox)

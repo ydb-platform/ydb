@@ -399,6 +399,29 @@ namespace NKikimr::NBsController {
                 return false;
             }
 
+            // a redefined PDisk kind changes the effective settings of every drive using it; they are validated here,
+            // against the final state, so that the profile and conflicting drive overrides may change in one request
+            if (!state.ChangedPDiskKinds.empty()) {
+                for (const auto& [id, host] : state.HostConfigs.Get()) {
+                    for (const auto& [key, drive] : host.Drives) {
+                        if (!drive.KindName || !state.ChangedPDiskKinds.contains(*drive.KindName)) {
+                            continue;
+                        }
+                        const TString context = TStringBuilder() << "HostConfigId# " << id << " Path# " << key.Path;
+                        const auto& materialized = state.GetMaterializedPDiskConfig(key, drive);
+                        NKikimrBlobStorage::TPDiskConfig config;
+                        if (!materialized || !config.ParseFromString(*materialized)) {
+                            *errorDescription = TStringBuilder() << context << " undeserializable PDiskConfig string";
+                            return false;
+                        }
+                        if (auto error = ::NKikimr::ValidatePDiskConfig(config, context)) {
+                            *errorDescription = std::move(*error);
+                            return false;
+                        }
+                    }
+                }
+            }
+
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -648,6 +671,9 @@ namespace NKikimr::NBsController {
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
+            }
+            if (state.PDiskKinds.Changed()) {
+                MakeTableMerger<Schema::PDiskKind>(&PDiskKinds, &state.PDiskKinds.Get(), this)(txc);
             }
             if (state.Boxes.Changed()) {
                 MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
@@ -1260,6 +1286,9 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
+                if (value.KindName) {
+                    drive.SetKindName(*value.KindName);
+                }
                 if (value.DiskScope) {
                     drive.SetDiskScope(*value.DiskScope);
                 }
@@ -1414,7 +1443,7 @@ namespace NKikimr::NBsController {
                     NTableAdapter::MapKey<T>(&keyTuple, rawKey);
                     db.Update(T::TableId, op, rawKey, {});
                 };
-                if (filter.Location) {
+                if (filter.Location || filter.KindName) {
                     // Serialize the parsed filter in a fixed property order: request ordering
                     // must not change its persistent identity, including when deleting a row.
                     NKikimrBlobStorage::TPDiskFilter proto;
@@ -1451,6 +1480,7 @@ namespace NKikimr::NBsController {
                     PROPERTY(SharedWithOs)
                     PROPERTY(ReadCentric)
                     PROPERTY(Kind)
+                    PROPERTY(KindName)
 #undef PROPERTY
 
                     case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
@@ -1486,6 +1516,7 @@ namespace NKikimr::NBsController {
             SERIALIZE_VARIABLE(SharedWithOs);
             SERIALIZE_VARIABLE(ReadCentric);
             SERIALIZE_VARIABLE(Kind);
+            SERIALIZE_VARIABLE(KindName);
 #undef SERIALIZE_VARIABLE
             if (filter.Location) {
                 *pb->AddProperty()->MutableLocation() = TNodeLocation::ParseLocation(*filter.Location);

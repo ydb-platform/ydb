@@ -1133,8 +1133,11 @@ public:
             Table::SharedWithOs::Type SharedWithOs;
             Table::ReadCentric::Type ReadCentric;
             Table::Kind::Type Kind;
+            // Original per-drive overrides. Effective settings are cached in memory until the drive or kind changes.
             TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+            TMaybe<TString> MaterializedPDiskConfig; // rebuilt on load, not persisted
             std::optional<Table::DiskScope::Type> DiskScope;
+            TMaybe<Table::KindName::Type> KindName; // Nothing for legacy drives, so their rows keep a NULL cell
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1144,14 +1147,16 @@ public:
                         Table::ReadCentric,
                         Table::Kind,
                         Table::PDiskConfig,
-                        Table::DiskScope
+                        Table::DiskScope,
+                        Table::KindName
                     > adapter(
                         &TDriveInfo::Type,
                         &TDriveInfo::SharedWithOs,
                         &TDriveInfo::ReadCentric,
                         &TDriveInfo::Kind,
                         &TDriveInfo::PDiskConfig,
-                        &TDriveInfo::DiskScope
+                        &TDriveInfo::DiskScope,
+                        &TDriveInfo::KindName
                     );
                 callback(&adapter);
             }
@@ -1175,6 +1180,29 @@ public:
                     &THostConfigInfo::Name,
                     &THostConfigInfo::Generation,
                     &THostConfigInfo::Drives
+                );
+            callback(&adapter);
+        }
+    };
+
+
+    struct TPDiskKindInfo {
+        using Table = Schema::PDiskKind;
+
+        Table::KindId::Type KindId;
+        TMaybe<Table::PDiskConfig::Type> PDiskConfig;
+        TMaybe<Table::Generation::Type> Generation;
+
+        template<typename T>
+        static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
+            static TTableAdapter<Table, TPDiskKindInfo,
+                    Table::KindId,
+                    Table::PDiskConfig,
+                    Table::Generation
+                > adapter(
+                    &TPDiskKindInfo::KindId,
+                    &TPDiskKindInfo::PDiskConfig,
+                    &TPDiskKindInfo::Generation
                 );
             callback(&adapter);
         }
@@ -1267,6 +1295,7 @@ public:
             TMaybe<Schema::BoxStoragePoolPDiskFilter::SharedWithOs::Type> SharedWithOs;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::ReadCentric::Type> ReadCentric;
             TMaybe<Schema::BoxStoragePoolPDiskFilter::Kind::Type> Kind;
+            TMaybe<TString> KindName;
             TMaybe<TString> Location; // set only through SetLocation
             std::shared_ptr<const TNodeLocation> RequiredLocation; // parsed Location, kept for matching
 
@@ -1337,6 +1366,9 @@ public:
                 if (Location) {
                     s << comma() << "Location:" << TNodeLocation::ParseLocation(*Location).ShortDebugString();
                 }
+                if (const auto& x = KindName) {
+                    s << comma() << "KindName:" << *x;
+                }
             }
 
             static TString ToString(const TSet<TPDiskFilter>& filters) {
@@ -1355,7 +1387,7 @@ public:
             }
 
             auto GetKey() const {
-                return std::tuple_cat(GetLegacyKey(), std::tie(Location));
+                return std::tuple_cat(GetLegacyKey(), std::tie(Location, KindName));
             }
 
             friend bool operator <(const TPDiskFilter &x, const TPDiskFilter &y) {
@@ -1712,6 +1744,8 @@ private:
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
     std::set<std::pair<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
     TMap<TGroupId, TBlobDepotDeleteQueueInfo> BlobDepotDeleteQueue;
+    TMap<TString, TPDiskKindInfo> PDiskKinds;
+    THashMap<TPDiskKindId, TString> PDiskKindNames; // derived index, rebuilt on load
     ui64 NextOperationLogIndex = 1;
     TActorId StatProcessorActorId;
     bool SelfHealEnable = false;
@@ -3016,7 +3050,8 @@ public:
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
     static TStoragePoolInfo ResolveStoragePoolForPile(const TBoxStoragePoolId& id, const TStoragePoolInfo& pool,
-        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config);
+        TBridgePileId pileId, const TBridgeInfo *bridgeInfo, const NKikimrBlobStorage::TStorageConfig *config,
+        const TMap<TString, TPDiskKindInfo>& kinds);
     TStoragePoolInfo GetStoragePoolForPile(const TBoxStoragePoolId& id, TBridgePileId pileId) const;
     std::optional<TString> ValidateStoragePoolPileOverrides(const NKikimrBlobStorage::TStorageConfig& config) const;
 
@@ -3024,6 +3059,12 @@ public:
     static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
+    static TMaybe<TString> MaterializePDiskConfig(const TMap<TString, TPDiskKindInfo>& kinds,
+        const TString& name, const TMaybe<TString>& overrides, TStringBuf validationContext = {});
+    static ui64 ResolvePDiskKind(const TMap<TString, TPDiskKindInfo>& kinds, const TString& name, TMaybe<ui64> explicitKind);
+    // Parses a pool filter and resolves its KindName into the numeric Kind.
+    static TStoragePoolInfo::TPDiskFilter ParsePDiskFilter(const TMap<TString, TPDiskKindInfo>& kinds, ui64 boxId,
+        ui64 storagePoolId, const NKikimrBlobStorage::TPDiskFilter& proto);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotInfo& vslot);
     static void Serialize(NKikimrBlobStorage::TVDiskLocation *pb, const TVSlotId& vslotId, std::optional<ui64> pdiskGuid = std::nullopt);

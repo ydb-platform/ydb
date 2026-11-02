@@ -8,6 +8,7 @@ import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
+import "ydb/core/protos/blobstorage_pdisk_kind.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/bootstrap.proto";
 import "ydb/core/protos/cms.proto";
@@ -392,6 +393,7 @@ message TBlobStorageConfig {
 
     // Persistent per-pile allocation rules. At most one rule may match a (pile, pool kind) or static group.
     repeated NKikimrBlobStorage.TStoragePoolPileOverride StoragePoolPileOverrides = 16;
+    repeated NKikimrBlobStorage.TDefinePDiskKind PDiskKinds = 17;
 }
 
 message TSelfManagementConfig {

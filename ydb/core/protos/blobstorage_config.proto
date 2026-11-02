@@ -6,6 +6,7 @@ import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
+import "ydb/core/protos/blobstorage_pdisk_kind.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "google/protobuf/any.proto";
@@ -24,12 +25,15 @@ message THostConfigDrive {
     bool ReadCentric = 4; // is this drive read-centric?
     uint64 Kind = 5; // nontransparent user-defined kind used for filtering when picking up groups
 
-    // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
-    NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
+    // With KindName, these fields override the kind's PDiskConfig. Otherwise, this message replaces the host default;
+    // the host default is used only when this message is absent (an explicitly empty message also replaces it).
+    TPDiskConfig PDiskConfig = 6;
     reserved 7; // uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
     reserved 8; // uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
 
     optional string DiskScope = 9; // when set allows for finer domain mapping
+
+    string KindName = 10; // optional, case-sensitive PDisk kind name; resolves Kind and supplies PDiskConfig defaults
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -39,8 +43,8 @@ message TDefineHostConfig {
     string Name = 2; // user-friendly name of typical configuration
     repeated THostConfigDrive Drive = 3; // a full set of drives on every host
 
-    // host-wide default configuration for every PDisk
-    NKikimrBlobStorage.TPDiskConfig DefaultHostPDiskConfig = 4;
+    // Default for drives without KindName and without an individual PDiskConfig; named drives do not use this default.
+    TPDiskConfig DefaultHostPDiskConfig = 4;
 
     // some syntactic sugar -- one drive type per path
     repeated string Rot = 5;
@@ -142,6 +146,7 @@ message TPDiskFilter {
             // Exact match on supplied string fields; omitted fields are unconstrained.
             // Deprecated numeric location fields are not accepted.
             NActorsInterconnect.TNodeLocation Location = 5;
+            string KindName = 6; // require certain kind name
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
@@ -828,6 +833,8 @@ message TConfigRequest {
             TDefineDataCenterStates DefineDataCenterStates = 65;
             TTestResetDataCenterStates TestResetDataCenterStates = 66;
             TDefineFailRealmStates DefineFailRealmStates = 67;
+            TDefinePDiskKind DefinePDiskKind = 68;
+            TDeletePDiskKind DeletePDiskKind = 69;
         }
     }
 
@@ -917,6 +924,7 @@ message TBaseConfig {
         reserved 22; // uint32 InferPDiskSlotCountMax = 22
         optional string DiskScope = 23; // when set allows for finer domain mapping
         uint64 ExpectedSlotSize = 24;
+        string KindName = 25;
     }
     message TVSlot {
         message TDonorDisk {
@@ -992,6 +1000,7 @@ message TBaseConfig {
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
     TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
+    repeated TPDiskKind PDiskKind = 8;
 }
 
 message TMoveCommand {

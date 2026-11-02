@@ -1,13 +1,12 @@
-YQL_PYTHON3_UDF(python3_udf)
+PREBUILT_YQL_PYTHON3_UDF(python3_udf)
 
-REGISTER_YQL_PYTHON_UDF(
-    NAME Python3
-    RESOURCE_NAME Python3
-)
+SET(_YQL_PREBUILT_RESOURCE_PREFIX PYTHON3_SMALL_UDF_RESOURCE)
 
-PEERDIR(
-    yql/essentials/public/udf
-)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+ENDIF()
+
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/udfs/common/python/python3_small/ya.make.inc)
 
 END()
 

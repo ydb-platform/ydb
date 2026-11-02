@@ -66,6 +66,7 @@ private:
     TVersionedPresetSchemas VersionedSchemas;
 
     void InitDerivedState();
+    void RegisterSchemaVersion(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
 public:
     NMonitoring::TDynamicCounters::TCounterPtr GetBadPortionsCounter() const {
@@ -144,6 +145,7 @@ public:
 public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
     bool FinishLoading();
+    void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
@@ -176,7 +178,6 @@ public:
     virtual bool ApplyChangesOnExecute(
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
 
-    void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
     void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) override;
     void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) override;
 

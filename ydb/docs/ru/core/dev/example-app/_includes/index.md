@@ -38,7 +38,7 @@
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-{% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C#](../example-dotnet.md#param-queries) | [Go](../go/index.md#param-queries) | [Java](../java/index.md#param-queries) | JavaScript | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries) | [Rust](../rust/index.md#query-client)
+{% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C#](../example-dotnet.md#query-processing) | [Go](../go/index.md#query-processing) | [Java](../java/index.md#param-queries) | JavaScript | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries) | [Rust](../rust/index.md#query-client)
 
 {% include [multistep_transactions.md](steps/09_multistep_transactions.md) %}
 

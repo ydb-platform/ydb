@@ -16,7 +16,7 @@ CREATE TABLE article (
 
 {{ ydb-short-name }} supports creating row-based and column-based tables. Their main difference lies in the use case and the data storage format on the hard disk. For row-based tables, data is stored sequentially as rows, while for column-based tables, data is stored as columns. Each table type has its own purpose.
 
-# Column Naming Rules {#column-naming-rules}
+## Column Naming Rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 
@@ -160,7 +160,7 @@ Syntax of TTL value is described in the article [{#T}](../../../yql/reference/sy
 
 {{ ydb-short-name }} allows you to rename an existing table, move it to another directory in the same database, and replace one table with another, in which case the data of the replaced table is deleted. When performing operations, only the table metadata changes, such as its path and name. The table data is not moved or overwritten.
 
-Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#termination-statuses).
+Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#handling-retryable-errors).
 
 The speed of the rename operation is determined by the type of data transactions currently running on the table and does not depend on the amount of data in the table.
 

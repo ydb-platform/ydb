@@ -408,8 +408,74 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
 
 
 TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
+    constexpr size_t MaxRingCount = 1024;
+    constexpr size_t MaxNodeCount = 1024;
+
+    const auto validateStructure = [name](const char* configName,
+            const NKikimrConfig::TStateStorageConfig& config) -> TString {
+        if (config.GetSSId() != 1) {
+            return TStringBuilder() << configName << ' ' << name << " configuration has invalid SSId";
+        }
+        if (config.HasRing() == (config.RingGroupsSize() > 0)) {
+            return TStringBuilder() << configName << ' ' << name
+                << " configuration must contain either Ring or RingGroups";
+        }
+
+        const auto validateRingGroup = [name, configName](
+                const NKikimrConfig::TStateStorageConfig::TRing& ringGroup) -> TString {
+            if (ringGroup.RingSize() && ringGroup.NodeSize()) {
+                return TStringBuilder() << configName << ' ' << name
+                    << " Ring and Node are defined, use one of them";
+            }
+            if (ringGroup.RingSize() >= MaxRingCount) {
+                return TStringBuilder() << configName << ' ' << name << " has too many rings";
+            }
+            if (ringGroup.NodeSize() >= MaxNodeCount) {
+                return TStringBuilder() << configName << ' ' << name << " has too many nodes";
+            }
+            if (!ringGroup.RingSize() && !ringGroup.NodeSize()) {
+                return TStringBuilder() << configName << ' ' << name << " has empty ring group";
+            }
+            for (const auto& ring : ringGroup.GetRing()) {
+                if (ring.RingSize()) {
+                    return TStringBuilder() << configName << ' ' << name << " has too deep nested ring declaration";
+                }
+                if (ring.HasRingGroupActorIdOffset()) {
+                    return TStringBuilder() << configName << ' ' << name
+                        << " RingGroupActorIdOffset should be used in ring group level, not ring";
+                }
+                if (!ring.NodeSize()) {
+                    return TStringBuilder() << configName << ' ' << name << " has empty ring";
+                }
+                if (ring.GetUseSingleNodeActorId() && ring.NodeSize() != 1) {
+                    return TStringBuilder() << configName << ' ' << name
+                        << " ring with UseSingleNodeActorId must contain exactly one node";
+                }
+            }
+            return {};
+        };
+
+        if (config.HasRing()) {
+            return validateRingGroup(config.GetRing());
+        }
+        for (const auto& ringGroup : config.GetRingGroups()) {
+            if (TString error = validateRingGroup(ringGroup)) {
+                return error;
+            }
+        }
+        return {};
+    };
+
     if (!newSSConfig.HasRing() && newSSConfig.RingGroupsSize() == 0) {
         return TStringBuilder() << "New " << name << " configuration is not filled in";
+    }
+    if (TString error = validateStructure("New", newSSConfig)) {
+        return error;
+    }
+    if (oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize()) {
+        if (TString error = validateStructure("Old", oldSSConfig)) {
+            return error;
+        }
     }
     if (!oldSSConfig.HasRing() && oldSSConfig.RingGroupsSize() == 0) {
         auto info = BuildStateStorageInfo(newSSConfig);
@@ -427,7 +493,8 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     disabledCnt++;
                 }
             }
-            if (disabledCnt > rg.NToSelect / 2 - 1) { // -1 ring for rolling restart
+            const ui32 maxDisabled = rg.NToSelect > 1 ? (rg.NToSelect - 2) / 2 : 0;
+            if (disabledCnt > maxDisabled) { // keep one ring available for rolling restart
                 return TStringBuilder() << "New " << name << " configuration disabled too many rings";
             }
         }
@@ -458,7 +525,7 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
                     << " to# " << SingleLineProto(newSSConfig);
             }
         }
-        if (disabledCnt > fromInfoGroup.NToSelect / 2) {
+        if (disabledCnt > (fromInfoGroup.NToSelect - 1) / 2) {
             return TStringBuilder() << name << " configuration disabled too many rings"
                 << " from# " << SingleLineProto(oldSSConfig)
                 << " to# " << SingleLineProto(newSSConfig);

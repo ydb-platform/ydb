@@ -180,7 +180,7 @@ All commands for working with configuration are described in the [{#T}](../../..
 ### Configuration Update from Cluster Node Perspective
 
 1. Each node requests full configuration at startup.
-2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#selectors-intro).
+2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#labels).
 3. The node subscribes to configuration updates by registering with the [Console tablet](../../../concepts/glossary.md#console).
 4. In case of configuration update, the local service receives it and transforms it for the node's labels.
 5. All local services subscribed to updates receive the updated configuration.

@@ -20,6 +20,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         for (ui32 realm = 0; realm < 3; ++realm) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(info.GetFailRealmState(realm)), static_cast<ui32>(R::N0));
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(fromTopology.GetFailRealmState(realm)), static_cast<ui32>(R::N0));
+            UNIT_ASSERT(!info.IsFailedFailRealm(realm));
+            UNIT_ASSERT(!info.IsRecoveringFailRealm(realm));
         }
     }
 
@@ -64,8 +66,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->GetDynamicInfo().FailRealmStates[realm]), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(localVDisk->GetFailRealmState(realm)), static_cast<ui32>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(current->Group->GetRings(realm).GetState()), static_cast<ui32>(expected));
+                UNIT_ASSERT_VALUES_EQUAL(current->IsFailedFailRealm(realm), expected == R::F);
+                UNIT_ASSERT_VALUES_EQUAL(current->IsRecoveringFailRealm(realm), expected == R::R);
+                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsFailedFailRealm(realm), expected == R::F);
+                UNIT_ASSERT_VALUES_EQUAL(localVDisk->IsRecoveringFailRealm(realm), expected == R::R);
                 const auto old = offset ? states[(realm + offset - 1) % 5] : R::N0;
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(previous->GetFailRealmState(realm)), static_cast<ui32>(old));
+                UNIT_ASSERT_VALUES_EQUAL(previous->IsFailedFailRealm(realm), old == R::F);
+                UNIT_ASSERT_VALUES_EQUAL(previous->IsRecoveringFailRealm(realm), old == R::R);
             }
             previous = std::move(current);
         }

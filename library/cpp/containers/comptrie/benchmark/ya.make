@@ -9,7 +9,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/containers/comptrie
-    util
+    library/cpp/containers/dense_hash
+    library/cpp/on_disk/aho_corasick
 )
 
 END()

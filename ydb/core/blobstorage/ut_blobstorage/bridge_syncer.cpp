@@ -2,8 +2,10 @@
 #include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
 
@@ -207,9 +209,124 @@ void TestLateSyncerCompletion(ECompletionRace race) {
     runtime->FilterFunction = nullptr;
 }
 
+void TestSyncerQuotaDelay(bool cancel) {
+    using namespace NBridgeTest;
+    TEnvironmentSetup env{{
+        .NodeCount = 16,
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        .LocationGenerator = GetBridgedLocation,
+        .SelfManagementConfig = true,
+        .NumPiles = 2,
+        .AutomaticBootstrap = true,
+    }};
+    const ui32 groupId = CreatePoolAndGetGroup(env);
+    auto group = GetGroupInfo(env, groupId);
+    auto *state = group.MutableBridgeGroupState();
+    const auto source = env.GetGroupInfo(state->GetPile(0).GetGroupId());
+    const auto target = env.GetGroupInfo(state->GetPile(1).GetGroupId());
+    state->MutablePile(1)->SetStage(NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA);
+    const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+    UNIT_ASSERT(info);
+    const TString data = "quota-delayed copy";
+    const TLogoBlobID id(100500, 1, 1, 0, data.size(), 0);
+    auto put = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, source->GroupID.GetRawId(), 1,
+        new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+    UNIT_ASSERT_VALUES_EQUAL(put->Status, NKikimrProto::OK);
+
+    auto quoter = std::make_shared<TReplQuoter>(1);
+    const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    env.Runtime->WrapInActorContext(edge, [&] {
+        quoter->Take(TActivationContext::Monotonic(), 600); // reserve ten minutes before the syncer's read
+    });
+    TActorId syncer;
+    bool targetChecked = false;
+    ui32 sourceReads = 0;
+    std::unique_ptr<IEventHandle> completion;
+    env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->Sender == syncer && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+            if (ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly) {
+                targetChecked = true;
+            } else {
+                ++sourceReads;
+            }
+        }
+        if (ev->Sender == syncer && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+            UNIT_ASSERT(!completion);
+            completion = std::move(ev);
+            return false;
+        }
+        return true;
+    };
+    syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
+        std::make_shared<NBridge::TSyncerDataStats>(), quoter, source->Type), 1);
+    WaitUntil(env, [&] { return targetChecked; }, "target index query before throttled read");
+    env.Sim(TDuration::Minutes(6));
+    UNIT_ASSERT(!completion);
+    UNIT_ASSERT_VALUES_EQUAL_C(sourceReads, 0, "the read must wait for its quota");
+    if (cancel) {
+        env.Runtime->Send(new IEventHandle(syncer, edge, new TEvents::TEvPoison), 1);
+        env.Sim(TDuration::Minutes(5));
+        UNIT_ASSERT_VALUES_EQUAL_C(sourceReads, 0, "a stopped syncer must not dispatch its delayed request");
+        UNIT_ASSERT(!completion);
+    } else {
+        WaitUntil(env, [&] { return bool(completion); }, "quota-delayed sync completion", TDuration::Seconds(1), 300);
+        UNIT_ASSERT_VALUES_EQUAL(sourceReads, 1);
+        UNIT_ASSERT(!completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, target->GroupID.GetRawId(), 9, id, data), NKikimrProto::OK);
+    }
+    env.Runtime->FilterFunction = {};
+}
+
 } // namespace
 
+Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
+    Y_UNIT_TEST(QuotaDelayedRequestCompletes) {
+        TestSyncerQuotaDelay(false);
+    }
+
+    Y_UNIT_TEST(StoppingSyncerCancelsQuotaDelayedRequest) {
+        TestSyncerQuotaDelay(true);
+    }
+}
+
 Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
+    Y_UNIT_TEST_TWIN(InvalidSourceAssignmentFails, missingSource) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        auto group = GetGroupInfo(env, CreatePoolAndGetGroup(env));
+        if (!missingSource) {
+            group.MutableBridgeGroupState()->MutablePile(0)->SetStage(NKikimrBridge::TGroupState::BLOCKS);
+        }
+        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(info);
+        const auto& state = group.GetBridgeGroupState();
+        const TGroupId source = TGroupId::FromValue(missingSource ? 0 : state.GetPile(0).GetGroupId());
+        const TGroupId target = TGroupId::FromValue(state.GetPile(1).GetGroupId());
+        TActorId syncer;
+        std::unique_ptr<IEventHandle> completion;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->Sender == syncer && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                completion = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source, target,
+            std::make_shared<NBridge::TSyncerDataStats>(), nullptr, info->Type), 1);
+        WaitUntil(env, [&] { return bool(completion); }, "invalid assignment completion");
+        env.Runtime->FilterFunction = {};
+        const auto& error = completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason;
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, missingSource ? "source group not found" : "group is not synced");
+    }
+
     Y_UNIT_TEST(LateCompletionWhileWaitingForNewConfiguration) {
         TestLateSyncerCompletion(ECompletionRace::NewGeneration);
     }
@@ -285,5 +402,73 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         RejoinPile(env, 1);
         checker.CheckAll();
         CheckPileData(env, checker, 1, 9);
+    }
+
+    // BSC doesn't check piles to sync while it notifies distconf of a synced pile, and the check requested meanwhile (here
+    // by the other pile coming back) must run once the notification is answered: it is the check that resets the parts
+    // of the pile coming back, and nothing else makes it run on a quiet cluster
+    Y_UNIT_TEST(RecheckAfterSyncNotification) {
+        using namespace NBridgeTest;
+
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        for (ui32 pile : {1, 2}) {
+            SwitchPileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+        }
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId);
+
+        auto isBsc = [&](const TActorId& actorId) {
+            IActor *actor = env.Runtime->GetActor(actorId);
+            return actor && TypeName(*actor).Contains("TBlobStorageController");
+        };
+        bool holding = true;
+        THashSet<ui64> notifyCookies;
+        std::vector<std::tuple<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType && isBsc(ev->Sender)) {
+                const auto& record = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (record.HasNotifyBridgeSyncFinished()) {
+                    const auto& cmd = record.GetNotifyBridgeSyncFinished();
+                    using T = std::decay_t<decltype(cmd)>;
+                    if (cmd.GetBSC() && TBridgePileId::FromProto(&cmd, &T::GetBridgePileId) ==
+                            TBridgePileId::FromPileIndex(1)) {
+                        notifyCookies.insert(ev->Cookie);
+                    }
+                }
+            } else if (holding && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType &&
+                    notifyCookies.contains(ev->Cookie) && isBsc(ev->GetRecipientRewrite())) {
+                held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitUntil(env, [&] { return !held.empty(); }, "BSC notification of pile 1 synced", TDuration::Seconds(1), 300);
+
+        // pile 2 comes back while BSC waits for the answer to the notification
+        SwitchPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        env.Sim(TDuration::Seconds(10));
+
+        holding = false;
+        for (auto& [nodeId, ev] : std::exchange(held, {})) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        env.Runtime->FilterFunction = {};
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        checker.CheckAll();
+        CheckPileData(env, checker, 2, 17);
     }
 }

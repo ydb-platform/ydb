@@ -12,7 +12,12 @@ from _paths import TEST_METRICS, add_product_paths
 
 add_product_paths(TEST_METRICS)
 
-from html_embed import js_script_json
+from html_embed import (
+    js_script_json,
+    sanitize_for_json,
+    strip_suggestion_hover_text,
+    write_dashboard_data_json,
+)
 
 _DIR = TEST_METRICS
 
@@ -26,6 +31,42 @@ class JsScriptJsonTest(unittest.TestCase):
         upper = js_script_json({"x": "</SCRIPT>"})
         self.assertNotIn("</SCRIPT>", upper)
         self.assertIn("\\u003c/SCRIPT\\u003e", upper)
+
+    def test_strip_suggestion_hover_text(self):
+        rows = strip_suggestion_hover_text(
+            [
+                {
+                    "suite_path": "a/b",
+                    "recommended_cpu": 4,
+                    "recommended_cpu_tooltip": "long text",
+                    "mem_explain": "why",
+                    "cpu_action": "raise",
+                }
+            ]
+        )
+        self.assertEqual(
+            rows,
+            [{"suite_path": "a/b", "recommended_cpu": 4, "cpu_action": "raise"}],
+        )
+
+    def test_write_dashboard_data_json_compact(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "dashboard_data.json"
+            write_dashboard_data_json(path, {"a": 1, "b": [2, 3]})
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(text, '{"a":1,"b":[2,3]}')
+
+    def test_sanitize_non_finite_floats_for_json_parse(self):
+        import math
+
+        cleaned = sanitize_for_json({"x": math.nan, "y": [math.inf, 1.5]})
+        self.assertEqual(cleaned, {"x": None, "y": [None, 1.5]})
+        raw = js_script_json({"x": math.nan})
+        self.assertIn("null", raw)
+        self.assertNotIn("NaN", raw)
 
     def test_cpu_seconds_keeps_seconds(self):
         from tests_resource_dashboard import cpu_seconds
@@ -48,6 +89,154 @@ class JsScriptJsonTest(unittest.TestCase):
                     if snippet and "\\" in snippet:
                         bad.append((name, part.lineno, snippet))
             self.assertEqual(bad, [], msg=f"backslash in f-string expression: {bad}")
+
+    def test_dashboard_html_exports_inline_handler_globals(self):
+        source = (_DIR / "dashboard_html_main.py").read_text(encoding="utf-8")
+        # Require the real post-fetch assignments, not the pre-fetch no-op stubs
+        # (`window.showTab = function() {}`).
+        required = (
+            "window.toggleSuiteMarkers = toggleSuiteMarkers;",
+            "window.showTab = showTab;",
+            "window.clearSuiteSearch = clearSuiteSearch;",
+            "window.clearAllMarkers = clearAllMarkers;",
+            "window.applyTimezoneToAllCharts = applyTimezoneToAllCharts;",
+            "window.applyMarkersToCharts = applyMarkersToCharts;",
+            "window.applyLayerToggles = applyLayerToggles;",
+            "window.toggleChartTile = toggleChartTile;",
+        )
+        missing = [name for name in required if name not in source]
+        self.assertEqual(missing, [], msg=f"missing window exports: {missing}")
+
+    def test_dashboard_html_uses_chart_tiles_and_collapses_tests_by_suite(self):
+        source = (_DIR / "dashboard_html_main.py").read_text(encoding="utf-8")
+        self.assertIn('class="chart-grid"', source)
+        self.assertIn('class="chart-tile"', source)
+        self.assertIn("function toggleChartTile(btn)", source)
+        self.assertIn("function syncChartGroupXRange(ids)", source)
+        self.assertIn("function fullEvlogRangeMs()", source)
+        self.assertIn('id="testsBySuiteDetails"', source)
+        self.assertIn('id="activeBySuiteDetails"', source)
+        self.assertIn("<summary>Tests in parallel</summary>", source)
+        self.assertIn("<summary>Active chunks</summary>", source)
+        self.assertIn('data-pane="yaActivity"', source)
+        self.assertNotIn('id="yaActivityGrid"', source)
+        # Runner monitoring lives inside the dashboard header.
+        header_idx = source.find('id="dashboardHeader"')
+        monitoring_idx = source.find('id="monitoringLinkWrap"')
+        headline_idx = source.find('id="headlineStats"')
+        self.assertGreater(header_idx, 0)
+        self.assertGreater(monitoring_idx, header_idx)
+        self.assertGreater(headline_idx, monitoring_idx)
+        header_block = source[header_idx:headline_idx]
+        self.assertIn('id="monitoringLinkWrap"', header_block)
+        self.assertIn("Runner monitoring:", header_block)
+        self.assertIn("build duration", source)  # filter-scope tip text
+        self.assertIn("'</b>total</span>'", source)
+        self.assertIn("'</b>build</span>'", source)
+        self.assertIn("'</b>test</span>'", source)
+        self.assertIn("headline-run-row", source)
+        self.assertIn("headline-tables", source)
+        self.assertNotIn("headlineTablesDetails", source)
+        self.assertIn("Host · /proc · tests", source)
+        self.assertIn("Host · /proc · full job", source)
+        self.assertIn("cpu_host_tests", source)
+        self.assertIn("function resolvePhaseDurations(hs)", source)
+        self.assertIn('rel="icon"', source)
+        self.assertIn("data:image/svg+xml,", source)
+        self.assertIn("<title>Chunk Resource Dashboard</title>", source)
+        # Typography: secondary collapses stay quiet; chart titles stay primary.
+        self.assertIn("details.aux-fold", source)
+        self.assertNotIn(
+            '<h3 style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">',
+            source,
+        )
+        self.assertIn("function ensureDetailsPlot(detailsId, paneId, plotFn)", source)
+        self.assertIn("_plottedDetailPanes", source)
+        self.assertIn("ensureDetailsPlot('testsBySuiteDetails', 'testsLayerSuite'", source)
+        self.assertIn("ensureDetailsPlot('activeBySuiteDetails', 'activeLayerSuite'", source)
+        self.assertIn("build = whole job", source)
+        self.assertIn("aria-expanded", source)
+        self.assertIn("from urllib.parse import quote", source)
+        # Long prose, debug dumps, and CPU suggestions live in one footer.
+        self.assertIn('id="docsFooter"', source)
+        self.assertIn("Docs &amp; debug", source)
+        footer_idx = source.find('id="docsFooter"')
+        stats_idx = source.find('id="stats"')
+        run_config_idx = source.find('id="runConfig"')
+        cpu_help_idx = source.find('id="cpuHelpText"')
+        sug_idx = source.find('id="cpuSuggestionsSection"')
+        heavy_idx = source.find('id="heavyTestsDetails"')
+        self.assertGreater(footer_idx, 0)
+        self.assertGreater(sug_idx, footer_idx)
+        self.assertGreater(heavy_idx, sug_idx)
+        self.assertGreater(cpu_help_idx, sug_idx)
+        self.assertGreater(stats_idx, footer_idx)
+        self.assertGreater(run_config_idx, footer_idx)
+        self.assertIn('class="quiet-link-fold"', source)
+        # Not mid-page above charts.
+        suite_grid_idx = source.find('id="suiteChartGrid"')
+        self.assertGreater(suite_grid_idx, 0)
+        self.assertLess(suite_grid_idx, footer_idx)
+        self.assertLess(suite_grid_idx, sug_idx)
+        self.assertNotIn('id="cpuHelpToggle"', source)
+        # Mid-page walls of help text should be gone.
+        self.assertNotIn('class="metrics-help"', source)
+        self.assertNotIn("How CPU/RAM chart metrics are calculated", source[0:suite_grid_idx])
+        self.assertIn("cfg.pr_title", source)
+        self.assertIn("cfg.report_url", source)
+        self.assertIn("ya-test.html", source)
+        self.assertIn("appendHeaderLink(testsReportHref, 'Test report')", source)
+        self.assertIn("tryLinks.length > 1", source)
+        self.assertIn("Resource dashboard", source)
+        self.assertIn("--report-url", (_DIR / "tests_resource_dashboard.py").read_text(encoding="utf-8"))
+        self.assertIn('report_url": args.report_url', (_DIR / "tests_resource_dashboard.py").read_text(encoding="utf-8"))
+        self.assertIn("document.title = 'PR #' + pr + ': ' + prTitle + ' · Resource dashboard'", source)
+        self.assertIn('>CPU<span class="chart-tile-sub">cores by suite · red = host</span>', source)
+        self.assertIn(">ya make<span class=\"chart-tile-sub\">active jobs by phase</span>", source)
+        self.assertIn("chart-tile-sub", source)
+        self.assertIn(".chart-tile.expanded {{", source)
+        self.assertIn("grid-column: 1 / -1;", source)
+        self.assertIn("Expand to full width", source)
+        self.assertNotIn(
+            ".chart-tile-meta {{\n      display: none;",
+            source,
+        )
+        self.assertNotIn("Hover CPU chart to see sorted contributors", source)
+        self.assertNotIn("Move cursor over chart to see sorted contributors", source)
+        self.assertIn(".hoverbox:empty,", source)
+        self.assertIn('id="cpuHover" class="hoverbox"', source)
+        self.assertIn("b: 72", source)
+        self.assertIn("itemsizing: 'constant'", source)
+        self.assertIn("JSON.parse(JSON.stringify(obj))", source)
+        self.assertIn("Plotly.newPlot(plotId, clone(traces), clone(yaLayout), yaOpts)", source)
+        # Suite 2×2: ya make → CPU → RAM → Disk; Tests + Active under details.
+        suite_grid_idx = source.find('id="suiteChartGrid"')
+        tests_details_idx = source.find('id="testsBySuiteDetails"')
+        active_details_idx = source.find('id="activeBySuiteDetails"')
+        ya_pane_idx = source.find('id="yaActivity"')
+        cpu_pane_idx = source.find('id="cpuLayerSuite"')
+        ram_pane_idx = source.find('id="ramLayerSuite"')
+        disk_pane_idx = source.find('id="diskLayerSuite"')
+        tests_pane_idx = source.find('id="testsLayerSuite"')
+        active_pane_idx = source.find('id="activeLayerSuite"')
+        pies_idx = source.find('id="cpuPieSuite"')
+        self.assertGreater(suite_grid_idx, 0)
+        self.assertGreater(ya_pane_idx, suite_grid_idx)
+        self.assertGreater(cpu_pane_idx, ya_pane_idx)
+        self.assertGreater(ram_pane_idx, cpu_pane_idx)
+        self.assertGreater(disk_pane_idx, ram_pane_idx)
+        self.assertLess(disk_pane_idx, tests_details_idx)
+        self.assertGreater(tests_details_idx, suite_grid_idx)
+        self.assertGreater(active_details_idx, tests_details_idx)
+        self.assertGreater(pies_idx, active_details_idx)
+        self.assertGreater(tests_pane_idx, tests_details_idx)
+        self.assertLess(tests_pane_idx, active_details_idx)
+        self.assertGreater(active_pane_idx, active_details_idx)
+        self.assertLess(active_pane_idx, pies_idx)
+        suite_grid_block = source[suite_grid_idx:tests_details_idx]
+        self.assertIn('data-pane="yaActivity"', suite_grid_block)
+        self.assertNotIn('data-pane="activeLayerSuite"', suite_grid_block)
+        self.assertNotIn('id="activeLayerSuite"', suite_grid_block)
 
 
 if __name__ == "__main__":

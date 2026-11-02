@@ -21,6 +21,7 @@ import zlib
 from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
+from statistics import median
 from typing import Any, Optional
 
 # Same-dir library for ya.make REQUIREMENTS (reserved cpu/ram)
@@ -93,6 +94,224 @@ def _default_repo_root() -> Optional[Path]:
 EVLOG_AUX_OUTPUT_RE = re.compile(
     r"(?:^|/)(?:meta\.json|ytest\.report\.trace|run_test\.log|testing_out_stuff\.tar(?:\.zstd)?)(?=\s|$)"
 )
+
+_COMPILE_PREFIXES = ("Preprocess", "Compile")
+_ARCHIVE_PREFIXES = ("Archive",)
+_LINK_PREFIXES = ("CompileAndLink", "SharedLibrary", "Link")
+_CACHE_PREFIXES = ("FromDistCache", "PutInDistCache", "PutInCache", "WriteThroughCaches")
+_LINK_OUTPUT_SUFFIXES = (".a", ".so", ".dylib")
+
+
+def classify_evlog_run_name(
+    name: str,
+) -> tuple[Optional[str], Optional[str], Optional[int], bool]:
+    """Shared Run(...) name parse: suite, group, chunk, is_aux packaging run."""
+    suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(name)
+    is_aux = bool(
+        chunk is not None
+        and chunk == 0
+        and "/chunk" not in name
+        and EVLOG_AUX_OUTPUT_RE.search(name)
+    )
+    return suite_raw, chunk_group, chunk, is_aux
+
+
+def _evlog_activity_kind(name: str, tag: Optional[str] = None) -> Optional[str]:
+    """Classify a ya worker node for the whole-build concurrency chart."""
+    tag_upper = str(tag or "").strip().upper()
+    for prefix in _CACHE_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "cache"
+    for prefix in _ARCHIVE_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "archive"
+    for prefix in _LINK_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "link"
+    for prefix in _COMPILE_PREFIXES:
+        if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
+            return "build"
+    if not name.startswith("Run("):
+        return None
+    # Worker tags are authoritative when present. In particular, LD also
+    # covers executable links whose output has no file extension, while AR
+    # means archive creation and is shown separately from compilations/build.
+    if tag_upper == "LD":
+        return "link"
+    if tag_upper == "AR":
+        return "archive"
+    if tag_upper == "TM":
+        return "test_tm"
+    if "test-results" in name:
+        # Non-TM test-results Runs are shown via report-backed test_report, not
+        # a separate evlog kind — skip so we do not build+discard "test" deltas.
+        return None
+    path = name.split("(", 1)[1]
+    if "$(BUILD_ROOT)" in path:
+        path = path.split("$(BUILD_ROOT)", 1)[1]
+    path = path.rstrip(")").lower()
+    if not tag_upper and path.endswith(_LINK_OUTPUT_SUFFIXES):
+        return "link"
+    # Non-test Run nodes are build/codegen jobs even when their output has no
+    # recognizable suffix (generated packages and executable targets).
+    return "build"
+
+
+def parse_evlog_activity_deltas(
+    evlog_path: Optional[Path] = None,
+    *,
+    events: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, list[tuple[float, int]]]:
+    """Return per-kind +1/-1 deltas for the whole-build concurrency chart.
+
+    Keeps only compact (timestamp_us, sign) pairs — no per-node interval dicts.
+    Callers sweep deltas into a step series (see build_active_series_from_deltas).
+    """
+    if events is None:
+        if evlog_path is None:
+            raise ValueError("parse_evlog_activity_deltas requires evlog_path or events")
+        events = load_json_or_jsonl(evlog_path)
+    deltas: dict[str, list[tuple[float, int]]] = defaultdict(list)
+    stacks: dict[tuple[int, int], list[tuple[float, str, Optional[str]]]] = defaultdict(list)
+    open_by_uid: dict[str, tuple[tuple[int, int], float, str]] = {}
+    completed_uids: set[str] = set()
+
+    def _open(kind: str, start_us: float) -> None:
+        if kind:
+            deltas[kind].append((start_us, +1))
+
+    def _close(kind: str, end_us: float) -> None:
+        if kind:
+            deltas[kind].append((end_us, -1))
+
+    for ev in events:
+        if "ph" not in ev:
+            if ev.get("namespace") != "worker_threads" or ev.get("event") != "node-finished":
+                continue
+            value = ev.get("value") if isinstance(ev.get("value"), dict) else {}
+            raw_time = value.get("time")
+            if not (isinstance(raw_time, list) and len(raw_time) == 2):
+                continue
+            try:
+                start_sec, end_sec = float(raw_time[0]), float(raw_time[1])
+            except (TypeError, ValueError):
+                continue
+            kind = _evlog_activity_kind(
+                str(value.get("name") or ""),
+                str(value.get("tag") or ""),
+            )
+            if kind and end_sec >= start_sec:
+                start_us = start_sec * 1_000_000.0
+                end_us = end_sec * 1_000_000.0
+                _open(kind, start_us)
+                _close(kind, end_us)
+            continue
+
+        ph = ev.get("ph")
+        if ph not in ("B", "E"):
+            continue
+        key = (int(ev.get("pid", 0)), int(ev.get("tid", 0)))
+        ts = float(ev.get("ts", 0.0) or 0.0)
+        if ph == "B":
+            args = ev.get("args") if isinstance(ev.get("args"), dict) else {}
+            arg_name = str(args.get("name") or "")
+            # Newer traces close Run(rnd-…) with B: Result(rnd-…) and no E.
+            m_res = RESULT_UID_RE.search(arg_name)
+            if m_res:
+                uid = m_res.group(1)
+                if uid in completed_uids:
+                    continue
+                begin = open_by_uid.pop(uid, None)
+                if begin is not None:
+                    b_key, start_us, kind = begin
+                    stack = stacks.get(b_key) or []
+                    for i in range(len(stack) - 1, -1, -1):
+                        if stack[i][2] == uid:
+                            stack.pop(i)
+                            break
+                    if kind:
+                        # Clamp so +1/-1 stays balanced on out-of-order timestamps.
+                        _close(kind, max(ts, start_us))
+                    completed_uids.add(uid)
+                continue
+            # Chrome-trace worker type lives in event name (CC/LD/AR/TM).
+            kind = _evlog_activity_kind(
+                arg_name,
+                str(args.get("tag") or ev.get("tag") or ev.get("name") or ""),
+            ) or ""
+            m_uid = RUN_UID_RE.search(arg_name)
+            uid = m_uid.group(1) if m_uid else None
+            stacks[key].append((ts, kind, uid))
+            if kind:
+                _open(kind, ts)
+            if uid and kind:
+                open_by_uid[uid] = (key, ts, kind)
+            continue
+        if not stacks[key]:
+            continue
+        start_us, kind, uid = stacks[key].pop()
+        if uid and uid in completed_uids:
+            continue
+        if uid:
+            open_by_uid.pop(uid, None)
+            completed_uids.add(uid)
+        if kind:
+            _close(kind, max(ts, start_us))
+
+    # Truncated traces: close leftover opens so concurrency does not stick high.
+    last_ts = 0.0
+    for kind_deltas in deltas.values():
+        for ts, _sign in kind_deltas:
+            if ts > last_ts:
+                last_ts = ts
+    for key, stack in list(stacks.items()):
+        while stack:
+            start_us, kind, uid = stack.pop()
+            if uid:
+                open_by_uid.pop(uid, None)
+                completed_uids.add(uid)
+            if kind:
+                _close(kind, max(last_ts, start_us))
+    for uid, (_key, start_us, kind) in list(open_by_uid.items()):
+        if uid in completed_uids:
+            continue
+        if kind:
+            _close(kind, max(last_ts, start_us))
+        completed_uids.add(uid)
+    open_by_uid.clear()
+
+    return dict(deltas)
+
+
+def activity_deltas_to_intervals(
+    deltas: dict[str, list[tuple[float, int]]],
+) -> list[dict[str, Any]]:
+    """Debug/test helper: LIFO-pair deltas into positive-length intervals."""
+    activity: list[dict[str, Any]] = []
+    for kind, kind_deltas in deltas.items():
+        starts: list[float] = []
+        # Opens before closes at the same timestamp so zero-length pairs cancel
+        # cleanly instead of leaving a stale start for a later close.
+        for ts, sign in sorted(kind_deltas, key=lambda item: (item[0], -item[1])):
+            if sign > 0:
+                starts.append(ts)
+            elif starts:
+                start_us = starts.pop()
+                if ts > start_us:
+                    activity.append({"kind": kind, "start_us": start_us, "end_us": ts})
+    activity.sort(key=lambda row: (float(row["start_us"]), str(row["kind"])))
+    return activity
+
+
+def parse_evlog_activity(
+    evlog_path: Optional[Path] = None,
+    *,
+    events: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    """Return compile/link/test worker intervals (test/debug convenience wrapper)."""
+    return activity_deltas_to_intervals(
+        parse_evlog_activity_deltas(evlog_path, events=events)
+    )
 
 
 def _suites_with_indexed_chunks(
@@ -598,7 +817,7 @@ def parse_report_chunks(
 
 
 def build_test_event_times_direct(
-    report_path: Path,
+    report_path: Optional[Path],
     suite_filter: Optional[str],
     enriched_runs: list[dict[str, Any]],
     evlog_path: Optional[Path] = None,
@@ -607,6 +826,8 @@ def build_test_event_times_direct(
     Build test-level error/timeout marker times directly from report rows (chunk=false),
     mapping test chunk_hid -> run end_us. Falls back to suite/chunk index mapping.
     """
+    if report_path is None or not report_path.exists():
+        return {}
     suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
     report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
     results = report.get("results", []) if isinstance(report, dict) else []
@@ -766,9 +987,17 @@ def build_test_event_times_direct(
     }
 
 
-def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict[str, Any]]:
+def parse_evlog_runs(
+    evlog_path: Optional[Path],
+    suite_filter: Optional[str],
+    *,
+    events: Optional[list[dict[str, Any]]] = None,
+) -> list[dict[str, Any]]:
     suite_filter = normalize_suite_path(suite_filter) if suite_filter else None
-    events = load_json_or_jsonl(evlog_path)
+    if events is None:
+        if evlog_path is None:
+            raise ValueError("parse_evlog_runs requires evlog_path or events")
+        events = load_json_or_jsonl(evlog_path)
     stacks: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     runs: list[dict[str, Any]] = []
     run_by_uid: dict[str, dict[str, Any]] = {}
@@ -787,11 +1016,11 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
             arg_name = str(value.get("name", ""))
             if not arg_name.startswith("Run("):
                 continue
-            suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            suite_raw, chunk_group, chunk, is_aux = classify_evlog_run_name(arg_name)
             if suite_raw is None or chunk is None:
                 continue
             # Skip aux-only runs (meta.json, run_test.log, etc.): they are side-effect events, not real chunk runs.
-            if chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
+            if is_aux:
                 continue
             if suite_filter is not None and normalize_suite_path(suite_raw) != suite_filter:
                 continue
@@ -864,7 +1093,7 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                     completed_uids.add(uid)
                 continue
             m_uid = RUN_UID_RE.search(arg_name)
-            suite_raw, chunk_group, chunk = extract_suite_group_chunk_from_run_name(arg_name)
+            suite_raw, chunk_group, chunk, is_aux = classify_evlog_run_name(arg_name)
             suite_norm = normalize_suite_path(suite_raw) if suite_raw is not None else None
             is_target = (
                 arg_name.startswith("Run(")
@@ -872,10 +1101,8 @@ def parse_evlog_runs(evlog_path: Path, suite_filter: Optional[str]) -> list[dict
                 and chunk is not None
                 and ev_name == "TM"
                 and (suite_filter is None or suite_norm == suite_filter)
+                and not is_aux
             )
-            # Skip aux-only runs (meta.json, run_test.log, etc.) in trace format too.
-            if is_target and chunk == 0 and "/chunk" not in arg_name and EVLOG_AUX_OUTPUT_RE.search(arg_name):
-                is_target = False
             if is_target and m_uid:
                 run_by_uid[m_uid.group(1)] = {
                     "pid": pid,
@@ -1012,6 +1239,8 @@ def _build_resources_overlay(
     resources_path: Path,
     enriched_runs: list[dict[str, Any]],
     records: Optional[list[dict[str, Any]]] = None,
+    activity: Optional[list[dict[str, Any]]] = None,
+    activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> Optional[dict[str, Any]]:
     """Load resources JSONL and convert to evlog timeline for overlay on CPU/RAM charts."""
     try:
@@ -1029,9 +1258,20 @@ def _build_resources_overlay(
     if ref_report_ts is None:
         ref_report_ts = ref_run.get("report_suite_finish_ts")
     if ref_report_ts is None:
-        # Fallback: assume first resource sample aligns with first evlog run start
-        ref_report_ts = float(records[0].get("ts", 0) or 0)
-        ref_start_ev = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
+        first_mon = float(records[0].get("ts", 0) or 0)
+        first_ev = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
+        # resources_monitor.ts is unix wall clock. Old worker_threads evlog
+        # value.time is the same domain — identity mapping. Pinning the first
+        # monitor sample onto the first test run (legacy fallback) shifts the
+        # whole host overlay by the build preamble (~30min on Large) and paints
+        # a false high-CPU/RAM tail after the last active chunk.
+        if first_mon >= 1_000_000_000.0 and first_ev >= 1_000_000_000.0:
+            ref_start_ev = 0.0
+            ref_report_ts = 0.0
+        else:
+            # Monotonic / relative evlog: pin first monitor sample to first run.
+            ref_report_ts = first_mon
+            ref_start_ev = first_ev
     else:
         ref_report_ts = float(ref_report_ts)
     # cpu_cores is in the first record; fallback: search all records (monitor adds it only to first)
@@ -1041,18 +1281,27 @@ def _build_resources_overlay(
         if v is not None and (isinstance(v, (int, float)) and v > 0):
             cpu_cores = int(v)
             break
-    min_evlog = min(float(r.get("start_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
-    max_evlog = max(float(r.get("end_us", 0) or 0) for r in enriched_runs) / 1_000_000.0
     xs_evlog: list[float] = []
     cpu_total_cores: list[float] = []
     ram_gb: list[float] = []
     disk_read_mb: list[float] = []
     disk_write_mb: list[float] = []
     for r in records:
-        ts = float(r.get("ts", 0) or 0)
-        evlog_sec = ref_start_ev + (ts - ref_report_ts)
-        if not (min_evlog <= evlog_sec <= max_evlog):
+        # Host overlay is /proc machine totals. Newer monitors also emit
+        # kind=test cgroup rows (suite/chunk) without cpu_total_pct /
+        # ram_used_kb. Filling those as 0.0 zeros out headline p95/median
+        # (~97% of samples on squeeze2) and dilutes avg to ~1–2 cores.
+        kind = str(r.get("kind") or "").lower()
+        if kind == "test":
             continue
+        if kind != "host" and r.get("cpu_total_pct") is None and r.get("ram_used_kb") is None:
+            continue
+        ts = float(r.get("ts", 0) or 0)
+        # Missing/zero timestamps produce a nonsense negative timeline that
+        # force-expands every chart x-range; skip them.
+        if ts <= 0:
+            continue
+        evlog_sec = ref_start_ev + (ts - ref_report_ts)
         xs_evlog.append(evlog_sec)
         cpu_total_cores.append(float(r.get("cpu_total_pct", 0) or 0) / 100.0 * cpu_cores)
         ram_gb.append(float(r.get("ram_used_kb", 0) or 0) / (1024 * 1024))
@@ -1075,13 +1324,31 @@ def _build_resources_overlay(
     ram_total_gb = _first_positive("ram_total_gb")
     if not xs_evlog:
         return None
+    range_lo = min(xs_evlog)
+    range_hi = max(xs_evlog)
+    if activity_deltas:
+        for kind_deltas in activity_deltas.values():
+            for ts, _sign in kind_deltas:
+                sec = float(ts) / 1_000_000.0
+                if sec < range_lo:
+                    range_lo = sec
+                if sec > range_hi:
+                    range_hi = sec
+    elif activity:
+        for row in activity:
+            start = float(row.get("start_us", 0) or 0) / 1_000_000.0
+            end = float(row.get("end_us", 0) or 0) / 1_000_000.0
+            if start and start < range_lo:
+                range_lo = start
+            if end and end > range_hi:
+                range_hi = end
     return {
         "xs_evlog_sec": xs_evlog,
         "cpu_total_cores": cpu_total_cores,
         "ram_gb": ram_gb,
         "disk_read_mb": disk_read_mb,
         "disk_write_mb": disk_write_mb,
-        "evlog_range_sec": [min_evlog, max_evlog],
+        "evlog_range_sec": [range_lo, range_hi],
         "cpu_cores": cpu_cores,
         "ram_total_gb": ram_total_gb,
     }
@@ -1287,7 +1554,12 @@ def build_trace(
 def main() -> None:
     p = argparse.ArgumentParser(description="Build tests resource dashboard from evlog + report")
     p.add_argument("--suite-path", default=None, help="Suite path to filter; omit for ALL suites")
-    p.add_argument("--report", required=True, type=Path, help="Path to report.json")
+    p.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="Path to report.json (optional: when missing, timeline falls back to evlog runs)",
+    )
     p.add_argument("--evlog", required=True, type=Path, help="Path to ya evlog json/jsonl")
     p.add_argument("--out-html", type=Path, default=None, help="Output HTML dashboard (also sets default paths for sibling outputs)")
     p.add_argument("--out-trace", type=Path, default=None, help="Output trace JSON (default: <html-stem>_trace.json next to --out-html)")
@@ -1325,9 +1597,16 @@ def main() -> None:
     )
     p.add_argument("--runner", type=str, default=None, help="Runner name (e.g. GitHub Actions runner) for monitoring link")
     p.add_argument("--pr", type=str, default=None, help="PR number for dashboard header")
+    p.add_argument("--pr-title", type=str, default=None, help="PR title for dashboard header and page title")
     p.add_argument("--branch", type=str, default=None, help="Target branch for dashboard header")
     p.add_argument("--commit", type=str, default=None, help="Commit SHA for dashboard header")
     p.add_argument("--artifacts-url", type=str, default=None, help="Base URL for artifacts (index.html, try links)")
+    p.add_argument(
+        "--report-url",
+        type=str,
+        default=None,
+        help="URL of the ya-test.html report for the dashboard header (after Artifacts)",
+    )
     p.add_argument("--try-links", type=str, default=None, help="Comma-separated try_N/tests_metrics/dashboard.html paths for links")
     p.add_argument("--repo", type=str, default="ydb-platform/ydb", help="GitHub repo for PR/commit links")
     args = p.parse_args()
@@ -1352,20 +1631,26 @@ def main() -> None:
         args.out_csv = args.out_trace.parent / (base + "_chunks.csv")
 
     # Prevent accidental overwrite of inputs by outputs.
-    report_r = args.report.resolve()
+    report_path = args.report if args.report and args.report.exists() else None
+    if args.report and report_path is None:
+        print(
+            f"WARNING: --report not found ({args.report}); building timeline from evlog only",
+            file=sys.stderr,
+        )
+    report_r = report_path.resolve() if report_path else None
     evlog_r = args.evlog.resolve()
     out_trace_r = args.out_trace.resolve()
     out_stats_r = args.out_stats.resolve() if args.out_stats else None
     out_html_r = args.out_html.resolve() if args.out_html else None
     out_cpu_sugg_r = args.out_cpu_suggestions.resolve() if args.out_cpu_suggestions else None
 
-    if report_r == out_trace_r:
+    if report_r is not None and report_r == out_trace_r:
         raise SystemExit("Invalid args: --report and --out-trace must be different files")
-    if out_stats_r and report_r == out_stats_r:
+    if report_r is not None and out_stats_r and report_r == out_stats_r:
         raise SystemExit("Invalid args: --report and --out-stats must be different files")
-    if out_html_r and report_r == out_html_r:
+    if report_r is not None and out_html_r and report_r == out_html_r:
         raise SystemExit("Invalid args: --report and --out-html must be different files")
-    if out_cpu_sugg_r and report_r == out_cpu_sugg_r:
+    if report_r is not None and out_cpu_sugg_r and report_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --report and --out-cpu-suggestions must be different files")
     if out_stats_r and out_trace_r == out_stats_r:
         raise SystemExit("Invalid args: --out-trace and --out-stats must be different files")
@@ -1374,7 +1659,9 @@ def main() -> None:
     if out_cpu_sugg_r and out_trace_r == out_cpu_sugg_r:
         raise SystemExit("Invalid args: --out-trace and --out-cpu-suggestions must be different files")
     out_csv_r = args.out_csv.resolve() if args.out_csv else None
-    protected = {report_r, evlog_r}
+    protected = {evlog_r}
+    if report_r is not None:
+        protected.add(report_r)
     for label, path in (
         ("--out-trace", out_trace_r),
         ("--out-stats", out_stats_r),
@@ -1385,21 +1672,30 @@ def main() -> None:
         if path in protected:
             raise SystemExit(f"Invalid args: {label} must not overwrite --report or --evlog")
 
-    report_obj = json.loads(args.report.read_text(encoding="utf-8", errors="replace"))
-    effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, args.report)
-
-    (
-        chunks,
-        report_status_by_suite,
-        tests_per_chunk,
-        tests_per_suite,
-        max_test_duration_sec_by_suite,
-        test_duration_stats_by_suite,
-        issues_summary,
-        suite_chunk_issues_summary,
-    ) = parse_report_chunks(
-        args.report, args.suite_path
-    )
+    if report_path is not None:
+        report_obj = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+        effective_sanitizer = args.sanitizer or _infer_sanitizer_from_report(report_obj, report_path)
+        (
+            chunks,
+            report_status_by_suite,
+            tests_per_chunk,
+            tests_per_suite,
+            max_test_duration_sec_by_suite,
+            test_duration_stats_by_suite,
+            issues_summary,
+            suite_chunk_issues_summary,
+        ) = parse_report_chunks(report_path, args.suite_path)
+    else:
+        report_obj = {}
+        effective_sanitizer = args.sanitizer
+        chunks = {}
+        report_status_by_suite = {}
+        tests_per_chunk = {}
+        tests_per_suite = {}
+        max_test_duration_sec_by_suite = {}
+        test_duration_stats_by_suite = {}
+        issues_summary = {}
+        suite_chunk_issues_summary = {}
     tests_per_chunk_by_label: dict[str, int] = {}
     for (suite_raw, group, idx), count in tests_per_chunk.items():
         suite_norm = normalize_suite_path(suite_raw)
@@ -1412,7 +1708,25 @@ def main() -> None:
         for rr in report_runs
         if not _is_dependency_sole_chunk_run(rr, suites_with_indexed)
     ]
-    evlog_runs = parse_evlog_runs(args.evlog, args.suite_path)
+    evlog_events = load_json_or_jsonl(args.evlog)
+    evlog_runs = parse_evlog_runs(args.evlog, args.suite_path, events=evlog_events)
+    # Compact +1/-1 deltas only — never materialize one interval dict per node.
+    try:
+        activity_deltas = parse_evlog_activity_deltas(args.evlog, events=evlog_events)
+    except Exception as exc:  # noqa: BLE001 — keep the rest of the dashboard
+        print(f"WARNING: evlog activity parse failed: {exc}", file=sys.stderr)
+        activity_deltas = {}
+    del evlog_events
+    # Large / aborted ya make may leave no report.json (disk full, kill). Keep a
+    # usable dashboard from evlog chunk runs alone (CPU/RAM then synthetic).
+    report_missing_fallback = False
+    if not report_runs and evlog_runs:
+        report_runs = [dict(er) for er in evlog_runs]
+        report_missing_fallback = True
+        print(
+            f"WARNING: no report chunk timeline; using {len(report_runs)} evlog run(s)",
+            file=sys.stderr,
+        )
     evlog_by_key: dict[tuple[str, Optional[str], int], dict[str, Any]] = {}
     for er in evlog_runs:
         k = (str(er.get("suite_path", "")), normalize_chunk_group(er.get("chunk_group")), int(er.get("chunk", 0)))
@@ -1421,6 +1735,7 @@ def main() -> None:
             evlog_by_key[k] = er
     runs = []
     enriched_by_evlog = 0
+    activity_offsets_us: list[float] = []
     for rr in report_runs:
         k = (str(rr.get("suite_path", "")), normalize_chunk_group(rr.get("chunk_group")), int(rr.get("chunk", 0)))
         best = evlog_by_key.get(k)
@@ -1429,8 +1744,26 @@ def main() -> None:
             out["duration_evlog_sec"] = float(best.get("dur_us", 0) or 0) / 1_000_000.0
             out["uid"] = best.get("uid")
             out["raw_name"] = best.get("raw_name") or out.get("raw_name")
+            # Prefer evlog wall clock when report was missing / fallback.
+            if report_missing_fallback:
+                out["start_us"] = float(best.get("start_us", 0) or 0)
+                out["end_us"] = float(best.get("end_us", 0) or 0)
+                out["dur_us"] = float(best.get("dur_us", 0) or 0)
             enriched_by_evlog += 1
+            activity_offsets_us.append(
+                float(rr.get("start_us", 0) or 0)
+                - float(best.get("start_us", 0) or 0)
+            )
         runs.append(out)
+    activity_offset_us = float(median(activity_offsets_us)) if activity_offsets_us else 0.0
+    activity_offset_unaligned = not bool(activity_offsets_us)
+    # Fallback offset 0 keeps build/link activity when clocks already match;
+    # stats flag marks that the shift was not median-validated.
+    if activity_offsets_us and activity_offset_us:
+        activity_deltas = {
+            kind: [(ts + activity_offset_us, sign) for ts, sign in kind_deltas]
+            for kind, kind_deltas in activity_deltas.items()
+        }
 
     requirements_cache = None
     repo_root = args.repo_root.resolve() if args.repo_root else _default_repo_root()
@@ -1453,9 +1786,12 @@ def main() -> None:
         ]
 
     trace, stats, enriched_runs = build_trace(runs, chunks, args.suite_path, requirements_cache)
-    stats["runs_from_report"] = len(report_runs)
+    stats["runs_from_report"] = 0 if report_missing_fallback else len(report_runs)
     stats["runs_from_evlog"] = len(evlog_runs)
     stats["runs_enriched_by_evlog"] = enriched_by_evlog
+    stats["report_missing_evlog_fallback"] = report_missing_fallback
+    stats["evlog_activity_offset_sec"] = activity_offset_us / 1_000_000.0
+    stats["evlog_activity_offset_unaligned"] = activity_offset_unaligned
     stats["repo_root"] = str(repo_root) if repo_root else None
     stats["suites_missing_ya_make"] = suites_missing_ya_make
     if suites_missing_ya_make:
@@ -1493,7 +1829,12 @@ def main() -> None:
         except ImportError:
             from resources_loader import load_resources_jsonl  # type: ignore[no-redef]
         resources_records = load_resources_jsonl(args.resources_jsonl)
-        resources_overlay = _build_resources_overlay(args.resources_jsonl, enriched_runs, records=resources_records)
+        resources_overlay = _build_resources_overlay(
+            args.resources_jsonl,
+            enriched_runs,
+            records=resources_records,
+            activity_deltas=activity_deltas,
+        )
 
     runner_footprint = resolve_runner_footprint(build_preset=args.build_preset)
     resources_overlay = enrich_resources_overlay(
@@ -1525,7 +1866,7 @@ def main() -> None:
         runner_footprint=runner_footprint,
     )
     suite_test_event_times = build_test_event_times_direct(
-        args.report, args.suite_path, enriched_runs, args.evlog
+        report_path, args.suite_path, enriched_runs, args.evlog
     )
     if args.out_cpu_suggestions:
         args.out_cpu_suggestions.write_text(json.dumps(cpu_suggestions, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1603,9 +1944,11 @@ def main() -> None:
                 path_match = '.path == $path or (.path | startswith($path + "/"))'
                 # When chunk_group is set, restrict to that group (e.g. only "[test_base.py 0/10] chunk" not all 0/10)
                 group_cond = '(if $group != "" then (.subtest_name | contains($group)) else true end)'
-                report_jq = shlex.quote(args.report.name)
+                report_jq = shlex.quote(report_path.name) if report_path is not None else ""
                 evlog_jq = shlex.quote(args.evlog.name)
-                if chunk_idx == 0:
+                if report_path is None:
+                    jq_report = ""
+                elif chunk_idx == 0:
                     jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | ascii_downcase | test("^\\\\s*sole\\\\s+chunk\\\\s*$")) or ((.subtest_name | test("\\\\b0/")) and {group_cond})))]\' {report_jq}'
                 else:
                     jq_report = f'jq --arg path "{path_esc}" --arg group "{group_esc}" \'[.results[] | select(.type == "test" and ({path_match}) and .chunk == true and ((.subtest_name | test("\\\\b{chunk_idx}/")) and {group_cond}))]\' {report_jq}'
@@ -1641,13 +1984,15 @@ def main() -> None:
         run_config = {
             "runner": args.runner,
             "pr": args.pr,
+            "pr_title": args.pr_title,
             "branch": args.branch,
             "commit": args.commit,
             "artifacts_url": args.artifacts_url,
+            "report_url": args.report_url,
             "try_links": [s.strip() for s in (args.try_links or "").split(",") if s.strip()],
             "repo": args.repo,
             "suite_path": args.suite_path,
-            "report": str(args.report),
+            "report": str(report_path) if report_path is not None else None,
             "evlog": str(args.evlog),
             "out_trace": str(args.out_trace),
             "out_stats": str(args.out_stats) if args.out_stats else None,
@@ -1678,6 +2023,7 @@ def main() -> None:
             tests_per_chunk_by_label=tests_per_chunk_by_label,
             issues_summary=issues_summary,
             suite_chunk_issues_summary=suite_chunk_issues_summary,
+            ya_activity_deltas=activity_deltas,
         )
         if args.full_table:
             out_table_html = args.out_html.with_name(args.out_html.stem + "_table.html")
@@ -1693,6 +2039,7 @@ def main() -> None:
         print(f"Chunks CSV written: {args.out_csv}")
     if args.out_html:
         print(f"HTML written: {args.out_html}")
+        print(f"Dashboard data written: {args.out_html.with_name(args.out_html.stem + '_data.json')}")
         if args.full_table:
             print(f"Table HTML written: {args.out_html.with_name(args.out_html.stem + '_table.html')}")
 

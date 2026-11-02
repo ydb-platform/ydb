@@ -1,6 +1,10 @@
 items:
   - name: Overview
     href: index.md
+  - name: ydb admin cluster bridge convert
+    href: convert.md
+  - name: ydb admin cluster bridge add-pile
+    href: add-pile.md
   - name: ydb admin cluster bridge list
     href: list.md
   - name: ydb admin cluster bridge switchover
@@ -11,3 +15,5 @@ items:
     href: takedown.md
   - name: ydb admin cluster bridge rejoin
     href: rejoin.md
+  - name: ydb admin cluster bridge remove-pile
+    href: remove-pile.md

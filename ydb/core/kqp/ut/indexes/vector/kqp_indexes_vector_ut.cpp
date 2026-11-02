@@ -2484,6 +2484,83 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(Float8VectorIndex, E5M2, Prefixed) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString type = E5M2 ? "Float8E5M2" : "Float8E4M3";
+        const TString sqlType = E5M2 ? "float8_e5m2" : "float8_e4m3";
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestTable` (
+                pk Int64 NOT NULL, bucket Uint32 NOT NULL, emb String, PRIMARY KEY (pk));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        TStringBuilder insert;
+        insert << "UPSERT INTO `/Root/TestTable` (pk, bucket, emb) VALUES ";
+        for (ui32 bucket = 1; bucket <= (Prefixed ? 2u : 1u); ++bucket) {
+            for (ui32 i = 0; i < 8; ++i) {
+                if (bucket != 1 || i != 0) {
+                    insert << ", ";
+                }
+                insert << "(" << (bucket * 100 + i) << ", " << bucket << "u, Untag(Knn::ToBinaryString" << type
+                    << "([" << Sprintf("%.2f", static_cast<double>(i) / 4 - 1.0) << "f, 0.25f]), \"" << type << "Vector\"))";
+            }
+        }
+        auto inserted = ExecuteDataQuery(session, insert);
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        for (bool autoDetect : {false, true}) {
+            TStringBuilder ddl;
+            ddl << "ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx GLOBAL USING vector_kmeans_tree ON ("
+                << (Prefixed ? "bucket, " : "") << "emb) WITH (distance=euclidean, levels=2, clusters=2";
+            if (!autoDetect) {
+                ddl << ", vector_type=" << sqlType << ", vector_dimension=2";
+            }
+            ddl << ");";
+            status = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto described = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto indexes = described.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes.front().GetIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorType, E5M2
+                ? TVectorIndexSettings::EVectorType::Float8E5M2 : TVectorIndexSettings::EVectorType::Float8E4M3);
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorDimension, 2);
+
+            auto qSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto shown = qSession.ExecuteQuery("SHOW CREATE TABLE `/Root/TestTable`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(shown.IsSuccess(), shown.GetIssues().ToString());
+            TResultSetParser parser(shown.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_STRING_CONTAINS(parser.ColumnParser(0).GetOptionalUtf8().value_or(""),
+                TStringBuilder() << "vector_type = '" << sqlType << "'");
+
+            const TString target = TStringBuilder() << "$target = Knn::ToBinaryString" << type << "([0.3125f, 0.25f]);\n";
+            const TString order = TStringBuilder() << (Prefixed ? " WHERE bucket = 1u" : "")
+                << " ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 3;";
+            const TString plainQuery = target + "SELECT pk FROM `/Root/TestTable`" + order;
+            const TString indexQuery = TStringBuilder() << "PRAGMA ydb.KMeansTreeSearchTopSize = \"4\";\n"
+                << target << "SELECT pk FROM `/Root/TestTable` VIEW vector_idx" << order;
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            // Exercise writes after the populated-table index build, then check
+            // that removing the closest vector is reflected by indexed search.
+            const TString upsert = TStringBuilder() << "UPSERT INTO `/Root/TestTable` (pk, bucket, emb) VALUES "
+                << "(100, 1u, Untag(Knn::ToBinaryString" << type << "([0.3125f, 0.25f]), \"" << type << "Vector\"));";
+            inserted = ExecuteDataQuery(session, upsert);
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+            inserted = ExecuteDataQuery(session, "DELETE FROM `/Root/TestTable` WHERE pk = 100;");
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            status = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX vector_idx;").ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+    }
+
     const TTtlNotAllowedIndexTestConfig VectorTtlNotAllowedConfig{
         .IndexInCreateTable = R"(INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
             WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),)",

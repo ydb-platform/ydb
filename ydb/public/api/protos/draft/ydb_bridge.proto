@@ -12,6 +12,23 @@ import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto"; 
 import "google/protobuf/timestamp.proto";
 
+// Atomically change bridge mode of the selected database.
+// Requires administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.
+message SetDatabaseBridgeModeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional bool bridge_mode = 2; // Required: true for bridged storage, false for ordinary storage.
+    // With bridge_mode=false, retain data copies in this pile. Empty selects copies automatically.
+    string retain_pile_name = 3;
+    // Required absolute path of the target database.
+    string database_path = 4;
+}
+
+message SetDatabaseBridgeModeResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SetDatabaseBridgeModeResult {}
+
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 

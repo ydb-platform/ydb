@@ -4,6 +4,6 @@
 
 Основные материалы:
 
-- [{#T}](deployment-preparation.md)
-- [{#T}](deployment-configuration-v1.md)
-- [{#T}](deployment-configuration-v2.md)
+- [Подготовка к развертыванию](deployment-preparation.md)
+- [Развёртывание кластера с использованием конфигурации V1](deployment-configuration-v1.md)
+- [Развёртывание кластера с использованием конфигурации V2](deployment-configuration-v2.md)

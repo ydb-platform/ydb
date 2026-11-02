@@ -8,19 +8,19 @@
 
 2. **Динамическая конфигурация**: файл в формате YAML, являющийся расширенной версией статической конфигурации. Загружается через [CLI](../../../recipes/ydb-cli/index.md) и надёжно сохраняется в [таблетке Console](../../../concepts/glossary.md#console), которая затем распространяет конфигурацию на все динамические узлы кластера. Использование динамической конфигурации опционально.
 
-Подробнее о Конфигурации V1 можно узнать в разделе [{#T}](config-overview.md).
+Подробнее о Конфигурации V1 можно узнать в разделе [Обзор конфигурации V1](config-overview.md).
 
 Основные материалы:
 
-- [{#T}](config-overview.md)
+- [Обзор конфигурации V1](config-overview.md)
 - [Статическая конфигурация](static-config.md)
-- [{#T}](dynamic-config.md)
-- [{#T}](dynamic-config-volatile-config.md)
+- [Динамическая конфигурация кластера](dynamic-config.md)
+- [Временные конфигурации](dynamic-config-volatile-config.md)
 - [DSL конфигурация кластера](dynamic-config-selectors.md)
-- [{#T}](cms.md)
-- [{#T}](change_actorsystem_configs.md)
-- [{#T}](cluster-expansion.md)
-- [{#T}](state-storage-move.md)
-- [{#T}](static-group-move.md)
+- [Изменение конфигураций через CMS](cms.md)
+- [Изменение конфигурации актор-системы](change_actorsystem_configs.md)
+- [Расширение кластера](cluster-expansion.md)
+- [Перемещение State Storage](state-storage-move.md)
+- [Перемещение статической группы](static-group-move.md)
 - [Замена FQDN узла](replacing-nodes.md)
 - [Аутентификация и авторизация узлов баз данных](node-authorization.md)

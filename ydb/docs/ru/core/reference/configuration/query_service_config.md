@@ -90,4 +90,4 @@ query_service_config:
 
 ## См. также
 
-- [{#T}](../../devops/deployment-options/manual/federated-queries/index.md)
+- [Развёртывание {{ ydb-short-name }} с функцией Federated Query](../../devops/deployment-options/manual/federated-queries/index.md)

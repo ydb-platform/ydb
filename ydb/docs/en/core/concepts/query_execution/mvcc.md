@@ -35,7 +35,7 @@ After implementing MVCC using global versions (shared with deterministic distrib
 
 ![Snapshot read example](_assets/mvcc_snapshot_read.png)
 
-## How {{ ydb-short-name }} Stores MVCC Data
+## How {{ ydb-short-name }} stores MVCC data {#how-ydb-short-name-stores-mvcc-data}
 
 A DataShard tablet stores one table shard as a write-optimized LSM tree in which, for each primary key, we keep a list of operations that change column values in the row. The current row state is built on every access by merging individual change operations. Background compaction likewise merges value changes across LSM levels and writes an aggregated state for each row.
 

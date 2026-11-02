@@ -11,10 +11,10 @@
 - System objects: [system views](../../dev/system-views.md) (`.sys`), [resource pools](../../concepts/glossary.md#resource-pool), and [resource pool classifiers](../../concepts/glossary.md#resource-pool-classifier).
 - [YQL](../../concepts/glossary.md#yql) editor with syntax highlighting for 150+ keywords and built-in functions.
 - Query execution plan visualization (`EXPLAIN` / `EXPLAIN ANALYZE`).
-- Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
+- Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md).
 - Cluster dashboard: CPU load, disk usage, memory usage, network traffic, node status (updates every 5 seconds).
 - [Access control (ACL)](../../security/authorization.md#right) management: granting, revoking, and viewing permissions.
-- [Streaming query](../../concepts/glossary.md#streaming-query) management: viewing, modifying, starting, and stopping.
+- Streaming query management: viewing, modifying, starting, and stopping.
 - [Federated queries](../../concepts/query_execution/federated_query/index.md) via external data sources (S3, databases).
 - [SQL query converter](../sql-translation/sql-dialect-converter.md) from other dialects (PostgreSQL, MySQL, ClickHouse, and others) to YQL.
 - Specialized editors for `JSON`, `JSONDOCUMENT`, and `YSON` data types.
@@ -231,7 +231,7 @@ Click **Explain** (or `Ctrl+Shift+E`) to get the [query execution plan](../../de
 
 ### Session manager {#session-manager}
 
-Select the menu item **Tools → Sessions Manager**, or right-click the connection and select the corresponding item. The opened view displays all active sessions with the current query, state, and duration (data from the system view [`.sys/query_sessions`](../../dev/system-views.md#query-sessions)). The **Hide Idle** checkbox hides sessions without an active query.
+Select the menu item **Tools → Sessions Manager**, or right-click the connection and select the corresponding item. The opened view displays all active sessions with the current query, state, and duration (data from the system view [`.sys/query_sessions`](../../dev/system-views.md)). The **Hide Idle** checkbox hides sessions without an active query.
 
 ### Cluster dashboard {#cluster-dashboard}
 

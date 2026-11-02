@@ -4,9 +4,9 @@
 
 Основные подразделы:
 
-* [{#T}](monitoring.md)
-* [{#T}](logging.md)
-* [{#T}](minidumps.md)
-* [{#T}](../../reference/observability/tracing/setup.md)
-* [{#T}](system-views.md)
-* [{#T}](alerting.md)
+* [Настройка мониторинга кластера {{ ydb-short-name }}](monitoring.md)
+* [Логирование в {{ ydb-short-name }}](logging.md)
+* [Минидампы (встроенный Google Breakpad)](minidumps.md)
+* [Настройка трассировки запросов {{ ydb-short-name }}](../../reference/observability/tracing/setup.md)
+* [Системные представления](system-views.md)
+* [Настройка оповещений](alerting.md)

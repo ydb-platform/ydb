@@ -1,6 +1,6 @@
 # Spilling
 
-## Spilling in General
+## Spilling in General {#spilling-in-ydb-short-name}
 
 **Spilling** is a memory management mechanism that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. In {{ ydb-short-name }}, disk storage is currently used for spilling. Spilling enables execution of user queries that require processing large data volumes exceeding available node memory.
 

@@ -132,7 +132,7 @@
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.3.13.10/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.3.13.10/checksums.debug.txt)
 
-| [См. список](../changelog-server.md#24-3) ||
+| [См. список](../changelog-enterprise.md#24-3-13-10) ||
 || **v24.2** |  |  |  |  ||
 || v.24.2.7.1 | 20.08.2024 |
 
@@ -144,7 +144,7 @@
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.2.7.1/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.2.7.1/checksums.debug.txt)
 
-| [См. список](../changelog-server.md#24-2) ||
+| [См. список](../changelog-enterprise.md#24-2) ||
 || **v24.1** |  |  |  |  ||
 || v.24.1.18.1 | 28.06.2024 |
 
@@ -156,11 +156,11 @@
 - [К дистрибутиву](https://binaries.ясубд.рф/release/24.1.18.1/checksums.txt)
 - [К отладочным символам](https://binaries.ясубд.рф/release/24.1.18.1/checksums.debug.txt)
 
-| [См. список](../changelog-server.md#24-1) ||
+| [См. список](../changelog-enterprise.md#24-1) ||
 || **v23.4** |  |  |  |  ||
-|| v.23.4.11.1 | 15.05.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.4.11.1/yasubd-23.4.11.1-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.4.11.1/checksums.txt) | [См. список](../changelog-server.md#23-4) ||
+|| v.23.4.11.1 | 15.05.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.4.11.1/yasubd-23.4.11.1-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.4.11.1/checksums.txt) | [См. список](../changelog-enterprise.md#23-4) ||
 || **v23.3** |  |  |  |  ||
-|| v.23.3.25.2 | 17.03.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.3.25.2/yasubd-23.3.25.2-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.3.25.2/checksums.txt) | [См. список](../changelog-server.md#23-3) ||
+|| v.23.3.25.2 | 17.03.2024 | [Дистрибутив](https://binaries.ясубд.рф/release/23.3.25.2/yasubd-23.3.25.2-linux-amd64.tar.gz) | [Контрольные суммы](https://binaries.ясубд.рф/release/23.3.25.2/checksums.txt) | [См. список](../changelog-enterprise.md#23-3) ||
 |#
 
 ### Docker
@@ -179,15 +179,15 @@
 || v.24.4.4.15 | 19.09.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:24.4.4.ent.15` | [См. список](../changelog-enterprise.md#24-4-4-15) ||
 || v.24.4.4.13 | 29.07.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:2025-08-08-73940688fea2aeb2e109f01a7827f2d7` | [См. список](../changelog-enterprise.md#24-4-4-13) ||
 || **v24.3** |  |  |  ||
-|| v.24.3.13 | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [См. список](../changelog-server.md#24-3) ||
+|| v.24.3.13 | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [См. список](../changelog-enterprise.md#24-3-13-10) ||
 || **v24.2** |  |  |  ||
-|| v.24.2.7 | 20.08.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7` | [См. список](../changelog-server.md#24-2) ||
+|| v.24.2.7 | 20.08.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.2.7` | [См. список](../changelog-enterprise.md#24-2) ||
 || **v24.1** |  |  |  ||
-|| v.24.1.18 | 31.07.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18` | [См. список](../changelog-server.md#24-1) ||
+|| v.24.1.18 | 31.07.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.1.18` | [См. список](../changelog-enterprise.md#24-1) ||
 || **v23.4** |  |  |  ||
-|| v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [См. список](../changelog-server.md#23-4) ||
+|| v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [См. список](../changelog-enterprise.md#23-4) ||
 || **v23.3** |  |  |  ||
-|| v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [См. список](../changelog-server.md#23-3-17) ||
+|| v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [См. список](../changelog-server.md#23-3) ||
 || v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [См. список](../changelog-server.md#23-3) ||
 |#
 

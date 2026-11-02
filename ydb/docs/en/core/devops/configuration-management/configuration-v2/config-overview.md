@@ -95,4 +95,4 @@ When [expanding the cluster](cluster-expansion.md), configuration is delivered t
 ## See Also
 
 * [Configuration parameters reference](config-settings.md)
-* [{#T}](../compare-configs.md)
+* [Comparison of {{ ydb-short-name }} cluster configurations: V1 and V2](../compare-configs.md)

@@ -4,7 +4,7 @@
 
 * Изменение конфигурации:
 
-  * [{#T}](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
+  * [Расширение кластера](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
   * [{#T}](adding_storage_groups.md).
 
 * Обслуживание:

@@ -11,7 +11,7 @@
         ![](../_assets/embedded-ui-cpu-system-pool.png)
 1. Проанализируйте загрузку процессора во всех пулах ресурсов на графиках Grafana:
 
-    1. Откройте панель мониторинга **[CPU](../../../../reference/observability/metrics/grafana-dashboards.md#cpu)** в Grafana.
+    1. Откройте панель мониторинга **[CPU](../../../../reference/observability/metrics/grafana-dashboards.md#actors)** в Grafana.
 
     1. Проверьте наличие скачков на следующих графиках:
 

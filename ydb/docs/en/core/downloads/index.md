@@ -9,5 +9,5 @@ This section provides instructions for downloading various {{ ydb-short-name }} 
 
 * [Command-line client utility](ydb-cli.md) (`ydb`)
 * [Disk substem management utility](ydb-dstool.md) (`ydb-dstool`)
-* [Cluster management utility](ydb-ops.md) (`ydbops`)
+* [Cluster management utility](ydb-ops.md#ydbops) (`ydbops`)
 * [Ansible playbooks](ydb-ansible.md)

@@ -60,7 +60,7 @@ In transactional applications, such information queries are executed with pagina
 
 An experimental capability to automatically select a secondary index for use in a query is also available. The selection algorithm is currently rule-based and uses only the query text to automatically select a secondary index.
 
-### Automatic use of indexes when selecting data
+### Automatic use of indexes when selecting data {#automatic-use}
 
 Explicitly specifying the `VIEW` section takes priority over the optimizer's decision to use secondary indexes. That is, the query
 

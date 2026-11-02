@@ -1,10 +1,10 @@
-# Vector search
+# Vector search {#vector-search}
 
 This section contains code recipes in different programming languages for [vector search](../../concepts/query_execution/vector_search.md) tasks using the {{ ydb-short-name }} SDK.
 
 The following operations are covered in detail:
 
-  - [Vector search](#vector-search)
+  - Vector search
   - [Connecting to {{ ydb-short-name }}](#connect-ydb)
   - [Creating a table](#create-table)
   - [Inserting vectors](#insert-vectors)

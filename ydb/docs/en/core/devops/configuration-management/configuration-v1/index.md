@@ -6,7 +6,7 @@ Configuration V1 is a two-level {{ ydb-short-name }} cluster configuration syste
 
 1. **Static configuration**: a YAML format file that is located locally on each static node and used when starting the `ydbd server` process. This configuration contains, among other things, [static group](../../../concepts/glossary.md#static-group) and [State Storage](../../../concepts/glossary.md#state-storage) settings.
 
-2. **Dynamic configuration**: a YAML format file that is an extended version of static configuration. It is loaded via [CLI](../../../recipes/ydb-cli/index.md) and reliably stored in the [Console tablet](../../../concepts/glossary.md#console), which then distributes the configuration to all dynamic cluster nodes. Using dynamic configuration is optional.
+2. **Dynamic configuration**: a YAML format file that is an extended version of static configuration. It is loaded via [CLI](../../../recipes/ydb-cli/index.md) and reliably stored in the Console tablet, which then distributes the configuration to all dynamic cluster nodes. Using dynamic configuration is optional.
 
 You can learn more about Configuration V1 in the [{#T}](config-overview.md) section.
 

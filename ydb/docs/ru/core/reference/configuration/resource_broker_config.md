@@ -1,5 +1,7 @@
 # resource_broker_config
 
+## Overview {#resource-broker-config}
+
 Секция `resource_broker_config` настраивает брокер ресурсов — [акторный сервис](../../concepts/glossary.md#actor-service), контролирующий потребление ресурсов [узла](../../concepts/glossary.md#node) {{ ydb-short-name }}, таких как:
 
 - `CPU` — количество потоков;

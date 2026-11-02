@@ -80,6 +80,13 @@ message VectorIndexSettings {
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
         VECTOR_TYPE_FLOAT = 1;
+<<<<<<< HEAD
+=======
+        VECTOR_TYPE_FLOAT16 = 5;
+        VECTOR_TYPE_BFLOAT16 = 6;
+        VECTOR_TYPE_FLOAT8_E4M3 = 7; // E4M3FN, no scale factor.
+        VECTOR_TYPE_FLOAT8_E5M2 = 8; // E5M2, no scale factor.
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         VECTOR_TYPE_UINT8 = 2;
         VECTOR_TYPE_INT8 = 3;
         VECTOR_TYPE_BIT = 4;

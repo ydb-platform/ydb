@@ -5,6 +5,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/type_traits.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
@@ -69,6 +70,17 @@ namespace {
         const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+<<<<<<< HEAD
+=======
+        else if (vectorType == "float16")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
+        else if (vectorType == "bfloat16")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
+        else if (vectorType == "float8_e4m3")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        else if (vectorType == "float8_e5m2")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -116,7 +128,14 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
+<<<<<<< HEAD
     using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
+=======
+    // Reduced-precision coordinates use float arithmetic and double sums.
+    using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
+    static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
+    using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     static constexpr bool AggregateNormalized = false;
 };
 
@@ -624,6 +643,17 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
     switch (settings.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return handleMetric.template operator()<float>();
+<<<<<<< HEAD
+=======
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+            return handleMetric.template operator()<TFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+            return handleMetric.template operator()<TBFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return handleMetric.template operator()<TFloat8E4M3>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return handleMetric.template operator()<TFloat8E5M2>();
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -659,6 +689,29 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
                 return nullptr;
             }
             break;
+<<<<<<< HEAD
+=======
+        case EFormat::Float16Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16, sizeof(TFloat16), "float16")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::BFloat16Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16, sizeof(TBFloat16), "bfloat16")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E4M3Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3, sizeof(TFloat8E4M3), "float8_e4m3")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E5M2Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2, sizeof(TFloat8E5M2), "float8_e5m2")) {
+                return nullptr;
+            }
+            break;
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         case EFormat::Uint8Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
                 return nullptr;
@@ -913,6 +966,38 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(float));
         }
         break;
+<<<<<<< HEAD
+=======
+    case EFormat::Float16Vector:
+    case EFormat::BFloat16Vector:
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float16Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16);
+        }
+        if (!hasVectorDimension) {
+            if (embedding.size() < HeaderLen + sizeof(TFloat16)
+                || (embedding.size() - HeaderLen) % sizeof(TFloat16) != 0) {
+                return false;
+            }
+            vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(TFloat16));
+        }
+        break;
+    case EFormat::Float8E4M3Vector:
+    case EFormat::Float8E5M2Vector:
+        if (embedding.size() <= HeaderLen) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float8E4M3Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
+        }
+        break;
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     case EFormat::Uint8Vector:
         if (!hasVectorType) {
             vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);

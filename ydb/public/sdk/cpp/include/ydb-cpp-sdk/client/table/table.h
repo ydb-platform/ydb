@@ -339,6 +339,13 @@ public:
         Uint8,
         Int8,
         Bit,
+<<<<<<< HEAD
+=======
+        Float16,
+        BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -369,6 +376,13 @@ public:
         Uint8,
         Int8,
         Bit,
+<<<<<<< HEAD
+=======
+        Float16,
+        BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
+>>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     };
 
     TVectorIndexSettings Settings;

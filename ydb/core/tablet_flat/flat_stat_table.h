@@ -228,7 +228,7 @@ using TBuildStatsYieldHandler = std::function<void()>;
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
             YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, "", \
                 {"logPrefix", logPrefix}, \
-                {"stream", TStringBuidler() << stream}); \
+                {"stream", TStringBuilder() << stream}); \
         } else { \
             Cerr << logPrefix << stream << Endl; \
         } \
@@ -239,7 +239,7 @@ using TBuildStatsYieldHandler = std::function<void()>;
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
             YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, "", \
                 {"logPrefix", logPrefix}, \
-                {"stream", TStringBuidler() << stream}); \
+                {"stream", TStringBuilder() << stream}); \
         } \
     } while (0)
 #endif

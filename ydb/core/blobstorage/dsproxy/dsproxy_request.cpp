@@ -601,8 +601,7 @@ namespace NKikimr {
                     .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
-            // A live VDisk may stop answering assimilation while its session and other queues remain healthy.
-            TActivationContext::Now() + TDuration::Minutes(5)
+            TInstant::Max()
         );
     }
 

@@ -158,6 +158,7 @@ struct TExecutionOptions {
             .Database = GetValue(index, Databases, TString()),
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .QueryId = queryId,
+            .QueryLabel = ScriptQueries[index].Source ? TFsPath(ScriptQueries[index].Source).GetName() : ToString(queryId),
             .Params = Params,
             .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt),
             .StatsCollectionMode = GetValue(index, StatsCollectionModes, Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE),
@@ -717,6 +718,19 @@ protected:
                 } else if (!google::protobuf::TextFormat::ParseFromString(LoadFile(file), &RunnerOptions.YdbSettings.AppConfig)) {
                     ythrow yexception() << "Bad format of app configuration";
                 }
+            });
+
+        options.AddLongOption("trace-file", "Write query spans as OTLP JSON lines (file is overwritten)")
+            .RequiredArgument("file")
+            .StoreResult(&RunnerOptions.YdbSettings.TraceFile);
+        options.AddLongOption("trace-dataset", "Dataset name stored in trace resources")
+            .RequiredArgument("name")
+            .StoreResult(&RunnerOptions.YdbSettings.TraceDataset);
+        options.AddLongOption("trace-level", "Span verbosity, 1 through 15 (default: 15)")
+            .RequiredArgument("level")
+            .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.TraceLevel, [](ui32 level) {
+                Y_ENSURE(level >= 1 && level <= 15, "Trace level must be between 1 and 15");
+                return static_cast<ui8>(level);
             });
 
         // Outputs

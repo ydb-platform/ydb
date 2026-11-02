@@ -6232,45 +6232,70 @@ Y_UNIT_TEST(AsyncReplicationInvalidSettings) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:62: Error: Unknown replication setting: FOO\n");
 }
 
-Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
-    auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication;
-        )";
-    auto res = SqlToYql(req);
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+Y_UNIT_TEST(DropAsyncReplicationModes) {
+    for (const auto& [query, mode] : {
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication;", "drop"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE;", "dropCascade"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication FORCE;", "dropForce"},
+             std::pair{"USE plato; DROP ASYNC REPLICATION MyReplication CASCADE FORCE;", "dropCascadeForce"}}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
 
-    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("drop"));
-        }
-    };
+        TVerifyLineFunc verifyLine = [mode](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(TStringBuilder() << "('mode '" << mode << ")"));
+            }
+        };
 
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(res, elementStat, verifyLine);
-
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        TWordCountHive elementStat = {{TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
 }
 
-Y_UNIT_TEST(DropAsyncReplicationCascade) {
-    auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication CASCADE;
-        )";
-    auto res = SqlToYql(req);
+Y_UNIT_TEST(DropAsyncReplicationForceRejectsUnsupportedForms) {
+    for (const auto* query : {
+             "USE plato; DROP ASYNC REPLICATION MyReplication FORCE CASCADE;",
+             "USE plato; DROP ASYNC REPLICATION MyReplication FORCE FORCE;",
+             "USE plato; DROP ASYNC REPLICATION MyReplication WITH (FORCE = TRUE);",
+             "USE plato; DROP ASYNC REPLICATION MyReplication WITH (FORCE = FALSE);",
+             "USE plato; DROP TRANSFER MyTransfer FORCE;",
+             "USE plato; DROP TABLE MyTable FORCE;"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+
+Y_UNIT_TEST(ForceRemainsAnUnquotedIdentifier) {
+    for (const auto* query : {
+             "SELECT fOrCe FROM plato.Input;",
+             "SELECT value AS fOrCe FROM plato.Input;",
+             "SELECT * FROM plato.fOrCe AS fOrCe;",
+             "USE ydb; CREATE TABLE fOrCe (fOrCe Uint64, PRIMARY KEY (fOrCe));",
+             "USE plato; DROP ASYNC REPLICATION fOrCe;",
+             "USE plato; DROP ASYNC REPLICATION fOrCe FORCE;",
+             "USE plato; CREATE TOPIC fOrCe (CONSUMER fOrCe);",
+             "USE plato; ALTER TOPIC fOrCe ADD CONSUMER fOrCe;"}) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << query << ": " << Err2Str(res));
+    }
+}
+
+Y_UNIT_TEST(ForceConsumerReferencesRequireQuoting) {
+    const auto res = SqlToYql("USE plato; ALTER TOPIC t DROP CONSUMER `fOrCe`;");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    ExpectFailWithFuzzyError(
+        "USE plato; ALTER TOPIC t DROP CONSUMER fOrCe;",
+        "Error: (mismatched input|extraneous input|no viable alternative at input).*fOrCe");
+}
 
-    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-        if (word == "Write") {
-            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropCascade"));
-        }
-    };
-
-    TWordCountHive elementStat = {{TString("Write"), 0}};
-    VerifyProgram(res, elementStat, verifyLine);
-
-    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+Y_UNIT_TEST(ForceRowPatternVariablesRequireQuoting) {
+    const auto res = SqlToYql("USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (`fOrCe`) DEFINE `fOrCe` AS true);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    ExpectFailWithFuzzyError(
+        "USE plato; SELECT * FROM Input MATCH_RECOGNIZE (PATTERN (fOrCe) DEFINE fOrCe AS true);",
+        "Error: (mismatched input|extraneous input|no viable alternative at input).*fOrCe");
 }
 
 Y_UNIT_TEST(PragmaCompactGroupBy) {

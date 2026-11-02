@@ -45,6 +45,7 @@ namespace NKqp {
 
 struct TUserRequestContext;
 class TQueryData;
+class TCompileTrace;
 
 } // namespace NKqp
 
@@ -176,6 +177,11 @@ struct TKikimrQueryContext : TThrRefBase {
     std::shared_ptr<NKikimr::NGRpcService::IRequestCtxMtSafe> RpcCtx;
 
     NSQLTranslation::TTranslationSettings TranslationSettings;
+
+    // Spans of the query compilation, if it is traced.
+    TIntrusivePtr<NKikimr::NKqp::TCompileTrace> CompileTrace;
+
+    ~TKikimrQueryContext();
 
     void Reset();
 };

@@ -112,8 +112,9 @@ public:
                 return false;
             }
 
-            const TSrc maxVal = static_cast<TSrc>(std::numeric_limits<TDst>::max());
-            return value >= -maxVal && value <= maxVal;
+            using TCommon = std::common_type_t<TSrc, TDst>;
+            const TCommon maxVal = std::numeric_limits<TDst>::max();
+            return static_cast<TCommon>(value) >= -maxVal && static_cast<TCommon>(value) <= maxVal;
         } else {
             return true;
         }

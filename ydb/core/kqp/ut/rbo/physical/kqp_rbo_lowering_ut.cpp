@@ -20,6 +20,9 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         NTests::TIdTestContext f;
         // Exercise RBO lowering regardless of the DML fallback default.
         f.Config->SetEnableFallbackOnDML(false);
+        auto& tableDescription = f.Tables->GetOrAddTable(f.KqpCtx.Cluster, "/Root", "/Root/table");
+        tableDescription.Metadata = MakeIntrusive<TKikimrTableMetadata>();
+        tableDescription.Metadata->DoesExist = true;
         auto& ctx = f.ExprCtx;
         const auto pos = f.Pos;
         auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
@@ -47,11 +50,12 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             .Settings().Build()
             .Done();
 
-        const auto rewritten = RewriteTableEffect(upsert.Ptr(), ctx, f.KqpCtx);
+        ui64 uniqueSourceIdCounter = 0;
+        const auto rewritten = RewriteTableEffect(upsert.Ptr(), ctx, f.KqpCtx, uniqueSourceIdCounter);
         auto plan = PlanConverter(f.TypeCtx, ctx).ConvertRoot(rewritten, nullptr);
         auto& effect = CastOperator<TOpTableEffect>(*plan->GetInput());
         UNIT_ASSERT_VALUES_EQUAL(effect.GetExplainName(), "UpsertRows");
-        const NNodes::TKqpTableSinkSettings settings(effect.BuildSettings(ctx));
+        const NNodes::TKqpTableSinkSettings settings(effect.BuildSettings(ctx, 0));
         UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Item(0).StringValue(), "value");
     }

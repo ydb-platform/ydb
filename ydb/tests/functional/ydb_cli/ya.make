@@ -35,6 +35,7 @@ ELSE()
 ENDIF()
 
 DEPENDS(
+    contrib/tools/python3/bin
     ydb/apps/ydb
     ydb/apps/ydb/experimental/ydb
     ydb/tests/functional/ydb_cli/ai_interactive

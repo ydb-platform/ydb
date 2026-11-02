@@ -1,6 +1,7 @@
 import io
 import os
 import signal
+import sys
 import textwrap
 import time
 
@@ -17,11 +18,12 @@ def spawn_child():
 
     def spawn(script, *args):
         child = pexpect.spawn(
-            yatest.common.python_path(),
+            yatest.common.binary_path("contrib/tools/python3/bin/python3"),
             ["-u", "-c", textwrap.dedent(script), *map(str, args)],
             encoding="utf-8",
             timeout=5,
         )
+        child.logfile_read = sys.stdout
         children.append(child)
         return child
 
@@ -67,7 +69,8 @@ def test_close_waits_for_exit_time_profile_write(spawn_child, tmp_path):
 
     BaseInteractiveTest.close_interactive(child, timeout=5)
 
-    assert report.read_text() == "header\ncomplete\n"
+    assert report.is_file(), output.getvalue()
+    assert report.read_text() == "header\ncomplete\n", output.getvalue()
     assert "shutdown-output" * 10000 in output.getvalue()
     assert child.closed
     assert child.exitstatus == 0

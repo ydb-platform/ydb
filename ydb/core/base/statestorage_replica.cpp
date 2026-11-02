@@ -170,8 +170,9 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         if (!tabletEntry.Followers.erase(followerGuardian))
             return false;
 
+        // the guardian of the leader keeps the list of followers, so it is the one to learn of the removal
         if (tabletEntry.CurrentGuardian)
-            NotifyWithTabletInfo(followerGuardian, tabletId, 0, &tabletEntry);
+            NotifyWithTabletInfo(tabletEntry.CurrentGuardian, tabletId, 0, &tabletEntry);
 
         return true;
     }

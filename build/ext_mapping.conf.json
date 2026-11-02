@@ -5,7 +5,7 @@
     "770480022": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/770480022",
     "451427803": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/451427803",
     "4966407557": "https://ydb-tech-ci.storage.yandexcloud.net/ydb-platform/resources/4966407557",
-    "14158409169": "https://storage.yandexcloud.net/ydb-ci/kafka/cm02102026"
+    "14158409169": "https://storage.yandexcloud.net/ydb-ci/kafka/14158409169"
   },
   "resources_info": {
     "770480022": { "file_name": "docker-compose" },

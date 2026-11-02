@@ -814,7 +814,10 @@ Y_UNIT_TEST(ReplicationDataClampsConsumerOffsetsToEndOffset) {
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 10));
     env.Dispatch();
     env.AckWrite(10);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+    const auto& updatedOffsets = env.CapturedReplicationData.back()->OffsetsByConsumers;
+    UNIT_ASSERT_VALUES_EQUAL(updatedOffsets.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(updatedOffsets.at("future-consumer"), 11u);
 }
 
 Y_UNIT_TEST(ReplicationDataSkipsMalformedServiceMessages) {

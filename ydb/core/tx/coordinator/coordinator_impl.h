@@ -19,6 +19,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 
 #include <util/generic/hash_set.h>
 #include <util/stream/file.h>
@@ -184,26 +185,27 @@ using NTabletFlatExecutor::TTransactionContext;
 //#define COORDINATOR_LOG_TO_FILE
 
 #ifdef COORDINATOR_LOG_TO_FILE
-#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
+#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, values) \
 do { \
     ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((actorCtxOrSystem).LoggerSettings()); \
     ::NActors::NLog::EPriority mPriority = (::NActors::NLog::EPriority)(priority); \
     ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)(component); \
     if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) { \
         TStringBuilder logStringBuilder; \
-        logStringBuilder << stream; \
+        logStringBuilder << text << " "; \
+        NActors::NStructuredLog::TTextWriter writer; \
+        writer.Write(logStringBuilder, YDB_LOG_CREATE_MESSAGE(values)); \
         Self->DebugLog << (TString)logStringBuilder << Endl; \
     } \
 } while(0) \
 /**/
 #else
-#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
-    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "",   \
-        {"stream", TStringBuilder() << stream})
+#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, values) \
+    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, values)
 #endif
 
-#define FLOG_LOG_S(actorCtxOrSystem, priority, component, stream) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
-#define FLOG_DEBUG_S(actorCtxOrSystem, component, stream) FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
+#define FLOG_LOG_S(actorCtxOrSystem, priority, component, text, values) YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, text, values)
+#define FLOG_DEBUG_S(actorCtxOrSystem, component, text, values) FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, text, values)
 
 class TCoordinatorStateActor;
 

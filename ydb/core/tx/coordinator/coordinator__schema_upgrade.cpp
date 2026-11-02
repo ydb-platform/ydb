@@ -33,12 +33,11 @@ struct TTxCoordinator::TTxUpgrade : public TTransactionBase<TTxCoordinator> {
         }
 
         UpgradeFail = true;
-        FLOG_LOG_S(ctx, NActors::NLog::PRI_CRIT, NKikimrServices::TX_COORDINATOR,
-             "tablet# " << Self->Tablet() <<
-             " SEND to self TEvents::TEvPoisonPill" <<
-             " databaseVersion# " << *databaseVersion <<
-             " CurrentDataBaseVersion# " << Schema::CurrentVersion <<
-             " reason# no realisation for upgrade scheme present");
+        FLOG_LOG_S(ctx, NActors::NLog::PRI_CRIT, NKikimrServices::TX_COORDINATOR, "SEND to self TEvents::TEvPoisonPill",
+            {"tablet", Self->Tablet()},
+            {"databaseVersion", *databaseVersion},
+            {"currentDataBaseVersion", Schema::CurrentVersion},
+            {"reason", "no realisation for upgrade scheme present"});
         return true;
     }
 

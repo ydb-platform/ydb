@@ -1407,9 +1407,12 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 auto actorSystem = ctx.ActorSystem();
                 auto txId = TxId;
                 settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) {
-                    LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId,
-                        "Proxy data request, txId: %" PRIu64 ", %s (%" PRIu32 ")\n%s",
-                        txId, operation, line, backtrace ? backtrace->PrintToString().data() : "");
+                    YDB_LOG_CTX_COMP_SAMPLED_BY(*actorSystem, PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, txId,
+                        "Proxy data request",
+                        {"txId", txId},
+                        {"operation",  operation},
+                        {"line",  line},
+                        {"backtrace",  backtrace ? backtrace->PrintToString().data() : ""});
                 };
                 settings.LogErrorWriter = [txId, actorSystem](const TString& message) {
                     YDB_LOG_ERROR_CTX_COMP(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "Proxy data request, engine error",

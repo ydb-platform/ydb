@@ -221,9 +221,6 @@
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/core/tx/conveyor/service/service.h>
-#include <ydb/core/tx/conveyor/usage/config.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -291,8 +288,6 @@
 #include <library/cpp/containers/absl/btree_set.h>
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
-
-#include <library/cpp/monlib/messagebus/mon_messagebus.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 

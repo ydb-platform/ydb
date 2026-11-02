@@ -407,7 +407,9 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
 }
 
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
+TString ValidateStateStorageConfig(
+        const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig,
+        const NKikimrConfig::TStateStorageConfig& newSSConfig, bool allowRingGroupReassignment) {
     constexpr size_t MaxRingCount = 1024;
     constexpr size_t MaxNodeCount = 1024;
 
@@ -576,6 +578,38 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TState
         }
 
         Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
+
+        if (allowRingGroupReassignment) {
+            if (newSSInfo->RingGroups.size() != oldSSInfo->RingGroups.size()) {
+                return TStringBuilder() << name << " ring group count differs";
+            }
+            for (ui32 groupIndex : xrange(oldSSInfo->RingGroups.size())) {
+                const auto& oldGroup = oldSSInfo->RingGroups[groupIndex];
+                const auto& newGroup = newSSInfo->RingGroups[groupIndex];
+                if (oldGroup.Rings.size() != newGroup.Rings.size()
+                        || oldGroup.NToSelect != newGroup.NToSelect
+                        || oldGroup.WriteOnly != newGroup.WriteOnly) {
+                    return TStringBuilder() << name << " ring group #" << groupIndex
+                        << " selection or writeOnly differs";
+                }
+                ui32 disabledCnt = 0;
+                for (ui32 ringIndex : xrange(oldGroup.Rings.size())) {
+                    const auto& oldRing = oldGroup.Rings[ringIndex];
+                    const auto& newRing = newGroup.Rings[ringIndex];
+                    if (oldRing.IsDisabled || newRing.IsDisabled) {
+                        ++disabledCnt;
+                    } else if (oldRing != newRing) {
+                        return TStringBuilder() << name << " ring group #" << groupIndex
+                            << " ring #" << ringIndex << " differs";
+                    }
+                }
+                if (disabledCnt > (oldGroup.NToSelect - 1) / 2) {
+                    return TStringBuilder() << name << " ring group #" << groupIndex
+                        << " configuration disabled too many rings";
+                }
+            }
+            return "";
+        }
 
         for (auto& newGroup : newSSInfo->RingGroups) {
             if (newGroup.WriteOnly) {

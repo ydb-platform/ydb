@@ -10,10 +10,51 @@ on:
         type: string
 
 jobs:
+  check-docs-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - name: Check whether documentation changed
+        id: check
+        shell: bash
+        env:
+          FEATURE_FLAG_DEFAULTS_ENABLED: ${{ vars.FEATURE_FLAG_DEFAULTS_ENABLED }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "$FEATURE_FLAG_DEFAULTS_ENABLED" != "false" || "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          diff_dir="$RUNNER_TEMP/docs-pr-diff"
+          git init -q "$diff_dir"
+          git -C "$diff_dir" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          if ! git -C "$diff_dir" fetch -q --no-tags --depth=1 --filter=blob:none origin "$BASE_SHA" "$GITHUB_SHA"; then
+            echo "::warning::Could not fetch commits to inspect PR files; building documentation"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed_files=$(git -C "$diff_dir" diff --name-only --no-renames "$BASE_SHA" "$GITHUB_SHA"); then
+            echo "::warning::Could not inspect PR files; building documentation"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -Eq '^(ydb/docs/|\.github/workflows/docs_)' <<< "$changed_files"; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping documentation build for code-only changes while feature flag defaults are disabled"
+          fi
+
   build-docs:
+    needs: check-docs-changes
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.state == 'open'
+      needs.check-docs-changes.outputs.build == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.pull_request.state == 'open')
     # Include event_name so rebuild_docs workflow_dispatch does not cancel the
     # pull_request build. Dispatch runs on main and its check attaches to main
     # SHA; only the pull_request run updates the PR's build-docs status (#48409).

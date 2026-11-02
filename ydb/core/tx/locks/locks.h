@@ -425,6 +425,7 @@ public:
     bool PersistRanges(ILocksDb* db);
 
     bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQuerySpanId = 0);
+    // Dependencies use TVolatileTxInfo::TxId, not a physical id from CommitTxIds.
     bool AddVolatileDependency(ui64 txId, ILocksDb* db);
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
@@ -1262,6 +1263,7 @@ public:
     void AddReadConflict(ui64 conflictId);
     void AddWriteConflict(ui64 conflictId);
     void AddWriteConflict(const TTableId& tableId, const TArrayRef<const TCell>& key);
+    // txId is TVolatileTxInfo::TxId, not a physical id from CommitTxIds.
     void AddVolatileDependency(ui64 txId);
     void BreakAllLocks(const TTableId& tableId);
 

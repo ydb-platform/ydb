@@ -35,6 +35,10 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             delta.SetFamilyCacheMode(table, it.first, family.CacheMode);
             delta.SetFamilyCache(table, it.first, family.Cache);
             delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
+            if (!family.KeyIndexInDescriptor || !family.GroupIndexesInDescriptor) {
+                // Only when changed, so that snapshots of tables without tiers stay as they were
+                delta.SetFamilyIndexPlacement(table, it.first, family.KeyIndexInDescriptor, family.GroupIndexesInDescriptor);
+            }
         }
 
         for(const auto& it : itTable.second.Columns) {
@@ -268,6 +272,18 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     delta.SetFamilyId(family);
     delta.SetSmall(small);
     delta.SetLarge(large);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetFamilyIndexPlacement(ui32 table, ui32 family, bool keyIndexInDescriptor, bool groupIndexesInDescriptor)
+{
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetKeyIndexInDescriptor(keyIndexInDescriptor);
+    delta.SetGroupIndexesInDescriptor(groupIndexesInDescriptor);
 
     return ApplyLastRecord();
 }

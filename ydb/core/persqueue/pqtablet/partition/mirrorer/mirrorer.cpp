@@ -518,14 +518,14 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
     y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
     for (auto& [consumer, offset] : OffsetsByConsumers) {
         auto offsetToSend = Min(offset, EndOffset);
-        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offset) {
+        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
             continue;
         }
         
         offsetsByConsumersToSend[consumer] = offsetToSend;
     }
 
-    if (offsetsByConsumersToSend.empty()) {
+    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
         return;
     }
 

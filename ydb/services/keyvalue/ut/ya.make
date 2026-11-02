@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/services/keyvalue)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 IF (OS_WINDOWS)
     CFLAGS(

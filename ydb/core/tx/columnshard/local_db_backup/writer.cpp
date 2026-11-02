@@ -157,14 +157,15 @@ private:
 
     void PutObject(const TString& key, TString&& body) {
         RequestInFlight = true;
-        Send(Client, new TEvExternalStorage::TEvPutObjectRequest(Aws::S3::Model::PutObjectRequest().WithKey(key), std::move(body)));
+        Send(Client, std::make_unique<TEvExternalStorage::TEvPutObjectRequest>(
+                         Aws::S3::Model::PutObjectRequest().WithKey(key), std::move(body)));
     }
 
     void UploadBufferedPart(TTableState& table) {
         RequestInFlight = true;
         auto request =
             Aws::S3::Model::UploadPartRequest().WithKey(table.Key).WithUploadId(table.UploadId).WithPartNumber(table.ETags.size() + 1);
-        Send(Client, new TEvExternalStorage::TEvUploadPartRequest(request, TString(table.Buffer.Data(), table.Buffer.Size())));
+        Send(Client, std::make_unique<TEvExternalStorage::TEvUploadPartRequest>(request, TString(table.Buffer.Data(), table.Buffer.Size())));
         table.Buffer.Clear();
     }
 
@@ -212,7 +213,7 @@ private:
                 case EScanStatus::InProgress:
                     if (table.Buffer.Size() < Params.UploadPartBytes) {
                         // Just buffered, let the scan continue right away.
-                        Send(Current->Scan, new TEvWriteSnapshotAck());
+                        Send(Current->Scan, std::make_unique<TEvWriteSnapshotAck>());
                         Current.reset();
                         continue;
                     }
@@ -245,7 +246,8 @@ private:
 
     void CreateMultipartUpload(TTableState& table) {
         RequestInFlight = true;
-        Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(Aws::S3::Model::CreateMultipartUploadRequest().WithKey(table.Key)));
+        Send(Client, std::make_unique<TEvExternalStorage::TEvCreateMultipartUploadRequest>(
+                         Aws::S3::Model::CreateMultipartUploadRequest().WithKey(table.Key)));
     }
 
     void ScanFailed(const TString& tableName, const TString& error) {
@@ -274,7 +276,7 @@ private:
         table.ETags.emplace_back(ev->Get()->GetResult().GetETag().c_str());
 
         if (Current->Status == EScanStatus::InProgress) {
-            Send(Current->Scan, new TEvWriteSnapshotAck());
+            Send(Current->Scan, std::make_unique<TEvWriteSnapshotAck>());
             Current.reset();
             RequestInFlight = false;
             return ProcessQueue();
@@ -288,7 +290,7 @@ private:
                            .WithKey(table.Key)
                            .WithUploadId(table.UploadId)
                            .WithMultipartUpload(Aws::S3::Model::CompletedMultipartUpload().WithParts(std::move(parts)));
-        Send(Client, new TEvExternalStorage::TEvCompleteMultipartUploadRequest(request));
+        Send(Client, std::make_unique<TEvExternalStorage::TEvCompleteMultipartUploadRequest>(request));
     }
 
     void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {
@@ -382,7 +384,7 @@ private:
     void FinishSuccess() {
         YDB_LOG_NOTICE("LocalDbBackup: snapshot finalized", {"tabletId", TabletId}, {"path", SnapshotPath}, {"bytes", WrittenBytes});
         Progress().SetStage("Completed");
-        Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
+        Send(Owner, std::make_unique<TEvSnapshotCompleted>(WrittenBytes));
         PassAway();
     }
 
@@ -390,7 +392,7 @@ private:
         YDB_LOG_ERROR("LocalDbBackup: snapshot failed", {"tabletId", TabletId}, {"path", SnapshotPath}, {"error", error});
         Progress().SetStage("Failed");
         AbortUploads();
-        Send(Owner, new TEvSnapshotCompleted(error));
+        Send(Owner, std::make_unique<TEvSnapshotCompleted>(error));
         PassAway();
     }
 
@@ -405,7 +407,7 @@ private:
         }
         for (auto& [_, table] : Tables) {
             if (!table.UploadId.empty() && !table.Done) {
-                Send(Client, new TEvExternalStorage::TEvAbortMultipartUploadRequest(
+                Send(Client, std::make_unique<TEvExternalStorage::TEvAbortMultipartUploadRequest>(
                                  Aws::S3::Model::AbortMultipartUploadRequest().WithKey(table.Key).WithUploadId(table.UploadId)));
             }
         }
@@ -413,7 +415,7 @@ private:
 
     void PassAway() override {
         if (Client) {
-            Send(Client, new NActors::TEvents::TEvPoison());
+            Send(Client, std::make_unique<NActors::TEvents::TEvPoison>());
         }
         NActors::TActorBootstrapped<TS3SnapshotWriter>::PassAway();
     }

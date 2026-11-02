@@ -11,11 +11,7 @@ PEERDIR(
 )
 
 SRCS(
-<<<<<<< HEAD
-=======
     data_center_states_ut.cpp
-    storage_pool_pile_override_ut.cpp
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
     ydb/core/blobstorage/base/batched_vec_ut.cpp
     ydb/core/blobstorage/base/bufferwithgaps_ut.cpp
     ydb/core/blobstorage/base/ptr_ut.cpp

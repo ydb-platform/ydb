@@ -94,12 +94,6 @@ struct TEnvironmentSetup {
         return InitialEventsFilter.Prepare();
     }
 
-<<<<<<< HEAD
-    NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request) {
-        const TActorId self = Runtime->AllocateEdgeActor();
-        auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-        ev->Record.MutableRequest()->CopyFrom(request);
-=======
     NKikimrBlobStorage::TConfigResponse Invoke(const NKikimrBlobStorage::TConfigRequest& request, bool selfHeal = false,
             const THostRecordMap& hostRecords = {}) {
         const TActorId self = Runtime->AllocateEdgeActor();
@@ -109,7 +103,6 @@ struct TEnvironmentSetup {
         if (hostRecords) {
             ev->EnforceHostRecords = hostRecords;
         }
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
         Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
         auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(self);
         return response->Get()->Record.GetResponse();

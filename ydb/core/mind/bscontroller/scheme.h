@@ -3,21 +3,8 @@
 #include "defs.h"
 #include "mood.h"
 
-<<<<<<< HEAD
-=======
-#include <ydb/core/base/blobstorage_pdisk_category.h>
-#include <ydb/core/base/blobstorage_grouptype.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-
-#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/blobstorage_base3.pb.h>
-#include <ydb/core/protos/blobstorage_disk.pb.h>
-#include <ydb/core/protos/blobstorage_disk_color.pb.h>
-#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
-#include <ydb/core/protos/bridge.pb.h>
 
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
 namespace NKikimr {
 
 namespace NBsController {
@@ -140,12 +127,7 @@ struct Schema : NIceDb::Schema {
         struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
         struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
-<<<<<<< HEAD
-=======
-        struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
-        struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -153,11 +135,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-<<<<<<< HEAD
-              ExpectedStorageYamlConfigVersion, EnableConfigV2>;
-=======
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor, DataCenterStates>;
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, DataCenterStates>;
     };
 
     struct VSlot : Table<5> {

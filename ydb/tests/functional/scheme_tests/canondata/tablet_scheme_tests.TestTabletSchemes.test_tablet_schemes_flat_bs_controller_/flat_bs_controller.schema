@@ -7,14 +7,11 @@
         ],
         "ColumnsAdded": [
             {
-<<<<<<< HEAD
                 "ColumnId": 29,
                 "ColumnName": "EnableConfigV2",
                 "ColumnType": "Bool"
             },
             {
-=======
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -23,6 +20,11 @@
                 "ColumnId": 2,
                 "ColumnName": "NextGroupID",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "DataCenterStates",
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 4,
@@ -143,38 +145,16 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 29,
-                "ColumnName": "EnableConfigV2",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 30,
-                "ColumnName": "DatabaseSpaceBlockColor",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 31,
-                "ColumnName": "DatabaseSpaceUnblockColor",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 32,
-                "ColumnName": "DataCenterStates",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-<<<<<<< HEAD
                     29,
-=======
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
                     1,
                     2,
+                    32,
                     4,
                     5,
                     6,
@@ -198,11 +178,7 @@
                     24,
                     26,
                     27,
-                    28,
-                    29,
-                    30,
-                    31,
-                    32
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -9,12 +9,8 @@ PEERDIR(
 )
 
 SRCS(
-<<<<<<< HEAD
-=======
     data_center_states.cpp
     data_center_states.h
-    dsproxy_events.h
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
     batched_vec.h
     blobstorage_events.cpp
     blobstorage_events.h

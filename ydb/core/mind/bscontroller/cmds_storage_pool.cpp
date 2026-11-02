@@ -1,10 +1,5 @@
 #include "config.h"
-<<<<<<< HEAD
-=======
-#include "group_geometry_info.h"
 #include <ydb/core/blobstorage/base/data_center_states.h>
-#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 

@@ -3,11 +3,7 @@
 #include "diff.h"
 #include "table_merger.h"
 
-<<<<<<< HEAD
-=======
 #include <ydb/core/blobstorage/base/data_center_states.h>
-#include <ydb/core/blobstorage/base/utility.h>
->>>>>>> 07db320a4dd (BSC: persist and validate mirror-3-dc fail-realm states (#57319))
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT

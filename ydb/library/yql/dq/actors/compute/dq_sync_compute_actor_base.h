@@ -64,10 +64,16 @@ protected:
         // Retry an empty drain only when every output channel can accept data;
         // otherwise wait for the consumer's acknowledgement instead of busy-polling.
         auto& outputs = this->ProcessOutputsState;
-        outputs.LastPopReturnedNoData = this->Channels && outputs.ChannelsReady && !outputs.DataWasSent;
+        outputs.LastPopReturnedNoData = outputs.ChannelsReady && !outputs.DataWasSent;
         if (outputs.LastPopReturnedNoData) {
             for (const auto& [channelId, channel] : this->OutputChannelsMap) {
-                if (!channel.Finished && !this->Channels->HasFreeMemoryInChannel(channelId)) {
+                if (channel.Finished) {
+                    continue;
+                }
+                const bool canAcceptData = this->Channels
+                    ? this->Channels->HasFreeMemoryInChannel(channelId)
+                    : channel.Channel->GetFillLevel() == EDqFillLevel::NoLimit;
+                if (!canAcceptData) {
                     outputs.LastPopReturnedNoData = false;
                     break;
                 }

@@ -11,6 +11,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.h>
@@ -386,6 +387,15 @@ private:
 
 struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TSystemEvent YieldingStreamFetched;
+    std::shared_ptr<IDqChannelService> ChannelService;
+
+    void InitChannelService() {
+        if (!ChannelService) {
+            auto actor = CreateLocalChannelServiceActor(ActorSystem.SingleSys(), EdgeActor.NodeId(),
+                new NMonitoring::TDynamicCounters(), TDqChannelLimits{}, 0, ChannelService);
+            ActorSystem.RegisterService(MakeChannelServiceActorID(EdgeActor.NodeId()), ActorSystem.Register(actor));
+        }
+    }
     static constexpr ui64 InputChannelId = 1000;
     static constexpr ui64 OutputChannelId = 2000;
     static constexpr ui32 InputStageId = 123;
@@ -746,6 +756,10 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             .MaxStoredBytes = 10_MB
         };
 
+        if (task.GetDqChannelVersion() >= 2u) {
+            InitChannelService();
+            return ChannelService->GetInputChannel(settings);
+        }
         return CreateDqInputChannel(settings, TypeEnv);
     }
 
@@ -775,7 +789,20 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 dqCompFactory,
                 dqTaskTransformFactory,
                 patternCache, false);
-        return [factory=factory](std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const NDq::TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const NDq::TLogFunc&) {
+        return [factory=factory, channelService=ChannelService, compFactory=dqCompFactory,
+                registry=FunctionRegistry, random=CreateDefaultRandomProvider(), time=CreateDefaultTimeProvider()]
+            (std::shared_ptr<TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logger) {
+            if (task.GetDqChannelVersion() >= 2u) {
+                TDqTaskRunnerContext ctx;
+                ctx.FuncRegistry = registry.Get();
+                ctx.RandomProvider = random.Get();
+                ctx.TimeProvider = time.Get();
+                ctx.ComputationFactory = compFactory;
+                ctx.ChannelService = channelService;
+                TDqTaskRunnerSettings settings;
+                settings.StatsMode = statsMode;
+                return MakeDqTaskRunner(alloc, ctx, settings, logger);
+            }
             return factory->Get(alloc, task, statsMode);
         };
     }
@@ -783,6 +810,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, TComputeMemoryLimits memoryLimits, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
+        runtimeSettings.ChannelService = ChannelService;
         runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
         auto actor = CreateDqComputeActor(
                 EdgeActor,
@@ -1437,6 +1465,47 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
+    void CheckYieldingProgram(ui32 channelVersion) {
+        NDqProto::TDqTask task;
+        task.SetId(ThisTaskId);
+        task.SetDqChannelVersion(channelVersion);
+        TProgramBuilder pb(TypeEnv, *FunctionRegistry);
+        auto row = pb.NewStruct({{"id", pb.NewDataLiteral<i32>(42)}, {"ts", pb.NewDataLiteral<ui64>(7)}});
+        auto stream = pb.Iterator(pb.NewList(RowType, {row}), {});
+        TCallableBuilder yielding(TypeEnv, "TestYieldingStream", stream.GetStaticType());
+        yielding.Add(stream);
+        TStructLiteralBuilder program(TypeEnv);
+        program.Add("Program", TRuntimeNode(yielding.Build(), false));
+        program.Add("Inputs", pb.NewTuple({}));
+        program.Add("Parameters", pb.Arg(pb.NewEmptyStructType()));
+        task.MutableProgram()->SetRaw(SerializeNode(program.Build(), TypeEnv));
+        task.MutableProgram()->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+        auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
+        auto actor = CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
+        if (channelVersion >= 2u) {
+            output->Bind(actor, DstEdgeActor);
+        }
+        UNIT_ASSERT_C(YieldingStreamFetched.WaitT(TDuration::Seconds(5)), "Program was not resumed after Yield");
+        if (channelVersion >= 2u) {
+            // Reaching a row after the internal yields is the regression check.
+            // Channel-service delivery is performed in an actor context.
+            return;
+        }
+
+        ui32 rows = 0;
+        auto checkValue = [&](const NUdf::TUnboxedValue& value, ui32 column) {
+            if (column == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(value.Get<i32>(), 42);
+                ++rows;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(value.Get<ui64>(), 7);
+            }
+            return true;
+        };
+        while (ReceiveData(checkValue, [](const auto&) {}, [] {}, output)) {}
+        UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+    }
+
     auto GetRandomSeed() {
         uint32_t seed = 0; // by default tests are reproducible (fixed-seed PRNG)
         if (auto env = getenv("RANDOM_SEED")) {
@@ -1743,34 +1812,11 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(ResumesYieldingProgramWithoutInputs, TSyncComputeActorTestFixture) {
-        NDqProto::TDqTask task;
-        task.SetId(ThisTaskId);
-        TProgramBuilder pb(TypeEnv, *FunctionRegistry);
-        auto row = pb.NewStruct({{"id", pb.NewDataLiteral<i32>(42)}, {"ts", pb.NewDataLiteral<ui64>(7)}});
-        auto stream = pb.Iterator(pb.NewList(RowType, {row}), {});
-        TCallableBuilder yielding(TypeEnv, "TestYieldingStream", stream.GetStaticType());
-        yielding.Add(stream);
-        TStructLiteralBuilder program(TypeEnv);
-        program.Add("Program", TRuntimeNode(yielding.Build(), false));
-        program.Add("Inputs", pb.NewTuple({}));
-        program.Add("Parameters", pb.Arg(pb.NewEmptyStructType()));
-        task.MutableProgram()->SetRaw(SerializeNode(program.Build(), TypeEnv));
-        task.MutableProgram()->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
-        auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
-        CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
-        UNIT_ASSERT_C(YieldingStreamFetched.WaitT(TDuration::Seconds(5)), "Program was not resumed after Yield");
+        CheckYieldingProgram(0);
+    }
 
-        ui32 rows = 0;
-        while (ReceiveData([&](const NUdf::TUnboxedValue& value, ui32 column) {
-            if (column == 0) {
-                UNIT_ASSERT_VALUES_EQUAL(value.Get<i32>(), 42);
-                ++rows;
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(value.Get<ui64>(), 7);
-            }
-            return true;
-        }, [](const auto&) {}, [] {}, output)) {}
-        UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+    Y_UNIT_TEST_F(ResumesYieldingProgramWithChannelService, TSyncComputeActorTestFixture) {
+        CheckYieldingProgram(2);
     }
 
     Y_UNIT_TEST_F(Empty, TSyncComputeActorTestFixture) { }

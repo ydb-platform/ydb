@@ -335,7 +335,7 @@ message StreamReadMessage {
         // Indicates that the SDK supports auto partitioning.
         bool auto_partitioning_support = 5;
         // Max in flight bytes per partition
-        uint64 partition_max_in_flight_bytes = 6; 
+        uint64 partition_max_in_flight_bytes = 6;
 
         message TopicReadSettings {
             // Topic path.
@@ -505,6 +505,9 @@ message StreamReadMessage {
 
         // Partition location, filled only when InitRequest.direct_read is true.
         PartitionLocation partition_location = 4;
+
+        // Earliest offset retained by the partition
+        optional int64 retained_start_offset = 5;
     }
 
     // Signal for server that client is ready to recive data for partition.

@@ -20,6 +20,7 @@ PEERDIR(
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json
+    library/cpp/html/pcdata
 )
 
 SRCS(
@@ -30,6 +31,7 @@ SRCS(
     event_util.cpp
     lag_provider.cpp
     logging.cpp
+    monitoring.cpp
     nodes_manager.cpp
     private_events.cpp
     replication.cpp

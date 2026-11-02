@@ -814,17 +814,23 @@ Y_UNIT_TEST_SUITE(Viewer) {
     void CheckNodesStorageFilterCase(TTestActorRuntime& runtime, size_t& vslotsResponses, bool vslotsAvailable,
                                     const TString& query, const std::vector<TNodeId>& expectedNodeIds, bool expectVSlots) {
         vslotsResponses = 0;
-        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-            TStringBuilder() << "GET /viewer/json/nodes?type=static&sort=NodeId&offload_merge=false"
-                << "&use_cache=false&timeout=1000&limit=20&offset=0&with=all" << query << " HTTP/1.1\r\n\r\n", endpoint, {});
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.Scan(TStringBuilder() << "type=static&sort=NodeId&offload_merge=false"
+            << "&use_cache=false&timeout=1000&limit=20&offset=0&with=all" << query);
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
         const TActorId sender = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
         TAutoPtr<IEventHandle> handle;
-        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        auto* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        const TString context = TStringBuilder() << query << ": " << result->Answer;
+        UNIT_ASSERT_C(result->Answer.StartsWith("HTTP/1.1 200"), context);
+        TStringBuf headers;
+        TStringBuf body;
+        UNIT_ASSERT_C(TStringBuf(result->Answer).TrySplit("\r\n\r\n", headers, body), context);
         NJson::TJsonValue json;
-        NJson::ReadJsonTree(result->Response->Body, &json, true);
-        const TString context = TStringBuilder() << query << ": " << result->Response->Body;
+        NJson::ReadJsonTree(body, &json, true);
         UNIT_ASSERT_VALUES_EQUAL_C(vslotsResponses > 0, expectVSlots, context);
         bool hasVSlotsError = false;
         for (const auto& problem : json["Problems"].GetArray()) {

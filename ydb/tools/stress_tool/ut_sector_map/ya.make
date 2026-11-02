@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/tools/stress_tool/lib)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     ../ut/device_test_tool_cli_ut.cpp

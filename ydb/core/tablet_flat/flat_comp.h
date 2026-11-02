@@ -64,15 +64,23 @@ namespace NTable {
         // Parts that replaced original data
         TVector<TPartView> Parts;
 
+        // Configured output id for each resulting part (not an LSM level or tier id).
+        THashMap<TLogoBlobID, ui32> PartOutputIds;
+
         TCompactionResult(TEpoch epoch, TVector<TPartView> parts)
             : Epoch(epoch)
             , Parts(std::move(parts))
-        { }
+        {
+            for (const auto& part : Parts) {
+                PartOutputIds.emplace(part->Label, 0);
+            }
+        }
 
         TCompactionResult(TEpoch epoch, size_t parts)
             : Epoch(epoch)
         {
             Parts.reserve(parts);
+            PartOutputIds.reserve(parts);
         }
     };
 

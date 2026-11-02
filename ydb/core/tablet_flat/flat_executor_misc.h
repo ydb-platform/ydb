@@ -27,12 +27,25 @@ namespace NTabletFlatExecutor {
 
         // Configuration for a single compaction output
         struct TOutputConf {
+            TOutputConf()
+                : TOutputConf(NTable::TScheme::TFamily{})
+            {
+            }
+
+            explicit TOutputConf(const NTable::TScheme::TFamily& leaderFamily)
+                : MaterializeOuterEdge(Max<ui32>())
+                , MaterializeExtEdge(leaderFamily.Large)
+            {
+            }
+
             NTable::NPage::TConf Layout;
             NWriter::TConf Writer;
+            // Physical blob byte thresholds, including wrappers: materialize
+            // values strictly below the edge. Layout serialization edges apply
+            // to payload bytes and do not force rewriting existing references.
+            ui32 MaterializeOuterEdge;
+            ui32 MaterializeExtEdge;
             ui32 OutputId = 0;
-            bool KeepInCache = false;  // Cache mode for this output
-            bool Final = false;         // Is this output final (no keys below)
-            NTable::NPage::IKeySpace* UnderlayMask = nullptr;  // Mask for keys that may exist below
         };
 
         explicit TCompactCfg(THolder<NTable::TCompactionParams> params)
@@ -42,12 +55,8 @@ namespace NTabletFlatExecutor {
 
         NTable::TEpoch Epoch = NTable::TEpoch::Zero();   /* Result epoch of compacted part */
         
-        // Multiple compaction outputs (step 1.4.1)
+        // Non-empty; the router returns an index into this vector.
         TVector<TOutputConf> Outputs;
-        
-        // Legacy single output configuration (deprecated, for backward compatibility)
-        NTable::NPage::TConf Layout;
-        NWriter::TConf Writer;
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         THolder<NTable::TCompactionParams> Params;
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;

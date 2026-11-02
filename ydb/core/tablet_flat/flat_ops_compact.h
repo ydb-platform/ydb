@@ -3,6 +3,7 @@
 #include "flat_scan_iface.h"
 #include "flat_scan_spent.h"
 #include "flat_writer_bundle.h"
+#include "flat_compaction_outputs.h"
 #include "flat_sausage_chop.h"
 #include "flat_row_misc.h"
 #include "flat_part_writer.h"
@@ -33,7 +34,7 @@ namespace NTabletFlatExecutor {
         struct TResult {
             NTable::TPartView Part;
             TDeque<NTable::TScreen::THole> Growth;
-            ui32 OutputId = 0;  // Identifies which output this part belongs to (step 1.4.1)
+            ui32 OutputId = 0;
         };
 
         using TResults = TDeque<TResult>;
@@ -192,7 +193,7 @@ namespace NTabletFlatExecutor {
             }
             Y_ENSURE(FtKeyColPos.size() >= 3);
             PrefixSize = FtKeyColPos.size()-3;
-            FtMinRowVersion = Conf->Layout.MinRowVersion;
+            FtMinRowVersion = Conf->Outputs.front().Layout.MinRowVersion;
         }
 
     public:
@@ -493,31 +494,12 @@ namespace NTabletFlatExecutor {
         }
     };
 
-    // Router interface for multi-output compaction (step 1.4.1)
-    class ICompactionRouter {
-    public:
-        virtual ~ICompactionRouter() = default;
-        
-        // Route a complete key (after buffering) to an output
-        // Returns output index (0-based)
-        virtual ui32 RouteKey(TArrayRef<const TCell> key) = 0;
-    };
-
-    // Default router: always route to output 0 (backward compatibility)
-    class TDefaultCompactionRouter : public ICompactionRouter {
-    public:
-        ui32 RouteKey(TArrayRef<const TCell> /*key*/) override {
-            return 0;
-        }
-    };
-
     class TOpsCompact: private ::NActors::IActorCallback, public IActorExceptionHandler, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
         using TPartWriter = NTable::TPartWriter;
-        using TBundle = NWriter::TBundle;
         using TStorage = TIntrusivePtr<TTabletStorageInfo>;
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
@@ -525,39 +507,14 @@ namespace NTabletFlatExecutor {
     public:
         constexpr static ui64 MaxFlight = 20ll * (1ll << 20);
 
-        // Per-output state for multi-output compaction
-        struct TOutputState {
-            TAutoPtr<TBundle> Bundle;
-            TIntrusivePtr<TPartWriter> Writer;
-            ui32 OutputId = 0;
-        };
-
-        TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf)
+        TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf,
+                THolder<ICompactionRouter> router)
             : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
             , Mask(mask)
             , Owner(owner)
             , Conf(std::move(conf))
+            , Outputs(Mask, *Conf, std::move(router))
         {
-            // Backward compatibility: if Outputs is empty, use legacy single-output mode
-            if (Conf->Outputs.empty()) {
-                Bundle = new TBundle(Mask, Conf->Writer);
-            } else {
-                // Multi-output mode: create shared TBanks
-                Y_ENSURE(!Conf->IsFulltextCompact || Conf->Outputs.size() == 1,
-                    "Multiple outputs with fulltext compaction is not supported");
-                
-                SharedBanks.ConstructInPlace(Mask, Conf->Writer.Slots);
-                
-                // Create Bundle and Writer for each output
-                Outputs.resize(Conf->Outputs.size());
-                for (size_t i = 0; i < Conf->Outputs.size(); ++i) {
-                    Outputs[i].OutputId = Conf->Outputs[i].OutputId;
-                    Outputs[i].Bundle = new TBundle(SharedBanks.Get(), Conf->Outputs[i].Writer);
-                }
-                
-                // Default router
-                Router = MakeHolder<TDefaultCompactionRouter>();
-            }
         }
 
         ~TOpsCompact()
@@ -593,7 +550,7 @@ namespace NTabletFlatExecutor {
             NTable::IScan::TConf conf;
 
             conf.NoErased = false; /* emit erase markers */
-            conf.LargeEdge = Conf->Layout.LargeEdge;
+            conf.LargeEdge = Outputs.GetScanLargeEdge();
 
             return { EScan::Feed, conf };
         }
@@ -604,26 +561,10 @@ namespace NTabletFlatExecutor {
                 const auto tags = Scheme->Tags();
                 lead.To(tags, { }, NTable::ESeek::Lower);
 
-                auto *scheme = new NTable::TPartScheme(Scheme->Cols);
-
-                if (Outputs.empty()) {
-                    // Legacy single-output mode
-                    Y_ENSURE(!Writer, "Initial IScan::Seek(...) called twice");
-                    Writer = new TPartWriter(scheme, tags, *Bundle, Conf->Layout, Conf->Epoch);
-
-                    if (Conf->IsFulltextCompact) {
-                        FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Writer);
-                    }
-                } else {
-                    // Multi-output mode: create Writer for each output
-                    for (auto& output : Outputs) {
-                        const auto& outConf = Conf->Outputs[&output - Outputs.data()];
-                        output.Writer = new TPartWriter(scheme, tags, *output.Bundle, outConf.Layout, Conf->Epoch);
-                    }
-                    
-                    // Start with output 0
-                    CurrentOutput = 0;
-                    Writer = Outputs[0].Writer;
+                Outputs.Start(*Scheme);
+                if (Conf->IsFulltextCompact) {
+                    Writer = Outputs.GetWriter(0);
+                    FtState = TFulltextCompact::Init(Conf.Get(), Scheme, Writer);
                 }
 
                 return EScan::Feed;
@@ -635,30 +576,9 @@ namespace NTabletFlatExecutor {
                 }
 
                 if (!Finished) {
-                    if (Outputs.empty()) {
-                        // Legacy single-output mode
-                        WriteStats = Writer->Finish();
-                        Results = Bundle->Results();
-                        Y_ENSURE(WriteStats.Parts == Results.size());
-                    } else {
-                        // Multi-output mode: finish all writers and collect results
-                        for (auto& output : Outputs) {
-                            auto stats = output.Writer->Finish();
-                            WriteStats.Rows += stats.Rows;
-                            WriteStats.Bytes += stats.Bytes;
-                            WriteStats.Coded += stats.Coded;
-                            WriteStats.Parts += stats.Parts;
-                            
-                            auto outputResults = output.Bundle->Results();
-                            Y_ENSURE(stats.Parts == outputResults.size());
-                            
-                            // Mark each result with OutputId
-                            for (auto& result : outputResults) {
-                                Results.push_back(std::move(result));
-                            }
-                        }
-                    }
-                    
+                    Results = Outputs.Finish(WriteStats);
+                    Y_ENSURE(WriteStats.Parts == Results.size());
+
                     WriteTxStatus();
                     Finished = true;
                 }
@@ -683,7 +603,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            Writer->BeginKey(key);
+            Writer = Outputs.BeginKey(key);
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl
@@ -821,7 +741,7 @@ namespace NTabletFlatExecutor {
                 return Flush(false);
             }
 
-            ui32 written = Writer->EndKey();
+            ui32 written = Outputs.EndKey();
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end key { written " << written << " row versions }";
@@ -896,9 +816,7 @@ namespace NTabletFlatExecutor {
                 return;
             }
 
-            // Write TxStatus to the first bundle (output 0)
-            auto* bundle = Outputs.empty() ? Bundle.Get() : Outputs[0].Bundle.Get();
-            auto dataId = bundle->WriteExtra(data);
+            auto dataId = Outputs.WriteExtra(data);
 
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " written tx status " << dataId.Lead << " size=" << dataId.Bytes;
@@ -977,6 +895,7 @@ namespace NTabletFlatExecutor {
                 auto& res = prod->Results.emplace_back();
                 res.Part = loader.Result();
                 res.Growth = std::move(result.Growth);
+                res.OutputId = result.OutputId;
                 Y_ENSURE(res.Part, "Unexpected result without a part after compaction");
             }
 
@@ -988,7 +907,7 @@ namespace NTabletFlatExecutor {
                 logl
                     << NFmt::Do(*this) << " end=" << status
                     << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
-                    << " (max " << Conf->Layout.MaxRows << ")"
+                    << " (max " << Conf->Outputs.front().Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());
 
                 for (const auto &result : prod->Results) {
@@ -1042,16 +961,10 @@ namespace NTabletFlatExecutor {
 
         EScan Flush(bool last)
         {
-            if (Outputs.empty()) {
-                // Legacy single-output mode
-                for (NPageCollection::TGlob& one : Bundle->GetBlobsToSave())
-                    FlushToBs(std::move(one));
-            } else {
-                // Multi-output mode: collect blobs from all bundles
-                for (auto& output : Outputs) {
-                    for (NPageCollection::TGlob& one : output.Bundle->GetBlobsToSave())
-                        FlushToBs(std::move(one));
-                }
+            // Only completed blobs count towards Flushing. Unfinished pages in
+            // any output must not put the scan to sleep without in-flight I/O.
+            for (NPageCollection::TGlob& one : Outputs.GetBlobsToSave()) {
+                FlushToBs(std::move(one));
             }
 
             EScan scan = EScan::Sleep;
@@ -1061,6 +974,8 @@ namespace NTabletFlatExecutor {
             } else {
                 scan = (Flushing >= MaxFlight ? EScan::Sleep : EScan::Feed);
             }
+            Y_DEBUG_ABORT_UNLESS(scan != EScan::Sleep || Failed || Writing > 0,
+                "Compaction stopped for writes without an in-flight request");
 
             Spent->Alter(scan != EScan::Sleep);
 
@@ -1114,7 +1029,7 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            Conf->Writer.ChannelsShares.Update(channel, msg.ApproximateFreeSpaceShare);
+            Outputs.UpdateChannelsShares(channel, msg.ApproximateFreeSpaceShare);
 
             const auto ok = (msg.Status == NKikimrProto::OK);
 
@@ -1201,18 +1116,11 @@ namespace NTabletFlatExecutor {
         THolder<TCompactCfg> Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
         
-        // Legacy single-output mode
-        TAutoPtr<TBundle> Bundle;
+        TCompactionOutputs Outputs;
         TIntrusivePtr<TPartWriter> Writer;
-        
-        // Multi-output mode (step 1.4.1)
-        TMaybe<NWriter::TBanks> SharedBanks;  // Shared TBanks for all outputs
-        TVector<TOutputState> Outputs;  // Per-output state
-        THolder<ICompactionRouter> Router;  // Key router
-        ui32 CurrentOutput = 0;  // Currently active output for writing
-        
+
         NTable::TWriteStats WriteStats;
-        TVector<TBundle::TResult> Results;
+        TVector<TCompactionOutputs::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         const NScheme::TTypeRegistry * Registry = nullptr;
         NSharedCache::TSharedCachePages * SharedCachePages;

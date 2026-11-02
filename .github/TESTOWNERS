@@ -5,7 +5,6 @@
 #YQL @vitstn TEAM:@ydb-platform/qp
 /ydb/library/yql/ @ydb-platform/qp
 /ydb/library/yql/dq @ydb-platform/qp
-/ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
 /ydb/core/base/generated/ut @ydb-platform/datashard
@@ -91,7 +90,6 @@
 /ydb/tests/functional/canonical @ydb-platform/qp
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/kqp @ydb-platform/qp
-/ydb/tests/functional/postgresql @ydb-platform/qp
 /ydb/tests/functional/query_cache @ydb-platform/qp
 /ydb/tests/functional/suite_tests @ydb-platform/qp
 
@@ -109,9 +107,6 @@
 /ydb/public/tools/ydb_recipe @ydb-platform/appteam
 /ydb/tests/functional/sdk @ydb-platform/appteam
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
-
-#YDB Postgres Compatibility @rekby TEAM:@ydb-platform/qp
-/ydb/tests/postgres_integrations @ydb-platform/qp
 
 #YDB Engineering Team @maximyurchuk TEAM:@ydb-platform/engineering
 /ydb/core/control/ut @ydb-platform/engineering
@@ -147,7 +142,6 @@
 /ydb/services/distributed_storage/ut @ydb-platform/blobstorage
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/services/test_shard/ut @ydb-platform/blobstorage
-/ydb/tests/compatibility/distconf @ydb-platform/blobstorage
 /ydb/tests/functional/autoconfig @ydb-platform/blobstorage
 /ydb/tests/functional/blobstorage @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
@@ -235,9 +229,9 @@
 /ydb/tests/functional/sqs_topic @ydb-platform/topics
 /ydb/tests/functional/topic @ydb-platform/topics
 /ydb/tests/stress/kafka @ydb-platform/topics
+/ydb/tests/stress/sqs_topic @ydb-platform/topics
 /ydb/tests/stress/topic/ @ydb-platform/topics
 /ydb/tests/stress/topic_kafka/ @ydb-platform/topics
-/ydb/tests/stress/topic_sqs/ @ydb-platform/topics
 /ydb/tests/stress/transfer/ @ydb-platform/topics
 
 #YDB Analytics TEAM:???

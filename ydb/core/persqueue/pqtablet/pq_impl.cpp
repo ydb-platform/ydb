@@ -1913,15 +1913,13 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
-<<<<<<< HEAD
             pipeIter->second.ClientActor = sender;
+
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created session",
                 {"logPrefix", LogPrefix()},
-=======
-            LOG_D("Created session",
->>>>>>> d5bf9b4bba3 (fix when restart pipe)
                 {"sessionId", cmd.GetSessionId()},
                 {"onPipe", pipeIter->first});
+
             ctx.Send(MakePQDReadCacheServiceActorId(),
                 new TEvPQ::TEvRegisterDirectReadSession(
                     TReadSessionKey{cmd.GetSessionId(), cmd.GetPartitionSessionId()},

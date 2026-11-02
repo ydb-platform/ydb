@@ -1,10 +1,10 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include <fmt/format.h>
 #include <google/protobuf/util/message_differencer.h>
-
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
@@ -23,10 +23,7 @@ using TTable = Ydb::Table::V1::TableService::Stub;
 
 template <class TResult, class TRequest, class TResponse>
 TResult Describe(
-    TTable& stub,
-    grpc::Status (TTable::*method)(grpc::ClientContext*, const TRequest&, TResponse*),
-    TStringBuf database,
-    TStringBuf path)
+    TTable& stub, grpc::Status (TTable::*method)(grpc::ClientContext*, const TRequest&, TResponse*), TStringBuf database, TStringBuf path)
 {
     grpc::ClientContext context;
     context.AddMetadata("x-ydb-database", std::string(database.data(), database.size()));
@@ -47,7 +44,7 @@ TResult Describe(
     return result;
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
     Y_UNIT_TEST_TWIN(ExternalTableDataSourceUsesLogicalDatabase, enableRelativePaths) {
@@ -59,22 +56,20 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         rule->SetDst("/Root/physical");
 
         TKikimrRunner kikimr(TKikimrSettings(config)
-            .SetFeatureFlags(config.GetFeatureFlags())
-            .SetDynamicNodeCount(1)
-            .SetStoragePoolTypes({"hdd"})
-            .SetWithSampleTables(false));
+                                 .SetFeatureFlags(config.GetFeatureFlags())
+                                 .SetDynamicNodeCount(1)
+                                 .SetStoragePoolTypes({ "hdd" })
+                                 .SetWithSampleTables(false));
         kikimr.CreateDatabase("physical", "hdd", {});
 
         const TString endpoint = kikimr.GetEndpoint();
-        NYdb::TDriver driver(NYdb::TDriverConfig()
-            .SetEndpoint(endpoint)
-            .SetDatabase("/Root/physical")
-            .SetAuthToken("root@builtin"));
+        NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root/physical").SetAuthToken("root@builtin"));
         NYdb::NQuery::TQueryClient queryClient(driver);
         const auto sessionResult = queryClient.GetSession().GetValueSync();
         UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
         auto session = sessionResult.GetSession();
-        const auto created = session.ExecuteQuery(R"(
+        const auto created = session
+                                 .ExecuteQuery(R"(
             CREATE EXTERNAL DATA SOURCE `/Root/physical/DataSource` WITH (
                 SOURCE_TYPE = "ObjectStorage",
                 LOCATION = "https://storage.example/Root/physical/bucket/",
@@ -89,7 +84,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
                 FORMAT = "csv_with_names",
                 COMPRESSION = "gzip"
             );
-        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        )", NYdb::NQuery::TTxControl::NoTx())
+                                 .GetValueSync();
         UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
 
         auto channel = grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());
@@ -106,16 +102,14 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
         expected.set_data_source_path("/Root/logical/DataSource");
         const auto absolute = Describe<Ydb::Table::DescribeExternalTableResult>(
             *stub, &TTable::DescribeExternalTable, "/Root/logical", "/Root/logical/ExternalTable");
-        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(expected, absolute),
-            absolute.DebugString());
+        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(expected, absolute), absolute.DebugString());
 
         const auto physicalSource = Describe<Ydb::Table::DescribeExternalDataSourceResult>(
             *stub, &TTable::DescribeExternalDataSource, "/Root/physical", "/Root/physical/DataSource");
         UNIT_ASSERT_VALUES_EQUAL(physicalSource.location(), "https://storage.example/Root/physical/bucket/");
         const auto absoluteSource = Describe<Ydb::Table::DescribeExternalDataSourceResult>(
             *stub, &TTable::DescribeExternalDataSource, "/Root/logical", "/Root/logical/DataSource");
-        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(physicalSource, absoluteSource),
-            absoluteSource.DebugString());
+        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(physicalSource, absoluteSource), absoluteSource.DebugString());
 
         if (enableRelativePaths) {
             // Only the database header is relative; schema object paths remain absolute.
@@ -123,12 +117,10 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalTable) {
             // succeeds but returns /Root/physical/DataSource instead of the alias.
             const auto relative = Describe<Ydb::Table::DescribeExternalTableResult>(
                 *stub, &TTable::DescribeExternalTable, "logical", "/Root/logical/ExternalTable");
-            UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(absolute, relative),
-                relative.DebugString());
+            UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(absolute, relative), relative.DebugString());
             const auto relativeSource = Describe<Ydb::Table::DescribeExternalDataSourceResult>(
                 *stub, &TTable::DescribeExternalDataSource, "logical", "/Root/logical/DataSource");
-            UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(physicalSource, relativeSource),
-                relativeSource.DebugString());
+            UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(physicalSource, relativeSource), relativeSource.DebugString());
         }
     }
 

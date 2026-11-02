@@ -23,6 +23,8 @@ using TTable = Ydb::Table::V1::TableService::Stub;
 NKikimrConfig::TAppConfig IsolationConfig(bool enableRelativePaths) {
     NKikimrConfig::TAppConfig config;
     config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
+    // The reload targets the same proxy that serves this fixture's gRPC requests.
+    config.MutableGRpcConfig()->SetGRpcProxyCount(1);
     auto* security = config.MutableDomainsConfig()->MutableSecurityConfig();
     security->SetEnforceUserTokenRequirement(true);
     security->AddRegisterDynamicNodeAllowedSIDs("root@builtin");

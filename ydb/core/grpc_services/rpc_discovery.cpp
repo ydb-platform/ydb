@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/random/shuffle.h>
 
@@ -44,6 +45,17 @@ public:
 
     void Bootstrap() {
         const TString database = Request->NormalizePath(Request->GetProtoRequest()->database());
+        const auto& userToken = Request->GetInternalToken();
+        YDB_LOG_INFO_COMP(NKikimrServices::DISCOVERY, "ListEndpoints request",
+            {"database", database},
+            {"endpoint", Request->GetAuthority()},
+            {"peer", Request->GetPeerName()},
+            {"sdk_build_info", Request->GetSdkBuildInfo().GetOrElse("undef")},
+            {"user_agent", Request->GetGrpcUserAgent().GetOrElse("undef")},
+            {"trace_id", Request->GetTraceId().GetOrElse("undef")},
+            {"user_sid", userToken ? userToken->GetUserSID() : TString("undef")},
+            {"client_instance_id", Request->GetPeerMetaValues("x-client-instance-id").GetOrElse("undef")});
+
         // request endpoints
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
             database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),

@@ -1,6 +1,8 @@
 """SQL helpers for S3 tests, using the same YDB driver as streaming tests."""
 
+import copy
 import json
+import time
 from dataclasses import dataclass, field
 
 import ydb
@@ -135,6 +137,10 @@ class S3Client:
             .with_native_datetime_in_result_sets(False)
         )
         self.pool = ydb.QuerySessionPool(ydb_client.driver, query_client_settings=settings)
+        self.retry_settings = copy.copy(ydb_client.retry_settings)
+        # Negative tests deliberately return INTERNAL_ERROR, which closes the
+        # KQP session. Retrying would hide the original issue behind BAD_SESSION.
+        self.retry_settings.retry_internal_error = False
         self.objects = []
 
     def path(self, name: str) -> str:
@@ -156,17 +162,43 @@ class S3Client:
                     settings=ydb.BaseRequestSettings().with_timeout(timeout),
                 ) as stream:
                     result.result_sets = convert.aggregate_result_sets_by_index(stream)
+            except ydb.issues.Error:
+                # The server can retire a failed session before the attach
+                # stream reports it. Never put that session back into service.
+                session.delete()
+                raise
             finally:
                 result.stats = session.last_query_stats
 
         try:
-            self.pool.retry_operation_sync(run, self.ydb_client.retry_settings)
+            self.pool.retry_operation_sync(run, self.retry_settings)
         except ydb.issues.Error as error:
             result.exception = error
         return result
 
     def query(self, sql, **kwargs):
         return self.execute(sql, **kwargs).check().result_sets
+
+    def start_topic_query(self, sql, topic_path, consumer, *, timeout=60):
+        """Start SQL and wait for its topic reader before the caller writes data."""
+        self.ydb_client.query(f'ALTER TOPIC {sql_identifier(topic_path)} ADD CONSUMER {sql_identifier(consumer)};')
+        future = self.ydb_client.query_async(f'PRAGMA pq.Consumer = {sql_string(consumer)};\n{sql}', timeout=timeout)
+        deadline = time.monotonic() + timeout
+        while True:
+            if future.done():
+                future.result()
+                raise AssertionError('Topic SQL query finished before input was written')
+            description = self.ydb_client.driver.topic_client.describe_consumer(
+                topic_path, consumer, include_stats=True
+            )
+            partitions = [partition for partition in description.partitions if partition.active]
+            if partitions and all(
+                partition.partition_consumer_stats is not None and partition.partition_consumer_stats.read_session_id
+                for partition in partitions
+            ):
+                return future
+            assert time.monotonic() < deadline, f'Topic reader did not start: {topic_path}, {consumer}'
+            time.sleep(0.1)
 
     def create_external_data_source(self, name, bucket, *, expect_error=False):
         name = self.path(name)

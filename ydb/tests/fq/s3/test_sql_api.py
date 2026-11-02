@@ -70,14 +70,11 @@ class TestS3SqlApi:
         assert [part.rows[0][0] for part in result] == [41, 42, 43]
 
     @pytest.mark.parametrize(
-        'sql, message', [('BAD QUERY', 'Unexpected'), ('SELECT * FROM `missing_table`', 'Cannot find table')]
+        'sql, message', [('BAD QUERY', 'no viable alternative'), ('SELECT * FROM `missing_table`', 'Cannot find table')]
     )
     def test_execute_query_error(self, client, sql, message):
         result = client.execute(sql).check(False)
-        if sql == 'BAD QUERY':
-            assert 'Unexpected' in result.error or 'mismatched input' in result.error
-        else:
-            assert message in result.error
+        assert message in result.error, result.error
 
     def test_explain_query(self, s3, client, unique_prefix):
         name, _ = self.prepare(s3, client, unique_prefix)

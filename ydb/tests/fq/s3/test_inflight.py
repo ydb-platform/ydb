@@ -43,15 +43,18 @@ class TestS3Inflight:
 
     @pytest.mark.parametrize('kikimr_params', [{'inflight': 1}, {'inflight': 2}, {'inflight': 5}], indirect=True)
     def test_inflight(self, kikimr, s3, client, unique_prefix, kikimr_params):
-        source = self.prepare(s3, client, unique_prefix, 900)
+        # HTTP requests are serialized at limit=1. This is enough files to
+        # exercise all limits without turning the test into a throughput run.
+        file_count = 30
+        source = self.prepare(s3, client, unique_prefix, file_count)
         sql = f'''PRAGMA ydb.MaxTasksPerStage='1';
             SELECT COUNT(*) AS cnt FROM {source}
             WITH (FORMAT=csv_with_names, SCHEMA=(Fruit String NOT NULL, Price Int32 NOT NULL, Weight Int32 NOT NULL));'''
         result = self.run(kikimr, client, sql, kikimr_params.param['inflight'], 'InFlightStreams')
-        assert result.rows[0]['cnt'] == 2700
+        assert result.rows[0]['cnt'] == file_count * 3
         sql = f'''SELECT COUNT(*) AS cnt FROM {source} WITH (FORMAT=raw, SCHEMA=(Data String NOT NULL));'''
         result = self.run(kikimr, client, sql, kikimr_params.param['inflight'], 'InFlight')
-        assert result.rows[0]['cnt'] == 900
+        assert result.rows[0]['cnt'] == file_count
 
     @pytest.mark.parametrize('kikimr_params', [{'inflight': 1, 'data_inflight': 1}], indirect=True)
     def test_data_inflight(self, kikimr, s3, client, unique_prefix):

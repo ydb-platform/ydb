@@ -499,7 +499,8 @@ Pear,15,33'''
         issues = str(query.error)
         assert "big dates is not supported" in issues, "Incorrect Issues: " + issues
 
-    def test_runtime_listing_disabled(self, kikimr, s3, client, unique_prefix):
+    @pytest.mark.parametrize('runtime_listing', ['false', 'true'])
+    def test_runtime_listing(self, kikimr, s3, client, unique_prefix, runtime_listing):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
@@ -522,7 +523,7 @@ Pear,15,33'''
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
-            PRAGMA s3.UseRuntimeListing="true";
+            PRAGMA s3.UseRuntimeListing="{runtime_listing}";
 
             SELECT * FROM `{storage_connection_name}`.`fruits.csv`
             WITH (
@@ -538,11 +539,13 @@ Pear,15,33'''
         query = client.execute(sql)
         query.check()
 
-        describe_string = "{}".format(query)
-        assert (
-            "Runtime listing is not allowed for federated queries, pragma value was ignored" in describe_string
-        ), describe_string
-        assert len(query.result_set().rows) == 3
+        rows = query.result_set().rows
+        assert len(rows) == 3
+        assert sorted((row['Fruit'], row['Price'], row['Weight']) for row in rows) == [
+            (b'Apple', 2, 22),
+            (b'Banana', 3, 100),
+            (b'Pear', 15, 33),
+        ]
 
     def test_precompute_with_different_result_types(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
@@ -700,7 +703,9 @@ class TestS3TopicJoin(StreamingTestBase):
             LIMIT 9;
         '''
         try:
-            future = kikimr.ydb_client.query_async(sql, timeout=60)
+            future = client.start_topic_query(
+                sql, kikimr.get_database_name() + '/' + self.input_topic, self.consumer_name
+            )
             self.write_stream(
                 [f'{{"key": {i % 3 + 1}, "word": "{word}"}}' for i, word in enumerate(words)], endpoint=endpoint
             )

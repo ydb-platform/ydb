@@ -18,7 +18,9 @@ class TestTopicS3Join(StreamingTestBase):
             LIMIT 1;
         '''
         try:
-            future = kikimr.ydb_client.query_async(sql, timeout=60)
+            future = client.start_topic_query(
+                sql, kikimr.get_database_name() + '/' + self.input_topic, self.consumer_name
+            )
             self.write_stream(['Banana'], endpoint=endpoint)
             result = future.result(timeout=70)[0]
             assert len(result.rows) == 1

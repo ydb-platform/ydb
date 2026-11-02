@@ -24,7 +24,9 @@ class TestEarlyFinish(StreamingTestBase):
             LIMIT 2;
         '''
         try:
-            future = kikimr.ydb_client.query_async(sql, timeout=60)
+            future = client.start_topic_query(
+                sql, kikimr.get_database_name() + '/' + self.input_topic, self.consumer_name
+            )
             self.write_stream(['A', 'B', 'C'], endpoint=endpoint)
             result = future.result(timeout=70)[0]
             assert [(row['Data1'], row['Data2']) for row in result.rows] == [(b'A', b'A'), (b'C', b'C')]

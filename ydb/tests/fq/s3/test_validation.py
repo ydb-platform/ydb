@@ -7,12 +7,15 @@ class TestSqlValidation:
         result = client.execute('SELECT FROM;').check(False)
         assert result.error
 
-    def test_nested_issues(self, client):
+    @pytest.mark.parametrize('depth', [1, 8, 16])
+    def test_nested_issues(self, client, depth):
+        # The nested issue tree must also fit the protobuf recursion limit.
         sql = '$t_0 = SELECT 1 - "f" AS data;\n'
-        for i in range(100):
+        for i in range(depth):
             sql += f'$t_{i + 1} = SELECT data FROM $t_{i} WHERE data != {i};\n'
-        result = client.execute(sql + 'SELECT data FROM $t_100;').check(False)
-        assert 'Cannot substract' in result.error
+        result = client.execute(sql + f'SELECT data FROM $t_{depth};').check(False)
+        assert 'Cannot substract' in result.error, result.error
+        assert any(issue.issues for issue in result.exception.issues)
 
     @pytest.mark.parametrize('depth', [1, 8, 16])
     def test_nested_type(self, client, depth):

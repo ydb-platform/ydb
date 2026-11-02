@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/workload/vector)
 
 SRCS(
+    float8_ut.cpp
     int4_ut.cpp
 )
 

@@ -1,7 +1,6 @@
 import functools
 import hashlib
 import shlex
-import re
 import os
 from enum import auto, StrEnum
 from typing import Any, TYPE_CHECKING
@@ -259,19 +258,6 @@ def _with_report_configure_error(fn):
     return _wrapper
 
 
-def _get_var_name(s: str) -> tuple[bool, str]:
-    if not s.startswith("$"):
-        return False, ""
-
-    PLAIN_VAR_PATTERN = r"^\$\w+$"
-    WRAPPED_VAR_PATTERN = r"^\$\{\w+\}$"
-    if re.match(PLAIN_VAR_PATTERN, s):
-        return True, s[1:]
-    if re.match(WRAPPED_VAR_PATTERN, s):
-        return True, s[2:-1]
-    return False, ""
-
-
 def _is_real_file(path: str) -> bool:
     return os.path.isfile(path) and not os.path.islink(path)
 
@@ -449,38 +435,19 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
 @ymake.macro
 @_with_report_configure_error
-def _NODEJS_BINARY_FOR_CONFIGURE(unit: ymake.Unit, for_mod: str, *, RELATIVE: bool = False) -> None:
-    if for_mod == "." or for_mod == "./":
-        ymake.report_configure_error(f"NODEJS_BINARY_FOR should be for another module but got path '{for_mod}'")
-        return
-
-    if not RELATIVE and for_mod.startswith("."):
-        ymake.report_configure_error(
-            "You are using a relative path for a module. "
-            f"You have to add RELATIVE key, like NODEJS_BINARY_FOR(RELATIVE {for_mod})"
-        )
-        return
-
-    _SET_TS_FOR_VARS(unit, for_mod)
-
-    for_mod_dir = unit.get("TS_FOR_DIR")
-    if not for_mod_dir or not os.path.isfile(os.path.join(unit.resolve(for_mod_dir), "package.json")):
-        ymake.report_configure_error(
-            f"NODEJS_BINARY_FOR: package.json not found in project directory '{unit.get('TS_FOR_PATH')}'."
-        )
-        return
-
-    _PEERDIR_TS_RESOURCE(unit, "nodejs")
-
-    # _PEERDIR_TS_RESOURCE marks the target's libatomic requirement separately from the host environment.
-    # Use this marker to avoid duplicating its Node.js version and platform checks.
-    if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
-        unit.set(
-            [
-                "COPY_LIBATOMIC_CMD",
-                '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
-            ]
-        )
+def _TS_RUNTIME_BIN_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("_WITH_NODEJS_BIN") == "yes":
+        unit.set(["COPY_NODEJS_CMD", '$COPY_CMD $WITH_NODEJS_ROOT/node ${output:"node"}'])
+        # Resource selection marks the target's requirement independently of the host.
+        if unit.get("_TARGET_NEEDS_LIBATOMIC") == "yes":
+            unit.set(
+                [
+                    "COPY_LIBATOMIC_CMD",
+                    '$COPY_CMD $WITH_LIBATOMIC_1_2_0_RESOURCE_GLOBAL/libatomic.so.1 ${output:"libatomic.so.1"}',
+                ]
+            )
+    if unit.get("_WITH_BUN_BIN") == "yes":
+        unit.set(["COPY_BUN_CMD", '$COPY_CMD $WITH_BUN_RESOURCE_GLOBAL/bun ${output:"bun"}'])
 
 
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
@@ -1122,10 +1089,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         )
 
     build_command = unit.get("_TS_BUILD_COMMAND")
-    after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
-    if after_build_command:
-        build_command = "{} && {}".format(build_command, after_build_command)
-    if after_build_command or (unit.get("_TS_LIBRARY_FOR") == "yes" and build_command):
+    if unit.get("_TS_LIBRARY_FOR") == "yes" and build_command:
         _set_ts_build_command(unit, build_command)
 
     # Code navigation
@@ -1475,26 +1439,6 @@ def _DEPENDS_ON_MOD(unit: ymake.Unit) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_FOR_PATH")
         unit.ondepends([for_mod_path])
-
-
-@ymake.macro
-@_with_report_configure_error
-def _RUN_JAVASCRIPT_AFTER_BUILD_PROCESS_INPUTS(unit: ymake.Unit, js_script: str) -> None:
-    inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
-
-    def process_input(input: str) -> str:
-        is_var, var_name = _get_var_name(input)
-        if is_var:
-            return f"${{hide;input:{var_name}}}"
-        return _build_cmd_input_paths([input], hide=True)
-
-    processed_inputs = [process_input(i) for i in inputs if i]
-
-    js_script = os.path.normpath(js_script)
-    if not js_script.startswith("node_modules/"):
-        processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
-
-    unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
 
 
 @ymake.macro

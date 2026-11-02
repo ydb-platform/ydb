@@ -2,6 +2,7 @@
 
 #include <ydb/library/workload/benchmark_base/state.h>
 #include <ydb/library/formats/arrow/csv/converter/csv_arrow.h>
+#include <ydb/library/vector_distance/type_traits.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
@@ -292,7 +293,7 @@ private:
         TStringBuilder buffer;
         NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
         for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
-            if constexpr (std::is_same_v<T, float> || std::is_same_v<T, TFloat16> || std::is_same_v<T, TBFloat16>) {
+            if constexpr (std::is_same_v<T, float> || NVectorDistance::IsReducedPrecisionFloat<T>) {
                 serializer.HandleElement(static_cast<T>(Distribution(RandomGenerator) * 2 - 1));
             } else if constexpr (NVectorDistance::IsInt4<T>) {
                 std::uniform_int_distribution<int> integerDistribution(T::MinValue, T::MaxValue);
@@ -363,6 +364,10 @@ public:
                 generateEmbedding = [this]() { return GenerateEmbedding<TFloat16>(); };
             } else if (VectorOpts.VectorType == "bfloat16") {
                 generateEmbedding = [this]() { return GenerateEmbedding<TBFloat16>(); };
+            } else if (VectorOpts.VectorType == "float8_e4m3") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TFloat8E4M3>(); };
+            } else if (VectorOpts.VectorType == "float8_e5m2") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TFloat8E5M2>(); };
             } else if (VectorOpts.VectorType == "uint4") {
                 generateEmbedding = [this]() { return GenerateEmbedding<TUint4>(); };
             } else if (VectorOpts.VectorType == "int4") {

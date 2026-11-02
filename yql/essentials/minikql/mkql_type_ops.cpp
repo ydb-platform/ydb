@@ -794,9 +794,9 @@ public:
         ui32 prevYear = NUdf::MIN_YEAR - 1;
         YearsOffsets_[0] = 0;
 
-        ui32 dayOfYear = 365;
+        ui32 dayOfYear = 364;
         ui32 dayOfWeek = 2;
-        ui32 weekOfYear = 52;
+        ui32 weekOfYear = 53;
         ui32 weekOfYearIso8601 = 1;
 
         Months_[0] = 0;

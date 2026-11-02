@@ -7,6 +7,7 @@
 #include <yt/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <yt/yql/providers/yt/codec/yt_codec.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -45,6 +46,7 @@
 #include <util/generic/size_literals.h>
 #include <util/stream/output.h>
 
+#include <atomic>
 #include <mutex>
 
 namespace NYql::NDqs {
@@ -260,10 +262,10 @@ public:
         , std::shared_ptr<std::vector<TType*>> columnTypes
         , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
         , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
-        , ui64 nativeYtTypeFlags, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
+        , ui64 nativeYtTypeFlags, std::atomic<i64>* blockCount)
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
-        , JobStats_(jobStats)
+        , BlockCount_(blockCount)
         , ColumnOrderMapping(columnOrderMapping)
     {
         ColumnConverters_.reserve(columnTypes->size());
@@ -288,7 +290,7 @@ public:
             auto ctx = NCommon::CreateMemoryArenaContext();
 
             YQL_ENSURE(batch);
-            MKQL_ADD_STAT(JobStats_, BlockCount, 1);
+            BlockCount_->fetch_add(1, std::memory_order::relaxed);
             YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
             result.resize(ColumnConverters_.size());
             size_t matchedColumns = 0;
@@ -319,7 +321,7 @@ private:
     std::shared_ptr<TListener> Consumer_;
     std::shared_ptr<arrow::ipc::NDqs::StreamDecoder2> Decoder_;
     std::shared_ptr<std::vector<TType*>> ColumnTypes_;
-    NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
+    std::atomic<i64>* BlockCount_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
     std::unordered_map<std::string, ui32>& ColumnOrderMapping;
 };
@@ -346,7 +348,7 @@ public:
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
-            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, decoder->NativeYtTypeFlags, jobStats));
+            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, decoder->NativeYtTypeFlags, &PendingBlocks_));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);
@@ -425,6 +427,7 @@ public:
             Listener_->InputDone();
             return;
         }
+        PendingInputBytes_.fetch_add(currentPayload.Size(), std::memory_order::relaxed);
         // TODO(): support row and range indexes
         auto payload = TMemoryInput(currentPayload.Begin(), currentPayload.Size());
         arrow::BufferBuilder bb;
@@ -440,8 +443,18 @@ public:
         InputsQueue_.emplace(input);
     }
 
+    void FlushPoolStats() {
+        if (auto bytes = PendingInputBytes_.exchange(0, std::memory_order::relaxed)) {
+            MKQL_ADD_STAT(JobStats_, NYql::NCommon::InputBytes, bytes);
+        }
+        if (auto blocks = PendingBlocks_.exchange(0, std::memory_order::relaxed)) {
+            MKQL_ADD_STAT(JobStats_, BlockCount, blocks);
+        }
+    }
+
     TResultBatch::TPtr Next() {
         for(;;) {
+            FlushPoolStats();
             size_t inputIdx = 0;
             NYT::TSharedRef payload;
             {
@@ -491,6 +504,7 @@ public:
     void Finish() {
         FallbackReader_.Finish();
         Pool_->Shutdown();
+        FlushPoolStats();
         for (auto& e: LocalListeners_) {
             e->Finish();
         }
@@ -524,6 +538,8 @@ private:
     TPtr Self_;
     size_t Inflight_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
+    std::atomic<i64> PendingInputBytes_{0};
+    std::atomic<i64> PendingBlocks_{0};
     size_t NextFreeInputIdx = 0;
 };
 

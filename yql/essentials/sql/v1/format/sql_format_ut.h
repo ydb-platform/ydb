@@ -574,6 +574,26 @@ Y_UNIT_TEST(AsyncReplication) {
          "DROP ASYNC REPLICATION user;\n"},
         {"drop async replication user cascade",
          "DROP ASYNC REPLICATION user CASCADE;\n"},
+        {"drop async replication user force",
+         "DROP ASYNC REPLICATION user FORCE;\n"},
+        {"drop async replication user cascade force",
+         "DROP ASYNC REPLICATION user CASCADE FORCE;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ForceIdentifier) {
+    TCases cases = {
+        {"drop async replication fOrCe",
+         "DROP ASYNC REPLICATION fOrCe;\n"},
+        {"drop async replication fOrCe force",
+         "DROP ASYNC REPLICATION fOrCe FORCE;\n"},
+        {"drop async replication fOrCe cascade force",
+         "DROP ASYNC REPLICATION fOrCe CASCADE FORCE;\n"},
+        {"create topic fOrCe (consumer fOrCe)",
+         "CREATE TOPIC fOrCe (\n\tCONSUMER fOrCe\n);\n"},
     };
 
     TSetup setup;

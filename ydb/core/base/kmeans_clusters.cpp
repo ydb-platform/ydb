@@ -75,6 +75,10 @@ namespace {
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
         else if (vectorType == "bfloat16")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
+        else if (vectorType == "float8_e4m3")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        else if (vectorType == "float8_e5m2")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
         else if (vectorType == "uint4")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4;
         else if (vectorType == "int4")
@@ -126,7 +130,7 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    // Arithmetic uses float for half precision and int for packed 4-bit coordinates.
+    // Reduced-precision floats use float arithmetic; packed 4-bit coordinates use int.
     using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
     static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
     using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
@@ -686,6 +690,10 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             return handleMetric.template operator()<TFloat16>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
             return handleMetric.template operator()<TBFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return handleMetric.template operator()<TFloat8E4M3>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return handleMetric.template operator()<TFloat8E5M2>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
             return handleMetric.template operator()<TUint4>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
@@ -736,6 +744,16 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
             break;
         case EFormat::BFloat16Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16, sizeof(TBFloat16), "bfloat16")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E4M3Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3, sizeof(TFloat8E4M3), "float8_e4m3")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E5M2Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2, sizeof(TFloat8E5M2), "float8_e5m2")) {
                 return nullptr;
             }
             break;
@@ -1018,6 +1036,20 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
                 return false;
             }
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(TFloat16));
+        }
+        break;
+    case EFormat::Float8E4M3Vector:
+    case EFormat::Float8E5M2Vector:
+        if (embedding.size() <= HeaderLen) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float8E4M3Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
         }
         break;
     case EFormat::Uint4Vector:

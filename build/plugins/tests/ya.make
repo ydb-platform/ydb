@@ -11,6 +11,7 @@ TEST_SRCS(
     test_requirements.py
     test_res.py
     test_yql_prebuilt.py
+    test_yql_python_udf.py
     test_ytest.py
 )
 

@@ -6,10 +6,6 @@ inputs:
     description: "limit build and test to specific target"
   build_preset:
     type: string
-  run_build:
-    type: boolean
-    default: true
-    description: "run build"
   run_tests:
     type: boolean
     default: true
@@ -33,9 +29,6 @@ inputs:
     type: boolean
     required: true
     description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
-  folder_prefix:
-    type: string
-    default: "ya-"
   put_build_results_to_cache:
     type: boolean
     default: true
@@ -44,7 +37,7 @@ inputs:
     default: ""
   test_retry_count:
     default: ""
-    description: "how many times to retry failed tests"
+    description: "Maximum attempts including the initial run (positive integer). Default: 3, or 1 for TSAN/MSAN."
   secs:
     type: string
     default: ""
@@ -349,7 +342,7 @@ runs:
               --build "release" --sanitize="thread"
             )
             DASHBOARD_SANITIZER="thread"
-            if [ -z $TEST_RETRY_COUNT ]; then
+            if [ -z "$TEST_RETRY_COUNT" ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -359,7 +352,7 @@ runs:
               --build "release" --sanitize="memory"
             )
             DASHBOARD_SANITIZER="memory"
-            if [ -z $TEST_RETRY_COUNT ]; then
+            if [ -z "$TEST_RETRY_COUNT" ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -372,8 +365,8 @@ runs:
 
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
-        if [ -z $TEST_RETRY_COUNT ]; then
-          # default is 3 for ordinary build and 1 for sanitizer builds
+        if [ -z "$TEST_RETRY_COUNT" ]; then
+          # Default: 3 attempts; TSAN/MSAN select 1 above.
           TEST_RETRY_COUNT=3
         fi
 
@@ -382,7 +375,7 @@ runs:
         fi
 
         params+=(
-          --stat -DCONSISTENT_DEBUG --no-dir-outputs
+          -DCONSISTENT_DEBUG --no-dir-outputs
           # Keep chunk archives separate to avoid merging and repacking them.
           --dont-merge-split-tests
           --test-failure-code 0 --build-all
@@ -395,10 +388,7 @@ runs:
         echo "GITHUB_EVENT_NAME = ${GITHUB_EVENT_NAME}"
 
         if [ -z "${{ inputs.custom_branch_name }}" ]; then
-          # For pull requests, use the target branch (base_ref) - this ensures that:
-          # - Test history is shown for the target branch (e.g., stable-25-3)
-          # - Test results are uploaded for the target branch
-          # For other events (push, workflow_dispatch), use ref_name (the branch that triggered the workflow)
+          # Attribute PR results and history to the target branch.
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
             BRANCH_NAME="${GITHUB_BASE_REF}"
           else
@@ -486,7 +476,6 @@ runs:
         analytics flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
           params+=(--retest)
         fi
 
@@ -521,7 +510,6 @@ runs:
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           if [ $IS_RETRY = 0 ]; then
-            CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
@@ -594,6 +582,8 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          # Store the attempt start, not the upload time.
+          ATTEMPT_STARTED_AT=$(date +%s)
           analytics end prepare_ya_make
           YA_MAKE_NAME="ya_make_try_${RETRY}"
           analytics start "ya_make_try_${RETRY}"
@@ -670,7 +660,7 @@ runs:
             # sed is to remove richness (tags like '[[rst]]')
             (( \
               cat $CURRENT_REPORT \
-              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
+              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type == "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
             echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
@@ -794,7 +784,16 @@ runs:
           esac
           run_name="${run_name}_attempt_${RETRY}"
           analytics start upload_tests_results
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          # Stream logs instead of buffering and replaying them through xtrace.
+          .github/scripts/analytics/upload_tests_results.py \
+            --test-results-file "${CURRENT_REPORT}" \
+            --run-timestamp "${ATTEMPT_STARTED_AT}" \
+            --commit "${ORIGINAL_HEAD}" \
+            --build-type "${BUILD_PRESET}" \
+            --pull "${run_name}" \
+            --job-name "${ANALYTICS_JOB_NAME}" \
+            --job-id "${{ github.run_id }}" \
+            --branch "${BRANCH_NAME}"
           analytics end upload_tests_results
           analytics flush
 
@@ -963,11 +962,14 @@ runs:
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`
+        if [[ -z "$comment_raw" ]]; then
+          echo "Skipped build size difference: no comparison available"
+          exit 0
+        fi
 
         IFS=';;;'
         read -ra comment_arr <<< "$comment_raw"
 
-        printf "$comment"
         if [[ ${comment_raw} != "Error"* ]]; then
           color=${comment_arr[0]}
           replace=$color";;;"

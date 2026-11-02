@@ -3,6 +3,7 @@
 #include "vector_workload_generator.h"
 #include "vector_workload_params.h"
 
+#include <ydb/library/vector_distance/type_traits.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <util/datetime/base.h>
@@ -99,7 +100,7 @@ static TString GenerateEmbedding(size_t dimension, std::mt19937_64& rng, std::un
     TStringBuilder buffer;
     NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
     for (size_t j = 0; j < dimension; ++j) {
-        if constexpr (std::is_same_v<T, float> || std::is_same_v<T, TFloat16> || std::is_same_v<T, TBFloat16>) {
+        if constexpr (std::is_same_v<T, float> || NVectorDistance::IsReducedPrecisionFloat<T>) {
             serializer.HandleElement(static_cast<T>(dist(rng)));
         } else if constexpr (NVectorDistance::IsInt4<T>) {
             std::uniform_int_distribution<int> integerDistribution(T::MinValue, T::MaxValue);
@@ -145,6 +146,10 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
             embeddingBuffer = GenerateEmbedding<TFloat16>(dimension, rng, dist);
         } else if (vectorType == "bfloat16") {
             embeddingBuffer = GenerateEmbedding<TBFloat16>(dimension, rng, dist);
+        } else if (vectorType == "float8_e4m3") {
+            embeddingBuffer = GenerateEmbedding<TFloat8E4M3>(dimension, rng, dist);
+        } else if (vectorType == "float8_e5m2") {
+            embeddingBuffer = GenerateEmbedding<TFloat8E5M2>(dimension, rng, dist);
         } else if (vectorType == "uint4") {
             embeddingBuffer = GenerateEmbedding<TUint4>(dimension, rng, dist);
         } else if (vectorType == "int4") {

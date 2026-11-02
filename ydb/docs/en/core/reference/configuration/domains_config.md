@@ -58,6 +58,7 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
       encryption_mode: <optional, specify 1 to encrypt data on the disk>
       erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
       kind: <storage pool name - specify the same value as above>
+      bridge_mode: <optional, true for a bridged pool or false for an ordinary pool>
       pdisk_filter:
       - property:
         - type: <device type to be compared with the one specified in host_configs.drive.type>
@@ -65,6 +66,8 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
   - kind: <storage pool name>
   ...
 ```
+
+In a bridge cluster with [non-uniform storage](../../concepts/bridge.md#storage-pools), `bridge_mode` selects whether the pool is bridged (`true`) or ordinary (`false`). Set it explicitly when creating pool types: an omitted value is resolved from the cluster's persisted bridge state. This field cannot change the mode of an existing pool; use [`ydb-dstool pool set-bridge-mode`](../ydb-dstool/pool-set-bridge-mode.md) instead.
 
 Each database in the cluster is assigned at least one of the available storage pools selected in the database creation operation. The names of storage pools among those assigned can be used in the `DATA` attribute when defining column groups in YQL operators [`CREATE TABLE`](../../yql/reference/syntax/create_table/family.md)/[`ALTER TABLE`](../../yql/reference/syntax/alter_table/family.md).
 

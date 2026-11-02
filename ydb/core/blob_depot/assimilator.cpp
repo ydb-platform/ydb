@@ -525,7 +525,7 @@ namespace NKikimr::NBlobDepot {
                 // there are some unprocessed get queries, still have to wait
             } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
                 OnCopyDone();
-            } else if (std::exchange(CopyReadErrors, false)) { // some blobs couldn't be read, try them again later
+            } else if (std::exchange(CopyRetryNeeded, false)) { // some blobs couldn't be copied, try them again later
                 TActivationContext::Schedule(CopyRetryBackoff.Next(), new IEventHandle(
                     TEvPrivate::EvRestartScanDataForCopying, 0, SelfId(), {}, nullptr, 0));
             } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
@@ -593,6 +593,8 @@ namespace NKikimr::NBlobDepot {
                         const bool inserted1 = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
                         Y_ABORT_UNLESS(inserted1);
                         ++get.PutsPending;
+                    } else {
+                        CopyRetryNeeded = true;
                     }
                     break;
 
@@ -606,7 +608,7 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     ++Self->AsStats.BlobsReadError;
-                    CopyReadErrors = true;
+                    CopyRetryNeeded = true;
                     continue;
             }
 

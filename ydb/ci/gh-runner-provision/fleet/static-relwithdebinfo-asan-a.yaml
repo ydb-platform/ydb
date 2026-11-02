@@ -1,0 +1,9 @@
+shape: ../shapes/static-relwithdebinfo.yaml
+name: static-relwithdebinfo-asan-a
+count: 12
+zone: ru-central1-a
+subnet_id: e9b1l2j8tlnpph34qcn8
+labels:
+  - auto-provisioned
+  - build-preset-relwithdebinfo
+  - build-preset-release-asan

@@ -1204,9 +1204,9 @@ namespace {
                     setting.Value().Cast<TCoInterval>().Literal().Value()
                 );
 
-                if (value <= 0) {
+                if (value < static_cast<i64>(TDuration::Seconds(1).MicroSeconds())) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << name << " must be positive"));
+                        TStringBuilder() << name << " must be at least 1 second"));
                     return false;
                 }
 

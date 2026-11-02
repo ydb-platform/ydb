@@ -1364,20 +1364,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(TenantInfoTablesStorageIncludesTopicsWithoutPoolUsage)
     {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 0, 200,
-            std::nullopt);
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 0, 200, std::nullopt);
     }
 
     Y_UNIT_TEST(TenantInfoTablesStorageKeepsTopicsWithUnknownPoolUsage)
     {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200,
-            "unknown", "None");
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200, "unknown", "None");
     }
 
     Y_UNIT_TEST(TenantInfoTablesStorageKeepsTopicsWithEmptyDomainPools)
     {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200,
-            "hdd", "HDD", true);
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200, "hdd", "HDD", true);
     }
 
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)

@@ -32,6 +32,7 @@
 #include <ydb/core/mind/hive/hive_events.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/malloc/api/malloc.h>

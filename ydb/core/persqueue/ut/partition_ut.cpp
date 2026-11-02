@@ -3261,8 +3261,8 @@ void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)
             SendEvent(event.Release());
             auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(sender, TDuration::Seconds(5));
             UNIT_ASSERT(response);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), cookie);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSessionInvalidated(), sessionId != session);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetCookie(), cookie);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetSessionInvalidated(), sessionId != session);
         } else {
             auto event = MakeTestRead(++cookie, 0, 1, "replication");
             event->SessionId = sessionId;

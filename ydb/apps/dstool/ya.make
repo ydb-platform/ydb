@@ -1,4 +1,6 @@
 PY3_PROGRAM(ydb-dstool)
+REQUIREMENTS(cpu:2)
+
 
 STRIP()
 

@@ -1,4 +1,6 @@
 PY3_PROGRAM(solomon_emulator)
+REQUIREMENTS(cpu:2)
+
 
 STYLE_PYTHON()
 

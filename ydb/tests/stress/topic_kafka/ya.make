@@ -1,4 +1,6 @@
 PY3_PROGRAM(workload_topic_kafka)
+REQUIREMENTS(cpu:2)
+
 
 PY_SRCS(
     __main__.py

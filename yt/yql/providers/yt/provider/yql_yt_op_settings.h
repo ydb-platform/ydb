@@ -149,6 +149,7 @@ enum class EYtSettingType: ui64 {
     ColumnGroups             /* "column_groups", "columngroups" */,
     SecurityTags             /* "security_tags", "securitytags" */,
     PrimaryKey               /* "primary_key" "primarykey" */,
+    Producer                 /* "producer" */,
     // Create, Alter
     Columns                  /* "columns"*/,
     Actions                  /* "actions"*/,

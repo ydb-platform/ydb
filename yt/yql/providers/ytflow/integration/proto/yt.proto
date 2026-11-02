@@ -14,6 +14,7 @@ message TYtQueueSinkMessage {
    optional bytes RowType = 3;
    optional bool DoesExist = 5;
    optional bool Truncate = 6;
+   optional string ProducerPath = 7;
 }
 
 message TYtSortedTableSinkMessage {

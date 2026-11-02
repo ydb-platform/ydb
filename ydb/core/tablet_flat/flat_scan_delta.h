@@ -3,6 +3,7 @@
 #include "flat_scan_iface.h"
 #include "flat_saved_row.h"
 #include "flat_table_subset.h"
+#include "flat_row_remap.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -94,7 +95,6 @@ namespace NTable {
             Key = TOwnedCellVec::Make(key);
             OldRow = TSavedRow();
             NewRow = TSavedRow();
-            HaveOld = false;
             HaveNew = false;
             NumCols = 0;
 
@@ -140,7 +140,6 @@ namespace NTable {
                 if (rowVersion <= From) {
                     /* No version in (From, To], the image is the same */
                     OldRow = NewRow;
-                    HaveOld = true;
                     rowVersion = TRowVersion::Min();
                 }
             } else if (From < rowVersion) {
@@ -149,7 +148,6 @@ namespace NTable {
             } else {
                 /* The first version at or below From gives the old image */
                 OldRow.Save(row);
-                HaveOld = true;
                 rowVersion = TRowVersion::Min();
             }
 
@@ -158,17 +156,13 @@ namespace NTable {
 
         EScan EndKey() override
         {
-            if (!HaveNew && !HaveOld) {
-                return EScan::Feed;
-            }
-
-            if (HaveNew && HaveOld && IsSame(OldRow, NewRow)) {
+            if (IsSame(OldRow, NewRow)) {
                 return EScan::Feed;
             }
 
             TRowState oldState(0), newState(0);
-            MakeState(OldRow, HaveOld, oldState);
-            MakeState(NewRow, HaveNew, newState);
+            MakeState(OldRow, oldState);
+            MakeState(NewRow, newState);
 
             return FeedDelta(Key, oldState, newState);
         }
@@ -190,18 +184,19 @@ namespace NTable {
                 return false;
             }
             for (size_t i = 0; i < a.Slots.size(); i++) {
-                if (a.Slots[i].Size != b.Slots[i].Size ||
-                    a.Slots[i].CellOp.Raw() != b.Slots[i].CellOp.Raw())
-                {
+                if (a.IsNull(i) != b.IsNull(i)) {
+                    return false;
+                }
+                if (a.GetBuf(i) != b.GetBuf(i)) {
                     return false;
                 }
             }
             return true;
         }
 
-        void MakeState(const TSavedRow& row, bool have, TRowState& out) const
+        void MakeState(const TSavedRow& row, TRowState& out) const
         {
-            if (have && IsPresent(row.Op)) {
+            if (IsPresent(row.Op)) {
                 row.Restore(out);
             } else {
                 out.Init(NumCols);
@@ -225,7 +220,6 @@ namespace NTable {
         TSavedRow OldRow;
         TSavedRow NewRow;
         ui32 NumCols = 0;
-        bool HaveOld = false;
         bool HaveNew = false;
     };
 

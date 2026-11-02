@@ -297,6 +297,87 @@ Y_UNIT_TEST_SUITE(TDeltaScanTest) {
         UNIT_ASSERT(WasDeltaScanSkipped(subset, TRowVersion(1, 1), TRowVersion(2, 1)));
     }
 
+    Y_UNIT_TEST(CreateThenEraseWithinRangeYieldsNothing) {
+        auto lay = MakeLayout();
+        auto part = NTest::TPartCook(lay, { false, 4096 })
+            .Ver({20, 1}).AddOpN(ERowOp::Erase, 1_u64)
+            .Ver({15, 1}).AddN(1_u64, 100_u64)
+            .Finish();
+        auto subset = MakeSubset(part);
+        auto deltas = RunDeltaScan(subset, TRowVersion(10, 1), TRowVersion(25, 1));
+        UNIT_ASSERT_VALUES_EQUAL(deltas.size(), 0);
+    }
+
+    Y_UNIT_TEST(ExplicitDefaultValueYieldsNothing) {
+        auto lay = MakeLayout();
+        auto part = NTest::TPartCook(lay, { false, 4096 })
+            .Ver({20, 1}).AddN(1_u64, nullptr)
+            .Ver({5, 1}).AddN(1_u64)
+            .Finish();
+        auto subset = MakeSubset(part);
+        auto deltas = RunDeltaScan(subset, TRowVersion(10, 1), TRowVersion(25, 1));
+        UNIT_ASSERT_VALUES_EQUAL(deltas.size(), 0);
+    }
+
+    Y_UNIT_TEST(ResetRowsRetainValues) {
+        auto lay = MakeLayout();
+        auto part = NTest::TPartCook(lay, { false, 4096 })
+            .Ver({20, 1}).AddOpN(ERowOp::Reset, 1_u64, 300_u64)
+            .Ver({5, 1}).AddN(1_u64, 100_u64)
+            .Finish();
+        auto subset = MakeSubset(part);
+        auto deltas = RunDeltaScan(subset, TRowVersion(10, 1), TRowVersion(25, 1));
+        UNIT_ASSERT_VALUES_EQUAL(deltas.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[0].OldValue, 100u);
+        UNIT_ASSERT_VALUES_EQUAL(deltas[0].NewValue, 300u);
+    }
+
+    Y_UNIT_TEST(SavedRowPreservesEmptyString) {
+        TRowState row(1);
+        row.Touch(ERowOp::Upsert);
+        row.Set(0, ECellOp::Set, TCell("", 0));
+        UNIT_ASSERT(!row.Get(0).IsNull());
+        TSavedRow saved;
+        saved.Save(row);
+        TRowState restored;
+        saved.Restore(restored);
+        UNIT_ASSERT_C(!restored.Get(0).IsNull(), "An empty string must not become NULL");
+    }
+
+    Y_UNIT_TEST(NullToEmptyStringIsAChange) {
+        NTest::TLayoutCook lay;
+        lay.Col(0, TagKey, NScheme::NTypeIds::Uint64)
+            .Col(0, TagValue, NScheme::NTypeIds::String)
+            .Key({ TagKey });
+        auto part = NTest::TPartCook(lay, { false, 4096 })
+            .Ver({20, 1}).AddN(1_u64, TString(""))
+            .Ver({5, 1}).AddN(1_u64, nullptr)
+            .Finish();
+        auto subset = MakeSubset(part);
+        class TStringScan : public TTestDeltaScan {
+        public:
+            TStringScan() : TTestDeltaScan({10, 1}, {25, 1}) {}
+            size_t Count = 0;
+        private:
+            EScan FeedDelta(TArrayRef<const TCell>, const TRowState& oldState, const TRowState& newState) override {
+                ++Count;
+                UNIT_ASSERT(oldState.Get(1).IsNull());
+                UNIT_ASSERT(!newState.Get(1).IsNull());
+                UNIT_ASSERT_VALUES_EQUAL(newState.Get(1).Size(), 0);
+                return EScan::Feed;
+            }
+        } scan;
+        scan.Tags = subset.Scheme->Tags();
+        NTest::TTestEnv env;
+        TTestDriver driver(&scan, subset, &env);
+        while (true) {
+            auto ready = driver.Process();
+            if (ready == EReady::Gone) break;
+            UNIT_ASSERT(ready == EReady::Data);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scan.Count, 1);
+    }
+
 }
 
 }

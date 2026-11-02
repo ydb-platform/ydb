@@ -1,5 +1,7 @@
 # Importing data from the file system
 
+## Schema objects {#schema-objects}
+
 The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [File structure](../file-structure.md) article:
 
 ```bash

@@ -1,5 +1,7 @@
 # Exporting data to the file system
 
+## Schema objects {#schema-objects}
+
 The `tools dump` command dumps the database data and objects schema to the client file system, in the format described in the [File system](../file-structure.md):
 
 ```bash

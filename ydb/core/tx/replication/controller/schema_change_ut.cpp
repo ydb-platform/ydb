@@ -1030,6 +1030,9 @@ struct TImportedReplicationInfo {
 
 void CompleteDestinationImport(TTestEnv& env, const TReplicationTestInfo& info, ui64 targetId) {
     UNIT_ASSERT(WaitFor([&] {
+        if (!env.GetRuntime().IsRealThreads()) {
+            env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(100));
+        }
         NKikimrMiniKQL::TResult result;
         const auto status = LocalQuery(env.GetRuntime(), info.ControllerId, Sprintf(R"((
             (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
@@ -1836,6 +1839,8 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         const auto info = StartPausedReplicationWithSourceStreams(env);
+        const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
+        CompleteDestinationImport(env, info, targetId);
         auto resume = MakeAlterReplicationRequest(info, 138);
         resume->Record.MutableSwitchState()->MutableStandBy();
         Alter(env, info, std::move(resume));

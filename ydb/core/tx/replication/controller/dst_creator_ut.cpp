@@ -315,11 +315,18 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             env.GetRuntime().Register(CreateReplicationMockService(env.GetSender())));
 
         bool streamCreated = false;
+        bool placeholderCreated = false;
         auto streamObserver = env.GetRuntime().AddObserver([&](IEventHandle::TPtr& ev) {
             if (ev->GetTypeRewrite() == TEvPrivate::EvCreateStreamResult && ev->HasEvent()) {
                 if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
                     UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
                     streamCreated = true;
+                }
+            }
+            if (ev->GetTypeRewrite() == TEvPrivate::EvCreateDstResult && ev->HasEvent()) {
+                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateDstResult*>(ev->GetBase())) {
+                    UNIT_ASSERT_C(result->IsSuccess(), result->Error);
+                    placeholderCreated = result->WaitingImport;
                 }
             }
         });
@@ -344,10 +351,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.SendAsync(replication.GetControllerId(), new TEvService::TEvStatus());
         // Bootstrap from backup starts after the source stream is ready.
         env.GetRuntime().WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
-        env.GetRuntime().WaitFor("destination placeholder", [&] {
-            return env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig().GetImportState()
-                == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
-        }, TDuration::Seconds(60));
+        env.GetRuntime().WaitFor("destination placeholder", [&] { return placeholderCreated; }, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
         const auto ssId = env.GetSchemeshardId("/Root/Dst");
         auto drop = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(200600, ssId);
         auto& tx = *drop->Record.AddTransaction();
@@ -363,7 +370,6 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         CreateTableWithVectorIndexes(env, "/Root/Dst");
         SetImportState(env, "/Root/Dst", NKikimrSchemeOp::TTableReplicationConfig::IMPORTED, EConsistencyLevel::Global);
         const auto pathId = env.GetPathId("/Root/Dst");
-
 
         const auto resumed = env.RunCall([&] {
             return session.ExecuteSchemeQuery(

@@ -173,8 +173,8 @@ void TestDropNotNullWithIndex(const TString& kind, bool compact = false) {
     UNIT_ASSERT(!rejected.IsSuccess());
     auto dropKey = client.ExecuteQuery("ALTER TABLE TestTable ALTER COLUMN Key DROP NOT NULL;",
         TTxControl::NoTx()).GetValueSync();
-    if (compact && (fulltext || json)) {
-        UNIT_ASSERT_C(!dropKey.IsSuccess(), "Compact document ids cannot be NULL");
+    if (fulltext || json) {
+        UNIT_ASSERT_C(!dropKey.IsSuccess(), "Document ids cannot be NULL");
         UNIT_ASSERT_STRING_CONTAINS(dropKey.GetIssues().ToString(), "requires a non-null document id");
         auto stillRejected = client.ExecuteQuery(nullKeyWrite, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(!stillRejected.IsSuccess());
@@ -239,6 +239,14 @@ void TestDropNotNullDocumentId(const TString& kind, bool compact) {
         TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
     CompareYson("[[1u]]", FormatResultSetYson(read.GetResultSet(0)));
+
+    auto indexRead = client.ExecuteQuery(TStringBuilder()
+        << "SELECT COUNT(*) FROM Docs VIEW idx WHERE Key IS NULL AND "
+        << (kind == "json" ? R"(JSON_VALUE(JsonValue, '$.text' RETURNING Utf8) = "cat"u)"
+            : R"(FulltextMatch(Text, "cat"))") << ";",
+        TTxControl::BeginTx().CommitTx()).GetValueSync();
+    UNIT_ASSERT_C(indexRead.IsSuccess(), indexRead.GetIssues().ToString());
+    CompareYson("[[1u]]", FormatResultSetYson(indexRead.GetResultSet(0)));
 }
 
 

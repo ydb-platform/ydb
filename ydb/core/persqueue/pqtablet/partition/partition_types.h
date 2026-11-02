@@ -100,9 +100,7 @@ struct TMessage {
         case 4:
             return std::get<4>(Body).Cookie;
         default:
-            YDB_LOG_ENSURE(false,
-                {"reason", "unreachable"},
-                {"index", Body.index()});
+            AFL_ENSURE(false)("reason", "unreachable")("index", Body.index());
         }
     }
 

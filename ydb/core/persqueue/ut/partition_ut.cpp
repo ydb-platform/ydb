@@ -371,6 +371,7 @@ protected:
                    bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false);
     void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
+    void TestRestoreReadSessionActor(bool hasDataRequest);
 
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
     void TestWriteSubDomainOutOfSpace_DeadlineWork(bool ignoreQuotaDeadline);
@@ -3151,8 +3152,10 @@ Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitio
     WaitPartitionConfigChanged();
 
     TVector<NKikimrPQ::TReplicationDataPayload> payloads;
+    TActorId replicationRecipient;
     Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
         if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
+            replicationRecipient = event->Recipient;
             auto& payload = payloads.emplace_back();
             UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
             return TTestActorRuntimeBase::EEventAction::DROP;
@@ -3160,9 +3163,12 @@ Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitio
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     });
 
+    const auto readSessionActor = Ctx->Runtime->AllocateEdgeActor();
     auto establishSession = [&](ui64 cookie, ui32 step) {
-        SendEvent(new TEvPQ::TEvSetClientInfo(cookie, "replication", 0, "replication-session-" + ToString(step),
-            1, 1, step, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION));
+        auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie, "replication", 0, "replication-session-" + ToString(step),
+            1, 1, step, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
+        event->ReadSessionActor = readSessionActor;
+        SendEvent(event.Release());
         WaitCmdWrite();
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
         WaitProxyResponse({.Cookie = cookie});
@@ -3174,6 +3180,7 @@ Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitio
     UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 1);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
+    UNIT_ASSERT_VALUES_EQUAL(replicationRecipient, readSessionActor);
 
     SendWrite(102, 0, "owner", Nothing(), "message", false, 1, true);
     WaitCmdWrite();
@@ -3204,6 +3211,119 @@ Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitio
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
     Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)
+{
+    const TString session = "replication-session";
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader", .Offset = 3}, {.Consumer = "other", .Offset = 4},
+        {.Consumer = "replication", .Offset = 2, .Step = 1, .Session = session}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    // A tablet restart restores the session from KV, but not its actor address.
+    const auto* userInfo = TPartitionTestWrapper::GetUserInfo(*partition, "replication");
+    UNIT_ASSERT(userInfo);
+    UNIT_ASSERT_VALUES_EQUAL(userInfo->Session, session);
+    UNIT_ASSERT(!userInfo->ReadSessionActor);
+
+    TVector<NKikimrPQ::TReplicationDataPayload> payloads;
+    TActorId replicationRecipient;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
+            replicationRecipient = event->Recipient;
+            auto& payload = payloads.emplace_back();
+            UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    const auto readSessionActor = Ctx->Runtime->AllocateEdgeActor();
+    ui64 cookie = 100;
+    auto sendRequest = [&](const TString& sessionId, const TActorId& sender) {
+        if (hasDataRequest) {
+            auto event = MakeHolder<TEvPersQueue::TEvHasDataInfo>();
+            event->Record.SetPartition(0);
+            event->Record.SetOffset(0);
+            event->Record.SetCookie(++cookie);
+            event->Record.SetDeadline((TInstant::Now() + TDuration::Minutes(1)).MilliSeconds());
+            event->Record.SetClientId("replication");
+            event->Record.SetSessionId(sessionId);
+            ActorIdToProto(sender, event->Record.MutableSender());
+            SendEvent(event.Release());
+            auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvHasDataInfoResponse>(sender, TDuration::Seconds(5));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetCookie(), cookie);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetSessionInvalidated(), sessionId != session);
+        } else {
+            auto event = MakeTestRead(++cookie, 0, 1, "replication");
+            event->SessionId = sessionId;
+            event->ReadSessionActor = sender;
+            // The local event is forwarded by the tablet, not by the read-session actor.
+            SendEvent(event.Release());
+            if (sessionId == session) {
+                WaitProxyResponse({.Cookie = cookie, .Status = NMsgBusProxy::MSTATUS_OK});
+            } else {
+                WaitErrorResponse({.Cookie = cookie, .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_NO_SESSION});
+            }
+        }
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    };
+
+    sendRequest("stale-session", readSessionActor);
+    UNIT_ASSERT(!userInfo->ReadSessionActor);
+    UNIT_ASSERT(payloads.empty());
+
+    // Restoring the address while another user-info write is in flight must also
+    // update its pending copy, without publishing the uncommitted offset.
+    SendSetOffset(201, "replication", 3, session);
+    WaitCmdWrite();
+    sendRequest(session, readSessionActor);
+    UNIT_ASSERT_VALUES_EQUAL(userInfo->ReadSessionActor, readSessionActor);
+    UNIT_ASSERT_VALUES_EQUAL(replicationRecipient, readSessionActor);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("replication"), 2);
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 201});
+    UNIT_ASSERT_VALUES_EQUAL(userInfo->ReadSessionActor, readSessionActor);
+    UNIT_ASSERT_VALUES_EQUAL(userInfo->Offset, 3);
+
+    sendRequest(session, readSessionActor);
+    sendRequest(session, Ctx->Runtime->AllocateEdgeActor());
+    UNIT_ASSERT_VALUES_EQUAL(userInfo->ReadSessionActor, readSessionActor);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+
+    SendSetOffset(202, "reader", 5, "");
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 202});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 5);
+    UNIT_ASSERT_VALUES_EQUAL(replicationRecipient, readSessionActor);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST_F(ReplicationDataRestoresReadSessionActorOnRead, TPartitionFixture)
+{
+    TestRestoreReadSessionActor(false);
+}
+
+Y_UNIT_TEST_F(ReplicationDataRestoresReadSessionActorOnHasData, TPartitionFixture)
+{
+    TestRestoreReadSessionActor(true);
 }
 
 Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)

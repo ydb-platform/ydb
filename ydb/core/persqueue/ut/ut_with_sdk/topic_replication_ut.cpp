@@ -83,6 +83,53 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), expectedStatus, response.operation().ShortDebugString());
     }
 
+    void EnableMirroring(const TString& source, const TString& destination) {
+        auto settings = Describe(destination);
+        auto* mirror = settings.mutable_remote_mirror_rule();
+        mirror->set_endpoint(Setup.GetEndpoint());
+        mirror->set_database(Setup.GetDatabase());
+        mirror->set_topic_path(source);
+        mirror->set_consumer_name("replicator");
+        mirror->mutable_credentials()->set_oauth_token("");
+        (*settings.mutable_attributes())["_ydb_mirror_consumer_offsets"] = "true";
+        Alter(destination, settings);
+    }
+
+    void Commit(const TString& path, ui64 offset) {
+        const auto result = Client.CommitOffset(path, 0, "reader", offset).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    NYdb::NTopic::TPartitionInfo DescribePartition(const TString& path, const TString& consumer) {
+        const auto result = Client.DescribeConsumer(path, consumer,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true).IncludeLocation(true)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto& partitions = result.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        return partitions.front();
+    }
+
+    void WaitForOffsets(const TString& path, ui64 expectedCommittedOffset, ui64 expectedEndOffset) {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(90);
+        ui64 committedOffset = 0;
+        ui64 endOffset = 0;
+        while (TInstant::Now() < deadline) {
+            const auto partition = DescribePartition(path, "reader");
+            const auto& consumerStats = partition.GetPartitionConsumerStats();
+            const auto& partitionStats = partition.GetPartitionStats();
+            if (consumerStats && partitionStats) {
+                committedOffset = consumerStats->GetCommittedOffset();
+                endOffset = partitionStats->GetEndOffset();
+                if (committedOffset == expectedCommittedOffset && endOffset == expectedEndOffset) {
+                    return;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(committedOffset, expectedCommittedOffset, "Timed out waiting for replicated consumer offset");
+        UNIT_ASSERT_VALUES_EQUAL_C(endOffset, expectedEndOffset, "Timed out waiting for mirrored messages");
+    }
+
     void Write(const TString& path, ui64 first, ui64 count) {
         auto writer = Client.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
             .Path(path).ProducerId("producer").MessageGroupId("producer").Codec(NYdb::NTopic::ECodec::RAW));
@@ -192,41 +239,14 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
         env.Write(source, 0, 1000);
         env.Read(source, 0, 500, 1000);
 
-        auto settings = env.Describe(destination);
-        auto* mirror = settings.mutable_remote_mirror_rule();
-        mirror->set_endpoint(env.Setup.GetEndpoint());
-        mirror->set_database(env.Setup.GetDatabase());
-        mirror->set_topic_path(source);
-        mirror->set_consumer_name("replicator");
-        mirror->mutable_credentials()->set_oauth_token("");
-        (*settings.mutable_attributes())["_ydb_mirror_consumer_offsets"] = "true";
-        env.Alter(destination, settings);
+        env.EnableMirroring(source, destination);
         UNIT_ASSERT_VALUES_EQUAL(env.Describe(destination).attributes().at("_ydb_mirror_consumer_offsets"), "true");
 
-        auto waitForOffset = [&](ui64 expected) {
-            const auto deadline = TInstant::Now() + TDuration::Seconds(90);
-            ui64 offset = 0;
-            while (TInstant::Now() < deadline) {
-                const auto result = env.Client.DescribeConsumer(destination, "reader",
-                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                const auto& partitions = result.GetConsumerDescription().GetPartitions();
-                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
-                if (const auto& stats = partitions.front().GetPartitionConsumerStats()) {
-                    offset = stats->GetCommittedOffset();
-                    if (offset == expected) {
-                        return;
-                    }
-                }
-                Sleep(TDuration::MilliSeconds(200));
-            }
-            UNIT_ASSERT_VALUES_EQUAL_C(offset, expected, "Timed out waiting for replicated consumer offset");
-        };
-        waitForOffset(500);
+        env.WaitForOffsets(destination, 500, 1000);
         env.Read(source, 500, 100, 1000);
-        waitForOffset(600);
+        env.WaitForOffsets(destination, 600, 1000);
 
-        settings = env.Describe(destination);
+        auto settings = env.Describe(destination);
         UNIT_ASSERT(settings.has_remote_mirror_rule());
         settings.clear_remote_mirror_rule();
         settings.mutable_attributes()->erase("_ydb_mirror_consumer_offsets");
@@ -234,6 +254,55 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
 
         env.Write(destination, 1000, 100);
         env.Read(destination, 600, 500, 1100);
+    }
+
+    Y_UNIT_TEST(ConsumerOffsetsSurviveSourceTabletRestart) {
+        TTopicReplicationEnv env;
+        const TString source = "/Root/replication_source";
+        const TString destination = "/Root/replication_destination";
+        env.Create(source, true);
+        env.Create(destination, false);
+        env.Write(source, 0, 100);
+        env.Commit(source, 20);
+        env.EnableMirroring(source, destination);
+        env.WaitForOffsets(destination, 20, 100);
+
+        const auto sourceBefore = env.DescribePartition(source, "replicator");
+        const auto destinationBefore = env.DescribePartition(destination, "reader");
+        UNIT_ASSERT(sourceBefore.GetPartitionConsumerStats());
+        UNIT_ASSERT(sourceBefore.GetPartitionLocation());
+        UNIT_ASSERT(destinationBefore.GetPartitionLocation());
+        const auto readSessionId = sourceBefore.GetPartitionConsumerStats()->GetReadSessionId();
+        UNIT_ASSERT_C(!readSessionId.empty(), "Mirrorer must have an active source read session before the restart");
+        const auto sourceGeneration = sourceBefore.GetPartitionLocation()->GetGeneration();
+        const auto destinationGeneration = destinationBefore.GetPartitionLocation()->GetGeneration();
+
+        // Keep the frontend and mirror alive, restarting only the source PQ tablet.
+        env.Setup.GetServer().KillTopicPqTablets(source);
+
+        // No new messages: restoring delivery must also work through HasDataInfo.
+        env.Commit(source, 40);
+        env.WaitForOffsets(destination, 40, 100);
+
+        auto checkSessionsAndGenerations = [&] {
+            const auto sourceAfter = env.DescribePartition(source, "replicator");
+            const auto destinationAfter = env.DescribePartition(destination, "reader");
+            UNIT_ASSERT(sourceAfter.GetPartitionConsumerStats());
+            UNIT_ASSERT(sourceAfter.GetPartitionLocation());
+            UNIT_ASSERT(destinationAfter.GetPartitionLocation());
+            UNIT_ASSERT_GT(sourceAfter.GetPartitionLocation()->GetGeneration(), sourceGeneration);
+            UNIT_ASSERT_VALUES_EQUAL_C(sourceAfter.GetPartitionConsumerStats()->GetReadSessionId(), readSessionId,
+                "Replication must recover without recreating the source read session");
+            UNIT_ASSERT_VALUES_EQUAL_C(destinationAfter.GetPartitionLocation()->GetGeneration(), destinationGeneration,
+                "Replication must recover without restarting the mirror tablet");
+        };
+        checkSessionsAndGenerations();
+
+        // Ordinary messages and subsequent consumer commits must keep progressing.
+        env.Write(source, 100, 20);
+        env.Commit(source, 60);
+        env.WaitForOffsets(destination, 60, 120);
+        checkSessionsAndGenerations();
     }
 }
 

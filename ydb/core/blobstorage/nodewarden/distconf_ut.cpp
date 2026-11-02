@@ -1333,9 +1333,9 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         runtime.RegisterService(GetNameserviceActorId(), runtime.Register(new TIgnoreActor, selfNodeId));
         const TActorId checkerId = runtime.Register(CreateDistconfBridgeConnectionCheckerActor(
             TBridgePileId::FromPileIndex(1), "pile1"), selfNodeId);
-        const TActorId edge = runtime.AllocateEdgeActor(selfNodeId);
 
         for (ui32 peerNodeId : {3u, 6u, 1u, 7u}) {
+            const TActorId edge = runtime.AllocateEdgeActor(selfNodeId);
             const bool samePile = peerNodeId == 3 || peerNodeId == 6;
             NKikimrBlobStorage::TConnectivityPayload payload;
             TBridgePileId::FromPileIndex(samePile ? 1 : 0).CopyToProto(&payload,

@@ -21,6 +21,7 @@
 #include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
 #include "viewer_database_stats.h"
+#include "viewer_cluster.h"
 #include "viewer_groups.h"
 #include "viewer_healthcheck.h"
 #include "viewer_nodelist.h"
@@ -1487,6 +1488,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
 
         std::unordered_set<ui32> queriedNodes;
+        auto isClusterActor = [&](const TActorId& actorId) {
+            return dynamic_cast<TJsonCluster*>(runtime.FindActor(actorId)) != nullptr;
+        };
         auto addSystemState = [&](NKikimrWhiteboard::TEvSystemStateResponse& response, ui32 nodeId) {
             queriedNodes.insert(nodeId - firstNodeId);
             if (options.AliveNodeIndexes.contains(nodeId - firstNodeId)) {
@@ -1504,37 +1508,51 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 case NSysView::TEvSysView::EvGetVSlotsResponse:
                 case NSysView::TEvSysView::EvGetGroupsResponse:
                 case NSysView::TEvSysView::EvGetStorageStatsResponse:
-                    if (options.DropClusterResponses) {
+                    if (options.DropClusterResponses && isClusterActor(ev->GetRecipientRewrite())) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
                 case TEvBlobStorage::EvNodeWardenQueryStorageConfig:
+                    if (!isClusterActor(ev->Sender)) {
+                        break;
+                    }
                     runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                        new TEvNodeWardenStorageConfig(nullptr, false, bridgeInfo), 0, ev->Cookie));
+                        new TEvNodeWardenStorageConfig(nullptr, false, bridgeInfo), 0, ev->Cookie), options.ServingNodeIndex);
                     return TTestActorRuntime::EEventAction::DROP;
                 case TEvInterconnect::EvListNodes:
+                    if (!isClusterActor(ev->Sender)) {
+                        break;
+                    }
                     if (!options.DropNodesInfo) {
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
                             new TEvInterconnect::TEvNodesInfo(nodes, options.ProvidePileMap ? pileMap : nullptr),
-                            0, ev->Cookie));
+                            0, ev->Cookie), options.ServingNodeIndex);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
                 case TEvWhiteboard::EvSystemStateRequest: {
+                    if (!isClusterActor(ev->Sender)) {
+                        break;
+                    }
                     if (!options.DropWhiteboard) {
                         auto response = std::make_unique<TEvWhiteboard::TEvSystemStateResponse>();
                         addSystemState(response->Record, ev->Recipient.NodeId());
-                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie));
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
+                            options.ServingNodeIndex);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 case NViewer::TEvViewer::EvViewerRequest: {
+                    if (!isClusterActor(ev->Sender)) {
+                        break;
+                    }
                     if (!options.DropWhiteboard) {
                         auto response = std::make_unique<NViewer::TEvViewer::TEvViewerResponse>();
                         auto* system = response->Record.MutableSystemResponse();
                         for (ui32 nodeId : ev->Get<NViewer::TEvViewer::TEvViewerRequest>()->Record.GetLocation().GetNodeId()) {
                             addSystemState(*system, nodeId);
                         }
-                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie));
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
+                            options.ServingNodeIndex);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -1547,7 +1565,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
             TStringBuilder() << "GET /viewer/json/cluster?direct=1&use_health_check=false&timeout=10000&offload_merge="
                 << options.OffloadMerge << " HTTP/1.1\r\n\r\n", endpoint, {});
         const TActorId sender = runtime.AllocateEdgeActor(options.ServingNodeIndex);
-        runtime.Send(new IEventHandle(NViewer::MakeViewerID(options.ServingNodeIndex), sender,
+        const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(options.ServingNodeIndex), options.ServingNodeIndex);
+        runtime.Send(new IEventHandle(viewerId, sender,
             new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)), options.ServingNodeIndex);
         TAutoPtr<IEventHandle> handle;
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);

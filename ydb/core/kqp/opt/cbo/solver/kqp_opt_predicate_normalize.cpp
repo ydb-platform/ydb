@@ -414,7 +414,7 @@ TString TTreeNode::ToString(ui32 indent) const {
     if (Operator != ELogicalOperator::Leaf) {
         out << " (" << Children.size() << " children)\n";
         for (const auto& child : Children) {
-            out << (child ? child->ToString(indent + 1) : TString(TString((indent + 1) * 2, ' ') + "<null>\n"));
+            out << (child ? child->ToString(indent + 1) : TString((indent + 1) * 2, ' ') + "<null>\n");
         }
         return out;
     }

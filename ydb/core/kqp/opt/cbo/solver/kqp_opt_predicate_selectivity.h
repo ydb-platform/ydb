@@ -40,14 +40,12 @@ public:
 protected:
     double ComputeEqualitySelectivity(
         const TExprBase& left,
-        const TExprBase& right,
-        bool collectConstantMembers
+        const TExprBase& right
     );
 
     double ComputeInequalitySelectivity(
         const TExprBase& left,
         const TExprBase& right,
-        bool collectConstantMembers,
         EInequalityPredicateType predicate
     );
 

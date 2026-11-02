@@ -343,15 +343,31 @@ namespace NKikimr::NKqp {
 
 using namespace NPredicateTree;
 
+namespace {
+
+const TColumnStatistics& FindColumnStatistics(const TOptimizerStatistics& stats, const TString& attributeName) {
+    static const TColumnStatistics empty;
+    const auto& data = stats.ColumnStatistics->Data;
+    if (const auto it = data.find(attributeName); it != data.end()) {
+        return it->second;
+    }
+    if (const auto dotPos = attributeName.find('.'); dotPos != TString::npos) {
+        if (const auto it = data.find(attributeName.substr(dotPos + 1)); it != data.end()) {
+            return it->second;
+        }
+    }
+    return empty;
+}
+
+} // anonymous namespace
+
 double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
     const TExprBase& left,
     const TExprBase& right,
-    bool collectMembers,
     EInequalityPredicateType predicate
 ) {
-    Y_UNUSED(collectMembers); // members are collected while the predicate tree is built
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeInequalitySelectivity(right, left, collectMembers, GetOppositePredicateType(predicate));
+        return ComputeInequalitySelectivity(right, left, GetOppositePredicateType(predicate));
     }
 
     if (auto attribute = IsAttribute(left)) {
@@ -371,8 +387,8 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
                 return DefaultInequalitySelectivity(Stats, attributeName);
             }
 
-            if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
-                const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+            if (const auto eqWidthHistogram = FindColumnStatistics(*Stats, attributeName).EqWidthHistogramEstimator) {
+                const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
                 TMaybe<ui64> estimation = EstimateInequalityPredicateByHistogram(right, columnType, eqWidthHistogram, predicate);
                 if (!estimation.Defined() || !Stats->Nrows) {
                     return DefaultInequalitySelectivity(Stats, attributeName);
@@ -388,13 +404,10 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(
 
 double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
     const TExprBase& left,
-    const TExprBase& right,
-    bool collectMembers
+    const TExprBase& right
 ) {
-    Y_UNUSED(collectMembers); // members are collected while the predicate tree is built
-
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeEqualitySelectivity(right, left, collectMembers);
+        return ComputeEqualitySelectivity(right, left);
     }
 
     if (auto attribute = IsAttribute(left)) {
@@ -414,8 +427,8 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
                 return DefaultEqualitySelectivity(Stats, attributeName);
             }
 
-            if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
-                const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+            if (const auto countMinSketch = FindColumnStatistics(*Stats, attributeName).CountMinSketch) {
+                const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
                 TMaybe<ui32> estimation = EstimateEqualityPredicateBySketch(right, columnType, countMinSketch);
                 if (!estimation.Defined() || !Stats->Nrows) {
                     return DefaultEqualitySelectivity(Stats, attributeName);
@@ -479,8 +492,8 @@ double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attribu
             return DefaultEqualitySelectivity(Stats, attributeName);
         }
 
-        if (const auto countMinSketch = Stats->ColumnStatistics->Data[attributeName].CountMinSketch) {
-            const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+        if (const auto countMinSketch = FindColumnStatistics(*Stats, attributeName).CountMinSketch) {
+            const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
             TMaybe<ui32> estimation = EstimateEqualityPredicateBySketch(
                 mergedRange.Left.GetRef(),
                 columnType,
@@ -513,8 +526,8 @@ double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attribu
             rightInequalitySign = EInequalityPredicateType::LessOrEqual;
         }
 
-        if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
-            const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+        if (const auto eqWidthHistogram = FindColumnStatistics(*Stats, attributeName).EqWidthHistogramEstimator) {
+            const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
             TMaybe<ui64> estimation = EstimateRangePredicateByHistogram(
                 mergedRange.Left.GetRef(),
                 mergedRange.Right.GetRef(),
@@ -554,8 +567,8 @@ double TPredicateSelectivityComputer::ReComputeEstimation(const TString& attribu
         }
     }
 
-    if (const auto eqWidthHistogram = Stats->ColumnStatistics->Data[attributeName].EqWidthHistogramEstimator) {
-        const auto columnType = Stats->ColumnStatistics->Data[attributeName].Type;
+    if (const auto eqWidthHistogram = FindColumnStatistics(*Stats, attributeName).EqWidthHistogramEstimator) {
+        const auto columnType = FindColumnStatistics(*Stats, attributeName).Type;
         TMaybe<ui64> estimation = EstimateInequalityPredicateByHistogram(
             nodePtr.GetRef(),
             columnType,
@@ -576,15 +589,15 @@ double TPredicateSelectivityComputer::ComputeLeafSelectivity(const TTreeNode& le
     switch (leaf.Kind) {
         case EPredicateKind::Comparison:
             if (leaf.Sign == EInequalityPredicateType::Equal) {
-                return ComputeEqualitySelectivity(leaf.Left.GetRef(), leaf.Right.GetRef(), false);
+                return ComputeEqualitySelectivity(leaf.Left.GetRef(), leaf.Right.GetRef());
             }
-            return ComputeInequalitySelectivity(leaf.Left.GetRef(), leaf.Right.GetRef(), false, leaf.Sign);
+            return ComputeInequalitySelectivity(leaf.Left.GetRef(), leaf.Right.GetRef(), leaf.Sign);
 
         case EPredicateKind::MergedRanges: {
             // a range unbounded on both sides covers the domain and estimates to 1.0
             double selectivity = 0.0;
             for (const auto& range : leaf.Ranges) {
-                selectivity += ReComputeEstimation(leaf.Column, range);
+                selectivity += ReComputeEstimation(leaf.Attribute, range);
             }
             return std::min(1.0, selectivity);
         }
@@ -631,8 +644,16 @@ double TPredicateSelectivityComputer::ComputeSelectivity(const std::shared_ptr<T
 
     // processing Or nodes
     double resSelectivity = 0.0;
+    size_t unknownChildren = 0;
     for (const auto& child : node->Children) {
+        if (!child || (child->Operator == ELogicalOperator::Leaf && child->Kind == EPredicateKind::Unknown)) {
+            ++unknownChildren;
+            continue;
+        }
         resSelectivity += ComputeSelectivity(child);
+    }
+    if (unknownChildren > 0 && unknownChildren == node->Children.size()) {
+        return 1.0;
     }
     // cap at 1.0 to stop error propagation
     return std::min(1.0, resSelectivity);

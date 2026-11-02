@@ -4281,6 +4281,128 @@ selector_config: []
         }
     }
 
+    void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {
+        TCommitConfirmationFixture fixture;
+        auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(2);
+        ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
+        auto oldVDisk = ss->GetVDisks(0);
+        oldVDisk.MutableVDiskID()->SetGroupGeneration(1);
+        oldVDisk.MutableVDiskLocation()->SetVDiskSlotID(1);
+        oldVDisk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+        ss->AddVDisks()->CopyFrom(oldVDisk);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+
+        auto query = [&] {
+            return QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        };
+        auto report = [&](ui32 generation, ui32 slotId) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *command = request->Record.MutableStaticVDiskSlain();
+            command->MutableVDiskId()->CopyFrom(oldVDisk.GetVDiskID());
+            command->MutableVDiskId()->SetGroupGeneration(generation);
+            auto *slot = command->MutableVSlotId();
+            slot->SetNodeId(oldVDisk.GetVDiskLocation().GetNodeID());
+            slot->SetPDiskId(oldVDisk.GetVDiskLocation().GetPDiskID());
+            slot->SetVSlotId(slotId);
+            InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+        };
+        auto reassign = [&](ui32 activeIndex, ui32 generation, ui32 slotId) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *config = request->Record.MutableUpdateConfig()->MutableConfig();
+            config->CopyFrom(query());
+            auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
+            auto replacement = serviceSet->GetVDisks(activeIndex);
+            serviceSet->MutableVDisks(activeIndex)->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+            replacement.MutableVDiskID()->SetGroupGeneration(generation);
+            replacement.MutableVDiskLocation()->SetVDiskSlotID(slotId);
+            serviceSet->AddVDisks()->CopyFrom(replacement);
+            serviceSet->MutableGroups(0)->SetGroupGeneration(generation);
+            serviceSet->MutableGroups(0)->MutableRings(0)->MutableFailDomains(0)->MutableVDiskLocations(0)
+                ->SetVDiskSlotID(slotId);
+            InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+        };
+
+        // A full VDiskID at another location must not remove the original record.
+        report(1, 9);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), fixture.Config.GetFingerprint());
+
+        // Remove G, keeping a repeated report for it delayed until its slot is reused.
+        report(1, 1);
+        auto cleaned = query();
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.GetBlobStorageConfig().GetServiceSet().VDisksSize(), 1);
+        report(1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), cleaned.GetFingerprint());
+
+        // The freed highest slot can now be allocated to the same position at G+2.
+        reassign(0, 3, 1);
+        if (obsoleteOccupant) {
+            // Retain G+2 at that slot as a destroyed record after another reassignment.
+            reassign(1, 4, 2);
+        }
+
+        const auto beforeDelayedReport = query();
+        const auto& reusedVDisk = beforeDelayedReport.GetBlobStorageConfig().GetServiceSet().GetVDisks(1);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetVDiskID().GetGroupGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetVDiskLocation().GetVDiskSlotID(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY, obsoleteOccupant);
+        report(1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), beforeDelayedReport.GetFingerprint());
+
+        if (obsoleteOccupant) {
+            // The report for the actual obsolete occupant still removes exactly that record.
+            report(3, 1);
+            UNIT_ASSERT_VALUES_EQUAL(query().GetBlobStorageConfig().GetServiceSet().VDisksSize(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresReusedActiveSlot) {
+        CheckStaticVDiskSlainAfterSlotReuse(false);
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresReusedObsoleteSlot) {
+        CheckStaticVDiskSlainAfterSlotReuse(true);
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresMissingSlotOnUnusedPDisk) {
+        TCommitConfirmationFixture fixture;
+        auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(2);
+        ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
+        ss->AddPDisks()->CopyFrom(MakeStorageConfig(3, 1, {2}).GetBlobStorageConfig().GetServiceSet().GetPDisks(0));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableStaticVDiskSlain();
+        command->MutableVDiskId()->CopyFrom(ss->GetVDisks(0).GetVDiskID());
+        command->MutableVDiskId()->SetGroupGeneration(1);
+        auto *slot = command->MutableVSlotId();
+        slot->SetNodeId(2);
+        slot->SetPDiskId(1);
+        slot->SetVSlotId(0);
+        InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+
+        const auto after = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(after.GetFingerprint(), fixture.Config.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetBlobStorageConfig().GetServiceSet().PDisksSize(), 2);
+    }
+
     bool HandleReplaceEvent(TTestActorSystem& runtime, ui32 nodeId, IEventHandle& ev,
                             TActorId edge, std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult>& response) {
         SetMetadataDiskGuid(nodeId, ev);

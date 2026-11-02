@@ -28,9 +28,6 @@ private:
 
 class TWorkerInfo {
 public:
-    // Last periodic activity sample; expires together with worker lag.
-    TMaybe<bool> InflightBatch;
-
     void AttachSession(ui32 nodeId);
     void ClearSession();
     bool HasSession() const;

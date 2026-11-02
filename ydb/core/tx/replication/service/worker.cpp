@@ -999,9 +999,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             return;
         }
 
-        auto status = MakeHolder<TEvWorker::TEvStatus>(Lag);
-        status->InflightBatch = bool(InFlightData);
-        Send(Parent, std::move(status));
+        Send(Parent, new TEvWorker::TEvStatus(Lag));
         Lag = TDuration::Zero();
 
         // The controller treats reports as idempotent.  Re-send while parked

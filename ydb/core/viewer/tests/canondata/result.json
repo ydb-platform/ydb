@@ -4,7 +4,6 @@
             "status": "SUCCESS"
         },
         "describe_result": {
-            "apply_status": {},
             "availability_period": {
                 "unlimited": {}
             },

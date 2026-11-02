@@ -32,13 +32,11 @@ bool TSessionInfo::HasWorker(const TWorkerId& id) const {
 }
 
 void TWorkerInfo::AttachSession(ui32 nodeId) {
-    InflightBatch.Clear();
     Session = nodeId;
     DataEnded = false;
 }
 
 void TWorkerInfo::ClearSession() {
-    InflightBatch.Clear();
     Session.Clear();
 }
 

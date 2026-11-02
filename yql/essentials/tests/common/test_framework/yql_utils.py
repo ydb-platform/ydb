@@ -68,43 +68,19 @@ def do_custom_query_check(res, sql_query):
     return True
 
 
-class CheckFailure(object):
-    """callback receives the error text and returns (check_succeeded, error_message)."""
-
-    def __init__(self, callback=None):
-        if callback is not None and not callable(callback):
-            raise TypeError('callback must be callable or None')
-        self.callback = callback
-
-    def check(self, execution_failed, error_text):
-        if not execution_failed:
-            return False, 'Expected execution to fail'
-        if self.callback is not None:
-            return self.callback(error_text)
-        return True, ''
-
-
-def check_custom_error(error_text, sql_query):
+def do_custom_error_check(res, sql_query):
     custom_errors = re.findall(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
-    if not custom_errors:
-        return False, 'Expected custom error check in test.\nTest error: %s' % error_text
+    assert custom_errors, 'Expected custom error check in test.\nTest error: %s' % res.std_err
 
     missing_errors = []
     for err_string in custom_errors:
         err_string = err_string.strip()
         log('Custom error: ' + err_string)
-        if err_string not in error_text:
+        if err_string not in res.std_err:
             missing_errors.append(err_string)
 
-    if missing_errors:
-        missing_list = '\n'.join('  - "' + e + '"' for e in missing_errors)
-        return False, 'Custom errors not found in stderr:\n%s\n\nActual stderr:\n%s' % (missing_list, error_text)
-    return True, ''
-
-
-def do_custom_error_check(res, sql_query):
-    check_succeeded, error_message = check_custom_error(res.std_err, sql_query)
-    assert check_succeeded, error_message
+    missing_list = '\n'.join('  - "' + e + '"' for e in missing_errors)
+    assert len(missing_errors) == 0, 'Custom errors not found in stderr:\n%s\n\nActual stderr:\n%s' % (missing_list, res.std_err)
 
 
 def skip_on_ubsan_known_failure(res_text):
@@ -730,8 +706,7 @@ def execute(
     :param urls: dict like {'name': url} with extra files urls
     :param run_sql: execute sql instead of yql
     :param verbose: log all results and diagnostics
-    :param check_error: True to require success, False to skip result checks,
-        or CheckFailure(callback=None) to require failure and optionally check the error text
+    :param check_error: fail on non-zero exit code
     :param input_tables: list of Table (will be written if not exist)
     :param output_tables: list of Table (will be returned)
     :param pretty_plan: whether to use pretty printing for plan or not
@@ -767,7 +742,7 @@ def execute(
     try:
         res_tables = klass.get_tables(output_tables)
     except Exception:
-        if check_error is True:
+        if check_error:
             raise
         res_tables = {}
 

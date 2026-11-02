@@ -31,10 +31,13 @@ def test(case):
         run_sql=True,
         tables=in_tables,
         files=spec.files,
-        check_error=yql_utils.CheckFailure() if spec.xfail else True,
+        check_error=not spec.xfail,
         extra_env=spec.extra_env,
         require_udf_resolver=True,
         scan_udfs=spec.scan_udfs,
     )
+
+    if spec.xfail:
+        assert res.execution_result.exit_code != 0
 
     return canonize_results(case, res, spec.xfail, spec.canonize_ast, spec.diff_tool)

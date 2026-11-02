@@ -1,7 +1,6 @@
 #include "oidc_session_create_handler.h"
 #include "oidc_session_create_nebius.h"
 #include "oidc_session_create_yandex.h"
-#include "openid_connect.h"
 
 namespace NMVP::NOIDC {
 
@@ -13,10 +12,6 @@ TSessionCreateHandler::TSessionCreateHandler(const NActors::TActorId& httpProxyI
 
 void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event) {
     NHttp::THttpIncomingRequestPtr request = event->Get()->Request;
-    if (request->Method == "OPTIONS") {
-        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(CreateOptionsResponse(request)));
-        return;
-    }
     if (request->Method == "GET") {
         switch (Settings.AccessServiceType) {
             case NMvp::yandex_v2:

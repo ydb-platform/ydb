@@ -2,13 +2,11 @@
 
 The `statistics_config` section controls how column statistics are collected for the [cost-based optimizer](../../concepts/query_execution/optimizer.md#statistics).
 
-Run [ANALYZE](../../yql/reference/syntax/analyze.md) to collect statistics on demand. To collect multi-column statistics, list the columns in a [STATISTICS](../../yql/reference/syntax/create_table/statistics.md) clause when creating or altering the table.
-
 ## Configuration parameters
 
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
-| `enable_background_column_stats_collection` | bool | `false` | Collect column statistics in the background |
+| `enable_background_column_stats_collection` | bool | `false` | Background statistics collection is enabled |
 | `background_analyze_change_ratio_threshold_percent` | uint32 | `20` | Change threshold for early collection, as a percentage |
 | `analyze_collect_primary_key_histogram` | bool | `false` | Build a primary-key histogram |
 | `analyze_column_table_whole_table_scan_max_bytes` | uint64 | `10737418240` (10 GiB) | Maximum size for scanning a column table as a whole |
@@ -30,25 +28,23 @@ For example, if the table currently has 1,000 rows, a 20% threshold corresponds 
 
 ## Primary-key histogram {#analyze-collect-primary-key-histogram}
 
-`analyze_collect_primary_key_histogram: true` enables collection of a primary-key equi-height histogram during `ANALYZE`.
+When defining multi-column statistics with [CREATE TABLE ... STATISTICS](../../yql/reference/syntax/create_table/statistics.md), specify the columns to include.
 
-`ANALYZE` must include every primary-key column. No histogram is built if the key is empty or contains a column of an unsupported type.
-
-This setting does not affect histograms defined with [STATISTICS](../../yql/reference/syntax/create_table/statistics.md): `ANALYZE` collects them regardless of its value.
+To avoid listing the primary-key columns in `STATISTICS`, set `analyze_collect_primary_key_histogram: true`. This enables collection of a primary-key equi-height histogram during `ANALYZE`.
 
 ## Reading tables
 
-Size thresholds are specified in bytes and apply only to a full `ANALYZE`. For sampling, see [{#T}](../../yql/reference/syntax/analyze.md#sampling).
+Size thresholds are specified in bytes and apply only to a full `ANALYZE`.
 
 ### Column tables {#analyze-column-table-whole-table-scan-max-bytes}
 
-If a column table's size is known and does not exceed the threshold, `ANALYZE` scans the whole table without splitting by shard. Larger tables and tables of unknown size are scanned shard by shard.
+If a column table's size does not exceed `analyze_column_table_whole_table_scan_max_bytes`, `ANALYZE` scans the whole table without splitting by shard. Larger tables and tables of unknown size are scanned shard by shard.
 
 A value of `0` always uses shard-by-shard scanning.
 
 ### Row tables {#analyze-row-table-whole-table-scan-max-bytes}
 
-If a row table's size is known and does not exceed the threshold, `ANALYZE` scans the whole table without splitting into primary-key ranges. Larger tables and tables of unknown size are scanned in primary-key ranges.
+If a row table's size does not exceed `analyze_row_table_whole_table_scan_max_bytes`, `ANALYZE` scans the whole table without splitting into primary-key ranges. Larger tables and tables of unknown size are scanned in primary-key ranges.
 
 A value of `0` enables scanning by primary-key range. If the key does not allow the table to be split into ranges, the whole table is read.
 
@@ -66,4 +62,5 @@ statistics_config:
 
 - [{#T}](../../concepts/query_execution/optimizer.md#statistics)
 - [{#T}](../../yql/reference/syntax/analyze.md)
-- [{#T}](../../yql/reference/syntax/create_table/statistics.md)
+- [CREATE TABLE ... STATISTICS](../../yql/reference/syntax/create_table/statistics.md)
+- [ALTER TABLE ... STATISTICS](../../yql/reference/syntax/alter_table/statistics.md)

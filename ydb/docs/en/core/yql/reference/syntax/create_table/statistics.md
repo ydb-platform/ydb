@@ -15,12 +15,12 @@ CREATE TABLE <table_name> (
 );
 ```
 
-[`SHOW CREATE TABLE`](../show_create.md) displays the statistics settings. To add or remove them for an existing table, use [`ALTER TABLE`](../alter_table/statistics.md).
+[`SHOW CREATE TABLE`](../show_create.md) displays the multi-column statistics settings. To add or remove them for an existing table, use [`ALTER TABLE`](../alter_table/statistics.md).
 
 ## Parameters
 
 * `table_name`: name of the table to create.
-* `statistics_name`: name of the statistics, used in `ALTER TABLE ... DROP STATISTICS`.
+* `statistics_name`: name of the multi-column statistics.
 * `column_name`: names of existing table columns. The column order matters.
 * `statistics_type`: `COUNT_MIN_SKETCH` or `EQ_HEIGHT_HISTOGRAM`. If `WITH` is omitted, all supported types are used.
 
@@ -30,11 +30,9 @@ CREATE TABLE <table_name> (
 
 For individual columns, `ANALYZE` builds sketches without `STATISTICS` when the estimated number of distinct values is less than 80% of the row count.
 
-`EQ_HEIGHT_HISTOGRAM` describes the distribution of values using an equi-height histogram. It supports only types whose values can be fully ordered. `Json`, `Yson`, and `JsonDocument` do not support this ordering, so explicitly specifying `WITH (EQ_HEIGHT_HISTOGRAM)` for these types results in an error.
+`EQ_HEIGHT_HISTOGRAM` describes the distribution of values using an equi-height histogram.
 
 Multi-column equi-height histograms help estimate the number of rows produced by a join. Both tables must have histograms for the join columns in the corresponding order and with matching types.
-
-`ANALYZE` builds this histogram even when [automatic primary-key histogram collection](../../../../reference/configuration/statistics_config.md#analyze-collect-primary-key-histogram) is disabled.
 
 ## Example
 

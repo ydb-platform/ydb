@@ -14,9 +14,7 @@ Parameters:
 
 * `path_to_table`: path to the table.
 * `column_name`: columns to collect statistics for. If the list is omitted, all columns are processed.
-* `SAMPLE <rate>`: collect statistics from a sample. The expression `rate` specifies the sampling rate and returns a `Double` value. The value must be finite, greater than `0`, and no greater than `1`.
-
-Without `SAMPLE`, or with `SAMPLE 1`, the entire table is read.
+* `SAMPLE <rate>`: sampled statistics collection. `rate` specifies the sampling rate and has type `Double`. The value must be in the interval `(0, 1]`. Without `SAMPLE`, or with `SAMPLE 1`, the entire table is read.
 
 ## Examples
 
@@ -35,13 +33,13 @@ ANALYZE orders SAMPLE 0.1;
 
 ## Collected statistics
 
-`ANALYZE` collects the row count and statistics for selected columns. It estimates the number of distinct values, their frequencies, and their distribution. The statistics collected depend on the column's type and contents.
+`ANALYZE` collects statistics for selected columns: estimates of the number of distinct values, their frequencies, and their distribution. The statistics collected depend on the column's type and contents.
 
-To collect multi-column statistics, add [STATISTICS](create_table/statistics.md) with the required column list to the table definition. For an existing table, use [ALTER TABLE](alter_table/statistics.md). When running `ANALYZE`, include every column in that set or omit the column list.
+To collect multi-column statistics, add a `STATISTICS` clause to [CREATE TABLE](create_table/statistics.md) or [ALTER TABLE](alter_table/statistics.md). When running `ANALYZE`, include all columns of these statistics or omit the column list.
 
-## Sampling {#sampling}
+## Sampled statistics collection {#sampling}
 
-To collect approximate statistics from a sample, add `SAMPLE` with a rate below `1`.
+To collect sampled statistics, add `SAMPLE` with a rate below `1`.
 
 * For a row table, each row is independently included in the sample with probability `rate`.
 * For a column table, shards are selected at random. At least one shard is read; when there are few shards, all of them may be read.
@@ -52,4 +50,4 @@ Sampled statistics are stored separately from full statistics and replaced by th
 
 ## Monitoring progress
 
-While `ANALYZE` runs, it creates a background operation that you can monitor with the [operation list](../../../reference/ydb-cli/operation-list.md) command. The SQL statement waits for statistics collection to finish.
+The SQL `ANALYZE` statement runs synchronously and waits for completion. A background operation is also created for observability. Use the [operation list](../../../reference/ydb-cli/operation-list.md) command to monitor the progress of background `ANALYZE` operations.

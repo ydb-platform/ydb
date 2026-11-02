@@ -68,11 +68,11 @@ To compare plans, the optimizer needs to estimate their costs. The cost function
 
 Statistics help the optimizer estimate how many rows a query needs to read and how many rows filters and joins will produce. It uses these estimates to choose a query execution plan.
 
-{{ ydb-short-name }} automatically updates table statistics: the row count and size in bytes.
+{{ ydb-short-name }} automatically updates basic table statistics: the row count and size in bytes.
 
-For more accurate estimates, collect column statistics with [ANALYZE](../../yql/reference/syntax/analyze.md). These statistics describe column values and how often they occur. For example, the optimizer can use them to estimate how many rows match a `WHERE` condition.
+For more accurate estimates, collect column statistics: which values occur in each column and how often. For example, the optimizer can use them to estimate how many rows match a `WHERE` condition.
 
-You can collect column statistics manually or [configure background collection](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).
+You can collect column statistics manually with [ANALYZE](../../yql/reference/syntax/analyze.md) or [configure background collection](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection).
 
 ### Cost Optimization Levels
 

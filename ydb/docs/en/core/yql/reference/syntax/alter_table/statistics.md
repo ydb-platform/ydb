@@ -2,9 +2,9 @@
 
 `ADD STATISTICS` defines multi-column statistics for an existing table. Run [ANALYZE](../analyze.md) to collect them.
 
-`DROP STATISTICS` removes only the collection settings for the specified statistics name.
+`DROP STATISTICS` removes the multi-column statistics with the specified name.
 
-Statistics types and column requirements are described in [{#T}](../create_table/statistics.md). An `ALTER TABLE` statement can include several of these actions along with other table changes.
+Statistics types and column requirements are described in [CREATE TABLE ... STATISTICS](../create_table/statistics.md). An `ALTER TABLE` statement can include several of these actions along with other table changes.
 
 ## Examples
 
@@ -18,7 +18,7 @@ ALTER TABLE orders
 ANALYZE orders;
 ```
 
-Remove the collection settings for `amount_category`:
+Remove the multi-column statistics named `amount_category`:
 
 ```yql
 ALTER TABLE orders DROP STATISTICS amount_category;

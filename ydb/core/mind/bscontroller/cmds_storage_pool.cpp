@@ -1293,25 +1293,20 @@ namespace NKikimr::NBsController {
                         return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
                             << " is writing to an excluded datacenter; repair its fail realm state first");
                     }
-                    const TFailRealm::EState target = excludedRealms[realm] ? TFailRealm::Excluded : TFailRealm::Recovering;
-                    states[realm] = target;
+                    const std::optional<TMirror3dcFailRealmStates> next = excludedRealms[realm]
+                        ? TakeDownFailRealm(states, realm) : ReturnFailRealm(states, realm);
+                    if (next) {
+                        states = *next;
+                    } else if (suppressFailModelChecking) {
+                        states[realm] = excludedRealms[realm] ? TFailRealm::F : TFailRealm::R;
+                    } else {
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                            << ": invalid mirror-3-dc data center transition");
+                    }
                     GroupContentChanged.insert(groupId);
                 }
             }
-            bool returnedRealm = false;
-            bool hasFailedRealm = false;
-            for (ui32 realm = 0; realm < 3; ++realm) {
-                returnedRealm |= previous[realm] == TFailRealm::F && states[realm] == TFailRealm::R;
-                hasFailedRealm |= states[realm] == TFailRealm::F;
-            }
-            if (returnedRealm && !hasFailedRealm) {
-                // Recovery with all three realms accepts 1+1+1 writes, so N2 is no longer sustainable.
-                for (TFailRealm::EState& realmState : states) {
-                    if (realmState == TFailRealm::N2) {
-                        realmState = TFailRealm::N1;
-                    }
-                }
-            }
+            // Several administrative changes must form one valid transition together.
             if (!suppressFailModelChecking) {
                 if (!isNew) {
                     if (const auto result = ValidateFailRealmStateTransition(previous, states); !result) {

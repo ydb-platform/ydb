@@ -38,7 +38,7 @@ TString MakeConsumerPath(const TString& consumer);
     if (!Valid) {                         \
         return TString();                 \
     } else {                              \
-        AFL_ENSURE(!result.empty(),
+        AFL_ENSURE(!result.empty(),       \
             {"originalTopic", OriginalTopic}); \
         return result;                    \
     }

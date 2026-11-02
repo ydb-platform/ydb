@@ -103,12 +103,12 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             //                    {"tiering", Tiering->GetDebugString()},
             //                    {"pathId", PathId});
             //                AFL_VERIFY(false,
-                                  {"tieringInfo", tieringInfo.DebugString()},
-                                  {"max", max->ToString()},
-                                  {"now", now},
-                                  {"d", *d},
-                                  {"tiering", Tiering->GetDebugString()},
-                                  {"pathId", PathId});
+            //                    {"tieringInfo", tieringInfo.DebugString()},
+            //                    {"max", max->ToString()},
+            //                    {"now", now},
+            //                    {"d", *d},
+            //                    {"tiering", Tiering->GetDebugString()},
+            //                    {"pathId", PathId});
             //            }
             auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(targetTierName);
             auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);

@@ -845,6 +845,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(dataCenters.size(), 3);
         for (const TString& dataCenter : dataCenters) {
             UNIT_ASSERT(env.Invoke(env.Define({{dataCenter, TDataCenter::EXCLUDED}})).GetSuccess());
+            UNIT_ASSERT(env.Invoke(env.SetIncludedStates(TFailRealm::N1)).GetSuccess());
             UNIT_ASSERT(env.Invoke(env.SetIncludedStates(TFailRealm::N2)).GetSuccess());
             const TMap<ui32, NKikimrBlobStorage::TGroupInfo> before = env.ReadGroups();
             const NKikimrBlobStorage::TConfigResponse response =
@@ -965,7 +966,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using R = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;
         UNIT_ASSERT(env.Invoke(env.Define({{"2", DC::EXCLUDED}})).GetSuccess());
-        UNIT_ASSERT(!env.Invoke(env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT(env.Invoke(env.SetIncludedStates(R::Invariant1)).GetSuccess());
         UNIT_ASSERT(env.Invoke(env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT(!env.Invoke(env.Define({})).GetSuccess()); // Two recoveries cannot start together.

@@ -3709,6 +3709,7 @@ struct TWriteSettings {
     bool SkipMissingRows = false;
     enum class EInputRowFormat { Flat, StructOfRows };
     EInputRowFormat InputRowFormat = EInputRowFormat::Flat;
+    bool IsIndexImplTable = false;
 
     struct TIndex {
         TTableId TableId;
@@ -4607,6 +4608,19 @@ public:
     std::optional<TWriteToken> InitializeWriteActors(const TWriteSettings& settings) {
         // Can't have CTAS here
         AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+
+        HasIndexStreamWrite |= !settings.Indexes.empty();
+        HasIndexImplWrite |= settings.IsIndexImplTable;
+        if (HasIndexStreamWrite && HasIndexImplWrite) {
+            ReplyError(
+                NYql::NDqProto::StatusIds::ABORTED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                "Cannot mix index stream writes and direct writes to index implementation "
+                "tables in a single transaction: EnableIndexStreamWrite was changed "
+                "during the transaction",
+                {});
+            return std::nullopt;
+        }
 
         auto& writeInfo = WriteInfos[settings.TableId.PathId];
 
@@ -6798,6 +6812,8 @@ private:
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
     bool EnableStreamWrite = true;
+    bool HasIndexStreamWrite = false;
+    bool HasIndexImplWrite = false;
 
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
@@ -7162,6 +7178,7 @@ private:
                 .InputRowFormat = Settings.GetInputRowFormat() == NKikimrKqp::INPUT_ROW_FORMAT_STRUCT_OF_ROWS
                     ? TWriteSettings::EInputRowFormat::StructOfRows
                     : TWriteSettings::EInputRowFormat::Flat,
+                .IsIndexImplTable = Settings.GetIsIndexImplTable(),
 
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .QuerySpanId = Settings.GetQuerySpanId(),

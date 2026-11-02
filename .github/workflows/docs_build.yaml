@@ -25,7 +25,6 @@ jobs:
   build-docs:
     permissions:
       contents: read
-      pull-requests: read
     uses: ydb-platform/ydb/.github/workflows/docs_build_core.yaml@main
     with:
       pull_number: ${{ inputs.pull_number || '' }}

@@ -14,37 +14,40 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       build: ${{ steps.check.outputs.build }}
     steps:
       - name: Check whether documentation changed
         id: check
-        uses: actions/github-script@v8
+        shell: bash
         env:
           FEATURE_FLAG_DEFAULTS_ENABLED: ${{ vars.FEATURE_FLAG_DEFAULTS_ENABLED }}
-        with:
-          script: |
-            if (process.env.FEATURE_FLAG_DEFAULTS_ENABLED !== 'false' || context.eventName === 'workflow_dispatch') {
-              core.setOutput('build', 'true');
-              return;
-            }
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [[ "$FEATURE_FLAG_DEFAULTS_ENABLED" != "false" || "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-            try {
-              const files = await github.paginate(github.rest.pulls.listFiles, {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number,
-                per_page: 100,
-              });
-              const docsChanged = files.some(({ filename }) =>
-                filename.startsWith('ydb/docs/') || filename.startsWith('.github/workflows/docs_'));
-              core.setOutput('build', String(docsChanged));
-              if (!docsChanged) core.notice('Skipping documentation build for code-only changes while feature flag defaults are disabled');
-            } catch (error) {
-              core.warning(`Could not inspect PR files; building documentation: ${error.message}`);
-              core.setOutput('build', 'true');
-            }
+          diff_dir="$RUNNER_TEMP/docs-pr-diff"
+          git init -q "$diff_dir"
+          git -C "$diff_dir" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          if ! git -C "$diff_dir" fetch -q --no-tags --depth=1 --filter=blob:none origin "$BASE_SHA" "$GITHUB_SHA"; then
+            echo "::warning::Could not fetch commits to inspect PR files; building documentation"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! changed_files=$(git -C "$diff_dir" diff --name-only --no-renames "$BASE_SHA" "$GITHUB_SHA"); then
+            echo "::warning::Could not inspect PR files; building documentation"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if grep -Eq '^(ydb/docs/|\.github/workflows/docs_)' <<< "$changed_files"; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping documentation build for code-only changes while feature flag defaults are disabled"
+          fi
 
   build-docs:
     needs: check-docs-changes

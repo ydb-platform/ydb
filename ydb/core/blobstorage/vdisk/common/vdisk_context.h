@@ -55,7 +55,10 @@ namespace NKikimr {
         // Memory consumption
         TMemoryConsumer FreshIndex;
         TMemoryConsumer FreshData;
-        TMemoryConsumer SstIndex;
+        // MemTotal:SstIndex by table, under the "table" label
+        TMemoryConsumer SstIndexLogoBlobs;
+        TMemoryConsumer SstIndexBlocks;
+        TMemoryConsumer SstIndexBarriers;
         TMemoryConsumer CompDataFresh;
         TMemoryConsumer CompIndexFresh;
         TMemoryConsumer CompData;

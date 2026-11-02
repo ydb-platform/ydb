@@ -126,7 +126,7 @@ namespace NTest {
             TIntrusivePtr<TSst> sst(new TSst(TestCtx->GetVCtx()));
             sst->Info.CTime = TAppData::TimeProvider->Now();
 
-            TTrackableVector<typename TSst::TRec> linearIndex(TMemoryConsumer(TestCtx->GetVCtx()->SstIndex));
+            TTrackableVector<typename TSst::TRec> linearIndex(TMemoryConsumer(SstIndexConsumer<TKey>(*TestCtx->GetVCtx())));
 
             while (it != end && totalBytes < requiredBytes) {
                 linearIndex.emplace_back(it->GetKey(), it->GetMemRec());

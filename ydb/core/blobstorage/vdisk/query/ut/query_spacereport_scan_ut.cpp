@@ -215,7 +215,7 @@ namespace {
             const TMemRecLogoBlob memRec = MakeDiskBlob(
                 gtype, {0}, TDiskPart(10, 0, payloadBytes + 8));
 
-            TTrackableVector<TSst::TRec> index(TMemoryConsumer(contexts.GetVCtx()->SstIndex));
+            TTrackableVector<TSst::TRec> index(TMemoryConsumer(contexts.GetVCtx()->SstIndexLogoBlobs));
             index.emplace_back(key, memRec);
             auto sst = MakeIntrusive<TSst>(contexts.GetVCtx());
             sst->LoadLinearIndex(index);

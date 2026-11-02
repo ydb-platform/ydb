@@ -69,39 +69,50 @@ class BaseInteractiveTest(BaseCliTestWithDatabase):
                         except pexpect.EOF:
                             pass
                 else:
+                    # EOF does not imply process exit. Only poll after EOF or
+                    # during forced cleanup; do not keep reading a closed PTY.
                     time.sleep(interval)
             return True
 
-        killed = False
+        failure = None
+        cause = None
         try:
             deadline = time.monotonic() + timeout
             if not wait_for_exit(deadline, drain=True):
-                raise TimeoutError(f"process shutdown did not finish within {timeout}s")
-            child.close()
-            if child.signalstatus is not None:
-                raise AssertionError(f"Interactive CLI terminated by signal {child.signalstatus}")
-            if child.exitstatus != 0:
-                raise AssertionError(f"Interactive CLI exit_code={child.exitstatus}, expected 0")
-        except Exception as error:
-            if not process.terminated:
-                try:
-                    # Do not use pexpect.kill(): it calls the possibly blocking
-                    # isalive() before sending the signal.
-                    os.kill(process.pid, signal.SIGKILL)
-                    killed = True
-                except ProcessLookupError:
-                    pass
-                if not wait_for_exit(time.monotonic() + 5):
-                    # Even an uninterruptible process must not hang test cleanup.
-                    process.fileobj.close()
-                    process.closed = child.closed = True
-                    process.fd = child.child_fd = -1
-            if not child.closed:
+                failure = f"process shutdown did not finish within {timeout}s"
+            else:
                 child.close()
-            detail = f"Interactive CLI shutdown failed: {error}"
-            if killed:
-                detail += "; child was killed by signal 9, coverage may be incomplete"
-            raise AssertionError(detail) from (original_error or error)
+                if child.signalstatus is not None:
+                    failure = f"Interactive CLI terminated by signal {child.signalstatus}"
+                elif child.exitstatus != 0:
+                    failure = f"Interactive CLI exit_code={child.exitstatus}, expected 0"
+        except Exception as error:
+            failure = str(error)
+            cause = error
+
+        if failure is None:
+            return
+
+        killed = False
+        if not process.terminated:
+            try:
+                # Do not use pexpect.kill(): it calls the possibly blocking
+                # isalive() before sending the signal.
+                os.kill(process.pid, signal.SIGKILL)
+                killed = True
+            except ProcessLookupError:
+                pass
+            if not wait_for_exit(time.monotonic() + 5):
+                # Even an uninterruptible process must not hang test cleanup.
+                process.fileobj.close()
+                process.closed = child.closed = True
+                process.fd = child.child_fd = -1
+        if not child.closed:
+            child.close()
+        detail = f"Interactive CLI shutdown failed: {failure}"
+        if killed:
+            detail += "; child was killed by signal 9, coverage may be incomplete"
+        raise AssertionError(detail) from (original_error or cause)
 
     @staticmethod
     def _isolated_profile_file() -> str:

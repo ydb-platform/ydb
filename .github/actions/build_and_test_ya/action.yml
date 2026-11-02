@@ -149,10 +149,19 @@ runs:
         EVENT_NAME: ${{ github.event_name }}
         GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
         GITHUB_TOKEN: ${{ github.token }}
+        # Env values are not shell-parsed — safe for untrusted PR titles.
+        PR_TITLE: ${{ github.event.pull_request.title || '' }}
       run: |
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        # Random delimiter so a hostile title cannot close the GITHUB_ENV block.
+        PR_TITLE_DELIM="ghadelimiter_$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+        {
+          echo "PR_TITLE<<${PR_TITLE_DELIM}"
+          echo "$PR_TITLE"
+          echo "${PR_TITLE_DELIM}"
+        } >> "$GITHUB_ENV"
         if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
           echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
           job_name=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail -sS \
@@ -417,7 +426,9 @@ runs:
         YA_MAKE_COMMAND="./ya make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
-        if [ "${{ inputs.increment }}" = "true" ]; then
+        # Temporary cold harness for dashboard test PR: full small/medium, no
+        # incremental graph compare (same idea as #57119).
+        if false; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
@@ -461,12 +472,14 @@ runs:
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
-        if [ ! -z "${{ fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}" ]; then
+        # Temporary cold harness: no remote cache read/write (same idea as #57119).
+        params+=(--no-bazel-remote-store)
+        if false; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}")
         fi
 
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+        if false; then
           params+=(--bazel-remote-username "${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}")
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)

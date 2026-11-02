@@ -11,6 +11,13 @@ namespace NKikimr {
 namespace NPageCollection {
 
     class TPageCollection: public IPageCollection {
+        static const TMeta& RequireMeta(const TAtomicSharedPtr<const TMeta>& meta) {
+            if (!meta) {
+                Y_TABLET_ERROR("Page collection metadata is missing");
+            }
+            return *meta;
+        }
+
         const TAtomicSharedPtr<const TMeta> MetaOwner;
 
     public:
@@ -23,7 +30,7 @@ namespace NPageCollection {
         TPageCollection(TLargeGlobId largeGlobId, TAtomicSharedPtr<const TMeta> sharedMeta)
             : MetaOwner(std::move(sharedMeta))
             , LargeGlobId(largeGlobId)
-            , Meta(*MetaOwner)
+            , Meta(RequireMeta(MetaOwner))
             , SkippedInMeta(Meta.SkippedPages())
         {
             if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup ||

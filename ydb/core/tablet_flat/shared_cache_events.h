@@ -111,7 +111,7 @@ namespace NKikimr::NSharedCache {
     struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TIntrusivePtr<TPage>> Pages;
-        // Globs buffer shared with its prebuilt page for allocation accounting
+        // Producers supply at most one Globs page per collection and share its non-empty body here for accounting.
         TSharedData GlobsPageData;
 
         TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)

@@ -1054,7 +1054,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             collection.PageSet.empty())
         {
             Y_DEBUG_ABORT_UNLESS(collection.InMemoryOwners.empty());
-            // Redundant no-result walk requests can remain queued after their pages and run are gone
+            // No waiters or fetches remain, so remaining registrations belong to redundant queued walks.
             while (!collection.MetadataRequests.Empty()) {
                 collection.MetadataRequests.Front()->RetireQueuedWalk();
             }

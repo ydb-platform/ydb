@@ -28,7 +28,7 @@
 ---|---
 `SET param = value` | Команда `SET` устанавливает значение [внутренней переменной](#internal-vars) `param` в `value`.
 `EXPLAIN query-text` | Выводит план запроса `query-text`. Эквивалентна команде [ydb table query explain](commands/explain-plan.md#explain-plan).
-`EXPLAIN AST query-text` | Выводит план запроса `query-text` вместе с [AST](commands/explain-plan.md). Эквивалентна команде `ydb table query explain --ast`.
+`EXPLAIN AST query-text` | Выводит план запроса `query-text` вместе с [AST](commands/explain-plan.md). Эквивалентна команде [ydb table query explain --ast](commands/explain-plan.md).
 
 ### Список внутренних переменных {#internal-vars}
 

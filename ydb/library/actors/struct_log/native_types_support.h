@@ -69,13 +69,7 @@ struct TNativePlainTypeSupport : public std::true_type
 
     static TString ToString(const T& value) {
         TStringBuilder str;
-        if constexpr(std::is_same_v<T, i8>) {
-            str << static_cast<int>(value);
-        } else if constexpr(std::is_same_v<T, ui8>) {
-            str << static_cast<unsigned>(value);
-        } else {
-            str << value;
-        }
+        str << value;
         return str;
     }
 

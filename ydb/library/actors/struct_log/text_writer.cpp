@@ -108,9 +108,7 @@ void TTextWriter::TValueWriter::Append(const TString& value) const {
         }
         outputText << keyItem.ToString();
     }
-    outputText << "=";
-    auto str = TTypesMapping::ToString(value);
-    outputText << EscapeFieldValue(str);
+    outputText << "=" << EscapeFieldValue(value);
 }
 
 }  // namespace NActors::NStructuredLog

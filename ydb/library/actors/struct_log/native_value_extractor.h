@@ -6,6 +6,7 @@
 #include <limits>
 #include <optional>
 #include <type_traits>
+#include <utility>
 
 namespace NActors::NStructuredLog {
 
@@ -26,7 +27,7 @@ public:
     using TOptional = std::optional<T>;
     using TResult = std::pair<TResultKind, TOptional>;
 
-    const TResult& ExtractValue(const TStructuredMessage& message, std::size_t index) {
+    TResult ExtractValue(const TStructuredMessage& message, std::size_t index) {
         Result.first = TResultKind::NoValue;
         Result.second.reset();
 
@@ -38,10 +39,10 @@ public:
             return it->second(data, length);
         };
         message.ForIndexSerialized(index, processValue);
-        return Result;
+        return std::move(Result);
     }
 
-    const TResult& ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
+    TResult ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
             Result.first = TResultKind::NoValue;
@@ -51,7 +52,7 @@ public:
         return ExtractValue(message, index.value());
     }
 
-    // Rejects NaN/Inf and values whose truncation would not fit in TDst (UB on float→int).
+    // Rejects NaN/Inf and out-of-range numeric casts (notably float→int UB, narrowing float→float).
     template <typename TDst, typename TSrc>
     static bool IsSafeNumericCast(const TSrc& value) {
         if constexpr (std::is_same_v<TDst, TSrc>) {
@@ -86,6 +87,13 @@ public:
                 auto unsignedValue = static_cast<std::make_unsigned_t<TSrc>>(value);
                 return unsignedValue <= std::numeric_limits<TDst>::max();
             }
+        } else if constexpr (std::is_floating_point_v<TSrc> && std::is_floating_point_v<TDst>) {
+            if (!std::isfinite(value)) {
+                return false;
+            }
+
+            const TSrc maxVal = static_cast<TSrc>(std::numeric_limits<TDst>::max());
+            return value >= -maxVal && value <= maxVal;
         } else {
             return true;
         }

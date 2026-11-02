@@ -63,8 +63,6 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(NativeTypesLimits) {
-        CheckTypeLimits<ui8>("0", "255");
-        CheckTypeLimits<i8>("-128", "127");
         CheckTypeLimits<ui16>("0", "65535");
         CheckTypeLimits<i16>("-32768", "32767");
         CheckTypeLimits<ui32>("0", "4294967295");
@@ -308,8 +306,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(CreateMessageNativeTypes) {
         // Native type values
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), "value=1");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), "value=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), "value=a");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('b')}), "value=b");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "value=3");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "value=4");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "value=5");
@@ -617,8 +615,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":"1"})");
 
         // Support types
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":"1"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), R"({"value":"1"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), R"({"value":"a"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('b')}), R"({"value":"b"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":"3"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":"4"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":"5"})");
@@ -700,8 +698,6 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(GenerateJsonLimits) {
-        CheckJsonTypeLimits<ui8>(R"({"max":"255","min":"0"})");
-        CheckJsonTypeLimits<i8>(R"({"max":"127","min":"-128"})");
         CheckJsonTypeLimits<ui16>(R"({"max":"65535","min":"0"})");
         CheckJsonTypeLimits<i16>(R"({"max":"32767","min":"-32768"})");
         CheckJsonTypeLimits<ui32>(R"({"max":"4294967295","min":"0"})");

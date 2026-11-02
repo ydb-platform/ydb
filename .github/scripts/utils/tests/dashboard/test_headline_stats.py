@@ -71,7 +71,7 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertNotIn("disk_read_host_tests", stats)
 
     def test_phase_durations_split_build_and_test(self):
-        # Build 0..5s, tests 5..15s → build=5, test=10, total=15.
+        # Build/archive 0..4.5s, tests 5..15s → build=4.5, test=10, total=15.
         phases = _phase_durations_sec(
             runs=[
                 {"suite_path": "s", "chunk": 0, "start_us": 5_000_000, "end_us": 15_000_000},
@@ -83,12 +83,13 @@ class HeadlineHostStatsTest(unittest.TestCase):
                 "link": [],
             },
         )
-        self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["build_duration_sec"], 4.5)
         self.assertAlmostEqual(phases["test_duration_sec"], 10.0)
         self.assertAlmostEqual(phases["total_duration_sec"], 15.0)
 
     def test_phase_durations_overlap_build_and_test(self):
-        # Build still active after tests start: build wall stops at first test.
+        # Build/link continue after tests start: both phases keep full wall spans.
+        # build 0..9, test 3..10 → build=9, test=7, total=10 (overlap not summed).
         phases = _phase_durations_sec(
             runs=[
                 {"suite_path": "s", "chunk": 0, "start_us": 3_000_000, "end_us": 10_000_000},
@@ -98,7 +99,7 @@ class HeadlineHostStatsTest(unittest.TestCase):
                 "link": [(1_000_000, 1), (9_000_000, -1)],
             },
         )
-        self.assertAlmostEqual(phases["build_duration_sec"], 3.0)
+        self.assertAlmostEqual(phases["build_duration_sec"], 9.0)
         self.assertAlmostEqual(phases["test_duration_sec"], 7.0)
         self.assertAlmostEqual(phases["total_duration_sec"], 10.0)
 
@@ -117,6 +118,7 @@ class HeadlineHostStatsTest(unittest.TestCase):
 
     def test_phase_durations_suite_filter_uses_filtered_runs_only_for_tests(self):
         # Mimic --suite-path: runs already filtered, deltas still whole-job.
+        # Honest build span stays 0..10; test is filtered 20..25; total 0..25.
         phases = _phase_durations_sec(
             runs=[
                 {"suite_path": "only/filtered", "chunk": 0, "start_us": 20_000_000, "end_us": 25_000_000},
@@ -125,7 +127,7 @@ class HeadlineHostStatsTest(unittest.TestCase):
                 "build": [(0, 1), (10_000_000, -1)],
             },
         )
-        self.assertAlmostEqual(phases["build_duration_sec"], 20.0)
+        self.assertAlmostEqual(phases["build_duration_sec"], 10.0)
         self.assertAlmostEqual(phases["test_duration_sec"], 5.0)
         self.assertAlmostEqual(phases["total_duration_sec"], 25.0)
 

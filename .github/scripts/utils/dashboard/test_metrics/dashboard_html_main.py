@@ -753,13 +753,9 @@ def build_html_dashboard(
       let totalSec = hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0;
       const buildSpan = activitySpanSec(['build', 'archive', 'cache', 'link']);
       const testSpan = activitySpanSec(['test_tm', 'test_report']);
+      // Honest independent spans (overlap allowed; do not clip build at test start).
       if (!hasBuild && buildSpan) {{
-        const testStart = testSpan ? testSpan.start : null;
-        if (testStart != null && testStart > buildSpan.start) {{
-          buildSec = Math.max(0, testStart - buildSpan.start);
-        }} else {{
-          buildSec = Math.max(0, buildSpan.end - buildSpan.start);
-        }}
+        buildSec = Math.max(0, buildSpan.end - buildSpan.start);
       }}
       if (!hasTest && testSpan) {{
         testSec = Math.max(0, testSpan.end - testSpan.start);
@@ -771,7 +767,8 @@ def build_html_dashboard(
       if (starts.length && ends.length) {{
         totalSec = Math.max(0, Math.max.apply(null, ends) - Math.min.apply(null, starts));
       }} else if (!totalSec) {{
-        totalSec = Math.max(buildSec, 0) + Math.max(testSec, 0);
+        // Last resort when spans are missing: do not double-count overlap.
+        totalSec = Math.max(buildSec, testSec, 0);
       }}
       return {{ totalSec, buildSec, testSec }};
     }}
@@ -825,14 +822,14 @@ def build_html_dashboard(
           + 'from ya activity.">build = whole job</span>')
         : '';
       const buildTip = suiteFiltered
-        ? 'Whole-job build/archive/cache/link activity until the first filtered-suite test start'
-        : 'From the first build/archive/cache/link activity to the first test start';
+        ? 'Whole-job build/archive/cache/link: first → last activity (overlap with tests allowed)'
+        : 'First → last build/archive/cache/link activity (overlap with tests allowed)';
       const testTip = suiteFiltered
-        ? 'Filtered suites only: first matching test start → last matching test end'
-        : 'From the first test start to the last test end';
+        ? 'Filtered suites only: first matching test start → last matching test end (overlap with build allowed)'
+        : 'First → last test start/end (overlap with build allowed)';
       const totalTip = suiteFiltered
-        ? 'Earliest of whole-job build start / filtered test start → latest end'
-        : 'From the first build/archive/cache/link activity to the last test end';
+        ? 'Earliest of whole-job build / filtered test start → latest end (overlap not summed)'
+        : 'Earliest of build/test start → latest of build/test end (overlap not summed)';
       const runLine =
         '<div class="headline-run">' +
           '<div class="headline-run-row">' +

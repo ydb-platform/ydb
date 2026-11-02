@@ -174,12 +174,13 @@ def _phase_durations_sec(
     runs: list[dict[str, Any]],
     ya_activity_deltas: Optional[dict[str, list[tuple[float, int]]]] = None,
 ) -> dict[str, float]:
-    """Wall clocks for the whole job, build phase, and test phase.
+    """Independent wall clocks for build / test / whole job.
 
+    Overlap is allowed and counted in both phases:
     - test: first suite/chunk start → last end (report/evlog runs)
-    - build: first build/archive/cache/link activity → test start (or last
-      build-related activity when there are no tests yet)
-    - total: earliest of build/test start → latest of build/test end
+    - build: first → last build/archive/cache/link activity (not clipped
+      at test start — late link/compile still counts as build)
+    - total: earliest phase start → latest phase end (overlap is not summed)
     """
     starts = [
         float(r.get("start_us", 0.0) or 0.0) / 1_000_000.0
@@ -208,13 +209,11 @@ def _phase_durations_sec(
         build_points.extend(span)
     build_start = min(build_points) if build_points else None
     build_end = max(build_points) if build_points else None
-
-    if build_start is not None and test_start is not None and test_start > build_start:
-        build_duration = max(0.0, float(test_start) - float(build_start))
-    elif build_start is not None and build_end is not None:
-        build_duration = max(0.0, float(build_end) - float(build_start))
-    else:
-        build_duration = 0.0
+    build_duration = (
+        max(0.0, float(build_end) - float(build_start))
+        if build_start is not None and build_end is not None
+        else 0.0
+    )
 
     phase_starts = [t for t in (build_start, test_start) if t is not None]
     phase_ends = [t for t in (build_end, test_end) if t is not None]

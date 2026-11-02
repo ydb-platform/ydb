@@ -751,18 +751,46 @@ def build_html_dashboard(
         : (hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0);
       let buildSec = hasBuild ? Math.max(0, Number(hs.build_duration_sec)) : 0;
       let totalSec = hasTotal ? Math.max(0, Number(hs.total_duration_sec)) : 0;
-      const buildSpan = activitySpanSec(['build', 'archive', 'cache', 'link']);
+      const buildSpan = activitySpanSec(['build', 'archive', 'link']);
       const testSpan = activitySpanSec(['test_tm', 'test_report']);
-      // Honest independent spans (overlap allowed; do not clip build at test start).
+      // Honest independent spans: keep overlap, but do not let post-test-only
+      // sparse AR/LD points stretch the build wall (cache excluded entirely).
       if (!hasBuild && buildSpan) {{
-        buildSec = Math.max(0, buildSpan.end - buildSpan.start);
+        let buildEnd = buildSpan.end;
+        if (testSpan && buildSpan.start < testSpan.start && buildEnd > testSpan.start) {{
+          const activity = data.ya_activity || {{}};
+          let lastBeforeOrOverlap = buildSpan.start;
+          ['build', 'archive', 'link'].forEach((kind) => {{
+            const series = activity[kind] || {{}};
+            const xs = Array.isArray(series.xs) ? series.xs : [];
+            const ys = Array.isArray(series.ys) ? series.ys : [];
+            let active = false;
+            let runStart = null;
+            for (let i = 0; i < xs.length; i++) {{
+              const x = Number(xs[i]);
+              const y = Number(ys[i]);
+              if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+              if (y > 0) {{
+                if (!active) {{ active = true; runStart = x; }}
+                if (runStart != null && runStart < testSpan.start && x > lastBeforeOrOverlap) {{
+                  lastBeforeOrOverlap = x;
+                }}
+              }} else if (active) {{
+                active = false;
+                runStart = null;
+              }}
+            }}
+          }});
+          buildEnd = Math.max(buildSpan.start, lastBeforeOrOverlap);
+        }}
+        buildSec = Math.max(0, buildEnd - buildSpan.start);
       }}
       if (!hasTest && testSpan) {{
         testSec = Math.max(0, testSpan.end - testSpan.start);
       }}
       const starts = [];
       const ends = [];
-      if (buildSpan) {{ starts.push(buildSpan.start); ends.push(buildSpan.end); }}
+      if (buildSpan) {{ starts.push(buildSpan.start); ends.push(buildSpan.start + buildSec); }}
       if (testSpan) {{ starts.push(testSpan.start); ends.push(testSpan.end); }}
       if (starts.length && ends.length) {{
         totalSec = Math.max(0, Math.max.apply(null, ends) - Math.min.apply(null, starts));
@@ -822,8 +850,8 @@ def build_html_dashboard(
           + 'from ya activity.">build = whole job</span>')
         : '';
       const buildTip = suiteFiltered
-        ? 'Whole-job build/archive/cache/link: first → last activity (overlap with tests allowed)'
-        : 'First → last build/archive/cache/link activity (overlap with tests allowed)';
+        ? 'Whole-job build/archive/link wall (cache excluded); overlap past test start counts, post-test-only spikes do not'
+        : 'Build/archive/link wall (cache excluded); overlap past test start counts, post-test-only spikes do not';
       const testTip = suiteFiltered
         ? 'Filtered suites only: first matching test start → last matching test end (overlap with build allowed)'
         : 'First → last test start/end (overlap with build allowed)';
@@ -2540,6 +2568,11 @@ def build_html_dashboard(
         // Clone per plot — Plotly mutates traces/layout in place.
         const clone = (obj) => JSON.parse(JSON.stringify(obj));
         Plotly.newPlot(plotId, clone(traces), clone(yaLayout), yaOpts);
+        // Native Plotly unified hover ignores the Timezone selector; use the
+        // same custom tip as other charts so the clock matches axis ticks.
+        el.classList.add('tz-hover');
+        el.on('plotly_hover', showChartTip);
+        el.on('plotly_unhover', hideChartTipSoon);
       }}
     }})();
 

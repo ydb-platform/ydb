@@ -145,11 +145,21 @@ def _first_last_active_sec(
     deltas: list[tuple[float, int]],
 ) -> Optional[tuple[float, float]]:
     """Return (first_active_sec, last_active_sec) from (+1/-1) activity deltas."""
-    if not deltas:
+    intervals = _active_intervals_sec(deltas)
+    if not intervals:
         return None
+    return (intervals[0][0], intervals[-1][1])
+
+
+def _active_intervals_sec(
+    deltas: list[tuple[float, int]],
+) -> list[tuple[float, float]]:
+    """Return contiguous (start_sec, end_sec) intervals where activity count > 0."""
+    if not deltas:
+        return []
     count = 0
-    first: Optional[float] = None
-    last: Optional[float] = None
+    start: Optional[float] = None
+    intervals: list[tuple[float, float]] = []
     # Same (ts, sign) order as build_active_series_from_deltas (closes first).
     for t_us, sign in sorted(deltas, key=lambda p: (float(p[0]), int(p[1]))):
         try:
@@ -159,15 +169,13 @@ def _first_last_active_sec(
             continue
         prev = count
         count += step
-        if prev <= 0 and count > 0 and first is None:
-            first = t
-        if count > 0:
-            last = t
-        elif prev > 0 and count <= 0:
-            last = t
-    if first is None or last is None or last < first:
-        return None
-    return (first, last)
+        if prev <= 0 and count > 0:
+            start = t
+        elif prev > 0 and count <= 0 and start is not None:
+            if t >= start:
+                intervals.append((start, t))
+            start = None
+    return intervals
 
 
 def _phase_durations_sec(
@@ -178,8 +186,10 @@ def _phase_durations_sec(
 
     Overlap is allowed and counted in both phases:
     - test: first suite/chunk start → last end (report/evlog runs)
-    - build: first → last build/archive/cache/link activity (not clipped
-      at test start — late link/compile still counts as build)
+    - build: first → last build/archive/link activity (cache excluded —
+      it stays noisy during tests). Intervals that only start after tests
+      are dropped when build itself began before tests; true overlap that
+      started earlier still extends past test start.
     - total: earliest phase start → latest phase end (overlap is not summed)
     """
     starts = [
@@ -201,14 +211,19 @@ def _phase_durations_sec(
     )
 
     deltas_by_kind = ya_activity_deltas or {}
-    build_points: list[float] = []
-    for kind in ("build", "archive", "cache", "link"):
-        span = _first_last_active_sec(list(deltas_by_kind.get(kind) or []))
-        if span is None:
-            continue
-        build_points.extend(span)
-    build_start = min(build_points) if build_points else None
-    build_end = max(build_points) if build_points else None
+    # Cache is omitted: From/Put cache keeps firing through the test phase
+    # and would stretch the headline build wall to ~total.
+    build_deltas: list[tuple[float, int]] = []
+    for kind in ("build", "archive", "link"):
+        build_deltas.extend(list(deltas_by_kind.get(kind) or []))
+    build_intervals = _active_intervals_sec(build_deltas)
+    if test_start is not None and build_intervals and build_intervals[0][0] < float(test_start):
+        # Normal order (build starts before tests): drop post-test-only
+        # archive/link spikes. If report times put tests before ya build
+        # (skew), keep the full build/archive/link span instead of emptying it.
+        build_intervals = [iv for iv in build_intervals if iv[0] < float(test_start)]
+    build_start = build_intervals[0][0] if build_intervals else None
+    build_end = max(iv[1] for iv in build_intervals) if build_intervals else None
     build_duration = (
         max(0.0, float(build_end) - float(build_start))
         if build_start is not None and build_end is not None

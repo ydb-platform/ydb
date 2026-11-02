@@ -103,6 +103,40 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertAlmostEqual(phases["test_duration_sec"], 7.0)
         self.assertAlmostEqual(phases["total_duration_sec"], 10.0)
 
+    def test_phase_durations_ignores_post_test_only_cache_spikes(self):
+        # Main build ends before tests; sparse cache/link during tests must not
+        # stretch build wall (regression: headline showed ~build+test).
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 5_000_000, "end_us": 20_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(0, 1), (4_000_000, -1)],
+                "cache": [(12_000_000, 1), (12_500_000, -1)],
+                "link": [(15_000_000, 1), (16_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 4.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 15.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 20.0)
+
+    def test_phase_durations_build_after_skewed_early_test_start(self):
+        # Report test times can precede ya build events; still report the
+        # build/archive/link wall (cache ignored).
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 1_000_000, "end_us": 30_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(10_000_000, 1), (12_000_000, -1)],
+                "link": [(12_000_000, 1), (15_000_000, -1)],
+                "cache": [(16_000_000, 1), (28_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["test_duration_sec"], 29.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 29.0)
+
     def test_phase_durations_late_link_and_build_only(self):
         # Link after compile, no tests → build span only.
         phases = _phase_durations_sec(

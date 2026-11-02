@@ -26,6 +26,12 @@
 /ydb/tests/stress/oltp_workload @ydb-platform/datashard
 /ydb/tests/datashard/vector_index/large @ydb-platform/datashard
 /ydb/core/kqp/ut/tli @ydb-platform/datashard
+/ydb/core/base/generated/ut @ydb-platform/datashard
+/ydb/core/sys_view @ydb-platform/datashard
+/ydb/core/tx/mediator/ut @ydb-platform/datashard
+/ydb/core/tx/time_cast/ut @ydb-platform/datashard
+/ydb/core/tx/tx_allocator/ut @ydb-platform/datashard
+/ydb/core/tx/tx_allocator_client/ut @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/config/validation/column_shard_config_validator_ut @ydb-platform/cs
@@ -93,6 +99,7 @@
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/tests/sql @slonn @ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
+/ydb/core/memory_controller/ut @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
 /ydb/tests/functional/canonical @ydb-platform/qp
 /ydb/tests/functional/suite_tests @ydb-platform/qp
@@ -161,31 +168,24 @@
 /ydb/tools/mnc @ydb-platform/blobstorage
 /ydb/core/load_test @ydb-platform/blobstorage
 /ydb/tests/stress/reconfig_state_storage_workload @ydb-platform/blobstorage
+/ydb/core/jaeger_tracing/ut @ydb-platform/blobstorage
+/ydb/core/testlib/actors/ut @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/backup @ydb-platform/core
-/ydb/core/base/generated/ut @ydb-platform/core
 /ydb/core/control/ut @ydb-platform/core
 /ydb/core/debug_tools/ut @ydb-platform/core
 /ydb/core/driver_lib @ydb-platform/core
 /ydb/core/graph @ydb-platform/core
 /ydb/core/grpc_services @ydb-platform/core
 /ydb/core/grpc_streaming/ut @ydb-platform/core
-/ydb/core/jaeger_tracing/ut @ydb-platform/core
-/ydb/core/memory_controller/ut @ydb-platform/core
 /ydb/core/metering/ut @ydb-platform/core
 /ydb/core/mind @ydb-platform/core
 /ydb/core/mon @ydb-platform/core
-/ydb/core/sys_view @ydb-platform/core
 /ydb/core/tablet/ut @ydb-platform/core
-/ydb/core/testlib/actors/ut @ydb-platform/core
 /ydb/core/tx/balance_coverage/ut @ydb-platform/core
-/ydb/core/tx/mediator/ut @ydb-platform/core
 /ydb/core/tx/sequenceproxy/ut @ydb-platform/core
 /ydb/core/tx/sequenceshard @ydb-platform/core
-/ydb/core/tx/time_cast/ut @ydb-platform/core
-/ydb/core/tx/tx_allocator/ut @ydb-platform/core
-/ydb/core/tx/tx_allocator_client/ut @ydb-platform/core
 /ydb/core/tx/tx_proxy @ydb-platform/core
 /ydb/core/wrappers/ut @ydb-platform/core
 /ydb/core/ydb_convert @ydb-platform/core
@@ -208,7 +208,6 @@
 /ydb/tests/stress/node_broker @ydb-platform/core
 /ydb/tests/stress/scheme_board @ydb-platform/core
 /ydb/tests/stress/system_tablet_backup @ydb-platform/core
-/ydb/tools/cfg @ydb-platform/core
 /ydb/core/config @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core
 /ydb/core/tx/replication @ydb-platform/core
@@ -293,3 +292,4 @@
 
 #Infra @shmel1k TEAM:@ydb-platform/infra
 /ydb/tools/ydbd_slice @ydb-platform/infra
+/ydb/tools/cfg @ydb-platform/infra

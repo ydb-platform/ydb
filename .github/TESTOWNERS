@@ -199,7 +199,7 @@
 /ydb/core/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
-/ydb/library/yaml_config/ut_transform @ydb-platform/core
+/ydb/library/yaml_config @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
 /ydb/core/client @ydb-platform/core
 /ydb/core/health_check @ydb-platform/core

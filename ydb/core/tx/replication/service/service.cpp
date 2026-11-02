@@ -219,7 +219,8 @@ public:
             return; // old controller: do not authorize further source commits
         }
         const auto id = GetWorkerId(ev->Sender);
-        YDB_LOG_VERIFY_DEBUG(HasWorker(id))("worker", id);
+        YDB_LOG_VERIFY_DEBUG(HasWorker(id),
+            {"worker", id});
         auto& record = ev->Get()->Record;
         id.Serialize(*record.MutableWorker());
         ctx.Send(ev->Forward(ActorId));

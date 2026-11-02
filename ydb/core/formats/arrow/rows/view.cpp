@@ -40,7 +40,9 @@ std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, con
 }
 
 std::partial_ordering TSimpleRow::CompareNotNull(const TSimpleRow& item) const {
-    YDB_LOG_VERIFY_DEBUG(Schema->Equals(*item.Schema))("rowSchema", Schema->ToString(true))("itemSchema", item.Schema->ToString(true));
+    YDB_LOG_VERIFY_DEBUG(Schema->Equals(*item.Schema),
+        {"rowSchema", Schema->ToString(true)},
+        {"itemSchema", item.Schema->ToString(true)});
     YDB_LOG_VERIFY(GetColumnsCount() <= item.GetColumnsCount());
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), *Schema).GetResult();
 }

@@ -24,7 +24,10 @@ std::vector<TSplittedBlob> TSplittedEntity::TNormalizedBlobChunks::Finish(const 
             if (Normal.size() != 1) {
                 Counters->BySizeSplitter.OnSmallSerialized(sb.GetSize());
             }
-            YDB_LOG_VERIFY_DEBUG(Normal.size() == 1)("size", sb.GetSize())("min", MinSize)("size", Normal.size());
+            YDB_LOG_VERIFY_DEBUG(Normal.size() == 1,
+                {"size", sb.GetSize()},
+                {"min", MinSize},
+                {"size", Normal.size()});
         }
         result.emplace_back(std::move(sb));
     }

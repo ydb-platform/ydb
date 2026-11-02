@@ -303,7 +303,8 @@ void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::share
     YDB_LOG_VERIFY(data->column(1)->type_id() == Type->id(),
         {"type", Type->ToString()},
         {"extType", data->column(0)->type()->ToString()});
-    YDB_LOG_VERIFY_DEBUG(data->schema()->field(0)->name() == "index")("name", data->schema()->field(0)->name());
+    YDB_LOG_VERIFY_DEBUG(data->schema()->field(0)->name() == "index",
+        {"name", data->schema()->field(0)->name()});
     if (data->num_rows()) {
         auto* arr = static_cast<const arrow::UInt32Array*>(data->column(0).get());
         YDB_LOG_VERIFY(arr->Value(arr->length() - 1) < recordsCount,

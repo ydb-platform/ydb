@@ -308,7 +308,8 @@ TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents:
         //     return TConclusionStatus::Fail("Rollback TEvWrite shouldn't have TxId");
         // }
 
-        YDB_LOG_VERIFY_DEBUG(evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)("TxMode", evWrite.Record.GetTxMode());
+        YDB_LOG_VERIFY_DEBUG(evWrite.Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            {"TxMode", evWrite.Record.GetTxMode()});
         if (evWrite.Record.GetTxMode() != NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
             return TConclusionStatus::Fail("Rollback TEvWrite should be Immediate");
         }

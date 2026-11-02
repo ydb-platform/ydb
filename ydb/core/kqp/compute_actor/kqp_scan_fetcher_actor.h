@@ -102,7 +102,8 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
-                    YDB_LOG_VERIFY_DEBUG(false)("event_type", ev->GetTypeName());
+                    YDB_LOG_VERIFY_DEBUG(false,
+                        {"event_type", ev->GetTypeName()});
                     StopOnError("unexpected message on data fetching: " + ev->GetTypeName());
             }
         } catch (...) {

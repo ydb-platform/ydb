@@ -665,7 +665,9 @@ public:
 
     void AddPosition(TIntervalPosition&& intervalPosition) {
         if (Positions.size()) {
-            YDB_LOG_VERIFY_DEBUG(Positions.back() < intervalPosition)("back", Positions.back().DebugJson())("pos", intervalPosition.DebugJson());
+            YDB_LOG_VERIFY_DEBUG(Positions.back() < intervalPosition,
+                {"back", Positions.back().DebugJson()},
+                {"pos", intervalPosition.DebugJson()});
         }
         Positions.emplace_back(std::move(intervalPosition));
     }

@@ -514,7 +514,9 @@ TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_p
     , Start(TReplaceKeyAdapter::BuildStart(*portion, context->GetReadMetadata()->GetRequestSorting()))
     , Finish(TReplaceKeyAdapter::BuildFinish(*portion, context->GetReadMetadata()->GetRequestSorting()))
 {
-    YDB_LOG_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
+    YDB_LOG_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater,
+        {"start", Start.DebugString()},
+        {"finish", Finish.DebugString()});
     if (context->GetReadMetadata()->IsDescSorted()) {
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
             Finish.GetValue().BuildSortablePosition(), Start.GetValue().BuildSortablePosition());

@@ -391,6 +391,23 @@ void ExportUnexistingExplicitPathImpl(TBackupTestFixture& f, bool /*isOlap*/) {
         .AppendItem(typename TExportSettings::TItem{.Src = "unexisting"});
     auto res = traits.Export(f, exportSettings);
     f.WaitOpStatus(res, EStatus::SCHEME_ERROR);
+
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
+    for (const auto& paths : TVector<TVector<TString>>{
+        {"Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"/Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"unexisting"},
+        {"Root/RecursiveFolderProcessing/dir1/unexisting", "/Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"Root/RecursiveFolderProcessing/dir1/unexisting", "unexisting"},
+    }) {
+        auto settings = traits.MakeExportSettings(f, "RecursiveFolderProcessing/dir1");
+        for (ui32 i = 0; i < paths.size(); ++i) {
+            settings.AppendItem(typename TExportSettings::TItem{.Src = paths[i], .Dst = ToString(i)});
+        }
+        const auto result = traits.Export(f, settings);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SCHEME_ERROR,
+            result.Status().GetIssues().ToString());
+    }
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

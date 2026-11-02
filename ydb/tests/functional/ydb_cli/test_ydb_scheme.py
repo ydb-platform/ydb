@@ -89,13 +89,6 @@ def relative_database_paths(ydb_cluster, ydb_root, request):
         yield database, request.param
 
 
-def test_relative_database(ydb_cluster, relative_database_paths):
-    tenant_node = next(iter(ydb_cluster.slots.values()))
-    _, relative_database = relative_database_paths
-
-    execute_ydb_cli_command(tenant_node, relative_database, ["sql", "-s", "SELECT 1;"])
-
-
 def test_relative_database_select_from_table(ydb_cluster, relative_database_paths, tmp_path):
     tenant_node = next(iter(ydb_cluster.slots.values()))
     database, relative_database = relative_database_paths

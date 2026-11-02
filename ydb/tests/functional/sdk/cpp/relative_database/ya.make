@@ -29,12 +29,10 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/query
-    ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(
-    relative_database.cpp
     relative_database_it.cpp
 )
 

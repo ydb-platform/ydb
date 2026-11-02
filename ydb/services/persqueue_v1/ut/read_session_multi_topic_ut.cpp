@@ -44,7 +44,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
         // A Topic API read stream of topics A and B. The test sends every client message itself.
-        // Next() describes server messages as "start topic-a/0", "end topic-a/0", "data topic-a/1 <message>", "committed topic-a/1 <offset>".
+        // Next() describes server messages as "start_partition_session topic-a:0", "end_partition_session topic-a:0", "data topic-a:1 <message>", "committed topic-a:1 <offset>".
         class TReader {
         public:
             TReader(TTopicSdkTestSetup& setup, bool autoPartitioningSupport, const TVector<i64>& partitionIds)
@@ -87,27 +87,27 @@ namespace NKikimr::NPersQueueTests {
                 return JoinSeq("; ", events);
             }
 
-            void Confirm(TStringBuf partition) {
+            void ConfirmStartPartitionSession(TStringBuf partition) {
                 TFromClient response;
                 response.mutable_start_partition_session_response()->set_partition_session_id(Find(partition).Id);
                 Send(response);
             }
 
-            void Read() {
+            void ReadData() {
                 TFromClient request;
                 request.mutable_read_request()->set_bytes_size(1_MB);
                 Send(request);
             }
 
-            // Commits all messages before `end` that are not committed yet.
-            void Commit(TStringBuf partition, i64 end) {
+            // Commits all messages before `end_partition_session` that are not committed yet.
+            void CommitOffset(TStringBuf partition, i64 end_partition_session) {
                 const TPartitionSession& session = Find(partition);
                 TFromClient request;
                 Ydb::Topic::StreamReadMessage::CommitOffsetRequest::PartitionCommitOffset* commit = request.mutable_commit_offset_request()->add_commit_offsets();
                 commit->set_partition_session_id(session.Id);
                 Ydb::Topic::OffsetsRange* range = commit->add_offsets();
                 range->set_start(session.CommittedOffset);
-                range->set_end(end);
+                range->set_end(end_partition_session);
                 Send(request);
             }
 
@@ -143,17 +143,17 @@ namespace NKikimr::NPersQueueTests {
                         break;
                     case TFromServer::kStartPartitionSessionRequest: {
                         const Ydb::Topic::StreamReadMessage::PartitionSession& session = message.start_partition_session_request().partition_session();
-                        const TString name = TStringBuilder() << TStringBuf(session.path()).RAfter('/') << "/" << session.partition_id();
+                        const TString name = TStringBuilder() << TStringBuf(session.path()).RAfter('/') << ":" << session.partition_id();
                         Sessions[name] = TPartitionSession{
                             .Id = session.partition_session_id(),
                             .CommittedOffset = message.start_partition_session_request().committed_offset(),
                         };
                         Names[session.partition_session_id()] = name;
-                        events.push_back("start " + name);
+                        events.push_back("start_partition_session " + name);
                         break;
                     }
                     case TFromServer::kEndPartitionSession:
-                        events.push_back("end " + Name(message.end_partition_session().partition_session_id()));
+                        events.push_back("end_partition_session " + Name(message.end_partition_session().partition_session_id()));
                         break;
                     case TFromServer::kReadResponse:
                         for (const Ydb::Topic::StreamReadMessage::ReadResponse::PartitionData& data : message.read_response().partition_data()) {
@@ -192,15 +192,15 @@ namespace NKikimr::NPersQueueTests {
             SplitPartition(setup.GetRuntime(), ++txId, TopicA, 0, "a");
             SplitPartition(setup.GetRuntime(), ++txId, TopicB, 0, "a");
 
-            // The explicit partition keeps the children off the session, so the session holds the same partitions while both parents end.
+            // The explicit partition keeps the children off the session, so the session holds the same partitions while both parents end_partition_session.
             TReader reader(setup, /*autoPartitioningSupport=*/true, /*partitionIds=*/{0});
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "start topic-a/0; start topic-b/0");
-            reader.Confirm("topic-a/0");
-            reader.Confirm("topic-b/0");
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "end topic-a/0; end topic-b/0");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "start_partition_session topic-a:0; start_partition_session topic-b:0");
+            reader.ConfirmStartPartitionSession("topic-a:0");
+            reader.ConfirmStartPartitionSession("topic-b:0");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "end_partition_session topic-a:0; end_partition_session topic-b:0");
         }
 
-        // Partition 0 of topic B is still being read. It is not a parent of topic-a/1 and must not hold its commit.
+        // Partition 0 of topic B is still being read. It is not a parent of topic-a:1 and must not hold its commit.
         Y_UNIT_TEST(ChildCommitDoesNotWaitForOtherTopic) {
             TTopicSdkTestSetup setup = CreateTwoTopicsSetup();
             Write(setup, TopicA, 0, "a-parent");
@@ -209,21 +209,21 @@ namespace NKikimr::NPersQueueTests {
             Write(setup, TopicA, 1, "a-child");
 
             TReader reader(setup, /*autoPartitioningSupport=*/false, /*partitionIds=*/{});
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "start topic-a/0; start topic-b/0");
-            reader.Confirm("topic-a/0");
-            reader.Confirm("topic-b/0");
-            reader.Read();
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-a/0 a-parent");
-            reader.Commit("topic-a/0", 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "start_partition_session topic-a:0; start_partition_session topic-b:0");
+            reader.ConfirmStartPartitionSession("topic-a:0");
+            reader.ConfirmStartPartitionSession("topic-b:0");
+            reader.ReadData();
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-a:0 a-parent");
+            reader.CommitOffset("topic-a:0", 1);
             // Without auto-partitioning support the children are given out after the parent is committed.
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(3), "committed topic-a/0 1; start topic-a/1; start topic-a/2");
-            reader.Confirm("topic-a/1");
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-a/1 a-child");
-            reader.Commit("topic-a/1", 1);
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "committed topic-a/1 1");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(3), "committed topic-a:0 1; start_partition_session topic-a:1; start_partition_session topic-a:2");
+            reader.ConfirmStartPartitionSession("topic-a:1");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-a:1 a-child");
+            reader.CommitOffset("topic-a:1", 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "committed topic-a:1 1");
         }
 
-        // The commit of topic-b/1 waits for its parent topic-b/0, not for partition 0 of topic A.
+        // The commit of topic-b:1 waits for its parent topic-b:0, not for partition 0 of topic A.
         Y_UNIT_TEST(ChildCommitWaitsForItsOwnParent) {
             TTopicSdkTestSetup setup = CreateTwoTopicsSetup();
             Write(setup, TopicA, 0, "a-parent");
@@ -235,26 +235,26 @@ namespace NKikimr::NPersQueueTests {
             Write(setup, TopicB, 1, "b-child");
 
             TReader reader(setup, /*autoPartitioningSupport=*/true, /*partitionIds=*/{});
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "start topic-a/0; start topic-b/0");
-            reader.Confirm("topic-b/0");
-            reader.Read();
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(4), "data topic-b/0 b-parent; end topic-b/0; start topic-b/1; start topic-b/2");
-            reader.Confirm("topic-b/1");
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-b/1 b-child");
-            // Not acknowledged until topic-b/0 is committed.
-            reader.Commit("topic-b/1", 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "start_partition_session topic-a:0; start_partition_session topic-b:0");
+            reader.ConfirmStartPartitionSession("topic-b:0");
+            reader.ReadData();
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(4), "data topic-b:0 b-parent; end_partition_session topic-b:0; start_partition_session topic-b:1; start_partition_session topic-b:2");
+            reader.ConfirmStartPartitionSession("topic-b:1");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-b:1 b-child");
+            // Not acknowledged until topic-b:0 is committed.
+            reader.CommitOffset("topic-b:1", 1);
 
-            reader.Confirm("topic-a/0");
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(4), "data topic-a/0 a-parent; end topic-a/0; start topic-a/1; start topic-a/2");
-            reader.Commit("topic-a/0", 1);
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "committed topic-a/0 1");
-            reader.Confirm("topic-a/1");
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-a/1 a-child");
-            reader.Commit("topic-a/1", 1);
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "committed topic-a/1 1");
+            reader.ConfirmStartPartitionSession("topic-a:0");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(4), "data topic-a:0 a-parent; end_partition_session topic-a:0; start_partition_session topic-a:1; start_partition_session topic-a:2");
+            reader.CommitOffset("topic-a:0", 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "committed topic-a:0 1");
+            reader.ConfirmStartPartitionSession("topic-a:1");
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "data topic-a:1 a-child");
+            reader.CommitOffset("topic-a:1", 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(1), "committed topic-a:1 1");
 
-            reader.Commit("topic-b/0", 1);
-            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "committed topic-b/0 1; committed topic-b/1 1");
+            reader.CommitOffset("topic-b:0", 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Next(2), "committed topic-b:0 1; committed topic-b:1 1");
         }
 
     } // Y_UNIT_TEST_SUITE(ReadSessionMultiTopic)

@@ -6,6 +6,7 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package NKikimrReplication;
@@ -85,6 +86,13 @@ message TBatchingSettings {
     optional uint64 BatchSizeBytes = 2 [default = 8388608];
 }
 
+message TAvailabilityPeriod {
+    oneof Value {
+        google.protobuf.Duration Duration = 1;
+        google.protobuf.Empty Unlimited = 2;
+    }
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -134,6 +142,7 @@ message TReplicationConfig {
     optional NKikimrProto.NMetricsConfig.TMetricsConfig MetricsConfig = 9;
     optional TReplicationLocationConfig Location = 10;
     optional bool InitialScan = 11 [default = true];
+    optional TAvailabilityPeriod AvailabilityPeriod = 12;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -290,6 +299,7 @@ message TEvDescribeReplicationResult {
     optional TReplicationState State = 4;
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
     optional TReplicationStats Stats = 7;
+    optional TAvailabilityPeriod AvailabilityPeriod = 8;
 }
 
 message TControllerIdentity {

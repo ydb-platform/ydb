@@ -449,5 +449,8 @@ message TFeatureFlags {
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableComputeSchedulerMemory = 370 [default = false, (RequireRestart) = true];
+    // Allows persisting Waiting for column-table imports with unresolved dependencies.
+    // Enable only after the rollback version supports resuming these imports.
+    optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
     optional bool EnableColumnshardCutHistorySending = 385 [default = false];
 }

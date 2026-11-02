@@ -6,6 +6,7 @@
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_env.h"
 
+#include <tuple>
 #include <type_traits>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
@@ -56,6 +57,61 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
     UNIT_ASSERT(false);
     return nullptr;
 }
+
+namespace {
+
+constexpr ui32 CorruptedLogHeaderOffset = 152;
+
+void TestLogHeaderCorruption(bool validChecksum) {
+    TActorTestContext::TSettings settings;
+    settings.EnableSectorEncryption = true;
+    TActorTestContext testCtx(settings);
+    TVDiskMock mock(&testCtx);
+    mock.InitFull();
+    const auto [format, offset, state] = testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* pdisk) {
+        UNIT_ASSERT(pdisk->CommonLogger->IsEmptySector());
+        return std::make_tuple(pdisk->Format,
+            pdisk->Format.Offset(pdisk->CommonLogger->ChunkIdx, pdisk->CommonLogger->SectorIdx),
+            pdisk->Mon.PDiskBriefState);
+    });
+    mock.SendEvLogSync(CorruptedLogHeaderOffset - sizeof(NPDisk::TFirstLogPageHeader));
+    testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+        new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr), NKikimrProto::OK);
+
+    TVector<ui8> sector(format.SectorSize);
+    testCtx.TestCtx.SectorMap->Read(sector.data(), sector.size(), offset);
+    auto* footer = reinterpret_cast<NPDisk::TDataSectorFooter*>(
+        sector.data() + sector.size() - sizeof(NPDisk::TDataSectorFooter));
+    NPDisk::TPDiskStreamCypher cypher(footer->IsEncrypted());
+    cypher.SetKey(format.LogKey);
+    auto crypt = [&] {
+        cypher.StartMessage(footer->Nonce);
+        cypher.InplaceEncrypt(sector.data(), sector.size() - sizeof(NPDisk::TDataSectorFooter));
+    };
+    crypt();
+    auto* header = reinterpret_cast<NPDisk::TLogPageHeader*>(sector.data() + CorruptedLogHeaderOffset);
+    UNIT_ASSERT_VALUES_EQUAL(header->Version, PDISK_DATA_VERSION);
+    header->Version = 61;
+    crypt();
+    NPDisk::TPDiskHashCalculator hasher;
+    if (validChecksum) {
+        footer->Hash = hasher.HashSector(offset, format.MagicLogChunk, sector.data(), sector.size(), {});
+    }
+    UNIT_ASSERT_VALUES_EQUAL(hasher.CheckSectorHash(offset, format.MagicLogChunk, sector.data(),
+        sector.size(), footer->Hash, {}), validChecksum);
+    testCtx.TestCtx.SectorMap->Write(sector.data(), sector.size(), offset);
+
+    testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+        new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, &testCtx.MainKey),
+        validChecksum ? NKikimrProto::CORRUPTED : NKikimrProto::OK);
+    UNIT_ASSERT(state->Val() == (validChecksum ? TPDiskMon::TPDisk::Error : TPDiskMon::TPDisk::OK));
+    if (!validChecksum) {
+        mock.Init();
+        UNIT_ASSERT_VALUES_EQUAL(mock.ReadLog(), 1);
+    }
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(TestAbstractPDiskInterface) {
@@ -1495,6 +1551,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         mock.Init();
         UNIT_ASSERT(mock.ReadLog() == mock.OwnedLogRecords());
+    }
+
+    Y_UNIT_TEST(CorruptedLogHeaderWithoutChecksumUpdateTruncatesRecovery) {
+        TestLogHeaderCorruption(false);
+    }
+
+    Y_UNIT_TEST(CorruptedLogHeaderWithValidChecksumTransitionsToError) {
+        TestLogHeaderCorruption(true);
     }
 
     Y_UNIT_TEST(TestPDiskOnDifferentKeys) {

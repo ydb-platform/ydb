@@ -192,6 +192,7 @@ private:
 
     y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
     y_absl::flat_hash_map<TString, ui64> ReplicatedOffsetsByConsumers;
+    TInstant LastReplicationDataTimestamp;
     TMaybe<ui64> MirroredOffsetToSend;
 };
 

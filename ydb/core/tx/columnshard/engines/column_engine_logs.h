@@ -97,6 +97,11 @@ public:
         return &LastPortion;
     }
 
+    TInsertWriteId BuildNextInsertWriteId(IDbWrapper& db) {
+        db.WriteCounter(LAST_INSERT_WRITE_ID, ++LastInsertWriteId);
+        return TInsertWriteId(LastInsertWriteId);
+    }
+
     enum ETableIdx {
         GRANULES = 0,
     };
@@ -106,6 +111,7 @@ public:
         LAST_GRANULE,
         LAST_PLAN_STEP,
         LAST_TX_ID,
+        LAST_INSERT_WRITE_ID,
     };
 
     enum class EStatsUpdateType {
@@ -271,6 +277,7 @@ private:
     std::shared_ptr<NColumnShard::TPortionIndexStats> Counters;
     ui64 LastPortion;
     ui64 LastGranule;
+    ui64 LastInsertWriteId = 0;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
 

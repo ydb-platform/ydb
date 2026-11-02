@@ -428,10 +428,21 @@ bool TColumnEngineForLogs::FinishLoading() {
             }
         }
         spg->SetLoadedKeyRanges(TLoadedKeyRanges::BuildEverything());
+
+        for (const auto& [_, portion] : spg->GetPortions()) {
+            if (portion->GetPortionType() == EPortionType::Written) {
+                LastInsertWriteId =
+                    std::max(LastInsertWriteId, (ui64)std::static_pointer_cast<TWrittenPortionInfo>(portion)->GetInsertWriteId());
+            }
+        }
+        for (const auto& [insertWriteId, _] : spg->GetInsertedPortions()) {
+            LastInsertWriteId = std::max(LastInsertWriteId, (ui64)insertWriteId);
+        }
     }
 
     Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
     Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
+    Y_ABORT_UNLESS(!(LastInsertWriteId >> 63), "near to int overflow");
     return true;
 }
 
@@ -916,6 +927,9 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
                 break;
             case LAST_TX_ID:
                 LastSnapshot = TSnapshot(LastSnapshot.GetPlanStep(), value);
+                break;
+            case LAST_INSERT_WRITE_ID:
+                LastInsertWriteId = value;
                 break;
         }
     };

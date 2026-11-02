@@ -1091,6 +1091,14 @@ def parse_evlog_runs(
                         }
                     )
                     completed_uids.add(uid)
+                    # Drop the matching B frame so a later E closes the outer span,
+                    # not a Result-closed ghost (same as parse_evlog_activity_deltas).
+                    b_key = (int(begin["pid"]), int(begin["tid"]))
+                    stack = stacks.get(b_key) or []
+                    for i in range(len(stack) - 1, -1, -1):
+                        if stack[i].get("uid") == uid:
+                            stack.pop(i)
+                            break
                 continue
             m_uid = RUN_UID_RE.search(arg_name)
             suite_raw, chunk_group, chunk, is_aux = classify_evlog_run_name(arg_name)

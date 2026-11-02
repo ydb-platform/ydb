@@ -232,6 +232,38 @@ def test_evlog_activity_closes_tm_on_result_without_e():
     assert by_kind["build"]["end_us"] == 60.0
 
 
+def test_parse_evlog_runs_result_does_not_steal_outer_e():
+    """Result(rnd) must leave the (pid,tid) stack so an outer Run still gets its E."""
+    outer = (
+        "Run(rnd-outer$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/"
+        "testing_out_stuff/chunk1/run)"
+    )
+    inner = (
+        "Run(rnd-inner$(BUILD_ROOT)/ydb/core/kqp/test-results/foo/"
+        "testing_out_stuff/chunk2/run)"
+    )
+    events = [
+        {"ph": "B", "pid": 1, "tid": 7, "ts": 10.0, "name": "TM", "args": {"name": outer}},
+        {"ph": "B", "pid": 1, "tid": 7, "ts": 20.0, "name": "TM", "args": {"name": inner}},
+        {
+            "ph": "B",
+            "pid": 1,
+            "tid": 7,
+            "ts": 40.0,
+            "name": "result[TM]",
+            "args": {"name": "Result(rnd-inner)"},
+        },
+        {"ph": "E", "pid": 1, "tid": 7, "ts": 90.0},
+    ]
+    runs = parse_evlog_runs(None, None, events=events)
+    by_uid = {r["uid"]: r for r in runs}
+    assert set(by_uid) == {"rnd-inner", "rnd-outer"}
+    assert by_uid["rnd-inner"]["start_us"] == 20.0
+    assert by_uid["rnd-inner"]["end_us"] == 40.0
+    assert by_uid["rnd-outer"]["start_us"] == 10.0
+    assert by_uid["rnd-outer"]["end_us"] == 90.0
+
+
 def test_evlog_activity_zero_length_close_stays_balanced():
     events = [
         {

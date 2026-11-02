@@ -589,7 +589,6 @@ private:
         if (outputChannel.EarlyFinish && !EarlyFinishRequestedChannels.contains(outputChannel.ChannelId)) {
             // The peer finished while this read was in flight. Its response does not
             // acknowledge closing the task runner's channel; send that request now.
-            outputChannel.PopStarted = false;
             ProcessOutputsState.Inflight--;
             RequestOutputChannelData(outputChannel, /*wasFinished=*/true, 0);
             DoExecute();

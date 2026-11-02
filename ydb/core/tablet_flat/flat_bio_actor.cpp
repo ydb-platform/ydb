@@ -62,7 +62,11 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
     } else if (eh->CastAsLocal<TEvents::TEvUndelivered>()) {
         Terminate(NKikimrProto::UNKNOWN);
     } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
-        PassAway();
+        if (Sender) {
+            Terminate(NKikimrProto::ERROR);
+        } else {
+            PassAway();
+        }
     } else {
         Y_TABLET_ERROR("Page collection blocks IO actor got an unexpected event");
     }

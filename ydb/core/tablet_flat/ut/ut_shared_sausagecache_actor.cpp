@@ -7,12 +7,15 @@
 #include <flat_sausage_record.h>
 #include <shared_cache_events.h>
 #include <shared_sausagecache.h>
+#include <flat_bio_actor.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/protos/bootstrap.pb.h>
@@ -665,6 +668,41 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 100 + rawBytes);
         collection.SetPageCollection({});
         UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TBlockIO_Actor) {
+    Y_UNIT_TEST(PoisonRepliesToActiveRead) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto proxy = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(1), proxy);
+        TBlockEvents<TEvBlobStorage::TEvGet> reads(runtime);
+
+        TRecord record(1);
+        record.Push(TLogoBlobID(1, 1, 1, 1, 10, 0));
+        record.Push(ui32(EPage::DataPage), TString(10, 'x'));
+        auto raw = record.Finish();
+        const TLargeGlobId id(1, TLogoBlobID(1, 1, 2, 1, raw.size(), 0), raw.size());
+        auto collection = MakeIntrusiveConst<NPageCollection::TPageCollection>(id, std::move(raw));
+        const ui64 eventCookie = 42;
+        const ui64 requestCookie = 10;
+        const auto bioActor = runtime.Register(new NBlockIO::TBlockIO({}, eventCookie));
+        runtime.Send(new IEventHandle(bioActor, sender,
+            new NBlockIO::TEvFetch(EPriority::Fast, collection, { collection->GetLocation(0) }, requestCookie)));
+        runtime.WaitFor("block IO read dispatched", [&] {
+            return !reads.empty();
+        }, TDuration::Seconds(5));
+
+        runtime.Send(new IEventHandle(bioActor, sender, new TEvents::TEvPoison()));
+        auto result = runtime.GrabEdgeEvent<NBlockIO::TEvData>(sender, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result->Cookie, eventCookie);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Cookie, requestCookie);
+        UNIT_ASSERT(result->Get()->PageCollection == collection);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Pages.size(), 1);
+        UNIT_ASSERT(!result->Get()->Pages[0].Data);
     }
 }
 

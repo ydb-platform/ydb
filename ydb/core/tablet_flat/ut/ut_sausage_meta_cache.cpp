@@ -22,6 +22,12 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSharedMetaCore) {
+    Y_UNIT_TEST(RejectsMissingSharedMeta) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            MakeIntrusiveConst<TPageCollection>(TLargeGlobId(), TAtomicSharedPtr<const TMeta>()), NUtil::TTabletError,
+            "metadata is missing");
+    }
+
     Y_UNIT_TEST(ComponentsUseSharedMetaForEpochAndSerialization) {
         NTable::NProto::TRoot root;
         root.SetEpoch(42);

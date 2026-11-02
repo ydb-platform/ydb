@@ -228,6 +228,7 @@ void TCollection::AddMetadataRequest(TRequest& request) {
     if (request.PageCollection == PageCollection) {
         ++MetadataRequestCount;
     } else {
+        // The initiating request still holds a registration for this retired descriptor.
         Y_ENSURE(RetiredMetadata);
         auto* reference = FindIfPtr(*RetiredMetadata, [&](const auto& item) {
             return item.Descriptor == request.PageCollection.Get();

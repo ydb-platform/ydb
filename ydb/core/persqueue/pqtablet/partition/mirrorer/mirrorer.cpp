@@ -30,15 +30,6 @@ static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 namespace {
 
-<<<<<<< HEAD
-=======
-TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
-    TStringBuilder out;
-    NActors::NStructuredLog::TTextWriter writer;
-    writer.Write(out, prefix);
-    return out;
-}
-
 TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
     TStringBuilder out;
     bool firstConsumer = true;
@@ -52,7 +43,6 @@ TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& off
     return out;
 }
 
->>>>>>> 5a1ee5ea937 (better)
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
@@ -363,32 +353,30 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         YDB_LOG_NOTICE("[STATE] next offset to read current end offset",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"offsetToRead", OffsetToRead},
-<<<<<<< HEAD
-            {"endOffset", EndOffset});
-        YDB_LOG_NOTICE("[STATE] bytes in flight messages in write request queue",
-            {"logPrefix", NPQ_LOG_PREFIX},
-=======
             {"endOffset", EndOffset}
         );
-        LOG_N(
+        YDB_LOG_NOTICE(
             "[STATE] replication offsets",
+            {"logPrefix", NPQ_LOG_PREFIX},
             {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
             {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
             {"lastReplicationDataTimestamp", LastReplicationDataTimestamp},
             {"replicationDataInFlight", ReplicationDataInFlight}
         );
-        LOG_N(
+        YDB_LOG_NOTICE(
             "[STATE] bytes in flight messages in write request queue",
->>>>>>> 49c37378b5e (fix)
+            {"logPrefix", NPQ_LOG_PREFIX},
             {"bytesInFlight", BytesInFlight},
             {"writeInFlightSize", WriteInFlight.size()},
-            {"toWrite", Queue.size()});
+            {"toWrite", Queue.size()}
+        );
         YDB_LOG_NOTICE("[STATE] wait new reader last received event read futures inflight",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"event", WaitNextReaderEventInFlight},
             {"time", LastReadEventTime},
             {"readFuturesInFlight", ReadFuturesInFlight},
             {"lastId", ReadFeatureId});
+
         if (!ReadFeatures.empty()) {
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;

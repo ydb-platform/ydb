@@ -2256,8 +2256,6 @@ Y_UNIT_TEST_F(SetOffset, TPartitionFixture)
     WaitProxyResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
-<<<<<<< HEAD
-=======
 // ResetOffset used to key its reply by SetClientInfo.Cookie, which shares the
 // tablet/compaction cookie space. A SetOffset with cookie=1 in flight while
 // ResetOffset registered dst=1 made ScheduleReplyOk steal the commit reply.

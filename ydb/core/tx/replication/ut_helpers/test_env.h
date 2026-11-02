@@ -16,6 +16,10 @@
 namespace NKikimr::NReplication::NTestHelpers {
 
 class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+public:
+    TFeatureFlags() {
+        FeatureFlags.SetEnableAsyncReplicationTableOwnership(true);
+    }
 };
 
 enum class ERuntimeMode {
@@ -133,6 +137,7 @@ public:
             .SetDomainName(DomainName)
             .SetNodeCount(nodeCount)
             .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
+            .SetFeatureFlags(TFeatureFlags().FeatureFlags)
         )
         , Server(Settings)
         , Client(Settings)

@@ -462,4 +462,5 @@ message TFeatureFlags {
     optional bool EnableAddColumnGeneratedStored = 372 [default = false];
     optional bool EnableUnsafeTruncateTable = 373 [default = false];
     optional bool EnableCsPatternIndexHints = 374 [default = false];
+    optional bool EnableAsyncReplicationTableOwnership = 375 [default = false, (RequireRestart) = true];
 }

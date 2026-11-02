@@ -61,6 +61,7 @@ namespace NKikimr {
             TBlobStorageController& Self;
 
             // user-defined configuration
+            TCowHolder<TDataCenterStates> DataCenterStates;
             TCowHolder<TMap<THostConfigId, THostConfigInfo>> HostConfigs;
             TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes;
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
@@ -145,6 +146,8 @@ namespace NKikimr {
             THashSet<TGroupId> GroupContentChanged;
             THashSet<TGroupId> GroupFailureModelChanged;
 
+            std::optional<TString> ApplyDataCenterStates();
+
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
@@ -155,6 +158,7 @@ namespace NKikimr {
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
                     TMonotonic mono, const NKikimrBlobStorage::TStorageConfig *storageConfig = nullptr)
                 : Self(controller)
+                , DataCenterStates(&controller.DataCenterStates)
                 , HostConfigs(&controller.HostConfigs)
                 , Boxes(&controller.Boxes)
                 , StoragePools(&controller.StoragePools)
@@ -206,6 +210,7 @@ namespace NKikimr {
             void Commit() {
                 Y_ABORT_UNLESS(!Fit);
 
+                DataCenterStates.Commit();
                 HostConfigs.Commit();
                 Boxes.Commit();
                 StoragePools.Commit();
@@ -230,7 +235,7 @@ namespace NKikimr {
             }
 
             bool Changed() const {
-                return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
+                return DataCenterStates.Changed() || HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
                     StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
                     DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
                     IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
@@ -377,6 +382,8 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
         };
 
     } // NBsController

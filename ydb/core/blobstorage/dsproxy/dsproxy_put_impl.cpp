@@ -1,5 +1,6 @@
 #include "dsproxy_put_impl.h"
 #include "dsproxy_blackboard.h"
+#include "dsproxy_strategy_put_mirror3dc.h"
 
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
@@ -20,9 +21,8 @@ void TPutImpl::RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults,
 
     switch (Info->Type.GetErasure()) {
         case TBlobStorageGroupType::ErasureMirror3dc:
-            return accelerate
-                ? RunStrategy(logCtx, TAcceleratePut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired)
-                : RunStrategy(logCtx, TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy), outPutResults, expired);
+            return RunStrategy(logCtx, TMirror3dcPutStrategy(Tactic, EnableRequestMod3x3ForMinLatecy, accelerate),
+                outPutResults, expired);
         case TBlobStorageGroupType::ErasureMirror3of4:
             return accelerate
                 ? RunStrategy(logCtx, TPut3of4Strategy(Tactic, true), outPutResults, expired)

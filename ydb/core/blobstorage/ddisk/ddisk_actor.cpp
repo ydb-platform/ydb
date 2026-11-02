@@ -408,6 +408,9 @@ namespace {
         }
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
+        if (!IsPersistentBufferActor) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
         TActorBootstrapped::PassAway();
     }
 

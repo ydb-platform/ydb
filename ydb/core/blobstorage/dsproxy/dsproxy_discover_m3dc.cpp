@@ -497,6 +497,9 @@ public:
         if (DiscoverBlockedGeneration) {
             for (const auto& vdisk : Info->GetVDisks()) {
                 auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+                if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                    continue;
+                }
                 auto query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
                 DSP_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());

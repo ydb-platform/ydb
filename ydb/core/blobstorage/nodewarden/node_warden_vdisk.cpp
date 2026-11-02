@@ -38,8 +38,9 @@ namespace NKikimr::NStorage {
 
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
+            vdisk.ShutdownActorId = vdisk.RuntimeData->ActorId;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
 
@@ -61,7 +62,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        vdisk.ShutdownPending = vdiskRunning; // Shutdown pending only if VDisk was running before poison
+        vdisk.ShutdownPending |= vdiskRunning;
         VDiskStatusChanged = true;
     }
 
@@ -94,6 +95,14 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        // A removed slot can be recreated while its old incarnation drains.
+        for (const auto& [actorId, slot] : VDiskIdByActor) {
+            if (slot == vslotId) {
+                vdisk.ShutdownPending = true;
+                vdisk.ShutdownActorId = actorId;
+                break;
+            }
+        }
         if (vdisk.ShutdownPending) {
             vdisk.RestartAfterShutdown = true;
             return;
@@ -430,6 +439,8 @@ namespace NKikimr::NStorage {
 
         vdisk.RuntimeData.emplace(TVDiskRecord::TRuntimeData{
             .GroupInfo = groupInfo,
+            .ActorId = actorId,
+            .ServiceId = vdiskServiceId,
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
@@ -446,15 +457,18 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::HandleGone(STATEFN_SIG) {
         if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
-            if (const auto jt = LocalVDisks.find(it->second); jt != LocalVDisks.end()) {
+            const auto slot = it->second;
+            VDiskIdByActor.erase(it);
+            if (const auto jt = LocalVDisks.find(slot); jt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = jt->second;
-                Y_ABORT_UNLESS(vdisk.ShutdownPending);
-                vdisk.ShutdownPending = false;
-                if (std::exchange(vdisk.RestartAfterShutdown, false)) {
-                    StartLocalVDiskActor(vdisk);
+                if (vdisk.ShutdownActorId == ev->Sender) {
+                    vdisk.ShutdownActorId = {};
+                    vdisk.ShutdownPending = false;
+                    if (std::exchange(vdisk.RestartAfterShutdown, false)) {
+                        StartLocalVDiskActor(vdisk);
+                    }
                 }
             }
-            VDiskIdByActor.erase(it);
         }
     }
 
@@ -601,10 +615,22 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(newInfo->GroupID == currentInfo->GroupID);
 
         const ui32 orderNumber = vdisk.RuntimeData->OrderNumber;
-        const TActorId vdiskServiceId = vdisk.GetVDiskServiceId();
+        const TActorId vdiskServiceId = vdisk.RuntimeData->ServiceId;
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {
             // this disk is in donor mode, we don't care about generation change; donor modes are operated by BSC solely
+            return;
+        }
+
+        const ui32 failRealm = vdisk.GetVDiskId().FailRealm;
+        const auto failed = NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+        const bool wasFailed = currentInfo->GetFailRealmState(failRealm) == failed;
+        const bool isFailed = newInfo->GetFailRealmState(failRealm) == failed;
+        if (wasFailed != isFailed) {
+            PoisonLocalVDisk(vdisk);
+            // Keep receiving group updates while the previous incarnation is shutting down.
+            Groups.at(vdisk.GetGroupId()).VDisksOfGroup.PushBack(&vdisk);
+            StartLocalVDiskActor(vdisk);
             return;
         }
 

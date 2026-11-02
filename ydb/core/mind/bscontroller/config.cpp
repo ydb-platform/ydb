@@ -337,6 +337,11 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            if (const auto error = state.ApplyDataCenterStates()) {
+                *errorDescription = *error;
+                return false;
+            }
+
             // when bridged non-proxy groups get updated, we update parent group too
             THashSet<TGroupId> updates;
             for (TGroupId groupId : state.GroupContentChanged) {
@@ -1356,6 +1361,9 @@ namespace NKikimr::NBsController {
                 for (const auto& [vdiskId, vslot] : vdisks) {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
+                        if (groupInfo.FailRealmStates) {
+                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                        }
                         domain = nullptr;
                     }
                     if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {

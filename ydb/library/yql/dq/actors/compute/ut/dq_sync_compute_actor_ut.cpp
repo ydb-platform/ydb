@@ -348,6 +348,83 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(TMockSinkState::TPtr sinkState
     return factory;
 }
 
+struct TBackpressureTestState {
+    std::atomic<bool> KeepYielding = false;
+    std::atomic<ui64> FetchCalls = 0;
+    std::atomic<i64> FreeSpace = -(1LL << 30);
+    std::atomic<ui64> Rows = 0;
+    TSystemEvent OutputPolled;
+    TSystemEvent Finished;
+    TMutex Lock;
+    NActors::TActorId OutputActor;
+};
+
+class TBackpressureTestOutput : public NActors::TActor<TBackpressureTestOutput>, public IDqComputeActorAsyncOutput {
+public:
+    TBackpressureTestOutput(ui64 index, ICallbacks* callbacks, std::shared_ptr<TBackpressureTestState> state,
+            IDqOutputConsumer::TPtr transformOutput = {}, std::shared_ptr<TScopedAlloc> alloc = {})
+        : NActors::TActor<TBackpressureTestOutput>(&TBackpressureTestOutput::StateFunc)
+        , Index(index), Callbacks(callbacks), State(std::move(state)), TransformOutput(std::move(transformOutput)), Alloc(std::move(alloc)) {}
+
+    ~TBackpressureTestOutput() {
+        if (Alloc) {
+            TGuard<TScopedAlloc> guard(*Alloc);
+            TransformOutput.Reset();
+        }
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        cFunc(NActors::TEvents::TSystem::Poison, PassAway);
+    )
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == 1) {
+            State->KeepYielding = false;
+            // The configured overcommit permits progress even at zero free space.
+            State->FreeSpace = 0;
+            Callbacks->ResumeExecution();
+        } else {
+            Send(ev->Sender, new NActors::TEvents::TEvWakeup());
+        }
+    }
+
+    ui64 GetOutputIndex() const override { return Index; }
+    i64 GetFreeSpace() const override {
+        {
+            TGuard<TMutex> guard(State->Lock);
+            State->OutputActor = SelfId();
+        }
+        State->OutputPolled.Signal();
+        return State->FreeSpace.load();
+    }
+    const TDqAsyncStats& GetEgressStats() const override { return Stats; }
+    void SendData(TUnboxedValueBatch&& batch, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) override {
+        State->Rows += batch.RowCount();
+        if (TransformOutput) {
+            batch.ForEachRow([&](const NUdf::TUnboxedValue& row) { TransformOutput->Consume(NUdf::TUnboxedValue(row)); });
+            if (finished) {
+                TransformOutput->Finish();
+            }
+        }
+        batch.clear();
+        if (finished) {
+            Callbacks->OnAsyncOutputFinished(Index);
+            State->Finished.Signal();
+        }
+    }
+    void CommitState(const NDqProto::TCheckpoint&) override {}
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {}
+    void PassAway() override { NActors::TActor<TBackpressureTestOutput>::PassAway(); }
+private:
+    ui64 Index;
+    ICallbacks* Callbacks;
+    std::shared_ptr<TBackpressureTestState> State;
+    IDqOutputConsumer::TPtr TransformOutput;
+    std::shared_ptr<TScopedAlloc> Alloc;
+    TDqAsyncStats Stats;
+};
+
 // Models a reader inside the program: Yield is not followed by an input actor event.
 class TYieldingStreamWrapper : public TMutableComputationNode<TYieldingStreamWrapper> {
     using TBase = TMutableComputationNode<TYieldingStreamWrapper>;
@@ -355,10 +432,14 @@ public:
     class TValue : public TComputationValue<TValue> {
         using TBase = TComputationValue<TValue>;
     public:
-        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue stream, TSystemEvent fetched)
-            : TBase(memInfo), Stream(std::move(stream)), Fetched(std::move(fetched)) {}
+        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue stream, TSystemEvent fetched, std::shared_ptr<TBackpressureTestState> state)
+            : TBase(memInfo), Stream(std::move(stream)), Fetched(std::move(fetched)), State(std::move(state)) {}
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            ++State->FetchCalls;
+            if (State->KeepYielding) {
+                return NUdf::EFetchStatus::Yield;
+            }
             if (YieldsRemaining) {
                 --YieldsRemaining;
                 return NUdf::EFetchStatus::Yield;
@@ -372,21 +453,24 @@ public:
         NUdf::TUnboxedValue Stream;
         TSystemEvent Fetched;
         ui32 YieldsRemaining = 3;
+        std::shared_ptr<TBackpressureTestState> State;
     };
 
-    TYieldingStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, TSystemEvent fetched)
-        : TBase(mutables), Stream(stream), Fetched(std::move(fetched)) {}
+    TYieldingStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, TSystemEvent fetched, std::shared_ptr<TBackpressureTestState> state)
+        : TBase(mutables), Stream(stream), Fetched(std::move(fetched)), State(std::move(state)) {}
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), Fetched);
+        return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), Fetched, State);
     }
 private:
     void RegisterDependencies() const final { DependsOn(Stream); }
     IComputationNode* Stream;
     TSystemEvent Fetched;
+    std::shared_ptr<TBackpressureTestState> State;
 };
 
 struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TSystemEvent YieldingStreamFetched;
+    std::shared_ptr<TBackpressureTestState> BackpressureState = std::make_shared<TBackpressureTestState>();
     std::shared_ptr<IDqChannelService> ChannelService;
 
     void InitChannelService() {
@@ -770,9 +854,9 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
     auto CreateTaskRunnerActorFactory() {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
-            [fetched = YieldingStreamFetched](NKikimr::NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+            [fetched = YieldingStreamFetched, state = BackpressureState](NKikimr::NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
                 if (callable.GetType()->GetName() == "TestYieldingStream") {
-                    return new TYieldingStreamWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), fetched);
+                    return new TYieldingStreamWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), fetched, state);
                 }
                 return nullptr;
             },
@@ -1465,10 +1549,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
-    void CheckYieldingProgram(ui32 channelVersion) {
-        NDqProto::TDqTask task;
-        task.SetId(ThisTaskId);
-        task.SetDqChannelVersion(channelVersion);
+    void GenerateYieldingProgram(NDqProto::TDqTask& task) {
         TProgramBuilder pb(TypeEnv, *FunctionRegistry);
         auto row = pb.NewStruct({{"id", pb.NewDataLiteral<i32>(42)}, {"ts", pb.NewDataLiteral<ui64>(7)}});
         auto stream = pb.Iterator(pb.NewList(RowType, {row}), {});
@@ -1480,6 +1561,70 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         program.Add("Parameters", pb.Arg(pb.NewEmptyStructType()));
         task.MutableProgram()->SetRaw(SerializeNode(program.Build(), TypeEnv));
         task.MutableProgram()->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+    }
+
+    void CheckBackpressuredYield(bool transform) {
+        constexpr TStringBuf outputType = "BackpressureTestOutput";
+        NDqProto::TDqTask task;
+        task.SetId(ThisTaskId);
+        GenerateYieldingProgram(task);
+        IDqInputChannel::TPtr output;
+        if (transform) {
+            output = AddDummyOutputChannel(task, OutputChannelId, RowType);
+            auto* desc = task.MutableOutputs(0)->MutableTransform();
+            desc->SetType(TString(outputType));
+            desc->SetInputType(SerializeNode(RowType, TypeEnv));
+            desc->SetOutputType(SerializeNode(RowType, TypeEnv));
+        } else {
+            task.AddOutputs()->MutableSink()->SetType(TString(outputType));
+        }
+        auto factory = MakeIntrusive<TDqAsyncIoFactory>();
+        factory->RegisterSink(TString(outputType), [state = BackpressureState](IDqAsyncIoFactory::TSinkArguments&& args) {
+            auto* actor = new TBackpressureTestOutput(args.OutputIndex, args.Callback, state);
+            return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>{actor, actor};
+        });
+        factory->RegisterOutputTransform(TString(outputType), [state = BackpressureState](IDqAsyncIoFactory::TOutputTransformArguments&& args) {
+            auto* actor = new TBackpressureTestOutput(args.OutputIndex, args.Callback, state, args.TransformOutput, args.Alloc);
+            return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>{actor, actor};
+        });
+        AsyncIoFactory = factory;
+        BackpressureState->KeepYielding = true;
+        CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
+        UNIT_ASSERT(BackpressureState->OutputPolled.WaitT(TDuration::Seconds(5)));
+        NActors::TActorId outputActor;
+        {
+            TGuard<TMutex> guard(BackpressureState->Lock);
+            outputActor = BackpressureState->OutputActor;
+        }
+        // The output shares the compute actor's mailbox. Two round trips let any
+        // incorrectly scheduled resume run before we inspect the reader count.
+        for (ui32 i = 0; i < 2; ++i) {
+            ActorSystem.Send(outputActor, EdgeActor, new NActors::TEvents::TEvWakeup());
+            UNIT_ASSERT(ActorSystem.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(EdgeActor, TDuration::Seconds(5)));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(BackpressureState->FetchCalls.load(), 1, "Reader was polled while the async output was blocked");
+        ActorSystem.Send(outputActor, EdgeActor, new NActors::TEvents::TEvWakeup(1));
+        UNIT_ASSERT(YieldingStreamFetched.WaitT(TDuration::Seconds(5)));
+        if (transform) {
+            ui32 rows = 0;
+            while (ReceiveData([&](const NUdf::TUnboxedValue& value, ui32 column) {
+                if (column == 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(value.Get<i32>(), 42);
+                    ++rows;
+                }
+                return true;
+            }, [](const auto&) {}, [] {}, output)) {}
+            UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+        }
+        UNIT_ASSERT(BackpressureState->Finished.WaitT(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(BackpressureState->Rows.load(), 1);
+    }
+
+    void CheckYieldingProgram(ui32 channelVersion) {
+        NDqProto::TDqTask task;
+        task.SetId(ThisTaskId);
+        task.SetDqChannelVersion(channelVersion);
+        GenerateYieldingProgram(task);
         auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
         auto actor = CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
         if (channelVersion >= 2u) {
@@ -1811,6 +1956,14 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
+    Y_UNIT_TEST_F(WaitsForBackpressuredSinkAfterYield, TSyncComputeActorTestFixture) {
+        CheckBackpressuredYield(false);
+    }
+
+    Y_UNIT_TEST_F(WaitsForBackpressuredOutputTransformAfterYield, TSyncComputeActorTestFixture) {
+        CheckBackpressuredYield(true);
+    }
+
     Y_UNIT_TEST_F(ResumesYieldingProgramWithoutInputs, TSyncComputeActorTestFixture) {
         CheckYieldingProgram(0);
     }

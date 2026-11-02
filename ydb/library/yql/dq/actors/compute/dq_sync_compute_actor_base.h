@@ -79,6 +79,18 @@ protected:
                 }
             }
         }
+        const i64 allowedOvercommit = TBase::AllowedChannelsOvercommit();
+        const auto canDrainAsyncOutputs = [allowedOvercommit](const auto& asyncOutputs) {
+            for (const auto& [_, output] : asyncOutputs) {
+                if (!output.Finished && output.AsyncOutput->GetFreeSpace() + allowedOvercommit <= 0) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        outputs.LastPopReturnedNoData = outputs.LastPopReturnedNoData
+            && canDrainAsyncOutputs(this->SinksMap)
+            && canDrainAsyncOutputs(this->OutputTransformsMap);
         TBase::CheckRunStatus();
     }
 

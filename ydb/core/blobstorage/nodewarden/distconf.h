@@ -579,6 +579,7 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void UpdateQuorums();
+        bool HasConnectedPileQuorum(TBridgePileId pileId);
         void ReconcileNodeRole();
         void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();

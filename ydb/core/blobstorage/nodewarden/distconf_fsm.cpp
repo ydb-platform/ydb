@@ -50,6 +50,16 @@ namespace NKikimr::NStorage {
         }
     }
 
+    bool TDistributedConfigKeeper::HasConnectedPileQuorum(TBridgePileId pileId) {
+        std::vector<TNodeIdentifier> connected;
+        connected.reserve(AllBoundNodes.size());
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            connected.push_back(nodeId);
+        }
+        Y_ABORT_UNLESS(StorageConfig);
+        return HasNodeQuorum(*StorageConfig, connected, pileId, *Cfg, nullptr, true);
+    }
+
     void TDistributedConfigKeeper::FillPileConnectivity(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record) {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         if (!IsBridged() || !StorageConfig || !Cfg) {

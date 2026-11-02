@@ -14,6 +14,7 @@
 #include <util/stream/null.h>
 #include <util/string/join.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
@@ -48,6 +49,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/string/builder.h>
 #include <regex>
+#include <unordered_set>
 
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -1436,6 +1438,194 @@ Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
     {
         CheckStorageLimitWithGroupSizeInUnits(true);
+    }
+
+    struct TClusterBridgeOptions {
+        bool OffloadMerge = false;
+        bool ProvidePileMap = true;
+        bool DropNodesInfo = false;
+        bool DropWhiteboard = false;
+        NKikimrBridge::TClusterState::EPileState LocalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
+        NKikimrBridge::TClusterState::EPileState RemoteState = NKikimrBridge::TClusterState::SYNCHRONIZED;
+        std::unordered_set<ui32> AliveNodeIndexes = {0, 1, 2, 4};
+    };
+
+    NJson::TJsonValue GetClusterBridgeInfo(const TClusterBridgeOptions& options) {
+        TPortManager ports;
+        auto settings = Tests::TServerSettings(ports.GetPort())
+            .SetNodeCount(6)
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .InitKikimrRunConfig();
+        Tests::TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        runtime.GetAppData().BridgeModeEnabled = true;
+        const ui32 firstNodeId = runtime.GetNodeId(0);
+
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        bridgeInfo->Piles.resize(4);
+        for (ui32 i = 0; i < bridgeInfo->Piles.size(); ++i) {
+            auto& pile = bridgeInfo->Piles[i];
+            pile.BridgePileId = TBridgePileId::FromPileIndex(i);
+            pile.Name = TStringBuilder() << "pile" << i;
+            pile.State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+        }
+        bridgeInfo->Piles[0].State = options.LocalState;
+        bridgeInfo->Piles[1].IsFreeSlot = true;
+        bridgeInfo->Piles[2].State = options.RemoteState;
+        bridgeInfo->SelfNodePile = &bridgeInfo->Piles[0];
+
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+        auto pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(4);
+        for (ui32 i = 0; i < 6; ++i) {
+            nodes->emplace_back(firstNodeId + i, "::1", "localhost", "localhost", 19001 + i,
+                TNodeLocation(), i % 2 == 0);
+            (*pileMap)[i < 4 ? 0 : 2].push_back(firstNodeId + i);
+        }
+
+        auto addSystemState = [&](NKikimrWhiteboard::TEvSystemStateResponse& response, ui32 nodeId) {
+            if (options.AliveNodeIndexes.contains(nodeId - firstNodeId)) {
+                auto* state = response.AddSystemStateInfo();
+                state->SetNodeId(nodeId);
+                state->SetSystemState(NKikimrWhiteboard::Green);
+            }
+        };
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvNodeWardenQueryStorageConfig:
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new TEvNodeWardenStorageConfig(nullptr, false, bridgeInfo), 0, ev->Cookie));
+                    return TTestActorRuntime::EEventAction::DROP;
+                case TEvInterconnect::EvListNodes:
+                    if (!options.DropNodesInfo) {
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TEvInterconnect::TEvNodesInfo(nodes, options.ProvidePileMap ? pileMap : nullptr),
+                            0, ev->Cookie));
+                    }
+                    return TTestActorRuntime::EEventAction::DROP;
+                case TEvWhiteboard::EvSystemStateRequest: {
+                    if (!options.DropWhiteboard) {
+                        auto response = std::make_unique<TEvWhiteboard::TEvSystemStateResponse>();
+                        addSystemState(response->Record, ev->Recipient.NodeId());
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie));
+                    }
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case NViewer::TEvViewer::EvViewerRequest: {
+                    if (!options.DropWhiteboard) {
+                        auto response = std::make_unique<NViewer::TEvViewer::TEvViewerResponse>();
+                        auto* system = response->Record.MutableSystemResponse();
+                        for (ui32 nodeId : ev->Get<NViewer::TEvViewer::TEvViewerRequest>()->Record.GetLocation().GetNodeId()) {
+                            addSystemState(*system, nodeId);
+                        }
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie));
+                    }
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            TStringBuilder() << "GET /viewer/json/cluster?direct=1&use_health_check=false&timeout=10000&offload_merge="
+                << options.OffloadMerge << " HTTP/1.1\r\n\r\n", endpoint, {});
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(NViewer::MakeViewerID(0), sender,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(response->Response->Body, &json, true);
+        return json;
+    }
+
+    void AssertBridgePileCounts(const NJson::TJsonValue& pile, ui32 storage, ui32 compute) {
+        UNIT_ASSERT_VALUES_EQUAL(pile["Nodes"].GetUIntegerSafe(), storage + compute);
+        UNIT_ASSERT_VALUES_EQUAL(pile["StorageNodes"].GetUIntegerSafe(), storage);
+        UNIT_ASSERT_VALUES_EQUAL(pile["ComputeNodes"].GetUIntegerSafe(), compute);
+    }
+
+    void AssertBridgePileAliveCounts(const NJson::TJsonValue& pile, ui32 storage, ui32 compute) {
+        UNIT_ASSERT_VALUES_EQUAL(pile["AliveNodes"].GetUIntegerSafe(), storage + compute);
+        UNIT_ASSERT_VALUES_EQUAL(pile["AliveStorageNodes"].GetUIntegerSafe(), storage);
+        UNIT_ASSERT_VALUES_EQUAL(pile["AliveComputeNodes"].GetUIntegerSafe(), compute);
+    }
+
+    void AssertBridgePileUnknownAliveCounts(const NJson::TJsonValue& pile) {
+        UNIT_ASSERT(!pile.Has("AliveNodes"));
+        UNIT_ASSERT(!pile.Has("AliveStorageNodes"));
+        UNIT_ASSERT(!pile.Has("AliveComputeNodes"));
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeNodeCounts, offloadMerge) {
+        const auto json = GetClusterBridgeInfo({.OffloadMerge = offloadMerge});
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 3);
+        AssertBridgePileCounts(piles[0], 2, 2);
+        AssertBridgePileAliveCounts(piles[0], 2, 1);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        AssertBridgePileAliveCounts(piles[1], 1, 0);
+        AssertBridgePileCounts(piles[2], 0, 0);
+        AssertBridgePileAliveCounts(piles[2], 0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(json["NodesAlive"].GetUIntegerSafe(), 4);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeNoAliveNodes) {
+        const auto json = GetClusterBridgeInfo({.AliveNodeIndexes = {}});
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileCounts(piles[0], 2, 2);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        for (const auto& pile : piles) {
+            AssertBridgePileAliveCounts(pile, 0, 0);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeDisconnectedPile, offloadMerge) {
+        const auto json = GetClusterBridgeInfo({
+            .OffloadMerge = offloadMerge,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+        });
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileAliveCounts(piles[0], 2, 1);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        AssertBridgePileUnknownAliveCounts(piles[1]);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeInactivePile) {
+        const auto json = GetClusterBridgeInfo({.RemoteState = NKikimrBridge::TClusterState::INACTIVE});
+        const auto& pile = json["BridgeInfo"]["Piles"][1];
+        AssertBridgePileCounts(pile, 1, 1);
+        AssertBridgePileUnknownAliveCounts(pile);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeDisconnectedServingPile) {
+        const auto json = GetClusterBridgeInfo({.LocalState = NKikimrBridge::TClusterState::DISCONNECTED});
+        for (const auto& pile : json["BridgeInfo"]["Piles"].GetArraySafe()) {
+            AssertBridgePileUnknownAliveCounts(pile);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeIncompleteWhiteboard, offloadMerge) {
+        const auto json = GetClusterBridgeInfo({.OffloadMerge = offloadMerge, .DropWhiteboard = true});
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileCounts(piles[0], 2, 2);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        for (const auto& pile : piles) {
+            AssertBridgePileUnknownAliveCounts(pile);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeMissingNameserviceData, dropNodesInfo) {
+        const auto json = GetClusterBridgeInfo({.ProvidePileMap = false, .DropNodesInfo = dropNodesInfo});
+        for (const auto& pile : json["BridgeInfo"]["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("Nodes"));
+            UNIT_ASSERT(!pile.Has("StorageNodes"));
+            UNIT_ASSERT(!pile.Has("ComputeNodes"));
+            AssertBridgePileUnknownAliveCounts(pile);
+        }
     }
 
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)

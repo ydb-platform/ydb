@@ -29,6 +29,8 @@ class TJsonCluster : public TViewerPipeClient {
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
+    bool WhiteboardProcessed = false;
+    bool NodePileMapAvailable = false;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> SystemViewerResponse;
@@ -48,6 +50,10 @@ class TJsonCluster : public TViewerPipeClient {
         bool Static = false;
         bool Connected = false;
         bool Disconnected = false;
+
+        bool IsAlive() const {
+            return !Disconnected && SystemState.HasSystemState();
+        }
 
         int GetCandidateScore() const {
             int score = 0;
@@ -313,6 +319,7 @@ private:
                     NodeCache.emplace(node.NodeInfo.NodeId, &node);
                 }
                 if (NodesInfoResponse->Get()->PileMap) {
+                    NodePileMapAvailable = true;
                     for (ui32 pileNum = 0; pileNum < NodesInfoResponse->Get()->PileMap->size(); ++pileNum) {
                         for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileNum]) {
                             auto itNode = NodeCache.find(nodeId);
@@ -547,7 +554,7 @@ private:
             if (stats.Limit > 0 && stats.Total > 0) {
                 stats.Limit = std::min(stats.Limit, stats.Total);
             }
-            if (!node.Disconnected && node.SystemState.HasSystemState()) {
+            if (node.IsAlive()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
             (*ClusterInfo.MutableMapNodeStates())[NKikimrWhiteboard::EFlag_Name(node.SystemState.GetSystemState())]++;
@@ -615,6 +622,7 @@ private:
                 (*ClusterInfo.AddSystemTablets()) = std::move(tabletState);
             }
         }
+        WhiteboardProcessed = true;
     }
 
     void WhiteboardRequestDone() {
@@ -1038,7 +1046,27 @@ private:
                 if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                     const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
                     auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
-                    std::unordered_map<ui32, ui32> pileNodes;
+                    struct TPileNodes {
+                        ui32 Storage = 0;
+                        ui32 Compute = 0;
+                        ui32 AliveStorage = 0;
+                        ui32 AliveCompute = 0;
+                    };
+                    std::unordered_map<ui32, TPileNodes> pileNodes;
+                    for (const auto& node : NodeData) {
+                        if (node.PileNum) {
+                            auto& nodes = pileNodes[*node.PileNum];
+                            if (node.Static) {
+                                ++nodes.Storage;
+                                nodes.AliveStorage += node.IsAlive();
+                            } else {
+                                ++nodes.Compute;
+                                nodes.AliveCompute += node.IsAlive();
+                            }
+                        }
+                    }
+                    const bool selfAllowsConnection = srcBridgeInfo.SelfNodePile
+                        && NBridge::PileStateTraits(srcBridgeInfo.SelfNodePile->State).AllowsConnection;
                     for (const auto& pile : srcBridgeInfo.Piles) {
                         if (pile.IsFreeSlot) {
                             continue;
@@ -1050,16 +1078,19 @@ private:
                         for (const auto& [status, count] : pileToGroupStatus[pbBridgePileInfo.GetPileId()]) {
                             (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
                         }
-                    }
-                    for (const auto& node : NodeData) {
-                        if (node.PileNum) {
-                            pileNodes[*node.PileNum]++;
-                        }
-                    }
-                    for (auto& pile : *pbBridgeInfo.MutablePiles()) {
-                        const auto pileId = TBridgePileId::FromProto(&pile, &std::decay_t<decltype(pile)>::GetPileId);
-                        if (const auto it = pileNodes.find(pileId.GetPileIndex()); it != pileNodes.end()) {
-                            pile.SetNodes(it->second);
+                        if (NodePileMapAvailable) {
+                            const auto& nodes = pileNodes[pile.BridgePileId.GetPileIndex()];
+                            pbBridgePileInfo.SetNodes(nodes.Storage + nodes.Compute);
+                            pbBridgePileInfo.SetStorageNodes(nodes.Storage);
+                            pbBridgePileInfo.SetComputeNodes(nodes.Compute);
+                            // Even running nodes may be unreachable by bridge policy. In particular,
+                            // DISCONNECTED permits only static connections within the same pile.
+                            if (WhiteboardProcessed && selfAllowsConnection
+                                    && NBridge::PileStateTraits(pile.State).AllowsConnection) {
+                                pbBridgePileInfo.SetAliveNodes(nodes.AliveStorage + nodes.AliveCompute);
+                                pbBridgePileInfo.SetAliveStorageNodes(nodes.AliveStorage);
+                                pbBridgePileInfo.SetAliveComputeNodes(nodes.AliveCompute);
+                            }
                         }
                     }
                 } else {

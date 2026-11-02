@@ -2150,11 +2150,6 @@ public:
                                         return SyncError();
                                     }
 
-                                    const auto defaultExpr = constraint.Value().Cast();
-                                    if (IsNullLiteral(defaultExpr)) {
-                                        continue;
-                                    }
-
                                     if (columnBuild == nullptr) {
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
@@ -2406,16 +2401,11 @@ public:
                                 defaultExpr = maybeJust.Cast().Input();
                             }
 
-                            if (IsNullLiteral(defaultExpr)) {
-                                alter_columns->ClearDefaultFromLiteral();
-                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
-                            } else {
-                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
-                                if (err) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
-                                    return SyncError();
-                                }
+                            alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                            auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
+                            if (err) {
+                                ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                return SyncError();
                             }
                         } else if (alterColumnAction == "dropDefault") {
                             if (table.Metadata->Kind == EKikimrTableKind::Olap) {

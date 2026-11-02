@@ -521,8 +521,26 @@ namespace {
         const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
         const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
     {
-        if (!defaultType || IsNullLiteral(defaultExpr)) {
+        if (!defaultType) {
             return std::nullopt;
+        }
+
+        if (IsNullLiteral(defaultExpr) && columnType) {
+            const auto* nullableType = columnType;
+            if (nullableType->GetKind() != ETypeAnnotationKind::Optional
+                && nullableType->GetKind() != ETypeAnnotationKind::Pg)
+            {
+                nullableType = ctx.MakeType<TOptionalExprType>(nullableType);
+            }
+            auto literal = Build<TCoNothing>(ctx, defaultExpr.Pos())
+                .OptionalType(BuildTypeExpr(defaultExpr.Pos(), *nullableType, ctx))
+                .Done();
+            onRepeat(ctx.Builder(defaultExpr.Pos())
+                .Callable("EvaluateExpr")
+                .Add(0, literal.Ptr())
+                .Seal()
+                .Build());
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
         }
 
         if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
@@ -827,7 +845,7 @@ namespace {
     }
 
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
-        TCoNameValueTuple constraint, bool& needEval, bool& hasNullDefault, bool isAlter = false)
+        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false)
     {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
@@ -856,17 +874,11 @@ namespace {
                 }
             }
 
-            if (columnMeta.IsDefaultKindDefined() || hasNullDefault) {
+            if (columnMeta.IsDefaultKindDefined()) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for " << columnName
                     << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
                 return false;
-            }
-
-            if (IsNullLiteral(constrValue)) {
-                hasNullDefault = true;
-                columnMeta.DefaultFromLiteral.Clear();
-                return true;
             }
 
             columnMeta.SetDefaultFromLiteral();
@@ -882,7 +894,7 @@ namespace {
                 return false;
             }
 
-            if (columnMeta.IsDefaultKindDefined() || hasNullDefault) {
+            if (columnMeta.IsDefaultKindDefined()) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default setting for "
                     << columnName << " column is already set: "
                     << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
@@ -901,7 +913,7 @@ namespace {
                 return false;
             }
 
-            if (columnMeta.IsDefaultKindDefined() || hasNullDefault) {
+            if (columnMeta.IsDefaultKindDefined()) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder()
                     << "Column " << columnName << " is GENERATED and can not have a Serial/DEFAULT value at the same time"));
                 return false;
@@ -1580,10 +1592,9 @@ private:
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                bool hasNullDefault = false;
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, hasNullDefault)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
                         return TStatus::Error;
                     }
 
@@ -2322,10 +2333,9 @@ private:
                     columnMeta.Name = name;
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
-                        bool hasNullDefault = false;
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, hasNullDefault, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
                                 return TStatus::Error;
                             }
 

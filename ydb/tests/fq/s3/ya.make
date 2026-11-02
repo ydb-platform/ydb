@@ -60,7 +60,7 @@ DATA(
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
@@ -69,7 +69,7 @@ IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 END()

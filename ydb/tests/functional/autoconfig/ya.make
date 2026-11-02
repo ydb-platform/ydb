@@ -6,12 +6,12 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:4)
+    REQUIREMENTS(ram:16 cpu:2)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:4)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SPLIT_FACTOR(20)

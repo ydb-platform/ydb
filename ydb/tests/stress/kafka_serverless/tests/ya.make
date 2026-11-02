@@ -25,6 +25,6 @@ PEERDIR(
     ydb/public/sdk/python/enable_v3_new_behavior
 )
 
-REQUIREMENTS(network:full cpu:1)
+REQUIREMENTS(network:full)
 
 END()

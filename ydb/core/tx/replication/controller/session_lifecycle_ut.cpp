@@ -33,19 +33,28 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         explicit TSecretGate(TTestActorRuntime& runtime)
             : Runtime(runtime)
             , Observer(runtime.AddObserver([this](IEventHandle::TPtr& ev) {
-                if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet
-                    && Runtime.FindActor(ev->Sender)->GetActivityType()
-                        == NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER)
-                {
+                if (!ev->HasEvent()) {
+                    return;
+                }
+
+                if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet) {
+                    const auto* sender = Runtime.FindActor(ev->Sender);
+                    if (!sender || sender->GetActivityType()
+                        != NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER)
+                    {
+                        return;
+                    }
+
                     auto request = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request;
                     request->ResultSet.front().Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                     request->ResultSet.front().SecurityObject = nullptr;
                     Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
                         new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request)));
                     ev.Reset();
-                } else if (ev->GetTypeRewrite() == TEvPrivate::EvResolveSecretResult) {
+                } else if (const auto* original = dynamic_cast<TEvPrivate::TEvResolveSecretResult*>(ev->GetBase())) {
+                    // Private event IDs are shared with unrelated actors, including Hive.
                     auto result = MakeHolder<TEvPrivate::TEvResolveSecretResult>(
-                        ev->Get<TEvPrivate::TEvResolveSecretResult>()->ReplicationId, "root@builtin");
+                        original->ReplicationId, "root@builtin");
                     ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
                         result.Release(), 0, ev->Cookie));
                     if (Hold) {

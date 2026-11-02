@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo
+    ydb/core/kqp/tracing
     ydb/library/mkql_proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt

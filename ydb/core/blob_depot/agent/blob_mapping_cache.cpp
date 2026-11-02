@@ -166,6 +166,8 @@ namespace NKikimr::NBlobDepot {
             // cache entry is a blob id and thus belongs to a single tablet, so every query sharing
             // it carries the same data kind.
             msg.SetDataKind(dataKind);
+            // queries joining this resolve share its deadline too: should it expire, they get a retryable error
+            query->SetResolveDeadline(msg);
 
             Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(TString(keyBuf), mustRestoreFirst));
             ++(mustRestoreFirst ? entry.MustRestoreFirstResolvePending : entry.OrdinaryResolvePending);

@@ -7,7 +7,6 @@ from ydb.tests.library.common.types import Erasure, TabletStates
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness import param_constants
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 
@@ -35,9 +34,6 @@ class TestHive(object):
         cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 Erasure.BLOCK_4_2,
-                additional_log_configs={
-                    'HIVE': LogLevels.TRACE, 'LOCAL': LogLevels.TRACE
-                },
                 use_in_memory_pdisks=False,
                 hive_config={
                     'max_node_usage_to_kick': 100,

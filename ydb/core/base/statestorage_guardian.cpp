@@ -189,14 +189,17 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
     TIntrusiveConstPtr<TGuardedInfo> Info;
 
     ui64 Signature;
-    // the replica sends follower changes to the guardian it has registered; a guardian made in place of a gone one
-    // registers itself even if the record of the leader matches, keeping the step the replica has
+    // A matching leader record is not a registration acknowledgement. The replica
+    // also returns it when an update is rejected, e.g. because its step is stale.
     bool Registered = false;
+    ui64 RegistrationCookie = 0;
     ui32 ProposedStep = 0;
 
     friend class TBaseGuardian;
 
     void RequestInfo() {
+        Registered = false;
+        RegistrationCookie = 0;
         MakeRequest();
     }
 
@@ -206,8 +209,11 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         Become(&TThis::StateLookup);
     }
 
-    void UpdateInfo() {
+    void UpdateInfo(ui32 proposedStep = 0) {
         ui64 cookie = ++LastCookie;
+        Registered = false;
+        RegistrationCookie = cookie;
+        ProposedStep = proposedStep;
         TAutoPtr<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
         req->Record.SetTabletID(Info->TabletID);
         req->Record.SetCookie(cookie);
@@ -216,10 +222,9 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader());
         ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet());
         req->Record.SetProposedGeneration(Info->Generation);
-        req->Record.SetProposedStep(std::exchange(ProposedStep, 0));
+        req->Record.SetProposedStep(ProposedStep);
         req->Record.SetSignature(Signature);
         req->Record.SetIsGuardian(true);
-        Registered = true;
 
         Send(Replica, req.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateUpdate);
@@ -240,6 +245,8 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
         CheckConfigVersion(SelfId(), ev->Sender, ev->Get());
 
         const auto status = record.GetStatus();
+        const bool registrationConfirmed = RegistrationCookie && record.GetCookie() == RegistrationCookie
+            && record.GetSignature() == Signature && record.GetCurrentStep() == ProposedStep;
         Signature = record.GetSignature();
         DowntimeFrom = TInstant::Max();
         ReplicaMissing(false);
@@ -256,10 +263,10 @@ class TReplicaGuardian : public TBaseGuardian<TReplicaGuardian> {
                     return UpdateInfo();
                 } else if (leader != Info->Leader || tabletLeader != Info->TabletLeader) {
                     return Demoted(); // hack around cluster restarts
-                } else if (!Registered) {
-                    ProposedStep = record.GetCurrentStep();
-                    return UpdateInfo();
+                } else if (!Registered && !registrationConfirmed) {
+                    return UpdateInfo(record.GetCurrentStep());
                 } else {
+                    Registered = true;
                     Become(&TThis::StateCalm);
                     Send(Guard, ev->Release().Release());
                     return;

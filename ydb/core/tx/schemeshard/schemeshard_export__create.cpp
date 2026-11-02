@@ -533,10 +533,32 @@ private:
         }, exportInfo);
     }
 
-    void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+    bool CheckItemType(const TExportInfo::TPtr& exportInfo, ui32 itemIdx, NIceDb::TNiceDb& db) {
+        auto& item = exportInfo->Items.at(itemIdx);
+        if (IsPathTypeTransferrable(item) ||
+            (IsPathTypeSchemeObject(item) && exportInfo->Kind != TExportInfo::EKind::YT))
+        {
+            return true;
+        }
+
+        item.Issue = TStringBuilder() << "Unsupported export object type " << static_cast<ui32>(item.SourcePathType)
+            << " for path '" << item.SourcePathName << "' and export kind " << static_cast<ui32>(exportInfo->Kind);
+        item.State = EState::Cancelled;
+        Self->TxIdToExport.erase(item.WaitTxId);
+        item.WaitTxId = InvalidTxId;
+        Self->PersistExportItemState(db, *exportInfo, itemIdx);
+        CancelAndPersistExport(exportInfo, itemIdx, "unsupported export object", db);
+        return false;
+    }
+
+    bool UploadScheme(const TExportInfo::TPtr& exportInfo, ui32 itemIdx, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+        if (!CheckItemType(exportInfo, itemIdx, db)) {
+            return false;
+        }
         DispatchByExportKind([&]<typename TSettings>() {
-            return UploadScheme<TSettings>(exportInfo, itemIdx, ctx);
-        }, exportInfo);
+            return UploadScheme<TSettings>(*exportInfo, itemIdx, ctx);
+        }, *exportInfo);
+        return true;
     }
 
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
@@ -989,7 +1011,17 @@ private:
                 continue;
             }
 
-            if (exportInfo.Items.at(i).State != EState::Transferring) {
+            if (other.State != EState::Transferring) {
+                continue;
+            }
+
+            if (!IsPathTypeTransferrable(other)) {
+                // Only known table types have backup transactions to cancel.
+                // In particular, an unsupported object cannot acknowledge one.
+                Self->TxIdToExport.erase(other.WaitTxId);
+                other.WaitTxId = InvalidTxId;
+                other.State = EState::Cancelled;
+                Self->PersistExportItemState(db, exportInfo, i);
                 continue;
             }
 
@@ -1082,6 +1114,14 @@ private:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        if (exportInfo->IsPreparing()) {
+            for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                if (!CheckItemType(exportInfo, itemIdx, db)) {
+                    return;
+                }
+            }
+        }
+
         switch (exportInfo->State) {
         case EState::CreateExportDir:
         case EState::CopyTables:
@@ -1110,11 +1150,17 @@ private:
                     continue;
                 }
 
+                if (!CheckItemType(exportInfo, itemIdx, db)) {
+                    return;
+                }
+
                 if (item.WaitTxId == InvalidTxId) {
                     if (IsPathTypeTransferrable(item) && item.State <= EState::Transferring) {
                         pendingTables.emplace_back(itemIdx);
                     } else {
-                        UploadScheme(*exportInfo, itemIdx, ctx);
+                        if (!UploadScheme(exportInfo, itemIdx, db, ctx)) {
+                            return;
+                        }
                     }
                 } else {
                     SubscribeTx(*exportInfo, itemIdx);
@@ -1588,7 +1634,9 @@ private:
                 exportInfo->Items[i].State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, i);
 
-                UploadScheme(*exportInfo, i, ctx);
+                if (!UploadScheme(exportInfo, i, db, ctx)) {
+                    return;
+                }
             }
 
             exportInfo->State = EState::Transferring;
@@ -1674,7 +1722,9 @@ private:
                     exportInfo->Items[i].State = EState::Transferring;
                     Self->PersistExportItemState(db, *exportInfo, i);
 
-                    UploadScheme(*exportInfo, i, ctx);
+                    if (!UploadScheme(exportInfo, i, db, ctx)) {
+                        return;
+                    }
                 }
 
                 exportInfo->State = EState::Transferring;
@@ -1703,7 +1753,9 @@ private:
                 if (IsPathTypeTransferrable(item)) {
                     tables.emplace_back(itemIdx);
                 } else {
-                    UploadScheme(*exportInfo, itemIdx, ctx);
+                    if (!UploadScheme(exportInfo, itemIdx, db, ctx)) {
+                        return;
+                    }
                 }
             }
             exportInfo->PendingItems = std::move(tables);
@@ -1718,6 +1770,10 @@ private:
             auto& item = exportInfo->Items.at(itemIdx);
 
             if (item.State != EState::Transferring) {
+                return;
+            }
+
+            if (!CheckItemType(exportInfo, itemIdx, db)) {
                 return;
             }
 

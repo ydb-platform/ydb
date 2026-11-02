@@ -3983,6 +3983,85 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportTests) {
+    void ResumeUnsupportedItem(bool clearScheme, bool clearWaitTxId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )");
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ui64 createTableTxId = 0;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable) {
+                createTableTxId = record.GetTxId();
+            }
+        });
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> completion(runtime, [&](auto& ev) {
+            return createTableTxId && ev->Get()->Record.GetTxId() == createTableTxId;
+        });
+        const ui64 importId = 100;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "" destination_path: "/MyRoot/Restored" }
+            }
+        )", port));
+        runtime.WaitFor("table creation completion", [&] { return !completion.empty(); });
+
+        // New schema columns are invisible to an older binary, just as if none
+        // of its known schema columns were present. Future item states are
+        // loaded verbatim from the same table.
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"((
+            (let key '('('ImportId (Uint64 '%lu)) '('Index (Uint32 '0))))
+            (let row '(%s %s))
+            (return (AsList (UpdateRow 'ImportItems key row)))
+        ))", importId,
+            clearScheme ? "'('Scheme (Null))" : "'('State (Uint8 '42))",
+            clearWaitTxId ? "'('WaitTxId (Null))" : ""));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, importId);
+        const auto desc = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), clearScheme
+            ? "Unsupported or missing import scheme" : "Unsupported import item state 42");
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "/MyRoot/Restored");
+
+        // Completing the original create operation cannot restart the import.
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor(),
+            new TEvSchemeShard::TEvNotifyTxCompletionResult(createTableTxId));
+        completion.Stop().Unblock();
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestLs(runtime, "/MyRoot/Restored", false, NLs::PathExist);
+        TestForgetImport(runtime, importId + 1, "/MyRoot", importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(UnsupportedSchemeWithPendingTransactionOnResume) {
+        ResumeUnsupportedItem(true, false);
+    }
+
+    Y_UNIT_TEST(UnsupportedSchemeWithoutTransactionOnResume) {
+        ResumeUnsupportedItem(true, true);
+    }
+
+    Y_UNIT_TEST(UnsupportedItemStateOnResume) {
+        ResumeUnsupportedItem(false, false);
+    }
+
     ui64 Run(TTestBasicRuntime& runtime, TTestEnv& env,
             THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,

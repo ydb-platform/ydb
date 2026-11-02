@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -7,21 +7,6 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
-
-namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-TKikimrRunner NewRboKikimrRunner() {
-    return DefaultKikimrRunner({}, NewRboAppConfig());
-}
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
     Y_UNIT_TEST(InsertAbort_Literal_Success) {
@@ -350,7 +335,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    /*
     Y_UNIT_TEST(InsertRevert_Literal_Duplicates) {
         auto kikimr = NewRboKikimrRunner();
         auto db = kikimr.GetTableClient();
@@ -370,9 +354,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
 
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
-    */
 
-    /*
     Y_UNIT_TEST(InsertRevert_Literal_Conflict) {
         auto kikimr = NewRboKikimrRunner();
         auto db = kikimr.GetTableClient();
@@ -394,7 +376,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
             [[1u];["One"];[-1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
-    */
 
     Y_UNIT_TEST(UpdateOn_Literal) {
         auto kikimr = NewRboKikimrRunner();
@@ -499,7 +480,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         auto app = NewRboAppConfig();
         app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseIndexStreamWrite);
 
-        TKikimrRunner kikimr(app);
+        TEffectsKikimrRunner kikimr(app);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -538,7 +519,7 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
 
     Y_UNIT_TEST(EmptyUpdate) {
         TKikimrSettings settings = TKikimrSettings(NewRboAppConfig()).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+        TEffectsKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -998,7 +979,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         }
     }
 
-    /*
     Y_UNIT_TEST(EffectWithSelect) {
         auto kikimr = NewRboKikimrRunner();
         auto db = kikimr.GetTableClient();
@@ -1195,7 +1175,6 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
             }
         }
     }
-    */
 }
 
 } // namespace NKqp

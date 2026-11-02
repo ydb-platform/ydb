@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
@@ -8,17 +8,6 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-TKikimrRunner NewRboKikimrRunner() {
-    return DefaultKikimrRunner({}, NewRboAppConfig());
-}
 
     void CreateTestTable(TSession& session) {
         AssertSuccessResult(session.ExecuteSchemeQuery(R"(
@@ -2012,7 +2001,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffectsNewRbo) {
         auto serverSettings = TKikimrSettings(NewRboAppConfig())
             .SetEnableScriptExecutionOperations(true)
             .SetEnableForceImmediateEffectsExecution(true);
-        TKikimrRunner kikimr(serverSettings);
+        TEffectsKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

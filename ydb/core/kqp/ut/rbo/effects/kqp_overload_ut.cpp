@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -14,17 +14,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
-namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
 
     Y_UNIT_TEST_TWIN(OltpOverloaded, Distributed) {
@@ -32,7 +21,7 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false);
 
-        TKikimrRunner kikimr(settings);
+        TEffectsKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
 

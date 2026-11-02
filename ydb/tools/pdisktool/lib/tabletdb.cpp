@@ -5,7 +5,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_dbase_naked.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 #include <ydb/core/tablet_flat/flat_mem_warm.h>
 #include <ydb/core/tablet_flat/flat_part_loader.h>
 #include <ydb/core/tablet_flat/flat_part_store.h>
@@ -106,7 +106,7 @@ public:
             return {true, nullptr};
         }
         if (lob == NTable::ELargeObj::Outer
-                && partStore->GroupsCount >= partStore->PageCollections.size()) {
+                && partStore->OuterSlot() >= partStore->PageCollections.size()) {
             ++Stats.PagesMissing;
             Repeated.Add("A part refers to an outer value group it does not have",
                 partStore->Label.ToString());

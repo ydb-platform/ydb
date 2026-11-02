@@ -5,7 +5,9 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -54,8 +56,9 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         } while (true);
     }
 
-    Y_UNIT_TEST(ReadTopic) {
-        TEnv env;
+    Y_UNIT_TEST_QUAD(ReadTopic, Compress, InternalDecompression) {
+        TEnv env(TFeatureFlags().SetTransferInternalDataDecompression(InternalDecompression));
+        auto codec = Compress ? NYdb::NTopic::ECodec::GZIP : NYdb::NTopic::ECodec::RAW;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         // create topic
@@ -73,6 +76,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         auto settings = TEvYdbProxy::TTopicReaderSettings()
             .ConsumerName("consumer")
+            .Decompress(!InternalDecompression)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path("/Root/topic")
                 .AppendPartitionIds(0)
@@ -80,21 +84,22 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         TActorId reader;
 
+        // note: messages must be long and repetitive to benefit from compression
         // write, create reader & read
-        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-1"));
+        UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessagemessagemessage-1", codec));
         {
             auto records = ReadData(env, reader, settings);
             UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
 
             const auto& record = records.at(0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-1");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-1");
         }
 
         // trigger commit, write new data & kill reader
         {
             env.SendAsync(reader, new TEvWorker::TEvPoll());
-            UNIT_ASSERT(WriteTopic(env, "/Root/topic", "message-2"));
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic", "messagemessagemessagemessagemessagemessage-2", codec));
             env.SendAsync(reader, new TEvents::TEvPoison());
         }
 
@@ -105,8 +110,38 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
             const auto& record = records.at(0);
             UNIT_ASSERT_VALUES_EQUAL(record.GetOffset(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "message-2");
+            UNIT_ASSERT_VALUES_EQUAL(record.GetData(), "messagemessagemessagemessagemessagemessage-2");
         }
+
+        if (!Compress) {
+            return;
+        }
+        // trigger commit, write broken data & kill reader
+        {
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic",
+                        NYdb::NTopic::TWriteMessage::CompressedMessage(
+                            "baddata",
+                            NYdb::NTopic::ECodec::GZIP,   // GZIP has signature and junk message will be rejected
+                            12345)));
+            env.SendAsync(reader, new TEvents::TEvPoison());
+        }
+
+        // create reader again & read
+        {
+            reader = CreateReader(env, settings);
+            env.SendAsync(reader, new TEvWorker::TEvPoll());
+
+            TAutoPtr<IEventHandle> ev;
+            do {
+                env.GetRuntime().template GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(ev);
+            } while (ev->Sender != reader);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), TEvWorker::EvGone);
+            const auto &result = *ev->Get<TEvWorker::TEvGone>();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, TEvWorker::TEvGone::EStatus::DATA_ERROR, result.ToString());
+        }
+
     }
 
     Y_UNIT_TEST(SourceIndexSchemeErrorIsRetryable) {
@@ -166,60 +201,81 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         } while (ev->Sender != reader && ev->Recipient != topicReader);
     }
 
+    struct TMockReader {
+        TTestActorRuntime Runtime;
+        TActorId Worker;
+        TActorId Proxy;
+        TActorId Session;
+        TActorId Reader;
+
+        TMockReader(bool failOnDataLoss) {
+            Runtime.Initialize(TAppPrepare().Unwrap());
+            Worker = Runtime.AllocateEdgeActor();
+            Proxy = Runtime.AllocateEdgeActor();
+            Session = Runtime.AllocateEdgeActor();
+            const auto settings = TEvYdbProxy::TTopicReaderSettings()
+                                      .FailOnDataLoss(failOnDataLoss)
+                                      .ConsumerName("consumer")
+                                      .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/topic").AppendPartitionIds(0));
+            Reader = Runtime.Register(CreateRemoteTopicReader(Proxy, settings));
+            Runtime.Send(Reader, Worker, new TEvWorker::TEvHandshake());
+            Runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(Proxy);
+            Runtime.Send(Reader, Proxy, new TEvYdbProxy::TEvCreateTopicReaderResponse(Session));
+            Runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(Worker);
+        }
+
+        void Start(const TString& sessionId, ui64 committedOffset) {
+            Runtime.Send(Reader, Session, new TEvYdbProxy::TEvStartTopicReadingSession(sessionId, committedOffset));
+        }
+
+        void Poll() {
+            Runtime.Send(Reader, Worker, new TEvWorker::TEvPoll());
+            Runtime.GrabEdgeEvent<TEvYdbProxy::TEvReadTopicRequest>(Session);
+        }
+
+        void Read(const TVector<ui64>& offsets) {
+            TVector<TTopicMessage> messages;
+            for (const auto offset : offsets) {
+                messages.emplace_back(offset, "message");
+            }
+            Runtime.Send(Reader, Session, new TEvYdbProxy::TEvReadTopicResponse(0, std::move(messages)));
+        }
+    };
+
     void CheckCommitQueue(const TVector<ui64>& offsets, const TVector<ui64>& expectedOffsets) {
-        TTestActorRuntime runtime;
-        runtime.Initialize(TAppPrepare().Unwrap());
-
-        const auto worker = runtime.AllocateEdgeActor();
-        const auto ydbProxy = runtime.AllocateEdgeActor();
-        const auto readSession = runtime.AllocateEdgeActor();
-        const auto settings = TEvYdbProxy::TTopicReaderSettings()
-            .ConsumerName("consumer")
-            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
-                .Path("/Root/topic")
-                .AppendPartitionIds(0)
-            );
-
-        const auto reader = runtime.Register(CreateRemoteTopicReader(ydbProxy, settings));
-        runtime.Send(reader, worker, new TEvWorker::TEvHandshake());
-        runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(ydbProxy);
-        runtime.Send(reader, ydbProxy,
-            new TEvYdbProxy::TEvCreateTopicReaderResponse(readSession));
-        runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker);
-        runtime.Send(reader, readSession,
-            new TEvYdbProxy::TEvStartTopicReadingSession(TString("read-session"), 7));
-        auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(worker);
-        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        TMockReader s(true);
+        s.Start("read-session", 7);
+        auto started = s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, s.Reader);
         UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 7);
 
         // In this runtime Send dispatches the reader's handler synchronously.
         // All commits have been handled before we inspect the outgoing requests.
         for (const auto offset : offsets) {
-            runtime.Send(reader, worker, new TEvWorker::TEvCommit(offset));
+            s.Runtime.Send(s.Reader, s.Worker, new TEvWorker::TEvCommit(offset));
         }
 
         for (const auto offset : expectedOffsets) {
-            auto requests = runtime.CaptureMailboxEvents(ydbProxy.Hint(), ydbProxy.NodeId());
+            auto requests = s.Runtime.CaptureMailboxEvents(s.Proxy.Hint(), s.Proxy.NodeId());
             UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
             const auto& request = requests.front();
             UNIT_ASSERT_VALUES_EQUAL(request->GetTypeRewrite(), static_cast<ui32>(TEvYdbProxy::EvCommitOffsetRequest));
-            UNIT_ASSERT_VALUES_EQUAL(request->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL(request->Sender, s.Reader);
             UNIT_ASSERT_VALUES_EQUAL(std::get<3>(request->Get<TEvYdbProxy::TEvCommitOffsetRequest>()->GetArgs()), offset);
-            UNIT_ASSERT(runtime.CaptureMailboxEvents(worker.Hint(), worker.NodeId()).empty());
+            UNIT_ASSERT(s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId()).empty());
 
-            runtime.Send(reader, ydbProxy,
-                new TEvYdbProxy::TEvCommitOffsetResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
-            auto result = runtime.GrabEdgeEvent<TEvWorker::TEvCommitResult>(worker);
-            UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
+            s.Runtime.Send(s.Reader, s.Proxy, new TEvYdbProxy::TEvCommitOffsetResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            auto result = s.Runtime.GrabEdgeEvent<TEvWorker::TEvCommitResult>(s.Worker);
+            UNIT_ASSERT_VALUES_EQUAL(result->Sender, s.Reader);
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Offset, offset);
 
-            auto notification = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCommitOffsetRequest>(readSession);
+            auto notification = s.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvCommitOffsetRequest>(s.Session);
             UNIT_ASSERT_VALUES_EQUAL(std::get<3>(notification->Get()->GetArgs()), offset);
         }
 
-        UNIT_ASSERT(runtime.CaptureMailboxEvents(ydbProxy.Hint(), ydbProxy.NodeId()).empty());
-        UNIT_ASSERT(runtime.CaptureMailboxEvents(worker.Hint(), worker.NodeId()).empty());
-        UNIT_ASSERT(runtime.CaptureMailboxEvents(readSession.Hint(), readSession.NodeId()).empty());
+        UNIT_ASSERT(s.Runtime.CaptureMailboxEvents(s.Proxy.Hint(), s.Proxy.NodeId()).empty());
+        UNIT_ASSERT(s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId()).empty());
+        UNIT_ASSERT(s.Runtime.CaptureMailboxEvents(s.Session.Hint(), s.Session.NodeId()).empty());
     }
 
     Y_UNIT_TEST(QueuesCommitWhileAnotherCommitIsInFlight) {
@@ -236,6 +292,215 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
     Y_UNIT_TEST(DropsSmallerAndDuplicateCommitsWhileAnotherCommitIsInFlight) {
         CheckCommitQueue({10, 10, 5}, {10});
+    }
+
+    Y_UNIT_TEST(ContiguousOffsetsFromCommittedOffsetAreDelivered) {
+        TMockReader s(true);
+        s.Start("read-session", 7);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Poll();
+        s.Read({7, 8});
+
+        const auto data = s.Runtime.GrabEdgeEvent<TEvWorker::TEvData>(s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(data->Get()->Records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(data->Get()->Records[0].GetOffset(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(data->Get()->Records[1].GetOffset(), 8);
+
+        s.Poll();
+        s.Read({9});
+        const auto next = s.Runtime.GrabEdgeEvent<TEvWorker::TEvData>(s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(next->Get()->Records[0].GetOffset(), 9);
+    }
+
+    Y_UNIT_TEST(OffsetGapWithinBatchReportsDataLoss) {
+        TMockReader s(true);
+        s.Start("read-session", 0);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Poll();
+        s.Read({0, 2});
+
+        const auto events = s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->GetTypeRewrite(), TEvWorker::EvGone);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+    }
+
+    Y_UNIT_TEST(OffsetGapBetweenBatchesReportsDataLoss) {
+        TMockReader s(true);
+        s.Start("read-session", 0);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Poll();
+        s.Read({0});
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvData>(s.Worker);
+        s.Poll();
+        s.Read({2});
+
+        const auto events = s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->GetTypeRewrite(), TEvWorker::EvGone);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+    }
+
+    Y_UNIT_TEST(FirstOffsetAfterCommittedOffsetReportsDataLoss) {
+        TMockReader s(true);
+        s.Start("read-session", 7);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Poll();
+        s.Read({8});
+
+        const auto events = s.Runtime.CaptureMailboxEvents(s.Worker.Hint(), s.Worker.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->GetTypeRewrite(), TEvWorker::EvGone);
+        UNIT_ASSERT_VALUES_EQUAL(events[0]->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+    }
+
+    Y_UNIT_TEST(OffsetGapIsAllowedWhenDataLossCheckIsDisabled) {
+        TMockReader s(false);
+        s.Start("read-session", 0);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Poll();
+        s.Read({1});
+
+        const auto data = s.Runtime.GrabEdgeEvent<TEvWorker::TEvData>(s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(data->Get()->Records[0].GetOffset(), 1);
+    }
+
+    Y_UNIT_TEST(MultiOffsetMessageFollowedByNextOffsetIsDelivered) {
+        TMockReader s(true);
+        s.Start("read-session", 7);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Poll();
+
+        using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
+        TVector<TTopicMessage> messages;
+        messages.emplace_back(TMessageInformation(7, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "", 2), TString("batch"));
+        messages.emplace_back(9, "next");
+        s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvReadTopicResponse(0, std::move(messages)));
+
+        TAutoPtr<IEventHandle> result;
+        s.Runtime.GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvWorker::EvData);
+        const auto& records = result->Get<TEvWorker::TEvData>()->Records;
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(records[0].GetOffset(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(records[0].GetLogicalMessageCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(records[1].GetOffset(), 9);
+    }
+
+    struct TRetentionGapTest {
+        TEnv<> Env{true, ERuntimeMode::Simulated};
+        const TString TopicPath = "/Root/topic";
+        const TString ConsumerName = "consumer";
+
+        TRetentionGapTest() {
+            Env.GetRuntime().GetAppData().FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
+            const auto create = Env.Send<TEvYdbProxy::TEvCreateTopicResponse>(Env.GetYdbProxy(),
+                new TEvYdbProxy::TEvCreateTopicRequest(TopicPath, NYdb::NTopic::TCreateTopicSettings()
+                    .RetentionPeriod(TDuration::Minutes(1))
+                    .BeginAddConsumer().ConsumerName(ConsumerName).EndAddConsumer()));
+            UNIT_ASSERT_C(create->Get()->Result.IsSuccess(), create->Get()->Result.GetIssues().ToString());
+            UNIT_ASSERT(Env.RunCall([&] { return WriteTopic(Env, TopicPath, "expired"); }));
+        }
+
+        TActorId StartReader() {
+            auto settings = TEvYdbProxy::TTopicReaderSettings()
+                .AutoCommit(false)
+                .FailOnDataLoss(true)
+                .ConsumerName(ConsumerName)
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(TopicPath).AppendPartitionIds(0));
+            const auto reader = CreateReader(Env, settings);
+            const auto started = Env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvReaderStarted>(Env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT(started);
+            UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 0);
+            return reader;
+        }
+
+        void ExpireFirstMessageAndWriteLater() {
+            auto& runtime = Env.GetRuntime();
+            NYdb::NTopic::TTopicClient topicClient(Env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
+                .DiscoveryEndpoint(Env.GetEndpoint()).Database(Env.GetDatabase()));
+            ui64 retainedStartOffset = 0;
+            for (ui32 attempt = 0; attempt < 10 && retainedStartOffset == 0; ++attempt) {
+                runtime.AdvanceCurrentTime(TDuration::Minutes(2));
+                auto description = Env.RunCall([&] {
+                    return topicClient.DescribeTopic(TopicPath, NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).ExtractValueSync();
+                });
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                const auto& partitions = description.GetTopicDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                UNIT_ASSERT(partitions.front().GetPartitionStats());
+                retainedStartOffset = partitions.front().GetPartitionStats()->GetStartOffset();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(retainedStartOffset, 1);
+
+            auto consumer = Env.RunCall([&] {
+                return topicClient.DescribeConsumer(TopicPath, ConsumerName,
+                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(consumer.IsSuccess(), consumer.GetIssues().ToString());
+            const auto& consumerPartitions = consumer.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(consumerPartitions.size(), 1);
+            UNIT_ASSERT(consumerPartitions.front().GetPartitionConsumerStats());
+            UNIT_ASSERT_VALUES_EQUAL(consumerPartitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), 0);
+
+            const auto alter = Env.Send<TEvYdbProxy::TEvAlterTopicResponse>(Env.GetYdbProxy(),
+                new TEvYdbProxy::TEvAlterTopicRequest(TopicPath,
+                    NYdb::NTopic::TAlterTopicSettings().SetRetentionPeriod(TDuration::Days(1))));
+            UNIT_ASSERT_C(alter->Get()->Result.IsSuccess(), alter->Get()->Result.GetIssues().ToString());
+            UNIT_ASSERT(Env.RunCall([&] { return WriteTopic(Env, TopicPath, "later"); }));
+        }
+
+        void AssertDataLoss(const TActorId& reader) {
+            auto& runtime = Env.GetRuntime();
+            TAutoPtr<IEventHandle> result;
+            runtime.GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(result, TDuration::Seconds(30));
+            Env.SendAsync(reader, new TEvents::TEvPoison());
+            runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
+            if (result->GetTypeRewrite() == TEvWorker::EvData) {
+                UNIT_FAIL("Reader delivered data after retention advanced beyond committed offset 0");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get<TEvWorker::TEvGone>()->ErrorDescription, "expected offset 0, got 1");
+        }
+    };
+
+    Y_UNIT_TEST(RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss) {
+        TRetentionGapTest s;
+        auto& runtime = s.Env.GetRuntime();
+
+        TVector<TAutoPtr<IEventHandle>> heldReads;
+        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvRead>([&](NGRpcProxy::V1::TEvPQProxy::TEvRead::TPtr& ev) {
+            heldReads.emplace_back(ev.Release());
+        });
+
+        const auto reader = s.StartReader();
+
+        s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return !heldReads.empty(); };
+        runtime.DispatchEvents(options, TDuration::Seconds(30));
+        UNIT_ASSERT(!heldReads.empty());
+
+        s.ExpireFirstMessageAndWriteLater();
+
+        readObserver.Remove();
+        for (auto& read : heldReads) {
+            runtime.Send(read.Release());
+        }
+
+        s.AssertDataLoss(reader);
+    }
+
+    Y_UNIT_TEST(RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss) {
+        TRetentionGapTest s;
+        s.ExpireFirstMessageAndWriteLater();
+        const auto reader = s.StartReader();
+
+        s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
+        s.AssertDataLoss(reader);
     }
 }
 

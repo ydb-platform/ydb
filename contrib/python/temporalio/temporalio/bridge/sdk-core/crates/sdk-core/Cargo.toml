@@ -1,0 +1,272 @@
+[package]
+name = "temporalio-sdk-core"
+version = "0.6.0"
+authors = ["Temporal Technologies Inc. <sdk@temporal.io>"]
+edition = "2024"
+license-file = "LICENSE.txt"
+description = "Library for building new Temporal SDKs"
+homepage = "https://temporal.io/"
+repository = "https://github.com/temporalio/sdk-rust"
+keywords = ["temporal", "workflow"]
+categories = ["development-tools"]
+exclude = ["machine_coverage/*"]
+# due to cargo msrv find
+rust-version = "1.88.0"
+
+[lib]
+
+[features]
+default = ["envconfig", "prometheus", "tls-ring"]
+tls-ring = [
+  "temporalio-client/tls-ring",
+  "temporalio-common/tls-ring",
+  "opentelemetry-otlp?/tls-ring",
+  "reqwest?/rustls-no-provider",
+  "tonic/tls-native-roots",
+]
+tls-aws-lc = [
+  "temporalio-client/tls-aws-lc",
+  "temporalio-common/tls-aws-lc",
+  "opentelemetry-otlp?/tls-aws-lc",
+  "reqwest?/rustls",
+  "tonic/tls-native-roots",
+]
+envconfig = ["temporalio-client/envconfig", "temporalio-common/envconfig"]
+prometheus = ["temporalio-common/prometheus"]
+otel = [
+  "dep:opentelemetry",
+  "dep:opentelemetry_sdk",
+  "dep:opentelemetry-otlp",
+  "temporalio-common/otel",
+]
+ephemeral-server = ["dep:flate2", "dep:reqwest", "dep:tar", "dep:zip"]
+debug-plugin = ["dep:reqwest", "dep:hyper"]
+# Exposes mocks and helpers used by sdk-core's own integration tests, benches,
+# and the `histfetch` binary. Not part of the public API surface; downstream
+# crates should not enable this feature.
+test-utilities = ["dep:assert_matches", "dep:bimap"]
+antithesis_assertions = ["dep:antithesis_sdk"]
+dynamic-tls = ["temporalio-client/dynamic-tls"]
+
+[dependencies]
+anyhow = "1.0"
+antithesis_sdk = { version = "0.2.1", optional = true, default-features = false, features = [
+  "full",
+] }
+assert_matches = { version = "1.5", optional = true }
+backon = { version = "1.6", default-features = false }
+bimap = { version = "0.6.3", optional = true }
+async-trait = "0.1"
+bon = { workspace = true }
+crossbeam-channel = "0.5"
+crossbeam-utils = "0.8"
+derive_more = { workspace = true }
+enum_dispatch = "0.3"
+enum-iterator = "2"
+flate2 = { version = "1.1", optional = true }
+futures = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
+gethostname = "1.0.2"
+hyper = { version = "1.7", optional = true }
+itertools = "0.14"
+lru = "0.18"
+mockall = "0.14"
+opentelemetry = { workspace = true, features = ["metrics"], optional = true }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = [
+  "rt-tokio",
+  "metrics",
+  "spec_unstable_metrics_views",
+], optional = true }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
+  "tokio",
+  "metrics",
+  "http-proto",
+  "grpc-tonic",
+  "reqwest-blocking-client",
+], optional = true }
+parking_lot = { version = "0.12" }
+pid = "4.0"
+pin-project = "1.1"
+prost = { workspace = true }
+prost-types = { workspace = true }
+rand = "0.10"
+reqwest = { version = "0.13", features = [
+  "json",
+  "stream",
+  "query",
+], default-features = false, optional = true }
+serde = "1.0"
+serde_json = { workspace = true }
+siphasher = "1.0"
+slotmap = "1.0"
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+tar = { version = "0.4", optional = true }
+thiserror = { workspace = true }
+tokio = { version = "1.47", default-features = false, features = [
+  "rt",
+  "rt-multi-thread",
+  "parking_lot",
+  "time",
+  "fs",
+  "process",
+  "macros",
+] }
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
+tokio-stream = { version = "0.1", default-features = false }
+tonic = { workspace = true, default-features = false, features = [
+  "tls-native-roots",
+  "transport",
+  "codegen",
+] }
+tracing = "0.1"
+url = "2.5"
+uuid = { version = "1.18", default-features = false, features = ["v4"] }
+# Only need specific features to decompress zip files for ephemeral server download
+zip = { version = "8.4", optional = true, default-features = false, features = [
+  "deflate",
+  "bzip2",
+  "zstd",
+] }
+
+# 1st party local deps
+[dependencies.temporalio-common]
+path = "../common"
+version = "0.6"
+default-features = false
+features = ["core-telemetry-bridge", "serde_serialize"]
+
+[dependencies.temporalio-client]
+path = "../client"
+version = "0.6"
+default-features = false
+features = ["core-based-sdk"]
+
+[dependencies.temporalio-macros]
+path = "../macros"
+version = "0.6"
+
+[dev-dependencies]
+assert_matches = "1.5"
+bimap = "0.6.3"
+bytes = "1.10"
+clap = { version = "4.5", features = ["derive"] }
+criterion = { version = "0.8", features = ["async", "async_tokio"] }
+crossbeam-queue = "0.3"
+flate2 = "1.1"
+http-body-util = { version = "0.1" }
+hyper = { version = "1.7" }
+hyper-util = { version = "0.1", features = [
+  "server",
+  "http1",
+  "http2",
+  "tokio",
+] }
+rstest = "0.26"
+semver = "1.0"
+temporalio-sdk = { path = "../sdk", features = ["wasm-workflows"] }
+temporalio-common = { path = "../common", version = "0.6", default-features = false }
+temporalio-workflow = { path = "../workflow" }
+tokio = { version = "1.47", default-features = false, features = [
+  "rt",
+  "rt-multi-thread",
+  "parking_lot",
+  "time",
+  "fs",
+  "process",
+  "test-util",
+  "macros",
+] }
+tokio-stream = { version = "0.1", default-features = false, features = ["net"] }
+tonic = { workspace = true, default-features = false, features = ["router"] }
+tracing-subscriber = { version = "0.3", default-features = false }
+trybuild = { version = "1.0", features = ["diff"] }
+
+[[bin]]
+name = "histfetch"
+path = "src/histfetch.rs"
+required-features = ["test-utilities"]
+
+[[bin]]
+name = "changelog-release-notes"
+path = "src/changelog_release_notes.rs"
+
+[[test]]
+name = "integ_tests"
+path = "tests/main.rs"
+# Prevents autodiscovery, and hence these getting run with `cargo test`. Run with
+# `cargo test --test integ_tests`
+test = false
+required-features = [
+  "temporalio-common/serde_serialize",
+  "test-utilities",
+  "ephemeral-server",
+]
+
+[[test]]
+name = "heavy_tests"
+path = "tests/heavy_tests.rs"
+test = false
+required-features = ["test-utilities"]
+
+[[test]]
+name = "manual_tests"
+path = "tests/manual_tests.rs"
+test = false
+required-features = ["test-utilities"]
+
+[[test]]
+name = "wasm_workflow_tests"
+path = "tests/wasm_workflow_tests.rs"
+# Prevents autodiscovery, and hence these getting run with `cargo test`. Run with
+# `cargo integ-test -t wasm_workflow_tests`. Building these requires `cargo component` plus both
+# `wasm32-unknown-unknown` and `wasm32-wasip1`; cargo-component still validates the WASIp1 target
+# even when this sample is built with an explicit unknown-unknown target.
+test = false
+required-features = [
+  "temporalio-common/serde_serialize",
+  "test-utilities",
+  "ephemeral-server",
+]
+
+[[test]]
+name = "global_metric_tests"
+path = "tests/global_metric_tests.rs"
+test = false
+required-features = ["test-utilities"]
+
+[[test]]
+name = "cloud_tests"
+path = "tests/cloud_tests.rs"
+test = false
+required-features = ["test-utilities"]
+
+[[test]]
+name = "fsm_procmacro"
+path = "tests/fsm_procmacro.rs"
+required-features = ["temporalio-common/serde_serialize"]
+
+[[bench]]
+name = "workflow_replay"
+path = "benches/workflow_replay_bench.rs"
+test = false
+harness = false
+required-features = ["test-utilities"]
+
+# The integration test runner should compile with the same configuration as the
+# rest of the integration tests so that artifacts are shared and no additional
+# compilation is required when switching between using the runner and running
+# tests directly.
+[[test]]
+name = "integ_runner"
+path = "tests/runner.rs"
+harness = false
+test = false
+required-features = [
+  "temporalio-common/serde_serialize",
+  "test-utilities",
+  "ephemeral-server",
+]
+
+
+[lints]
+workspace = true

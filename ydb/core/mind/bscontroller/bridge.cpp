@@ -109,7 +109,8 @@ public:
                 if (!--self->NumPendingBridgeSyncFinishedResponses) {
                     Y_ABORT_UNLESS(self->CheckingUnsyncedBridgePiles);
                     self->CheckingUnsyncedBridgePiles = false;
-                    if (self->NotifyBridgeSyncFinishedErrors) {
+                    // the check requested while the notifications were in flight didn't run, so it runs now
+                    if (self->NotifyBridgeSyncFinishedErrors || self->RecheckUnsyncedBridgePiles) {
                         self->CheckUnsyncedBridgePiles();
                     }
                 }
@@ -1090,6 +1091,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             updateNodeWarden = true;
 
             if (syncer.HasErrorReason()) {
+                syncerState.NotBefore = TActivationContext::Monotonic() + syncerState.RetryBackoff.Next();
                 NKikimrBridge::TGroupState::EStage stage = NKikimrBridge::TGroupState::BLOCKS;
                 TBridgePileId pileId;
                 const auto *pile = NBridge::FindGroupPile(bridgeGroupInfo.GetBridgeGroupState(), [&](TBridgePileId id,
@@ -1114,6 +1116,8 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 // this is just a repeat
                 continue;
             }
+            syncerState.RetryBackoff.Reset();
+            syncerState.NotBefore = {};
 
             // let's update syncer state (switch it to next one)
             auto *state = bridgeGroupInfo.MutableBridgeGroupState();
@@ -1254,6 +1258,11 @@ bool TBlobStorageController::IsBridgeUpgradeSyncer(const TSyncerState& syncerSta
     return pile && pile->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
 }
 
+void TBlobStorageController::HandleRetrySyncers() {
+    SyncersRetryAt = TMonotonic::Max();
+    ProcessSyncers();
+}
+
 void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
     if (nodesToUpdate.empty() && TActivationContext::Monotonic() < LoadedAt + TDuration::Seconds(10)) {
         return; // give nodes some time to connect to BSC
@@ -1270,12 +1279,18 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         return *numUpgradeSyncersCounted;
     };
 
+    const TMonotonic now = TActivationContext::Monotonic();
+    TMonotonic retryAt = TMonotonic::Max();
     for (auto it = SyncersRequiringAction.begin(); it != SyncersRequiringAction.end(); ) {
         TSyncerState& syncerState = *it++;
 
         if (syncerState.InCommit || syncerState.NodeIds) { // can't happen
             Y_FAIL_S("InCommit# " << syncerState.InCommit
                 << " NodeIds# " << FormatList(syncerState.NodeIds | std::views::keys));
+        }
+        if (now < syncerState.NotBefore) {
+            retryAt = Min(retryAt, syncerState.NotBefore);
+            continue; // the syncer has failed recently, it is started later
         }
 
         const NKikimrBlobStorage::TGroupInfo *bridgeGroupInfo = nullptr;
@@ -1424,6 +1439,11 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
                 ++numUpgradeSyncers();
             }
         }
+    }
+
+    if (retryAt < SyncersRetryAt) {
+        SyncersRetryAt = retryAt;
+        TActivationContext::Schedule(retryAt, new IEventHandle(TEvPrivate::EvRetrySyncers, 0, SelfId(), {}, nullptr, 0));
     }
 
     for (TNodeId nodeId : nodesToUpdate) {

@@ -43,9 +43,9 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
                 CreateTable(runtime, t.TxId, "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -89,9 +89,9 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
                 CreateTable(runtime, t.TxId, "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -128,9 +128,9 @@ Y_UNIT_TEST_SUITE(SchemeshardForcedCompactionTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-                runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
                 CreateTable(runtime, t.TxId, "Table1");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);

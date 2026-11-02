@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "TimeSkippingProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+
+// FastForwardPollingResult is the result of polling and waiting for a fast-forward to complete
+// on a time-skipping execution.
+// FAST_FORWARD_POLLING_RESULT_POLL_TIMEOUT and FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED
+// are the normal poll outcomes; FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED means the
+// fast-forward can no longer complete.
+enum FastForwardPollingResult {
+    // Never returned; guards against an unset result.
+    FAST_FORWARD_POLLING_RESULT_UNSPECIFIED = 0;
+    // The poll timed out server-side before the fast-forward completed. The caller may poll again.
+    FAST_FORWARD_POLLING_RESULT_POLL_TIMEOUT = 1;
+    // The fast-forward identified by the request's `fast_forward_id` reached its target time and completed.
+    FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED = 2;
+    // The fast-forward can no longer complete, which usually indicates improper usage of
+    // fast-forward on the client side. Possible reasons: the `fast_forward_id` does not match
+    // the execution's current fast-forward, the execution ended before the fast-forward
+    // completed, the fast-forward config was updated while the poll was in flight, etc.
+    // See `failed_reason` in the response for the specific cause.
+    FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED = 3;
+}

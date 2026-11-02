@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
@@ -85,6 +86,8 @@ struct Schema : NIceDb::Schema {
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
+        struct FailRealmStates : Column<18, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TFailRealmStates; };
+
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
@@ -101,7 +104,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
-              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo, FailRealmStates>;
     };
 
     struct State : Table<1> {
@@ -136,6 +139,7 @@ struct Schema : NIceDb::Schema {
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DatabaseSpaceBlockColor : Column<30, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct DatabaseSpaceUnblockColor : Column<31, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
+        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -143,7 +147,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2, DatabaseSpaceBlockColor, DatabaseSpaceUnblockColor, DataCenterStates>;
     };
 
     struct VSlot : Table<5> {
@@ -372,11 +376,9 @@ struct Schema : NIceDb::Schema {
         struct ReadCentric : Column<5, HostConfigDrive::ReadCentric::ColumnType> {};
         struct Kind : Column<6, HostConfigDrive::Kind::ColumnType> {};
 
-        // Serialized TNodeLocation; null preserves filters written before location support.
-        struct Location : Column<7, NScheme::NTypeIds::String> {};
-
-        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, Location>;
-        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind, Location>;
+        // Keep the legacy key unchanged: older controllers use its length for prefix scans.
+        using TKey = TableKey<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, TypeCol, SharedWithOs, ReadCentric, Kind>;
     };
 
     struct GroupStoragePool : Table<123> {
@@ -515,6 +517,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BoxId, StoragePoolId>;
     };
 
+    struct BoxStoragePoolPDiskFilterV2 : Table<136> {
+        using BoxId = BoxStoragePoolPDiskFilter::BoxId;
+        using StoragePoolId = BoxStoragePoolPDiskFilter::StoragePoolId;
+        // A protobuf key allows adding filter properties without extending the table key.
+        struct Filter : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TPDiskFilter; };
+
+        using TKey = TableKey<BoxId, StoragePoolId, Filter>;
+        using TColumns = TableColumns<BoxId, StoragePoolId, Filter>;
+    };
+
 
     using TTables = SchemaTables<
         Node,
@@ -543,7 +555,8 @@ struct Schema : NIceDb::Schema {
         BridgeSyncState,
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,
-        DatabaseSpaceExhaustedPool
+        DatabaseSpaceExhaustedPool,
+        BoxStoragePoolPDiskFilterV2
     >;
 
     using TSettings = SchemaSettings<

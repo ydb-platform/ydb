@@ -57,6 +57,13 @@ message TLayout {
     repeated TBTreeIndexMeta BTreeHistoricIndexes = 12;
     optional uint32 BTreeIndexesFormatVersion = 13;
     repeated TBloomFilterMeta ByKeyPrefixes = 14; // Per-prefix bloom filter pages
+
+    // Descriptor pages (root, bloom, frames, globs, stats) are in a separate page collection 0,
+    // data pages of group G are in page collection G + 1
+    optional bool SeparateDescriptorCollection = 15;
+    // Indexes are in the descriptor page collection, otherwise with data of their group
+    optional bool KeyIndexInDescriptor = 16 [default = true]; // Main group index
+    optional bool GroupIndexesInDescriptor = 17 [default = true]; // Other groups indexes
 }
 
 message TStat {

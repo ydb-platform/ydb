@@ -4,6 +4,7 @@
 #include "datashard_failpoints.h"
 #include "read_iterator.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -1029,6 +1030,65 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
     Y_UNIT_TEST(ShouldReadRangeArrow) {
         TestReadRangeMovies(NKikimrDataEvents::FORMAT_ARROW);
+    }
+
+    Y_UNIT_TEST(ShouldHelpQueuedReadOnOverload) {
+        TTestHelper helper;
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto& table = helper.Tables.at("table-1");
+        const auto shardActor = ResolveTablet(runtime, table.TabletId);
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto snapshot = CreateVolatileSnapshot(helper.Server, {"/Root/table-1"}, TDuration::Hours(1));
+        auto makeRead = [&](ui64 readId) {
+            auto request = helper.GetBaseReadRequest("table-1", readId, NKikimrDataEvents::FORMAT_CELLVEC, snapshot);
+            AddKeyQuery(*request, {1, 1, 1});
+            return request;
+        };
+
+        // Warm the read so helping can finish it without waiting for pages.
+        auto warmResult = helper.SendRead("table-1", makeRead(1).release());
+        CheckResult(table.UserTable, *warmResult, {{1, 1, 1, 100}});
+        UNIT_ASSERT(warmResult->Record.GetFinished());
+
+        // CheckInflightLimit rejects when the count is greater than the limit,
+        // so a limit of one admits two iterators before rejecting the next read.
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->DataShardControls.MaxTxInFly);
+        TBlockEvents<IEventHandle> blockedActivations(runtime, [&](const IEventHandle::TPtr& ev) {
+            return ev->GetTypeName().Contains("TEvActivateLowExecution");
+        });
+        for (ui64 readId : {2, 3}) {
+            runtime.Send(new IEventHandle(shardActor, sender, makeRead(readId).release()), 0, true);
+        }
+        runtime.WaitFor("blocked low-priority activation", [&] { return !blockedActivations.empty(); }, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount"), 2);
+
+        runtime.Send(new IEventHandle(shardActor, sender, makeRead(4).release()), 0, true);
+        std::map<ui64, TEvDataShard::TEvReadResult::TPtr> results;
+        for (size_t i = 0; i < 2; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(5));
+            UNIT_ASSERT_C(ev, "Expected the helped read and overload results while activations are blocked");
+            const ui64 readId = ev->Get()->Record.GetReadId();
+            UNIT_ASSERT(results.emplace(readId, std::move(ev)).second);
+        }
+
+        const auto& helped = *results.at(2)->Get();
+        CheckResult(table.UserTable, helped, {{1, 1, 1, 100}});
+        UNIT_ASSERT(helped.Record.GetFinished());
+        const auto& rejected = results.at(4)->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetStatus().GetCode(), Ydb::StatusIds::OVERLOADED);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(rejected.GetStatus().GetIssues(0).message().Contains("MaxTxInFly"));
+        // Helping runs exactly one transaction and still rejects the new read,
+        // even though completing the queued read frees an admission slot.
+        UNIT_ASSERT_VALUES_EQUAL(helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount"), 1);
+
+        blockedActivations.Stop().Unblock();
+        auto remaining = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(5));
+        UNIT_ASSERT(remaining);
+        UNIT_ASSERT_VALUES_EQUAL(remaining->Get()->Record.GetReadId(), 3);
+        CheckResult(table.UserTable, *remaining->Get(), {{1, 1, 1, 100}});
+        UNIT_ASSERT(remaining->Get()->Record.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(helper.GetSimpleCounter("table-1", "DataShard/ReadIteratorsCount"), 0);
     }
 
     Y_UNIT_TEST(ShouldReadKeyOnlyValueColumn) {

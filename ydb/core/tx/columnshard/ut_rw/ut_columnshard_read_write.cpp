@@ -2643,6 +2643,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         auto ydbSchema = table.Schema;
         auto planStep = SetupSchema(runtime, sender, tableId);
 
+        const auto getTableStats = [&]() {
+            NKikimrTableStats::TTableStats stats;
+            csDefaultControllerGuard->GetTheOnlyShard()->GetTabletCounters().FillStats(stats);
+            return stats;
+        };
+
         constexpr ui32 numRows = 10;
         std::pair<ui64, ui64> portion = { 10, 10 + numRows };
         auto testData = MakeTestBlob(portion, ydbSchema);
@@ -2721,8 +2727,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
+            const auto statsBeforeDelete = getTableStats();
+            UNIT_ASSERT_VALUES_EQUAL(statsBeforeDelete.GetRowDeletes(), 0);
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
+            // Count delete writes before commit, separately from updates.
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), numRows);
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowUpdates(), statsBeforeDelete.GetRowUpdates());
             auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
@@ -2732,6 +2743,18 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), numRows);
+        }
+        {
+            // Erasing missing keys is still delete work, even if the transaction is later aborted.
+            constexpr ui64 lockId = 2;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete, lockId));
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), 2 * numRows);
+            TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, lockId);
+            UNIT_ASSERT_VALUES_EQUAL(writer.Abort(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(getTableStats().GetRowDeletes(), 2 * numRows);
         }
     }
 
@@ -3879,6 +3902,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_GE(compactionsHappened, previousCompactionsHappened);
         UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
         UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
+
+        // Compaction cleanup removes physical rows without deleting logical rows.
+        const auto& counters = csDefaultControllerGuard->GetTheOnlyShard()->GetTabletCounters();
+        UNIT_ASSERT_GT(counters.GetValue(COUNTER_ROWS_ERASED), 0);
+        NKikimrTableStats::TTableStats stats;
+        counters.FillStats(stats);
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetRowDeletes(), 0);
     }
 
     void TestCleanupSnapshotPersistenceAfterReboot() {

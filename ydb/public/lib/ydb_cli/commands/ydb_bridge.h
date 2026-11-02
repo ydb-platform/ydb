@@ -29,7 +29,6 @@ private:
     TString FilePath;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
-    std::vector<TString> QuorumPiles;
 };
 
 class TCommandBridgeList : public TYdbReadOnlyCommand, public TCommandWithOutput {

@@ -87,6 +87,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
@@ -277,6 +278,7 @@ private:
 public:
     struct TPipeInfo {
         TActorId PartActor;
+        TActorId ClientActor;
         TString Owner;
         ui32 ServerActors = 0;
         TString SessionId;

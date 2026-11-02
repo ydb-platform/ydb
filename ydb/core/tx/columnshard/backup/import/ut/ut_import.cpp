@@ -216,9 +216,12 @@ NKikimrTxColumnShard::TRestoreTxBody MakeRestoreTxBody(const ui64 tableId, const
 Y_UNIT_TEST_SUITE(Restore) {
     using EDataFormat = NDataShard::NBackupRestoreTraits::EDataFormat;
 
-    [[nodiscard]] TPlanStep ProposeTx(
-        TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
+    [[nodiscard]] TPlanStep ProposeTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind,
+        const TString& txBody, const ui64 txId, std::optional<TMessageSeqNo> seqNo = std::nullopt) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
+        if (seqNo) {
+            *event->Record.MutableSeqNo() = seqNo->SerializeToProto();
+        }
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
@@ -270,9 +273,9 @@ Y_UNIT_TEST_SUITE(Restore) {
 
     template <class TCounter>
     void RunCountedTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody,
-        ui64& txId, const TCounter& counter) {
+        ui64& txId, const TCounter& counter, std::optional<TMessageSeqNo> seqNo = std::nullopt) {
         AFL_VERIFY(counter() == 0);
-        const auto planStep = ProposeTx(runtime, sender, txKind, txBody, ++txId);
+        const auto planStep = ProposeTx(runtime, sender, txKind, txBody, ++txId, seqNo);
         AFL_VERIFY(counter() == 1);
         PlanAndWait(runtime, sender, txKind, planStep, txId);
     }
@@ -332,14 +335,42 @@ Y_UNIT_TEST_SUITE(Restore) {
             ui64 txId = 111;
             TActorId sender = runtime.AllocateEdgeActor();
 
-            RunCountedTx(
-                runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucketName).SerializeAsString(), txId, [&]() {
-                    return csControllerGuard->GetFinishedImportsCount();
-                });
+            const TString restoreTxBody = MakeRestoreTxBody(tableId, bucketName).SerializeAsString();
+            const TMessageSeqNo seqNo(1, 1);
+            RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, restoreTxBody, txId, [&]() {
+                return csControllerGuard->GetFinishedImportsCount();
+            }, seqNo);
             TestWaitCondition(runtime, "import", [&]() {
                 return true;
             });
             VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+
+            for (const bool reboot : { false, true }) {
+                if (reboot) {
+                    RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+                }
+                // A delayed retry of the propose for a completed restore is a stale duplicate: it must be dropped
+                // without a reply and without creating a new operator.
+                {
+                    auto retry = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                        NKikimrTxColumnShard::TX_KIND_RESTORE, sender, txId, restoreTxBody);
+                    *retry->Record.MutableSeqNo() = seqNo.SerializeToProto();
+                    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, retry.release());
+                    UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+                }
+                VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+                if (reboot) {
+                    RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime), 0u);
+
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(txId));
+                auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+                UNIT_ASSERT_C(ev, "Completed restore must reply after a retry propose");
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+                VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+            }
 
             YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
                 {"TESTSTEP", 8});
@@ -596,6 +627,8 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            // S3 uses real HTTP threads; allow replies to arrive before simulated timers exhaust the event limit.
+            runtime.SetFastSimulatedTime(false);
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             auto planStep = PrepareTablet(runtime, tableId, schema, 2);
             ui64 txId = 111;
@@ -616,6 +649,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            runtime.SetFastSimulatedTime(false);
             auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             Y_UNUSED(PrepareTablet(runtime, tableId, schema, 2));
             ui64 txId = 111;

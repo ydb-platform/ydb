@@ -66,21 +66,21 @@
 /ydb/core/audit @ydb-platform/security
 /ydb/core/log_backend/ut @ydb-platform/security
 /ydb/core/security @ydb-platform/security
-/ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
-/ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
+/ydb/core/tx/schemeshard/ut_login* @ydb-platform/security
+/ydb/core/tx/schemeshard/ut_login_large @ydb-platform/security
 /ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
 /ydb/library/aclib @ydb-platform/security
-/ydb/library/login @ydb-platform/Security
-/ydb/library/security @ydb-platform/Security
+/ydb/library/login @ydb-platform/security
+/ydb/library/security @ydb-platform/security
 /ydb/mvp/core/ut @ydb-platform/security
 /ydb/mvp/meta @ydb-platform/security
 /ydb/mvp/oidc_proxy @ydb-platform/security
-/ydb/services/scheme_secret/ut @ydb-platform/Security
+/ydb/services/scheme_secret/ut @ydb-platform/security
 /ydb/tests/functional/audit @ydb-platform/security
 /ydb/tests/functional/mvp/meta @ydb-platform/security
 /ydb/tests/functional/mvp/oidc_proxy @ydb-platform/security
-/ydb/tests/functional/secrets @ydb-platform/Security
-/ydb/tests/functional/security @ydb-platform/Security
+/ydb/tests/functional/secrets @ydb-platform/security
+/ydb/tests/functional/security @ydb-platform/security
 
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/engine @ydb-platform/qp
@@ -121,7 +121,7 @@
 /ydb/tests/functional/benchmarks_init @ydb-platform/engineering
 /ydb/tests/functional/minidumps @ydb-platform/engineering
 /ydb/tests/functional/wardens @ydb-platform/engineering
-/ydb/tests/library @ydb-platform/Engineering
+/ydb/tests/library @ydb-platform/engineering
 /ydb/tests/stability @ydb-platform/engineering
 /ydb/tests/stress @ydb-platform/engineering
 /ydb/tests/tools/nemesis @ydb-platform/engineering
@@ -213,32 +213,32 @@
 /ydb/tests/stress/system_tablet_backup @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
-/ydb/core/http_proxy @ydb-platform/Topics
-/ydb/core/kafka_proxy @ydb-platform/Topics
-/ydb/core/persqueue @ydb-platform/Topics
+/ydb/core/http_proxy @ydb-platform/topics
+/ydb/core/kafka_proxy @ydb-platform/topics
+/ydb/core/persqueue @ydb-platform/topics
 /ydb/core/raw_socket/ut @ydb-platform/topics
-/ydb/core/transfer @ydb-platform/Topics
-/ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
-/ydb/core/ymq @ydb-platform/Topics
-/ydb/library/persqueue @ydb-platform/Topics
-/ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
-/ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
-/ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
-/ydb/services/datastreams @ydb-platform/Topics
-/ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
+/ydb/core/transfer @ydb-platform/topics
+/ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/topics
+/ydb/core/ymq @ydb-platform/topics
+/ydb/library/persqueue @ydb-platform/topics
+/ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/topics
+/ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/topics
+/ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/topics
+/ydb/services/datastreams @ydb-platform/topics
+/ydb/services/deprecated/persqueue_v0 @ydb-platform/topics
 /ydb/services/persqueue_cluster_discovery @ydb-platform/topics
-/ydb/services/persqueue_v1 @ydb-platform/Topics
+/ydb/services/persqueue_v1 @ydb-platform/topics
 /ydb/services/sqs_topic @ydb-platform/topics
-/ydb/tests/functional/federation_test @ydb-platform/Topics
+/ydb/tests/functional/federation_test @ydb-platform/topics
 /ydb/tests/functional/kafka @ydb-platform/topics
-/ydb/tests/functional/sqs @ydb-platform/Topics
+/ydb/tests/functional/sqs @ydb-platform/topics
 /ydb/tests/functional/sqs_topic @ydb-platform/topics
 /ydb/tests/functional/topic @ydb-platform/topics
-/ydb/tests/stress/kafka @ydb-platform/Topics
-/ydb/tests/stress/topic/ @ydb-platform/Topics
-/ydb/tests/stress/topic_kafka/ @ydb-platform/Topics
-/ydb/tests/stress/topic_sqs/ @ydb-platform/Topics
-/ydb/tests/stress/transfer/ @ydb-platform/Topics
+/ydb/tests/stress/kafka @ydb-platform/topics
+/ydb/tests/stress/topic/ @ydb-platform/topics
+/ydb/tests/stress/topic_kafka/ @ydb-platform/topics
+/ydb/tests/stress/topic_sqs/ @ydb-platform/topics
+/ydb/tests/stress/transfer/ @ydb-platform/topics
 
 #YDB Analytics TEAM:???
 

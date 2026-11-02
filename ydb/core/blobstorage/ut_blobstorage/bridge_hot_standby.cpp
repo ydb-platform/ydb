@@ -158,6 +158,16 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         CheckPileData(env, checker, 1, 9);
     }
 
+    // A pile out of sync can't be suspended: the suspended pile would take part in configuration quorum and count its
+    // state storage rings as synchronized ones.
+    Y_UNIT_TEST(StandbyCannotBeSuspended) {
+        TEnvironmentSetup env(MakeSettings());
+        PrepareStandby(env);
+        ExpectError(TrySwitchPileState(env, 1, NKikimrBridge::TClusterState::SUSPENDED),
+            "only SYNCHRONIZED pile can be suspended");
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
+    }
+
     Y_UNIT_TEST(CollectionForwardsOnlyKeepFlagsWithoutWaiting) {
         TEnvironmentSetup env(MakeSettings());
         const ui32 groupId = PrepareStandby(env);

@@ -327,7 +327,8 @@ message TBridgePileInfo {
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
     // Alive means a node returned whiteboard system state and was not disconnected during collection.
     // Alive counters are absent (unknown, not zero) when collection is incomplete or bridge policy
-    // prevents connections from the serving pile to this pile, including DISCONNECTED and INACTIVE.
+    // prevents connections from the serving pile to this pile. A DISCONNECTED pile can report
+    // its own alive counters; other piles are unknown from there. INACTIVE piles remain unknown.
     optional uint32 AliveNodes = 6;
     optional uint32 StorageNodes = 7; // Known static nodes.
     optional uint32 AliveStorageNodes = 8;

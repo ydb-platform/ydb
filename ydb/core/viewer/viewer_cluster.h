@@ -29,6 +29,7 @@ class TJsonCluster : public TViewerPipeClient {
     std::optional<TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStatsResponse;
 
     int WhiteboardStateRequestsInFlight = 0;
+    bool WhiteboardRequestsSent = false;
     bool WhiteboardProcessed = false;
     bool NodePileMapAvailable = false;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
@@ -212,12 +213,38 @@ private:
         }
     }
 
+    const TBridgeInfo* GetBridgeInfo() const {
+        return NodeWardenStorageConfigResponse && NodeWardenStorageConfigResponse->IsOk()
+            ? NodeWardenStorageConfigResponse->Get()->BridgeInfo.get()
+            : nullptr;
+    }
+
+    static bool CanQueryPile(const TBridgeInfo& bridgeInfo, const TBridgeInfo::TPile& pile) {
+        if (!bridgeInfo.SelfNodePile) {
+            return false;
+        }
+        if (pile.BridgePileId == bridgeInfo.SelfNodePile->BridgePileId) {
+            return NBridge::PileStateTraits(pile.State).AllowsConnectionWithinPile;
+        }
+        return NBridge::PileStateTraits(bridgeInfo.SelfNodePile->State).AllowsConnection
+            && NBridge::PileStateTraits(pile.State).AllowsConnection;
+    }
+
+    bool CanQueryNode(const TNode& node) const {
+        const auto* bridgeInfo = GetBridgeInfo();
+        return !bridgeInfo || !node.PileNum
+            || (*node.PileNum < bridgeInfo->Piles.size() && CanQueryPile(*bridgeInfo, bridgeInfo->Piles[*node.PileNum]));
+    }
+
     std::vector<TNodeBatch> BatchNodes() {
         std::vector<TNodeBatch> batches;
         if (OffloadMerge) {
             std::unordered_map<TSubDomainKey, TNodeBatch> batchSubDomain;
             std::unordered_map<TString, TNodeBatch> batchDataCenters;
             for (TNode& node : NodeData) {
+                if (!CanQueryNode(node)) {
+                    continue;
+                }
                 if (node.Static) {
                     batchDataCenters[node.DataCenter].NodesToAskAbout.push_back(&node);
                 } else {
@@ -238,6 +265,9 @@ private:
         } else {
             TNodeBatch nodeBatch;
             for (TNode& node : NodeData) {
+                if (!CanQueryNode(node)) {
+                    continue;
+                }
                 nodeBatch.NodesToAskAbout.push_back(&node);
             }
             SplitBatch(nodeBatch, batches);
@@ -252,6 +282,16 @@ private:
 
         if (NodeStateResponse && !NodeStateResponse->IsDone()) {
             return false;
+        }
+
+        if (NodeWardenStorageConfigResponse && !NodeWardenStorageConfigResponse->IsDone()) {
+            return false;
+        }
+
+        if (const auto* bridgeInfo = GetBridgeInfo(); bridgeInfo && bridgeInfo->SelfNodePile
+                && !NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).AllowsConnection) {
+            // Local whiteboard collection must not wait for tablets in other piles.
+            return true;
         }
 
         if (ListTenantsResponse && !ListTenantsResponse->IsDone()) {
@@ -387,9 +427,13 @@ private:
             ListTenantsResponse.reset();
         }
 
-        if (TimeToAskWhiteboard()) {
+        if (!WhiteboardRequestsSent && TimeToAskWhiteboard()) {
+            WhiteboardRequestsSent = true;
             std::vector<TNodeBatch> batches = BatchNodes();
             SendWhiteboardRequests(batches);
+            if (WhiteboardStateRequestsInFlight == 0) {
+                ProcessWhiteboard();
+            }
         }
     }
 
@@ -1065,8 +1109,6 @@ private:
                             }
                         }
                     }
-                    const bool selfAllowsConnection = srcBridgeInfo.SelfNodePile
-                        && NBridge::PileStateTraits(srcBridgeInfo.SelfNodePile->State).AllowsConnection;
                     for (const auto& pile : srcBridgeInfo.Piles) {
                         if (pile.IsFreeSlot) {
                             continue;
@@ -1083,10 +1125,8 @@ private:
                             pbBridgePileInfo.SetNodes(nodes.Storage + nodes.Compute);
                             pbBridgePileInfo.SetStorageNodes(nodes.Storage);
                             pbBridgePileInfo.SetComputeNodes(nodes.Compute);
-                            // Even running nodes may be unreachable by bridge policy. In particular,
-                            // DISCONNECTED permits only static connections within the same pile.
-                            if (WhiteboardProcessed && selfAllowsConnection
-                                    && NBridge::PileStateTraits(pile.State).AllowsConnection) {
+                            // A DISCONNECTED pile can still be queried from within that same pile.
+                            if (WhiteboardProcessed && CanQueryPile(srcBridgeInfo, pile)) {
                                 pbBridgePileInfo.SetAliveNodes(nodes.AliveStorage + nodes.AliveCompute);
                                 pbBridgePileInfo.SetAliveStorageNodes(nodes.AliveStorage);
                                 pbBridgePileInfo.SetAliveComputeNodes(nodes.AliveCompute);

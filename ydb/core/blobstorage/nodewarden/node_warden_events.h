@@ -191,15 +191,33 @@ namespace NKikimr::NStorage {
         const ui32 BridgeProxyGroupGeneration;
         const TGroupId SourceGroupId;
         const TGroupId TargetGroupId;
+        const bool Reconcile;
+        const bool Thorough;
         std::optional<TString> ErrorReason;
 
         TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
-                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
+                TGroupId sourceGroupId, TGroupId targetGroupId, bool reconcile, bool thorough,
+                std::optional<TString> errorReason)
             : BridgeProxyGroupId(bridgeProxyGroupId)
             , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
             , SourceGroupId(sourceGroupId)
             , TargetGroupId(targetGroupId)
+            , Reconcile(reconcile)
+            , Thorough(thorough)
             , ErrorReason(errorReason)
+        {}
+    };
+
+    // the bridge proxy tells that the part of HOT_STANDBY pile has missed a write, so it needs to be reconciled
+    struct TEvNodeWardenStandbyDirty
+        : TEventLocal<TEvNodeWardenStandbyDirty, TEvBlobStorage::EvNodeWardenStandbyDirty>
+    {
+        const TGroupId TargetGroupId;
+        const bool Data; // a blob write may have been lost, not just garbage collection
+
+        TEvNodeWardenStandbyDirty(TGroupId targetGroupId, bool data)
+            : TargetGroupId(targetGroupId)
+            , Data(data)
         {}
     };
 

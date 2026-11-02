@@ -22,6 +22,7 @@ namespace NKikimr::NBridge {
         bool Finished = false;
         ui32 Step = 0;
         std::deque<TLogoBlobID> RestoreQueue;
+        std::deque<TLogoBlobID> AbsenceQueue; // target blobs with keep flag, to be released if the synced piles lack them
         struct TSourceBlobFlags {
             bool Keep = false;
             bool DoNotKeep = false;
@@ -31,10 +32,17 @@ namespace NKikimr::NBridge {
         TReplQuoter::TPtr SyncRateQuoter;
         const TBlobStorageGroupType SourceGroupType;
 
+        // Reconciliation of the part of HOT_STANDBY pile: step 1 reads blocks and barriers, step 2 reads blobs, step 3
+        // sends the barriers read at step 1. The keep flags of the blobs a barrier covers are set before the barrier,
+        // so the blob scan started after it sees them all, and they get to the part before the barrier.
+        const bool Reconcile;
+        const bool Thorough; // check the data of every blob of the source, not only of the missing ones
+        std::vector<std::unique_ptr<IEventBase>> PendingBarriers;
+
     public:
         TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
             std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
-            TBlobStorageGroupType sourceGroupType);
+            TBlobStorageGroupType sourceGroupType, bool reconcile, bool thorough);
 
         void Bootstrap();
         void BeginNextStep();

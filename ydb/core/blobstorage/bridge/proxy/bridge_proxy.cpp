@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
@@ -1186,6 +1187,11 @@ namespace NKikimr {
                         if (auto event = PrepareEvent(groupPileInfo, *ev->Get(), bridgePileId, true)) {
                             backgroundWrites.emplace_back(bridgePileId, std::move(event));
                         }
+                        if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                            if (const auto& msg = *ev->Get(); msg.Collect || msg.DoNotKeep) {
+                                MarkStandbyDirty(bridgePileId, false); // the reconciliation forwards what is held back
+                            }
+                        }
                     }
                     return; // skip this pile, no data quorum needed
                 }
@@ -1346,6 +1352,7 @@ namespace NKikimr {
                     (BridgePileId, bridgePileId), (Bytes, bytes), (BytesInFlight, StandbyBytesInFlight->Val()),
                     (MaxBytesInFlight, static_cast<i64>(StandbyMaxBytesInFlight)));
                 ++*StandbyWritesDropped;
+                MarkStandbyDirty(bridgePileId, IsDataWrite(*ev));
                 return;
             }
             BackgroundBytesHeld += bytes;
@@ -1412,8 +1419,22 @@ namespace NKikimr {
                         (BridgePileId, write.BridgePileId), (Status, msg.Status), (Restarts, write.Restarts),
                         (Response, msg.ToString()));
                     ++*StandbyWritesLost;
+                    MarkStandbyDirty(write.BridgePileId, IsDataWrite(*write.Event));
                 }
                 FinishBackgroundWrite(write);
+            }
+        }
+
+        // the write that may leave the standby part without the data of a blob, not just without its flags or block
+        static bool IsDataWrite(const IEventBase& ev) {
+            return ev.Type() == TEvBlobStorage::EvPut || ev.Type() == TEvBlobStorage::EvPatch;
+        }
+
+        // the part of HOT_STANDBY pile has missed a write, and BSC gets it reconciled
+        void MarkStandbyDirty(TBridgePileId bridgePileId, bool data) {
+            if (const auto *part = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), bridgePileId)) {
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenStandbyDirty(
+                    TGroupId::FromProto(part, &NKikimrBridge::TGroupState::TPile::GetGroupId), data));
             }
         }
 

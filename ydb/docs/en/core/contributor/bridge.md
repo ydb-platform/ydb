@@ -89,13 +89,13 @@ To enable the prototype for an existing secondary pile, use the hidden `update` 
 ydb admin cluster bridge update --set pile_name:HOT_STANDBY
 ```
 
-Entering `HOT_STANDBY` marks the pile unsynchronized and resets its group synchronization stages. Background writes may be missed (dropped over the limit, failed, or lost with a restarted node), and the prototype does not run periodic synchronization. Before promotion, start normal rejoin and wait for the pile to reach `SYNCHRONIZED`:
+Entering `HOT_STANDBY` marks the pile unsynchronized and resets its group synchronization stages. Background writes may be missed: dropped over the limit, failed, or lost with a restarted node. BSController therefore reconciles each standby group part with a synchronized one, without changing the part's stage. A pass merges blocks, `KEEP` and `DO_NOT_KEEP` flags, copies the blobs the part lacks, and releases the part's `KEEP` flags of the blobs no synchronized pile has. It sends the garbage collection barriers of the synchronized part last, once everything they may collect is kept in the standby as it is in the source. Passes are event-driven: dsproxy-proxy marks the part when it holds back a barrier or `DO_NOT_KEEP` flag, or loses a write, and Node Warden reports the marks to BSController every 10 seconds. A part is reconciled at most once a minute, and at most 16 passes run at once. After a lost `Put` or `Patch`, when BSController starts, and when a node registers (it may have restarted with writes in flight), the pass also checks the data of every blob, as the part may have its flags without its data. Reconciliation bounds the standby's garbage and the data rejoin copies; it doesn't make promotion faster yet. Before promotion, start normal rejoin and wait for the pile to reach `SYNCHRONIZED`:
 
 ```bash
 ydb admin cluster bridge rejoin --pile pile_name
 ```
 
-Rejoin proceeds through `NOT_SYNCHRONIZED_1` and `NOT_SYNCHRONIZED_2`, fences writers using old group generations, and copies missing data. Direct promotion from `HOT_STANDBY` is not allowed. Background replication still consumes network and storage resources. Garbage collection barriers and `DO_NOT_KEEP` flags are deferred until rejoin so they cannot overtake unconfirmed `KEEP` flags; storage usage can therefore grow while the pile remains in standby.
+Rejoin proceeds through `NOT_SYNCHRONIZED_1` and `NOT_SYNCHRONIZED_2`, fences writers using old group generations, and copies missing data. Direct promotion from `HOT_STANDBY` is not allowed. Background replication and reconciliation still consume network and storage resources. dsproxy-proxy doesn't forward garbage collection barriers and `DO_NOT_KEEP` flags, so they can't overtake unconfirmed `KEEP` flags. Until the next reconciliation pass, the standby keeps the data collected since the last one.
 
 ## Bootstrap of BSController and other system tablets {#bootstrap}
 

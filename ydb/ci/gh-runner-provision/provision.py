@@ -143,8 +143,8 @@ def load_config(path):
     for key in ("cores", "memory_gb", "disk_gb", "count", "start", "index_width"):
         if not isinstance(cfg[key], int) or isinstance(cfg[key], bool):
             raise ConfigError(f"{key} must be an integer")
-    if cfg["count"] < 1 or cfg["start"] < 0 or cfg["index_width"] < 0:
-        raise ConfigError("count, start and index_width must be non-negative; count at least 1")
+    if cfg["count"] < 0 or cfg["start"] < 0 or cfg["index_width"] < 0:
+        raise ConfigError("count, start and index_width must be non-negative")
     if cfg["_fleet"]:
         if fleet_keys is None or "count" not in fleet_keys or "labels" not in fleet_keys:
             raise ConfigError("fleet file must set count and labels")

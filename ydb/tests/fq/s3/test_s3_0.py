@@ -691,12 +691,12 @@ class TestS3TopicJoin(StreamingTestBase):
         topic, endpoint = self.get_input_name(kikimr, unique_prefix + 'join_s3_with_topic', True, lambda name: name)
         words = ['January', 'February', 'March', 'Monday', 'Tuesday', 'Wednesday', 'Gold', 'Silver', 'Bronze']
         sql = f'''
-            SELECT dictionary.value AS num, stream.word AS word
-            FROM {topic} WITH (STREAMING='TRUE', FORMAT=json_each_row, SCHEMA=(key Int64 NOT NULL, word String NOT NULL)) AS stream
+            SELECT dictionary.value AS num, input_rows.word AS word
+            FROM {topic} WITH (STREAMING='TRUE', FORMAT=json_each_row, SCHEMA=(key Int64 NOT NULL, word String NOT NULL)) AS input_rows
             INNER JOIN (
                 SELECT key, value FROM `{client.path(source)}`.`*`
                 WITH (FORMAT=json_each_row, SCHEMA=(key Int64 NOT NULL, value String NOT NULL))
-            ) AS dictionary ON stream.key = dictionary.key
+            ) AS dictionary ON input_rows.key = dictionary.key
             LIMIT 9;
         '''
         try:

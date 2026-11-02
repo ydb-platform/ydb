@@ -144,7 +144,9 @@ class S3Client:
     def execute(self, sql, *, explain=False, timeout=120, parameters=None):
         statement = f'PRAGMA TablePathPrefix = {sql_string(self.directory)};\n{sql}'
         result = SqlResult()
-        with self.pool.checkout() as session:
+
+        def run(session):
+            result.result_sets = []
             try:
                 with session.execute(
                     statement,
@@ -154,9 +156,13 @@ class S3Client:
                     settings=ydb.BaseRequestSettings().with_timeout(timeout),
                 ) as stream:
                     result.result_sets = convert.aggregate_result_sets_by_index(stream)
-            except ydb.issues.Error as error:
-                result.exception = error
-            result.stats = session.last_query_stats
+            finally:
+                result.stats = session.last_query_stats
+
+        try:
+            self.pool.retry_operation_sync(run, self.ydb_client.retry_settings)
+        except ydb.issues.Error as error:
+            result.exception = error
         return result
 
     def query(self, sql, **kwargs):
@@ -225,6 +231,6 @@ class S3Client:
         try:
             for kind, name in reversed(self.objects):
                 self.execute(f'DROP {kind} IF EXISTS {sql_identifier(name)};').check()
+            self.ydb_client.driver.scheme_client.remove_directory(self.directory)
         finally:
             self.pool.stop()
-            self.ydb_client.driver.scheme_client.remove_directory(self.directory)

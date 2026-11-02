@@ -44,7 +44,7 @@ class TestS3Inflight:
     @pytest.mark.parametrize('kikimr_params', [{'inflight': 1}, {'inflight': 2}, {'inflight': 5}], indirect=True)
     def test_inflight(self, kikimr, s3, client, unique_prefix, kikimr_params):
         source = self.prepare(s3, client, unique_prefix, 900)
-        sql = f'''PRAGMA dq.MaxTasksPerStage='1';
+        sql = f'''PRAGMA ydb.MaxTasksPerStage='1';
             SELECT COUNT(*) AS cnt FROM {source}
             WITH (FORMAT=csv_with_names, SCHEMA=(Fruit String NOT NULL, Price Int32 NOT NULL, Weight Int32 NOT NULL));'''
         result = self.run(kikimr, client, sql, kikimr_params.param['inflight'], 'InFlightStreams')

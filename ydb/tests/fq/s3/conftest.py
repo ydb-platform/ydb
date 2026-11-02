@@ -5,6 +5,7 @@ import pytest
 import requests
 import yatest.common
 import library.python.port_manager
+from ydb import convert
 
 from library.recipes import common as recipes_common
 from ydb.tests.fq.s3.s3_helpers import S3
@@ -88,7 +89,15 @@ def unique_prefix():
 
 
 @pytest.fixture
-def client(kikimr, s3, unique_prefix):
+def client(kikimr, s3, unique_prefix, monkeypatch):
+    # The SDK has no PG result decoder; PG values use text_value on the wire.
+    # Scope this compatibility adapter to the test, preserving PG column types.
+    if 'pg_type' not in convert._to_native_map:
+        monkeypatch.setitem(
+            convert._to_native_map,
+            'pg_type',
+            lambda type_pb, value_pb, settings: value_pb.text_value,
+        )
     directory = kikimr.get_database_name() + '/' + unique_prefix.rstrip('_')
     kikimr.ydb_client.driver.scheme_client.make_directory(directory)
     result = S3Client(kikimr.ydb_client, s3.s3_url, directory)

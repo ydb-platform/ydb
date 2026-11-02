@@ -76,9 +76,17 @@ class TestExternalTables:
         client.create_external_data_source(source, 'external-tables')
         self.create_table(client, table, source, 'first.json')
         result = client.create_external_data_source(table, 'external-tables', expect_error=True)
-        assert result.error_code == 'SCHEME_ERROR'
+        assert result.error_code == 'GENERIC_ERROR', result.error
+        assert 'unexpected path type' in result.error, result.error
         result = client.execute(f'''
             CREATE EXTERNAL TABLE `{client.path(source)}` (a Int32)
             WITH (DATA_SOURCE='{client.path(source)}', LOCATION='first.json', FORMAT='json_each_row');
         ''').check(False)
-        assert result.error_code == 'SCHEME_ERROR'
+        assert result.error_code == 'GENERIC_ERROR', result.error
+        assert 'unexpected path type' in result.error, result.error
+        entries = {entry.name: entry.type for entry in client.list_directory().children}
+        assert entries == {
+            source: ydb.scheme.SchemeEntryType.EXTERNAL_DATA_SOURCE,
+            table: ydb.scheme.SchemeEntryType.EXTERNAL_TABLE,
+        }
+        assert client.query(f'SELECT * FROM `{table}`;')[0].rows == [{'a': 42, 'b': 'first'}]

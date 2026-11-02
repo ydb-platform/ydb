@@ -1182,7 +1182,7 @@ Pear;15;33'''
         query.check()
         data = query.result_set(index=0, limit=50)
         assert data.rows[0][0] == b"", str(data)
-        assert data.rows[0][1] == b"", str(data)
+        assert data.rows[0][1] == "", str(data)
         assert data.rows[0][2] == b"", str(data)
 
     def test_parquet_converters_to_timestamp(self, kikimr, s3, client, unique_prefix):

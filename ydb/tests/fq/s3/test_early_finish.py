@@ -14,13 +14,13 @@ class TestEarlyFinish(StreamingTestBase):
         source = client.create_external_data_source(unique_prefix + 'source', 'early-finish').name
         topic, endpoint = self.get_input_name(kikimr, unique_prefix + 'early_finish', True, lambda name: name)
         sql = f'''
-            SELECT stream.Data AS Data1, dictionary.Data AS Data2
-            FROM {topic} WITH (STREAMING='TRUE', FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS stream
+            SELECT input_rows.Data AS Data1, dictionary.Data AS Data2
+            FROM {topic} WITH (STREAMING='TRUE', FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS input_rows
             INNER JOIN (
                 SELECT Data FROM `{client.path(source)}`.`*`
                 WITH (FORMAT=raw, SCHEMA=(Data String NOT NULL))
                 ORDER BY Data DESC
-            ) AS dictionary ON stream.Data = dictionary.Data
+            ) AS dictionary ON input_rows.Data = dictionary.Data
             LIMIT 2;
         '''
         try:

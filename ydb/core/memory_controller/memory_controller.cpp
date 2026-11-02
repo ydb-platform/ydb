@@ -1,6 +1,7 @@
 #include "memory_controller.h"
 #include "memory_controller_config.h"
 #include "consumer_collection.h"
+#include "limit_budget.h"
 #include "memtable_collection.h"
 
 #include <ydb/core/base/counters.h>
@@ -29,7 +30,12 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
 
+#include <library/cpp/iterator/enumerate.h>
+
+#include <util/generic/hash.h>
 #include <util/stream/format.h>
+
+#include <limits>
 
 #include <tcmalloc/malloc_extension.h>
 
@@ -114,7 +120,7 @@ struct TConsumerState {
     const ui64 Reclaimable;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
-    bool CanZeroLimit = false;
+    bool ReduceForSoftPressure = false;
 
     TConsumerState(const TMemoryConsumer& consumer)
         : Kind(consumer.Kind)
@@ -135,7 +141,7 @@ struct TConsumerState {
 
     ui64 GetLimit(double coefficient) const {
         Y_DEBUG_ABORT_UNLESS(MinBytes <= MaxBytes);
-        return static_cast<ui64>(MinBytes + coefficient * (MaxBytes - MinBytes));
+        return MinBytes + static_cast<ui64>(coefficient * static_cast<long double>(MaxBytes - MinBytes));
     }
 };
 
@@ -187,14 +193,15 @@ enum class ELimitDelivery {
 
 struct TConsumerTraits {
     EMemoryConsumerKind Kind;
-    bool ElasticLimit; // false: the limit is not flexible, only the consumption is accounted
-    bool CanZeroLimit;
+    bool ElasticLimit; // false: reserve the fixed limit as well as observed usage
+    bool ReduceForSoftPressure; // soft pressure may cut below Min; Hard always bounds every grant
     TLimitBytesGetter GetMinBytes;
     TLimitBytesGetter GetMaxBytes;
     ELimitDelivery LimitDelivery;
     TStatsWriter WriteStats;
     bool StatsSummed; // several kinds add up into the same fields
     bool StatsWithLimit; // the kind writes the limit field
+    ui64 LimitMultiplier = 1;
 };
 
 // One row per EMemoryConsumerKind, in the enum order
@@ -202,7 +209,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::SharedCache,
         .ElasticLimit = true,
-        .CanZeroLimit = true,
+        .ReduceForSoftPressure = true,
         .GetMinBytes = &GetSharedCacheMinBytes,
         .GetMaxBytes = &GetSharedCacheMaxBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -213,7 +220,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::MemTable,
         .ElasticLimit = true,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetMemTableMinBytes,
         .GetMaxBytes = &GetMemTableMaxBytes,
         .LimitDelivery = ELimitDelivery::MemTableCompaction,
@@ -224,29 +231,31 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesScanGroupedMemory,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesScanGroupedMemoryLimitBytes,
         .GetMaxBytes = &GetColumnTablesScanGroupedMemoryLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
         .WriteStats = &WriteQueryExecutionStats,
         .StatsSummed = true,
         .StatsWithLimit = false,
+        .LimitMultiplier = NOlap::TGlobalLimits::ScanGroupedMemoryHardLimitMultiplier,
     },
     {
         .Kind = EMemoryConsumerKind::ColumnTablesCompGroupedMemory,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesCompGroupedMemoryLimitBytes,
         .GetMaxBytes = &GetColumnTablesCompGroupedMemoryLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
         .WriteStats = &WriteCompactionStats,
         .StatsSummed = false,
         .StatsWithLimit = true,
+        .LimitMultiplier = NOlap::TGlobalLimits::CompGroupedMemoryHardLimitMultiplier,
     },
     {
         .Kind = EMemoryConsumerKind::ColumnTablesBlobCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesBlobCacheLimitBytes,
         .GetMaxBytes = &GetColumnTablesBlobCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -257,7 +266,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesDataAccessorCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesDataAccessorCacheLimitBytes,
         .GetMaxBytes = &GetColumnTablesDataAccessorCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -268,7 +277,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesColumnDataCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesColumnDataCacheLimitBytes,
         .GetMaxBytes = &GetColumnTablesColumnDataCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -279,18 +288,19 @@ constexpr TConsumerTraits ConsumerTraits[] = {
     {
         .Kind = EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetColumnTablesDeduplicationGroupedMemoryLimitBytes,
         .GetMaxBytes = &GetColumnTablesDeduplicationGroupedMemoryLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
         .WriteStats = &WriteQueryExecutionStats,
         .StatsSummed = true,
         .StatsWithLimit = false,
+        .LimitMultiplier = NOlap::TGlobalLimits::DeduplicationGroupedMemoryHardLimitMultiplier,
     },
     {
         .Kind = EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetPortionsMetaDataCacheLimitBytes,
         .GetMaxBytes = &GetPortionsMetaDataCacheLimitBytes,
         .LimitDelivery = ELimitDelivery::PortionsCacheSetter,
@@ -302,7 +312,7 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         // The compute scheduler: reports the memory of the queries and limits it by the given limit
         .Kind = EMemoryConsumerKind::QueryExecution,
         .ElasticLimit = false,
-        .CanZeroLimit = false,
+        .ReduceForSoftPressure = false,
         .GetMinBytes = &GetQueryExecutionLimitBytes,
         .GetMaxBytes = &GetQueryExecutionLimitBytes,
         .LimitDelivery = ELimitDelivery::LimitShares,
@@ -330,7 +340,18 @@ const TConsumerTraits& GetConsumerTraits(EMemoryConsumerKind kind) {
     return ConsumerTraits[index];
 }
 
+ui64 GetLimitMultiplier(EMemoryConsumerKind kind) {
+    return GetConsumerTraits(kind).LimitMultiplier;
+}
+
+ui64 GetLimitReservation(EMemoryConsumerKind kind, ui64 limitBytes) {
+    return SaturatingMultiply(limitBytes, GetLimitMultiplier(kind));
+}
+
 class TMemoryController : public TActorBootstrapped<TMemoryController> {
+    using ETargetSource = TMemoryGrantLedger::ETargetSource;
+    using TConsumerSnapshots = THashMap<EMemoryConsumerKind, TConsumerCollectionSnapshot>;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MEMORY_CONTROLLER;
@@ -351,6 +372,10 @@ public:
         , Counters(counters)
     {
         Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TColumnTablesPortionsMetaDataCacheMemoryConsumer>());
+        // These controls have no controller-issued cap before the first allocation.
+        for (const auto& [kind, consumer] : Consumers) {
+            GrantLedger.Register({kind, {}}, std::numeric_limits<ui64>::max(), GetLimitMultiplier(kind));
+        }
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -387,7 +412,12 @@ private:
 
             HFunc(TEvConsumerRegister, Handle);
             HFunc(TEvConsumerUnregister, Handle);
+            HFunc(TEvConsumerDemand, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
+            HFunc(TEvents::TEvActorDead, Handle);
+            case TEvents::TEvActorAlive::EventType:
+            case TEvents::TEvActorLivenessUnsure::EventType:
+                break;
 
             HFunc(TEvMemTableRegister, Handle);
             HFunc(TEvMemTableUnregister, Handle);
@@ -415,14 +445,16 @@ private:
             : GetResourceBrokerLimitBytes(Config, hardLimitBytes, Collections.contains(EMemoryConsumerKind::QueryExecution));
 
         TVector<TConsumerState> consumers(::Reserve(Consumers.size() + Collections.size()));
+        TConsumerSnapshots snapshots;
         ui64 consumersConsumption = 0;
         for (const auto& consumer : Consumers) {
             consumers.push_back(BuildConsumerState(*consumer.second, hardLimitBytes));
-            consumersConsumption += consumers.back().Consumption;
+            consumersConsumption = SaturatingAdd(consumersConsumption, consumers.back().Consumption);
         }
         for (const auto& [kind, collection] : Collections) {
-            consumers.push_back(BuildConsumerState(kind, collection, hardLimitBytes));
-            consumersConsumption += consumers.back().Consumption;
+            snapshots[kind] = collection.GetSnapshot();
+            consumers.push_back(BuildConsumerState(kind, snapshots[kind].GetTotal(), hardLimitBytes));
+            consumersConsumption = SaturatingAdd(consumersConsumption, consumers.back().Consumption);
         }
 
         // allocatedMemory = otherConsumption + consumersConsumption
@@ -433,20 +465,26 @@ private:
                 && processMemoryInfo.MemTotal.has_value() && processMemoryInfo.MemAvailable.has_value()) {
             // externalConsumption + AnonRss + MemAvailable = MemTotal
             externalConsumption = SafeDiff(processMemoryInfo.MemTotal.value(),
-                processMemoryInfo.AnonRss.value() + processMemoryInfo.MemAvailable.value());
+                SaturatingAdd(processMemoryInfo.AnonRss.value(), processMemoryInfo.MemAvailable.value()));
         }
 
         // targetConsumersConsumption + otherConsumption + externalConsumption = targetUtilizationBytes
-        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption + externalConsumption);
+        ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, SaturatingAdd(otherConsumption, externalConsumption));
+        const ui64 available = SafeDiff(hardLimitBytes, SaturatingAdd(otherConsumption, externalConsumption));
 
-        // want to find maximum possible coefficient in range [0..1] so that
-        // Sum(consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes)) <= targetConsumersConsumption
-        auto coefficient = BinarySearchCoefficient(consumers, targetConsumersConsumption);
+        PlanConsumerDemands(consumers, snapshots, available);
+
+        // Grow elastic targets within both utilization and reserved Hard capacity.
+        auto coefficient = BinarySearchCoefficient(consumers, snapshots, targetConsumersConsumption, available);
 
         ui64 resultingConsumersConsumption = 0;
+        ui64 requiredConsumersBudget = 0;
         for (const auto& consumer : consumers) {
-            // Note: take Max with current consumer consumption because memory free may happen with a delay, or don't happen at all
-            resultingConsumersConsumption += GetResultingConsumption(consumer, coefficient);
+            const ui64 requiredBudget = GetRequiredBudget(consumer, coefficient, snapshots);
+            requiredConsumersBudget = SaturatingAdd(requiredConsumersBudget, requiredBudget);
+            // Idle fixed grants reserve Hard capacity without causing Soft pressure.
+            resultingConsumersConsumption = SaturatingAdd(resultingConsumersConsumption,
+                GetConsumerTraits(consumer.Kind).ElasticLimit ? requiredBudget : consumer.Consumption);
         }
 
         YDB_LOG_INFO_CTX(ctx, "Periodic memory stats",
@@ -465,6 +503,7 @@ private:
             {"externalConsumption", HumanReadableBytes(externalConsumption)},
             {"targetConsumersConsumption", HumanReadableBytes(targetConsumersConsumption)},
             {"resultingConsumersConsumption", HumanReadableBytes(resultingConsumersConsumption)},
+            {"requiredConsumersBudget", HumanReadableBytes(requiredConsumersBudget)},
             {"coefficient", coefficient});
 
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
@@ -483,6 +522,7 @@ private:
         Counters->GetCounter("Stats/ExternalConsumption")->Set(externalConsumption);
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
+        Counters->GetCounter("Stats/RequiredConsumersBudget")->Set(requiredConsumersBudget);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
         Counters->GetCounter("Stats/ArrowAllocatedMemory")->Set(arrow::default_memory_pool()->bytes_allocated());
         Counters->GetCounter("Stats/ArrowYqlAllocatedMemory")->Set(NYql::NUdf::GetYqlMemoryPool()->bytes_allocated());
@@ -500,13 +540,15 @@ private:
         memoryStats.SetTargetUtilization(targetUtilizationBytes);
         if (hasMemTotalHardLimit) memoryStats.SetExternalConsumption(externalConsumption);
 
+        const ui64 softLimitExcess = SafeDiff(
+            SaturatingAdd(SaturatingAdd(resultingConsumersConsumption, otherConsumption), externalConsumption), softLimitBytes);
+        // Soft pressure trims cache first. Hard shortfalls scale all automatic grants.
+        const auto limits = ApplyConsumerLimits(consumers, snapshots, coefficient, softLimitExcess, available);
+
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
-            ui64 limitBytes = consumer.GetLimit(coefficient);
-            if (resultingConsumersConsumption + otherConsumption + externalConsumption > softLimitBytes && consumer.CanZeroLimit) {
-                limitBytes = SafeDiff(limitBytes, resultingConsumersConsumption + otherConsumption + externalConsumption - softLimitBytes);
-            }
-            consumersLimitBytes += limitBytes;
+            const ui64 limitBytes = limits.at(consumer.Kind);
+            consumersLimitBytes = SaturatingAdd(consumersLimitBytes, limitBytes);
 
             YDB_LOG_INFO_CTX(ctx, "Consumer state",
                 {"consumerKind", consumer.Kind},
@@ -520,13 +562,12 @@ private:
             counters.Consumption->Set(consumer.Consumption);
             counters.Demand->Set(consumer.Demand);
             counters.Reclaimable->Set(consumer.Reclaimable);
-            counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
+            counters.Reservation->Set(GrantLedger.GetUnusedReservation(consumer.Kind));
             counters.LimitBytes->Set(limitBytes);
             counters.LimitMinBytes->Set(consumer.MinBytes);
             counters.LimitMaxBytes->Set(consumer.MaxBytes);
             AddMemoryStats(consumer, memoryStats, limitBytes);
 
-            ApplyLimit(consumer, limitBytes);
         }
 
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
@@ -538,11 +579,91 @@ private:
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }
 
+    void PlanConsumerDemands(const TVector<TConsumerState>& consumers, TConsumerSnapshots& snapshots, ui64 available) {
+        TVector<TMemoryGrantLedger::TRequest> requests;
+        TVector<TConsumerCollectionSnapshot::TEntry*> entries;
+        // Use the same order as ApplyConsumerLimits, across all consumer kinds.
+        for (const auto& consumer : consumers) {
+            if (auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
+                for (auto& entry : snapshot->Entries) {
+                    if (entry.Desired) {
+                        requests.push_back(TMemoryGrantLedger::TRequest{
+                            .Key = {consumer.Kind, entry.Registrant}, .Used = entry.Report.Used,
+                            .TargetLimit = *entry.Desired, .Multiplier = GetLimitMultiplier(consumer.Kind),
+                            .Source = ETargetSource::ConsumerRequest});
+                        entries.push_back(&entry);
+                    }
+                }
+            }
+        }
+        const auto planned = GrantLedger.PlanExplicitLimits(requests, available);
+        for (const auto& [index, entry] : Enumerate(entries)) {
+            entry->PlannedLimit = planned[index];
+        }
+    }
+
+    THashMap<EMemoryConsumerKind, ui64> ApplyConsumerLimits(
+        const TVector<TConsumerState>& consumers, const TConsumerSnapshots& snapshots,
+        double coefficient, ui64 softLimitExcess, ui64 available)
+    {
+        TVector<TMemoryGrantLedger::TRequest> requests;
+        for (const auto& consumer : consumers) {
+            const ui64 limitBytes = consumer.GetLimit(coefficient);
+            const ui64 reduction = consumer.ReduceForSoftPressure ? softLimitExcess : 0;
+            if (const auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
+                const auto shares = snapshot->ComputeLimitShares(limitBytes, reduction);
+                for (const auto& [index, entry] : Enumerate(snapshot->Entries)) {
+                    const auto source = entry.Desired ? ETargetSource::ConsumerRequest : ETargetSource::MemoryController;
+                    requests.push_back(TMemoryGrantLedger::TRequest{
+                        .Key = {consumer.Kind, entry.Registrant}, .Used = entry.Report.Used,
+                        .TargetLimit = shares[index].Bytes, .Multiplier = GetLimitMultiplier(consumer.Kind), .Source = source});
+                }
+            } else {
+                requests.push_back(TMemoryGrantLedger::TRequest{
+                    .Key = {consumer.Kind, {}}, .Used = consumer.Consumption,
+                    .TargetLimit = SafeDiff(limitBytes, reduction), .Multiplier = GetLimitMultiplier(consumer.Kind)});
+            }
+        }
+        const auto grants = GrantLedger.Allocate(requests, available);
+        THashMap<EMemoryConsumerKind, ui64> limits;
+        for (const auto& grant : grants) {
+            const auto& [kind, registrant] = grant.Key;
+            limits[kind] = SaturatingAdd(limits[kind], grant.Bytes);
+            // MC-owned controls keep enforcing the retained cap while growth waits.
+            if (!grant.ShouldSend && GetConsumerTraits(kind).LimitDelivery == ELimitDelivery::LimitShares) {
+                if (registrant != TActorId{}) {
+                    // Waiting must not hide a dead registrant. The runtime
+                    // handles this probe without invoking the consumer.
+                    SendActorLivenessCheck(registrant);
+                }
+                continue;
+            }
+            switch (GetConsumerTraits(kind).LimitDelivery) {
+                case ELimitDelivery::LimitShares:
+                    Send(registrant, new TEvConsumerLimit(grant.Bytes), IEventHandle::FlagTrackDelivery);
+                    break;
+                case ELimitDelivery::MemTableCompaction:
+                    ApplyMemTableLimit(grant.Bytes);
+                    break;
+                case ELimitDelivery::PortionsCacheSetter:
+                    NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetPortionsCacheLimit(grant.Bytes);
+                    break;
+            }
+        }
+        const auto committed = GrantLedger.GetCommitted();
+        Counters->GetCounter("Stats/ConsumersCommitted")->Set(committed);
+        Counters->GetCounter("Stats/ConsumersBudgetDeficit")->Set(SafeDiff(committed, available));
+
+        return limits;
+    }
+
     void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
         // A kind the controller feeds itself has no registrant and must not be taken over
         Y_ABORT_UNLESS(!Consumers.contains(msg->Kind), "Consumer kind is owned by the memory controller");
         TIntrusivePtr<IMemoryConsumer> consumer = Collections[msg->Kind].Register(ev->Sender);
+        consumer->SetLimitCeiling(msg->LimitCeiling);
+        GrantLedger.Register({msg->Kind, ev->Sender}, msg->InitialLimitBytes, GetLimitMultiplier(msg->Kind));
         YDB_LOG_INFO_CTX(ctx, "Consumer registered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
@@ -558,6 +679,7 @@ private:
                 {"sender", ev->Sender});
             return;
         }
+        GrantLedger.Forget({msg->Kind, ev->Sender});
         if (it->second.IsEmpty()) {
             Collections.erase(it);
             // Nothing updates the gauges of a removed kind any more, so zero them instead of leaving the last values
@@ -566,6 +688,20 @@ private:
         YDB_LOG_INFO_CTX(ctx, "Consumer unregistered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
+    }
+
+    void Handle(TEvConsumerDemand::TPtr& ev, const TActorContext& ctx) {
+        const auto* msg = ev->Get();
+        auto* collection = Collections.FindPtr(msg->Kind);
+        if (!collection || !collection->SetDesired(ev->Sender, msg->Desired)) {
+            YDB_LOG_WARN_CTX(ctx, "Consumer demand ignored for an unknown registration",
+                {"msgKind", msg->Kind}, {"sender", ev->Sender});
+            return;
+        }
+        // The next periodic allocation uses this target. Do not grant from
+        // stale usage here or start another periodic wakeup chain.
+        YDB_LOG_INFO_CTX(ctx, "Consumer requested a limit",
+            {"msgKind", msg->Kind}, {"sender", ev->Sender}, {"desired", msg->Desired});
     }
 
     void ResetConsumerCounters(EMemoryConsumerKind kind) {
@@ -580,15 +716,23 @@ private:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext& ctx) {
-        // Only limit sends are tracked, so an undelivered one marks a dead registrant
         if (ev->Get()->SourceType != EvConsumerLimit) {
             return;
         }
+        ForgetDeadRegistrant(ev->Sender, ctx);
+    }
+
+    void Handle(TEvents::TEvActorDead::TPtr& ev, const TActorContext& ctx) {
+        ForgetDeadRegistrant(ev->Sender, ctx);
+    }
+
+    void ForgetDeadRegistrant(TActorId registrant, const TActorContext& ctx) {
         for (auto it = Collections.begin(); it != Collections.end();) {
-            if (it->second.Unregister(ev->Sender)) {
+            if (it->second.Unregister(registrant)) {
+                GrantLedger.Forget({it->first, registrant});
                 YDB_LOG_INFO_CTX(ctx, "Consumer registrant died",
                     {"msgKind", it->first},
-                    {"registrant", ev->Sender});
+                    {"registrant", registrant});
                 Counters->GetCounter("Stats/ConsumerRegistrantDeaths", true)->Inc();
                 if (it->second.IsEmpty()) {
                     ResetConsumerCounters(it->first);
@@ -633,63 +777,73 @@ private:
             {"ev", msg->Record});
     }
 
-    double BinarySearchCoefficient(const TVector<TConsumerState>& consumers, ui64 availableMemory) {
+    double BinarySearchCoefficient(const TVector<TConsumerState>& consumers,
+        const TConsumerSnapshots& snapshots, ui64 targetMemory, ui64 hardBudget)
+    {
         static const ui32 BinarySearchIterations = 20;
 
         double left = 0, right = 1;
         for (ui32 iteration = 0; iteration < BinarySearchIterations; iteration++) {
             double middle = (left + right) / 2;
 
-            ui64 value = 0;
+            ui64 targetRemaining = targetMemory;
+            ui64 hardRemaining = hardBudget;
+            bool fits = true;
             for (const auto& consumer : consumers) {
-                value += GetTargetConsumption(consumer, middle);
+                const ui64 target = GetTargetConsumption(consumer, middle, snapshots);
+                const ui64 required = GetRequiredBudget(consumer, middle, snapshots);
+                if (target > targetRemaining || required > hardRemaining) {
+                    fits = false;
+                    break;
+                }
+                targetRemaining -= target;
+                hardRemaining -= required;
             }
 
-            if (value > availableMemory) {
+            if (!fits) {
                 right = middle;
             } else {
                 left = middle;
             }
         }
 
+        // Twenty halvings can return zero, but never one.
+        Y_DEBUG_ABORT_UNLESS(0 <= left && left < right && right <= 1);
         return left;
     }
 
-    ui64 GetTargetConsumption(const TConsumerState& consumer, const double coefficient) const {
+    ui64 GetDesiredLimit(const TConsumerState& consumer, double coefficient,
+        const TConsumerSnapshots& snapshots) const
+    {
+        const ui64 defaultLimit = consumer.GetLimit(coefficient);
+        const auto* snapshot = snapshots.FindPtr(consumer.Kind);
+        return snapshot ? snapshot->GetDesiredLimit(defaultLimit) : defaultLimit;
+    }
+
+    ui64 GetRequiredBudget(const TConsumerState& consumer, double coefficient,
+        const TConsumerSnapshots& snapshots) const
+    {
+        const ui64 defaultLimit = consumer.GetLimit(coefficient);
+        const auto* snapshot = snapshots.FindPtr(consumer.Kind);
+        if (!snapshot) {
+            return Max(consumer.Consumption, GetLimitReservation(consumer.Kind, defaultLimit));
+        }
+
+        ui64 total = 0;
+        for (const auto& entry : snapshot->Entries) {
+            const ui64 bytes = entry.PlannedLimit.value_or(snapshot->ComputeLimitShare(entry, defaultLimit));
+            // A sibling's unused grant must not hide this registrant's unreleased usage.
+            total = SaturatingAdd(total, Max(entry.Report.Used, GetLimitReservation(consumer.Kind, bytes)));
+        }
+        return total;
+    }
+
+    ui64 GetTargetConsumption(const TConsumerState& consumer, double coefficient,
+        const TConsumerSnapshots& snapshots) const
+    {
+        const ui64 reservation = GetLimitReservation(consumer.Kind, GetDesiredLimit(consumer, coefficient, snapshots));
         return GetConsumerTraits(consumer.Kind).ElasticLimit
-            ? consumer.GetLimit(coefficient)
-            : consumer.Consumption;
-    }
-
-    ui64 GetResultingConsumption(const TConsumerState& consumer, const double coefficient) const {
-        return GetConsumerTraits(consumer.Kind).ElasticLimit
-            ? Max(consumer.Consumption, consumer.GetLimit(coefficient))
-            : consumer.Consumption;
-    }
-
-    void ApplyLimit(const TConsumerState& consumer, ui64 limitBytes) const {
-        switch (GetConsumerTraits(consumer.Kind).LimitDelivery) {
-            case ELimitDelivery::MemTableCompaction:
-                ApplyMemTableLimit(limitBytes);
-                break;
-            case ELimitDelivery::LimitShares:
-                SendLimitShares(consumer.Kind, limitBytes);
-                break;
-            case ELimitDelivery::PortionsCacheSetter:
-                NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner::SetPortionsCacheLimit(limitBytes);
-                break;
-        }
-    }
-
-    void SendLimitShares(EMemoryConsumerKind kind, ui64 limitBytes) const {
-        const auto* collection = Collections.FindPtr(kind);
-        if (!collection) {
-            return;
-        }
-        for (const auto& share : collection->ComputeLimitShares(limitBytes)) {
-            // Delivery tracking turns a send to a dead registrant into TEvUndelivered, which drops its entry
-            Send(share.Registrant, new TEvConsumerLimit(share.Bytes), IEventHandle::FlagTrackDelivery);
-        }
+            ? reservation : consumer.Consumption;
     }
 
     void ApplyMemTableLimit(ui64 limitBytes) const {
@@ -791,8 +945,8 @@ private:
         return result;
     }
 
-    TConsumerState BuildConsumerState(EMemoryConsumerKind kind, const TConsumerCollection& collection, ui64 hardLimitBytes) const {
-        TConsumerState result(kind, collection.GetTotal());
+    TConsumerState BuildConsumerState(EMemoryConsumerKind kind, const TConsumerReport& report, ui64 hardLimitBytes) const {
+        TConsumerState result(kind, report);
         SetLimitBounds(result, hardLimitBytes);
         return result;
     }
@@ -801,7 +955,7 @@ private:
         const auto& traits = GetConsumerTraits(result.Kind);
         result.MinBytes = traits.GetMinBytes(Config, hardLimitBytes);
         result.MaxBytes = traits.GetMaxBytes(Config, hardLimitBytes);
-        result.CanZeroLimit = traits.CanZeroLimit;
+        result.ReduceForSoftPressure = traits.ReduceForSoftPressure;
 
         if (result.MinBytes > result.MaxBytes) {
             result.MinBytes = result.MaxBytes;
@@ -814,6 +968,7 @@ private:
     TMap<EMemoryConsumerKind, TIntrusivePtr<TMemoryConsumer>> Consumers;
     // Kinds fed by event-registered actors; each holds one entry per registrant, keyed by its TActorId
     TMap<EMemoryConsumerKind, TConsumerCollection> Collections;
+    TMemoryGrantLedger GrantLedger;
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;

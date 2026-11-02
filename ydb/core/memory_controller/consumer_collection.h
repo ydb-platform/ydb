@@ -6,6 +6,8 @@
 #include <util/generic/vector.h>
 
 #include <atomic>
+#include <limits>
+#include <optional>
 
 namespace NKikimr::NMemory {
 
@@ -29,6 +31,35 @@ struct TConsumerShare {
     ui64 Bytes = 0;
 };
 
+// One read of every live report, reused for totals and per-registrant allocation.
+struct TConsumerCollectionSnapshot {
+    struct TEntry {
+        TActorId Registrant;
+        TConsumerReport Report;
+        std::optional<ui64> Desired;
+        std::optional<ui64> PlannedLimit; // explicit target admitted by MC, or the retained grant while waiting
+        ui64 LimitCeiling = std::numeric_limits<ui64>::max();
+    };
+
+    // Reports and membership stay fixed; only PlannedLimit changes during the round.
+    TVector<TEntry> Entries;
+
+    TConsumerReport GetTotal() const {
+        return Total;
+    }
+
+    // Explicit Desired replaces the default share based on reported demand.
+    ui64 ComputeLimitShare(const TEntry& entry, ui64 limitBytes) const;
+    TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes, ui64 limitReduction = 0) const;
+    ui64 GetDesiredLimit(ui64 defaultLimitBytes) const;
+
+private:
+    friend class TConsumerCollection;
+    TConsumerReport Total;
+    size_t AutomaticRegistrantCount = 0;
+    ui64 AutomaticDemand = 0;
+};
+
 // Per-kind set of registrants owned by the memory controller; every method runs on its thread.
 class TConsumerCollection {
 public:
@@ -38,6 +69,9 @@ public:
     // Drops the registrant's entry; false for an actor that holds none.
     bool Unregister(TActorId registrant);
 
+    // A request belongs to this registration, independently of its usage report.
+    bool SetDesired(TActorId registrant, ui64 desired);
+
     bool IsEmpty() const {
         return Registrants.empty();
     }
@@ -46,17 +80,17 @@ public:
         return Registrants.size();
     }
 
-    // Sum of the clamped reports over live entries.
-    TConsumerReport GetTotal() const;
-
-    // Limit share: an equal bootstrap slice, a demand-proportional cut of the rest and an equal split of what demand leaves over.
-    TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
+    TConsumerCollectionSnapshot GetSnapshot() const;
 
     // Release request: bytes each registrant is asked to free, proportional to and capped by its Reclaimable; zero requests are omitted.
     TVector<TConsumerShare> ComputeReleaseRequests(ui64 limitBytes) const;
 
 private:
-    TMap<TActorId, TIntrusivePtr<TRegistrantConsumer>> Registrants;
+    struct TRegistrant {
+        TIntrusivePtr<TRegistrantConsumer> Consumer;
+        std::optional<ui64> Desired;
+    };
+    TMap<TActorId, TRegistrant> Registrants;
 };
 
 }

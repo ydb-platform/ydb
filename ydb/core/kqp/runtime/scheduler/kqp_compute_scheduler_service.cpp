@@ -105,7 +105,8 @@ public:
 
         if (Scheduler->IsMemoryEnabled()) {
             YDB_LOG_INFO("Memory of the queries is accounted");
-            Send(NKikimr::NMemory::MakeMemoryControllerId(), new NKikimr::NMemory::TEvConsumerRegister(NKikimr::NMemory::EMemoryConsumerKind::QueryExecution));
+            Send(NKikimr::NMemory::MakeMemoryControllerId(), new NKikimr::NMemory::TEvConsumerRegister(
+                NKikimr::NMemory::EMemoryConsumerKind::QueryExecution, Scheduler->GetTotalMemoryLimit()));
         }
 
         Become(&TComputeSchedulerService::State);

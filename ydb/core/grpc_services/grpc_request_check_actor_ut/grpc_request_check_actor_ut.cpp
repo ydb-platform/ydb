@@ -68,11 +68,8 @@ struct TTestSetup {
         authConfig.SetUseStaff(false);
 
         auto settings = TServerSettings(KikimrPort, authConfig);
-<<<<<<< HEAD
         settings.SetEnableAccessServiceBulkAuthorization(true);
-=======
         settings.SetUseRealThreads(useRealThreads);
->>>>>>> 425b312da0d (Fix retryable errors when resolving shared databases (#55437))
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         return settings;
@@ -351,8 +348,6 @@ Y_UNIT_TEST(CanSetPermissionsForDbWithoutCloudUserAttributes) {
 }
 
 } // CheckCloudPermissions
-<<<<<<< HEAD
-=======
 
 namespace {
 
@@ -862,4 +857,3 @@ Y_UNIT_TEST(HttpEnforceDeniesWithoutGrpcAccessDenyCounter) {
 }
 
 } // DatabaseAccessCheckFlagsInterplay
->>>>>>> 425b312da0d (Fix retryable errors when resolving shared databases (#55437))

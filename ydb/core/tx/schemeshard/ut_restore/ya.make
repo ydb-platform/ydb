@@ -34,7 +34,6 @@ PEERDIR(
 SRCS(
     ut_restore.cpp
     ut_restore_fs.cpp
-    ut_restore_kesus.cpp
 )
 
 

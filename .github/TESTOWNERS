@@ -139,6 +139,9 @@
 /ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering
 /ydb/tests/functional/minidumps @ydb-platform/engineering
+/ydb/core/control/ut @ydb-platform/engineering
+/ydb/core/graph @ydb-platform/engineering
+/ydb/tests/functional/wardens @ydb-platform/engineering
 
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/core/subsystems @ydb-platform/blobstorage
@@ -286,11 +289,6 @@
 /ydb/services/nbs/ut @ydb-platform/nbs
 /ydb/core/nbs @ydb-platform/nbs
 /ydb/tests/functional/nbs @ydb-platform/nbs
-
-#Unknown / needs owner
-/ydb/core/control/ut @unknown
-/ydb/core/graph @unknown
-/ydb/tests/functional/wardens @unknown
 
 #Infra @shmel1k TEAM:@ydb-platform/infra
 /ydb/tools/ydbd_slice @ydb-platform/infra

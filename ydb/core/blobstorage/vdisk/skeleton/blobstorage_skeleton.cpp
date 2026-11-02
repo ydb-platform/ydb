@@ -21,6 +21,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/balance/balancing_actor.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
@@ -1760,8 +1761,10 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvVStatus",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS20"});
-            auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
-                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone, Config->BaseInfo.ReadOnly));
+            const bool durabilityReplDone = DurabilityReplDone && !RepeatRecoveryPending && !HasUnreadableBlobs;
+            const TActorId aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
+                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now,
+                ReplDone, durabilityReplDone, Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2213,7 +2216,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // ANUBIS/OSIRIS SECTOR
         ////////////////////////////////////////////////////////////////////////
-        void Handle(TEvCallOsiris::TPtr &ev, const TActorContext &ctx) {
+        TActorId StartOsiris(const TActorId& notifyId, const TActorContext& ctx) {
             // NOTE:
             // We take ordinary snapshot. Their can be a race, that LocalSyncData
             // may be in-flight at this moment, so we can't take lsn exclusively.
@@ -2221,10 +2224,45 @@ namespace NKikimr {
             // and confirmed.
             const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, std::move(fullSnap), confirmedLsn,
+            IActor *actor = CreateHullOsiris(notifyId, ctx.SelfID, ctx.SelfID, GInfo, std::move(fullSnap), confirmedLsn,
                     Config->AnubisOsirisMaxInFly);
-            auto aid = ctx.Register(actor);
+            const TActorId aid = ctx.Register(actor);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            return aid;
+        }
+
+        void Handle(TEvCallOsiris::TPtr& ev, const TActorContext& ctx) {
+            StartOsiris(ev->Sender, ctx);
+        }
+
+        void TryRepeatRecovery(const TActorContext& ctx) {
+            if (CurrentStateFunc() != &TThis::StateNormal
+                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+                return;
+            }
+            RepeatRecoveryPending = false;
+            DurabilityReplDone = false;
+            ReplOnlyPhantomsRemain = false;
+            UpdateReplState();
+            RepeatOsirisId = StartOsiris(SelfId(), ctx);
+        }
+
+        void Handle(TEvOsirisDone::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Sender != RepeatOsirisId) {
+                return;
+            }
+            RepeatOsirisId = {};
+            if (RepeatRecoveryPending) {
+                // A newer policy arrived while the previous snapshot was being processed.
+                RepeatRecoveryPending = false;
+                RepeatOsirisId = StartOsiris(SelfId(), ctx);
+                return;
+            }
+            // The old scheduler has finished; recreate it to scan Hull from the beginning.
+            ctx.Send(Db->ReplID, new TEvents::TEvPoisonPill);
+            ActiveActors.Erase(Db->ReplID);
+            StartReplActor(ctx);
         }
 
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
@@ -2482,6 +2520,7 @@ namespace NKikimr {
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
                 ReplDone = true;
+                DurabilityReplDone = true;
             }
             UpdateReplState();
             RunBalancing(ctx);
@@ -2791,22 +2830,27 @@ namespace NKikimr {
             DeliverDelayedCutLogIfAny(ctx);
         }
 
+        void StartReplActor(const TActorContext& ctx) {
+            std::shared_ptr<TReplCtx> replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes, Hull->GetHullDs(),
+                GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
+            Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
+            ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+            if (CommenceRepl) {
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
+                    nullptr, 0));
+            }
+        }
+
         void Handle(TEvSyncGuidRecoveryDone::TPtr &ev, const TActorContext &ctx) {
             if (ev->Get()->Status == NKikimrProto::OK) {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "SKELETON SYNC GUID RECOVERY SUCCEEDED",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"marker", "BSVS31"});
                 DbBirthLsn = ev->Get()->DbBirthLsn;
+                Db->LsnMngr->AdvanceSyncLogRecoveryBase(*DbBirthLsn);
                 SkeletonIsUpAndRunning(ctx, Config->RunRepl);
                 if (Config->RunRepl) {
-                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes, Hull->GetHullDs(),
-                        GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
-                    Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
-                    ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
-                    if (CommenceRepl) {
-                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
-                            nullptr, 0));
-                    }
+                    StartReplActor(ctx);
                 }
             } else {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "SKELETON SYNC GUID RECOVERY FAILED",
@@ -3151,8 +3195,27 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // OTHER MESSAGES SECTOR
         ////////////////////////////////////////////////////////////////////////
+        static std::optional<EMirror3dcLayout> GetDurabilityLayout(const TBlobStorageGroupInfo& info) {
+            if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+                return std::nullopt;
+            }
+            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
+                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
+            if (!state) {
+                return std::nullopt;
+            }
+            return GetMirror3dcGroupLayouts(*state)->Durability;
+        }
+
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
+
+            if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
+                const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
+                const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
+                RepeatRecoveryPending |= previousDurability && nextDurability
+                    && previousDurability != nextDurability;
+            }
 
             // Save locally
             GInfo = msg->NewInfo;
@@ -3194,15 +3257,22 @@ namespace NKikimr {
                 ctx.Send(Db->SyncFullHandlerID, ev->Get()->Clone());
             }
 
+            TryRepeatRecovery(ctx);
+
             // FIXME: reconfigure handoff
         }
 
         void HandleReplDone(STFUNC_SIG) {
+            if (ev->Sender != Db->ReplID || RepeatOsirisId) {
+                return;
+            }
             if (ev->Cookie) { // semi-finished replication, only phantom blobs
                 ReplOnlyPhantomsRemain = true;
             } else {
                 ReplDone = true;
+                DurabilityReplDone = true;
             }
+            TryRepeatRecovery(TActivationContext::AsActorContext());
             UpdateReplState();
         }
 
@@ -3260,6 +3330,11 @@ namespace NKikimr {
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            // assimilation requests go without QoS, so their clients don't learn of the VDisk going away from the
+            // connection, and they must get replies
+            for (auto& [lsn, request] : std::exchange(PendingAssimilations, {})) {
+                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
+            }
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
         }
@@ -3293,7 +3368,7 @@ namespace NKikimr {
         }
 
         void UpdateReplState() {
-            const bool ready = ReplDone && !HasUnreadableBlobs;
+            const bool ready = DurabilityReplDone && !HasUnreadableBlobs;
             UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING);
         }
 
@@ -3699,8 +3774,9 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVGetBarrier, Handle)
             HFunc(TEvBlobStorage::TEvVSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncFull, Handle)
+            HFunc(TEvOsirisDone, Handle)
             // TEvCallOsiris
-            // TEvAnubisOsirisPut
+            HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             // TEvSyncGuidRecoveryDone
             HFunc(TEvLocalSyncData, Handle)
@@ -3771,6 +3847,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
+            IgnoreFunc(TEvOsirisDone)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
@@ -3882,7 +3959,10 @@ namespace NKikimr {
         NMonGroup::TSyncLogIFaceGroup SyncLogIFaceGroup;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
+        bool RepeatRecoveryPending = false;
+        TActorId RepeatOsirisId;
         bool ReplDone = false;
+        bool DurabilityReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();

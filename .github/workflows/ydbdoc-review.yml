@@ -71,7 +71,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sourcePr = context.payload.pull_request.number;
-            const head = `${owner}:translation/pr-${sourcePr}`;
+            const head = `${owner}:robots/translation/pr-${sourcePr}`;
             let translationPr = null;
 
             for (let attempt = 1; attempt <= 6; attempt++) {

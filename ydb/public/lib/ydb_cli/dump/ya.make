@@ -20,6 +20,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/import
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/proto

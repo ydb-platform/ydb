@@ -6,12 +6,11 @@ This table will be used by SQL queries to join muted test data with GitHub issue
 
 area_override logic
 -------------------
-Each muted-test issue has a default owner (from TESTOWNERS via the ``Owner:`` line in the
-issue body).  A human can add an ``area/...`` label (e.g. ``area/blobstorage``).  If the
-team behind that area (via ``area_to_owner_mapping``) **differs** from the default owner,
-we store the **area path string** in ``area_override``. ``tests_monitor.py`` reads this table
-(plus ``area_to_owner_mapping``) and fills ``effective_area`` / ``effective_owner_team`` on each
-row; downstream marts use those columns.
+A human can add an ``area/...`` label on a mute issue. If that area's team (via
+``area_to_owner_mapping``) differs from the test's current TESTOWNERS owner (first
+``;;`` token; fallback: ``Owner:`` in the issue body), we store the area path in
+``area_override``. ``tests_monitor.py`` uses it for ``effective_area`` /
+``effective_owner_team``.
 
 Edge cases:
   * No ``area`` in issue ``info`` → area_override = NULL
@@ -19,7 +18,7 @@ Edge cases:
   * Closed **COMPLETED** with ``manual-fast-unmute`` label → override can apply (fast-track window)
   * Closed **COMPLETED** without that label: override cleared **only** when **project Status** is
     ``Unmuted`` (do not infer from closer — avoids clearing during the gap before fast-unmute label).
-  * Area resolves to the same team as the default owner → area_override = NULL
+  * Area resolves to the same team as the TESTOWNERS / body baseline → area_override = NULL
   * Area not found in mapping → area_override = NULL
   * Labels change → we always see the *current* ``info`` snapshot
 
@@ -57,6 +56,7 @@ from github_issue_utils import (
     DEFAULT_BUILD_TYPE,
     issue_label_names_lower,
     scan_to_utc_date,
+    team_slug_from_monitor_owner,
 )
 
 
@@ -305,7 +305,18 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     return best_team
 
 
-def resolve_area_override(
+def _first_owner_team_slug(owners) -> str:
+    """First ``;;`` TESTOWNERS token as lowercase team slug (same as tests_monitor.compute_owner)."""
+    if not owners:
+        return ""
+    raw = str(owners)
+    if ";;" in raw:
+        parts = raw.split(";;", 1)
+        raw = parts[0] if "TEAM" in parts[0] else parts[1]
+    return team_slug_from_monitor_owner(raw)
+
+
+def prepare_issue_area_override(
     body: str,
     info_raw,
     area_to_owner: dict,
@@ -314,18 +325,7 @@ def resolve_area_override(
     labels_raw=None,
     project_status=None,
 ):
-    """If GitHub ``area/...`` implies a different team than ``Owner:``, return that area path.
-
-    **Closed issues**
-
-    * ``NOT_PLANNED`` / ``DUPLICATE``: no override.
-    * ``COMPLETED`` (or empty ``state_reason`` on **CLOSED**) + label ``manual-fast-unmute``: override stays (fast-track active).
-    * ``COMPLETED`` (or empty ``state_reason``) without that label: override cleared **only** when **project Status** is ``Unmuted``.
-
-    Open issues: unchanged area logic.
-
-    Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
-    """
+    """Issue-level area context, or None if override cannot apply."""
     st = (issue_state or "").strip().upper()
     sr = (state_reason or "").strip().upper()
     labels_lo = issue_label_names_lower(labels_raw)
@@ -352,12 +352,66 @@ def resolve_area_override(
     if not resolved_team:
         return None
 
-    default_owner = _extract_default_owner(body)
+    return {
+        "area_label": area_label,
+        "resolved_team": resolved_team.lower(),
+        "body_owner": _extract_default_owner(body),
+    }
 
-    if resolved_team.lower() == default_owner.lower():
+
+def area_override_for_baseline(issue_area_ctx, baseline_owner_team=None):
+    """area path if baseline team differs from issue area team, else None."""
+    if not issue_area_ctx:
         return None
+    baseline = _first_owner_team_slug(baseline_owner_team)
+    if not baseline:
+        baseline = (issue_area_ctx.get("body_owner") or "").lower()
+    if issue_area_ctx["resolved_team"] == (baseline or "").lower():
+        return None
+    return issue_area_ctx["area_label"]
 
-    return area_label
+
+def resolve_area_override(
+    body: str,
+    info_raw,
+    area_to_owner: dict,
+    issue_state=None,
+    state_reason=None,
+    labels_raw=None,
+    project_status=None,
+    baseline_owner_team=None,
+):
+    """Return area path when ``area/...`` team differs from TESTOWNERS / body Owner baseline."""
+    ctx = prepare_issue_area_override(
+        body,
+        info_raw,
+        area_to_owner,
+        issue_state=issue_state,
+        state_reason=state_reason,
+        labels_raw=labels_raw,
+        project_status=project_status,
+    )
+    return area_override_for_baseline(ctx, baseline_owner_team=baseline_owner_team)
+
+
+def get_testowners_by_full_name(ydb_wrapper) -> dict:
+    """``full_name`` → raw ``owners`` string from analytics testowners table."""
+    table_path = ydb_wrapper.get_table_path("testowners")
+    try:
+        rows = ydb_wrapper.execute_scan_query(
+            f"SELECT full_name, owners FROM `{table_path}`",
+            query_name="github_issue_mapping_testowners",
+        )
+    except Exception as e:
+        print(f"Warning: Could not load testowners ({e}); area_override falls back to issue Owner:")
+        return {}
+    out = {}
+    for r in rows:
+        fn = r.get("full_name")
+        if fn:
+            out[str(fn)] = r.get("owners")
+    print(f"Loaded testowners for area_override baseline: {len(out)} entries")
+    return out
 
 
 def create_test_issue_mapping_table(ydb_wrapper, table_path):
@@ -468,32 +522,40 @@ def main():
                 return 0
 
             area_to_owner = get_area_to_owner_mapping(ydb_wrapper)
+            testowners_by_name = get_testowners_by_full_name(ydb_wrapper)
 
             url_to_updated_at = {}
-            # Pre-compute area_override per issue URL for O(1) lookup
-            url_to_area_override = {}
+            url_to_area_ctx = {}
             for issue in issues_data:
                 url = issue.get('url', '')
-                if url:
-                    url_to_updated_at[url] = issue.get("updated_at") or issue.get("created_at")
-                    url_to_area_override[url] = resolve_area_override(
-                        issue.get('body', ''),
-                        issue.get('info'),
-                        area_to_owner,
-                        issue.get('state'),
-                        issue.get('state_reason'),
-                        issue.get('labels'),
-                        issue.get('project_status'),
-                    )
+                if not url:
+                    continue
+                url_to_updated_at[url] = issue.get("updated_at") or issue.get("created_at")
+                url_to_area_ctx[url] = prepare_issue_area_override(
+                    issue.get('body', ''),
+                    issue.get('info'),
+                    area_to_owner,
+                    issue.get('state'),
+                    issue.get('state_reason'),
+                    issue.get('labels'),
+                    issue.get('project_status'),
+                )
 
             print("Creating test-to-issue mapping...")
             test_to_issue = create_test_issue_mapping(issues_data)
             print(f"Created mapping for {len(test_to_issue)} unique test names")
 
+            matched = sum(1 for t in test_to_issue if t in testowners_by_name)
+            print(f"TESTOWNERS baseline match: {matched}/{len(test_to_issue)}")
+
             override_count = 0
-            for issue_list in test_to_issue.values():
+            for test_name, issue_list in test_to_issue.items():
+                baseline = testowners_by_name.get(test_name)
                 for issue_info in issue_list:
-                    ao = url_to_area_override.get(issue_info['url'])
+                    ao = area_override_for_baseline(
+                        url_to_area_ctx.get(issue_info['url']),
+                        baseline_owner_team=baseline,
+                    )
                     issue_info['area_override'] = ao
                     if ao:
                         override_count += 1

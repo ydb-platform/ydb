@@ -40,7 +40,11 @@ namespace NKikimr::NGroupSyncer {
     // Run one pass over the observed placements at this generation.
     IActor* CreateMirror3dcRepairSyncer(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId notifyId);
 
+    // with reconcile set, the syncer brings the part of HOT_STANDBY pile up to its source without changing the stage of
+    // the part: one pass syncs blocks, keep flags and the blobs the part misses (every blob when thorough), and then the
+    // barriers of the source
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
+        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter, bool reconcile = false,
+        bool thorough = false);
 
 } // NKikimr::NGroupSyncer

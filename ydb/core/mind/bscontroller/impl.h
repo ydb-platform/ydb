@@ -2301,12 +2301,20 @@ private:
 
     struct TSyncersRequiringAction;
 
+    enum class EStandbyDirty {
+        None,
+        Garbage, // garbage collection only: barriers and do-not-keep flags are not forwarded, keep flags may be lost
+        Data, // a blob write may have been lost as well, so the data of every blob is checked
+    };
+
     struct TSyncerState
         : TIntrusiveListItem<TSyncerState, TSyncersRequiringAction>
     {
         struct TPerNodeInfo {
             TGroupId SourceGroupId;
             TSyncerProgress Progress;
+            bool Reconcile = false; // the pass reconciling the part of HOT_STANDBY pile
+            bool Thorough = false;
         };
         const TGroupId BridgeProxyGroupId;
         const TGroupId TargetGroupId;
@@ -2326,6 +2334,13 @@ private:
         ui64 CopiedTotal = 0;
         std::deque<std::tuple<TMonotonic, ui64>> CopiedSamples;
         ui64 CopyRate = 0; // bytes per second
+        // What the part of HOT_STANDBY pile may have missed since the last reconciliation pass started; nothing is
+        // known about the part when the entry gets created (BSC has started, or the part has been reset).
+        EStandbyDirty StandbyDirty = EStandbyDirty::Data;
+        // the passes are this far apart at least, and the failed ones are retried with backoff; the sync of the part of
+        // the pile rejoining doesn't wait for them
+        TMonotonic StandbyNotBefore;
+        TBackoffTimer StandbyRetryBackoff{100, 30000};
 
         TSyncerState(TGroupId bridgeProxyGroupId, TGroupId targetGroupId)
             : BridgeProxyGroupId(bridgeProxyGroupId)
@@ -2433,6 +2448,15 @@ private:
     // delete the part of the bridged group in the pile along with its data; the group serves as bridge proxy only when
     // its inline pile goes away
     void DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId);
+
+    // the parts of HOT_STANDBY piles are reconciled with their sources by this many syncers at most, and a part not more
+    // often than this
+    static constexpr size_t MaxStandbyReconcilers = 16;
+    static constexpr TDuration StandbyReconcileInterval = TDuration::Minutes(1);
+
+    static void MarkStandbyDirty(TSyncerState& syncerState, bool data) {
+        syncerState.StandbyDirty = Max(syncerState.StandbyDirty, data ? EStandbyDirty::Data : EStandbyDirty::Garbage);
+    }
 
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;

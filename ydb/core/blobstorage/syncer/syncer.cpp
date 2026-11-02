@@ -6,12 +6,15 @@
 namespace NKikimr::NGroupSyncer {
 
     TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter)
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter, bool reconcile,
+            bool thorough)
         : Info(std::move(info))
         , SourceGroupId(sourceGroupId)
         , TargetGroupId(targetGroupId)
         , SyncerDataStats(std::move(syncerDataStats))
         , SyncRateQuoter(std::move(syncRateQuoter))
+        , Reconcile(reconcile)
+        , Thorough(thorough)
     {
         Y_ABORT_UNLESS(Info);
         Y_ABORT_UNLESS(Info->IsBridged());
@@ -35,12 +38,13 @@ namespace NKikimr::NGroupSyncer {
             return Terminate("target group not found in TGroupState");
         }
         Stage = target->GetStage();
-        if (Stage == NKikimrBridge::TGroupState::SYNCED) {
+        if (Stage == NKikimrBridge::TGroupState::SYNCED && !Reconcile) {
             return Terminate(std::nullopt); // everything is already synced
         }
 
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '#'
-            << NKikimrBridge::TGroupState::EStage_Name(Stage) << '}';
+            << (Reconcile ? TString(Thorough ? "RECONCILE_THOROUGH" : "RECONCILE")
+                : TString(NKikimrBridge::TGroupState::EStage_Name(Stage))) << '}';
 
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS00, "bootstrapping bridged blobstorage syncer", (LogId, LogId));
 
@@ -56,14 +60,21 @@ namespace NKikimr::NGroupSyncer {
         std::ranges::fill(GroupAssimilateState, TAssimilateState());
 
         // reset sync states to their original state and decide what to synchronize
-        if (Stage != NKikimrBridge::TGroupState::BLOCKS) {
-            // we can blocks only in BLOCKS stage
-            SourceState.SkipBlocksUpTo.emplace(TargetState.SkipBlocksUpTo.emplace());
-        }
+        if (Reconcile) {
+            if (Step != 1) {
+                SourceState.SkipBlocksUpTo.emplace(TargetState.SkipBlocksUpTo.emplace());
+                SourceState.SkipBarriersUpTo.emplace(TargetState.SkipBarriersUpTo.emplace());
+            }
+        } else {
+            if (Stage != NKikimrBridge::TGroupState::BLOCKS) {
+                // we can blocks only in BLOCKS stage
+                SourceState.SkipBlocksUpTo.emplace(TargetState.SkipBlocksUpTo.emplace());
+            }
 
-        if (Stage != NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Step != 1) {
-            // we need barriers only at first step while syncing barriers and do not keep flags
-            SourceState.SkipBarriersUpTo.emplace(TargetState.SkipBarriersUpTo.emplace());
+            if (Stage != NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Step != 1) {
+                // we need barriers only at first step while syncing barriers and do not keep flags
+                SourceState.SkipBarriersUpTo.emplace(TargetState.SkipBarriersUpTo.emplace());
+            }
         }
 
         if (!ScansBlobs()) {
@@ -80,6 +91,9 @@ namespace NKikimr::NGroupSyncer {
     }
 
     bool TSyncerActor::ScansBlobs() const {
+        if (Reconcile) {
+            return Step != 1; // step 1 merges blocks and barriers, step 2 scans blobs
+        }
         // blobs not needed only at the first stage, when we are syncing blocks, or when we are syncing barriers solely
         return Stage != NKikimrBridge::TGroupState::BLOCKS &&
             (Stage != NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Step != 1);
@@ -101,7 +115,7 @@ namespace NKikimr::NGroupSyncer {
     void TSyncerActor::Terminate(std::optional<TString> errorReason) {
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS04, "syncing finished", (LogId, LogId), (ErrorReason, errorReason));
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenNotifySyncerFinished(Info->GroupID,
-            Info->GroupGeneration, SourceGroupId, TargetGroupId, std::move(errorReason)));
+            Info->GroupGeneration, SourceGroupId, TargetGroupId, Reconcile, Thorough, std::move(errorReason)));
         PassAway();
     }
 
@@ -134,11 +148,14 @@ namespace NKikimr::NGroupSyncer {
             STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS05, "merging block", (LogId, LogId), (SourceItem, sourceItem),
                 (TargetItem, targetItem));
             // this operation is only possible while syncing blocks, so enforce it
-            Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::BLOCKS);
+            Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::BLOCKS || Reconcile);
             const auto& [tabletId] = key;
             const ui32 generation = Max(sourceItem ? sourceItem->BlockedGeneration : 0,
                 targetItem ? targetItem->BlockedGeneration : 0);
             for (bool toTargetGroup : {false, true}) {
+                if (Reconcile && (!toTargetGroup || (targetItem && generation <= targetItem->BlockedGeneration))) {
+                    continue; // reconciliation writes to the standby part only, and only what it misses
+                }
                 auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max(),
                     TWriteSource::SyncerMergeBlock);
                 request->IsIdempotent = true;
@@ -149,7 +166,7 @@ namespace NKikimr::NGroupSyncer {
         auto mergeBarriers = [&](auto *sourceItem, auto *targetItem, const auto& /*key*/) {
             STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS06, "merging barrier", (LogId, LogId), (SourceItem, sourceItem),
                 (TargetItem, targetItem));
-            Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP);
+            Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP || Reconcile);
             if (!sourceItem) {
                 return;
             }
@@ -184,13 +201,35 @@ namespace NKikimr::NGroupSyncer {
                 }
 
                 if (item.RecordGeneration || item.PerGenerationCounter || item.CollectGeneration || item.CollectStep) {
-                    IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(sourceItem->TabletId,
+                    auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(sourceItem->TabletId,
                         item.RecordGeneration, item.PerGenerationCounter, sourceItem->Channel, true,
-                        item.CollectGeneration, item.CollectStep, nullptr, nullptr, TInstant::Max(), false, TWriteSource::SyncerMergeGC, hard, true));
+                        item.CollectGeneration, item.CollectStep, nullptr, nullptr, TInstant::Max(), false, TWriteSource::SyncerMergeGC, hard, true);
+                    if (Reconcile) {
+                        PendingBarriers.push_back(std::move(ev)); // sent when the part keeps what the source does
+                    } else {
+                        IssueQuery(true, std::move(ev));
+                    }
                 }
             };
             issueCollectGarbage(sourceItem->Soft, targetItem ? &targetItem->Soft : nullptr, false);
             issueCollectGarbage(sourceItem->Hard, targetItem ? &targetItem->Hard : nullptr, true);
+        };
+
+        // check the target blob (restoring its redundancy) and copy it from the source when it is missing
+        auto restoreBlob = [&](auto *sourceItem, auto *targetItem, const TLogoBlobID& blobId, bool missingData) {
+            RestoreQueue.push_back(blobId);
+            if (missingData) {
+                CountToCopy(blobId);
+                CountedToCopy.insert(blobId);
+            }
+            if (sourceItem->Keep || sourceItem->DoNotKeep) {
+                SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
+            }
+            if (sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
+                doNotKeepToIssue.push_back(blobId);
+            }
+            SyncerDataStats->BytesTotal += blobId.BlobSize();
+            ++SyncerDataStats->BlobsTotal;
         };
 
         auto mergeBlobs = [&](auto *sourceItem, auto *targetItem, const auto& key) {
@@ -202,6 +241,22 @@ namespace NKikimr::NGroupSyncer {
             // Is the target missing the data of this source blob? A Keep flag reaches the target before the data
             // does, so the target may have a record of the blob with no data in it.
             const bool missingData = sourceItem && (!targetItem || !targetItem->HasData);
+
+            if (Reconcile) {
+                if (sourceItem && (Thorough || missingData)) {
+                    restoreBlob(sourceItem, targetItem, blobId, missingData);
+                } else if (sourceItem) {
+                    if (sourceItem->DoNotKeep && !targetItem->DoNotKeep) {
+                        doNotKeepToIssue.push_back(blobId);
+                    } else if (sourceItem->Keep && !targetItem->Keep && !targetItem->DoNotKeep) {
+                        keepToIssue.push_back(blobId);
+                    }
+                } else if (targetItem->Keep && !targetItem->DoNotKeep) {
+                    // the source has collected the blob (or the write racing the scan has got to the target first)
+                    AbsenceQueue.push_back(blobId);
+                }
+                return;
+            }
 
             switch (Stage) {
                 case NKikimrBridge::TGroupState::WRITE_KEEP:
@@ -224,7 +279,7 @@ namespace NKikimr::NGroupSyncer {
                         // The source scan may predate a concurrent Put followed by Keep, which reaches the target
                         // even though Put does not at this stage. Confirm absence after observing the target's Keep
                         // before releasing it. Genuinely collected source blobs must still be collected in the target.
-                        RestoreQueue.push_back(blobId);
+                        AbsenceQueue.push_back(blobId);
                     }
                     break;
 
@@ -235,19 +290,7 @@ namespace NKikimr::NGroupSyncer {
                         // there is a bug and this blob is a phantom; or there is a data loss
                         break;
                     }
-                    RestoreQueue.push_back(blobId);
-                    if (missingData) {
-                        CountToCopy(blobId);
-                        CountedToCopy.insert(blobId);
-                    }
-                    if (sourceItem->Keep || sourceItem->DoNotKeep) {
-                        SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
-                    }
-                    if (sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
-                        doNotKeepToIssue.push_back(blobId);
-                    }
-                    SyncerDataStats->BytesTotal += blobId.BlobSize();
-                    ++SyncerDataStats->BlobsTotal;
+                    restoreBlob(sourceItem, targetItem, blobId, missingData);
                     break;
 
                 default:
@@ -306,11 +349,17 @@ namespace NKikimr::NGroupSyncer {
     }
 
     void TSyncerActor::ProcessRestoreQueue() {
-        while (!RestoreQueue.empty() && QueriesInFlight < MaxQueriesInFlight) {
+        while (QueriesInFlight < MaxQueriesInFlight) {
+            const bool absenceCheck = !AbsenceQueue.empty();
+            auto& queue = absenceCheck ? AbsenceQueue : RestoreQueue;
+            if (queue.empty()) {
+                break;
+            }
+
             std::optional<ui64> tabletId;
             ui32 dataSize = 0;
-            auto it = RestoreQueue.begin();
-            for (; it != RestoreQueue.end(); ++it) {
+            auto it = queue.begin();
+            for (; it != queue.end(); ++it) {
                 if (tabletId && (it->TabletID() != *tabletId || dataSize + it->BlobSize() > MaxDataPerIndexQuery)) {
                     break;
                 }
@@ -318,8 +367,8 @@ namespace NKikimr::NGroupSyncer {
                 dataSize += it->BlobSize();
             }
 
-            auto jt = RestoreQueue.begin();
-            size_t numBlobs = std::distance(RestoreQueue.begin(), it);
+            auto jt = queue.begin();
+            size_t numBlobs = std::distance(queue.begin(), it);
             TArrayHolder<TEvBlobStorage::TEvGet::TQuery> q(new TEvBlobStorage::TEvGet::TQuery[numBlobs]);
             for (size_t i = 0; i < numBlobs; ++i) {
                 q[i].Set(*jt++);
@@ -327,11 +376,11 @@ namespace NKikimr::NGroupSyncer {
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
                 NKikimrBlobStorage::FastRead, true, true);
             ev->DoNotReportIndexRestoreGetMissingBlobs = true; // they may be missing, do not report errors in this case
-            if (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP) {
+            if (absenceCheck) {
                 // Cluster state may advance before BSC resets the physical generations. A different synchronized
                 // source can then accept a write while our assigned source is suspended and genuinely lacks it.
                 auto check = std::make_shared<TAbsenceCheck>();
-                check->Ids.assign(RestoreQueue.begin(), it);
+                check->Ids.assign(queue.begin(), it);
                 check->Observations.resize(numBlobs);
                 NBridge::ForEachGroupPile(Info->Group->GetBridgeGroupState(), [&](TBridgePileId, const auto& pile) {
                     if (pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
@@ -346,7 +395,7 @@ namespace NKikimr::NGroupSyncer {
                 IssueQuery(true, std::move(ev));
             }
 
-            RestoreQueue.erase(RestoreQueue.begin(), it);
+            queue.erase(queue.begin(), it);
         }
     }
 
@@ -354,12 +403,19 @@ namespace NKikimr::NGroupSyncer {
         ProcessRestoreQueue();
 
         if (Finished && !QueriesInFlight) {
-            Y_VERIFY_S(Payloads.empty() && RestoreQueue.empty(), " Payloads.size# " << Payloads.size()
-                << " RestoreQueue.size# " << RestoreQueue.size());
+            Y_VERIFY_S(Payloads.empty() && RestoreQueue.empty() && AbsenceQueue.empty(), " Payloads.size# "
+                << Payloads.size() << " RestoreQueue.size# " << RestoreQueue.size()
+                << " AbsenceQueue.size# " << AbsenceQueue.size());
             if (Errors) {
                 Terminate("errors encountered during sync");
-            } else if (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP && Step == 1) {
+            } else if (Step == 1 && (Reconcile || Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP)) {
                 BeginNextStep();
+            } else if (Reconcile && Step == 2 && !PendingBarriers.empty()) {
+                // the part keeps everything the source does now, and its blobs may be collected the same way
+                ++Step;
+                for (auto& ev : std::exchange(PendingBarriers, {})) {
+                    IssueQuery(true, std::move(ev));
+                }
             } else {
                 // sync stage finished successfully for this group
                 Terminate(std::nullopt);
@@ -535,8 +591,8 @@ namespace NKikimr::NGroupSyncer {
         if (msg.Status != NKikimrProto::OK) {
             errorReason = TStringBuilder() << "TEvGet failed Status# " << msg.Status
                 << " ErrorReason# " << msg.ErrorReason;
-        } else if (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP) {
-            auto& check = *Payloads.at(ev->Cookie).AbsenceCheck;
+        } else if (const auto& absenceCheck = Payloads.at(ev->Cookie).AbsenceCheck) {
+            auto& check = *absenceCheck;
             Y_ABORT_UNLESS(msg.ResponseSz == check.Ids.size());
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 const auto& r = msg.Responses[i];
@@ -783,9 +839,10 @@ namespace NKikimr::NGroupSyncer {
     )
 
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter) {
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter, bool reconcile,
+            bool thorough) {
         return new TSyncerActor(std::move(info), sourceGroupId, targetGroupId, std::move(syncerDataStats),
-            std::move(syncRateQuoter));
+            std::move(syncRateQuoter), reconcile, thorough);
     }
 
 } // NKikimr::NGroupSyncer

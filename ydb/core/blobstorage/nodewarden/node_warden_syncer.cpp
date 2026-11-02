@@ -23,6 +23,8 @@ namespace NKikimr::NStorage {
                 .BridgeProxyGroupId = TGroupId::FromProto(&item, &T::GetBridgeProxyGroupId),
                 .SourceGroupId = TGroupId::FromProto(&item, &T::GetSourceGroupId),
                 .TargetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId),
+                .Reconcile = item.GetReconcile(),
+                .Thorough = item.GetThorough(),
             });
             auto& syncer = const_cast<TWorkingSyncer&>(*it);
             syncer.PendingBridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration();
@@ -38,6 +40,7 @@ namespace NKikimr::NStorage {
                     {"bridgeProxyGroupGeneration", syncer.BridgeProxyGroupGeneration},
                     {"sourceGroupId", syncer.SourceGroupId},
                     {"targetGroupId", syncer.TargetGroupId},
+                    {"reconcile", syncer.Reconcile},
                     {"pendingBridgeProxyGroupGeneration", syncer.PendingBridgeProxyGroupGeneration},
                     {"actorId", syncer.ActorId});
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
@@ -69,7 +72,7 @@ namespace NKikimr::NStorage {
             syncer.SyncerDataStats = std::make_unique<NGroupSyncer::TSyncerDataStats>();
             syncer.ForceProgressReport = true;
             syncer.ActorId = Register(NGroupSyncer::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
-                syncer.SyncerDataStats, SyncRateQuoter));
+                syncer.SyncerDataStats, SyncRateQuoter, syncer.Reconcile, syncer.Thorough));
             syncer.Finished = false;
             syncer.ErrorReason.reset();
             ++syncer.NumStart;
@@ -82,6 +85,8 @@ namespace NKikimr::NStorage {
                 {"bridgeProxyGroupGeneration", syncer.BridgeProxyGroupGeneration},
                 {"sourceGroupId", syncer.SourceGroupId},
                 {"targetGroupId", syncer.TargetGroupId},
+                {"reconcile", syncer.Reconcile},
+                {"thorough", syncer.Thorough},
                 {"pendingBridgeProxyGroupGeneration", syncer.PendingBridgeProxyGroupGeneration},
                 {"prevActorId", prevActorId},
                 {"actorId", syncer.ActorId},
@@ -98,6 +103,8 @@ namespace NKikimr::NStorage {
             .BridgeProxyGroupId = msg.BridgeProxyGroupId,
             .SourceGroupId = msg.SourceGroupId,
             .TargetGroupId = msg.TargetGroupId,
+            .Reconcile = msg.Reconcile,
+            .Thorough = msg.Thorough,
         });
         if (it == WorkingSyncers.end()) {
             return;
@@ -118,6 +125,11 @@ namespace NKikimr::NStorage {
         SendToController(std::move(notify));
     }
 
+    void TNodeWarden::Handle(TEvNodeWardenStandbyDirty::TPtr ev) {
+        auto& msg = *ev->Get();
+        StandbyDirty[msg.TargetGroupId] |= msg.Data;
+    }
+
     bool TNodeWarden::FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update,
             TWorkingSyncer& syncer, bool forceProgress) {
         auto *item = update->AddSyncers();
@@ -131,6 +143,9 @@ namespace NKikimr::NStorage {
         syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
         if (syncer.Finished) {
             item->SetFinished(true);
+        }
+        if (syncer.Reconcile) {
+            item->SetReconcile(true);
         }
         if (syncer.ErrorReason) {
             item->SetErrorReason(*syncer.ErrorReason);
@@ -176,7 +191,15 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::NotifySyncersProgress() {
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
-        bool doSend = false;
+        // the marks lost along with the pipe don't matter: BSC takes every standby part for dirty when the node registers
+        bool doSend = !StandbyDirty.empty();
+        for (const auto& [targetGroupId, data] : std::exchange(StandbyDirty, {})) {
+            auto *item = notify->Record.AddStandbyDirty();
+            targetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
+            if (data) {
+                item->SetData(true);
+            }
+        }
         for (const TWorkingSyncer& syncer : WorkingSyncers) {
             if (FillInWorkingSyncer(&notify->Record, const_cast<TWorkingSyncer&>(syncer), false)) {
                 doSend = true;

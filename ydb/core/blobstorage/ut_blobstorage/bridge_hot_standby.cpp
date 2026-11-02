@@ -229,6 +229,97 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
     }
 
+    // The write dropped over the budget gets to the standby by reconciliation, while the pile stays in HOT_STANDBY.
+    Y_UNIT_TEST(ReconciliationCopiesDroppedWrite) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        for (const ui32 nodeId : env.Runtime->GetNodes()) {
+            TControlBoard::SetValue(0,
+                env.Runtime->GetNode(nodeId)->AppData->Icb->DSProxyControls.BridgeStandbyMaxBytesInFlight);
+        }
+        const i64 droppedBefore = GetStandbyCounter(env, "WritesDropped");
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        const auto& [writtenGroup, id, data] = checker.GetWritten().back();
+        UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
+        UNIT_ASSERT_LT(droppedBefore, GetStandbyCounter(env, "WritesDropped"));
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::NODATA);
+        WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
+            "reconciliation copies the dropped write");
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
+    }
+
+    // Reconciliation forwards the barrier held back by dsproxy-proxy only after the standby keeps what the source does:
+    // the keep flag the standby has missed comes first, and the keep flag the source has released is released.
+    Y_UNIT_TEST(ReconciliationCollectsGarbageAfterKeepFlags) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 3; ++i) {
+            checker.Write(groupId);
+        }
+        const auto& written = checker.GetWritten();
+        const auto& [groupA, a, dataA] = written[0]; // kept, but its keep flag doesn't reach the standby
+        const auto& [groupB, b, dataB] = written[1]; // not kept
+        const auto& [groupC, c, dataC] = written[2]; // kept in the standby, and then released
+        for (const auto& [group, id, data] : written) {
+            UNIT_ASSERT_VALUES_EQUAL(group, groupId);
+            WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
+                "background write reaches standby");
+        }
+
+        ui32 keepsLost = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage &&
+                    ev->Recipient == MakeBlobStorageProxyID(piles[1])) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                if (msg->RecordGeneration == 1 && msg->Keep && std::ranges::find(*msg->Keep, a) != msg->Keep->end()) {
+                    ++keepsLost; // the one of dsproxy-proxy, not of the reconciliation
+                    return false;
+                }
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto collect = [&](ui32 counter, bool barrier, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCollectGarbage(a.TabletID(), 1, counter, 0, barrier,
+                    1, barrier ? 10 : 0, keep, doNotKeep, TInstant::Max(), false));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        };
+        collect(0, false, new TVector<TLogoBlobID>{c}, nullptr);
+        collect(1, false, new TVector<TLogoBlobID>{a}, nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(keepsLost, 1);
+        collect(2, true, nullptr, new TVector<TLogoBlobID>{c});
+        for (const auto& [group, id, data] : written) {
+            UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
+        }
+
+        // the barrier takes effect when the VDisks of the group get it in sync
+        WaitUntil(env, [&] {
+            return ReadFromPileGroup(env, piles[0], 1, b, dataB) == NKikimrProto::NODATA &&
+                ReadFromPileGroup(env, piles[0], 1, c, dataC) == NKikimrProto::NODATA;
+        }, "source collects garbage", TDuration::Seconds(1), 60);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[0], 1, a, dataA), NKikimrProto::OK);
+
+        WaitUntil(env, [&] {
+            return ReadFromPileGroup(env, piles[1], 9, b, dataB) == NKikimrProto::NODATA &&
+                ReadFromPileGroup(env, piles[1], 9, c, dataC) == NKikimrProto::NODATA;
+        }, "reconciliation forwards the barrier");
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, a, dataA), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(keepsLost, 1);
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::HOT_STANDBY);
+        env.Runtime->FilterFunction = {};
+
+        RejoinPile(env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, a, dataA), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, b, dataB), NKikimrProto::NODATA);
+    }
+
     // A pile out of sync can't be suspended: the suspended pile would take part in configuration quorum and count its
     // state storage rings as synchronized ones.
     Y_UNIT_TEST(StandbyCannotBeSuspended) {

@@ -35,6 +35,7 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenWriteMetadata;
     struct TEvNodeWardenQueryCacheResult;
     struct TEvNodeWardenNotifySyncerFinished;
+    struct TEvNodeWardenStandbyDirty;
     struct TEvNodeWardenAcquireBlobDepotS3Router;
     struct TEvNodeWardenReleaseBlobDepotS3Router;
 
@@ -898,6 +899,8 @@ namespace NKikimr::NStorage {
             ui32 PendingBridgeProxyGroupGeneration = 0;
             const TGroupId SourceGroupId;
             const TGroupId TargetGroupId;
+            const bool Reconcile = false;
+            const bool Thorough = false;
             TActorId ActorId;
             bool Finished = false;
             std::optional<TString> ErrorReason;
@@ -921,12 +924,16 @@ namespace NKikimr::NStorage {
             bool ForceProgressReport = false;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
-                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId) <=>
-                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId);
+                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId, x.Reconcile, x.Thorough) <=>
+                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId, y.Reconcile, y.Thorough);
             }
         };
 
         std::set<TWorkingSyncer> WorkingSyncers;
+
+        // the parts of HOT_STANDBY piles the local bridge proxies have found missing a write, reported to BSC along
+        // with the syncer progress; the value tells whether a blob write may have been lost
+        THashMap<TGroupId, bool> StandbyDirty;
 
         TReplQuoter::TPtr SyncRateQuoter;
         ui64 SyncRateConfigLimit = 0; // BridgeSyncRateBytesPerSecond, 0 means no limit
@@ -937,6 +944,7 @@ namespace NKikimr::NStorage {
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbyDirty>> ev);
         bool FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, TWorkingSyncer& syncer,
             bool forceProgress);
         void NotifySyncersProgress();

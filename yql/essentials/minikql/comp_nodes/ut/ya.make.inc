@@ -72,7 +72,6 @@ SET(ORIG_SOURCES
     mkql_computation_node_ut.cpp
     mkql_group_ut.cpp
     mkql_dict_ut.cpp
-    mkql_isa_detection_ut.cpp
     mkql_iterable_ut.cpp
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp

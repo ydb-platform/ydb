@@ -302,6 +302,58 @@ Y_UNIT_TEST_SUITE(BlobDepotMoveData) {
         test.WaitMoveData();
     }
 
+    // the agent checks the blob it has cached the mapping for, while the value has been moved to another blob since;
+    // the old blob is reported missing, and the agent resolves the key again to check the moved blob, rather than
+    // reporting NODATA
+    Y_UNIT_TEST(CheckIntegrityAfterMove) {
+        TMoveDataTest test;
+        auto& env = test.Env;
+        auto& blob = test.AddBlob(1);
+        test.Put(blob);
+
+        std::set<TLogoBlobID> checked; // physical blobs checked by the agent
+        bool oldBlobsMissing = false;
+        ui32 numMissing = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrity) {
+                const TLogoBlobID& id = ev->Get<TEvBlobStorage::TEvCheckIntegrity>()->Id;
+                if (id != blob.Id && !oldBlobsMissing) {
+                    checked.insert(id);
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvCheckIntegrityResult && oldBlobsMissing) {
+                auto *msg = ev->Get<TEvBlobStorage::TEvCheckIntegrityResult>();
+                if (checked.contains(msg->Id)) {
+                    msg->Status = NKikimrProto::NODATA;
+                    ++numMissing;
+                }
+            }
+            return true;
+        };
+
+        auto check = [&] {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, test.VirtualGroup, new TEvBlobStorage::TEvCheckIntegrity(blob.Id, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge);
+            Cerr << "*** " << res->Get()->ToString() << Endl;
+            return res->Get()->Status;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::OK); // the agent caches the mapping
+        UNIT_ASSERT(!checked.empty());
+
+        test.ReassignAllChannels();
+        test.RestartTablet();
+        test.MoveData();
+
+        oldBlobsMissing = true;
+        UNIT_ASSERT_VALUES_EQUAL(check(), NKikimrProto::OK);
+        UNIT_ASSERT(numMissing); // the stale mapping was used indeed
+        env.Runtime->FilterFunction = {};
+    }
+
     Y_UNIT_TEST(TrashNotEmptyDuringCheckTrash) {
         TMoveDataTest test;
 

@@ -26,6 +26,7 @@
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
@@ -418,12 +419,14 @@ public:
                 return true;
             case EType::GlobalAsync:
                 return false;
-            case EType::GlobalSyncVectorKMeansTree:
+            case EType::GlobalSyncVectorKMeansTree: {
                 if (State != EIndexState::Ready) {
                     // Do not try to update vector indexes until their build is finished
                     return false;
                 }
-                return true;
+                const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).GetSettings();
+                return !settings.has_autoupdate() || settings.autoupdate();
+            }
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
@@ -718,7 +721,7 @@ struct TKikimrColumnMetadata {
         }
 
         if (IsDefaultFromExpression()) {
-            const auto& defaultExpression = message->GetDefaultExpression();
+            const auto& defaultExpression = message->GetDefaultFromExpression();
             DefaultExpression = TDefaultExpressionColumnInfo{};
             DefaultExpression->ExprText = defaultExpression.GetExprText();
             DefaultExpression->Stored = defaultExpression.GetStored();
@@ -769,7 +772,7 @@ struct TKikimrColumnMetadata {
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
         if (DefaultExpression) {
-            auto& defaultExpression = *message->MutableDefaultExpression();
+            auto& defaultExpression = *message->MutableDefaultFromExpression();
             defaultExpression.SetExprText(DefaultExpression->ExprText);
             defaultExpression.SetStored(DefaultExpression->Stored);
             for (const auto& dep : DefaultExpression->Dependencies) {
@@ -1267,6 +1270,7 @@ struct TAlterDatabaseSettings {
 
 struct TTruncateTableSettings {
     TString TablePath;
+    bool Unsafe = false;
 };
 
 struct TCreateUserSettings {
@@ -1517,6 +1521,7 @@ struct TReplicationSettings : public TReplicationSettingsBase {
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
     TMaybe<bool> InitialScan;
+    TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {
@@ -1816,7 +1821,7 @@ public:
         const TMaybe<TString>& requestType,
         const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
+    virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
@@ -1894,7 +1899,7 @@ public:
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;
@@ -1931,6 +1936,7 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
 bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error);
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, NKikimrKqp::TKqpColumnMetadataProto& column, TString& error);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);

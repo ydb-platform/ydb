@@ -815,6 +815,22 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_LE(kOverlap, 500u);
     }
 
+    Y_UNIT_TEST(FillSettingAutoupdate) {
+        for (const auto& [value, expected] : TVector<std::pair<TString, bool>>{
+                 {"true", true}, {"false", false}, {"1", true}, {"0", false}, {"TRUE", true}, {"FALSE", false}}) {
+            Ydb::Table::KMeansTreeSettings settings;
+            TString error;
+            UNIT_ASSERT_C(FillSetting(settings, "autoupdate", value, error), error);
+            UNIT_ASSERT(settings.has_autoupdate());
+            UNIT_ASSERT_VALUES_EQUAL(settings.autoupdate(), expected);
+        }
+
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        UNIT_ASSERT(!FillSetting(settings, "autoupdate", "maybe", error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Invalid bool value for autoupdate: maybe");
+    }
+
     Y_UNIT_TEST(FillSettingAdaptiveClusters) {
         Ydb::Table::KMeansTreeSettings settings;
         TString error;

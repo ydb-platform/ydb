@@ -4,9 +4,10 @@
 codecov:
   # PR code is measured, but it must not be able to weaken coverage policy.
   strict_yaml_branch: default
-  # Delay notifications until CI completes. The trusted PR workflow separately
-  # rejects a coverage-relevant exact base without a successful all-suite run.
-  require_ci_to_pass: true
+  # Wait for CI to finish, but still publish the standard comment when our
+  # non-required patch-coverage job is red. That job checks the preserved LCOV
+  # offline; neither Codecov processing nor a main baseline gates its verdict.
+  require_ci_to_pass: false
   notify:
     wait_for_ci: true
 
@@ -35,9 +36,12 @@ flag_management:
           target: auto
           threshold: 0.1%
           flag_coverage_not_uploaded_behavior: exclude
-        - type: patch
+        # Shared by all three flags and the local patch checker. Edit here only.
+        - &cpp_patch_policy
+          type: patch
           target: 80%
-          informational: true
+          threshold: 0%
+          informational: false
           flag_coverage_not_uploaded_behavior: exclude
     - name: cli
       paths:
@@ -48,10 +52,7 @@ flag_management:
           target: auto
           threshold: 5%
           flag_coverage_not_uploaded_behavior: exclude
-        - type: patch
-          target: 80%
-          informational: true
-          flag_coverage_not_uploaded_behavior: exclude
+        - *cpp_patch_policy
     - name: cli_workload
       paths:
         - ydb/library/workload/**
@@ -60,10 +61,7 @@ flag_management:
           target: auto
           threshold: 5%
           flag_coverage_not_uploaded_behavior: exclude
-        - type: patch
-          target: 80%
-          informational: true
-          flag_coverage_not_uploaded_behavior: exclude
+        - *cpp_patch_policy
 
 comment:
   # Codecov's flags table always includes missing base flags as `?`, and its

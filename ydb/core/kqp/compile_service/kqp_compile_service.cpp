@@ -1,6 +1,7 @@
 #include "kqp_compile_service.h"
 #include "helpers/kqp_compile_service_helpers.h"
 
+#include <ydb/core/kqp/tracing/kqp_trace_flow.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -103,6 +104,7 @@ struct TKqpCompileRequest {
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan CompileServiceSpan;
+    NWilson::TSpan WaitSpan;
     ui64 Cookie;
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
@@ -160,6 +162,7 @@ public:
 
             if (!request.IsIntrestedInResult()) {
                 auto result = std::move(request);
+                EndQueryTraceSpan(result.WaitSpan, Ydb::StatusIds::CANCELLED);
                 EndQueryTraceSpan(result.CompileServiceSpan, Ydb::StatusIds::CANCELLED);
                 YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Drop compilation request because session is not longer wait for response");
                 if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
@@ -276,13 +279,14 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+        PathNormalizer = AppData(ctx)->GetPathNormalizer();
 
         QueryReplayBackend.Reset(CreateQueryReplayBackend(TableServiceConfig, Counters, QueryReplayFactory));
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+                 {tableServiceConfigKind, NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpCompileService::MainState);
@@ -481,11 +485,16 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
+        const bool aliasesChanged = ev->Get()->PathNormalizer.has_value()
+            && *ev->Get()->PathNormalizer != PathNormalizer;
+        if (ev->Get()->PathNormalizer.has_value()) {
+            PathNormalizer = *ev->Get()->PathNormalizer;
+        }
 
         auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
-        if (diff.has_value()) {
+        if (aliasesChanged || diff.has_value()) {
             YDB_LOG_NOTICE("Query cache was invalidated due to config change, config change differencer",
-                {"output", diff.value()});
+                {"output", diff.value_or("path aliases changed")});
 
             QueryCache->Clear();
         }
@@ -536,6 +545,8 @@ private:
             {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "Get query plan");
+        // The compile service works concurrently with its requester.
+        MarkSpawn(compileServiceSpan);
 
         YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
             {"sender", ev->Sender},
@@ -662,6 +673,7 @@ private:
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
+            MarkSpawn(compileServiceSpan);
 
             TKqpCompileSettings compileSettings(
                 true,
@@ -705,6 +717,7 @@ private:
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << request.Uid);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
+            MarkSpawn(compileServiceSpan);
 
             ReplyError(ev->Sender, request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx,
                 ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
@@ -722,6 +735,8 @@ private:
         auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
         Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
         Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
+        LinkDependsOn(compileRequest.WaitSpan, ev->TraceId);
+        EndQueryTraceSpan(compileRequest.WaitSpan, compileResult->Status);
 
         YDB_LOG_DEBUG_CTX(ctx, "Received response",
             {"sender", compileRequest.Sender},
@@ -755,6 +770,8 @@ private:
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
+                    LinkDependsOn(request.WaitSpan, ev->TraceId);
+                    EndQueryTraceSpan(request.WaitSpan, compileResult->Status);
                     Reply(request.Sender, compileResult, compileStats, ctx,
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
@@ -843,8 +860,11 @@ private:
     }
 
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
+        compileRequest.WaitSpan = compileRequest.CompileServiceSpan.CreateChild(
+            TComponentTracingLevels::TQueryProcessor::Detailed, "Wait for compiler", NWilson::EFlags::AUTO_END);
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
+            EndQueryTraceSpan(overflow->WaitSpan, Ydb::StatusIds::OVERLOADED);
             Counters->ReportCompileRequestRejected(overflow->DbCounters);
             YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
                 {"sender", overflow->Sender},
@@ -911,6 +931,8 @@ private:
         YQL_ENSURE(astStatements.size());
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        LinkDependsOn(compileRequest.WaitSpan, ev->TraceId);
+        EndQueryTraceSpan(compileRequest.WaitSpan, Ydb::StatusIds::SUCCESS);
         if (astStatements.size() > 1) {
             ReplyQueryStatements(compileRequest.Sender, astStatements, query, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
             return;
@@ -923,6 +945,9 @@ private:
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        LinkDependsOn(compileRequest.WaitSpan, ev->TraceId);
+        EndQueryTraceSpan(compileRequest.WaitSpan, ev->Get()->Status);
+        EndQueryTraceSpan(compileRequest.CompileServiceSpan, ev->Get()->Status);
         ctx.Send(compileRequest.Sender, ev->Release(), 0, compileRequest.Cookie);
     }
 
@@ -975,6 +1000,7 @@ private:
                     {"sender", request->Sender},
                     {"deadline", request->CompileSettings.Deadline});
 
+                EndQueryTraceSpan(request->WaitSpan, Ydb::StatusIds::TIMEOUT);
                 Counters->ReportCompileRequestTimeout(request->DbCounters);
 
                 NYql::TIssue issue(NYql::TPosition(), "Compilation timed out.");
@@ -989,12 +1015,15 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
+        request.WaitSpan.EndOk();
+        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, PathNormalizer, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), request.CollectDiagnostics,
             request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
+        request.WaitSpan = request.CompileServiceSpan.CreateChild(
+            TComponentTracingLevels::TQueryProcessor::Detailed, "Await compilation", NWilson::EFlags::AUTO_END);
 
         YDB_LOG_DEBUG_CTX(ctx, "Created compile actor",
             {"sender", request.Sender},
@@ -1107,6 +1136,7 @@ private:
     TDuration DatabaseTypeRetryDelay = TDuration::Seconds(1);
 
     TTableServiceConfig TableServiceConfig;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
     TQueryServiceConfig QueryServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;

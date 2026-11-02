@@ -1,5 +1,3 @@
-ALLOCATOR(J)
-
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/udfs/common/python/sanitizer_suppressions.inc)
 
 SRCS(

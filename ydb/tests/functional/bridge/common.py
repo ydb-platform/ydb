@@ -96,6 +96,8 @@ class BridgeKiKiMRTest(object):
             port = self.configurator.port_allocator.get_node_port_allocator(node_id).ic_port
             hosts_by_port[port].setdefault("location", {}).update(location)
 
+        self.configure_cluster()
+
         self.cluster = KiKiMR(configurator=self.configurator)
         self.cluster.start()
 
@@ -111,6 +113,9 @@ class BridgeKiKiMRTest(object):
             self.bridge_clients[name] = client
         self.bridge_client = self.bridge_clients[self.pile_names[0]]
         self.secondary_bridge_client = self.bridge_clients[self.pile_names[1]]
+
+    def configure_cluster(self):
+        pass
 
     def teardown_method(self):
         for client in self.bridge_clients.values():

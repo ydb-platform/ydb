@@ -1,4 +1,7 @@
 #include <ydb/core/base/hive.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -183,6 +186,63 @@ Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
     send(Q1_("SELECT 43 AS cache_counter;"), NKikimrKqp::QUERY_TYPE_SQL_DML, Nothing(), false, TInstant::MicroSeconds(1));
     receive(Ydb::StatusIds::TIMEOUT);
     check(0, !AstCache);
+}
+
+Y_UNIT_TEST_TWIN(PathAliasesInvalidateCompilationCache, AstCache) {
+    auto settings = TKikimrSettings().SetUseRealThreads(false);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    config->SetEnableAstCache(AstCache);
+    auto* rule = settings.AppConfig.MutableResourcePathPrefixMapping()->AddRules();
+    rule->SetSrc("/Alias");
+    rule->SetDst("/Root");
+    TKikimrRunner kikimr(settings);
+    UNIT_ASSERT(kikimr.RunCall([&] { return kikimr.GetQueryClient().GetSession().GetValueSync().IsSuccess(); }));
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("path-aliases", "/Root", "path-aliases");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+    auto compile = [&](const TString& expectedPath, bool fromCache) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName), "/Root", "", "root@builtin",
+            "SELECT Key FROM `/Alias/KeyValue`;", TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), std::move(query), true, false, false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        const auto& result = *response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, fromCache);
+        if (expectedPath.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SCHEME_ERROR, result.Issues.ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToString());
+            UNIT_ASSERT(result.PreparedQuery);
+            const auto& tables = result.PreparedQuery->GetQueryTables();
+            UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tables.front().Path, expectedPath);
+        }
+    };
+    auto update = [&](std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer) {
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *notification->Record.MutableConfig()->MutableTableServiceConfig() = *config;
+        notification->PathNormalizer = std::move(normalizer);
+        runtime.Send(new IEventHandle(service, edge, notification.Release()));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edge, TDuration::Seconds(30)));
+    };
+
+    compile("/Root/KeyValue", false);
+    compile("/Root/KeyValue", true);
+    rule->SetSrc("/Alias/KeyValue");
+    rule->SetDst("/Root/TwoShard");
+    const auto normalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(settings.AppConfig.GetResourcePathPrefixMapping());
+    update(normalizer);
+    compile("/Root/TwoShard", false);
+    compile("/Root/TwoShard", true);
+    update(normalizer);
+    compile("/Root/TwoShard", true);
+    update(nullptr);
+    compile("", false);
 }
 
 auto GetYqlStreamIterator(
@@ -1102,10 +1162,12 @@ Y_UNIT_TEST(StatsProfile) {
 }
 
 // The per node memory history of a profiled query carries what the query holds on the node (Memory + ExternalMemory
-// via the resource manager), reported by the query quota manager of the node service: at least the start prepay of
-// the tasks and the channels. A scan query never runs its tasks locally in the executer, they go to the node service
-Y_UNIT_TEST(NodeMemQueryAllocatedProfile) {
+// via the compute scheduler or, without FeatureFlags.EnableComputeSchedulerMemory, the resource manager), reported by
+// the query quota manager of the node service: at least the start prepay of the tasks and the channels. A scan query
+// never runs its tasks locally in the executer, they go to the node service
+Y_UNIT_TEST_TWIN(NodeMemQueryAllocatedProfile, EnableComputeSchedulerMemory) {
     NKikimrConfig::TAppConfig app;
+    app.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
     app.MutableTableServiceConfig()->SetEnableChannelMemoryTracking(true);
     TKikimrRunner kikimr{TKikimrSettings(app)};
 

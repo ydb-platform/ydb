@@ -11,6 +11,8 @@
 #include <util/generic/algorithm.h>
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
+#include <util/string/join.h>
+#include <util/string/split.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
@@ -44,6 +46,24 @@ using namespace NNodeWhiteboard;
 
 namespace {
 
+bool IsPathParameter(TStringBuf name) {
+    return name == "database" || name == "database_path" || name == "tenant" || name == "path" || name == "topic";
+}
+
+TString NormalizePathValue(TStringBuf key, TStringBuf value, const std::function<TString(TStringBuf)>& normalizer, bool pathList = false) {
+    if (pathList && key == "path") {
+        auto paths = StringSplitter(value).Split(',').ToList<TString>();
+        for (auto& path : paths) {
+            path = normalizer(path);
+        }
+        return JoinSeq(',', paths);
+    }
+    if (!value.empty() && (key == "database" || key == "database_path" || key == "tenant")) {
+        return normalizer(CanonizePath(TString(value)));
+    }
+    return normalizer(value);
+}
+
 enum class EViewerEndpointAccessType {
     Administration,
     Monitoring,
@@ -73,6 +93,37 @@ TString GetLegacyJsonPathAlias(TStringBuf path) {
     return TStringBuilder() << '/' << prefix << "/json/" << rest;
 }
 
+}
+
+TCgiParameters NormalizePathParameters(TCgiParameters params, const std::shared_ptr<const std::function<TString(TStringBuf)>>& normalizer, bool pathList) {
+    if (normalizer) {
+        for (auto& [key, value] : params) {
+            if (IsPathParameter(key)) {
+                value = NormalizePathValue(key, value, *normalizer, pathList);
+            }
+        }
+    }
+    return params;
+}
+
+void NormalizePathParameters(NJson::TJsonValue& params, const std::shared_ptr<const std::function<TString(TStringBuf)>>& normalizer, bool pathList) {
+    if (!params.IsMap() || !normalizer) {
+        return;
+    }
+    for (auto& [key, value] : params.GetMapSafe()) {
+        if (!IsPathParameter(key)) {
+            continue;
+        }
+        if (value.IsString()) {
+            value = NormalizePathValue(key, value.GetString(), *normalizer, pathList);
+        } else if (value.IsArray()) {
+            for (auto& item : value.GetArraySafe()) {
+                if (item.IsString()) {
+                    item = NormalizePathValue(key, item.GetString(), *normalizer);
+                }
+            }
+        }
+    }
 }
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);

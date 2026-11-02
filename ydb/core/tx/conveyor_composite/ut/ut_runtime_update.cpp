@@ -355,6 +355,8 @@ ui64 GetBadConfigNotificationsCounter(const TRuntimeFixture& fixture) {
 
 std::pair<ui32, ui32> RunWeightedPhase(TRuntimeFixture& fixture, const ESpecialTaskCategory blockerCategory) {
     TAtomicCounter counter;
+    // Weights apply to measured execution time, which can round to zero for empty tasks.
+    const auto executionDuration = TDuration::MilliSeconds(1);
     TAutoPtr<NActors::IEventHandle> heldTask;
     auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType && !heldTask) {
@@ -363,13 +365,13 @@ std::pair<ui32, ui32> RunWeightedPhase(TRuntimeFixture& fixture, const ESpecialT
         }
         return NActors::TTestActorRuntime::EEventAction::PROCESS;
     });
-    fixture.Submit(counter, blockerCategory);
+    fixture.Submit(counter, blockerCategory, 0, executionDuration);
     fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
     UNIT_ASSERT(heldTask);
 
     for (ui32 i = 0; i < 50; ++i) {
-        fixture.Submit(counter, ESpecialTaskCategory::Scan);
-        fixture.Submit(counter, ESpecialTaskCategory::Insert);
+        fixture.Submit(counter, ESpecialTaskCategory::Scan, 0, executionDuration);
+        fixture.Submit(counter, ESpecialTaskCategory::Insert, 0, executionDuration);
     }
     fixture.Runtime.SetObserverFunc(previousObserver);
 
@@ -523,21 +525,22 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
     }
 
     Y_UNIT_TEST(WeightsUpdateInPlace) {
+        // Account for each completed task before selecting the next category.
         auto initial = BuildTopologyConfig(
-            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 100}}}, {1});
+            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 100}}}, {1}, 1);
         TRuntimeFixture fixture(initial);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 100);
         const auto [scanBefore, insertBefore] = RunWeightedPhase(fixture, ESpecialTaskCategory::Scan);
-        UNIT_ASSERT(scanBefore > insertBefore);
+        UNIT_ASSERT_C(scanBefore > insertBefore, "scan=" << scanBefore << ", insert=" << insertBefore);
 
         auto candidate = BuildTopologyConfig(
-            {{{ESpecialTaskCategory::Scan, 100}, {ESpecialTaskCategory::Insert, 1}}}, {1});
+            {{{ESpecialTaskCategory::Scan, 100}, {ESpecialTaskCategory::Insert, 1}}}, {1}, 1);
         fixture.Update(candidate);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 100);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 1);
         const auto [scanAfter, insertAfter] = RunWeightedPhase(fixture, ESpecialTaskCategory::Insert);
-        UNIT_ASSERT(insertAfter > scanAfter);
+        UNIT_ASSERT_C(insertAfter > scanAfter, "scan=" << scanAfter << ", insert=" << insertAfter);
     }
 
     Y_UNIT_TEST(QueueSizeLimitUpdatesMonitoringOnly) {

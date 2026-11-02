@@ -1,8 +1,11 @@
 #include "bridge_common.h"
+#include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
+#include <util/system/type_name.h>
 
 using NBridgeTest::GetBridgedLocation;
 using NBridgeTest::QueryStorageConfig;
@@ -215,6 +218,56 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         for (size_t i = 0; i < pileGroups.size(); ++i) {
             checkData(pileGroups[i].GetRawId(), 1 + 8 * i);
         }
+    }
+
+
+    // the syncer failing at once is started again after a while only, rather than over and over in a loop of BSC and
+    // NodeWarden; once the reason is gone, the pile gets synced
+    Y_UNIT_TEST(FailingSyncerRestartedWithBackoff) {
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = NBridgeTest::CreatePoolAndGetGroup(env);
+        NBridgeTest::TDataChecker checker(env);
+        checker.Write(groupId);
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId);
+
+        // every assimilation the syncers make fails, and so do the syncers
+        bool failing = true;
+        THashMap<TGroupId, ui32> failures; // by target group
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (failing && ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilateResult && ev->HasEvent()) {
+                if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TSyncerActor")) {
+                    ev->Get<TEvBlobStorage::TEvAssimilateResult>()->Status = NKikimrProto::ERROR;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenNotifySyncerFinished && ev->HasEvent()) {
+                if (const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>(); msg->ErrorReason) {
+                    ++failures[msg->TargetGroupId];
+                }
+            }
+            return true;
+        };
+        NBridgeTest::SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(!failures.empty());
+        for (const auto& [targetGroupId, num] : failures) {
+            // the backoff from 100 ms to 30 s allows about ten attempts a minute
+            UNIT_ASSERT_C(num <= 15, "TargetGroupId# " << targetGroupId << " failures# " << num);
+        }
+
+        failing = false;
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        env.Runtime->FilterFunction = {};
+        checker.CheckAll();
+        NBridgeTest::CheckPileData(env, checker, 1, 9);
     }
 
 }

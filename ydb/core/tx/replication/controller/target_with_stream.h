@@ -81,6 +81,7 @@ public:
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
+    bool IsExpectedStreamCreator(const TActorId& actorId) const override;
 
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;

@@ -13,8 +13,10 @@ TNodeLockContext::TNodeLockContext(i32 priority, const TString& requestId, NKiki
     , Mode(mode)
 {}
 
-INodesChecker::TLock::TLock(i32 priority)
-    : Priority(priority)
+INodesChecker::TLock::TLock(const TNodeLockContext& ctx)
+    : Priority(ctx.Priority)
+    , PermissionId(ctx.PermissionId)
+    , Owner(ctx.Owner)
 {}
 
 TNodesLimitsCounterBase::ENodeState INodesChecker::NodeState(NKikimrCms::EState state) {
@@ -85,7 +87,7 @@ void TNodesCounterBase::LockNode(ui32 nodeId, const TNodeLockContext& ctx) {
         }
     }
 
-    AddPriorityLock(node.Locks, TLock(ctx.Priority));
+    AddPriorityLock(node.Locks, TLock(ctx));
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) {
@@ -106,6 +108,17 @@ void TNodesCounterBase::UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) {
 
 const THashMap<ui32, INodesChecker::TNodeInfo>& TNodesCounterBase::GetNodes() const {
     return Nodes;
+}
+
+TString TNodesCounterBase::GetNodeStateDescription(ui32 nodeId) const {
+    const auto& node = Nodes.at(nodeId);
+    TStringBuilder description;
+    description << "node state: '" << node.State << "'";
+    if (!node.Locks.empty() && !node.Locks.front().PermissionId.empty()) {
+        const auto& lock = node.Locks.front();
+        description << " (permission " << lock.PermissionId << " owned by " << lock.Owner << ")";
+    }
+    return description;
 }
 
 bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const {
@@ -131,7 +144,7 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, const TNodeLockContext&
         case NODE_STATE_RESTART:
             if (IsNodeLocked(nodeId, ctx.Priority)) {
                 reason = TStringBuilder() << ReasonPrefix(nodeId)
-                    << ": node state: '" << nodeState << "'";
+                    << ": " << GetNodeStateDescription(nodeId);
                 return false;
             } else {
                 // Allow to maintain nodes that locked by lower priority locks
@@ -221,7 +234,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext&
         case NODE_STATE_RESTART:
             if (IsNodeLocked(nodeId, ctx.Priority)) {
                 reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
-                    << ": node state: '" << nodeState << "'";
+                    << ": " << GetNodeStateDescription(nodeId);
                 return false;
             } else {
                 // Allow to maintain nodes that locked by lower priority locks

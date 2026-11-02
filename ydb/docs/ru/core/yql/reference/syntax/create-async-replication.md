@@ -21,6 +21,9 @@ WITH (option = value [, ...])
 
 * `CONNECTION_STRING` — [строка соединения](../../../concepts/connect.md#connection_string) c базой-источником. Обязательный параметр.
 * `CA_CERT` — [корневой сертификат для TLS](../../../concepts/connect.md#tls-cert). Необязательный параметр. Может быть указан, если база-источник поддерживает режим обмена данными с шифрованием (`CONNECTION_STRING` начинается с `grpcs://`).
+* `INITIAL_SCAN`: выполнять ли [первоначальное сканирование](../../../concepts/async-replication.md#initial-scan). Необязательный параметр типа `Bool`. Если не указан, используется настройка сервера; по умолчанию `TRUE`.
+  * `TRUE`: исходные данные передаются через потоки изменений, объекты-реплики создаются автоматически.
+  * `FALSE`: репликация создаётся в состоянии `PAUSED` и подготавливает потоки изменений без первоначального сканирования. Целевые таблицы не создаются и не подключаются к репликации до перевода в `STANDBY`. Сначала создайте резервную копию источника и восстановите данные в приёмнике, затем запустите репликацию с помощью [ALTER ASYNC REPLICATION](alter-async-replication.md). К моменту запуска целевые таблицы должны существовать и соответствовать схемам источника, включая индексы. Порядок действий описан в [руководстве по первоначальной синхронизации](../../../devops/async-replication-initial-sync.md).
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
 
   {% include [x](_includes/async_replication_authentification.md) %}
@@ -117,7 +120,22 @@ WITH (
 );
 ```
 
+Создание репликации для [первоначальной синхронизации с помощью резервного копирования и восстановления](../../../devops/async-replication-initial-sync.md):
+
+```yql
+CREATE ASYNC REPLICATION my_replication_without_initial_scan
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_PATH = 'my_secret',
+    INITIAL_SCAN = FALSE
+);
+```
+
+Репликация подготавливает потоки изменений в состоянии `PAUSED`. Дождитесь их готовности, выполните резервное копирование и восстановление, затем переведите репликацию в `STANDBY` с помощью [ALTER ASYNC REPLICATION](alter-async-replication.md).
+
 ## См. также
 
+* [Первоначальная синхронизация с помощью резервного копирования и восстановления](../../../devops/async-replication-initial-sync.md)
 * [ALTER ASYNC REPLICATION](alter-async-replication.md)
 * [DROP ASYNC REPLICATION](drop-async-replication.md)

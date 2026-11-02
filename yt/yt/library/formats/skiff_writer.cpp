@@ -379,41 +379,30 @@ TUnversionedValueToSkiffConverter CreatePrimitiveValueConverter(EWireType wireTy
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TUnversionedValueToSkiffConverter CreateTzValueConverter(const std::shared_ptr<TSkiffSchema>& skiffSchema, bool required)
+TUnversionedValueToSkiffConverter CreateTzTupleValueConverter(
+    const std::shared_ptr<TSkiffSchema>& skiffSchema,
+    bool required)
 {
     // A valid skiff schema is expected.
-    auto wireType = skiffSchema->GetWireType();
-    switch (wireType) {
-        case EWireType::String32:
-            return required
-                ? ConvertSimpleValueImpl<EWireType::String32, false>
-                : ConvertSimpleValueImpl<EWireType::String32, true>;
-
-        case EWireType::Tuple: {
-            const auto& children = skiffSchema->GetChildren();
-            YT_VERIFY(children.size() == 2);
-            const auto innerWireType = children[0]->GetWireType();
-            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
-            switch (innerWireType) {
-        #define CASE(x) \
-                case ((x)): \
-                    return CreatePrimitiveValueConverter<EValueType::String>(required, TTzSkiffWriter<(x)>());
-                CASE(EWireType::Int32);
-                CASE(EWireType::Int64);
-                CASE(EWireType::Uint16);
-                CASE(EWireType::Uint32);
-                CASE(EWireType::Uint64);
-        #undef CASE
-                default:
-                    break;
-            }
-            YT_ABORT();
-        }
-        case EWireType::Yson32:
-            return CreatePrimitiveValueConverter(wireType, required);
+    YT_VERIFY(skiffSchema->GetWireType() == EWireType::Tuple);
+    const auto& children = skiffSchema->GetChildren();
+    YT_VERIFY(children.size() == 2);
+    const auto innerWireType = children[0]->GetWireType();
+    YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+    switch (innerWireType) {
+#define CASE(x) \
+        case x: \
+            return CreatePrimitiveValueConverter<EValueType::String>(required, TTzTupleSkiffWriter<(x)>());
+        CASE(EWireType::Int32);
+        CASE(EWireType::Int64);
+        CASE(EWireType::Uint16);
+        CASE(EWireType::Uint32);
+        CASE(EWireType::Uint64);
+#undef CASE
         default:
-            YT_ABORT();
+            break;
     }
+    YT_ABORT();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -426,89 +415,14 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
     auto [skiffSchema, optionalKind] = StripOptional(skiffField.Schema());
     auto wireType = skiffSchema->GetWireType();
     bool required = optionalKind == EOptionalKind::None;
+    ValidateMatchesSimpleType(skiffSchema, logicalType);
 
-    switch (logicalType) {
-        case ESimpleLogicalValueType::Int8:
-        case ESimpleLogicalValueType::Int16:
-        case ESimpleLogicalValueType::Int32:
-        case ESimpleLogicalValueType::Int64:
-
-        case ESimpleLogicalValueType::Interval:
-
-        case ESimpleLogicalValueType::Date32:
-        case ESimpleLogicalValueType::Datetime64:
-        case ESimpleLogicalValueType::Timestamp64:
-        case ESimpleLogicalValueType::Interval64:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Uint8:
-        case ESimpleLogicalValueType::Uint16:
-        case ESimpleLogicalValueType::Uint32:
-        case ESimpleLogicalValueType::Uint64:
-
-        case ESimpleLogicalValueType::Date:
-        case ESimpleLogicalValueType::Datetime:
-        case ESimpleLogicalValueType::Timestamp:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-            CheckTzType(skiffSchema, logicalType);
-            return CreateTzValueConverter(skiffSchema, required);
-
-        case ESimpleLogicalValueType::Float:
-        case ESimpleLogicalValueType::Double:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Double, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Boolean:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Boolean, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Utf8:
-        case ESimpleLogicalValueType::Json:
-        case ESimpleLogicalValueType::String:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::String32, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Any:
-            ValidateWireTypeIsOneOf(wireType, {
-                EWireType::Int8,
-                EWireType::Int16,
-                EWireType::Int32,
-                EWireType::Int64,
-
-                EWireType::Uint8,
-                EWireType::Uint16,
-                EWireType::Uint32,
-                EWireType::Uint64,
-
-                EWireType::String32,
-                EWireType::Boolean,
-                EWireType::Double,
-                EWireType::Nothing,
-                EWireType::Yson32,
-            });
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Null:
-        case ESimpleLogicalValueType::Void:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Nothing, EWireType::Yson32});
-            return CreatePrimitiveValueConverter(wireType, required);
-
-        case ESimpleLogicalValueType::Uuid:
-            ValidateWireTypeIsOneOf(wireType, {EWireType::Uint128, EWireType::String32, EWireType::Yson32});
-            if (wireType == EWireType::Uint128) {
-                return CreatePrimitiveValueConverter<EValueType::String>(required, TUuidWriter());
-            } else {
-                return CreatePrimitiveValueConverter(wireType, required);
-            }
+    if (logicalType == ESimpleLogicalValueType::Uuid && wireType == EWireType::Uint128) {
+        return CreatePrimitiveValueConverter<EValueType::String>(required, TUuidWriter());
+    } else if (IsTzType(logicalType) && wireType == EWireType::Tuple) {
+        return CreateTzTupleValueConverter(skiffSchema, required);
+    } else {
+        return CreatePrimitiveValueConverter(wireType, required);
     }
 }
 

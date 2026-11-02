@@ -15,7 +15,12 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
-struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {};
+struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {
+    //! Leave existing storage pools and their groups non-bridged (static storage groups are still converted); they are
+    //! not replicated to added piles until converted separately. Requires the bridge config to enable non-uniform
+    //! storage.
+    FLUENT_SETTING_DEFAULT(bool, SkipStoragePoolConversion, false);
+};
 
 struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 

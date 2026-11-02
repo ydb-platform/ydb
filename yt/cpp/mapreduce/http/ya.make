@@ -17,7 +17,6 @@ PEERDIR(
     library/cpp/http/io
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/threading/cron
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/interface/logging

@@ -11,6 +11,8 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -1222,8 +1224,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         THashSet<ui64> InitialShards;
         // Hide every TEvWriteResult of these tablets.
         THashSet<ui64> SuppressResultsFrom;
-        // Hold the first data EvWrite to a tablet from this set instead of delivering
-        // it; the test re-delivers the held event later.
+        // Hold the first data EvWrite (one that carries rows) to a tablet from this set
+        // instead of delivering it; the test re-delivers the held event later. Empty
+        // chain-carrying re-routed batches are never held.
         THashSet<ui64> HoldWritesTo;
         std::unique_ptr<IEventHandle> HeldWrite;
         ui64 HeldWriteTablet = 0;
@@ -1245,8 +1248,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             }
         }
 
-        // (destination, WriteSeqNum, OriginalShard) of every data-mode operation.
-        TVector<std::tuple<ui64, ui64, ui64>> WriteOps;
+        // (destination, WriteSeqNum, OriginalShard, rows) of every data-mode operation.
+        // Rows come from the operation payload (0 for the empty re-routed batches that
+        // only carry the write chain).
+        TVector<std::tuple<ui64, ui64, ui64, ui64>> WriteOps;
         // Tablets that answered with IsDuplicate=true.
         THashSet<ui64> DuplicateResponders;
         // Prepare destination -> DataShards of the attached ancestor locks.
@@ -1268,8 +1273,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             return TTestActorRuntime::EEventAction::PROCESS;
         }
 
-        TVector<std::tuple<ui64, ui64, ui64>> WriteOpsSnapshot() const {
-            TVector<std::tuple<ui64, ui64, ui64>> result;
+        TVector<std::tuple<ui64, ui64, ui64, ui64>> WriteOpsSnapshot() const {
+            TVector<std::tuple<ui64, ui64, ui64, ui64>> result;
             with_lock(Mutex) {
                 result = WriteOps;
             }
@@ -1333,21 +1338,33 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             if (!InitialShards.contains(fwd.TabletId)) {
                 NewShardSends++;
             }
+            bool hasRows = false;
             bool hold = false;
             with_lock(Mutex) {
                 if (WriteActorId == TActorId()) {
                     WriteActorId = ev->Sender;
                 }
                 for (const auto& op : record.GetOperations()) {
+                    ui64 rows = 0;
+                    if (op.HasPayloadIndex()) {
+                        ::NKikimr::NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite> payloadReader(
+                            static_cast<const NEvents::TDataEvents::TEvWrite&>(*fwd.Ev));
+                        TSerializedCellMatrix matrix;
+                        if (TSerializedCellMatrix::TryParse(payloadReader.GetDataFromPayload(op.GetPayloadIndex()), matrix)) {
+                            rows = matrix.GetRowCount();
+                        }
+                    }
+                    hasRows = hasRows || rows > 0;
                     WriteOps.emplace_back(
                         fwd.TabletId,
                         op.GetWriteSeqNum().GetWriteSeqNum(),
-                        op.GetOriginalShard());
+                        op.GetOriginalShard(),
+                        rows);
                 }
                 if (CookieTablet == fwd.TabletId) {
                     ObservedCookies.insert(ev->Cookie);
                 }
-                hold = HoldWritesTo.contains(fwd.TabletId) && !HeldWrite;
+                hold = HoldWritesTo.contains(fwd.TabletId) && !HeldWrite && hasRows;
                 if (hold) {
                     HeldWrite.reset(ev.Release());
                     HeldWriteTablet = fwd.TabletId;
@@ -1838,7 +1855,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             // re-sent (its cookie set did not grow).
             const auto writeOps = wire.WriteOpsSnapshot();
             THashSet<ui64> rerouteDestinations;
-            for (const auto& [dest, seqNum, originalShard] : writeOps) {
+            for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
                 if (initialShards.contains(dest)) {
                     UNIT_ASSERT_VALUES_EQUAL_C(originalShard, dest,
                         "operations to the original shards must carry OriginalShard");
@@ -1848,6 +1865,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                         "a re-routed operation must carry OriginalShard of the removed shard");
                     UNIT_ASSERT_VALUES_EQUAL_C(seqNum, 1u,
                         "the re-routed batch must preserve the original WriteSeqNum");
+                    UNIT_ASSERT_C(rows > 0,
+                        "an inconsistent reroute must not produce empty batches");
                 }
             }
             UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 2u,
@@ -2013,7 +2032,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             {
                 const auto writeOps = wire.WriteOpsSnapshot();
                 THashSet<ui64> rerouteDestinations;
-                for (const auto& [dest, seqNum, originalShard] : writeOps) {
+                THashSet<ui64> dataDestinations;
+                for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
                     if (initialShards.contains(dest)) {
                         UNIT_ASSERT_VALUES_EQUAL_C(originalShard, dest,
                             "operations to the original shards must carry OriginalShard");
@@ -2023,9 +2043,14 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                             "a re-routed operation must carry OriginalShard of the removed shard");
                         UNIT_ASSERT_VALUES_EQUAL_C(seqNum, 2u,
                             "the re-routed batch must continue the transferred chain at 2");
+                        if (rows > 0) {
+                            dataDestinations.insert(dest);
+                        }
                     }
                 }
-                UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 1u,
+                UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 2u,
+                    "the re-routed chain must be delivered to both covering new shards");
+                UNIT_ASSERT_VALUES_EQUAL_C(dataDestinations.size(), 1u,
                     "keys 21..25 must be re-routed to a single new shard");
             }
 
@@ -2055,8 +2080,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             {
                 const auto writeOps = wire.WriteOpsSnapshot();
                 THashSet<ui64> freshDestinations;
-                for (const auto& [dest, seqNum, originalShard] : writeOps) {
+                for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
                     if (newShards.contains(dest) && originalShard == dest) {
+                        UNIT_ASSERT_C(rows > 0, "a fresh batch must carry rows");
                         freshDestinations.insert(dest);
                         UNIT_ASSERT_VALUES_EQUAL_C(seqNum, 1u,
                             "a fresh batch to a new shard must start its own chain at 1");
@@ -2234,11 +2260,11 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     }
 
     // A split where all of the removed shard's rows land in one of the two new shards
-    // leaves the other one lock-only: it holds the transferred ancestor lock but
-    // receives no rows and no re-routed batch. It still must join the distributed
-    // commit (the transferred lock makes it a participant; the prepare reaches it through
-    // the external-shards path) so that the ancestor lock is validated and cleaned by
-    // the commit.
+    // leaves the other one lock-only: it holds the transferred ancestor lock and
+    // receives no rows, only the empty re-routed batch carrying the write chain, which
+    // it answers as a duplicate. The echoed lock makes the shard a participant of the
+    // distributed commit, and its prepare must carry the ancestor lock of the removed
+    // shard so it is validated and cleaned by the commit.
     class TUncommittedWriteSeqNumLockOnlyShardJoinsCommit : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {
@@ -2322,7 +2348,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             // All re-routed rows must land in one new shard; the other one is lock-only.
             const auto writeOps = wire.WriteOpsSnapshot();
             THashSet<ui64> rerouteDestinations;
-            for (const auto& [dest, seqNum, originalShard] : writeOps) {
+            THashSet<ui64> dataDestinations;
+            for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
                 if (initialShards.contains(dest)) {
                     UNIT_ASSERT_VALUES_EQUAL_C(originalShard, dest,
                         "operations to the original shards must carry OriginalShard");
@@ -2332,26 +2359,33 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                         "a re-routed operation must carry OriginalShard of the removed shard");
                     UNIT_ASSERT_VALUES_EQUAL_C(seqNum, 1u,
                         "the re-routed batch must preserve the original WriteSeqNum");
+                    if (rows > 0) {
+                        dataDestinations.insert(dest);
+                    }
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 1u,
+            UNIT_ASSERT_VALUES_EQUAL_C(rerouteDestinations.size(), 2u,
+                "the re-routed chain must be delivered to both covering shards");
+            UNIT_ASSERT_VALUES_EQUAL_C(dataDestinations.size(), 1u,
                 "all rows must be re-routed to a single new shard");
 
             const auto shardsAfterSplit = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVLockOnly");
             ui64 lockOnlyShard = 0;
             for (const ui64 shardId : shardsAfterSplit) {
-                if (!initialShards.contains(shardId) && !rerouteDestinations.contains(shardId)) {
+                if (!initialShards.contains(shardId) && !dataDestinations.contains(shardId)) {
                     UNIT_ASSERT_VALUES_EQUAL_C(lockOnlyShard, 0u, "more than one lock-only shard");
                     lockOnlyShard = shardId;
                 }
             }
             UNIT_ASSERT_C(lockOnlyShard != 0, "no lock-only shard was found");
+            UNIT_ASSERT_C(rerouteDestinations.contains(lockOnlyShard),
+                "the lock-only shard must receive the empty re-routed batch");
             {
                 const auto duplicates = wire.DuplicateRespondersSnapshot();
-                UNIT_ASSERT_C(duplicates.contains(*rerouteDestinations.begin()),
+                UNIT_ASSERT_C(duplicates.contains(*dataDestinations.begin()),
                     "the re-routed batch must be answered as a duplicate of the transferred chain");
-                UNIT_ASSERT_C(!duplicates.contains(lockOnlyShard),
-                    "the lock-only shard must not answer any data write");
+                UNIT_ASSERT_C(duplicates.contains(lockOnlyShard),
+                    "the lock-only shard must answer the empty re-routed batch as a duplicate of the transferred chain");
             }
 
             // The lock-only shard joins the distributed commit: its prepare carries the
@@ -2368,8 +2402,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                     "no prepare message was sent to the lock-only shard");
                 UNIT_ASSERT_C(prepareAncestors.at(lockOnlyShard).contains(splitShard),
                     "the lock-only shard's prepare must carry the ancestor lock of the removed shard");
-                UNIT_ASSERT_C(prepareAncestors.contains(*rerouteDestinations.begin()),
+                UNIT_ASSERT_C(prepareAncestors.contains(*dataDestinations.begin()),
                     "no prepare message was sent to the data destination shard");
+                UNIT_ASSERT_C(prepareAncestors.at(*dataDestinations.begin()).contains(splitShard),
+                    "the data destination's prepare must carry the ancestor lock of the removed shard");
             }
 
             {
@@ -2386,7 +2422,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST(UncommittedWriteSeqNumLockOnlyShardJoinsCommit) {
-        return; // TODO
         TUncommittedWriteSeqNumLockOnlyShardJoinsCommit tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
@@ -2496,10 +2531,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 const auto writeOps = wire.WriteOpsSnapshot();
                 THashSet<ui64> routedOriginalShards;
                 THashSet<ui64> routedSeqNums;
-                for (const auto& [dest, seqNum, originalShard] : writeOps) {
+                for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
                     if (dest == mergedShard) {
                         UNIT_ASSERT_VALUES_EQUAL_C(seqNum, 1u,
                             "the re-routed batches must preserve the original WriteSeqNums");
+                        UNIT_ASSERT_C(rows > 0,
+                            "a merge target must receive rows of every removed shard");
                         routedOriginalShards.insert(originalShard);
                         routedSeqNums.insert(seqNum);
                     } else {
@@ -2641,12 +2678,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             }
 
             // All re-routed rows must land in one target; the other one is the empty
-            // target (it receives no data writes).
+            // target (it receives only the empty chain-carrying batch).
             ui64 emptyTarget = 0;
             {
                 THashSet<ui64> dataDestinations;
-                for (const auto& [dest, seqNum, originalShard] : wire.WriteOpsSnapshot()) {
-                    if (newShards.contains(dest)) {
+                for (const auto& [dest, seqNum, originalShard, rows] : wire.WriteOpsSnapshot()) {
+                    if (newShards.contains(dest) && rows > 0) {
                         dataDestinations.insert(dest);
                     }
                 }
@@ -2665,8 +2702,8 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             {
                 const auto writeOps = wire.WriteOpsSnapshot();
-                for (const auto& [dest, seqNum, originalShard] : writeOps) {
-                    UNIT_ASSERT_C(dest != emptyTarget,
+                for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
+                    UNIT_ASSERT_C(dest != emptyTarget || rows == 0,
                         "the empty target must not receive data writes");
                 }
             }
@@ -2698,7 +2735,6 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST(UncommittedWriteSeqNumSplitWithEmptyTargetJoinsCommit) {
-        return; // TODO
         TUncommittedWriteSeqNumSplitWithEmptyTargetJoinsCommit tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
@@ -3047,7 +3083,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             {
                 TDispatchOptions opts;
                 opts.FinalEvents.emplace_back([&](IEventHandle&) {
-                    for (const auto& [dest, seqNum2, originalShard] : wire.WriteOpsSnapshot()) {
+                    for (const auto& [dest, seqNum2, originalShard, rows2] : wire.WriteOpsSnapshot()) {
                         if (originalShard == splitShard && finalShardCandidates.contains(dest)) {
                             return true;
                         }
@@ -3064,14 +3100,20 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             {
                 const auto writeOps = wire.WriteOpsSnapshot();
                 THashSet<ui64> finalDestinations;
-                for (const auto& [dest, seqNum, originalShard] : writeOps) {
+                THashSet<ui64> dataFinalDestinations;
+                for (const auto& [dest, seqNum, originalShard, rows] : writeOps) {
                     if (finalShardCandidates.contains(dest) && originalShard == splitShard) {
-                        finalDestinations.insert(dest);
                         UNIT_ASSERT_VALUES_EQUAL_C(seqNum, 2u,
                             "the twice re-routed batch must preserve the original WriteSeqNum");
+                        finalDestinations.insert(dest);
+                        if (rows > 0) {
+                            dataFinalDestinations.insert(dest);
+                        }
                     }
                 }
-                UNIT_ASSERT_VALUES_EQUAL_C(finalDestinations.size(), 1u,
+                UNIT_ASSERT_VALUES_EQUAL_C(finalDestinations.size(), finalShardCandidates.size(),
+                    "the twice re-routed chain must be delivered to every covering shard of each re-route");
+                UNIT_ASSERT_VALUES_EQUAL_C(dataFinalDestinations.size(), 1u,
                     "keys 21..25 must land on a single final destination");
             }
 

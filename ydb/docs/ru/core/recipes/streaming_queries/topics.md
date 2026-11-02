@@ -25,7 +25,7 @@
 Для выполнения примеров вам потребуется:
 
 * запущенная база {{ ydb-short-name }} — см. [quick start](../../quickstart.md);
-* включённый флаг `enable_streaming_queries`.
+* включённый [фича-флаг](../../reference/configuration/feature_flags.md) `enable_streaming_queries`.
 
 {% list tabs %}
 

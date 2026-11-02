@@ -1,0 +1,13 @@
+@startuml
+Created -[#blue]-> StartCommandCreated: Schedule
+StartCommandCreated -[#blue]-> StartCommandCreated: CommandStartTimer
+StartCommandCreated -[#blue]-> StartCommandRecorded: TimerStarted
+StartCommandCreated -[#blue]-> Canceled: Cancel
+StartCommandRecorded -[#blue]-> Fired: TimerFired
+StartCommandRecorded -[#blue]-> CancelTimerCommandCreated: Cancel
+CancelTimerCommandCreated --> CancelTimerCommandCreated: Cancel
+CancelTimerCommandCreated -[#blue]-> CancelTimerCommandSent: CommandCancelTimer
+CancelTimerCommandSent --> Canceled: TimerCanceled
+Canceled -[#blue]-> Canceled: Cancel
+Fired -[#blue]-> Fired: Cancel
+@enduml

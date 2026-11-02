@@ -128,6 +128,30 @@ NYdb::NIssue::TIssues IssuesFromMessage(const ::google::protobuf::RepeatedPtrFie
 TReplicationDescription::TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc)
     : ConnectionParams_(desc.connection_params())
 {
+    if (desc.has_availability_period()) {
+        const auto& period = desc.availability_period();
+        AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Invalid;
+        if (period.has_unlimited()) {
+            AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unlimited;
+        } else if (period.has_duration()) {
+            const auto& duration = period.duration();
+            constexpr int nanosPerMillisecond = 1000000;
+            constexpr auto maxSeconds = google::protobuf::util::TimeUtil::kDurationMaxSeconds;
+            const bool roundingOverflows = duration.seconds() == maxSeconds
+                && duration.nanos() > 1000000000 - nanosPerMillisecond;
+            if (!roundingOverflows && google::protobuf::util::TimeUtil::IsDurationValid(duration)
+                && duration.seconds() >= 0 && duration.nanos() >= 0
+                && (duration.seconds() > 0 || duration.nanos() > 0))
+            {
+                AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Finite;
+                // The server reports the effective duration rounded up to milliseconds.
+                const auto millis = duration.seconds() * 1000
+                    + (duration.nanos() + nanosPerMillisecond - 1) / nanosPerMillisecond;
+                AvailabilityPeriod_ = TDuration::MilliSeconds(millis);
+            }
+        }
+    }
+
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
         Items_.push_back(TItem{
@@ -177,6 +201,14 @@ const TConnectionParams& TReplicationDescription::GetConnectionParams() const {
 
 const std::vector<TReplicationDescription::TItem> TReplicationDescription::GetItems() const {
     return Items_;
+}
+
+TReplicationDescription::EAvailabilityPeriodKind TReplicationDescription::GetAvailabilityPeriodKind() const {
+    return AvailabilityPeriodKind_;
+}
+
+const std::optional<TDuration>& TReplicationDescription::GetAvailabilityPeriod() const {
+    return AvailabilityPeriod_;
 }
 
 TReplicationDescription::EConsistencyLevel TReplicationDescription::GetConsistencyLevel() const {

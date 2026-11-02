@@ -11,6 +11,7 @@
 #include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/kernel_logic.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
+#include <ydb/core/formats/arrow/program/visitor.h>
 
 #include <ydb/library/formats/arrow/helpers/array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
@@ -28,6 +29,11 @@ namespace {
 class TTestGetJsonPath: public TGetJsonPath {
 public:
     using TGetJsonPath::ExtractArray;
+
+    std::shared_ptr<NAccessor::IChunkedArray> ExtractArray(
+        const std::shared_ptr<NAccessor::IChunkedArray>& input, const std::string_view path) const {
+        return TGetJsonPath::ExtractArray(input, NAccessor::NSubColumns::ParseJsonPath(path).DetachResult());
+    }
 };
 
 NAccessor::NSubColumns::TSettings BuildSettings(const double dictionaryFraction, const ui32 columnsLimit) {
@@ -138,6 +144,10 @@ public:
         return *result;
     }
 
+    const std::shared_ptr<NAccessor::IChunkedArray>& GetOutputAccessor() const {
+        return Context.GetResources().GetAccessorVerified(OutputId);
+    }
+
     void AssertResult(const std::vector<std::optional<ui8>>& expected) const {
         const auto actual = arrow::Concatenate(Context.GetResources().GetAccessorVerified(OutputId)->GetChunkedArray()->chunks()).ValueOrDie();
         UNIT_ASSERT(actual->Equals(*NKikimr::NKernels::UInt8VecToArray(expected)));
@@ -186,7 +196,8 @@ void AssertNullConstantWithInput(const NKikimr::NKernels::EOperation operation, 
 Y_UNIT_TEST_SUITE(JsonValue) {
     Y_UNIT_TEST(UsesNativeStringBuffers) {
         auto input = BuildSubColumns({ R"({"s":"x"})", R"({"s":"yy"})", R"({"s":"zzz"})" }, BuildSettings(0, 1024));
-        auto accessor = input->GetPathAccessor("$.s", input->GetRecordsCount()).DetachResult();
+        auto accessor = input->GetPathAccessor(
+            NAccessor::NSubColumns::ParseJsonPath("$.s").DetachResult(), input->GetRecordsCount()).DetachResult();
         const auto& source = accessor->GetChunkedArrayAccessor();
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Array);
 
@@ -207,7 +218,8 @@ Y_UNIT_TEST_SUITE(JsonValue) {
             dictionaryDocs.emplace_back(TStringBuilder() << R"({"s":")" << (index % 2 ? "x" : "yy") << R"("})");
         }
         auto dictionaryInput = BuildSubColumns(dictionaryDocs, BuildSettings(1, 1024));
-        auto accessor = dictionaryInput->GetPathAccessor("$.s", dictionaryInput->GetRecordsCount()).DetachResult();
+        auto accessor = dictionaryInput->GetPathAccessor(
+            NAccessor::NSubColumns::ParseJsonPath("$.s").DetachResult(), dictionaryInput->GetRecordsCount()).DetachResult();
         const auto& source = accessor->GetChunkedArrayAccessor();
         UNIT_ASSERT(source->GetType() == NAccessor::IChunkedArray::EType::Dictionary);
         UNIT_ASSERT(source->GetDataType()->id() == arrow::Type::STRING);
@@ -231,6 +243,23 @@ Y_UNIT_TEST_SUITE(JsonValue) {
         UNIT_ASSERT_VALUES_EQUAL(input->GetColumnsData().GetStats().GetColumnsCount(), 0);
         UNIT_ASSERT_VALUES_EQUAL(input->GetOthersData().GetStats().GetColumnsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(ExtractJsonValue(input, "$.s"), "x;yy;");
+    }
+
+    Y_UNIT_TEST(ExecutesAcrossMultipleDataOwners) {
+        auto first = BuildSubColumns({ R"({"s":"x"})" }, BuildSettings(0, 1024));
+        auto second = BuildSubColumns({ R"({"s":"yy"})" }, BuildSettings(0, 1024));
+        NAccessor::TCompositeChunkedArray::TBuilder builder(first->GetDataType());
+        builder.AddChunk(first);
+        builder.AddChunk(second);
+
+        TAccessorsCollection resources(2);
+        resources.AddVerified(1, builder.Finish(), false);
+        resources.AddConstantVerified(2, std::make_shared<arrow::StringScalar>("$.s"));
+        const auto result = TGetJsonPath().Execute(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo::BuildVector({3}), resources);
+        UNIT_ASSERT(result.IsSuccess() && *result);
+        const auto output = arrow::Concatenate(resources.GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie();
+        UNIT_ASSERT(output->GetScalar(0).ValueOrDie()->Equals(arrow::StringScalar("x")));
+        UNIT_ASSERT(output->GetScalar(1).ValueOrDie()->Equals(arrow::StringScalar("yy")));
     }
 };
 
@@ -513,5 +542,153 @@ Y_UNIT_TEST_SUITE(CoalesceKernelLogic) {
         AssertCoalesceProcessor(first, true);
     }
 }; // Y_UNIT_TEST_SUITE(CoalesceKernelLogic)
+
+Y_UNIT_TEST_SUITE(StreamLogic) {
+    void AssertNeutralOperandForwardsSparseInput(const NKernels::EOperation operation, const bool neutralFirst) {
+        auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 1, 0 }));
+        auto varying = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
+        const ui32 recordsCount = varying->GetRecordsCount();
+        auto neutral = operation == NKernels::EOperation::And
+            ? NAccessor::TSparsedArray::BuildTrueArrayUI8(recordsCount)
+            : NAccessor::TSparsedArray::BuildFalseArrayUI8(recordsCount);
+
+        TStreamLogicTest test(recordsCount, {1, 2}, 3, operation);
+        test.AddAccessor(1, neutralFirst ? neutral : varying);
+        test.AddAccessor(2, neutralFirst ? varying : neutral);
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetOutputAccessor().get(), varying.get());
+    }
+
+    void AssertAbsorbingOperandFinishesStream(const NKernels::EOperation operation, const bool absorbingFirst) {
+        auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 1, 0 }));
+        auto varying = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
+        const bool absorbingValue = operation == NKernels::EOperation::Or;
+        auto absorbing = absorbingValue ? NAccessor::TSparsedArray::BuildTrueArrayUI8(varying->GetRecordsCount())
+                                        : NAccessor::TSparsedArray::BuildFalseArrayUI8(varying->GetRecordsCount());
+
+        TStreamLogicTest test(varying->GetRecordsCount(), { 1, 2 }, 3, operation);
+        test.AddAccessor(1, absorbingFirst ? absorbing : varying);
+        test.AddAccessor(2, absorbingFirst ? varying : absorbing);
+        UNIT_ASSERT_VALUES_EQUAL(test.ProcessInput(1), absorbingFirst);
+        const auto output = test.GetOutputAccessor();
+        UNIT_ASSERT_VALUES_EQUAL(test.ProcessInput(2), true);
+        if (absorbingFirst) {
+            UNIT_ASSERT_VALUES_EQUAL(test.GetOutputAccessor().get(), output.get());
+        }
+        test.AssertResult({ absorbingValue, absorbingValue, absorbingValue });
+    }
+
+    void AssertAbsorbingScalarAfterNeutralAccumulator(const NKernels::EOperation operation) {
+        const bool absorbingValue = operation == NKernels::EOperation::Or;
+        const std::vector<std::optional<ui8>> expected(2, absorbingValue);
+        auto neutral = absorbingValue ? NAccessor::TSparsedArray::BuildFalseArrayUI8(expected.size())
+                                      : NAccessor::TSparsedArray::BuildTrueArrayUI8(expected.size());
+
+        TStreamLogicTest test(expected.size(), {1, 2}, 3, operation);
+        test.AddAccessor(1, neutral);
+        test.AddScalar(2, std::make_shared<arrow::UInt8Scalar>(absorbingValue));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(test.ProcessInput(2));
+        test.AssertResult(expected);
+    }
+
+    Y_UNIT_TEST(AndForwardsSparseInputAfterNeutralAccumulator) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::And, true);
+    }
+
+    Y_UNIT_TEST(OrForwardsSparseInputAfterNeutralAccumulator) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::Or, true);
+    }
+
+    Y_UNIT_TEST(AndKeepsSparseAccumulatorForNeutralInput) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::And, false);
+    }
+
+    Y_UNIT_TEST(OrKeepsSparseAccumulatorForNeutralInput) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::Or, false);
+    }
+
+    Y_UNIT_TEST(AndKeepsAbsorbingAccumulator) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::And, true);
+    }
+
+    Y_UNIT_TEST(OrKeepsAbsorbingAccumulator) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, true);
+    }
+
+    Y_UNIT_TEST(AndFinishesOnAbsorbingInput) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::And, false);
+    }
+
+    Y_UNIT_TEST(OrFinishesOnAbsorbingInput) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, false);
+    }
+
+    Y_UNIT_TEST(AndFinishesOnAbsorbingScalarAfterNeutralAccumulator) {
+        AssertAbsorbingScalarAfterNeutralAccumulator(NKernels::EOperation::And);
+    }
+
+    Y_UNIT_TEST(OrFinishesOnAbsorbingScalarAfterNeutralAccumulator) {
+        AssertAbsorbingScalarAfterNeutralAccumulator(NKernels::EOperation::Or);
+    }
+
+    Y_UNIT_TEST(StopsReadyInputBatchAfterKernelAbsorbingResult) {
+        TFailDataSource dataSource;
+        auto resources = std::make_unique<TAccessorsCollection>(2);
+        resources->AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ std::nullopt, 1 })), false);
+        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 0 })), false);
+        ui32 materializations = 0;
+        // Processing input 3 would materialize it.
+        resources->AddVerified(3, std::make_shared<TCountingSparsedArray>(arrow::MakeNullScalar(arrow::uint8()), 2, materializations), false);
+
+        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
+        NGraph::NExecution::TExecutionVisitor visitor(std::move(context));
+        auto processor =
+            std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ 1, 2, 3 }), TColumnChainInfo(4), NKernels::EOperation::And);
+        NGraph::NExecution::TCompiledGraph::TNode node(5, processor);
+        UNIT_ASSERT(visitor.OnEnter(node).IsSuccess());
+        UNIT_ASSERT(visitor.OnComeback(node, TColumnChainInfo::BuildVector({ 1 })).IsSuccess());
+        UNIT_ASSERT(visitor.OnComeback(node, TColumnChainInfo::BuildVector({ 2, 3 })).IsSuccess());
+
+        UNIT_ASSERT_VALUES_EQUAL(materializations, 0);
+        const auto& output = visitor.MutableContext().GetResources().GetAccessorVerified(4);
+        UNIT_ASSERT(arrow::Concatenate(output->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({ 0, 0 })));
+        const auto exit = visitor.OnExit(node);
+        UNIT_ASSERT(exit.IsSuccess());
+        UNIT_ASSERT(*exit == NGraph::NExecution::TCompiledGraph::IVisitor::EVisitStatus::Skipped);
+    }
+
+    void AssertFinishesOnPlainAbsorbingInputAfterNeutralAccumulator(const NKernels::EOperation operation) {
+        const bool absorbingValue = operation == NKernels::EOperation::Or;
+        const std::vector<std::optional<ui8>> expected(2, absorbingValue);
+        auto neutral = absorbingValue ? NAccessor::TSparsedArray::BuildFalseArrayUI8(expected.size())
+                                      : NAccessor::TSparsedArray::BuildTrueArrayUI8(expected.size());
+
+        TStreamLogicTest test(expected.size(), { 1, 2 }, 3, operation);
+        test.AddAccessor(1, neutral);
+        test.AddAccessor(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray(expected)));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(test.ProcessInput(2));
+        test.AssertResult(expected);
+    }
+
+    Y_UNIT_TEST(AndFinishesOnPlainAbsorbingInputAfterNeutralAccumulator) {
+        AssertFinishesOnPlainAbsorbingInputAfterNeutralAccumulator(NKernels::EOperation::And);
+    }
+
+    Y_UNIT_TEST(OrFinishesOnPlainAbsorbingInputAfterNeutralAccumulator) {
+        AssertFinishesOnPlainAbsorbingInputAfterNeutralAccumulator(NKernels::EOperation::Or);
+    }
+
+    Y_UNIT_TEST(AndDoesNotFinishForNullableInput) {
+        TStreamLogicTest test(2, { 1, 2 }, 3, NKernels::EOperation::And);
+        test.AddScalar(1, std::make_shared<arrow::UInt8Scalar>(1));
+        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({ 0, std::nullopt }));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        test.AssertResult({ 0, std::nullopt });
+    }
+};
 
 } // namespace NKikimr::NArrow::NSSA

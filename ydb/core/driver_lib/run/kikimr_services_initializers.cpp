@@ -92,6 +92,7 @@
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -368,6 +369,21 @@ static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
         return item->second;
     else
         return appData->SystemPoolId;
+}
+
+static ui32 GetPoolIdForQpCache(const NActors::TActorSystemSetup* setup,
+        const NKikimr::TAppData* appData, const TString& poolName) {
+    Y_DEBUG_ABORT_UNLESS(setup != nullptr);
+    Y_DEBUG_ABORT_UNLESS(appData != nullptr);
+    if (!poolName) {
+        return appData->BatchPoolId;
+    }
+    for (ui32 poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
+        if (setup->GetPoolName(poolId) == poolName) {
+            return poolId;
+        }
+    }
+    return appData->BatchPoolId;
 }
 
 static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInterconnectConfig& config, ui32 numNodes, ui32 numDataCenters) {
@@ -785,9 +801,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                             break;
                     }
                 }
+                const ui32 qpCachePoolId = GetPoolIdForQpCache(setup, appData, icConfig.GetRdmaQpCachePoolName());
+                if (icConfig.GetRdmaQpPoolSize() > RdmaRuntimeMaxQpPoolSize) {
+                    Cerr << "Warning: RDMA QP pool size " << icConfig.GetRdmaQpPoolSize()
+                        << " exceeds the supported limit " << RdmaRuntimeMaxQpPoolSize
+                        << " and will be clamped" << Endl;
+                }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()), icConfig.GetEnableRdmaSendReceive()),
+                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()),
+                            icConfig.GetEnableRdmaSendReceive(), icConfig.GetRdmaQpPoolSize(), qpCachePoolId),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -1209,6 +1232,10 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                   const NKikimr::TAppData* appData) {
     setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+    const auto& selfHealConfig = Config.GetCmsConfig().GetSentinelConfig().GetStateStorageSelfHealConfig();
+    if (const ui32 timeout = selfHealConfig.GetSelfHealStateRequestTimeout()) {
+        nodeWardenConfig->SelfHealStateRequestTimeout = TDuration::MicroSeconds(timeout);
+    }
     nodeWardenConfig->BlobStorageExecutorPoolIds =
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {
@@ -2531,11 +2558,18 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
     );
 }
 
-TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(
+    const TKikimrRunConfig& runConfig,
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway)
     : IKikimrServicesInitializer(runConfig)
+    , Gateway_(std::move(gateway))
 {}
 
 void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.push_back(std::make_pair(
+        NWorkloadManager::MakeWorkloadManagerStateActorId(NodeId),
+        TActorSetupCmd(NWorkloadManager::CreateWorkloadManagerStateActor(Gateway_), TMailboxType::HTSwap, appData->UserPoolId)));
+
     auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
     setup->LocalServices.push_back(std::make_pair(
         NWorkloadManager::MakeServiceId(NodeId),

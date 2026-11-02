@@ -494,7 +494,8 @@ namespace NKikimr::NStorage {
             }
         };
 
-        if (pileListChanged) {
+        const ui32 requiredFeatureLevel = GetRequiredBridgeFeatureLevel(ProposedStorageConfig);
+        if (pileListChanged || requiredFeatureLevel > GetRequiredBridgeFeatureLevel(*Self->StorageConfig)) {
             // every node connected to the cluster must take pile ids from pile registry; static nodes being removed
             // from the config, as well as the nodes of piles not allowing connections (INACTIVE and DISCONNECTED ones),
             // don't take part in the cluster; the ones of lower feature level are refused when their pile is back
@@ -519,7 +520,8 @@ namespace NKikimr::NStorage {
                     ignoredNodeIds.insert(nodeId);
                 }
             }
-            RequireBridgeCapability(BridgeFeatureLevelPileOps, std::move(requiredNodeIds), std::move(ignoredNodeIds),
+            RequireBridgeCapability(Max<ui32>(BridgeFeatureLevelPileOps, requiredFeatureLevel),
+                std::move(requiredNodeIds), std::move(ignoredNodeIds),
                 std::move(proceed));
         } else {
             proceed();

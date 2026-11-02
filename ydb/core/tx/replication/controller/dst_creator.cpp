@@ -190,7 +190,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 GetTableProfiles();
             } else {
                 Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
-                    .WithKeyShardBoundary(true)));
+                    .WithKeyShardBoundary(true)),
+                    0,
+                    RetryGeneration);
             }
             break;
         case TReplication::ETargetKind::Transfer:
@@ -203,7 +205,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"actorState", "StateDescribeSrcPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
-            sFunc(TEvents::TEvWakeup, DescribeSrcPath);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
@@ -229,6 +231,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        if (ev->Cookie != RetryGeneration) {
+            return;
+        }
+
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
@@ -322,6 +328,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void AllocateTxId() {
+        WaitingTxId = 0;
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
         Become(&TThis::StateAllocateTxId);
     }
@@ -342,7 +349,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (InitialScan || CreatePlaceholder) {
+        if (DropIndexTx.HasDropIndex()) {
+            ExecuteSchemeTx(DropIndexTx);
+        } else if (InitialScan || CreatePlaceholder) {
             CreateDst();
         } else {
             DescribeDstPath();
@@ -351,6 +360,33 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void CreateDst() {
         ExecuteSchemeTx(TxBody);
+    }
+
+    bool ShouldDropVectorIndex(const NKikimrSchemeOp::TIndexDescription& index) const {
+        return !InitialScan && !CreatePlaceholder
+            && Kind == TReplication::ETargetKind::Table
+            && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+    }
+
+    void PrepareDropIndex(const NKikimrSchemeOp::TIndexDescription& index,
+            const NKikimrScheme::TEvDescribeSchemeResult& desc)
+    {
+        const auto parts = SplitPath(desc.GetPath());
+        Y_ABORT_UNLESS(!parts.empty());
+        DropIndexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
+        DropIndexTx.SetInternal(true);
+        DropIndexTx.SetWorkingDir(TString(ExtractParent(desc.GetPath())));
+        DropIndexTx.MutableDropIndex()->SetTableName(parts.back());
+        DropIndexTx.MutableDropIndex()->SetIndexName(index.GetName());
+
+        // DROP INDEX is addressed by name. Bind it to the table and index we
+        // validated so a concurrent schema change cannot redirect the removal.
+        auto* tableCondition = DropIndexTx.AddApplyIf();
+        tableCondition->SetPathId(DstPathId.LocalPathId);
+        tableCondition->SetPathVersion(desc.GetPathDescription().GetSelf().GetPathVersion());
+        DropIndexTx.AddApplyIf()->SetPathId(index.GetLocalPathId());
+        NeedToCheck = true;
+        AllocateTxId();
     }
 
     void ExecuteSchemeTx(const NKikimrSchemeOp::TModifyScheme& tx) {
@@ -371,7 +407,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            sFunc(TEvents::TEvWakeup, AllocateTxId);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
@@ -381,6 +417,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
+        if (record.GetTxId() != TxId) {
+            return;
+        }
 
         switch (record.GetStatus()) {
         case NKikimrScheme::StatusAccepted:
@@ -393,12 +432,22 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             if (record.HasPathCreateTxId()) {
                 NeedToCheck = true;
                 return SubscribeTx(record.GetPathCreateTxId());
+            } else if (DropIndexTx.HasDropIndex()) {
+                DropIndexTx.Clear();
+                Become(&TThis::StateDescribeDstPath);
+                return Retry();
             } else {
                 return Error(record.GetStatus(), record.GetReason());
             }
             break;
         case NKikimrScheme::StatusAlreadyExists:
             return DescribeDstPath();
+        case NKikimrScheme::StatusPreconditionFailed:
+        case NKikimrScheme::StatusPathDoesNotExist:
+            if (DropIndexTx.HasDropIndex()) {
+                return DescribeDstPath();
+            }
+            return Error(record.GetStatus(), record.GetReason());
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
@@ -407,12 +456,17 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void SubscribeTx(ui64 txId) {
         YDB_LOG_DEBUG("Subscribe tx",
             {"txId", txId});
+        WaitingTxId = txId;
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
+
+        if (!WaitingTxId || ev->Get()->Record.GetTxId() != WaitingTxId) {
+            return;
+        }
 
         if (NeedToCheck) {
             DescribeDstPath();
@@ -422,6 +476,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void DescribeDstPath() {
+        DropIndexTx.Clear();
         Send(PipeCache, new TEvPipeCache::TEvForward(
             new TEvSchemeShard::TEvDescribeScheme(DstPath), SchemeShardId));
         Become(&TThis::StateDescribeDstPath);
@@ -432,7 +487,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             {"actorState", "StateDescribeDstPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            sFunc(TEvents::TEvWakeup, DescribeDstPath);
+            hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
         }
@@ -453,6 +508,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+            for (const auto& index : desc.GetTable().GetTableIndexes()) {
+                if (ShouldDropVectorIndex(index)) {
+                    return PrepareDropIndex(index, record);
+                }
+            }
             return Success();
         }
         case NKikimrScheme::StatusPathDoesNotExist:
@@ -609,6 +669,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check indexes
         THashMap<TStringBuf, const NKikimrSchemeOp::TIndexDescription*> indexes;
         for (const auto& index : got.GetTableIndexes()) {
+            if (ShouldDropVectorIndex(index)) {
+                continue;
+            }
             indexes.emplace(index.GetName(), &index);
         }
 
@@ -773,7 +836,38 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     void Retry() {
         YDB_LOG_DEBUG("Retry");
-        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(RetryGeneration));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag != RetryGeneration) {
+            return;
+        }
+
+        const auto state = CurrentStateFunc();
+        if (state == &TThis::StateDescribeSrcPath) {
+            DescribeSrcPath();
+        } else if (state == &TThis::StateDescribeDstPath) {
+            DescribeDstPath();
+        } else if (state == &TThis::StateExecuteSchemeTx) {
+            AllocateTxId();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateYdbProxy::TPtr& ev) {
+        if (YdbProxy == ev->Get()->YdbProxy) {
+            return;
+        }
+
+        YdbProxy = ev->Get()->YdbProxy;
+        if (CurrentStateFunc() == &TThis::StateDescribeSrcPath) {
+            // The old proxy discards its outstanding requests on shutdown.
+            // Ignore late replies/retries and validate using the new credentials.
+            ++RetryGeneration;
+            DescribeSrcPath();
+        }
+        // Other states either have not used the source yet or are already
+        // reconciling local DDL. Keep their requests and retries intact.
     }
 
     void PassAway() override {
@@ -845,6 +939,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvPrivate::TEvUpdateYdbProxy, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -852,7 +947,7 @@ public:
 private:
     const TActorId Parent;
     const ui64 SchemeShardId;
-    const TActorId YdbProxy;
+    TActorId YdbProxy;
     const TPathId PathId;
     const ui64 ReplicationId;
     const ui64 TargetId;
@@ -871,9 +966,12 @@ private:
     TString Owner;
     TTableProfiles TableProfiles;
     ui64 TxId = 0;
+    ui64 WaitingTxId = 0;
     NKikimrSchemeOp::TModifyScheme TxBody;
+    NKikimrSchemeOp::TModifyScheme DropIndexTx;
     TActorId PipeCache;
     bool NeedToCheck = false;
+    ui64 RetryGeneration = 0;
     TPathId DstPathId;
     TActorId Subscriber;
 

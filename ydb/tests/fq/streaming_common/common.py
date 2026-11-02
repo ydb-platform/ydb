@@ -62,7 +62,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
-    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_kqp_constraints_transformer = param.get("enable_kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
         "enable_dq_source_stream_lookup_join_local_lookups", True
     )
@@ -118,7 +118,9 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
-    if not enable_kqp_constraints_transformer:
+    if enable_kqp_constraints_transformer:
+        extra_feature_flags.add("enable_kqp_constraints_transformer")
+    else:
         disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
@@ -176,7 +178,6 @@ def get_ydb_config(request, enable_fq_connector=None):
             },
         }
 
-    config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
     config.yaml_config["auth_config"]["local_metadata_service"] = {

@@ -112,7 +112,16 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::CheckBindingLiveness() {
-        if (Binding && Binding->RootNodeId && Binding->SessionId && !BindingLivenessActorId) {
+        // Keep ordinary V1 clusters independent of keeper liveness. The startup flag applies only
+        // before bootstrap, so a committed disable also stops an already running watchdog.
+        const bool bootstrapping = BaseConfig->GetSelfManagementConfig().GetEnabled()
+            && (!StorageConfig || !StorageConfig->GetGeneration());
+        if (!SelfManagementEnabled && !bootstrapping) {
+            CancelBindingLiveness();
+            return;
+        }
+        if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
+            && !BindingLivenessActorId) {
             BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));
         }
     }
@@ -469,7 +478,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
+        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT || Halted) {
             return;
         }
 
@@ -929,6 +938,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
 
             if (Binding) {
+                Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (!Binding->SupportsDirectRootQueries) {
+                    CancelBindingLiveness();
+                }
                 BindFailuresStreak = 0;
                 LastUnboundWarnAt = TInstant::Zero();
             }
@@ -1107,6 +1120,9 @@ namespace NKikimr::NStorage {
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        } else if (Halted) {
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }

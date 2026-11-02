@@ -426,11 +426,13 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
-    // These configs share a protobuf oneof: serializing both clears the first one.
+    // Replication and incremental restore configs share a protobuf oneof.
     if (IsReplicated()) {
         ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
-    } else {
+    } else if (IsIncrementalRestore()) {
         IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    } else {
+        schema.ClearIncomingStreamConfig();
     }
 
     // Keep the persisted schema in sync with the parsed level, so that a restart

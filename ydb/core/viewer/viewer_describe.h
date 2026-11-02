@@ -411,6 +411,9 @@ public:
             DecodeExternalTableContent(describe, json);
         }
 
+        if (json.Has("Path") && json["Path"].IsString()) {
+            json["Path"] = RestorePath(json["Path"].GetString());
+        }
         ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 

@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
 # Builds the per-try tests resource dashboard (CPU/RAM/disk overlay).
-# Extracted from test_ya/action.yml: the composite-action run block hit the
+# Extracted from build_and_test_ya/action.yml: the composite-action run block hit the
 # GitHub Actions 21000-char template limit. Best-effort: never fails the job.
 #
-# Expects env: CURRENT_PUBLIC_DIR, CURRENT_REPORT, RESOURCES_JSONL, RETRY,
+# Expects env: CURRENT_PUBLIC_DIR, CURRENT_REPORT, RESOURCES_JSONL, RETRY, YA_MAKE_OUT_DIR,
 # DASHBOARD_SANITIZER (optional), BUILD_PRESET, RUNNER_NAME, PR_NUMBER,
 # BRANCH_NAME, ORIGINAL_HEAD, PUBLIC_DIR_URL, GITHUB_REPOSITORY.
 
 TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
 mkdir -p "$TESTS_METRICS_DIR"
+
+RESOURCE_USAGE_DIR="$CURRENT_PUBLIC_DIR/test_resources"
+mkdir -p "$RESOURCE_USAGE_DIR"
+if timeout 120 python3 .github/scripts/tests/resource_usage_report.py \
+  --report "$CURRENT_REPORT" --output-dir "$RESOURCE_USAGE_DIR" --build-output "$YA_MAKE_OUT_DIR" \
+  > "$RESOURCE_USAGE_DIR/build.log" 2>&1; then
+  rm -f "$RESOURCE_USAGE_DIR/build.log"
+else
+  rm -f "$RESOURCE_USAGE_DIR/report.html"
+  echo "Test resource report generation failed (see test_resources/build.log)"
+fi
 
 DASHBOARD_ARGS=()
 if [ -n "$DASHBOARD_SANITIZER" ]; then

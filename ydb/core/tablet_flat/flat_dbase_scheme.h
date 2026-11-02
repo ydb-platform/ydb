@@ -3,6 +3,7 @@
 #include "bloom_filter_defaults.h"
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
+#include "flat_tier_policy.h"
 #include "util_basics.h"
 
 #include <ydb/core/base/localdb.h>
@@ -44,7 +45,10 @@ public:
         ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
     };
 
-    struct TFamily /* group of columns configuration */ {
+    /* Configuration of a group of columns, or placement of a tier when the
+        tiering policy refers to the family (such a family has no columns)
+     */
+    struct TFamily {
         using ECodec = NPage::ECodec;
         using ECacheMode = NPage::ECacheMode;
 
@@ -96,6 +100,8 @@ public:
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
         ui32 SpecialTableType = 0; // maps to NKikimrSchemeOp::ESpecialTableType
+
+        std::optional<TTieringPolicy> TieringPolicy; // refers to families as tiers
 
         // When true this table has an in-memory caching enabled that has not been processed yet
         mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
@@ -248,6 +254,7 @@ public:
     TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
+    TAlter& DropFamily(ui32 table, ui32 family);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
     TAlter& SetExecutorCacheSize(ui64 cacheSize);
@@ -262,6 +269,8 @@ public:
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetSpecialTableType(ui32 tableId, ui32 type);
+    TAlter& SetTieringPolicy(ui32 tableId, const TTieringPolicy& policy);
+    TAlter& ResetTieringPolicy(ui32 tableId);
     TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();

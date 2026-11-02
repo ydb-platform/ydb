@@ -87,6 +87,7 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TKMeansTreeSettings, stream, value) {
         ", levels: " << value.Levels << 
         ", overlap_clusters: " << value.OverlapClusters << 
         ", overlap_ratio: " << value.OverlapRatio << 
+        ", autoupdate: " << value.AutoUpdate.value_or(true) <<
         " }";
 }
 

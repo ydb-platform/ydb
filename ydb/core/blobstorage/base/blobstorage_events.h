@@ -587,6 +587,14 @@ namespace NKikimr {
         {}
     };
 
+    struct TEvVRestorePart : TEventPB<TEvVRestorePart, NKikimrBlobStorage::TEvVRestorePart,
+            TEvBlobStorage::EvVRestorePart>
+    {};
+
+    struct TEvVRestorePartResult : TEventPB<TEvVRestorePartResult, NKikimrBlobStorage::TEvVRestorePartResult,
+            TEvBlobStorage::EvVRestorePartResult>
+    {};
+
     struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo,
             TEvBlobStorage::EvNodeWardenQueryGroupInfo> {
         TEvNodeWardenQueryGroupInfo() = default;

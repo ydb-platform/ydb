@@ -491,6 +491,7 @@ TFuture<void> TClient::ReshardTable(
     writer->WriteRowset(TRange(keys));
     req->Attachments() = writer->Finish();
 
+    ToProto(req->mutable_cumulative_data_weights(), options.CumulativeDataWeights);
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
@@ -517,6 +518,7 @@ TFuture<void> TClient::ReshardTable(
         req->set_slicing_accuracy(*options.SlicingAccuracy);
     }
 
+    ToProto(req->mutable_cumulative_data_weights(), options.CumulativeDataWeights);
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_tablet_range_options(), options);
 
@@ -998,6 +1000,7 @@ TFuture<TPullQueueResult> TClient::PullQueue(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TPullQueueResult{
             .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
         };
     }));
 }
@@ -1040,6 +1043,7 @@ TFuture<TPullQueueResult> TClient::PullQueueConsumer(
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
         return TPullQueueResult{
             .Rowset = CreateQueueRowset(std::move(rowset), rsp->start_offset()),
+            .ResponseSizeLimitReached = YT_OPTIONAL_FROM_PROTO(*rsp, response_size_limit_reached),
         };
     }));
 }

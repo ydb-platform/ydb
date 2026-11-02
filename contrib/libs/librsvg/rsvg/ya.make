@@ -1,0 +1,199 @@
+# Native Rust build POC; dependencies and features follow Cargo.lock.
+
+CRATE(rsvg)
+
+CRATE_VERSION(2.62.0)
+CRATE_EDITION(2024)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+VERSION(2.62.0)
+LICENSE("LGPL-2.1-or-later")
+
+CRATE_SOURCES(
+    benches/box_blur.rs
+    benches/composite.rs
+    benches/lighting.rs
+    benches/path_parser.rs
+    benches/pixel_iterators.rs
+    benches/pixel_ops.rs
+    benches/srgb.rs
+    build.rs
+    src/accept_language.rs
+    src/angle.rs
+    src/api.rs
+    src/aspect_ratio.rs
+    src/bbox.rs
+    src/cairo_path.rs
+    src/color.rs
+    src/cond.rs
+    src/coord_units.rs
+    src/css.rs
+    src/dasharray.rs
+    src/document.rs
+    src/dpi.rs
+    src/drawing_ctx.rs
+    src/element.rs
+    src/error.rs
+    src/filter.rs
+    src/filter_func.rs
+    src/filters/blend.rs
+    src/filters/bounds.rs
+    src/filters/color_matrix.rs
+    src/filters/component_transfer.rs
+    src/filters/composite.rs
+    src/filters/context.rs
+    src/filters/convolve_matrix.rs
+    src/filters/displacement_map.rs
+    src/filters/drop_shadow.rs
+    src/filters/error.rs
+    src/filters/flood.rs
+    src/filters/gaussian_blur.rs
+    src/filters/image.rs
+    src/filters/lighting.rs
+    src/filters/merge.rs
+    src/filters/mod.rs
+    src/filters/morphology.rs
+    src/filters/offset.rs
+    src/filters/tile.rs
+    src/filters/turbulence.rs
+    src/float_eq_cairo.rs
+    src/font_props.rs
+    src/gradient.rs
+    src/href.rs
+    src/image.rs
+    src/io.rs
+    src/iri.rs
+    src/layout.rs
+    src/length.rs
+    src/limits.rs
+    src/log.rs
+    src/marker.rs
+    src/node.rs
+    src/paint_server.rs
+    src/parsers.rs
+    src/path_builder.rs
+    src/path_parser.rs
+    src/pattern.rs
+    src/properties.rs
+    src/property_defs.rs
+    src/property_macros.rs
+    src/rect.rs
+    src/session.rs
+    src/shapes.rs
+    src/space.rs
+    src/structure.rs
+    src/style.rs
+    src/surface_utils/iterators.rs
+    src/surface_utils/mod.rs
+    src/surface_utils/shared_surface.rs
+    src/surface_utils/srgb.rs
+    src/test_utils/compare_surfaces.rs
+    src/test_utils/mod.rs
+    src/test_utils/reference_utils.rs
+    src/text.rs
+    src/text2.rs
+    src/transform.rs
+    src/unit_interval.rs
+    src/url_resolver.rs
+    src/util.rs
+    src/viewbox.rs
+    src/xml/attributes.rs
+    src/xml/mod.rs
+    src/xml/xml2.rs
+    src/xml/xml2_load.rs
+)
+
+CRATE_INPUTS(
+    COPYING.LIB
+    README.md
+    example.svg
+    meson.build
+    src/filters/test_input_requirements.svg
+    src/ua.css
+)
+
+CRATE_ENV(
+    SYSTEM_DEPS_CAIRO_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_LIB=cairo
+    SYSTEM_DEPS_CAIRO_GOBJECT_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_GOBJECT_LIB=cairo-gobject
+    SYSTEM_DEPS_CAIRO_PDF_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_PDF_LIB=cairo-pdf
+    SYSTEM_DEPS_CAIRO_PNG_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_PNG_LIB=cairo-png
+    SYSTEM_DEPS_CAIRO_PS_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_PS_LIB=cairo-ps
+    SYSTEM_DEPS_CAIRO_SVG_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_CAIRO_SVG_LIB=cairo-svg
+    SYSTEM_DEPS_FONTCONFIG_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_FONTCONFIG_LIB=fontconfig
+    SYSTEM_DEPS_FREETYPE2_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_FREETYPE2_LIB=freetype2
+    SYSTEM_DEPS_GIO_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_GIO_LIB=gio
+    SYSTEM_DEPS_GLIB_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_GLIB_LIB=glib
+    SYSTEM_DEPS_HARFBUZZ_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_HARFBUZZ_LIB=harfbuzz
+    SYSTEM_DEPS_LIBXML2_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_LIBXML2_LIB=libxml2
+    SYSTEM_DEPS_PANGOCAIRO_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_PANGOCAIRO_LIB=pangocairo
+    SYSTEM_DEPS_PANGOFT2_NO_PKG_CONFIG=1
+    SYSTEM_DEPS_PANGOFT2_LIB=pangoft2
+)
+
+CRATE_FEATURES(capi)
+CRATE_BUILD_SCRIPT(contrib/libs/librsvg/rsvg/build_script)
+PEERDIR(
+    contrib/crates/cairo-rs-0.22.0
+    contrib/crates/cast-0.3.0
+    contrib/crates/cssparser-0.35.0
+    contrib/crates/cssparser-color-0.3.0
+    contrib/crates/data-url-0.3.2
+    contrib/crates/encoding_rs-0.8.42
+    contrib/crates/float-cmp-0.10.0
+    contrib/crates/gio-0.22.1
+    contrib/crates/glib-0.22.0
+    contrib/crates/image-0.25.9
+    contrib/crates/itertools-0.14.0
+    contrib/crates/language-tags-0.3.2
+    contrib/crates/libc-0.2.191
+    contrib/crates/locale_config-0.3.0
+    contrib/crates/markup5ever-0.35.0
+    contrib/crates/nalgebra-0.34.1
+    contrib/crates/num-traits-0.2.19
+    contrib/crates/pango-0.22.0
+    contrib/crates/pangocairo-0.22.0
+    contrib/crates/precomputed-hash-0.1.1
+    contrib/crates/rayon-1.12.0
+    contrib/crates/rctree-0.6.0
+    contrib/crates/regex-1.13.1
+    contrib/crates/rgb-0.8.52
+    contrib/crates/selectors-0.31.0
+    contrib/crates/string_cache-0.9.0
+    contrib/crates/tinyvec-1.11.0
+    contrib/crates/url-2.5.8
+    contrib/crates/xml5ever-0.35.0
+)
+CRATE_PROC_MACROS(
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/cssparser-macros-0.6.1
+    contrib/crates/derive_more-impl-2.1.1
+    contrib/crates/displaydoc-0.2.7
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/glib-macros-0.22.0
+    contrib/crates/multiversion_no_op-1.0.0
+    contrib/crates/mutants-0.0.3
+    contrib/crates/nalgebra-macros-0.3.0
+    contrib/crates/paste-1.0.15
+    contrib/crates/phf_macros-0.11.3
+    contrib/crates/rustversion-1.0.23
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/yoke-derive-0.8.4
+    contrib/crates/zerocopy-derive-0.8.63
+    contrib/crates/zerofrom-derive-0.1.8
+    contrib/crates/zerovec-derive-0.11.7
+)
+
+END()

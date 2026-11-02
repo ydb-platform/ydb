@@ -1,0 +1,538 @@
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+namespace {
+
+NKikimrConfig::TAppConfig NewRboAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+    return appConfig;
+}
+
+TKikimrRunner NewRboKikimrRunner() {
+    return DefaultKikimrRunner({}, NewRboAppConfig());
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(KqpWriteNewRbo) {
+    Y_UNIT_TEST(UpsertNullKey) {
+        auto kikimr = NewRboKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const TString query = Q_(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
+                    (Null, "Value1");
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/KeyValue`;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL("[[#;[\"Value1\"]];[[1u];[\"One\"]];[[2u];[\"Two\"]]]",
+                    NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const TString query = Q_(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
+                    (Null, "Value2");
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/KeyValue`;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL("[[#;[\"Value2\"]];[[1u];[\"One\"]];[[2u];[\"Two\"]]]",
+                    NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            const TString query = Q_(R"(
+                UPSERT INTO `/Root/KeyValue` (Key) VALUES
+                    (Null);
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/KeyValue`;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL("[[#;[\"Value2\"]];[[1u];[\"One\"]];[[2u];[\"Two\"]]]",
+                    NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(Insert) {
+        auto kikimr = NewRboKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TxCheck` (
+                Id Uint32,
+                PRIMARY KEY (Id)
+            );
+        )").GetValueSync().IsSuccess());
+
+        auto insertQuery = Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint64, Value: String>>;
+            DECLARE $id AS Uint32;
+
+            INSERT INTO `/Root/KeyValue`
+            SELECT * FROM AS_TABLE($rows);
+
+            UPSERT INTO `/Root/TxCheck` (Id) VALUES ($id);
+        )");
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(1)
+                        .AddMember("Value").String("One1")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("Ten1")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .AddParam("$id")
+                .Uint32(1)
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(insertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION));
+
+        params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("Ten2")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(11)
+                        .AddMember("Value").String("Eleven2")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("None2")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .AddParam("$id")
+                .Uint32(2)
+                .Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(insertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION));
+
+        params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("Ten3")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(11)
+                        .AddMember("Value").String("Eleven3")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .AddParam("$id")
+                .Uint32(3)
+                .Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(insertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q_(R"(
+            SELECT * FROM `/Root/KeyValue`;
+            SELECT * FROM `/Root/TxCheck`;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];["One"]];
+            [[2u];["Two"]];
+            [[10u];["Ten3"]];
+            [[11u];["Eleven3"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST(InsertRevert) {
+        auto kikimr = NewRboKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TxCheck` (
+                Id Uint32,
+                PRIMARY KEY (Id)
+            );
+        )").GetValueSync().IsSuccess());
+
+        auto insertQuery = Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint64, Value: String>>;
+            DECLARE $id AS Uint32;
+
+            INSERT OR REVERT INTO `/Root/KeyValue`
+            SELECT * FROM AS_TABLE($rows);
+
+            UPSERT INTO `/Root/TxCheck` (Id) VALUES ($id);
+        )");
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(1)
+                        .AddMember("Value").String("One1")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("Ten1")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .AddParam("$id")
+                .Uint32(1)
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(insertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // TODO:
+        // UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_REVERTED));
+
+        params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("Ten2")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(11)
+                        .AddMember("Value").String("Eleven2")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("None2")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .AddParam("$id")
+                .Uint32(2)
+                .Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(insertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // TODO:
+        // UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_REVERTED));
+
+        params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(10)
+                        .AddMember("Value").String("Ten3")
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(11)
+                        .AddMember("Value").String("Eleven3")
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .AddParam("$id")
+                .Uint32(3)
+                .Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(insertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q_(R"(
+            SELECT * FROM `/Root/KeyValue`;
+            SELECT * FROM `/Root/TxCheck`;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];["One"]];
+            [[2u];["Two"]];
+            [[10u];["Ten3"]];
+            [[11u];["Eleven3"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[1u]];[[2u]];[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST(ProjectReplace) {
+        auto kikimr = NewRboKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("In_Group").OptionalUint32(10)
+                        .AddMember("In_Name").OptionalString("Replace1")
+                        .AddMember("In_Amount").OptionalUint64(100)
+                    .EndStruct()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("In_Group").OptionalUint32(10)
+                        .AddMember("In_Name").OptionalString("Replace2")
+                        .AddMember("In_Amount").OptionalUint64(200)
+                    .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $rows AS List<Struct<
+                In_Group : Uint32?,
+                In_Name : String?,
+                In_Amount : Uint64?
+            >>;
+
+            REPLACE INTO `/Root/Test`
+            SELECT
+                In_Group AS Group,
+                In_Name AS Name,
+                In_Amount AS Amount
+            FROM AS_TABLE($rows);
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    }
+
+    Y_UNIT_TEST(CastValues) {
+        auto kikimr = NewRboKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Int32(101)
+                        .AddMember("Data").Uint32(1000)
+                    .EndStruct()
+                .EndList()
+            .Build()
+        .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<'Key':Int32,'Data':Uint32>>;
+
+            UPSERT INTO EightShard
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            -- TODO: Restore SELECT * after fixing RBO column order (Key, Text, Data instead of Data, Key, Text).
+            SELECT Data, Key, Text FROM EightShard WHERE Key = 101;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1000];[101u];["Value1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(CastValuesOptional) {
+        auto kikimr = NewRboKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").OptionalInt32(101)
+                        .AddMember("Data").OptionalUint32(1000)
+                    .EndStruct()
+                .EndList()
+            .Build()
+        .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<'Key':Int32?,'Data':Uint32?>>;
+
+            UPSERT INTO EightShard
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            -- TODO: Restore SELECT * after fixing RBO column order (Key, Text, Data instead of Data, Key, Text).
+            SELECT Data, Key, Text FROM EightShard WHERE Key = 101;
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1000];[101u];["Value1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(OutOfSpace) {
+        auto settings = TKikimrSettings(NewRboAppConfig())
+            .SetEnableScriptExecutionOperations(true)
+            .SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        Y_UNUSED(runtime);
+
+        auto edgeActor = runtime.AllocateEdgeActor();
+
+        const auto& shards = GetTableShards(
+            &kikimr.GetTestServer(),
+            edgeActor,
+            "/Root/KeyValue");
+        UNIT_ASSERT(shards.size() == 1);
+
+        {
+            const TString query =
+                R"(
+                    UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1, 'value');
+                )";
+
+            std::vector<std::unique_ptr<IEventHandle>> responses;
+            bool blockResults = true;
+
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (blockResults && ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    auto* msg = ev->Get<NEvents::TDataEvents::TEvWriteResult>();
+                    auto newResult = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                        msg->Record.GetOrigin(),
+                        msg->Record.GetTxId(),
+                        NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
+                        "");
+
+                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, newResult.release(), 0, ev->Cookie));
+
+                    responses.emplace_back(ev.Release());
+
+                    blockResults = false;
+
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = NYdb::NQuery::TTxControl::BeginTx(
+                    NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteQuery(query, txc).ExtractValueSync();
+            });
+
+            size_t requestsExpected = 1;
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return responses.size() >= requestsExpected;
+            });
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(responses.size() == requestsExpected);
+            UNIT_ASSERT(!blockResults);
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE));
+        }
+    }
+}
+
+} // namespace NKqp
+} // namespace NKikimr

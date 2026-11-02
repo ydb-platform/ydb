@@ -12,6 +12,17 @@ using namespace NKikimr;
 namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TLsnAllocTrackerTests) {
+        Y_UNIT_TEST(RecoveryBasePreservesPendingAllocations) {
+            TLsnMngr manager(20, 0, false);
+            const TLsnSeg pending = manager.AllocLsnForHullAndSyncLog();
+            manager.AdvanceSyncLogRecoveryBase(9);
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetConfirmedLsnForSyncLog(), 9);
+            manager.AdvanceSyncLogRecoveryBase(5);
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetConfirmedLsnForSyncLog(), 9);
+            manager.ConfirmLsnForHull(pending, true);
+            UNIT_ASSERT_VALUES_EQUAL(manager.GetConfirmedLsnForSyncLog(), pending.Last);
+        }
+
         Y_UNIT_TEST(Test1) {
             TLsnAllocTracker t(100);
             STR << t.ToString() << "\n";

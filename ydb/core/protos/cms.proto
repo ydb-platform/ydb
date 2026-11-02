@@ -445,6 +445,9 @@ message TCmsConfig {
             optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
             optional uint32 NodeBadStateLimit = 4 [default = 10];
             optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            // Timeout for retrying a Sentinel state request, in microseconds.
+            // Read by distconf from the node's startup configuration.
+            optional uint32 SelfHealStateRequestTimeout = 11 [default = 5000000];
             optional uint32 RelaxTime = 6 [default = 600000000];
             optional bool PileupReplicas = 7 [default = false];
             optional uint32 OverrideReplicasInRingCount = 8 [default = 0];

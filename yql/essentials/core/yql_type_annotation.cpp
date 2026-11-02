@@ -162,6 +162,9 @@ TString TColumnOrder::AddColumn(const TString& name) {
     ++UseCountLcase_[lcase];
     if (uint64_t count = ++UseCount_[name]; count > 1) {
         TString generated = name + "_generated_" + ToString(count);
+        while (GeneratedToOriginal_.contains(generated)) {
+            generated = name + "_generated_" + ToString(++count);
+        }
         GeneratedToOriginal_[generated] = name;
         Order_.emplace_back(name, generated);
         ++UseCount_[generated];

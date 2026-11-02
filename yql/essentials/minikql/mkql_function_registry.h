@@ -148,6 +148,6 @@ inline TStringBuf ModuleName(const TStringBuf& name) {
 
 const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
 
-void FillStaticModules(IMutableFunctionRegistry& registry);
+void FillStaticModules(IMutableFunctionRegistry& registry, bool skipLoaded = false);
 
 } // namespace NKikimr::NMiniKQL

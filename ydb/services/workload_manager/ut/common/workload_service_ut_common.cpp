@@ -11,6 +11,7 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
@@ -871,7 +872,7 @@ void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSe
     WaitForClassifierSuccess(ydb, TSampleQueries::TSelect42::Query, settings);
 }
 
-void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
+void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& poolId) {
     const ui32 nodeId = runtime.GetNodeId(nodeIndex);
     const TActorId edgeActor = runtime.AllocateEdgeActor(nodeIndex);
 
@@ -881,8 +882,31 @@ void WaitForClassifierPropagation(TTestActorRuntime& runtime, ui32 nodeIndex) {
     const auto response = runtime.GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(edgeActor, FUTURE_WAIT_TIMEOUT);
     UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
 
-    runtime.Send(
-        NKqp::MakeKqpProxyID(nodeId), edgeActor, new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
+    // Classifiers and pool settings arrive independently. A query with a
+    // classifier snapshot but no target pool in its pool snapshot falls back
+    // to the default pool. Populate both caches before launching the query.
+    if (poolId) {
+        const auto snapshot = response->Get()->GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>();
+        bool found = false;
+        for (const auto& [databaseId, configs] : snapshot->GetResourcePoolClassifierConfigs()) {
+            for (const auto& [_, classifier] : configs.ByName) {
+                if (classifier.GetClassifierSettings().ResourcePool != poolId) {
+                    continue;
+                }
+                found = true;
+                runtime.Send(MakeServiceId(nodeId), edgeActor, new TEvSubscribeOnPoolChanges(databaseId, poolId), nodeIndex);
+                const auto pool = runtime.GrabEdgeEvent<TEvUpdatePoolInfo>(edgeActor, FUTURE_WAIT_TIMEOUT);
+                UNIT_ASSERT_C(pool && pool->Get()->Config, "Failed to load resource pool " << poolId);
+                runtime.Send(MakeWorkloadManagerStateActorId(nodeId), edgeActor,
+                    new TEvUpdatePoolInfo(databaseId, poolId, pool->Get()->Config, pool->Get()->SecurityObject), nodeIndex);
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "No classifier targets resource pool " << poolId);
+    }
+
+    runtime.Send(MakeWorkloadManagerStateActorId(nodeId), edgeActor,
+        new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()), nodeIndex);
 }
 
 }   // namespace NKikimr::NWorkloadManager

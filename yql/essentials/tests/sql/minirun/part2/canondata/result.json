@@ -1232,6 +1232,20 @@
             "uri": "https://{canondata_backend}/1773845/ff77bd3ec2ca89593f1bdbdfd92fdb974609ee70/resource.tar.gz#test.test_select_yql-join_on_2_lt-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-join_v1_compat_implicit_using_scope_legacy-default.txt-Debug]": [
+        {
+            "checksum": "e2e9ea6bd0359afda7b8bf9d5acf3466",
+            "size": 767,
+            "uri": "https://{canondata_backend}/1942415/b76da0b38710f822361fa7b0e621f88fcf98b550/resource.tar.gz#test.test_select_yql-join_v1_compat_using_scope_legacy-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_v1_compat_implicit_using_scope_legacy-default.txt-Results]": [
+        {
+            "checksum": "7711b4db5906e22a966b255cb5838264",
+            "size": 2675,
+            "uri": "https://{canondata_backend}/1942415/b76da0b38710f822361fa7b0e621f88fcf98b550/resource.tar.gz#test.test_select_yql-join_v1_compat_using_scope_legacy-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-projection_alias_case_sensivity-default.txt-Debug]": [
         {
             "checksum": "2d8d753bd27a7c18d36ba3a2fef99b5f",
@@ -1306,14 +1320,14 @@
         {
             "checksum": "ec528a0f3e6da2a2db4f920d7d1cb6d3",
             "size": 3323,
-            "uri": "https://{canondata_backend}/1773845/ff77bd3ec2ca89593f1bdbdfd92fdb974609ee70/resource.tar.gz#test.test_select_yql-without-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1920236/aa86f936f2ec6b1048d127933f80b906a8e17107/resource.tar.gz#test.test_select_yql-without-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-without-default.txt-Results]": [
         {
             "checksum": "8039a72dd2626122044ace53bdd43184",
             "size": 10547,
-            "uri": "https://{canondata_backend}/1773845/ff77bd3ec2ca89593f1bdbdfd92fdb974609ee70/resource.tar.gz#test.test_select_yql-without-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1920236/aa86f936f2ec6b1048d127933f80b906a8e17107/resource.tar.gz#test.test_select_yql-without-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql_tpch-q15-default.txt-Debug]": [

@@ -9,21 +9,16 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/atomic_shared_ptr
     ydb/core/base
     ydb/core/cms/console
-
     ydb/core/kqp/common
     ydb/core/kqp/query_data
-
     ydb/core/mind
     ydb/core/protos
-
     ydb/core/resource_pools
-
     ydb/library/aclib
-
     ydb/library/yql/providers/pq/common
-
 )
 
 YQL_LAST_ABI_VERSION()
@@ -34,8 +29,8 @@ RECURSE(
     actors
     common
     metadata_subscription
-    tables
     service
+    tables
 )
 
 RECURSE_FOR_TESTS(

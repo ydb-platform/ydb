@@ -19,14 +19,9 @@ public:
         : TBase(viewer, ev)
     {
         AllowedMethods = {HTTP_METHOD_GET};
-    }
-
-    void Bootstrap() override {
-        const auto& params = Params;
-        if (params.Has("database_path")) {
-            Database = params.Get("database_path");
+        if (Params.Has("database_path")) {
+            Database = Params.Get("database_path");
         }
-        TBase::Bootstrap();
     }
 
     static YAML::Node GetSwagger() {

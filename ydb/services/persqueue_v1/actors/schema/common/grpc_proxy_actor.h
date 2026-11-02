@@ -59,7 +59,7 @@ protected:
         return CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
     }
 
-    TString ResolveTopicPath(TStringBuf path) const {
+    TString NormalizeTopicPath(TStringBuf path) const {
         return AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
             ? this->Request_->GetDatabaseRelativePath(path)
             : TString(path);
@@ -67,7 +67,7 @@ protected:
 
     bool ResolveDeadLetterQueuePath(TString& path) {
         if (!path.StartsWith("sqs://")) {
-            path = ResolveTopicPath(path);
+            path = NormalizeTopicPath(path);
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && AppData()->FeatureFlags.GetEnableRelativePaths()
                 && NPQ::NormalizeDlqTopicPath(path, GetDatabase()) != CanonizePath(path)) {
                 ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Dead letter queue must belong to the topic database");

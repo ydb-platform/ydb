@@ -548,12 +548,12 @@ namespace NKikimr::NGRpcService {
             stream->Finish();
         }
 
-        Y_UNIT_TEST_TWIN(CdcReadSessionReturnsSubscribedAlias, enableRelativePaths) {
+        Y_UNIT_TEST_QUAD(CdcReadSessionReturnsSubscribedAlias, enableRelativePaths, relativeSubscription) {
             TFixture fixture(false, true, true, /*nestedAliasParent=*/false, enableRelativePaths);
             auto table = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
             auto topic = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
             const char* tablePath = "/alias/test";
-            const char* feedPath = "/alias/test/feed";
+            const char* feedPath = relativeSubscription ? "test/feed" : "/alias/test/feed";
 
             Ydb::Table::CreateTableRequest create;
             create.set_path(tablePath);
@@ -571,33 +571,31 @@ namespace NKikimr::NGRpcService {
             feed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
             Success(Call(*table, &TTable::AlterTable, alter, "/alias"));
 
-            for (const auto* subscribedPath : {feedPath, "test/feed"}) {
-                grpc::ClientContext context;
-                context.AddMetadata("x-ydb-database", "/alias");
-                context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
-                context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
-                auto stream = topic->StreamRead(&context);
-                UNIT_ASSERT(stream);
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/alias");
+            context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+            auto stream = topic->StreamRead(&context);
+            UNIT_ASSERT(stream);
 
-                Ydb::Topic::StreamReadMessage::FromClient request;
-                auto* settings = request.mutable_init_request()->add_topics_read_settings();
-                settings->set_path(subscribedPath);
-                settings->add_partition_ids(0);
-                UNIT_ASSERT(stream->Write(request));
+            Ydb::Topic::StreamReadMessage::FromClient request;
+            auto* settings = request.mutable_init_request()->add_topics_read_settings();
+            settings->set_path(feedPath);
+            settings->add_partition_ids(0);
+            UNIT_ASSERT(stream->Write(request));
 
-                Ydb::Topic::StreamReadMessage::FromServer response;
-                UNIT_ASSERT(stream->Read(&response));
-                UNIT_ASSERT_C(response.server_message_case() ==
-                    Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, response.DebugString());
-                UNIT_ASSERT(stream->Read(&response));
-                UNIT_ASSERT_C(response.server_message_case() ==
-                    Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
-                UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
-                    TStringBuf(subscribedPath).StartsWith('/') ? feedPath : "/Root/kfront/test/feed", response.DebugString());
+            Ydb::Topic::StreamReadMessage::FromServer response;
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, response.DebugString());
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
+                relativeSubscription ? "/Root/kfront/test/feed" : "/alias/test/feed", response.DebugString());
 
-                context.TryCancel();
-                stream->Finish();
-            }
+            context.TryCancel();
+            stream->Finish();
         }
     } // Y_UNIT_TEST_SUITE(YdbPathAliasingIngress)
 

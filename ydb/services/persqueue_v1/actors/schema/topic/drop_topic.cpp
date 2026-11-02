@@ -23,7 +23,7 @@ public:
         Register(NPQ::NSchema::CreateDropTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Path = ResolveTopicPath(GetProtoRequest()->path()),
+            .Path = NormalizeTopicPath(GetProtoRequest()->path()),
             .UserToken = GetUserToken(),
             .EnableRelativePaths = true,
         }));

@@ -138,7 +138,6 @@
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering
-/ydb/tests/functional/minidumps @ydb-platform/engineering
 
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/core/subsystems @ydb-platform/blobstorage
@@ -289,6 +288,7 @@
 
 #Unknown / needs owner
 /ydb/core/control/ut @unknown
+/ydb/tests/functional/minidumps @unknown
 /ydb/tests/functional/restarts @unknown
 /ydb/tests/functional/wardens @unknown
 

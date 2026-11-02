@@ -1,5 +1,6 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>

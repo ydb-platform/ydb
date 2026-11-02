@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         Retention,
     };
 
-    void MissingSourceDnsName(EBootstrapStage stage) {
+    void MissingSourceDnsName(EBootstrapStage stage, TDuration responseDelay = TDuration::Zero()) {
         TEnv env(true, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
@@ -65,6 +65,26 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         }));
 
         TActorId creator;
+        bool responseDelayed = false;
+        auto delayedResponse = runtime.AddObserver<TEvYdbProxy::TEvAlterTableResponse>(
+            [&](TEvYdbProxy::TEvAlterTableResponse::TPtr& ev) {
+                if (!responseDelay || responseDelayed) {
+                    return;
+                }
+                if (ev->Sender != env.GetYdbProxy() || ev->GetRecipientRewrite() != creator) {
+                    return;
+                }
+                if (!ev->Get()->Result.IsSuccess()) {
+                    return;
+                }
+
+                responseDelayed = true;
+                // Visit a timestamp past the old deadline before delivering the response.
+                runtime.Schedule(new IEventHandle(env.GetSender(), env.GetSender(), new TEvents::TEvWakeup()),
+                    responseDelay - TDuration::Seconds(1));
+                runtime.Schedule(ev.Release(), responseDelay);
+            });
+
         TVector<TInstant> attempts;
         const auto requestType = stage == EBootstrapStage::Changefeed
             ? TEvYdbProxy::TEvAlterTableRequest::EventType
@@ -100,21 +120,28 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             "Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
         runtime.EnableScheduleForActor(creator);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
+        const auto startedAt = runtime.GetCurrentTime();
         runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
-            env.GetSender(), TDuration::Seconds(60));
+        // Real SDK requests progress independently of simulated time. The test
+        // runner's wall-clock timeout bounds these waits.
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
         UNIT_ASSERT(result);
         UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(attempts.size(), 3);
         UNIT_ASSERT(attempts[1] - attempts[0] >= TDuration::Seconds(10));
         UNIT_ASSERT(attempts[2] - attempts[1] >= TDuration::Seconds(10));
 
+        if (responseDelay) {
+            UNIT_ASSERT(responseDelayed);
+            UNIT_ASSERT(runtime.GetCurrentTime() - startedAt >= responseDelay);
+        }
+
         const auto desc = env.GetDescription("/Root/Table");
         const auto& streams = desc.GetPathDescription().GetTable().GetCdcStreams();
         UNIT_ASSERT_VALUES_EQUAL(streams.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(streams.at(0).GetName(), "Stream");
         env.SendAsync(env.GetYdbProxy(), new TEvYdbProxy::TEvDescribeTopicRequest("/Root/Table/Stream", {}));
-        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender(), TDuration::Seconds(30));
+        const auto topic = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicResponse>(env.GetSender());
         UNIT_ASSERT(topic);
         UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
         const auto& consumers = topic->Get()->Result.GetTopicDescription().GetConsumers();
@@ -128,6 +155,10 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(MissingSourceDnsNameDuringConsumerCreationRetries) {
         MissingSourceDnsName(EBootstrapStage::Consumer);
+    }
+
+    Y_UNIT_TEST(MissingSourceDnsNameWaitsBeyondSimulatedMinute) {
+        MissingSourceDnsName(EBootstrapStage::Consumer, TDuration::Minutes(2));
     }
 
     Y_UNIT_TEST(MissingSourceDnsNameDuringRetentionUpdateRetries) {
@@ -410,6 +441,93 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             UNIT_ASSERT(!result->Get()->SchemaChanges);
         }
     }
+
+    void AvailabilityPolicyOnSource(bool local, bool quotaEnabled, bool important) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableTopicDiskSubDomainQuota(quotaEnabled);
+        TEnv env(flags);
+        auto& runtime = env.GetRuntime();
+        const auto proxy = env.GetYdbProxy();
+        const auto topicProxy = local ? runtime.Register(CreateLocalYdbProxy("/Root")) : proxy;
+        // The local adapter supports topic operations; table DDL and DescribeTable
+        // use the remote adapter while both consumer serializers hit the real service.
+        auto observer = runtime.AddObserver([local, proxy, topicProxy](IEventHandle::TPtr& ev) {
+            if (!local || ev->GetRecipientRewrite() != proxy) {
+                return;
+            }
+            const auto type = ev->GetTypeRewrite();
+            if (type == TEvYdbProxy::TEvAlterTopicRequest::EventType
+                || type == TEvYdbProxy::TEvDescribeTopicRequest::EventType)
+            {
+                ev->Rewrite(type, topicProxy);
+            }
+        });
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        // Install an ordinary finite consumer first to cover ALTER clearing the
+        // finite period when creation replays an existing stream.
+        const auto availability = TDuration::MilliSeconds(1);
+        const auto run = [&](bool unlimited) {
+            runtime.Register(CreateStreamCreator(env.GetSender(), proxy, 1, 1,
+                std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+                "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
+                false, true, false, true, false, TDuration::Seconds(1),
+                unlimited ? TDuration::Zero() : availability, unlimited));
+            const auto request = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
+            runtime.Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+            return runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+        };
+        if (quotaEnabled) {
+            const auto result = run(false);
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        }
+        const auto result = run(important);
+        if (important && !quotaEnabled) {
+            UNIT_ASSERT(!result->Get()->IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), "important");
+        } else {
+            UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Status.GetIssues().ToString());
+        }
+        const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
+        const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        if (important && !quotaEnabled) {
+            UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), TDuration::Days(1).Seconds());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetImportant(), important);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).HasAvailabilityPeriodMs(), !important);
+            if (!important) {
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers(0).GetAvailabilityPeriodMs(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(UnlimitedAvailabilityRemoteSource) {
+        AvailabilityPolicyOnSource(false, true, true);
+    }
+
+    Y_UNIT_TEST(UnlimitedAvailabilityLocalSource) {
+        AvailabilityPolicyOnSource(true, true, true);
+    }
+
+    Y_UNIT_TEST(UnlimitedAvailabilityRequiresSourceQuotaFeature) {
+        AvailabilityPolicyOnSource(false, false, true);
+    }
+
+    Y_UNIT_TEST(SubsecondAvailabilityRemoteSource) {
+        AvailabilityPolicyOnSource(false, false, false);
+    }
+
+    Y_UNIT_TEST(SubsecondAvailabilityLocalSource) {
+        AvailabilityPolicyOnSource(true, false, false);
+    }
+
     class TStreamSetup {
     public:
         TTestActorRuntime Runtime;
@@ -420,7 +538,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         TTestActorRuntime::TEventObserverHolder Observer;
 
         explicit TStreamSetup(bool transfer = false, TDuration retention = TDuration::Seconds(1),
-                TDuration availability = TDuration::Days(1), bool describeOnly = false)
+                TDuration availability = TDuration::Days(1), bool describeOnly = false, bool important = false)
         {
             Runtime.Initialize(TAppPrepare().Unwrap());
             Parent = Runtime.AllocateEdgeActor();
@@ -439,7 +557,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             }
             Creator = Runtime.Register(CreateStreamCreator(Parent, Proxy, 1, 1, config,
                 "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
-                false, true, false, true, describeOnly, retention, availability));
+                false, true, false, true, describeOnly, retention, availability, important));
             Runtime.EnableScheduleForActor(Creator);
         }
 
@@ -476,6 +594,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             consumer->set_name("replicationConsumer");
             consumer->set_important(important);
             consumer->mutable_availability_period()->set_seconds(availability.Seconds());
+            consumer->mutable_availability_period()->set_nanos(availability.NanoSecondsOfSecond());
             Runtime.Send(new IEventHandle(Creator, Proxy, new TEvYdbProxy::TEvDescribeTopicResponse(
                 NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(result)), 0, request->Cookie));
             return request->Cookie;
@@ -502,6 +621,54 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT(TStreamSetup::Settings(retention).AddConsumers_.empty());
         // Duplicate completion of an earlier operation must not finish retention setup.
         setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie, NYdb::EStatus::UNAUTHORIZED);
+        setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(retention->Cookie);
+        setup.Finish();
+    }
+
+    Y_UNIT_TEST(UnlimitedAvailabilityBeforeShortRetention) {
+        for (const bool existing : {false, true}) {
+            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Zero(), false, true);
+            auto consumer = setup.CreateConsumer();
+            const auto& added = TStreamSetup::Settings(consumer).AddConsumers_.at(0);
+            UNIT_ASSERT(added.Important_);
+            UNIT_ASSERT_VALUES_EQUAL(added.AvailabilityPeriod_, TDuration::Zero());
+            if (existing) {
+                setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie, NYdb::EStatus::ALREADY_EXISTS);
+                consumer = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(setup.Proxy);
+                const auto& settings = TStreamSetup::Settings(consumer);
+                const auto& altered = settings.AlterConsumers_.at(0);
+                UNIT_ASSERT(altered.SetImportant_ && *altered.SetImportant_);
+                UNIT_ASSERT(altered.SetAvailabilityPeriod_);
+                UNIT_ASSERT_VALUES_EQUAL(*altered.SetAvailabilityPeriod_, TDuration::Zero());
+                UNIT_ASSERT(!settings.SetRetentionPeriod_);
+            }
+            setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie);
+            setup.VerifyConsumer(true, TDuration::Zero());
+            const auto retention = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(setup.Proxy);
+            setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(retention->Cookie);
+            setup.Finish();
+        }
+    }
+
+    Y_UNIT_TEST(IgnoredUnlimitedAvailabilityKeepsBootstrapRetention) {
+        for (const bool important : {false, true}) {
+            TStreamSetup setup(false, TDuration::Seconds(1), TDuration::Zero(), false, true);
+            const auto consumer = setup.CreateConsumer();
+            setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie);
+            setup.VerifyConsumer(important, important ? TDuration::Days(1) : TDuration::Zero());
+            setup.Finish(NYdb::EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT(!setup.RetentionRequested);
+        }
+    }
+
+    Y_UNIT_TEST(SubsecondFiniteAvailability) {
+        TStreamSetup setup(false, TDuration::Seconds(1), TDuration::MilliSeconds(1));
+        const auto consumer = setup.CreateConsumer();
+        UNIT_ASSERT_VALUES_EQUAL(TStreamSetup::Settings(consumer).AddConsumers_.at(0).AvailabilityPeriod_,
+            TDuration::MilliSeconds(1));
+        setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(consumer->Cookie);
+        setup.VerifyConsumer(false, TDuration::MilliSeconds(1));
+        const auto retention = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvAlterTopicRequest>(setup.Proxy);
         setup.Reply<TEvYdbProxy::TEvAlterTopicResponse>(retention->Cookie);
         setup.Finish();
     }

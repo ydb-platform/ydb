@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="100" height="100">
+  <!--
+      This test is to see that when preparing a FilterPlan, the code computes the correct InputRequirements
+      for the filter.  For example, if a filter primtiive has an attribute in"SourceAlpha", then the
+      corresponding InputRequirements must have InputRequirements.needs_source_alpha=true.
+  -->
+  <filter id="filter_1">
+    <feGaussianBlur in="SourceAlpha"/>
+  </filter>
+
+  <filter id="filter_2">
+    <feGaussianBlur/>
+    <feBlend in2="SourceAlpha"/>
+  </filter>
+
+  <filter id="filter_3">
+    <feGaussianBlur/>
+    <feDisplacementMap in2="BackgroundImage"/>
+    <feMerge>
+      <feMergeNode in="BackgroundAlpha"/>
+      <feMergeNode in="StrokePaint"/>
+      <feMergeNode in="FillPaint"/>
+    </feMerge>
+  </filter>
+
+  <rect id="rect_1" filter="url(#filter_1)"/>
+  <rect id="rect_2" filter="url(#filter_2)"/>
+  <rect id="rect_3" filter="url(#filter_3)"/>
+</svg>

@@ -12,6 +12,8 @@
 
 #include <util/string/strip.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
@@ -191,6 +193,49 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
 
         check(Ydb::Table::AlterTableRequest{});
         check(NKikimrKqp::TKqpAlterTableRequest{});
+    }
+
+    Y_UNIT_TEST(ColumnCompressionRoundTrip) {
+        using TCompression = Ydb::Table::ColumnCompression;
+        for (const auto algorithm : {TCompression::ALGORITHM_OFF, TCompression::ALGORITHM_LZ4, TCompression::ALGORITHM_ZSTD}) {
+            for (const auto level : {std::optional<int>{}, std::optional<int>{0}, std::optional<int>{-5}, std::optional<int>{5}}) {
+                if (level && algorithm != TCompression::ALGORITHM_ZSTD) {
+                    continue;
+                }
+                Ydb::Table::CreateTableRequest original;
+                auto* column = original.add_columns();
+                column->set_name("value");
+                column->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+                column->mutable_compression()->set_algorithm(algorithm);
+                if (level) {
+                    column->mutable_compression()->set_compression_level(*level);
+                }
+                auto* defaultColumn = original.add_columns();
+                defaultColumn->set_name("default_compression");
+                *defaultColumn->mutable_type() = column->type();
+
+                NKikimrSchemeOp::TColumnTableDescription internal;
+                auto status = Ydb::StatusIds::SUCCESS;
+                TString error;
+                UNIT_ASSERT_C(FillColumnDescription(internal, original.columns(), status, error), error);
+
+                Ydb::Table::CreateTableRequest exported;
+                FillColumnDescription(exported, internal);
+                Ydb::Table::DescribeTableResult described;
+                FillColumnDescription(described, internal);
+                for (const auto* restored : {&exported.columns(), &described.columns()}) {
+                    UNIT_ASSERT_VALUES_EQUAL(restored->size(), 2);
+                    const auto& compression = restored->Get(0).compression();
+                    UNIT_ASSERT(compression.has_algorithm());
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(compression.algorithm()), static_cast<int>(algorithm));
+                    UNIT_ASSERT_VALUES_EQUAL(compression.has_compression_level(), level.has_value());
+                    if (level) {
+                        UNIT_ASSERT_VALUES_EQUAL(compression.compression_level(), *level);
+                    }
+                    UNIT_ASSERT(!restored->Get(1).has_compression());
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(InternalColumnTableCompressionAndEncoding) {

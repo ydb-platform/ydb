@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/base/pdisk_config_validation.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
+#include <expected>
+
 namespace NKikimr {
     namespace NBsController {
 
@@ -154,12 +156,14 @@ namespace NKikimr {
             TConfigFitAction Fit;
 
             THashSet<TGroupId> GroupContentChanged;
+            TVector<ui32> GroupStateUpdates;
             THashSet<TGroupId> GroupFailureModelChanged;
             // Pools whose leading-disk override changed. Their VDisk service-set records are resent
             // without touching group generation.
             THashSet<TBoxStoragePoolId> HeapAllocatorNumLeadingDisksChanged;
 
-            std::optional<TString> ApplyDataCenterStates();
+            bool ResetDataCenterStates = false;
+            std::expected<void, TString> ApplyDataCenterStates(bool suppressFailModelChecking);
 
             bool PushStaticGroupsToSelfHeal = false;
 
@@ -445,6 +449,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd, TStatus& status);
 
             template<typename TCallback>
             void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);

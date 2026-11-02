@@ -24,6 +24,10 @@ private:
     }
 
     virtual TConclusionStatus DoInitialize(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoRestore(const TUpdateRestoreContext& /*context*/) override {
+        return TConclusionStatus::Fail("Resharding launcher has no persistent ALTER to restore");
+    }
+
     virtual TConclusionStatus DoStart(const TUpdateStartContext& context) override;
 
     virtual std::set<ui64> DoGetShardIds() const override {

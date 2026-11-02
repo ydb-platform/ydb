@@ -30,6 +30,11 @@ struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
         return true;
     }
 
+    static bool IsVisible(const TExportInfo& info) {
+        // Forget is already acknowledged; only asynchronous cleanup remains.
+        return info.State != TExportInfo::EState::Dropping;
+    }
+
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         return DoExecuteImpl(Self->Exports, Self->ExportsByTime, txc, ctx);
     }

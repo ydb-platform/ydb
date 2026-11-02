@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcBlobStatusTrackerTest) {
         CheckCase({R::N0, R::N0, R::N0}, {1, 1, 1}, {}, {}, G::EBS_FULL);
         CheckCase({R::N1, R::F, R::F}, {2, 0, 0}, {}, {}, G::EBS_FULL);
         CheckCase({R::N1, R::R, R::F}, {2, 2, 0}, {}, {}, G::EBS_FULL);
-        CheckCase({R::N2, R::N2, R::R}, {2, 0, 2}, {}, {}, G::EBS_RECOVERABLE_DOUBTED);
+        CheckCase({R::N1, R::N1, R::R}, {2, 0, 2}, {}, {}, G::EBS_RECOVERABLE_DOUBTED);
     }
 
     Y_UNIT_TEST(EnsuredLayoutDeterminesAbsence) {
@@ -88,11 +88,11 @@ Y_UNIT_TEST_SUITE(TMirror3dcBlobStatusTrackerTest) {
 
     Y_UNIT_TEST(RecoveryFailuresFollowEnsuredAlternatives) {
         for (auto status : {NKikimrProto::ERROR, NKikimrProto::NOT_YET, NKikimrProto::VDISK_ERROR_STATE}) {
-            CheckCase({R::N2, R::N2, R::R}, {}, {1, 1, 1}, {},
+            CheckCase({R::N1, R::N1, R::R}, {}, {1, 1, 1}, {},
                 G::EBS_DISINTEGRATED, false, status);
-            CheckCase({R::N2, R::N2, R::R}, {}, {2, 0, 2}, {},
+            CheckCase({R::N1, R::N1, R::R}, {}, {2, 0, 2}, {},
                 G::EBS_UNRECOVERABLE_FRAGMENTARY, false, status);
-            CheckCase({R::N2, R::N2, R::R}, {}, {2, 2, 3}, {},
+            CheckCase({R::N1, R::N1, R::R}, {}, {2, 2, 3}, {},
                 G::EBS_DISINTEGRATED, false, status);
         }
     }
@@ -112,11 +112,14 @@ Y_UNIT_TEST_SUITE(TMirror3dcBlobStatusTrackerTest) {
         CheckCase({R::N1, R::F, R::F}, {1, 0, 0}, {}, {}, G::EBS_RECOVERABLE_DOUBTED);
         CheckCase({R::N1, R::F, R::F}, {1, 0, 0}, {}, {2, 0, 0}, G::EBS_RECOVERABLE_FRAGMENTARY);
         CheckCase({R::N1, R::F, R::F}, {}, {}, {2, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, true);
-        CheckCase({R::N2, R::N2, R::R}, {2, 0, 2}, {}, {2, 2, 0}, G::EBS_RECOVERABLE_FRAGMENTARY);
+        CheckCase({R::N1, R::N1, R::R}, {2, 0, 2}, {}, {2, 2, 0}, G::EBS_RECOVERABLE_FRAGMENTARY);
     }
 
     Y_UNIT_TEST(InvalidRealmStatesDoNotFallBackToLegacy) {
         CheckCase({R::F, R::F, R::F}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
+        CheckCase({R::N0, R::N2, R::R}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
+        CheckCase({R::N1, R::N2, R::R}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
+        CheckCase({R::N2, R::N2, R::R}, {3, 3, 3}, {}, {}, G::EBS_DISINTEGRATED);
     }
 }
 

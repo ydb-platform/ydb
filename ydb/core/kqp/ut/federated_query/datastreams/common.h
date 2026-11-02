@@ -162,12 +162,13 @@ public:
 
     void ExecSchemeQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 
-    void WaitForClassifierPropagation();
+    void WaitForClassifierPropagation(const TString& poolId = {});
 
     // Query client SDK
 
     std::vector<NYdb::TResultSet> ExecQuery(const std::string& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS,
-        const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr);
+        const std::string& expectedError = "", std::function<void(const std::string&)> astValidator = nullptr,
+        TDuration timeout = TDuration::Zero());
 
     void CreatePqSource(const std::string& pqSourceName);
 

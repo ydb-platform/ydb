@@ -29,6 +29,11 @@ public:
         return Future_.HasValue();
     }
 
+    //! Shows whether this is the default token, which cannot be cancelled
+    bool IsDefault() const {
+        return Future_.StateId() == Default().Future_.StateId();
+    }
+
     //! Shows whether a cancellation has been requested
     bool IsDeadlineReached() const {
         return TInstant::Now() > Deadline_;

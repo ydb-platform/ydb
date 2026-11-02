@@ -141,6 +141,12 @@ protected:
         EInequalityPredicateType inequalitySign
     );
 
+    std::shared_ptr<TTreeNode> ProcessBoolLiteralPredicate(
+        bool value,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
     std::shared_ptr<TTreeNode> ProcessRegexPredicate(
         bool underNot,
         bool collectConstantMembers
@@ -154,7 +160,6 @@ protected:
         bool containString
     );
 
-    TMaybe<TString> GetAttributeType(const TString& attributeName);
     std::shared_ptr<TTreeNode> CreateLeafNode(TMaybe<TString> attribute);
 
     double ComputeSelectivity(

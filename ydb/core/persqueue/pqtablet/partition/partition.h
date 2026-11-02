@@ -1200,6 +1200,8 @@ private:
     void ScheduleNegativeReply(const TMessage& msg);
 
     void SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos = {});
+    void RestoreReadSessionActor(TUserInfo& userInfo, const TString& sessionId,
+                                const TActorId& readSessionActor, const TActorContext& ctx);
 
     void OnHandleWriteResponse(const TActorContext& ctx);
 

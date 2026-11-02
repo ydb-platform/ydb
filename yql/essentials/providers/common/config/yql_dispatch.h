@@ -18,6 +18,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/yexception.h>
 #include <util/generic/vector.h>
@@ -250,7 +251,7 @@ public:
             , Parser_(NPrivate::GetDefaultParser<TType>())
             , Serializer_(NPrivate::GetDefaultSerializer<TType>())
             , ValueSetter_([this](TSettings& settings, const TString& cluster, TType value) {
-                std::invoke(SettingAccessor_, settings)[cluster] = value;
+                std::invoke(SettingAccessor_, settings)[cluster] = std::move(value);
             })
         {
         }
@@ -264,7 +265,7 @@ public:
                         validate(settings, cluster, v);
                     }
                     if (!validateOnly) {
-                        ValueSetter_(settings, cluster, v);
+                        ValueSetter_(settings, cluster, std::move(v));
                         if (Warning_) {
                             return errorCallback(Warning_, false);
                         }
@@ -417,8 +418,9 @@ public:
         void Serialize(const std::function<void(const TString&, const TString&)>& callback, const TSettings& settings) const override {
             YQL_ENSURE(!TSetting::IsPerCluster(), "Only serialization for static settings is supported now");
             if constexpr (!TSetting::IsPerCluster()) {
-                YQL_ENSURE(HasSerializableValue(settings), "Setting is not serializable");
-                callback(Name_, Serializer_(*std::invoke(SettingAccessor_, settings).Get()));
+                if (const auto& value = std::invoke(SettingAccessor_, settings).Get()) {
+                    callback(Name_, Serializer_(*value));
+                }
             }
         }
 
@@ -480,18 +482,20 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    explicit TDispatcher(const TStringBuf& providerName = "", bool strictConfigValidation = false)
+    explicit TDispatcher(const TStringBuf& providerName = "", bool strictConfigValidation = false, bool normalizeSettingNames = true)
         : ProviderName_(providerName)
         , StrictConfigValidation_(strictConfigValidation)
+        , NormalizeSettingNames_(normalizeSettingNames)
     {
     }
 
     TDispatcher(const TDispatcher&) = delete;
 
     template <NPrivate::StringContainer TContainer>
-    explicit TDispatcher(const TContainer& validClusters, bool strictConfigValidation = false)
+    explicit TDispatcher(const TContainer& validClusters, bool strictConfigValidation = false, bool normalizeSettingNames = true)
         : ValidClusters(validClusters.begin(), validClusters.end())
         , StrictConfigValidation_(strictConfigValidation)
+        , NormalizeSettingNames_(normalizeSettingNames)
     {
     }
 
@@ -517,7 +521,7 @@ public:
     TSettingHandlerImpl<TAccessor>& AddSetting(const TString& name, TAccessor accessor) {
         using THandler = TSettingHandlerImpl<TAccessor>;
         TIntrusivePtr<THandler> handler = new THandler(name, std::move(accessor));
-        if (!Handlers_.insert({NormalizeName(name), handler}).second) {
+        if (!Handlers_.insert({PrepareSettingName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }
 
@@ -529,7 +533,7 @@ public:
     }
 
     bool IsRuntime(const TString& name) const {
-        auto normalizedName = NormalizeName(name);
+        auto normalizedName = PrepareSettingName(name);
         if (auto handler = Handlers_.Value(normalizedName, typename TSettingHandler::TPtr())) {
             return handler->IsRuntime();
         }
@@ -541,14 +545,13 @@ public:
         using TAttribute = typename TContainer::value_type;
 
         auto errorCallback = GetDefaultErrorCallback();
-        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
-
-        const auto flags = NCommon::SelectAndSaveActivatedFlags<TAttribute>(
-            activationLabel, qContext, clusterValues, filter, !ProviderName_.empty());
-
-        for (const auto& flag : flags) {
-            Dispatch(settings, cluster, flag.GetName(), flag.GetValue(), EStage::CONFIG, errorCallback, qContext);
-        }
+        NCommon::ForEachActivatedFlag<TAttribute>(
+            clusterValues, filter, qContext,
+            [&]() -> TString { return TStringBuilder() << ProviderName_ << "_" << cluster; },
+            !ProviderName_.empty(),
+            [&](const auto& flag) {
+                Dispatch(settings, cluster, flag.GetName(), flag.GetValue(), EStage::CONFIG, errorCallback, qContext);
+            });
     }
 
     template <NPrivate::ConfigFeatureList TContainer>
@@ -598,7 +601,7 @@ public:
 
     void Enumerate(std::function<void(std::string_view)> callback) const {
         for (const auto& name : Names_) {
-            if (!Handlers_.at(NormalizeName(name))->IsDeprecated()) {
+            if (!Handlers_.at(PrepareSettingName(name))->IsDeprecated()) {
                 callback(name);
             }
         }
@@ -606,9 +609,7 @@ public:
 
     void SerializeStaticSettings(const TSettings& settings, const std::function<void(const TString&, const TString&)>& callback) const {
         for (const auto& [name, handler] : Handlers_) {
-            if (handler->HasSerializableValue(settings)) {
-                handler->Serialize(callback, settings);
-            }
+            handler->Serialize(callback, settings);
         }
     }
 
@@ -624,7 +625,7 @@ public:
 
     bool Dispatch(TSettings& settings, const TString& cluster, const TString& name, const TMaybe<TString>& value,
                   EStage stage, const TErrorCallback& errorCallback, const TQContext& qContext) const {
-        auto normalizedName = NormalizeName(name);
+        auto normalizedName = PrepareSettingName(name);
         if (auto handler = Handlers_.Value(normalizedName, typename TSettingHandler::TPtr())) {
             auto handleSetting = [&](bool validateOnly) {
                 return handler->Handle(cluster, value, validateOnly, errorCallback, settings);
@@ -655,6 +656,13 @@ protected:
 
     const TString ProviderName_;
     bool StrictConfigValidation_ = false;
+
+private:
+    TString PrepareSettingName(const TString& name) const {
+        return NormalizeSettingNames_ ? NormalizeName(name) : name;
+    }
+
+    const bool NormalizeSettingNames_;
 };
 
 template <typename TSettings>

@@ -3,6 +3,7 @@ package NYT.NYson.NProto;
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/protobuf_helpers.proto";
 import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+import "yt_proto/yt/core/yson/proto/list_types.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 
 enum EColor
@@ -21,6 +22,77 @@ enum EFlag
     Flag_True = 1 [(NYT.NYson.NProto.enum_value_name) = "true"];
     Flag_Yes = 1 [(NYT.NYson.NProto.enum_value_name) = "yes"];
     Flag_AnotherYes = 1 [(NYT.NYson.NProto.enum_value_name) = "yes"];
+}
+
+message TPackedYsonList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int64 values = 1 [packed = true];
+}
+
+message TYsonListWithExtraField
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int64 values = 1;
+    optional int64 extra = 2;
+}
+
+message TYsonListWithExtensionRange
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int64 values = 1;
+    extensions 100 to max;
+}
+
+message TYsonListWithWrongFieldNumber
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int64 values = 2;
+}
+
+message TYsonListWithSingularField
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    optional int64 values = 1;
+}
+
+message TYsonListWithYsonMap
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    map<string, int64> values = 1 [(NYT.NYson.NProto.yson_map) = true];
+}
+
+message TMessageYsonList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated TNestedMessage values = 1;
+}
+
+message TRequiredYsonList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int64 values = 1 [(NYT.NYson.NProto.required) = true];
+}
+
+message TRecursiveYsonList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated TRecursiveYsonList values = 1;
+}
+
+message TNestedYsonList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated TInt64List values = 1;
+}
+
+message TMessageWithYsonLists
+{
+    optional TInt64List list = 1;
+    optional int32 sibling = 2;
+    repeated TInt64List lists = 3;
+    map<string, TInt64List> list_map = 4 [(NYT.NYson.NProto.yson_map) = true];
+    optional TMessageYsonList messages = 5;
 }
 
 message TNestedMessage

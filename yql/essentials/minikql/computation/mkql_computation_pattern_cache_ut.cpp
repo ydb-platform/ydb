@@ -66,8 +66,7 @@ TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
 
 NYql::TRuntimeSettingsStableHash MakeStableHash(ui8 fill) {
     NYql::TRuntimeSettingsStableHash hash;
-    constexpr size_t arbitraryLength = 12;
-    hash->resize(arbitraryLength, fill);
+    hash->fill(fill);
     return hash;
 }
 

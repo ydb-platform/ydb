@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 auto sender = runtime.AllocateEdgeActor();
                 auto requestEvent = new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request);
                 requestEvent->PathNormalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
-                    [normalizer = runtime.GetAppData().PathNormalizer](TStringBuf path) { return normalizer->NormalizePath(path); });
+                    [normalizer = runtime.GetAppData().GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
                 runtime.Send(new IEventHandle(MakeViewerID(0), sender, requestEvent));
                 TAutoPtr<IEventHandle> handle;
                 UNIT_ASSERT(runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle, TDuration::Seconds(30)));

@@ -404,7 +404,7 @@ class FaultTest(GrpcCase):
 
 
 class HealthOverGrpcTest(GrpcCase):
-    async def test_failed_resyncing_pile_is_not_reported_as_a_bridge_group_failure(self):
+    async def test_failed_stage2_pile_is_reported_as_a_bridge_group_failure(self):
         c = await self.make()
         inst = c.inst("pile1")
         inst.set_blocked([1])
@@ -413,9 +413,12 @@ class HealthOverGrpcTest(GrpcCase):
         inst.replica.force(state, True)
         self.assertTrue(model.requires_data_quorum(state.per_pile[1]))
         data = await self.self_check(c, c.label("pile1"))
-        self.assertEqual(data["self_check_result"], "GOOD")
-        self.assertFalse(data.get("issue_log"))
-        self.assertEqual(data["database_status"][0]["storage"]["pools"][0]["groups"][0]["overall"], "GREEN")
+        self.assertEqual(data["self_check_result"], "MAINTENANCE_REQUIRED")
+        self.assertEqual(len(data["issue_log"]), 1)
+        issue = data["issue_log"][0]
+        self.assertEqual((issue["type"], issue["status"]), ("BRIDGE_GROUP", "RED"))
+        self.assertEqual(issue["location"]["storage"]["pool"]["group"]["pile"]["name"], "pile2")
+        self.assertEqual(data["database_status"][0]["storage"]["pools"][0]["groups"][0]["overall"], "ORANGE")
 
     async def self_check(self, c, label):
         resp = await c.monitoring(label).SelfCheck(ydb_monitoring_pb2.SelfCheckRequest())

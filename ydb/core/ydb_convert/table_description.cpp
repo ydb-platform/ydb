@@ -25,6 +25,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/protobuf/json/util.h>
@@ -3339,7 +3340,8 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 }
 
 bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
-        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error,
+        const TString& sourceDatabase, const TString& targetDatabase)
 {
     NKikimrSchemeOp::TColumnTableDescription& tableDesc = *out.MutableCreateColumnTable();
 
@@ -3360,6 +3362,16 @@ bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
 
     if (!FillCreateTableSettingsDesc(tableDesc, in, status, error)) {
         return false;
+    }
+
+    if (sourceDatabase && tableDesc.GetTtlSettings().HasEnabled()) {
+        // Each conversion starts from the original backup scheme, so retries cannot rewrite paths twice.
+        for (auto& tier : *tableDesc.MutableTtlSettings()->MutableEnabled()->MutableTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                auto* storage = tier.MutableEvictToExternalStorage();
+                storage->SetStorage(NYdb::NDump::RewriteAbsolutePath(storage->GetStorage(), sourceDatabase, targetDatabase));
+            }
+        }
     }
 
     if (!FillColumnTableIndexesFromCreateRequest(tableDesc, in, status, error)) {

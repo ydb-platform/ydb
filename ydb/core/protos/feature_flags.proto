@@ -448,5 +448,5 @@ message TFeatureFlags {
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
-    optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
+    optional bool EnableComputeSchedulerMemory = 370 [default = false, (RequireRestart) = true];
 }

@@ -1306,7 +1306,6 @@ namespace NKikimr::NBsController {
                     GroupContentChanged.insert(groupId);
                 }
             }
-            // Several administrative changes must form one valid transition together.
             if (!suppressFailModelChecking) {
                 if (!isNew) {
                     if (const auto result = ValidateFailRealmStateTransition(previous, states); !result) {

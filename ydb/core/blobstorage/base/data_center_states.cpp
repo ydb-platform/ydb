@@ -1,4 +1,5 @@
 #include "data_center_states.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <util/string/builder.h>
 
@@ -112,6 +113,11 @@ std::expected<void, TString> ValidateFailRealmStateTransition(const TFailRealmSt
         // RFC 190, Table 1, row 7.
         if (from == TFailRealm::Invariant1 && to == TFailRealm::Invariant2) {
             return expect(statsAfter.NumExcluded == 1 && statsAfter.NumDistinctIncludedStates == 1);
+        }
+        // Returning the last excluded realm permits 1+1+1 writes again.
+        if (from == TFailRealm::Invariant2 && to == TFailRealm::Invariant1) {
+            return expect(statsBefore.NumExcluded == 1 && statsAfter.NumExcluded == 0
+                && IsAllowedMirror3dcFailRealmStateTransition(before, after));
         }
         // RFC 190, Table 1, row 8.
         if ((from == TFailRealm::Invariant1 || from == TFailRealm::Invariant2) && to == TFailRealm::Invariant0) {

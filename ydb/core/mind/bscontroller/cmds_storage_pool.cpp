@@ -1298,6 +1298,20 @@ namespace NKikimr::NBsController {
                     GroupContentChanged.insert(groupId);
                 }
             }
+            bool returnedRealm = false;
+            bool hasFailedRealm = false;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                returnedRealm |= previous[realm] == TFailRealm::F && states[realm] == TFailRealm::R;
+                hasFailedRealm |= states[realm] == TFailRealm::F;
+            }
+            if (returnedRealm && !hasFailedRealm) {
+                // Recovery with all three realms accepts 1+1+1 writes, so N2 is no longer sustainable.
+                for (TFailRealm::EState& realmState : states) {
+                    if (realmState == TFailRealm::N2) {
+                        realmState = TFailRealm::N1;
+                    }
+                }
+            }
             if (!suppressFailModelChecking) {
                 if (!isNew) {
                     if (const auto result = ValidateFailRealmStateTransition(previous, states); !result) {

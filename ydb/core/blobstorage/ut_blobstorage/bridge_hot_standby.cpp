@@ -1,8 +1,20 @@
 #include "bridge_pile_ops.h"
 
+#include <ydb/core/base/counters.h>
+
 using namespace NBridgeTest;
 
 namespace {
+
+    // the sum of the standby write counter of every node
+    i64 GetStandbyCounter(TEnvironmentSetup& env, const TString& name, bool derivative = true) {
+        i64 sum = 0;
+        for (const ui32 nodeId : env.Runtime->GetNodes()) {
+            sum += GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "dsproxynode")
+                ->GetSubgroup("subsystem", "bridge_standby")->GetCounter(name, derivative)->Val();
+        }
+        return sum;
+    }
 
     TEnvironmentSetup::TSettings MakeSettings() {
         return {
@@ -156,6 +168,65 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
         checker.Write(groupId);
         CheckPileData(env, checker, 1, 9);
+    }
+
+    // The DS proxy of the standby part lags behind the generation the write is forced to; the write is resent and
+    // reaches the standby anyway.
+    Y_UNIT_TEST(RaceWithLaggingProxyResendsWrite) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        const i64 restartedBefore = GetStandbyCounter(env, "WritesRestarted");
+        ui32 races = 0;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == MakeBlobStorageProxyID(piles[1]) &&
+                    !races++) {
+                auto result = ev->Get<TEvBlobStorage::TEvPut>()->MakeErrorResponse(NKikimrProto::RACE, "lagging proxy",
+                    TGroupId::FromValue(piles[1]));
+                result->RacingGeneration = 0;
+                env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, result.release(), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            return true;
+        };
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        const auto& [writtenGroup, id, data] = checker.GetWritten().back();
+        UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
+        WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
+            "resent background write reaches standby");
+        UNIT_ASSERT_VALUES_EQUAL(races, 2); // the RACE and the resent write
+        UNIT_ASSERT_LT(restartedBefore, GetStandbyCounter(env, "WritesRestarted"));
+        env.Runtime->FilterFunction = {};
+    }
+
+    // Writes beyond the node budget are dropped rather than held; the client doesn't notice, and the rejoin recovers them.
+    Y_UNIT_TEST(OverBudgetWriteIsDropped) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        for (const ui32 nodeId : env.Runtime->GetNodes()) {
+            TControlBoard::SetValue(0,
+                env.Runtime->GetNode(nodeId)->AppData->Icb->DSProxyControls.BridgeStandbyMaxBytesInFlight);
+        }
+        const i64 droppedBefore = GetStandbyCounter(env, "WritesDropped");
+        ui32 standbyWrites = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            standbyWrites += ev->GetTypeRewrite() == TEvBlobStorage::EvPut &&
+                ev->Recipient == MakeBlobStorageProxyID(piles[1]);
+            return true;
+        };
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        const auto& [writtenGroup, id, data] = checker.GetWritten().back();
+        UNIT_ASSERT_VALUES_EQUAL(writtenGroup, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(standbyWrites, 0);
+        UNIT_ASSERT_LT(droppedBefore, GetStandbyCounter(env, "WritesDropped"));
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::NODATA);
+        env.Runtime->FilterFunction = {};
+
+        RejoinPile(env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
     }
 
     // A pile out of sync can't be suspended: the suspended pile would take part in configuration quorum and count its

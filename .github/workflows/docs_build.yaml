@@ -19,6 +19,7 @@ on:
       - 'ydb/library/actors/core/executor_pool_basic_feature_flags.h'
       - '.github/workflows/docs_build.yaml'
       - '.github/workflows/docs_release.yaml'
+      - '.github/workflows/docs_release_core.yaml'
   workflow_dispatch:
     inputs:
       pull_number:

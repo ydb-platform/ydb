@@ -25,6 +25,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
 
+#include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
 
 #include <util/string/split.h>
@@ -54,6 +55,13 @@ enum class EConnectRightVerdict {
 struct TConnectRightCheckResult {
     EConnectRightVerdict Verdict = EConnectRightVerdict::Allowed;
     TStringBuf Reason;
+};
+
+// Temporary LOGBROKER-10668: methods that may omit credentials when EnableAnonymousDiscovery is on.
+// A presented token or client certificate is still checked.
+constexpr TStringBuf AnonymousDiscoveryMethods[] = {
+    "NKikimrClient.TGRpcServer/ChooseProxy",
+    "Ydb.Discovery.V1.DiscoveryService/ListEndpoints",
 };
 
 template<typename TCtx>
@@ -255,6 +263,30 @@ public:
             }
         }
         Initialize(schemeData, rootAttributes);
+    }
+
+    // Feature flags are read from AppData, which requires an actor activation.
+    // The secure-request bootstrap calls this before checking the token.
+    void PrepareAuthentication() {
+        if (!AppData()->FeatureFlags.GetEnableAnonymousDiscovery()) {
+            return;
+        }
+
+        // An empty auth header still leaves SecurityToken empty and hides a client
+        // certificate. Do not treat that request as anonymous.
+        const bool hasCertificate = !GrpcRequestBaseCtx_->FindClientCertPropertyValues().empty();
+        if (!TBase::GetSecurityToken().empty() || hasCertificate) {
+            return;
+        }
+
+        const TString method = GrpcRequestBaseCtx_->GetRpcMethodName();
+        if (!IsIn(AnonymousDiscoveryMethods, method)) {
+            return;
+        }
+
+        YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY, "Allow grpc method without token",
+            {"method", method});
+        TBase::SetAllowMissingToken();
     }
 
     void Bootstrap(const TActorContext& ctx) {

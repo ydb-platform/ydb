@@ -1091,6 +1091,22 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
 
+        case EYtSettingType::Consumer: {
+            if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureAtom(*setting->Child(1), ctx)) {
+                return false;
+            }
+
+            if (setting->Child(1)->Content().empty()) {
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(setting->Pos()),
+                    "Consumer path must not be empty"));
+
+                return false;
+            }
+
+            break;
+        }
+
         case EYtSettingType::PrimaryKey: {
             TVector<TString> keyColumns;
             if (!ParseWritePrimaryKey(*setting, keyColumns, ctx)) {

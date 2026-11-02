@@ -398,6 +398,12 @@ public:
         sourceSettings.SetPath(table.Name().StringValue());
         sourceSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
 
+        if (auto consumerSetting = NYql::GetSetting(
+            table.Settings().Ref(), EYtSettingType::Consumer
+        )) {
+            sourceSettings.SetConsumerPath(TString(consumerSetting->Child(1)->Content()));
+        }
+
         settings.PackFrom(sourceSettings);
     }
 

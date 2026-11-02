@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/runtime)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:4)
 
 SRCS(
     kqp_scan_data_ut.cpp

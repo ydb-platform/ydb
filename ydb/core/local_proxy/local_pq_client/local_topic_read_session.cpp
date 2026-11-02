@@ -566,8 +566,8 @@ private:
         if (message.has_retained_start_offset()) {
             retainedStartOffset = message.retained_start_offset();
         }
-        AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(std::move(partitionSession), committedOffset,
-            offsets.start(), offsets.end(), retainedStartOffset));
+        AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
+            std::move(partitionSession), committedOffset, offsets.start(), offsets.end(), retainedStartOffset));
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest& message) {

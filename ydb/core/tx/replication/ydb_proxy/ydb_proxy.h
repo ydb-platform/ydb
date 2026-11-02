@@ -248,10 +248,11 @@ struct TEvYdbProxy {
         {
         }
 
-        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset)
+        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset, std::optional<ui64> retainedStartOffset)
             : ReadSessionId(readSessionId)
             , CommittedOffset(committedOffset)
             , ReadOffset(committedOffset)
+            , RetainedStartOffset(retainedStartOffset)
         {
         }
 

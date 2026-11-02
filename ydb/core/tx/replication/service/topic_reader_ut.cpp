@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         }
 
         void Start(const TString& sessionId, ui64 committedOffset) {
-            Runtime.Send(Reader, Session, new TEvYdbProxy::TEvStartTopicReadingSession(sessionId, committedOffset));
+            Runtime.Send(Reader, Session, new TEvYdbProxy::TEvStartTopicReadingSession(sessionId, committedOffset, std::nullopt));
         }
 
         void Poll() {
@@ -529,6 +529,21 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         TRetentionGapTest s;
         s.ExpireFirstMessage();
         const auto reader = CreateReader(s.Env, s.ReaderSettings());
+        s.AssertStartupDataLoss(reader);
+    }
+
+    Y_UNIT_TEST(LocalRetentionGapBeforeSessionStartWithoutLaterMessageReportsDataLoss) {
+        TRetentionGapTest s;
+        s.ExpireFirstMessage();
+
+        auto& runtime = s.Env.GetRuntime();
+        const auto proxy = runtime.Register(CreateLocalYdbProxy(s.Env.GetDatabase()));
+        const auto reader = runtime.Register(CreateRemoteTopicReader(proxy, s.ReaderSettings()));
+        s.Env.SendAsync(reader, new TEvWorker::TEvHandshake());
+        const auto handshake = runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(s.Env.GetSender(), TDuration::Seconds(30));
+        UNIT_ASSERT(handshake);
+        UNIT_ASSERT_VALUES_EQUAL(handshake->Sender, reader);
+
         s.AssertStartupDataLoss(reader);
     }
 }

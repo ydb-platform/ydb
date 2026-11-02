@@ -220,8 +220,9 @@ Y_UNIT_TEST_SUITE(VDiskConfigurationGeneration) {
         env.Sim(TDuration::Minutes(1));
         const ui32 groupId = env.GetGroups().front();
         const TIntrusivePtr<TBlobStorageGroupInfo> oldInfo = env.GetGroupInfo(groupId);
-        TBlobStorageGroupInfo::TDynamicInfo dynamic(oldInfo->GetDynamicInfo());
-        ++dynamic.GroupGeneration;
+        TBlobStorageGroupInfo::TDynamicInfo dynamic(oldInfo->GroupID, oldInfo->GroupGeneration + 1);
+        dynamic.ServiceIdForOrderNumber = oldInfo->GetDynamicInfo().ServiceIdForOrderNumber;
+        dynamic.FailRealmStates = oldInfo->GetDynamicInfo().FailRealmStates;
         const TIntrusivePtr<TBlobStorageGroupInfo> newInfo = MakeIntrusive<TBlobStorageGroupInfo>(
             oldInfo->PickTopology(), std::move(dynamic), "", TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
         const TVDiskID oldDisk = oldInfo->GetVDiskId(0);

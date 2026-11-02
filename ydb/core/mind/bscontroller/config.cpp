@@ -448,6 +448,10 @@ namespace NKikimr::NBsController {
                     continue;
                 }
                 const std::function<bool(const TGroupInfo&)> configDelivered = [&](const TGroupInfo& config) {
+                    if (config.VDisksInGroup.empty() && (config.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE
+                            || config.BridgeGroupInfo)) {
+                        return true; // The new virtual/proxy configuration has no VDisks to acknowledge it.
+                    }
                     if (config.Topology->GetTotalFailRealmsNum() != 3) {
                         return false;
                     }

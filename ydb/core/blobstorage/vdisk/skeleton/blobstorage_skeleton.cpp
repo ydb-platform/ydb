@@ -2698,7 +2698,7 @@ namespace NKikimr {
 
         void HandleConfigQueryResult(TEvNodeWardenGroupInfo::TPtr&, const TActorContext& ctx) {
             if (ConfigStartupPending && GInfo->GroupGeneration < PersistedGroupGeneration && !ConfigPersistenceInFlight) {
-                ctx.Schedule(TDuration::Seconds(5), new IEventHandle(NodeWardenServiceId, SelfId(),
+                ctx.Schedule(TDuration::Seconds(5), std::make_unique<IEventHandle>(NodeWardenServiceId, SelfId(),
                     new TEvNodeWardenQueryGroupInfo(GInfo->GroupID.GetRawId(), PersistedGroupGeneration)));
             }
         }

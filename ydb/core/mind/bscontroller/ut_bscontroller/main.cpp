@@ -1186,10 +1186,10 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!env.Invoke(exclude).GetSuccess());
         env.StaleConfigRealm.reset();
         UNIT_ASSERT(env.Invoke(exclude).GetSuccess());
+        env.PauseConfigReports = true;
         const NKikimrBlobStorage::TGroupInfo failed = env.ReadGroups().at(groupId);
         UNIT_ASSERT_VALUES_EQUAL(failed.GetGroupGeneration(), initial.GetGroupGeneration() + 1);
         // Old acknowledgements cannot authorize another generation; force does not bypass delivery checks.
-        env.PauseConfigReports = true;
         const NKikimrBlobStorage::TConfigRequest promote = env.SetGroupStates(groupId,
             {TFailRealm::N1, TFailRealm::N1, TFailRealm::F});
         UNIT_ASSERT(!env.Invoke(promote).GetSuccess());

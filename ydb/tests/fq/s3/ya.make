@@ -5,27 +5,35 @@ STYLE_PYTHON()
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 PEERDIR(
     contrib/python/boto3
     contrib/python/moto
     contrib/python/pyarrow
+    contrib/python/pytest
+    contrib/python/requests
     library/python/port_manager
     library/python/testing/recipe
     library/python/testing/yatest_common
     library/recipes/common
     ydb/tests/tools/datastreams_helpers
-    ydb/tests/tools/fq_runner
+    ydb/tests/fq/streaming_common
+    ydb/tests/library
+    ydb/public/api/protos
+    ydb/public/sdk/python
+    ydb/public/sdk/python/enable_v3_new_behavior
 )
 
 DEPENDS(
+    ydb/apps/ydb
+    ydb/apps/ydbd
     contrib/python/moto/bin
 )
 
 TEST_SRCS(
-    test_bindings_0.py
-    test_bindings_1.py
+    test_external_tables_0.py
+    test_external_tables_1.py
     test_compressions.py
     test_early_finish.py
     test_explicit_partitioning_0.py
@@ -35,7 +43,7 @@ TEST_SRCS(
     test_inference.py
     test_inflight.py
     test_insert.py
-    test_public_metrics.py
+    test_query_metrics.py
     test_parquet_pushdown.py
     test_push_down.py
     test_s3_0.py
@@ -45,13 +53,14 @@ TEST_SRCS(
     test_statistics.py
     test_test_connection.py
     test_validation.py
-    test_ydb_over_fq.py
-    test_yq_v2.py
+    test_sql_api.py
+    test_sql.py
 )
 
 PY_SRCS(
     conftest.py
     s3_helpers.py
+    sql_client.py
 )
 
 DATA(

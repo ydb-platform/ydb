@@ -420,11 +420,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DeleteSpecificGroups)
                     HANDLE_COMMAND(DefineDataCenterStates)
                     HANDLE_COMMAND(TestResetDataCenterStates)
-<<<<<<< HEAD
-=======
                     HANDLE_COMMAND(DefineFailRealmStates)
-                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
->>>>>>> 9e652f56288 ([BlobStorage] Add direct persistent fail-realm state assignment in BSC (#57363))
 
                     default: break;
                 }

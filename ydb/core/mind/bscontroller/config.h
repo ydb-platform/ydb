@@ -384,20 +384,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates& cmd, TStatus& status);
-<<<<<<< HEAD
-=======
             void ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd, TStatus& status);
-
-            template<typename TCallback>
-            void ForEachStoragePoolGroup(TBoxStoragePoolId storagePoolId, TCallback&& callback);
-
-            // turn ordinary groups of the storage pool being made bridged into inline piles, and give every bridged
-            // group of the pool its parts in all piles
-            void MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId);
-
-            // designate the part every bridged group of the storage pool being made ordinary keeps
-            void MakeStoragePoolGroupsOrdinary(TBoxStoragePoolId storagePoolId, const TString& retainPileName);
->>>>>>> 9e652f56288 ([BlobStorage] Add direct persistent fail-realm state assignment in BSC (#57363))
         };
 
     } // NBsController

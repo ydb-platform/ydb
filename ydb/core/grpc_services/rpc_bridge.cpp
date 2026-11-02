@@ -352,8 +352,10 @@ private:
         const auto selfNodePileId = bridgeInfo->SelfNodePile->BridgePileId;
         if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
             const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
-            if (newSelfState == NKikimrBridge::TClusterState::DISCONNECTED ||
-                newSelfState == NKikimrBridge::TClusterState::SUSPENDED) {
+            // the servers of the pile stop serving out of configuration quorum (as in HOT_STANDBY), and the suspended
+            // one is about to go out; the stop waits for this request to reply
+            if (newSelfState == NKikimrBridge::TClusterState::SUSPENDED ||
+                    !NBridge::PileStateTraits(newSelfState).RequiresConfigQuorum) {
                 IsDisconnectingRequest = true;
                 self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
                     new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestStarted());

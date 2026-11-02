@@ -187,7 +187,8 @@ void TestCompletion(ECompletion completion) {
 }
 
 Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
-    Y_UNIT_TEST(HotStandbyKeepsServerRunning) {
+    // servers of the HOT_STANDBY pile stop, as it is out of configuration quorum; the stop waits for the reply
+    Y_UNIT_TEST(HotStandbyDelaysServerStop) {
         TSetup setup;
         auto [rpc, future] = setup.Start(false, Ydb::Bridge::PileState::HOT_STANDBY);
         const auto invoke = setup.Runtime.GrabEdgeEventIf<NStorage::TEvNodeConfigInvokeOnRoot>(setup.NodeWarden,
@@ -195,11 +196,14 @@ Y_UNIT_TEST_SUITE(BridgeRpcLifecycle) {
         UNIT_ASSERT(invoke);
         const auto& state = invoke->Get()->Record.GetSwitchBridgeClusterState().GetNewClusterState();
         UNIT_ASSERT_EQUAL(state.GetPerPileState(1), NKikimrBridge::TClusterState::HOT_STANDBY);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Finished, 0);
         auto response = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
         response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
         setup.Runtime.Send(new IEventHandle(rpc, setup.NodeWarden, response.release()), 0, true);
         UNIT_ASSERT_EQUAL(setup.Runtime.WaitFuture(future).operation().status(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(setup.Started, 0);
+        setup.Runtime.WaitFor("disconnect request completion", [&] { return setup.Finished == 1; }, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(setup.Started, 1);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Finished, 1);
     }
 
     Y_UNIT_TEST(InvalidQuorumDoesNotDelayServerStop) {

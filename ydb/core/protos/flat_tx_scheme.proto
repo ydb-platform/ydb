@@ -474,3 +474,27 @@ message TEvShredInfoResponse {
 
 message TEvShredManualStartupRequest {
 }
+
+message TDatabaseFreezeState {
+    optional uint64 Epoch = 1;
+    optional bool Freeze = 2;
+    optional bool Ready = 3;
+    optional uint32 Status = 4; // Ydb.StatusIds.StatusCode
+    optional string Issue = 5;
+    repeated uint64 Shards = 6;
+    optional bool ParticipantsFixed = 7;
+}
+
+message TEvDatabaseFreeze {
+    optional uint64 PathId = 1;
+    optional uint64 Epoch = 2;
+    optional bool Freeze = 3;
+}
+
+message TEvDatabaseFreezeResult {
+    optional uint64 PathId = 1;
+    optional uint64 Epoch = 2;
+    optional bool Ready = 3;
+    optional uint32 Status = 4; // Ydb.StatusIds.StatusCode
+    optional string Issue = 5;
+}

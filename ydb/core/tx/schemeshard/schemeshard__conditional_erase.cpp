@@ -82,6 +82,9 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
     }
 
     void DoExecuteOnTable(TTableInfo::TPtr tableInfo, const TPathId tablePathId, const TActorContext& ctx) {
+        if (Self->IsDatabaseFreezeBlocking(tablePathId)) {
+            return;
+        }
         if (!tableInfo->IsTTLEnabled()) {
             YDB_LOG_ERROR_CTX(ctx, "TTL is not enabled for table",
                 {"pathId", tablePathId},

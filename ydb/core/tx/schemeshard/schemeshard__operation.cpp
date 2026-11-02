@@ -257,6 +257,55 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {
+        TVector<TString> mutationPaths{transaction.GetWorkingDir()};
+        if (transaction.HasSubDomain()) {
+            mutationPaths.push_back(TPath::Resolve(transaction.GetWorkingDir(), this)
+                .Dive(transaction.GetSubDomain().GetName()).PathString());
+        }
+        if (transaction.HasUpgradeSubDomain()) {
+            mutationPaths.push_back(TPath::Resolve(transaction.GetWorkingDir(), this)
+                .Dive(transaction.GetUpgradeSubDomain().GetName()).PathString());
+        }
+        if (transaction.HasMoveTable()) {
+            mutationPaths.push_back(transaction.GetMoveTable().GetSrcPath());
+            mutationPaths.push_back(transaction.GetMoveTable().GetDstPath());
+        }
+        if (transaction.HasMoveTableIndex()) {
+            mutationPaths.push_back(transaction.GetMoveTableIndex().GetSrcPath());
+            mutationPaths.push_back(transaction.GetMoveTableIndex().GetDstPath());
+        }
+        if (transaction.HasMoveIndex()) {
+            mutationPaths.push_back(transaction.GetMoveIndex().GetTablePath());
+        }
+        if (transaction.HasCreateConsistentCopyTables()) {
+            for (const auto& copy : transaction.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
+                mutationPaths.push_back(copy.GetDstPath());
+                if (copy.HasCreateSrcCdcStream() || copy.HasDropSrcCdcStream()) {
+                    mutationPaths.push_back(copy.GetSrcPath());
+                }
+            }
+        }
+        for (const auto& mutationPath : mutationPaths) {
+            auto path = TPath::Resolve(mutationPath, this);
+            if (transaction.HasDrop() && mutationPath == transaction.GetWorkingDir()) {
+                path.Dive(transaction.GetDrop().GetName());
+            }
+            path.RiseUntilExisted();
+            if (path.IsResolved() && IsDatabaseFreezeBlocking(path.Base()->PathId)) {
+                const auto domainId = path.GetPathIdForDomain();
+                const auto freeze = DatabaseFreezes.find(domainId);
+                // Let operations accepted before the fence finish their internal
+                // stages. CDC initial scan finalization also needs a scheme tx.
+                const bool continuation = transaction.GetInternal() && freeze != DatabaseFreezes.end()
+                    && !freeze->second.GetParticipantsFixed();
+                const bool finishCdcScan = transaction.HasAlterCdcStream()
+                    && transaction.GetAlterCdcStream().HasGetReady();
+                if (!continuation && !finishCdcScan) {
+                    return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                        NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId), "Database is frozen for schema changes");
+                }
+            }
+        }
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(quotaResult.Status, ui64(txId), ui64(selfId)));

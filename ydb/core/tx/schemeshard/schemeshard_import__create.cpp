@@ -272,6 +272,9 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
+        if (domainPath.IsResolved() && Self->IsDatabaseFreezeBlocking(domainPath.Base()->PathId)) {
+            return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for imports");
+        }
         {
             TPath::TChecker checks = domainPath.Check();
             checks

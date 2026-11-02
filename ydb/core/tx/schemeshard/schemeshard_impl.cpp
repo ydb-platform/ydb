@@ -5979,7 +5979,10 @@ void TSchemeShard::DefaultSignalTabletActive(const TActorContext &ctx) {
 }
 
 void TSchemeShard::Cleanup(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    for (const auto& [_, worker] : DatabaseFreezeWorkers) {
+        ctx.Send(worker, new TEvents::TEvPoisonPill);
+    }
+    DatabaseFreezeWorkers.clear();
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
@@ -6141,6 +6144,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreeze, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreezeResult, Handle);
 
         HFuncTraced(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck, Handle);
 

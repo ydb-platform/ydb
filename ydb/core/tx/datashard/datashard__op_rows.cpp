@@ -232,6 +232,13 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
 
+    if (self->IsStateFrozen()) {
+        rejectReasons = ERejectReasons::WrongState;
+        rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at frozen table";
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &WrongShardState, ctx, logThrottlerType);
+        return true;
+    }
+
     if (self->IsReplicated()) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";

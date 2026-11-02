@@ -32,7 +32,7 @@ PEERDIR(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:4)
+    REQUIREMENTS(ram:16 cpu:1)
 ENDIF()
 
 END()

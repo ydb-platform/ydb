@@ -4,8 +4,8 @@ It's set after the data source in `FROM` and is used for additional hints for {%
 
 The following values are supported:
 
-* `INFER_SCHEMA`: Sets the flag for output of the table schema. The behavior is similar to the `yt.InferSchema` pragma, but for a specific data source. You can specify the number of rows to output (from 1 to 1000).
-* `FORCE_INFER_SCHEMA`: Sets the flag for table schema output. The behavior is similar to the `yt.ForceInferSchema` pragma, but for a specific data source. You can specify the number of rows to output (from 1 to 1000).
+* `INFER_SCHEMA`: Sets the flag for output of the table schema. The behavior is similar to the [yt.inferSchema pragma](../pragma.md), but for a specific data source. You can specify the number of rows to output (from 1 to 1000).
+* `FORCE_INFER_SCHEMA`: Sets the flag for table schema output. The behavior is similar to the [yt.ForceInferSchema pragma](../pragma.md), but for a specific data source. You can specify the number of rows to output (from 1 to 1000).
 * `DIRECT_READ`: Suppresses certain optimizers and enforces accessing table contents as is. The behavior is similar to the debug {% if tech and feature_webui %}[pragma DirectRead](../pragma.md#debug){% else %}pragma DirectRead{% endif %}, but for a specific data source.
 * `INLINE`: Hints that the table contents is small and you need to use its in-memory view to process the query. The actual size of the table is not controlled in this case, and if it's large, the query might fail with an out-of-memory error.
 * `UNORDERED`: Suppresses original table sorting.

@@ -113,12 +113,22 @@ namespace NKikimr::NDDisk {
         sync.Selector = write.Selector;
         sync.SourceResult.reset();
         sync.SourceCookie = NActors::AllocateWaitCookie();
-        SyncSourceCookies.emplace(sync.SourceCookie, TSyncSourceCookie{sync.Id, input.PersistentBufferSource});
+        const ui32 nodeId = input.Source.NodeId() != SelfId().NodeId() ? input.Source.NodeId() : 0;
+        SyncSourceCookies.emplace(sync.SourceCookie, TSyncSourceCookie{
+            .SyncId = sync.Id,
+            .PersistentBuffer = input.PersistentBufferSource,
+            .NodeId = nodeId,
+        });
+        if (nodeId) {
+            ++SyncSourceReadsPerNode[nodeId];
+        }
         IEventBase* query = input.PersistentBufferSource
             ? static_cast<IEventBase*>(new TEvReadPersistentBuffer(input.Credentials, write.Selector,
                 input.Lsn, input.Generation, TReadInstruction(true)))
             : static_cast<IEventBase*>(new TEvRead(input.Credentials, write.Selector, TReadInstruction(true)));
-        Send(input.Source, query, IEventHandle::FlagTrackDelivery, sync.SourceCookie, write.Span.GetTraceId());
+        // A remote source replies through the session of the read; subscribe to learn when that session is lost.
+        const ui32 flags = IEventHandle::FlagTrackDelivery | (nodeId ? IEventHandle::FlagSubscribeOnSession : 0);
+        Send(input.Source, query, flags, sync.SourceCookie, write.Span.GetTraceId());
     }
 
     bool TDDiskActor::AcceptSyncSource(TDataWrite& write, TSyncReadRequest& input) {
@@ -207,7 +217,7 @@ namespace NKikimr::NDDisk {
             return;
         }
         const auto route = it->second;
-        SyncSourceCookies.erase(it);
+        ForgetSyncSource(cookie);
         if (const auto parent = SyncsInFlight.find(route.SyncId); parent != SyncsInFlight.end()) {
             auto& sync = *parent->second;
             sync.SourceCookie = 0;
@@ -227,11 +237,49 @@ namespace NKikimr::NDDisk {
         CompleteSyncSource(cookie, persistentBuffer, TStatus::ERROR, "source read event undelivered", false, {}, {});
     }
 
+    void TDDiskActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
+        if (const auto it = SyncSourceCookies.find(ev->Cookie); it != SyncSourceCookies.end()) {
+            it->second.Session = ev->Sender;
+        }
+    }
+
+    void TDDiskActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
+        // The notification may come late, after a new session to the same node has carried other reads, so fail
+        // only the reads of the lost session. Without a known session, match the cookie: the proxy reports a read
+        // that it could not send.
+        std::vector<std::pair<ui64, bool>> lost;
+        for (const auto& [cookie, source] : SyncSourceCookies) {
+            if (source.Session ? source.Session == ev->Sender : cookie == ev->Cookie) {
+                lost.emplace_back(cookie, source.PersistentBuffer);
+            }
+        }
+        for (const auto& [cookie, persistentBuffer] : lost) {
+            CompleteSyncSource(cookie, persistentBuffer, TStatus::ERROR, "source read session lost", false, {}, {});
+        }
+    }
+
     void TDDiskActor::CancelPendingSyncSources() {
         for (const auto& [id, sync] : SyncsInFlight) {
-            SyncSourceCookies.erase(std::exchange(sync->SourceCookie, 0));
+            ForgetSyncSource(std::exchange(sync->SourceCookie, 0));
             QueueSync(id);
         }
+    }
+
+    void TDDiskActor::ForgetSyncSource(ui64 cookie) {
+        const auto it = SyncSourceCookies.find(cookie);
+        if (it == SyncSourceCookies.end()) {
+            return;
+        }
+        if (const ui32 nodeId = it->second.NodeId) {
+            const auto jt = SyncSourceReadsPerNode.find(nodeId);
+            Y_ABORT_UNLESS(jt != SyncSourceReadsPerNode.end());
+            if (!--jt->second) {
+                // no read waits for that node, so a recreated actor leaves no subscription behind
+                SyncSourceReadsPerNode.erase(jt);
+                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+            }
+        }
+        SyncSourceCookies.erase(it);
     }
 
     template<class TResult>

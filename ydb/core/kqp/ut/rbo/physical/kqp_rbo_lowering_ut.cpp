@@ -1,4 +1,4 @@
-#include "kqp_rbo_test_helpers.h"
+#include <ydb/core/kqp/ut/rbo/kqp_rbo_test_helpers.h>
 
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_aggregation_builder.h>
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_convertion_utils.h>

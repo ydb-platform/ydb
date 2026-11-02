@@ -168,16 +168,17 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
             CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA);
             CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::F, R::F}, {}, {1, 0, 0}, NKikimrProto::ERROR);
             CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::F, R::F}, {}, {1, 0, 0}, NKikimrProto::NODATA);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::N2, R::R}, {}, {1, 1, 3}, NKikimrProto::ERROR);
-            CheckRead(range ? ERead::Range : ERead::Index, {R::N2, R::N2, R::R}, {}, {2, 2, 3}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::N1, R::R}, {}, {1, 1, 3}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {R::N1, R::N1, R::R}, {}, {2, 2, 3}, NKikimrProto::ERROR);
         }
     }
 
-    Y_UNIT_TEST(AbsenceExcludesAllEnsuredAlternativesIncludingRecoveryRealm) {
-        for (auto operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
-            CheckRead(operation, {R::N2, R::N2, R::R}, {}, {1, 1, 1}, NKikimrProto::ERROR);
-            CheckRead(operation, {R::N2, R::N2, R::R}, {}, {2, 0, 2}, NKikimrProto::NODATA);
-            CheckRead(operation, {R::N2, R::N2, R::R}, {}, {1, 1, 0}, NKikimrProto::NODATA);
+    Y_UNIT_TEST(AbsenceDependsOnNormalRealmsInEnsuredPair) {
+        for (const ERead operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
+            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {1, 1, 1}, NKikimrProto::ERROR);
+            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {2, 0, 2}, NKikimrProto::NODATA);
+            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {1, 1, 0}, NKikimrProto::ERROR);
+            CheckRead(operation, {R::N1, R::N1, R::R}, {}, {0, 0, 3}, NKikimrProto::NODATA);
         }
     }
 
@@ -188,7 +189,7 @@ Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
 
     Y_UNIT_TEST(PhantomCheckSkipsFailedRealmsAndRejectsRecoveryErrors) {
         CheckRead(ERead::Get, {R::N1, R::F, R::F}, {}, {}, NKikimrProto::NODATA, true);
-        CheckRead(ERead::Get, {R::N2, R::N2, R::R}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
+        CheckRead(ERead::Get, {R::N1, R::N1, R::R}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
     }
 
     Y_UNIT_TEST(PartialCopiesAreRestoredThroughNewPutStrategy) {

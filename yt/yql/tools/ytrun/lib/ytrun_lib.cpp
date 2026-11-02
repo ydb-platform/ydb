@@ -31,6 +31,7 @@
 #include <library/cpp/sighandler/async_signals_handler.h>
 
 #include <util/folder/path.h>
+#include <util/generic/map.h>
 #include <util/stream/file.h>
 
 namespace {
@@ -95,6 +96,10 @@ TYtRunTool::TYtRunTool(TString name)
                         }
                         if (progress.Counters->Total) {
                             counters << TStringBuf(" (") << (100ul * progress.Counters->Completed / progress.Counters->Total) << TStringBuf("%)");
+                        }
+                        const TMap<TString, i64> custom(progress.Counters->Custom.begin(), progress.Counters->Custom.end());
+                        for (const auto& [name, value] : custom) {
+                            counters << ", " << name << '=' << value;
                         }
                     }
                     TStringBuilder waitingRemoteId;

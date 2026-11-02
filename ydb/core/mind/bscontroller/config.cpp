@@ -642,6 +642,9 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+            }
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
@@ -651,6 +654,11 @@ namespace NKikimr::NBsController {
             }
             if (state.StoragePools.Changed()) {
                 MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
+                for (const auto& [previous, current] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                    TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
+                        previous ? &previous->second.PDiskFilters : nullptr,
+                        current ? &current->second.PDiskFilters : nullptr);
+                }
             }
             if (state.Nodes.Changed()) {
                 MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
@@ -1022,6 +1030,9 @@ namespace NKikimr::NBsController {
                 TActivationContext::Send(std::make_unique<IEventHandle>(Self.SelfHealId, Self.SelfId(), UpdateSelfHealInfoMsg.Release()));
             }
 
+            for (ui32 groupId : GroupStateUpdates) {
+                Self.UpdateGroupStateActor(TGroupId::FromValue(groupId));
+            }
             for (auto& fn : Callbacks) {
                 fn();
             }
@@ -1364,6 +1375,58 @@ namespace NKikimr::NBsController {
             }
         }
 
+        bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
+                const TBoxStoragePoolId& id) {
+            PDiskFilters.clear();
+            auto load = [&]<typename T>() {
+                auto rows = db.Table<T>().Range(std::get<0>(id), std::get<1>(id)).Select();
+                if (!rows.IsReady()) {
+                    return false;
+                }
+                while (rows.IsValid()) {
+                    if constexpr (std::is_same_v<T, Schema::BoxStoragePoolPDiskFilter>) {
+                        PDiskFilters.insert(TPDiskFilter::CreateFromRowset(rows));
+                    } else {
+                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id),
+                            rows.template GetValue<typename T::Filter>()));
+                    }
+                    if (!rows.Next()) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            return load.template operator()<Schema::BoxStoragePoolPDiskFilter>()
+                && load.template operator()<Schema::BoxStoragePoolPDiskFilterV2>();
+        }
+
+        void TBlobStorageController::TStoragePoolInfo::UpdatePDiskFilters(NTable::TDatabase& db,
+                const TPDiskFilters* previous, const TPDiskFilters* current) {
+            for (const auto& [prev, cur] : Diff(previous, current)) {
+                if (prev && cur) {
+                    continue;
+                }
+                const auto op = cur ? NTable::ERowOp::Upsert : NTable::ERowOp::Erase;
+                const auto& filter = cur ? *cur : *prev;
+                auto update = [&]<typename T>(const auto& key) {
+                    auto keyTuple = NTableAdapter::PrepareKeyTuple<T>(&key);
+                    TStackVec<TRawTypeValue, std::tuple_size_v<decltype(keyTuple)>> rawKey;
+                    NTableAdapter::MapKey<T>(&keyTuple, rawKey);
+                    db.Update(T::TableId, op, rawKey, {});
+                };
+                if (filter.Location) {
+                    // Serialize the parsed filter in a fixed property order: request ordering
+                    // must not change its persistent identity, including when deleting a row.
+                    NKikimrBlobStorage::TPDiskFilter proto;
+                    Serialize(&proto, filter);
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
+                        std::make_tuple(filter.BoxId, filter.StoragePoolId, proto.SerializeAsString()));
+                } else {
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilter>(filter.GetLegacyKey());
+                }
+            }
+        }
+
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
                 const NKikimrBlobStorage::TPDiskFilter& proto) {
@@ -1515,6 +1578,12 @@ namespace NKikimr::NBsController {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
+            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
+                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                }
+            }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {
                 Serialize(pb->AddVSlotId(), vslot->VSlotId);
             }

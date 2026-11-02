@@ -744,6 +744,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(GetStartOffset());
     meta.SetEndOffset(GetEndOffset());
+    meta.SetMirroredOffset(BlobEncoder.MirroredOffset);
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
@@ -3247,8 +3248,10 @@ void TPartition::RunPersist() {
         Compacter->TryCompactionIfPossible();
     }
 
+    UpdatePendingUsersFromReplicationData();
+
     haveChanges |= TryAddDeleteHeadKeysToPersistRequest();
-    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig;
+    haveChanges |= TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig || PendingReplicationData.has_value();
 
     if (haveChanges) {
         WriteCycleStartTime = now;
@@ -3914,14 +3917,14 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             {"newHead", BlobEncoder.NewHead}
         );
 
-        auto oldHeadOffset = BlobEncoder.NewHead.Offset;
+        const auto oldHeadOffset = BlobEncoder.NewHead.Offset;
 
         if (!t.WriteInfo->BodyKeys.empty()) {
             bool needCompactHead =
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
             BlobEncoder.NewPartitionedBlob(Partition,
-                                           BlobEncoder.NewHead.Offset,
+                                    BlobEncoder.NewHead.Offset,
                                            "", // SourceId
                                            0,  // SeqNo
                                            0,  // TotalParts
@@ -4120,11 +4123,21 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         PendingExplicitMessageGroups.reset();
     }
 
+    bool replicationSessionEstablished = false;
+    TVector<const TUserInfo*> changedUsers;
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
             bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+            if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                && !actual->Session.empty() && actual->PipeClient
+                && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
+                    || userInfo.Step != actual->Step || userInfo.PipeClient != actual->PipeClient)) {
+                replicationSessionEstablished = true;
+            }
 
+            userInfo.PipeClient = actual->PipeClient;
+            userInfo.PartitionSessionId = actual->PartitionSessionId;
             userInfo.Session = actual->Session;
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
@@ -4157,6 +4170,9 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
             }
+            if (offsetHasChanged && userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+                changedUsers.push_back(&userInfo);
+            }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
             // Consumer may already have been removed by an earlier write cycle
             // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).
@@ -4187,6 +4203,11 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         }
     }
 
+    if (replicationSessionEstablished) {
+        SendOffsetsToReplicationConsumer(ctx);
+    } else if (!changedUsers.empty()) {
+        SendOffsetsToReplicationConsumer(ctx, changedUsers);
+    }
     ChangeConfigActs.clear();
     AnswerCurrentReplies(ctx);
 
@@ -4212,6 +4233,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Config = std::move(config);
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
+
+    for (const auto& consumer : Config.GetConsumers()) {
+        if (auto* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName())) {
+            userInfo->Type = consumer.GetType();
+        }
+    }
 
     if (explicitMessageGroups) {
         for (const auto& [id, group] : *explicitMessageGroups) {

@@ -93,6 +93,12 @@ message TFailRealmStates {
     repeated TGroupInfo.TFailRealm.EState State = 1;
 }
 
+message TFailRealmInfo {
+    optional TGroupInfo.TFailRealm.EState State = 1 [default = N0];
+    // Empty if the location is unknown or the realm spans several data centers.
+    optional string DataCenter = 2;
+}
+
 message TVDiskLocation {
     optional uint32 NodeID = 1;
     optional uint32 PDiskID = 2;

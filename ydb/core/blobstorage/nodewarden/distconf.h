@@ -950,6 +950,8 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> ValidateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 
+    std::optional<TString> ValidateBridgeClusterState(const NKikimrBridge::TClusterState& state);
+
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
 

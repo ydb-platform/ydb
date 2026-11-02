@@ -1090,15 +1090,9 @@
             3,
             4,
             5,
-            6,
-            7
+            6
         ],
         "ColumnsAdded": [
-            {
-                "ColumnId": 7,
-                "ColumnName": "Location",
-                "ColumnType": "String"
-            },
             {
                 "ColumnId": 1,
                 "ColumnName": "BoxId",
@@ -1134,7 +1128,6 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
@@ -2231,6 +2224,58 @@
                 "Columns": [
                     1,
                     2
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 136,
+        "TableName": "BoxStoragePoolPDiskFilterV2",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "BoxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "StoragePoolId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Filter",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

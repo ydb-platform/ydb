@@ -22,13 +22,13 @@ struct TBenchmark {
 };
 
 TString ReadRboData(const TString& path) {
-    return TIFStream(SRC_("data/" + path)).ReadAll();
+    return TIFStream(SRC_("../data/" + path)).ReadAll();
 }
 
 TString CanonicalPath(const TBenchmark& benchmark, const TString& statistics, ui32 queryId) {
     const TString statisticsName = statistics == "normal" ? benchmark.NormalStatistics : benchmark.SmallStatistics;
     const TString scale = statisticsName.substr(benchmark.Schema.size());
-    return SRC_(TStringBuilder() << "data/join_order/" << benchmark.Schema << queryId
+    return SRC_(TStringBuilder() << "../data/join_order/" << benchmark.Schema << queryId
         << "_" << scale << "_column_store.json");
 }
 
@@ -74,7 +74,7 @@ void RunJoinOrderBenchmark(const TBenchmark& benchmark, const std::set<ui32>& di
     TString errors;
     const TString statisticsPath = "stats/" + (profile == "normal"
         ? benchmark.NormalStatistics : benchmark.SmallStatistics) + ".json";
-    const TString fullStatisticsPath = SRC_("data/" + statisticsPath);
+    const TString fullStatisticsPath = SRC_("../data/" + statisticsPath);
     UNIT_ASSERT_C(TFsPath(fullStatisticsPath).Exists(),
         "Missing " << profile << " statistics: " << fullStatisticsPath);
 

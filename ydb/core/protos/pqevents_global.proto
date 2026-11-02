@@ -318,3 +318,17 @@ message TEvCheckMessageDeduplicationResponse {
     optional EStatus Status = 3;
     map<string, TMessageDeduplicationResult> Result = 4;
 }
+
+message TReplicationDataPayload {
+    map<string, uint64> OffsetsByConsumers = 1;
+}
+
+message TEvReplicationData {
+    optional uint32 PartitionId = 1;
+    optional string Session = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Step = 4;
+    optional bytes Payload = 5; // serialized TReplicationDataPayload
+    optional uint64 PartitionSessionId = 6;
+    optional NActorsProto.TActorId PipeClient = 7;
+}

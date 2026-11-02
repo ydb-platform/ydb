@@ -1,3 +1,9 @@
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+* Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+## v3.26.0
+
 * Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it are dropped; partition sessions of a dropped database get `TPartitionSessionClosedEvent` with the `ConnectionLost` reason. A listed database that becomes unavailable keeps its subsession. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
 
 * Fixed Query session shutdown racing with session pool return.

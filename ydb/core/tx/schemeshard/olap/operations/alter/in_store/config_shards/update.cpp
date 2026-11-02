@@ -4,13 +4,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
-    const auto& original = context.GetOriginalEntityAsVerified<TInStoreTable>();
-    if (!context.GetModification()->GetAlterColumnTable().HasAlterShards()) {
-        return TConclusionStatus::Fail("no data about shards altering");
-    }
-    auto& alterShards = context.GetModification()->GetAlterColumnTable().GetAlterShards();
-    Alter = alterShards;
+void TInStoreShardsUpdate::InitializeShardIds() {
     AFL_VERIFY(Alter.HasModification());
 
     for (auto&& i : Alter.GetModification().GetNewShardIds()) {
@@ -23,6 +17,30 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
         AFL_VERIFY(DeleteShardIds.emplace(i).second);
     }
 
+    for (auto&& i : Sharding->GetModifiedShardIds(Alter.GetModification())) {
+        ShardIds.emplace(i);
+        AFL_VERIFY(ModifiedShardIds.emplace(i).second);
+    }
+}
+
+TConclusionStatus TInStoreShardsUpdate::DoRestoreImpl(
+    const TUpdateRestoreContext& context, const TColumnTableInfo::TPtr& alterData) {
+    TEntityInitializationContext eContext(context.GetSSOperationContext());
+    TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), alterData, eContext);
+    Alter = alterData->AlterBody->GetAlterShards();
+    Sharding = alterData->GetShardingVerified(TargetInStoreTable->GetTableSchemaVerified());
+    InitializeShardIds();
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
+    const auto& original = context.GetOriginalEntityAsVerified<TInStoreTable>();
+    if (!context.GetModification()->GetAlterColumnTable().HasAlterShards()) {
+        return TConclusionStatus::Fail("no data about shards altering");
+    }
+
+    Alter = context.GetModification()->GetAlterColumnTable().GetAlterShards();
+    AFL_VERIFY(Alter.HasModification());
     auto tableInfo = original.GetTableInfoPtrVerified();
 
     auto description = tableInfo->Description;
@@ -30,10 +48,7 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
     Sharding = tableInfo->GetShardingVerified(original.GetTableSchemaVerified());
     Sharding->ApplyModification(Alter.GetModification()).Validate();
     *description.MutableSharding() = Sharding->SerializeToProto();
-    for (auto&& i : Sharding->GetModifiedShardIds(Alter.GetModification())) {
-        ShardIds.emplace(i);
-        AFL_VERIFY(ModifiedShardIds.emplace(i).second);
-    }
+    InitializeShardIds();
 
     auto targetInfo = std::make_shared<TColumnTableInfo>(tableInfo->AlterVersion + 1, std::move(description),
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());

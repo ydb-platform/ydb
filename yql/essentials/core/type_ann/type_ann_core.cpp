@@ -16878,6 +16878,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["JsonVariables"] = &JsonVariablesWrapper;
     ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
     ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
+    ExtFunctions["ColumnOrderOf"] = &ColumnOrderOfWrapper;
     ExtFunctions["UnionAllPositional"] = &SelectOpPositionalWrapper;
     ExtFunctions["UnionPositional"] = &SelectOpPositionalWrapper;
     ExtFunctions["UnionMergePositional"] = &SelectOpPositionalWrapper;

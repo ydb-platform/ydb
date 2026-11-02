@@ -25,10 +25,11 @@ namespace NKikimr::NBridge {
         const auto& state = Info->Group->GetBridgeGroupState();
         if (const auto *source = NBridge::FindGroupPileByGroupId(state, SourceGroupId)) {
             if (source->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
-                Y_DEBUG_ABORT("TGroupState.TPile is not in SYNCED state for primary pile");
+                // An old assignment may be stamped with a newer group generation after its source was suspended.
                 return Terminate("group is not synced for primary pile");
             }
-            SourceGroupGeneration = source->GetGroupGeneration();
+        } else {
+            return Terminate("source group not found in TGroupState");
         }
         const auto *target = NBridge::FindGroupPileByGroupId(state, TargetGroupId);
         if (!target) {
@@ -39,7 +40,6 @@ namespace NKikimr::NBridge {
         if (Stage == NKikimrBridge::TGroupState::SYNCED) {
             return Terminate(std::nullopt); // everything is already synced
         }
-        TargetGroupGeneration = target->GetGroupGeneration();
 
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '#'
             << NKikimrBridge::TGroupState::EStage_Name(Stage) << '}';
@@ -198,13 +198,13 @@ namespace NKikimr::NBridge {
                     break;
 
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
-                    if (targetItem && !targetItem->DoNotKeep && (sourceItem ? sourceItem->DoNotKeep : targetItem->Keep)) {
-                        // the source item has DoNotKeep flag, or it is missing; the source collects blobs only behind
-                        // the barriers already synced to the target, so the missing blob vanishes from the target too,
-                        // unless it is kept there; the blob not kept is left alone, as it may also be the write which
-                        // has reached the target only, and the bridge proxy can restore it into the source later on, so
-                        // DoNotKeep here would make piles disagree on its fate
+                    if (sourceItem && sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
                         doNotKeepToIssue.push_back(blobId);
+                    } else if (!sourceItem && targetItem && targetItem->Keep && !targetItem->DoNotKeep) {
+                        // The source scan may predate a concurrent Put followed by Keep, which reaches the target
+                        // even though Put does not at this stage. Confirm absence after observing the target's Keep
+                        // before releasing it. Genuinely collected source blobs must still be collected in the target.
+                        RestoreQueue.push_back(blobId);
                     }
                     break;
 
@@ -216,8 +216,11 @@ namespace NKikimr::NBridge {
                         break;
                     }
                     RestoreQueue.push_back(blobId);
-                    if (sourceItem->Keep) {
-                        SourceKeepFlags.insert(blobId);
+                    if (sourceItem->Keep || sourceItem->DoNotKeep) {
+                        SourceBlobFlags.emplace(blobId, TSourceBlobFlags{sourceItem->Keep, sourceItem->DoNotKeep});
+                    }
+                    if (sourceItem->DoNotKeep && (!targetItem || !targetItem->DoNotKeep)) {
+                        doNotKeepToIssue.push_back(blobId);
                     }
                     SyncerDataStats->BytesTotal += blobId.BlobSize();
                     ++SyncerDataStats->BlobsTotal;
@@ -297,7 +300,24 @@ namespace NKikimr::NBridge {
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
                 NKikimrBlobStorage::FastRead, true, true);
             ev->DoNotReportIndexRestoreGetMissingBlobs = true; // they may be missing, do not report errors in this case
-            IssueQuery(true, std::move(ev));
+            if (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP) {
+                // Cluster state may advance before BSC resets the physical generations. A different synchronized
+                // source can then accept a write while our assigned source is suspended and genuinely lacks it.
+                auto check = std::make_shared<TAbsenceCheck>();
+                check->Ids.assign(RestoreQueue.begin(), it);
+                check->Observations.resize(numBlobs);
+                NBridge::ForEachGroupPile(Info->Group->GetBridgeGroupState(), [&](TBridgePileId, const auto& pile) {
+                    if (pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
+                        ++check->ResponsesPending;
+                        IssueQuery(TGroupId::FromValue(pile.GetGroupId()),
+                            std::make_unique<TEvBlobStorage::TEvGet>(TEvBlobStorage::CloneEventPolicy, *ev),
+                            TQueryPayload{.AbsenceCheck = check});
+                    }
+                });
+                Y_ABORT_UNLESS(check->ResponsesPending);
+            } else {
+                IssueQuery(true, std::move(ev));
+            }
 
             RestoreQueue.erase(RestoreQueue.begin(), it);
         }
@@ -365,15 +385,22 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload payload,
             ui64 quoterBytes) {
+        IssueQuery(toTargetGroup ? TargetGroupId : SourceGroupId, std::move(ev), std::move(payload), quoterBytes);
+    }
+
+    void TSyncerActor::IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload payload,
+            ui64 quoterBytes) {
+        const auto *pile = NBridge::FindGroupPileByGroupId(Info->Group->GetBridgeGroupState(), groupId);
+        Y_ABORT_UNLESS(pile);
         switch (ev->Type()) {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
-                STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (ToTargetGroup, toTargetGroup), \
+                STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (GroupId, groupId), \
                     (Msg, msg), (QueriesInFlight, QueriesInFlight), \
                     (PendingQueries.size, PendingQueries.size()), (MaxQueriesInFlight, MaxQueriesInFlight), \
                     (Payloads.size, Payloads.size())); \
-                msg.ForceGroupGeneration.emplace(toTargetGroup ? TargetGroupGeneration : SourceGroupGeneration); \
+                msg.ForceGroupGeneration.emplace(pile->GetGroupGeneration()); \
                 break; \
             }
 
@@ -392,8 +419,7 @@ namespace NKikimr::NBridge {
         const auto [it, inserted] = Payloads.emplace(cookie, std::move(payload));
         Y_ABORT_UNLESS(inserted);
 
-        std::unique_ptr<IEventHandle> handle(CreateEventForBSProxy(SelfId(),
-            toTargetGroup ? TargetGroupId : SourceGroupId, ev.release(), cookie));
+        std::unique_ptr<IEventHandle> handle(CreateEventForBSProxy(SelfId(), groupId, ev.release(), cookie));
 
         const TMonotonic now = TActivationContext::Monotonic();
         const TDuration timeout = SyncRateQuoter && quoterBytes
@@ -402,14 +428,29 @@ namespace NKikimr::NBridge {
         const TMonotonic timestamp = now + timeout;
 
         if (QueriesInFlight < MaxQueriesInFlight) {
-            if (now < timestamp) {
-                TActivationContext::Schedule(timestamp, handle.release());
-            } else {
-                TActivationContext::Send(handle.release());
-            }
+            SendQuery(std::move(handle), timestamp);
             ++QueriesInFlight;
         } else {
             PendingQueries.emplace_back(std::move(handle), timestamp);
+        }
+    }
+
+    void TSyncerActor::SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore) {
+        const TMonotonic now = TActivationContext::Monotonic();
+        if (now < notBefore) {
+            const ui64 cookie = handle->Cookie;
+            // Own throttled requests until dispatch so terminating this attempt also cancels delayed writes/reads.
+            DelayedQueries.emplace(cookie, std::move(handle));
+            Schedule(notBefore - now, new TEvents::TEvWakeup(cookie));
+        } else {
+            TActivationContext::Send(handle.release());
+        }
+    }
+
+    void TSyncerActor::Handle(TEvents::TEvWakeup::TPtr ev) {
+        if (const auto it = DelayedQueries.find(ev->Get()->Tag); it != DelayedQueries.end()) {
+            TActivationContext::Send(it->second.release());
+            DelayedQueries.erase(it);
         }
     }
 
@@ -454,9 +495,23 @@ namespace NKikimr::NBridge {
         if (msg.Status != NKikimrProto::OK) {
             errorReason = TStringBuilder() << "TEvGet failed Status# " << msg.Status
                 << " ErrorReason# " << msg.ErrorReason;
+        } else if (Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP) {
+            auto& check = *Payloads.at(ev->Cookie).AbsenceCheck;
+            Y_ABORT_UNLESS(msg.ResponseSz == check.Ids.size());
+            for (size_t i = 0; i < msg.ResponseSz; ++i) {
+                const auto& r = msg.Responses[i];
+                Y_ABORT_UNLESS(r.Id == check.Ids[i]);
+                if (r.Status == NKikimrProto::NODATA || (r.Status == NKikimrProto::OK && r.DoNotKeep)) {
+                    check.Observations[i] |= 1;
+                } else if (r.Status == NKikimrProto::OK) {
+                    check.Observations[i] |= 2;
+                } else {
+                    errorReason = TStringBuilder() << "source absence check failed Status# " << r.Status;
+                }
+            }
         } else if (msg.GroupId == SourceGroupId.GetRawId()) { // it was a data query for copying
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
-                const bool sourceKeep = SourceKeepFlags.erase(msg.Responses[i].Id);
+                const auto sourceFlags = TakeSourceBlobFlags(msg.Responses[i].Id);
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // rewrite this blob with keep flag, if set; DataKind is deliberately left at
                     // USER -- it is a per-request admission hint that is never stored with the blob,
@@ -469,7 +524,7 @@ namespace NKikimr::NBridge {
                         .HandleClass = NKikimrBlobStorage::TabletLog,
                         .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                         .WriteSource = TWriteSource::SyncerMergePut,
-                        .IssueKeepFlag = r.Keep || sourceKeep,
+                        .IssueKeepFlag = (r.Keep || sourceFlags.Keep) && !(r.DoNotKeep || sourceFlags.DoNotKeep),
                         .IgnoreBlock = true,
                     }));
                 } else if (r.Status == NKikimrProto::NODATA) {
@@ -492,7 +547,8 @@ namespace NKikimr::NBridge {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
                     // blob exists and okay; its redundancy has been restored; its keep flag was synced earlier, unless
                     // the blob has been written since then without it, as the bridge proxy restoring it may do
-                    if (SourceKeepFlags.erase(r.Id) && !r.Keep) {
+                    const auto sourceFlags = TakeSourceBlobFlags(r.Id);
+                    if (sourceFlags.Keep && !sourceFlags.DoNotKeep && !r.Keep && !r.DoNotKeep) {
                         if (!keep) {
                             keep = std::make_unique<TVector<TLogoBlobID>>();
                         }
@@ -506,7 +562,7 @@ namespace NKikimr::NBridge {
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
                         NKikimrBlobStorage::FastRead), {}, quoterBytes);
                 } else if (r.Status == NKikimrProto::ERROR) {
-                    SourceKeepFlags.erase(r.Id);
+                    SourceBlobFlags.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
                     errorReason = "TEvGet from target group failed with ERROR";
@@ -531,6 +587,15 @@ namespace NKikimr::NBridge {
         CheckIfDone();
     }
 
+    TSyncerActor::TSourceBlobFlags TSyncerActor::TakeSourceBlobFlags(const TLogoBlobID& id) {
+        if (const auto it = SourceBlobFlags.find(id); it != SourceBlobFlags.end()) {
+            const auto flags = it->second;
+            SourceBlobFlags.erase(it);
+            return flags;
+        }
+        return {};
+    }
+
     TSyncerActor::TQueryPayload TSyncerActor::OnQueryFinished(ui64 cookie, bool success) {
         const auto it = Payloads.find(cookie);
         Y_ABORT_UNLESS(it != Payloads.end());
@@ -539,17 +604,33 @@ namespace NKikimr::NBridge {
 
         Errors |= !success;
 
+        if (const auto& check = res.AbsenceCheck) {
+            check->Failed |= !success;
+            if (!--check->ResponsesPending && !check->Failed) {
+                auto doNotKeep = std::make_unique<TVector<TLogoBlobID>>();
+                for (size_t i = 0; i < check->Ids.size(); ++i) {
+                    if (check->Observations[i] == 1) {
+                        doNotKeep->push_back(check->Ids[i]);
+                    } else if (check->Observations[i] == 3) {
+                        // Keeping the blob but completing the stage would let a stale source omit it in DATA too.
+                        Errors = true;
+                    }
+                }
+                if (!doNotKeep->empty()) {
+                    const ui64 tabletId = doNotKeep->front().TabletID();
+                    IssueQuery(true, std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), 0u, 0u,
+                        false, 0u, 0u, nullptr, doNotKeep.release(), TInstant::Max(), true, TWriteSource::SyncerMergeGC,
+                        false, true));
+                }
+            }
+        }
+
         if (PendingQueries.empty()) {
             --QueriesInFlight;
         } else {
             Y_ABORT_UNLESS(QueriesInFlight == MaxQueriesInFlight);
-            TMonotonic now = TActivationContext::Monotonic();
             auto& [handle, timestamp] = PendingQueries.front();
-            if (now < timestamp) {
-                TActivationContext::Schedule(timestamp, handle.release());
-            } else {
-                TActivationContext::Send(handle.release());
-            }
+            SendQuery(std::move(handle), timestamp);
             PendingQueries.pop_front();
         }
 
@@ -642,6 +723,7 @@ namespace NKikimr::NBridge {
         hFunc(TEvBlobStorage::TEvGetResult, Handle)
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle)
         hFunc(TEvents::TEvUndelivered, Handle)
+        hFunc(TEvents::TEvWakeup, Handle)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 

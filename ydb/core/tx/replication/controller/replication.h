@@ -9,6 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -181,6 +182,7 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const std::optional<TDuration> GetLag() const;
+    void SetLagChangedCallback(std::function<void()> callback);
     const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);

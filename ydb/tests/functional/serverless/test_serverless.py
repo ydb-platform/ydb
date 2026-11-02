@@ -61,9 +61,11 @@ CLUSTER_CONFIG = dict(
     column_shard_config={
         'disabled_on_scheme_shard': False,
         'max_read_staleness_ms': 200,
-        # Report quota usage promptly so ingestion stops near the configured limit.
+        # Base reports need the generation from an executor report, which can
+        # arrive before table metadata is ready during startup.
         'statistics': {
             'report_base_statistics_period_ms': 1000,
+            'report_executor_statistics_period_ms': 1000,
         },
     },
     table_service_config={

@@ -23,6 +23,7 @@
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <util/folder/dirut.h>
 
@@ -39,6 +40,8 @@ TNodeWardenConfig::TNodeWardenConfig()
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)
     , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
+    , SelfHealStateRequestTimeout(TDuration::MicroSeconds(NKikimrCms::TCmsConfig::TSentinelConfig::
+        TStateStorageSelfHealConfig::default_instance().GetSelfHealStateRequestTimeout()))
 {}
 
 TNodeWardenConfig::~TNodeWardenConfig()
@@ -237,6 +240,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvNodeWardenReadMetadata, Handle);
         hFunc(TEvNodeWardenWriteMetadata, Handle);
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
+        hFunc(TEvPrivate::TEvCleanupTemporaryPDisk, Handle);
+        hFunc(TEvents::TEvPoisonTaken, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
@@ -560,6 +565,9 @@ void TNodeWarden::Bootstrap() {
                 icb->RetroTracingControls.EnableStorageGeneration);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceCollectionSlowRequests,
                 icb->RetroTracingControls.EnableStorageCollectionSlowRequests);
+
+        TControlBoard::RegisterSharedControl(UseFixedVDiskSlotSize, icb->PDiskControls.UseFixedVDiskSlotSize);
+        UseFixedVDiskSlotSizeCached = UseFixedVDiskSlotSize;
     }
 
     // start replication broker
@@ -625,6 +633,7 @@ void TNodeWarden::Bootstrap() {
     YamlConfig = std::move(Cfg->YamlConfig);
 
     InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig->GetInferPDiskSlotCountSettings());
+    VDiskHeapAllocatorNumLeadingDisks = Cfg->BlobStorageConfig->GetVDiskHeapAllocatorNumLeadingDisks();
     ui32 blobStorageConfigItem = NKikimrConsole::TConfigItem::BlobStorageConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(blobStorageConfigItem));
@@ -760,7 +769,9 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
                     : NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
             if (const auto vdiskIt = LocalVDisks.find(vslotId); vdiskIt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = vdiskIt->second;
-                StartLocalVDiskActor(vdisk); // start the current VDisk after the previous slot contents are gone
+                // start the current VDisk after the previous slot contents are gone; after a wipe, this waits for
+                // the record BS_CONTROLLER sends in reply to the WIPED report
+                StartLocalVDiskActor(vdisk);
             }
             break;
         }
@@ -1438,6 +1449,11 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
 }
 
 void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
+    const bool useFixedVDiskSlotSize = UseFixedVDiskSlotSize;
+    if (useFixedVDiskSlotSize != UseFixedVDiskSlotSizeCached) {
+        UseFixedVDiskSlotSizeCached = useFixedVDiskSlotSize;
+        UpdatePDiskSettings();
+    }
     DsProxyPerPoolCounters->UpdateAll();
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats());
 }
@@ -1475,6 +1491,35 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     if (record.VDisksMetricsSize() || record.PDisksMetricsSize() || record.VDiskStatusSize()) { // anything to report?
         record.SetMetricsSequence(++MetricsSequence);
         SendToController(std::move(ev));
+    }
+}
+
+void TNodeWarden::UpdatePDiskSettings() {
+    for (auto& [key, localPDisk] : LocalPDisks) {
+        TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
+            localPDisk.Record, &localPDisk.PDiskConfigWarning);
+        ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+        ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+        ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
+
+        if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                newSlotSizeInUnits != localPDisk.SlotSizeInUnits ||
+                newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
+            YDB_LOG_DEBUG_COMP(BS_NODE, "SendChangeExpectedSlotCount after settings update",
+                {"marker", "NW112"},
+                {"PDiskId", key.PDiskId},
+                {"expectedSlotCount", newExpectedSlotCount},
+                {"slotSizeInUnits", newSlotSizeInUnits},
+                {"expectedSlotSize", newExpectedSlotSize});
+
+            const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+            Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
+                newExpectedSlotCount, newSlotSizeInUnits, newExpectedSlotSize));
+
+            localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+            localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
+            localPDisk.ExpectedSlotSize = newExpectedSlotSize;
+        }
     }
 }
 
@@ -1523,36 +1568,13 @@ void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscrip
 void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
     auto& record = ev->Get()->Record;
     if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
-        auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
+        const auto& bsConfig = record.GetConfig().GetBlobStorageConfig();
+        VDiskHeapAllocatorNumLeadingDisks = bsConfig.GetVDiskHeapAllocatorNumLeadingDisks();
+        const auto& inferSettings = bsConfig.GetInferPDiskSlotCountSettings();
         auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
         if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
             InferPDiskSlotCountSettings.CopyFrom(inferSettings);
-            for (auto& [key, localPDisk] : LocalPDisks) {
-                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(
-                    localPDisk.Record, &localPDisk.PDiskConfigWarning);
-                ui32 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
-                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
-                ui64 newExpectedSlotSize = newPDiskConfig->ExpectedSlotSize;
-
-                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
-                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits ||
-                        newExpectedSlotSize != localPDisk.ExpectedSlotSize) {
-                    YDB_LOG_DEBUG_COMP(BS_NODE, "SendChangeExpectedSlotCount from config notification",
-                        {"marker", "NW112"},
-                        {"PDiskId", key.PDiskId},
-                        {"expectedSlotCount", newExpectedSlotCount},
-                        {"slotSizeInUnits", newSlotSizeInUnits},
-                        {"expectedSlotSize", newExpectedSlotSize});
-
-                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
-                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(
-                        newExpectedSlotCount, newSlotSizeInUnits, newExpectedSlotSize));
-
-                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
-                    localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
-                    localPDisk.ExpectedSlotSize = newExpectedSlotSize;
-                }
-            }
+            UpdatePDiskSettings();
         }
     }
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
@@ -1916,6 +1938,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearDefineBox();
     }
     bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
+    bsTo->MutableStoragePoolPileOverrides()->CopyFrom(bsFrom.GetStoragePoolPileOverrides());
 
     if (bsFrom.HasBscSettings()) {
         bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
@@ -1965,8 +1988,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                 return false;
             }
         }
-        if (piles.size() < 2) {
-            *errorReason = "pile set can't be empty or contain less than two elements when bridge mode is enabled";
+        if (piles.empty()) {
+            *errorReason = "pile set can't be empty when bridge mode is enabled";
             return false;
         }
     }
@@ -1985,8 +2008,15 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
         const auto& bridgePileName = TNodeLocation(r->GetLocation()).GetBridgePileName();
         if (!piles.empty()) {
-            if (!bridgePileName) {
-                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
+            // pile name may be omitted only for single-pile configuration (cluster converted from non-bridged one)
+            if (!bridgePileName && piles.size() != 1) {
+                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId()
+                    << " (nodes of the cluster converted from non-bridged one have to get the name of its pile before"
+                    " other piles are added)";
+                return false;
+            } else if (bridgePileName && !piles.contains(*bridgePileName)) {
+                *errorReason = TStringBuilder() << "unknown pile name '" << *bridgePileName << "' for node "
+                    << r->GetNodeId();
                 return false;
             }
         } else if (bridgePileName) {
@@ -2011,7 +2041,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, *to, from);
                     if (!errorReason->empty()) {
                         return false;
                     }

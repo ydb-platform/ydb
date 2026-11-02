@@ -111,7 +111,7 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        StageResult->BuildResultPages(*accessor, *memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds());
     } else {
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         if (StageResult->IsEmpty()) {
@@ -395,10 +395,10 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
         bool isAllowed = false;
         if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
             const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(arrData.get());
-            isAllowed = data->GetHeader().HasSubColumn(fetchContext.GetSubColumnName());
+            isAllowed = data->GetHeader().HasSubColumn(fetchContext.GetSubColumnName().GetValue());
         } else if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
             const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsArray*>(arrData.get());
-            isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName());
+            isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName().GetValue());
         } else {
             AFL_VERIFY(false);
         }
@@ -433,18 +433,23 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     const auto accessorType = GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType();
     // Dictionary-only accessors are indexed by dictionary entries, not portion rows: only when no row-level filter
     // (PK range, duplicates, deletions) has to be applied to this portion.
-    const bool dictionaryOnlyAllowed = addr.GetUseDictionaryOnly() && UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
-                                       readContext->GetDuplicateFilterPortionCount() <= 1 &&
-                                       NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
+    const bool dictionaryOnlyAllowed =
+        addr.GetUseDictionaryOnly() && !GetIsStartedByCursor() && UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !IsConflicting() &&
+        readContext->GetDuplicateFilterPortionCount() <= 1 && NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
     if (dictionaryOnlyAllowed && accessorType == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
         return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);
     } else if (addr.HasSubColumns() && accessorType == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
         // A single dictionary encoded sub-column may be fetched as its dictionary values only (DISTINCT over JSON_VALUE);
         // the fetch logic decides per chunk from the sub-columns header.
-        const bool subColumnDictionaryOnly = dictionaryOnlyAllowed && addr.GetSubColumnNames(false).size() == 1;
-        return std::make_shared<NCommon::TSubColumnsFetchLogic>(addr.GetColumnId(), source,
-            std::vector<TString>(addr.GetSubColumnNames(false).begin(), addr.GetSubColumnNames(false).end()), subColumnDictionaryOnly);
+        const auto& requestedSubColumns = addr.GetSubColumnNames(false);
+        const bool subColumnDictionaryOnly = dictionaryOnlyAllowed && requestedSubColumns.size() == 1;
+        std::vector<TString> subColumnNames;
+        subColumnNames.reserve(requestedSubColumns.size());
+        for (auto&& name : requestedSubColumns) {
+            subColumnNames.emplace_back(name.GetValue());
+        }
+        return std::make_shared<NCommon::TSubColumnsFetchLogic>(addr.GetColumnId(), source, std::move(subColumnNames), subColumnDictionaryOnly);
     } else {
         return std::make_shared<NCommon::TDefaultFetchLogic>(addr.GetColumnId(), GetContext()->GetCommonContext()->GetStoragesManager());
     }

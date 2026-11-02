@@ -29,7 +29,6 @@ private:
     TString FilePath;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
-    std::vector<TString> QuorumPiles;
 };
 
 class TCommandBridgeList : public TYdbReadOnlyCommand, public TCommandWithOutput {
@@ -65,7 +64,7 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
-    TString DownPile;
+    TVector<TString> DownPiles;
     TString NewPrimaryPile;
 };
 
@@ -88,6 +87,43 @@ public:
     TCommandBridgeRejoin(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
+};
+
+class TCommandBridgeConvert : public TYdbCommand {
+public:
+    TCommandBridgeConvert(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    bool SkipStoragePoolConversion = false;
+};
+
+class TCommandBridgeAddPile : public TYdbCommand {
+public:
+    TCommandBridgeAddPile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
+};
+
+class TCommandBridgeRemovePile : public TYdbCommand {
+public:
+    TCommandBridgeRemovePile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    bool Prompt(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:

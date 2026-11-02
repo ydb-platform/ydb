@@ -24,8 +24,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/general_cache/usage/events.h>
 
@@ -273,7 +273,7 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NActors::TActorId& scanActorId,
     const ERequestSorting sorting = ERequestSorting::NONE) {
     auto indexInfoCache = std::make_shared<TObjectCache<TSchemaVersionId, TIndexInfo>>();
-    auto entryGuard = indexInfoCache->Upsert(TSchemaVersionId(1, 1), MakeTestIndexInfo());
+    auto entryGuard = indexInfoCache->GetOrInsert(TSchemaVersionId(1, 1), MakeTestIndexInfo());
     auto versionedIndex = std::make_shared<TVersionedIndex>();
     versionedIndex->AddIndex(TSnapshot(1, 1), std::move(entryGuard));
 

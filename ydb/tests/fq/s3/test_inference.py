@@ -159,20 +159,35 @@ Pear,15,33,2024-05-06'''
         # they don't survive a parquet round-trip cleanly (parquet's default
         # reader widens unsigned ints to signed int64).
         columns = [
-            ("c01_bool",          pa.array([True],                          type=pa.bool_()),                          ydb.Type.BOOL,      False),
-            ("c02_int8",          pa.array([1],                             type=pa.int8()),                           ydb.Type.INT8,      False),
-            ("c03_int16",         pa.array([1],                             type=pa.int16()),                          ydb.Type.INT16,     False),
-            ("c04_int32",         pa.array([1],                             type=pa.int32()),                          ydb.Type.INT32,     False),
-            ("c05_int64",         pa.array([1],                             type=pa.int64()),                          ydb.Type.INT64,     False),
-            ("c06_float",         pa.array([1.0],                           type=pa.float32()),                        ydb.Type.FLOAT,     False),
-            ("c07_double",        pa.array([1.0],                           type=pa.float64()),                        ydb.Type.DOUBLE,    False),
-            ("c08_string_req",    pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      False),
-            ("c09_binary_req",    pa.array([b"b"],                          type=pa.binary()),                         ydb.Type.STRING,    False),
-            ("c10_date32",        pa.array([date(2024, 1, 2)],              type=pa.date32()),                         ydb.Type.DATE,      False),
-            ("c11_timestamp_req", pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, False),
-            ("c12_decimal",       pa.array([decimal.Decimal("1.5")],        type=pa.decimal128(precision=5, scale=2)), ydb.Type.DOUBLE,    False),
-            ("c13_string_opt",    pa.array(["s"],                           type=pa.string()),                         ydb.Type.UTF8,      True),
-            ("c14_timestamp_opt", pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),                  ydb.Type.TIMESTAMP, True),
+            ("c01_bool", pa.array([True], type=pa.bool_()), ydb.Type.BOOL, False),
+            ("c02_int8", pa.array([1], type=pa.int8()), ydb.Type.INT8, False),
+            ("c03_int16", pa.array([1], type=pa.int16()), ydb.Type.INT16, False),
+            ("c04_int32", pa.array([1], type=pa.int32()), ydb.Type.INT32, False),
+            ("c05_int64", pa.array([1], type=pa.int64()), ydb.Type.INT64, False),
+            ("c06_float", pa.array([1.0], type=pa.float32()), ydb.Type.FLOAT, False),
+            ("c07_double", pa.array([1.0], type=pa.float64()), ydb.Type.DOUBLE, False),
+            ("c08_string_req", pa.array(["s"], type=pa.string()), ydb.Type.UTF8, False),
+            ("c09_binary_req", pa.array([b"b"], type=pa.binary()), ydb.Type.STRING, False),
+            ("c10_date32", pa.array([date(2024, 1, 2)], type=pa.date32()), ydb.Type.DATE, False),
+            (
+                "c11_timestamp_req",
+                pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),
+                ydb.Type.TIMESTAMP,
+                False,
+            ),
+            (
+                "c12_decimal",
+                pa.array([decimal.Decimal("1.5")], type=pa.decimal128(precision=5, scale=2)),
+                ydb.Type.DOUBLE,
+                False,
+            ),
+            ("c13_string_opt", pa.array(["s"], type=pa.string()), ydb.Type.UTF8, True),
+            (
+                "c14_timestamp_opt",
+                pa.array([datetime(2024, 1, 2, 3, 4, 5)], type=pa.timestamp('us')),
+                ydb.Type.TIMESTAMP,
+                True,
+            ),
         ]
 
         schema = pa.schema([pa.field(name, arr.type, nullable=nullable) for name, arr, _t, nullable in columns])
@@ -207,11 +222,13 @@ Pear,15,33,2024-05-06'''
         for actual, (name, _arr, expected_type, nullable) in zip(result_set.columns, columns):
             assert actual.name == name, f"unexpected column name: got {actual.name}, want {name}"
             if nullable:
-                assert actual.type.optional_type.item.type_id == expected_type, \
-                    f"column {name}: got {actual.type}, want Optional<{expected_type}>"
+                assert (
+                    actual.type.optional_type.item.type_id == expected_type
+                ), f"column {name}: got {actual.type}, want Optional<{expected_type}>"
             else:
-                assert actual.type.type_id == expected_type, \
-                    f"column {name}: got {actual.type}, want {expected_type} (non-Optional)"
+                assert (
+                    actual.type.type_id == expected_type
+                ), f"column {name}: got {actual.type}, want {expected_type} (non-Optional)"
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -251,8 +268,9 @@ Pear,15,33,2024-05-06'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "Schema inference" in issues and "with_infer" in issues, \
-            f"expected a clear schema-inference-disabled error in issues, got: {issues}"
+        assert (
+            "Schema inference" in issues and "with_infer" in issues
+        ), f"expected a clear schema-inference-disabled error in issues, got: {issues}"
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -292,8 +310,9 @@ Pear,15,33,2024-05-06'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
-        assert "couldn't infer schema" in issues or "no usable columns" in issues, \
-            f"expected a clear inference-failure error in issues, got: {issues}"
+        assert (
+            "couldn't infer schema" in issues or "no usable columns" in issues
+        ), f"expected a clear inference-failure error in issues, got: {issues}"
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -653,9 +672,7 @@ Pear|15|33|2024-05-06'''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "parameter is not supported with type inference" in str(
-            client.describe_query(query_id).result
-        )
+        assert "parameter is not supported with type inference" in str(client.describe_query(query_id).result)
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -682,7 +699,8 @@ Pear,15,33'''
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
 
-        sql = '''$projection = @@ {
+        sql = (
+            '''$projection = @@ {
                 "projection.enabled" : "true",
                 "storage.location.template" : "/${date}",
                 "projection.date.type" : "date",
@@ -691,7 +709,8 @@ Pear,15,33'''
                 "projection.date.interval" : "1",
                 "projection.date.format" : "/year=%Y",
                 "projection.date.unit" : "YEARS"
-            } @@;''' + f'''
+            } @@;'''
+            + f'''
 
             SELECT *
             FROM `{storage_connection_name}`.`/`
@@ -700,6 +719,7 @@ Pear,15,33'''
                 partitioned_by=(`date`),
                 projection=$projection);
             '''
+        )
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -825,9 +845,7 @@ Pear,15,33'''
         assert result_set.rows[2].items[0].int64_value == 30
 
     def _create_bucket_and_upload_file(self, filename, s3, kikimr):
-        s3_helpers.create_bucket_and_upload_file(
-            filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
-        )
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data")
         kikimr.control_plane.wait_bootstrap(1)
 
     def _create_bucket_and_upload_file_body(

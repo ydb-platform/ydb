@@ -4,6 +4,8 @@
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/adapter.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NImport {
 
 NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext &context) const {
@@ -31,8 +33,10 @@ bool TSession::IsStarted() const {
 
 void TSession::Abort(const TString &errorMessage) {
     if (Status == EStatus::Finished || Status == EStatus::Aborted) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "import_session_abort_ignored")("status", (ui64)Status)(
-            "message", "import session is already in terminal state");
+        YDB_LOG_DEBUG("",
+            {"event", "import_session_abort_ignored"},
+            {"status", (ui64)Status},
+            {"message", "import session is already in terminal state"});
         return;
     }
     Status = EStatus::Aborted;

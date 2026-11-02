@@ -40,7 +40,7 @@ private:
 //   TRACE — successful completed at TRACE, full SQL/issues, multi-part records.
 //
 // Part-1 rsyslog budget ($MaxMessageSize=8 KB):
-//   ~64 B log prefix + ~10 B [REQ_JSON] + ~950 B envelope/completed fields
+//   ~64 B log prefix + ~10 B [REQ_JSON] + ~1014 B envelope/completed fields
 //   + up to ~6 KB data + up to 1 KB issues ≈ 8.0 KB.
 //
 // Multi-part layout (TRACE only):
@@ -48,7 +48,7 @@ private:
 //   part>1:  envelope + request{data or issues slice}. Reassemble by req_id/part.
 // Top-level `kind` = "completed" on part==1, "continuation" on part>1.
 // Transaction-control actions without SQL carry `query_text_expected=false`.
-// Every completed envelope carries `is_streaming`.
+// Every completed envelope carries `is_streaming` and `used_new_rbo`.
 #define KQP_REQ_LOG(logQuery) \
     do { \
         if (IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::KQP_REQUEST, 0ull)) { \

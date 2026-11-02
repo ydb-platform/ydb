@@ -8,7 +8,7 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/memory/leaky_singleton.h>
+#include <library/cpp/yt/misc/immortal.h>
 
 #include <library/cpp/yt/system/thread_name.h>
 
@@ -114,7 +114,8 @@ void SetThreadMessageTags(TLoggingTagList messageTags)
 const TLoggingTagList& GetThreadMessageTags()
 {
     if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
-        return *LeakySingleton<TLoggingTagList>();
+        static TImmortal<TLoggingTagList> EmptyTags;
+        return *EmptyTags;
     }
     return ThreadMessageTag().Tags;
 }

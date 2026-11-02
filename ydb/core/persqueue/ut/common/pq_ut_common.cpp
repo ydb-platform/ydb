@@ -1134,7 +1134,9 @@ TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc) {
     TActorId tabletPipe = tc.Runtime->ConnectToPipe(tc.TabletId, tc.Edge, 0, GetPipeConfigWithRetries());
     TAutoPtr<IEventHandle> handle;
     {
-        auto predicate = [&](const auto& ev) { return ev.TabletId == tc.TabletId; };
+        auto predicate = [&](const TEvTabletPipe::TEvClientConnected& ev) {
+            return ev.TabletId == tc.TabletId;
+        };
         auto ev = tc.Runtime->GrabEdgeEventIf<TEvTabletPipe::TEvClientConnected>(handle, predicate);
         UNIT_ASSERT(ev);
     }

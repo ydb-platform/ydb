@@ -8,10 +8,10 @@ namespace {
 
 using namespace NThreading;
 
-class TSolomonGateway : public ISolomonGateway {
+class TSolomonGateway: public ISolomonGateway {
 public:
     explicit TSolomonGateway(const TSolomonGatewayConfig& config) {
-        for (const auto& item: config.GetClusterMapping()) {
+        for (const auto& item : config.GetClusterMapping()) {
             Clusters_[item.GetName()] = item;
         }
     }
@@ -56,10 +56,10 @@ private:
     THashMap<TString, TSolomonClusterConfig> Clusters_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 ISolomonGateway::TPtr CreateSolomonGateway(const TSolomonGatewayConfig& config) {
     return MakeIntrusive<TSolomonGateway>(config);
 }
 
-} // namespace NYql
+}   // namespace NYql

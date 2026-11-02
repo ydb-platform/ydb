@@ -15,32 +15,30 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
-#include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
 #include <ydb/core/fq/libs/control_plane_storage/internal/response_tasks.h>
+#include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
+#include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/metrics/status_code_counters.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_retries.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/db_pool/db_pool.h>
-#include <ydb/library/security/util.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
-#include <ydb/core/util/exceptions.h>
-
+#include <ydb/library/security/util.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/protobuf/interop/cast.h>
-
 #include <util/generic/guid.h>
 #include <util/system/yassert.h>
 
@@ -54,7 +52,8 @@ using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-inline static void PrepareAccessConditionImpl(TSqlQueryBuilder& builder, TPermissions permissions, const TString& user, TPermissions::TPermission privatePermission, TPermissions::TPermission publicPermission) {
+inline static void PrepareAccessConditionImpl(TSqlQueryBuilder& builder, TPermissions permissions, const TString& user,
+    TPermissions::TPermission privatePermission, TPermissions::TPermission publicPermission) {
     if (permissions.Check(publicPermission) && permissions.Check(privatePermission)) {
         // any row
     } else if (permissions.Check(publicPermission)) {
@@ -79,19 +78,21 @@ inline static void PrepareManageAccessCondition(TSqlQueryBuilder& builder, TPerm
     PrepareAccessConditionImpl(builder, permissions, user, TPermissions::MANAGE_PRIVATE, TPermissions::MANAGE_PUBLIC);
 }
 
-inline static bool HasAccessImpl(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user, TPermissions::TPermission privatePermission, TPermissions::TPermission publicPermission) {
-    return (permissions.Check(publicPermission) && permissions.Check(privatePermission))
-        || (permissions.Check(publicPermission) && (entityVisibility == FederatedQuery::Acl::SCOPE || entityUser == user))
-        || (permissions.Check(privatePermission) && entityVisibility == FederatedQuery::Acl::PRIVATE)
-        || (entityVisibility == FederatedQuery::Acl::PRIVATE && entityUser == user);
+inline static bool HasAccessImpl(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser,
+    const TString& user, TPermissions::TPermission privatePermission, TPermissions::TPermission publicPermission) {
+    return (permissions.Check(publicPermission) && permissions.Check(privatePermission)) ||
+           (permissions.Check(publicPermission) && (entityVisibility == FederatedQuery::Acl::SCOPE || entityUser == user)) ||
+           (permissions.Check(privatePermission) && entityVisibility == FederatedQuery::Acl::PRIVATE) ||
+           (entityVisibility == FederatedQuery::Acl::PRIVATE && entityUser == user);
 }
 
-
-inline static bool HasViewAccess(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
+inline static bool HasViewAccess(
+    TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
     return HasAccessImpl(permissions, entityVisibility, entityUser, user, TPermissions::VIEW_PRIVATE, TPermissions::VIEW_PUBLIC);
 }
 
-inline static bool HasManageAccess(TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
+inline static bool HasManageAccess(
+    TPermissions permissions, FederatedQuery::Acl::Visibility entityVisibility, const TString& entityUser, const TString& user) {
     return HasAccessImpl(permissions, entityVisibility, entityUser, user, TPermissions::MANAGE_PRIVATE, TPermissions::MANAGE_PUBLIC);
 }
 
@@ -177,8 +178,9 @@ struct TRequestCounters {
     }
 };
 
-template<typename T>
-THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources, const TRequestCommonCountersPtr& commonCounters)
+template <typename T>
+THashMap<TString, T> GetEntitiesWithVisibilityPriority(
+    const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources, const TRequestCommonCountersPtr& commonCounters)
 {
     THashMap<TString, T> entities;
     TResultSetParser parser(resultSet);
@@ -186,7 +188,8 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
         T entity;
         if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
         }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
@@ -205,8 +208,9 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
     return entities;
 }
 
-template<typename T>
-TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources, const TRequestCommonCountersPtr& commonCounters)
+template <typename T>
+TVector<T> GetEntities(
+    const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources, const TRequestCommonCountersPtr& commonCounters)
 {
     TVector<T> entities;
     TResultSetParser parser(resultSet);
@@ -214,7 +218,8 @@ TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, b
         T entity;
         if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntities. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error parsing proto message for GetEntities. Please contact internal support";
         }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
@@ -225,7 +230,8 @@ TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, b
     return entities;
 }
 
-void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt);
+void InsertIdempotencyKey(
+    TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt);
 
 void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
 
@@ -245,7 +251,7 @@ struct TPrepareResponseResultTypeImpl<true, ResponseEvent, Result> {
 };
 
 template <class ResponseEvent, class Result>
-struct TPrepareResponseResultType : TPrepareResponseResultTypeImpl<ResponseEvent::Auditable, ResponseEvent, Result> {};
+struct TPrepareResponseResultType: TPrepareResponseResultTypeImpl<ResponseEvent::Auditable, ResponseEvent, Result> {};
 
 class TDbRequester {
 protected:
@@ -255,52 +261,26 @@ protected:
     {
     }
 
-    std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> Read(
-        const TString& query,
-        const NYdb::TParams& params,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo,
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+    std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> Read(const TString& query, const NYdb::TParams& params,
+        const TRequestCounters& requestCounters, TDebugInfoPtr debugInfo, TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
 
-    static TAsyncStatus Validate(
-        NActors::TActorSystem* actorSystem,
-        std::shared_ptr<std::optional<TTransaction>> transaction,
-        size_t item, const TVector<TValidationQuery>& validators,
-        TSession session,
-        std::shared_ptr<bool> successFinish,
-        TDebugInfoPtr debugInfo,
+    static TAsyncStatus Validate(NActors::TActorSystem* actorSystem, std::shared_ptr<std::optional<TTransaction>> transaction, size_t item,
+        const TVector<TValidationQuery>& validators, TSession session, std::shared_ptr<bool> successFinish, TDebugInfoPtr debugInfo,
         TTxSettings transactionMode = TTxSettings::SerializableRW());
 
-    TAsyncStatus Write(
-        const TString& query,
-        const NYdb::TParams& params,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo,
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryTli = true);
+    TAsyncStatus Write(const TString& query, const NYdb::TParams& params, const TRequestCounters& requestCounters, TDebugInfoPtr debugInfo,
+        const TVector<TValidationQuery>& validators = {}, TTxSettings transactionMode = TTxSettings::SerializableRW(), bool retryTli = true);
 
-    static TAsyncStatus ReadModifyWrite(
-        TDbPoolPtr dbPool,
-        const TString& readQuery,
-        const NYdb::TParams& readParams,
+    static TAsyncStatus ReadModifyWrite(TDbPoolPtr dbPool, const TString& readQuery, const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo = {},
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryOnTli = true);
+        const TRequestCounters& requestCounters, TDebugInfoPtr debugInfo = {}, const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(), bool retryOnTli = true);
 
-    TAsyncStatus ReadModifyWrite(
-        const TString& readQuery,
-        const NYdb::TParams& readParams,
+    TAsyncStatus ReadModifyWrite(const TString& readQuery, const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo = {},
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryOnTli = true) {
+        const TRequestCounters& requestCounters, TDebugInfoPtr debugInfo = {}, const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(), bool retryOnTli = true) {
         return ReadModifyWrite(DbPool, readQuery, readParams, prepare, requestCounters, debugInfo, validators, transactionMode, retryOnTli);
     }
 
@@ -311,17 +291,14 @@ protected:
 
 class TControlPlaneStorageUtils {
 protected:
-    TControlPlaneStorageUtils(
-        const NConfig::TControlPlaneStorageConfig& config,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& common,
-        const NConfig::TComputeConfig& computeConfig)
-    : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, s3Config, common, computeConfig))
+    TControlPlaneStorageUtils(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config,
+        const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfig)
+        : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, s3Config, common, computeConfig))
     {
     }
 
     explicit TControlPlaneStorageUtils(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config)
-    : Config(config)
+        : Config(config)
     {
     }
 
@@ -331,29 +308,24 @@ protected:
     bool IsSuperUser(const TString& user) const;
     static bool IsSuperUser(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, const TString& user);
 
-    template<typename T>
-    NYql::TIssues ValidateConnection(T& ev, bool passwordRequired = true) const
-    {
-        return ::NFq::ValidateConnection<T>(ev, Config->Proto.GetMaxRequestSize(),
-                                  Config->AvailableConnections, Config->Proto.GetDisableCurrentIam(),
-                                  passwordRequired);
+    template <typename T>
+    NYql::TIssues ValidateConnection(T& ev, bool passwordRequired = true) const {
+        return ::NFq::ValidateConnection<T>(
+            ev, Config->Proto.GetMaxRequestSize(), Config->AvailableConnections, Config->Proto.GetDisableCurrentIam(), passwordRequired);
     }
 
-    template<typename T>
-     NYql::TIssues ValidateBinding(T& ev) const
-    {
+    template <typename T>
+    NYql::TIssues ValidateBinding(T& ev) const {
         return ::NFq::ValidateBinding<T>(ev, Config->Proto.GetMaxRequestSize(), Config->AvailableBindings, Config->GeneratorPathsLimit);
     }
 
-    template<typename T>
-    NYql::TIssues ValidateQuery(const T& ev) const
-    {
+    template <typename T>
+    NYql::TIssues ValidateQuery(const T& ev) const {
         return ::NFq::ValidateQuery<T>(ev, Config->Proto.GetMaxRequestSize());
     }
 
-    template<class P>
-    NYql::TIssues ValidateEvent(const P& ev) const
-    {
+    template <class P>
+    NYql::TIssues ValidateEvent(const P& ev) const {
         return ::NFq::ValidateEvent<P>(ev, Config->Proto.GetMaxRequestSize());
     }
 
@@ -387,7 +359,7 @@ protected:
     static constexpr int64_t InitialRevision = 1;
 };
 
-class TControlPlaneStorageBase : public TControlPlaneStorageUtils {
+class TControlPlaneStorageBase: public TControlPlaneStorageUtils {
 protected:
     enum ERequestTypeScope {
         RTS_CREATE_QUERY,
@@ -418,33 +390,10 @@ protected:
         RTS_MAX,
     };
 
-    static constexpr std::string_view RequestTypeScopeNames[ERequestTypeScope::RTS_MAX] = {
-        "CreateQuery",
-        "ListQueries",
-        "DescribeQuery",
-        "GetQueryStatus",
-        "ModifyQuery",
-        "DeleteQuery",
-        "ControlQuery",
-        "GetResultData",
-        "ListJobs",
-        "DescribeJob",
-        "CreateConnection",
-        "ListConnections",
-        "DescribeConnection",
-        "ModifyConnection",
-        "DeleteConnection",
-        "CreateBinding",
-        "ListBindings",
-        "DescribeBinding",
-        "ModifyBinding",
-        "DeleteBinding",
-        "PingTask",
-        "CreateDatabase",
-        "DescribeDatabase",
-        "ModifyDatabase",
-        "DeleteFolderResources"
-    };
+    static constexpr std::string_view RequestTypeScopeNames[ERequestTypeScope::RTS_MAX] = { "CreateQuery", "ListQueries", "DescribeQuery",
+        "GetQueryStatus", "ModifyQuery", "DeleteQuery", "ControlQuery", "GetResultData", "ListJobs", "DescribeJob", "CreateConnection",
+        "ListConnections", "DescribeConnection", "ModifyConnection", "DeleteConnection", "CreateBinding", "ListBindings", "DescribeBinding",
+        "ModifyBinding", "DeleteBinding", "PingTask", "CreateDatabase", "DescribeDatabase", "ModifyDatabase", "DeleteFolderResources" };
 
     enum ERequestTypeCommon {
         RTC_WRITE_RESULT_DATA,
@@ -489,8 +438,10 @@ protected:
             TMetricsScope() = default;
 
             TMetricsScope(const TString& cloudId, const TString& scope)
-                : CloudId(cloudId), Scope(scope)
-            {}
+                : CloudId(cloudId)
+                , Scope(scope)
+            {
+            }
 
             bool operator<(const TMetricsScope& right) const {
                 return std::make_pair(CloudId, Scope) < std::make_pair(right.CloudId, right.Scope);
@@ -535,26 +486,26 @@ protected:
             { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
         });
 
-        TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
-        TTtlCache<TMetricsScope, TFinalStatusCountersPtr, TMap> FinalStatusCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
+        TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{ TTtlCacheSettings{}.SetTtl(TDuration::Days(1)) };
+        TTtlCache<TMetricsScope, TFinalStatusCountersPtr, TMap> FinalStatusCounters{ TTtlCacheSettings{}.SetTtl(TDuration::Days(1)) };
 
     public:
         ::NMonitoring::TDynamicCounterPtr Counters;
         ::NMonitoring::THistogramPtr LeaseLeftMs;
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const ::NFq::TControlPlaneStorageConfig& config)
-            : ScopeCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
-            , FinalStatusCounters{TTtlCacheSettings{}.SetTtl(config.MetricsTtl)}
+            : ScopeCounters{ TTtlCacheSettings{}.SetTtl(config.MetricsTtl) }
+            , FinalStatusCounters{ TTtlCacheSettings{}.SetTtl(config.MetricsTtl) }
             , Counters(counters)
-            , LeaseLeftMs(Counters->GetHistogram("LeaseLeftMs", ::NMonitoring::ExplicitHistogram({100, 1000, 5000, 10000, 20000})))
+            , LeaseLeftMs(Counters->GetHistogram("LeaseLeftMs", ::NMonitoring::ExplicitHistogram({ 100, 1000, 5000, 10000, 20000 })))
         {
-            for (auto& request: CommonRequests) {
+            for (auto& request : CommonRequests) {
                 request->Register(Counters);
             }
         }
 
         TRequestCounters GetCounters(const TString& cloudId, const TString& scope, ERequestTypeScope scopeType, ERequestTypeCommon commonType) {
-            return {GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType)};
+            return { GetScopeCounters(cloudId, scope, scopeType), GetCommonCounters(commonType) };
         }
 
         TRequestCommonCountersPtr GetCommonCounters(ERequestTypeCommon type) {
@@ -562,15 +513,14 @@ protected:
         }
 
         TFinalStatusCountersPtr GetFinalStatusCounters(const TString& cloudId, const TString& scope) {
-            TMetricsScope key{cloudId, scope};
+            TMetricsScope key{ cloudId, scope };
             TMaybe<TFinalStatusCountersPtr> cacheVal;
             FinalStatusCounters.Get(key, &cacheVal);
             if (cacheVal) {
                 return *cacheVal;
             }
 
-            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
-                                    ->GetSubgroup("scope", scope);
+            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)->GetSubgroup("scope", scope);
 
             auto finalStatusCounters = MakeIntrusive<TFinalStatusCounters>(scopeCounters);
             cacheVal = finalStatusCounters;
@@ -583,7 +533,7 @@ protected:
                 return nullptr;
             }
 
-            TMetricsScope key{cloudId, scope};
+            TMetricsScope key{ cloudId, scope };
             TMaybe<TScopeCountersPtr> cacheVal;
             ScopeCounters.Get(key, &cacheVal);
 
@@ -611,12 +561,8 @@ protected:
     TStatusCodeByScopeCounters::TPtr FailedStatusCodeCounters;
     TString TenantName;
 
-    TControlPlaneStorageBase(
-        const NConfig::TControlPlaneStorageConfig& config,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& common,
-        const NConfig::TComputeConfig& computeConfig,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
+    TControlPlaneStorageBase(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config,
+        const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfig, const ::NMonitoring::TDynamicCounterPtr& counters,
         const TString& tenantName);
 
     // Create query request
@@ -626,26 +572,21 @@ protected:
     std::pair<FederatedQuery::Query, FederatedQuery::Job> GetCreateQueryProtos(
         const FederatedQuery::CreateQueryRequest& request, const TString& user, TInstant startTime) const;
 
-    static FederatedQuery::Internal::QueryInternal GetQueryInternalProto(
-        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
-        const FederatedQuery::CreateQueryRequest& request, const TString& cloudId, const TString& token,
-        const TMaybe<TQuotaMap>& quotas);
+    static FederatedQuery::Internal::QueryInternal GetQueryInternalProto(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+        const FederatedQuery::CreateQueryRequest& request, const TString& cloudId, const TString& token, const TMaybe<TQuotaMap>& quotas);
 
-    static void FillConnectionsAndBindings(
-        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+    static void FillConnectionsAndBindings(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         FederatedQuery::Internal::QueryInternal& queryInternal, FederatedQuery::QueryContent::QueryType queryType,
-        const TVector<FederatedQuery::Connection>& allConnections,
-        const THashMap<TString, FederatedQuery::Connection>& visibleConnections,
+        const TVector<FederatedQuery::Connection>& allConnections, const THashMap<TString, FederatedQuery::Connection>& visibleConnections,
         const THashMap<TString, FederatedQuery::Binding>& visibleBindings);
 
     // Describe query request
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev) const;
 
-    static void FillDescribeQueryResult(
-        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
-        FederatedQuery::DescribeQueryResult& result, FederatedQuery::Internal::QueryInternal internal,
-        const TString& user, TPermissions permissions);
+    static void FillDescribeQueryResult(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+        FederatedQuery::DescribeQueryResult& result, FederatedQuery::Internal::QueryInternal internal, const TString& user,
+        TPermissions permissions);
 
     // Get result data request
 
@@ -708,13 +649,12 @@ protected:
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev) const;
 
-    static void UpdateTaskInfo(
-        NActors::TActorSystem* actorSystem, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
-        FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-        NKikimr::NKqp::TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt);
+    static void UpdateTaskInfo(NActors::TActorSystem* actorSystem, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
+        Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
+        FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner, NKikimr::NKqp::TRetryLimiter& retryLimiter,
+        TDuration& backoff, TInstant& expireAt);
 
-    static void FillQueryStatistics(
-        const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
+    static void FillQueryStatistics(const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
         const FederatedQuery::Internal::QueryInternal& internal, const NKikimr::NKqp::TRetryLimiter& retryLimiter);
 
     void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
@@ -726,8 +666,9 @@ protected:
 protected:
     // Should not be used from callbacks
     template <typename T>
-    void SendResponseIssues(TActorId sender, const NYql::TIssues& issues, ui64 cookie, const TDuration& delta, TRequestCounters requestCounters) {
-        std::unique_ptr<T> event(new T{issues});
+    void SendResponseIssues(
+        TActorId sender, const NYql::TIssues& issues, ui64 cookie, const TDuration& delta, TRequestCounters requestCounters) {
+        std::unique_ptr<T> event(new T{ issues });
         requestCounters.Common->ResponseBytes->Add(event->GetByteSize());
         TActivationContext::Send(sender, std::move(event), 0, cookie);
         requestCounters.DecInFly();
@@ -737,22 +678,17 @@ protected:
 
     // Beware! Borrows ownership of ev content, nullify ev
     template <class ResponseEvent, class Result, class RequestEventPtr>
-    TFuture<bool> SendResponse(const TString& name,
-        NActors::TActorSystem* actorSystem,
-        const TAsyncStatus& status,
-        TActorId self,
-        RequestEventPtr&& ev,
-        const TInstant& startTime,
-        const TRequestCounters& requestCounters,
-        const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare,
-        TDebugInfoPtr debugInfo)
+    TFuture<bool> SendResponse(const TString& name, NActors::TActorSystem* actorSystem, const TAsyncStatus& status, TActorId self,
+        RequestEventPtr&& ev, const TInstant& startTime, const TRequestCounters& requestCounters,
+        const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare, TDebugInfoPtr debugInfo)
     {
-        using TRequestEventSharedPtr = std::shared_ptr<typename std::decay_t<RequestEventPtr>::TValueType>; // TEv*::TPtr is TAutoPtr
-        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev=TRequestEventSharedPtr(ev.Release()), requestCounters=requestCounters](const auto& future) mutable {
+        using TRequestEventSharedPtr = std::shared_ptr<typename std::decay_t<RequestEventPtr>::TValueType>;   // TEv*::TPtr is TAutoPtr
+        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev = TRequestEventSharedPtr(ev.Release()),
+                                requestCounters = requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
-            typename TPrepareResponseResultType<ResponseEvent, Result>::TResponseAuditDetails auditDetails; // void* for nonauditable events
+            typename TPrepareResponseResultType<ResponseEvent, Result>::TResponseAuditDetails auditDetails;   // void* for nonauditable events
 
             try {
                 TStatus status = future.GetValue();
@@ -799,8 +735,8 @@ protected:
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
-                      Y_UNUSED(level);
-                      requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                        Y_UNUSED(level);
+                        requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {
@@ -829,17 +765,16 @@ protected:
     static ui64 GetExecutionLimitMills(FederatedQuery::QueryContent::QueryType queryType, const TMaybe<TQuotaMap>& quotas);
 };
 
-class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor>,
-                                     public TDbRequester,
-                                     public TControlPlaneStorageBase
-{
+class TYdbControlPlaneStorageActor: public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor>, public TDbRequester,
+                                    public TControlPlaneStorageBase {
     using TBase = TControlPlaneStorageBase;
 
-    using TQueryQuotasMap = THashMap<TString, std::array<ui32, 3>>; // 3 = max(FederatedQuery::QueryContent::QueryType) + 1
+    using TQueryQuotasMap = THashMap<TString, std::array<ui32, 3>>;   // 3 = max(FederatedQuery::QueryContent::QueryType) + 1
 
     ::NFq::TYqSharedResources::TPtr YqSharedResources;
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
+
     // Query Quota
     struct TQueryQuotaState {
         TQueryQuotasMap Query;
@@ -847,19 +782,15 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         TInstant UpdatedAt = TInstant::Zero();
         bool Updating = false;
     };
+
     std::shared_ptr<TQueryQuotaState> Quotas = std::make_shared<TQueryQuotaState>();
 
     TString TablePathPrefix;
 
 public:
-    TYdbControlPlaneStorageActor(
-        const NConfig::TControlPlaneStorageConfig& config,
-        const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& common,
-        const NConfig::TComputeConfig& computeConfig,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+    TYdbControlPlaneStorageActor(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config,
+        const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfig, const ::NMonitoring::TDynamicCounterPtr& counters,
+        const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
         : TBase(config, s3Config, common, computeConfig, counters, tenantName)
         , YqSharedResources(yqSharedResources)
@@ -902,7 +833,8 @@ public:
         hFunc(NMon::TEvHttpInfo, Handle);
         hFunc(TEvQuotaService::TQuotaUsageRequest, Handle);
         hFunc(TEvQuotaService::TQuotaLimitChangeRequest, Handle);
-        hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
+        hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) {
+                ev->Get()->Callback(); } );
         hFunc(TEvents::TEvSchemaCreated, Handle);
         hFunc(TEvControlPlaneStorage::TEvCreateDatabaseRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDescribeDatabaseRequest, Handle);
@@ -989,18 +921,13 @@ public:
     void AfterTablesCreated();
 
 private:
-    template<class ResponseEvent, class Result, class RequestEventPtr>
-    TFuture<bool> SendResponseTuple(const TString& name,
-        NActors::TActorSystem* actorSystem,
-        const TAsyncStatus& status,
-        TActorId self,
-        const RequestEventPtr& ev,
-        const TInstant& startTime,
-        const TRequestCounters& requestCounters,
-        const std::function<Result()>& prepare,
+    template <class ResponseEvent, class Result, class RequestEventPtr>
+    TFuture<bool> SendResponseTuple(const TString& name, NActors::TActorSystem* actorSystem, const TAsyncStatus& status, TActorId self,
+        const RequestEventPtr& ev, const TInstant& startTime, const TRequestCounters& requestCounters, const std::function<Result()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([prepare, actorSystem, name, debugInfo, startTime, self, sender=ev->Sender, cookie=ev->Cookie, requestCounters=requestCounters](const auto& future) mutable {
+        return status.Apply([prepare, actorSystem, name, debugInfo, startTime, self, sender = ev->Sender, cookie = ev->Cookie,
+                                requestCounters = requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -1041,8 +968,8 @@ private:
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
-                      Y_UNUSED(level);
-                      requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                        Y_UNUSED(level);
+                        requestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
                     });
                 }
             } else {
@@ -1070,13 +997,8 @@ private:
         bool RetryOnTli = false;
     };
 
-    static NThreading::TFuture<void> PickTask(
-        TDbPoolPtr dbPool,
-        const TPickTaskParams& taskParams,
-        const TRequestCounters& requestCounters,
-        TDebugInfoPtr debugInfo,
-        std::shared_ptr<TResponseTasks> responseTasks,
-        const TVector<TValidationQuery>& validators = {},
+    static NThreading::TFuture<void> PickTask(TDbPoolPtr dbPool, const TPickTaskParams& taskParams, const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo, std::shared_ptr<TResponseTasks> responseTasks, const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW());
 
     struct TPingTaskParams {
@@ -1086,13 +1008,11 @@ private:
         std::shared_ptr<std::vector<TString>> MeteringRecords;
     };
 
-    TPingTaskParams ConstructHardPingTask(
-        const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
+    TPingTaskParams ConstructHardPingTask(const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
         const std::shared_ptr<TFinalStatus>& finalStatus, const TRequestCommonCountersPtr& commonCounters) const;
 
-    TPingTaskParams ConstructSoftPingTask(
-        const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
+    TPingTaskParams ConstructSoftPingTask(const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
         const TRequestCommonCountersPtr& commonCounters) const;
 };
 
-}
+}   // namespace NFq

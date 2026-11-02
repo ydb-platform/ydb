@@ -61,15 +61,15 @@ public:
                 newState = ETabletState::Stopped;
                 for (TTabletInfo& follower : tablet->Followers) {
                     if (follower.IsAlive()) {
-                        follower.InitiateStop(SideEffects);
+                        follower.InitiateStop(SideEffects, EHiveEventReason::StopRequest);
                         db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
                 if (tablet->IsAlive()) {
-                    tablet->InitiateStop(SideEffects);
+                    tablet->InitiateStop(SideEffects, EHiveEventReason::StopRequest);
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0);
                 } else {
-                    tablet->BecomeStopped();
+                    tablet->BecomeStopped(EHiveEventReason::StopRequest);
                 }
                 status = NKikimrProto::OK;
                 break;
@@ -88,6 +88,8 @@ public:
             if (status == NKikimrProto::OK && newState != state) {
                 db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(newState);
                 db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::StoppedByTenant>(ByTenant);
+                Self->RecordTabletEvent(*tablet, EHiveEventType::StopRequested, EHiveEventReason::OwnerRequest,
+                    TStringBuilder() << "from=" << ETabletStateName(state) << " to=" << ETabletStateName(newState) << " byTenant=" << ByTenant);
                 tablet->State = newState;
                 tablet->StoppedByTenant = ByTenant;
             }

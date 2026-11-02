@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -430,57 +431,25 @@ struct TKqpTableWriterStatistics {
     }
 };
 
-// Compute the shards of `newPartitioning` that now cover the key range of `deadShardId`
-// in `oldPartitioning`. Used on split/merge: the removed shard's pending batches are
-// re-routed to these shards, and its TxManager participant state (locks, flags) is
-// moved to them. Range boundaries come from the neighbor partitions' EndKeyPrefix
-// (the first partition starts at the min key); the intersection with the new
-// partitioning yields exactly the covering shards.
+// Compute the shards of `newPartitioning` that now cover the key range of the removed
+// shard with `removedShardMeta` partitioning metadata. Used on split/merge: the removed
+// shard's pending batches are re-routed to these shards, and its TxManager participant
+// state (locks, flags) is moved to them. The range comes from the removed shard's
+// registered metadata (registered by the caller from the pre-update partitioning);
+// the intersection with the new partitioning yields exactly the covering shards.
 TVector<ui64> FindCoveringShards(
-        const TPartitioning::TCPtr& oldPartitioning,
+        const TShardMeta& removedShardMeta,
         const TPartitioning::TCPtr& newPartitioning,
-        const ui64 deletedShardId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
-    AFL_ENSURE(oldPartitioning);
     AFL_ENSURE(newPartitioning);
-
-    const auto& oldPartitions = oldPartitioning->GetTablePartitioning();
-    size_t deletedIndex = oldPartitions.size();
-    for (size_t index = 0; index < oldPartitions.size(); ++index) {
-        if (oldPartitions[index].ShardId == deletedShardId) {
-            deletedIndex = index;
-            break;
-        }
-    }
-    // The removed shard must exist in the old partitioning; a miss means a cache
-    // desync and re-homing would silently break the commit — fail closed instead.
-    AFL_ENSURE(deletedIndex < oldPartitions.size());
-    AFL_ENSURE(oldPartitions[deletedIndex].Range.Defined());
-
-    const auto makeBoundaryCells = [](const TKeyDesc::TPartitionRangeInfo& range) {
-        return range.EndKeyPrefix.GetCells();
-    };
-
-    // The dead shard's range start: end of the previous partition (exclusive if that
-    // boundary was inclusive, inclusive otherwise); the first partition starts at
-    // the min key (null cells, same convention as ResolveShards' full range).
-    TVector<TCell> from(keyColumnTypes.size());
-    bool inclusiveFrom = true;
-    if (deletedIndex > 0) {
-        AFL_ENSURE(oldPartitions[deletedIndex - 1].Range.Defined());
-        const auto& prevRange = *oldPartitions[deletedIndex - 1].Range;
-        const auto cells = makeBoundaryCells(prevRange);
-        from.assign(cells.begin(), cells.end());
-        inclusiveFrom = !prevRange.IsInclusive;
-    }
-
-    const auto& deadRange = *oldPartitions[deletedIndex].Range;
-    const auto to = makeBoundaryCells(deadRange);
-    const bool inclusiveTo = deadRange.IsInclusive || deadRange.IsPoint;
-    const TTableRange deadTableRange(from, inclusiveFrom, to, inclusiveTo);
+    // The removed shard's metadata must be filled: it is registered from the
+    // pre-update partitioning before the covering computation. A miss means a
+    // re-homing would silently break the commit — fail closed instead.
+    AFL_ENSURE(removedShardMeta.IsKnown());
+    AFL_ENSURE(!removedShardMeta.Borders.From.empty());
 
     auto intersections = newPartitioning->GetIntersectionWithRange(
-        keyColumnTypes, deadTableRange);
+        keyColumnTypes, removedShardMeta.Borders);
     // The removed shard's range must remain covered by the new partitioning; an empty
     // intersection means a desync — fail closed.
     AFL_ENSURE(!intersections.empty());
@@ -490,6 +459,18 @@ TVector<ui64> FindCoveringShards(
         result.push_back(intersection.ShardId);
     }
     return result;
+}
+
+// Whether writes of this transaction participate in the WriteSeqNum protocol —
+// the only user of the split/merge partitioning metadata
+// (FindCoveringShards/MoveShardTo), so shard metas are collected only then.
+// Shared by the table write actor (its AttachWriteSeqNum member) and the buffer
+// write actor (which serves tables with different schemas and becomes
+// InconsistentTx only with the first write task).
+bool ShouldAttachWriteSeqNum(bool inconsistentTx, bool isOlap) {
+    return AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
+        && !inconsistentTx
+        && !isOlap;
 }
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
@@ -561,10 +542,7 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
-        , AttachWriteSeqNum(
-              AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
-              && !inconsistentTx
-              && !isOlap)
+        , AttachWriteSeqNum(ShouldAttachWriteSeqNum(inconsistentTx, isOlap))
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -608,7 +586,7 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
-            const auto partitioning = TxManager->GetPartitioning(TableId);
+            const auto partitioning = TxManager->GetTableMeta(TableId).InitialPartitioning;
             if (!partitioning) {
                 Resolve();
             } else {
@@ -1062,10 +1040,13 @@ public:
                     {"tablePath", TablePath},
                     {"shardID", ev->Get()->Record.GetOrigin()},
                     {"sink", this->SelfId()});
-                // The shard acknowledged the wait: don't let resends burn the bounded
-                // retry budget while the shard is legitimately overloaded. TEvOverloadReady
-                // will reset the attempts again right before the resend.
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                // The shard acknowledged the wait. Don't reset the retry counter here:
+                // the batch is still unacknowledged, and zeroing the accumulated attempts
+                // would re-baseline the exponential backoff and the bounded resend budget
+                // on every subscribed rejection (pacing would collapse to the initial retry
+                // delay under sustained overload). No sends happen while we wait, so the
+                // attempts are merely frozen; OnOverloadReady resets them right before the
+                // resend, once the shard reports it is ready.
             }
             return;
         }
@@ -1431,9 +1412,36 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+
+            // TxManager must know all shards that will participate in commit
+            // before Prepare/Commit is sent to them.
+            // The partitioning metadata is consumed only by the split/merge
+            // handling (FindCoveringShards/MoveShardTo), so it is filled only
+            // under the WriteSeqNum protocol; everywhere else shards are
+            // registered without metadata. A shard already registered with
+            // borders is left untouched: the shard never changes borders between
+            // resolves (a split/merge removes the tablet id entirely), so
+            // re-adding it would only rebuild and re-merge the same metadata. A
+            // shard registered without borders (e.g. a fresh MoveShardTo transfer
+            // target) still needs this UpdateShards pass — that is how it learns
+            // its exact borders.
+            if (AttachWriteSeqNum && (!TxManager->HasShard(shardInfo.ShardId)
+                    || TxManager->GetShardMeta(shardInfo.ShardId).Borders.From.empty())) {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
+            } else {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+            }
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
+    }
+
+    // Borders/version of the shard in the partitioning this actor currently works
+    // with. Called only under the WriteSeqNum protocol (UpdateShards gates on
+    // AttachWriteSeqNum): row tables only, where the resolved partitioning always
+    // has representable per-shard key ranges.
+    TShardMeta MakeShardMeta(const ui64 shardId) const {
+        AFL_ENSURE(AttachWriteSeqNum);
+        return NKqp::MakeShardMeta(TableId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
     }
 
     void FlushBuffer(const TWriteToken token) {
@@ -1529,7 +1537,7 @@ public:
         evWrite->Record.SetOverloadSubscribe(metadata.NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
-        YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
+        YQL_ENSURE(isPrepare || isImmediateCommit || evWrite->Record.OperationsSize() > 0);
 
         if (metadata.SendAttempts == 0) {
             if (!isPrepare) {
@@ -1879,8 +1887,10 @@ public:
             YQL_ENSURE(Partitioning);
             // The controller's Partitioning member is overwritten by
             // OnPartitioningChanged: it still holds the pre-update partitioning here,
-            // needed to compute the covering shards of the removed shards.
-            const auto oldPartitioning = ShardedWriteController->GetPartitioning();
+            // needed to register the partitioning metadata of the shards removed by
+            // the split/merge. Captured by value (with its shard index) so it
+            // survives the update below.
+            const TShardPartitionIndex oldPartitioning = ShardedWriteController->GetShardPartitionIndex();
             ShardedWriteController->OnPartitioningChanged(Partitioning);
 
             const auto deletedShards = ShardedWriteController->GetDeletedShards();
@@ -1895,9 +1905,19 @@ public:
                 TVector<std::pair<ui64, TVector<ui64>>> transferTargets;
                 if (AttachWriteSeqNum) {
                     // The inconsistent-tx TxManager is collect-only: nothing to transfer.
+                    // The removed shards' partitioning metadata must be registered from
+                    // the pre-update partitioning before the covering computation: a
+                    // shard whose first batches were flushed by OnPartitioningChanged
+                    // above has no TxManager metadata yet (its shard update is only
+                    // consumed by the UpdateShards pass below, which runs against the
+                    // new partitioning). Removed shards are always a part of the
+                    // pre-update partitioning.
+                    for (const ui64 shardId : deletedShards) {
+                        TxManager->AddShard(shardId, IsOlap, TablePath, NKqp::MakeShardMeta(TableId, oldPartitioning, shardId, KeyColumnTypes.size()));
+                    }
                     transferTargets.reserve(deletedShards.size());
                     for (const ui64 shardId : deletedShards) {
-                        transferTargets.emplace_back(shardId, FindCoveringShards(oldPartitioning, Partitioning, shardId, KeyColumnTypes));
+                        transferTargets.emplace_back(shardId, FindCoveringShards(TxManager->GetShardMeta(shardId), Partitioning, KeyColumnTypes));
                     }
                     THashMap<ui64, ui32> sourcesPerTarget;
                     for (const auto& [shardId, targets] : transferTargets) {
@@ -1923,7 +1943,7 @@ public:
                         }
                     }
                 }
-                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
+                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards), transferTargets);
                 UpdateShards();
                 bool locksConsistent = true;
                 for (const auto& [shardId, targets] : transferTargets) {
@@ -4132,6 +4152,9 @@ public:
             .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
             .QuerySpanId = QuerySpanId,
 
+            .CollectShardMetas = ShouldAttachWriteSeqNum(
+                settings.TransactionSettings.InconsistentTx, settings.IsOlap),
+
             .TxManager = TxManager,
             .Alloc = Alloc,
             .TypeEnv = *TypeEnv,
@@ -5214,6 +5237,10 @@ public:
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            // Only write-actor shards are erased: their locks are attached
+            // when their prepare/immediate write is filled (via GetLocks).
+            // Shards that hold only locks are not write-actor shards — they
+            // are sent by the loop below, which requires non-empty locks.
             for (const auto& shardId : actor->GetShardsIds()) {
                 shards.erase(shardId);
             }

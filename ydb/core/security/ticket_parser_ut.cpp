@@ -34,7 +34,6 @@ namespace NKikimr {
 namespace {
 
 using TAccessServiceMock = TTicketParserAccessServiceMock;
-using TAccessServiceMockV2 = TTicketParserAccessServiceMockV2;
 using TNebiusAccessServiceMock = TTicketParserNebiusAccessServiceMock;
 using TEvAuthorizeTicket = TEvTicketParser::TEvAuthorizeTicket;
 
@@ -80,12 +79,6 @@ void SetUseAccessService<NKikimr::TAccessServiceMock>(NKikimrProto::TAuthConfig&
 }
 
 template <>
-void SetUseAccessService<NKikimr::TAccessServiceMockV2>(NKikimrProto::TAuthConfig& authConfig) {
-    authConfig.SetUseAccessService(true);
-    authConfig.SetAccessServiceType("Yandex_v2");
-}
-
-template <>
 void SetUseAccessService<NKikimr::TNebiusAccessServiceMock>(NKikimrProto::TAuthConfig& authConfig) {
     authConfig.SetUseAccessService(true);
     authConfig.SetAccessServiceType("Nebius_v1");
@@ -109,16 +102,6 @@ constexpr bool IsApiKeySupported() {
 template <class TAccessServiceMock>
 constexpr bool IsSignatureSupported() {
     return !IsNebiusAccessService<TAccessServiceMock>();
-}
-
-template <class TAccessServiceMock>
-constexpr bool IsAccessServiceV2Interface() {
-    return false;
-}
-
-template <>
-constexpr bool IsAccessServiceV2Interface<NKikimr::TAccessServiceMockV2>() {
-    return true;
 }
 
 template <typename HttpType>
@@ -1210,7 +1193,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1250,10 +1232,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AccessServiceAuthenticationOk<NKikimr::TAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(AccessServiceAuthenticationOkV2Interface) {
-        AccessServiceAuthenticationOk<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(NebiusAccessServiceAuthenticationOk) {
         AccessServiceAuthenticationOk<NKikimr::TNebiusAccessServiceMock>();
     }
@@ -1268,12 +1246,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
-        SetUseAccessService<NKikimr::TAccessServiceMockV2>(authConfig);
+        SetUseAccessService<NKikimr::TAccessServiceMock>(authConfig);
         authConfig.SetUseAccessServiceTLS(false);
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(true);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = [](const TTicketParserSettings& s) -> IActor* {
             return new TTicketParserAuthenticationOnly(s);
@@ -1285,7 +1262,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        NKikimr::TAccessServiceMockV2 accessServiceMock;
+        NKikimr::TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1348,7 +1325,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetRefreshTime("1h");
 
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(false);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
 
@@ -1403,8 +1379,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
     }
 
-    template <typename TAccessServiceMock>
-    void AccessServiceAuthenticationApiKeyOk() {
+    Y_UNIT_TEST(AccessServiceAuthenticationApiKeyOk) {
         using namespace Tests;
 
         TPortManager tp;
@@ -1421,7 +1396,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         SetUseAccessService<TAccessServiceMock>(authConfig);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1437,9 +1411,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Access Server Mock
         TAccessServiceMock accessServiceMock;
-        if constexpr (IsAccessServiceV2Interface<TAccessServiceMock>()) {
-            accessServiceMock.AllowedUserApiKeys.insert("ApiKey-value-valid");
-        }
+        accessServiceMock.AllowedUserApiKeys.insert("ApiKey-value-valid");
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -1454,16 +1426,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->HasError());
     }
 
-    Y_UNIT_TEST(AccessServiceAuthenticationApiKeyOk) {
-        AccessServiceAuthenticationApiKeyOk<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AccessServiceAuthenticationApiKeyOkV2Interface) {
-        AccessServiceAuthenticationApiKeyOk<NKikimr::TAccessServiceMockV2>();
-    }
-
-    template <typename TAccessServiceMock>
-    void AuthenticationWithUserAccount() {
+    Y_UNIT_TEST(AuthenticationWithUserAccount) {
         using namespace Tests;
 
         TPortManager tp;
@@ -1482,7 +1445,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUserAccountServiceEndpoint(userAccountServiceEndpoint);
         SetUseAccessService<TAccessServiceMock>(authConfig);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1497,9 +1459,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         // Access Server Mock
         TAccessServiceMock accessServiceMock;
-        if constexpr (IsAccessServiceV2Interface<TAccessServiceMock>()) {
-            accessServiceMock.AllowedUserTokens.insert("user1");
-        }
+        accessServiceMock.AllowedUserTokens.insert("user1");
         grpc::ServerBuilder builder1;
         builder1.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder1.BuildAndStart());
@@ -1525,14 +1485,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
     }
 
-    Y_UNIT_TEST(AuthenticationWithUserAccount) {
-        AuthenticationWithUserAccount<NKikimr::TAccessServiceMock>();
-    }
-
-    Y_UNIT_TEST(AuthenticationWithUserAccountV2Interface) {
-        AuthenticationWithUserAccount<NKikimr::TAccessServiceMockV2>();
-    }
-
     template <typename TAccessServiceMock>
     void AuthenticationUnavailable() {
         using namespace Tests;
@@ -1549,7 +1501,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1589,10 +1540,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthenticationUnavailable<NKikimr::TAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(AuthenticationUnavailableV2Interface) {
-        AuthenticationUnavailable<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(NebiusAuthenticationUnavailable) {
         AuthenticationUnavailable<NKikimr::TNebiusAccessServiceMock>();
     }
@@ -1614,7 +1561,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetMinErrorRefreshTime("300ms");
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1684,10 +1630,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthenticationRetryError<NKikimr::TAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(AuthenticationRetryErrorV2) {
-        AuthenticationRetryError<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(NebiusAuthenticationRetryError) {
         AuthenticationRetryError<NKikimr::TNebiusAccessServiceMock>();
     }
@@ -1709,7 +1651,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetRefreshPeriod("5s");
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1777,10 +1718,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthenticationRetryErrorImmediately<NKikimr::TAccessServiceMock>();
     }
 
-    Y_UNIT_TEST(AuthenticationRetryErrorImmediatelyV2Interface) {
-        AuthenticationRetryErrorImmediately<NKikimr::TAccessServiceMockV2>();
-    }
-
     Y_UNIT_TEST(NebiusAuthenticationRetryErrorImmediately) {
         AuthenticationRetryErrorImmediately<NKikimr::TNebiusAccessServiceMock>();
     }
@@ -1802,7 +1739,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetMinErrorRefreshTime("300ms");
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1882,7 +1818,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationRetryError) {
-        AuthorizationRetryError<NKikimr::TAccessServiceMockV2>();
+        AuthorizationRetryError<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationRetryError) {
@@ -1906,7 +1842,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseStaff(false);
         authConfig.SetRefreshPeriod("5s");
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -1984,7 +1919,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationRetryErrorImmediately) {
-        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMockV2>();
+        AuthorizationRetryErrorImmediately<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationRetryErrorImmediately) {
@@ -2155,7 +2090,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2498,7 +2432,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorization) {
-        Authorization<NKikimr::TAccessServiceMockV2>();
+        Authorization<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(NebiusAuthorization) {
@@ -2521,7 +2455,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2598,7 +2531,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationWithRequiredPermissions) {
-        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMockV2>();
+        AuthorizationWithRequiredPermissions<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationWithRequiredPermissions) {
@@ -2624,7 +2557,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseUserAccountServiceTLS(false);
         authConfig.SetUserAccountServiceEndpoint(userAccountServiceEndpoint);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2726,7 +2658,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationWithUserAccount) {
-        AuthorizationWithUserAccount<NKikimr::TAccessServiceMockV2>();
+        AuthorizationWithUserAccount<NKikimr::TAccessServiceMock>();
     }
 
     template <typename TAccessServiceMock>
@@ -2748,7 +2680,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetUseUserAccountServiceTLS(false);
         authConfig.SetUserAccountServiceEndpoint(userAccountServiceEndpoint);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2803,7 +2734,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationWithUserAccount2) {
-        AuthorizationWithUserAccount2<NKikimr::TAccessServiceMockV2>();
+        AuthorizationWithUserAccount2<NKikimr::TAccessServiceMock>();
     }
 
     template <typename TAccessServiceMock>
@@ -2822,7 +2753,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2865,7 +2795,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationUnavailable) {
-        AuthorizationUnavailable<NKikimr::TAccessServiceMockV2>();
+        AuthorizationUnavailable<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationUnavailable) {
@@ -2888,7 +2818,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -2948,7 +2877,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(BulkAuthorizationModify) {
-        AuthorizationModify<NKikimr::TAccessServiceMockV2>();
+        AuthorizationModify<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(NebiusAuthorizationModify) {
@@ -2983,7 +2912,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TString userToken = "user1";
 
         // Access Server Mock
-        NKikimr::TAccessServiceMockV2 accessServiceMock;
+        NKikimr::TAccessServiceMock accessServiceMock;
         grpc::ServerBuilder builder;
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -3077,7 +3006,6 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         authConfig.SetAccessServiceEndpoint(accessServiceEndpoint);
         authConfig.SetUseStaff(false);
         auto settings = TServerSettings(port, authConfig);
-        settings.SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TAccessServiceMock>());
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         TServer server(settings);
@@ -3165,7 +3093,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
     }
 
     Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserBulkAuthorization) {
-        AuthorizationWithPeerName<NKikimr::TAccessServiceMockV2>();
+        AuthorizationWithPeerName<NKikimr::TAccessServiceMock>();
     }
 
     Y_UNIT_TEST(XUserIPHeaderIsSetInTicketParserNebiusAuthorization) {
@@ -3569,8 +3497,8 @@ struct TAuthConfigSettings {
 NKikimrProto::TAuthConfig CreateAuthConfig(const TAuthConfigSettings& authConfigSettings) {
     NKikimrProto::TAuthConfig authConfig;
     authConfig.SetUseBlackBox(authConfigSettings.UseBlackBox);
-    SetUseAccessService<NKikimr::TAccessServiceMockV2>(authConfig);
-    authConfig.SetUseAccessServiceApiKey(IsApiKeySupported<NKikimr::TAccessServiceMockV2>());
+    SetUseAccessService<NKikimr::TAccessServiceMock>(authConfig);
+    authConfig.SetUseAccessServiceApiKey(IsApiKeySupported<NKikimr::TAccessServiceMock>());
     authConfig.SetUseAccessServiceTLS(authConfigSettings.UseAccessServiceTLS);
     authConfig.SetAccessServiceEndpoint(authConfigSettings.AccessServiceEndpoint);
     authConfig.SetUseStaff(authConfigSettings.UseStaff);
@@ -3663,7 +3591,7 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
     runtime->SetLogPriority(NKikimrServices::TOKEN_MANAGER, NLog::PRI_TRACE);
 
     // Create Access Service mock
-    NKikimr::TAccessServiceMockV2 accessServiceMock;
+    NKikimr::TAccessServiceMock accessServiceMock;
     grpc::ServerBuilder builder;
     builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
     std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
@@ -3749,7 +3677,7 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
     runtime->SetLogPriority(NKikimrServices::TOKEN_MANAGER, NLog::PRI_TRACE);
 
     // Create Access Service mock
-    NKikimr::TAccessServiceMockV2 accessServiceMock;
+    NKikimr::TAccessServiceMock accessServiceMock;
     grpc::ServerBuilder builder;
     builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
     std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());

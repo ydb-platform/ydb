@@ -1,16 +1,16 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
-#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <util/string/split.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -36,12 +36,7 @@ TString FormatShardPathInvalid(const TSolomonClusterConfig& clusterConfig, const
     return err;
 }
 
-void ParseShardPath(
-    const TSolomonClusterConfig& clusterConfig,
-    const TString& path,
-    TString& project,
-    TString& cluster,
-    TString& service)
+void ParseShardPath(const TSolomonClusterConfig& clusterConfig, const TString& path, TString& project, TString& cluster, TString& service)
 {
     std::vector<TString> shardData;
     shardData.reserve(3);
@@ -55,13 +50,13 @@ void ParseShardPath(
     service = shardData.back();
 }
 
-class TSoPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
+class TSoPhysicalOptProposalTransformer: public TOptimizeTransformerBase {
 public:
     explicit TSoPhysicalOptProposalTransformer(TSolomonState::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderSolomon, {})
         , State_(std::move(state))
     {
-#define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TSoPhysicalOptProposalTransformer::name)
+#define HNDL(name) "PhysicalOptimizer-" #name, Hndl(&TSoPhysicalOptProposalTransformer::name)
         if (!State_->WriteThroughDqIntegration) {
             AddHandler(0, &TSoWriteToShard::Match, HNDL(SoWriteToShard));
         }
@@ -69,7 +64,7 @@ public:
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
 #undef HNDL
 
-        SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
+        SetGlobal(0);   // Stage 0 of this optimizer is global => we can remap nodes.
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
@@ -83,7 +78,8 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TSoDataSink dataSink, TCoAtom writeShard, TExprBase input, TExprContext& ctx, const TGetParents& getParents, bool allowPureStage) const {
+    TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TSoDataSink dataSink, TCoAtom writeShard, TExprBase input, TExprContext& ctx,
+        const TGetParents& getParents, bool allowPureStage) const {
         const auto typeAnn = input.Ref().GetTypeAnn();
         const TTypeAnnotationNode* inputItemType = nullptr;
         if (!EnsureNewSeqType<false, true, false>(input.Pos(), *typeAnn, ctx, &inputItemType)) {
@@ -92,17 +88,15 @@ public:
 
         const TExprBase rowTypeNode(ExpandType(writePos, *inputItemType, ctx));
         const TString solomonCluster(dataSink.Cluster());
-        auto dqSinkBuilder = Build<TDqSink>(ctx, writePos)
-            .DataSink(dataSink)
-            .Settings(BuildSolomonShard(writeShard, rowTypeNode, ctx, solomonCluster));
+        auto dqSinkBuilder =
+            Build<TDqSink>(ctx, writePos).DataSink(dataSink).Settings(BuildSolomonShard(writeShard, rowTypeNode, ctx, solomonCluster));
 
         if (allowPureStage && IsDqPureExpr(input)) {
             YQL_CLOG(INFO, ProviderSolomon) << "Optimize insert into solomon (SoWriteToShard / SoInsert), build pure stage with sink";
 
-            const auto dqSink = dqSinkBuilder
-                .Index().Build(0)
-                .Done();
+            const auto dqSink = dqSinkBuilder.Index().Build(0) .Done();
 
+            // clang-format off
             return Build<TDqStage>(ctx, writePos)
                 .Inputs().Build()
                 .Program<TCoLambda>()
@@ -116,8 +110,9 @@ public:
                     .Build()
                 .Settings().Build()
                 .Done();
+            // clang-format on
         }
-        
+
         const auto maybeDqUnion = input.Maybe<TDqCnUnionAll>();
         if (!maybeDqUnion) {
             // If input is not DqCnUnionAll, it means not all dq optimizations are done yet
@@ -131,9 +126,7 @@ public:
 
         YQL_CLOG(INFO, ProviderSolomon) << "Optimize insert into solomon (SoWriteToShard / SoInsert), push into existing stage";
 
-        const auto dqSink = dqSinkBuilder
-            .Index(dqUnion.Output().Index())
-            .Done();
+        const auto dqSink = dqSinkBuilder.Index(dqUnion.Output().Index()).Done();
 
         const auto inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
@@ -143,10 +136,7 @@ public:
         }
         sinksBuilder.Add(dqSink);
 
-        return Build<TDqStage>(ctx, inputStage.Pos())
-            .InitFrom(inputStage)
-            .Outputs(sinksBuilder.Done())
-            .Done();
+        return Build<TDqStage>(ctx, inputStage.Pos()).InitFrom(inputStage).Outputs(sinksBuilder.Done()).Done();
     }
 
     TMaybeNode<TExprBase> SoWriteToShard(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
@@ -155,23 +145,20 @@ public:
         }
 
         const auto write = node.Cast<TSoWriteToShard>();
-        const auto stage = BuildSinkStage(write.Pos(), write.DataSink(), write.Shard(), write.Input(), ctx, getParents, /* allowPureStage */ false);
+        const auto stage =
+            BuildSinkStage(write.Pos(), write.DataSink(), write.Shard(), write.Input(), ctx, getParents, /* allowPureStage */ false);
         if (!stage) {
             return node;
         }
 
-        return Build<TDqQuery>(ctx, write.Pos())
-            .World(write.World())
-            .SinkStages()
-                .Add(*stage)
-                .Build()
-            .Done();
+        return Build<TDqQuery>(ctx, write.Pos()).World(write.World()).SinkStages().Add(*stage).Build() .Done();
     }
 
     TMaybeNode<TExprBase> SoInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         const auto insert = node.Cast<TSoInsert>();
         const auto input = insert.Input();
-        const auto maybeStage = BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), input, ctx, getParents, /* allowPureStage */ true);
+        const auto maybeStage =
+            BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), input, ctx, getParents, /* allowPureStage */ true);
         if (!maybeStage) {
             return node;
         }
@@ -192,12 +179,9 @@ public:
         const auto dqUnionOutput = maybeDqUnion.Cast().Output();
         optCtx.RemapNode(dqUnionOutput.Stage().Ref(), newStage.Ptr());
 
-        const auto dqResult = Build<TCoNth>(ctx, newStage.Pos())
-            .Tuple(newStage)
-            .Index(dqUnionOutput.Index())
-            .Done();
+        const auto dqResult = Build<TCoNth>(ctx, newStage.Pos()).Tuple(newStage).Index(dqUnionOutput.Index()).Done();
 
-        return ctx.NewList(dqResult.Pos(), {dqResult.Ptr()});
+        return ctx.NewList(dqResult.Pos(), { dqResult.Ptr() });
     }
 
 private:
@@ -218,6 +202,7 @@ private:
         }
         YQL_ENSURE(!cluster.empty(), "Cluster is not defined. You can define it inside connection, or inside query.");
 
+        // clang-format off
         return Build<TSoShard>(ctx, shardNode.Pos())
             .SolomonCluster<TCoAtom>().Value(solomonCluster).Build()
             .Project<TCoAtom>().Value(project).Build()
@@ -226,16 +211,17 @@ private:
             .RowType(rowType)
             .Token<TCoSecureParam>().Name().Build("cluster:default_" + solomonCluster).Build()
             .Done();
+        // clang-format on
     }
 
 private:
     TSolomonState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state) {
     return MakeHolder<TSoPhysicalOptProposalTransformer>(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

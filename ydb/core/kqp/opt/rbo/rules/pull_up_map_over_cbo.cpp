@@ -16,15 +16,18 @@ TIntrusivePtr<IOperator> TPullUpMapOverCBORule::SimpleMatchAndApply(const TIntru
 
             YQL_CLOG(TRACE, CoreDq) << "Trying to pull up map";
 
-            // We can always pull up a map above the join, unless we try to pull up from a right side of a non-inner join
-            // But we need to check that the join doesn't depend on the map
+            // Pulling computations above a NULL-extended side would replace the
+            // NULLs of unmatched rows with newly computed values.
             if (input->Kind == EOperator::Join) {
                 auto join = CastOperator<TOpJoin>(input);
-                if (join->JoinKind != "Inner" && join->GetLeftInput() != map) {
+                const bool leftPreserved = join->JoinKind == "Cross" || join->JoinKind == "Left"
+                    || join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly";
+                if (join->JoinKind != "Inner" && (join->GetLeftInput() != map || !leftPreserved)) {
                     continue;
                 }
-                const auto& joinKeys = join->GetLeftInput() == map ? join->GetLHSKeys() : join->GetRHSKeys();
-                if (!joinKeys.IsSubsetOf(map->GetInput()->GetOutputIUs())) {
+                // Residual predicates, as well as keys, must not use definitions
+                // that would only become available above the join.
+                if (join->GetUsedIUs(props).HasAny(map->GetMapElements().Keys())) {
                     continue;
                 }
             }

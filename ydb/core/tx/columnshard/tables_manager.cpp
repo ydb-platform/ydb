@@ -13,6 +13,8 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/wire_format_lite.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <util/string/join.h>
 
@@ -38,6 +40,34 @@ TInternalPathId GetInitialMaxInternalPathId(const ui64 tabletId) {
     //So, we intentionally make them different in order to detect possible errors earlier
     static constexpr ui64 InternalPathIdTabletMod = 1'000;   //not huge, to be able to write tests on equal values
     return TInternalPathId::FromRawValue(InternalPathIdBase + tabletId % InternalPathIdTabletMod);
+}
+
+// a bigger diff loads slower than the full schema it replaces
+constexpr ui32 MaxSchemaDiffChanges = 100;
+
+ui32 CountChanges(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff) {
+    return diff.UpsertColumnsSize() + diff.DropColumnsSize() + diff.UpsertIndexesSize() + diff.DropIndexesSize();
+}
+
+bool ParseSmallDiffOnly(const TString& versionInfoProto, NKikimrSchemeOp::TColumnTableSchemaDiff& diff) {
+    using google::protobuf::internal::WireFormatLite;
+    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(versionInfoProto.data()), versionInfoProto.size());
+    diff.Clear();
+    bool hasDiff = false;
+    while (const ui32 tag = input.ReadTag()) {
+        if (WireFormatLite::GetTagFieldNumber(tag) != TSchemaPreset::TSchemaPresetVersionInfo::kDiffFieldNumber) {
+            AFL_VERIFY(WireFormatLite::SkipField(&input, tag));
+            continue;
+        }
+        ui32 size = 0;
+        AFL_VERIFY(input.ReadVarint32(&size));
+        const auto limit = input.PushLimit(size);
+        AFL_VERIFY(diff.MergeFromCodedStream(&input));
+        input.PopLimit(limit);
+        hasDiff = true;
+    }
+    AFL_VERIFY(input.ConsumedEntireMessage());
+    return hasDiff && CountChanges(diff) <= MaxSchemaDiffChanges;
 }
 
 }   //namespace
@@ -162,7 +192,9 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
 }
 
-bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
+bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info, TTablesLoadDurations* durations) {
+    TTablesLoadDurations ignoredDurations;
+    TTablesLoadDurations& loadDurations = durations ? *durations : ignoredDurations;
     {
         std::optional<ui64> tabletSchemeShardLocalPathIdValue;
         if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, tabletSchemeShardLocalPathIdValue)) {
@@ -197,7 +229,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
     TMap<TSchemeShardLocalPathId, TInternalPathId> mutableTables;
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard(&loadDurations.Tables);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::TablesV1");
         auto rowset = db.Table<Schema::TableInfoV1>().Select();
         if (!rowset.IsReady()) {
@@ -225,7 +257,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
         }
     }
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableLoadTimeCounters.StartGuard(&loadDurations.Tables);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Tables");
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady()) {
@@ -271,7 +303,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 
     std::optional<TSchemaPreset> preset;
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetLoadTimeCounters.StartGuard(&loadDurations.SchemaPresets);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::SchemaPresets");
         auto rowset = db.Table<Schema::SchemaPresetInfo>().Select();
         if (!rowset.IsReady()) {
@@ -301,7 +333,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
 
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->TableVersionsLoadTimeCounters.StartGuard(&loadDurations.TableVersions);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::Versions");
         auto rowset = db.Table<Schema::TableVersionInfo>().Select();
         if (!rowset.IsReady()) {
@@ -337,7 +369,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
 
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard();
+        TLoadTimeSignals::TLoadTimer timer =
+            LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard(&loadDurations.SchemaPresetVersions);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
 
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();
@@ -346,6 +379,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             return false;
         }
 
+        // one message for all versions: parsing into it reuses its strings and columns instead of allocating them anew
+        TSchemaPreset::TSchemaPresetVersionInfo info;
+        NKikimrSchemeOp::TColumnTableSchemaDiff diff;
+        TString lastVersionInfoProto;
         while (!rowset.EndOfSet()) {
             const ui32 id = rowset.GetValue<Schema::SchemaPresetVersionInfo::Id>();
             AFL_VERIFY(preset);
@@ -353,35 +390,39 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             NOlap::TSnapshot version(
                 rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(), rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>());
 
-            TSchemaPreset::TSchemaPresetVersionInfo info;
-            Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-            YDB_LOG_DEBUG("",
-                {"event", "load_preset"},
-                {"presetId", id},
-                {"snapshot", version},
-                {"version", info.HasSchema() ? info.GetSchema().GetVersion() : -1});
-
-            AFL_VERIFY(info.HasSchema());
+            const TString versionInfoProto = rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>();
+            // a version after the first one is built from the previous one and its small diff, so its full schema is not needed
+            const bool diffOnly = PrimaryIndex && ParseSmallDiffOnly(versionInfoProto, diff);
+            if (!diffOnly) {
+                AFL_VERIFY(info.ParseFromString(versionInfoProto));
+                AFL_VERIFY(info.HasSchema());
+                info.ClearDiff();
+            }
+            const NOlap::IColumnEngine::TSchemaVersionView versionView =
+                diffOnly ? NOlap::IColumnEngine::TSchemaVersionView(diff) : NOlap::IColumnEngine::TSchemaVersionView(info);
             YDB_LOG_INFO("",
                 {"event", "index_schema"},
                 {"presetId", id},
                 {"snapshot", version},
-                {"version", info.GetSchema().GetVersion()});
-            NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
+                {"version", versionView.GetVersion()});
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
-                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
-            } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
-                       info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
-                PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
+                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, versionView, PortionsStats);
             } else {
-                PrimaryIndex->RegisterOldSchemaVersion(version, preset->Id, schemaInitializationData);
+                PrimaryIndex->RegisterSchemaVersion(version, preset->Id, versionView);
             }
+            lastVersionInfoProto = versionInfoProto;
 
             if (!rowset.Next()) {
                 timer.AddLoadingFail();
                 return false;
             }
+        }
+
+        if (lastVersionInfoProto) {
+            // the next alter's diff is made against this schema
+            AFL_VERIFY(info.ParseFromString(lastVersionInfoProto));
+            ActualSchemaForPreset[preset->Id] = std::move(*info.MutableSchema());
         }
     }
 
@@ -534,7 +575,10 @@ void TTablesManager::AddSchemaVersion(
     if (it == ActualSchemaForPreset.end()) {
         ActualSchemaForPreset.emplace(presetId, schema);
     } else {
-        *versionInfo.MutableDiff() = NOlap::TSchemaDiffView::MakeSchemasDiff(it->second, schema);
+        NKikimrSchemeOp::TColumnTableSchemaDiff diff = NOlap::TSchemaDiffView::MakeSchemasDiff(it->second, schema);
+        if (CountChanges(diff) <= MaxSchemaDiffChanges) {
+            *versionInfo.MutableDiff() = std::move(diff);
+        }
         it->second = schema;
     }
 
@@ -543,13 +587,13 @@ void TTablesManager::AddSchemaVersion(
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
-            NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+            NOlap::IColumnEngine::TSchemaVersionView(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
         PrimaryIndex->OnTieringModified(GetTtl());
     } else {
-        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaVersionView(versionInfo));
     }
 }
 

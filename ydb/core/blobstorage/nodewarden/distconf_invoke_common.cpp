@@ -13,13 +13,16 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     namespace {
-        void SendInvokeResult(TActorId recipient, TActorId sender, ui64 cookie, TActorId sessionId,
-                              std::unique_ptr<TEvNodeConfigInvokeOnRootResult> response) {
-            auto handle = std::make_unique<IEventHandle>(recipient, sender, response.release(), 0, cookie);
+        void SendInvokeResult(std::unique_ptr<IEventHandle> handle, TActorId sessionId) {
             if (sessionId) {
                 handle->Rewrite(TEvInterconnect::EvForward, sessionId);
             }
             TActivationContext::Send(handle.release());
+        }
+
+        void SendInvokeResult(TActorId recipient, TActorId sender, ui64 cookie, TActorId sessionId,
+                              std::unique_ptr<TEvNodeConfigInvokeOnRootResult> response) {
+            SendInvokeResult(std::make_unique<IEventHandle>(recipient, sender, response.release(), 0, cookie), sessionId);
         }
 
         bool IsClusterStateReached(const NKikimrBridge::TClusterState& current, const NKikimrBridge::TClusterState& requested) {
@@ -41,12 +44,14 @@ namespace NKikimr::NStorage {
         }
     }
 
-    TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query)
+    TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, TInvokeQuery&& query,
+            std::shared_ptr<TFreshConfigQueryGroup> freshConfigQueryGroup)
         : TActor(&TThis::StateFunc)
         , Self(self)
         , LifetimeToken(Self->LifetimeToken)
         , InvokePipelineGeneration(Self->InvokePipelineGeneration)
         , Query(std::move(query))
+        , FreshConfigQueryGroup(std::move(freshConfigQueryGroup))
     {}
 
     TInvokeRequestHandlerActor::TInvokeRequestHandlerActor(TDistributedConfigKeeper *self,
@@ -79,6 +84,9 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(Self->RootState == ERootState::INITIAL);
                 Y_ABORT_UNLESS(!Self->Scepter); // this operation is invoked without a scepter
                 InvokedWithoutScepter = true;
+            }
+            if (FreshConfigQueryGroup) {
+                FreshConfigQueryGroup->Started = true;
             }
             ExecuteQuery();
         } else {
@@ -154,12 +162,7 @@ namespace NKikimr::NStorage {
                         return UpdateConfig(op.Command.MutableUpdateConfig());
 
                     case TQuery::kQueryConfig:
-                        return Finish(TResult::OK, std::nullopt, [&](auto *record) {
-                            auto *response = record->MutableQueryConfig();
-                            if (Self->StorageConfig) {
-                                response->MutableConfig()->CopyFrom(*Self->StorageConfig);
-                            }
-                        });
+                        return QueryConfig(op.Command.GetQueryConfig());
 
                     case TQuery::kReassignGroupDisk:
                         return ReassignGroupDisk(op.Command.GetReassignGroupDisk());
@@ -215,11 +218,32 @@ namespace NKikimr::NStorage {
                     case TQuery::kDemandRetroTrace:
                         return DemandRetroTrace(op.Command.GetDemandRetroTrace());
 
+                    case TQuery::kConvertToBridge:
+                        return ConvertToBridge(op.Command.GetConvertToBridge());
+
+                    case TQuery::kNotifyBscConversionFinished:
+                        return NotifyBscConversionFinished(op.Command.GetNotifyBscConversionFinished());
+
+                    case TQuery::kAddBridgePile:
+                        return AddBridgePile(op.Command.GetAddBridgePile());
+
+                    case TQuery::kNotifyBridgePileOperation:
+                        return NotifyBridgePileOperation(op.Command.GetNotifyBridgePileOperation());
+
+                    case TQuery::kRemoveBridgePile:
+                        return RemoveBridgePile(op.Command.GetRemoveBridgePile());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 
                     case TQuery::kQueryWorkingRoot:
                         Y_ABORT("QueryWorkingRoot must be handled directly by the keeper");
+
+                    case TQuery::kQueryPileConnectivity:
+                        Y_ABORT("QueryPileConnectivity must be handled directly by the keeper");
+
+                    case TQuery::kValidateTargetedProposition:
+                        Y_ABORT("ValidateTargetedProposition must be handled directly by the keeper");
                 }
 
                 throw TExError() << "Unhandled request";
@@ -230,16 +254,23 @@ namespace NKikimr::NStorage {
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
-                IssueScatterTask(std::move(task), [this](TEvGather *res) {
+                const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
+                IssueScatterTask(std::move(task), [this, recoveryGeneration](TEvGather *res) {
                     Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
                     Y_ABORT_UNLESS(!Self->CurrentProposition);
 
-                    if (!res->HasCollectConfigs()) {
+                    if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
+                        throw TExRace() << "Configuration changed while collecting configs";
+                    } else if (!res->HasCollectConfigs()) {
                         throw TExError() << "Incorrect CollectConfigs response";
                     } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
+                    } else if (r.IsDistconfDisabledQuorum) {
+                        Self->ConfigRecoveryRequired = false;
+                        Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
-                        StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true,
+                        RecoveryProposition = r.RequiresRecoveryProposition;
+                        StartProposition(&r.ConfigToPropose.value(), !r.RequiresRecoveryProposition,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
                     } else {
                         Finish(TResult::OK, std::nullopt);
@@ -320,14 +351,178 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
+    void TInvokeRequestHandlerActor::QueryConfig(const TQuery::TQueryConfig& request) {
+        auto reply = [this, fresh = request.GetRequireFresh() && !Self->IsBridged()] {
+            Finish(TResult::OK, std::nullopt, [&](auto *record) {
+                auto *response = record->MutableQueryConfig();
+                if (Self->StorageConfig) {
+                    response->MutableConfig()->CopyFrom(*Self->StorageConfig);
+                }
+                response->SetFresh(fresh);
+            });
+        };
+        if (request.GetRequireFresh() && !Self->IsBridged()) {
+            CollectConfig([reply = std::move(reply)](TProcessCollectConfigsResult&&) { reply(); });
+        } else {
+            reply();
+        }
+    }
+
+    void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
+                                                 bool allowConflictingGenerationAdvance) {
+        if (!Self->StorageConfig || !Self->Scepter) {
+            throw TExRace() << "No working root for configuration recovery";
+        }
+        TEvScatter task;
+        task.MutableCollectConfigs();
+        const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
+        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback), allowConflictingGenerationAdvance]
+                                        (TEvGather *res) {
+            if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
+                throw TExRace() << "Configuration changed while collecting configs";
+            }
+            if (!res->HasCollectConfigs()) {
+                throw TExError() << "Incorrect CollectConfigs response";
+            }
+            auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true,
+                                                     allowConflictingGenerationAdvance);
+            if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
+                throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
+            }
+            if (result.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(result);
+            }
+            if (!result.RequiresGenerationAdvance) {
+                Self->ConfigRecoveryRequired = false;
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+            }
+            callback(std::move(result));
+        });
+    }
+
+    void TInvokeRequestHandlerActor::StartRecoveryProposition(TProcessCollectConfigsResult& result) {
+        Y_ABORT_UNLESS(result.RequiresRecoveryProposition && result.ConfigToPropose && result.PropositionBase);
+        RecoveryProposition = true;
+        StartPropositionImpl(&*result.ConfigToPropose, false, &*result.PropositionBase, false);
+    }
+
+    void TInvokeRequestHandlerActor::CollectBridgeConfig(const NKikimrBlobStorage::TStorageConfig& config,
+            std::function<void()> callback) {
+        TEvScatter task;
+        task.MutableCollectConfigs();
+        auto quorumConfig = *Self->StorageConfig;
+        quorumConfig.MutableClusterState()->CopyFrom(config.GetClusterState());
+        IssueScatterTask(std::move(task), [this, quorumConfig = std::move(quorumConfig), callback = std::move(callback)]
+                                        (TEvGather *res) {
+            if (!res->HasCollectConfigs() || res->GetCollectConfigs().GetMetadataOnly()) {
+                throw TExError() << "Configuration bodies are required for bridge configuration changes";
+            }
+            std::vector<TSuccessfulDisk> successfulDisks;
+            const NKikimrBlobStorage::TStorageConfig *committedConfig = nullptr;
+            bool committedConflict = false;
+            const auto& collected = res->GetCollectConfigs();
+            for (auto&& [field, isCommitted] : {
+                        std::make_tuple(&collected.GetCommittedConfigs(), true),
+                        std::make_tuple(&collected.GetProposedConfigs(), false),
+                    }) {
+                for (const auto& item : *field) {
+                    const auto& config = item.GetConfig();
+                    if (!Self->ObserveConfigGeneration(config) || !config.GetGeneration() || !item.DisksSize()) {
+                        continue;
+                    }
+                    for (const auto& disk : item.GetDisks()) {
+                        successfulDisks.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                            disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                    }
+                    if (isCommitted) {
+                        if (!committedConfig || config.GetGeneration() > committedConfig->GetGeneration()) {
+                            committedConfig = &config;
+                            committedConflict = false;
+                        } else if (config.GetGeneration() == committedConfig->GetGeneration()
+                                   && config.GetFingerprint() != committedConfig->GetFingerprint()) {
+                            committedConflict = true;
+                        }
+                    }
+                }
+            }
+            if (committedConflict) {
+                throw TExNoQuorum() << "Conflicting committed bridge configurations";
+            }
+            if (committedConfig) {
+                for (const auto *applied : {Self->StorageConfig.get(), Self->CommittedStorageConfig.get(),
+                                             Self->LocalCommittedStorageConfig.get()}) {
+                    if (applied && applied->GetGeneration() == committedConfig->GetGeneration()
+                        && applied->GetFingerprint() != committedConfig->GetFingerprint()) {
+                        throw TExNoQuorum() << "Conflicting committed bridge configurations";
+                    }
+                }
+                if (committedConfig->GetGeneration() > Self->StorageConfig->GetGeneration()) {
+                    if (const auto error = ValidateConfig(*committedConfig)) {
+                        throw TExError() << "Invalid committed bridge configuration: " << *error;
+                    }
+                    InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *committedConfig);
+                    throw TExRace() << "Configuration was recovered; retry the configuration update";
+                }
+            }
+            TStringStream err;
+            if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
+                throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
+            }
+            auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true, false,
+                                                     &quorumConfig);
+            if (result.ErrorReason || !result.RecoveredConfig) {
+                throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable bridge configuration");
+            }
+            if (result.RequiresRecoveryProposition) {
+                return StartRecoveryProposition(result);
+            }
+            if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*Self->StorageConfig)) {
+                if (result.RecoveredConfig->GetGeneration() <= Self->StorageConfig->GetGeneration()) {
+                    throw TExNoQuorum() << "The current bridge configuration has not been recovered";
+                }
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                throw TExRace() << "Configuration was recovered; retry the configuration update";
+            }
+            callback();
+        });
+    }
+
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
+        if ((Self->IsBridged() || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration()
+            && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
+            const TStorageConfigMeta base(*Self->StorageConfig);
+            auto savedBase = propositionBase ? std::make_optional(*propositionBase) : std::nullopt;
+            const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+            const bool allowConflictingGenerationAdvance = op && op->Command.HasReplaceStorageConfig();
+            auto start = [this, config = *config, mindPrev, savedBase = std::move(savedBase), fromBootstrap, base]
+                         (bool advancesConflictingGeneration) mutable {
+                if (base != TStorageConfigMeta(*Self->StorageConfig)) {
+                    throw TExRace() << "Configuration was recovered; retry the configuration update";
+                }
+                AdvancesConflictingGeneration = advancesConflictingGeneration;
+                StartPropositionImpl(&config, mindPrev, savedBase ? &*savedBase : nullptr, fromBootstrap);
+            };
+            if (Self->IsBridged() && !mindPrev) {
+                CollectBridgeConfig(*config, [start = std::move(start)]() mutable { start(false); });
+            } else {
+                CollectConfig([start = std::move(start)](TProcessCollectConfigsResult&& result) mutable {
+                    start(result.RequiresGenerationAdvance);
+                }, allowConflictingGenerationAdvance);
+            }
+        } else {
+            StartPropositionImpl(config, mindPrev, propositionBase, fromBootstrap);
+        }
+    }
+
+    void TInvokeRequestHandlerActor::StartPropositionImpl(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
         if (!Self->HasConnectedNodeQuorum(*config)) {
             // we won't be able to have quorum for this configuration if we start proposing now
             throw TExNoQuorum() << "No quorum to start propose/commit configuration";
         }
 
-        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query)) {
+        if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query); op && !RecoveryProposition) {
             if (const auto& record = op->Command; record.HasReplaceStorageConfig()) {
                 AUDIT_LOG(
                     const auto& replaceConfig = record.GetReplaceStorageConfig();
@@ -377,7 +572,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), mindPrev);
+                                      SelfId(), mindPrev, AdvancesConflictingGeneration, RecoveryProposition);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -399,6 +594,12 @@ namespace NKikimr::NStorage {
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
+        } else if (RecoveryProposition && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
+            Finish(TResult::RACE, "Configuration was recovered; retry the original operation");
+        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+                   op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
+                   && Self->SelfManagementEnabled) {
+            StartCommitConfirmation();
         } else {
             Finish(TResult::OK, std::nullopt, [&](TResult *record) {
                 if (ReassignGroupDiskResult) {
@@ -455,11 +656,34 @@ namespace NKikimr::NStorage {
                 if (sendResult) {
                     auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
                     record.Swap(&ev->Record);
-                    SendInvokeResult(op.Sender, SelfId(), op.Cookie, op.SessionId, std::move(ev));
+                    auto response = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
+                    if (FreshConfigQueryGroup && (!FreshConfigQueryGroup->AdditionalRequests.empty()
+                        || !FreshConfigQueryGroup->RefillRequests.empty())) {
+                        auto buffer = response->ReleaseChainBuffer();
+                        for (const auto& request : FreshConfigQueryGroup->AdditionalRequests) {
+                            SendInvokeResult(std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
+                                request.Sender, SelfId(), buffer, request.Cookie), request.SessionId);
+                        }
+                        for (const auto& [nodeId, request] : FreshConfigQueryGroup->RefillRequests) {
+                            SendInvokeResult(std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
+                                request.Sender, SelfId(), buffer, request.Cookie), request.SessionId);
+                        }
+                        if (op.Command.GetQueryConfig().GetRefillNodeId()) {
+                            return;
+                        }
+                        response = std::make_unique<IEventHandle>(TEvNodeConfigInvokeOnRootResult::EventType, 0,
+                            op.Sender, SelfId(), std::move(buffer), op.Cookie);
+                    }
+                    SendInvokeResult(std::move(response), op.SessionId);
                 }
             },
             [&](TCollectConfigsAndPropose&) {
-                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                if (InvokePipelineGeneration == Self->InvokePipelineGeneration && status == TResult::OK) {
+                    Self->ConfigRecoveryScheduled = false;
+                    if (Self->ConfigRecoveryRequired) {
+                        InvokeOtherActor(*Self, &TDistributedConfigKeeper::ScheduleConfigRecovery);
+                    }
+                } else if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
                     // reschedule operation
                     TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
                         new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,
@@ -516,6 +740,17 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::PassAway() {
         if (!LifetimeToken.expired()) {
+            if (FreshConfigQueryGroup) {
+                for (const auto& [nodeId, request] : FreshConfigQueryGroup->RefillRequests) {
+                    const auto it = Self->PendingRefillQueryGroups.find(nodeId);
+                    if (it != Self->PendingRefillQueryGroups.end() && it->second.lock() == FreshConfigQueryGroup) {
+                        Self->PendingRefillQueryGroups.erase(it);
+                    }
+                }
+            }
+            std::erase_if(Self->ConsoleConfigValidationQ, [actorId = SelfId()](const auto& item) {
+                return std::get<0>(item) == actorId;
+            });
             if (Detached) {
                 const size_t n = Self->DetachedQueries.erase(SelfId());
                 Y_ABORT_UNLESS(n == 1);
@@ -563,7 +798,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
                 hFunc(TEvBlobStorage::TEvControllerDistconfResponse, Handle);
                 hFunc(TEvNodeWardenStorageConfig, Handle);
-                cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+                fFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             )
         } catch (const TExError& error) {
             Finish(error.Status, error.what());
@@ -574,6 +809,42 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev) {
+        if (ev->Get()->Record.HasValidateTargetedProposition()) {
+            const auto& request = ev->Get()->Record.GetValidateTargetedProposition();
+            const ui32 nodeId = ev->Sender.NodeId();
+            bool confirmed = false;
+            if (!IsBridged() && Scepter && CurrentProposition && IsPropositionCurrent(*CurrentProposition)
+                && request.HasConfig()
+                && TStorageConfigMeta(request.GetConfig()) == TStorageConfigMeta(CurrentProposition->StorageConfig)) {
+                const auto it = ScatterTasks.find(request.GetScatterCookie());
+                if (it != ScatterTasks.end()) {
+                    const TScatterTask& task = it->second;
+                    const auto containsNode = [nodeId](const auto& node) { return node.GetNodeId() == nodeId; };
+                    const auto& proposed = CurrentProposition->StorageConfig;
+                    confirmed = std::holds_alternative<TScatterTaskOriginFsm>(task.Origin)
+                                && task.ScepterCounter == ScepterCounter
+                                && task.Request.HasTaskId() && task.Request.GetTaskId() == request.GetTaskId()
+                                && task.Request.HasProposeStorageConfig()
+                                && TStorageConfigMeta(task.Request.GetProposeStorageConfig().GetConfig())
+                                   == TStorageConfigMeta(proposed)
+                                && AddedNodesScatterTasks.contains({nodeId, request.GetScatterCookie()})
+                                && task.PendingNodes.contains(nodeId)
+                                && proposed.HasPrevConfig()
+                                && !std::ranges::any_of(proposed.GetPrevConfig().GetAllNodes(), containsNode)
+                                && std::ranges::any_of(proposed.GetAllNodes(), containsNode);
+                }
+            }
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+            response->Record.MutableValidateTargetedProposition()->SetConfirmed(confirmed);
+            if (confirmed) {
+                auto *scepter = response->Record.MutableScepter();
+                scepter->SetId(Scepter->Id);
+                scepter->SetNodeId(SelfId().NodeId());
+            }
+            SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+            return;
+        }
         if (ev->Get()->Record.HasQueryWorkingRoot()) {
             auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
             response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
@@ -585,19 +856,35 @@ namespace NKikimr::NStorage {
             SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
             return;
         }
-        if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
+        if (ev->Get()->Record.HasQueryPileConnectivity()) {
+            if (!IsSelfStatic && ConnectedToStaticNode && StaticNodeSessionId) {
+                // Dynamic nodes subscribe to static nodes; they have no binding subtree of their own.
+                ForwardInvokeOnRoot(std::move(ev), ConnectedToStaticNode);
+                return;
+            }
+            if (!IsSelfStatic || !(Binding && Binding->RootNodeId)) {
+                auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                if (!IsSelfStatic) {
+                    response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM);
+                    response->Record.SetErrorReason("No static node connection for pile connectivity query");
+                } else {
+                    FillPileConnectivity(response->Record);
+                }
+                // A component top must answer even while binding or running a stalled proposition.
+                SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+                return;
+            }
+        }
+        if (Halted) {
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+            response->Record.SetErrorReason("distconf is halted on this node");
+            SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+        } else if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {
             // we have binding, so we have to forward this message to 'hop' node and return answer
-            const ui32 hopNodeId = Binding->NodeId;
-            const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
-                .Command = ev->Get()->Record,
-                .Sender = ev->Sender,
-                .SessionId = ev->InterconnectSession,
-                .Cookie = ev->Cookie,
-            }, hopNodeId));
-            TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
-                ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+            ForwardInvokeOnRoot(std::move(ev), Binding->NodeId);
         } else {
             Invoke(TInvokeExternalOperation{
                 .Command = std::move(ev->Get()->Record),
@@ -608,15 +895,62 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::ForwardInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev, ui32 hopNodeId) {
+        const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, {
+            .Command = ev->Get()->Record,
+            .Sender = ev->Sender,
+            .SessionId = ev->InterconnectSession,
+            .Cookie = ev->Cookie,
+        }, hopNodeId));
+        TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(hopNodeId), actorId,
+            ev->Release().Release(), IEventHandle::FlagSubscribeOnSession));
+    }
+
     void TDistributedConfigKeeper::Invoke(TInvokeQuery&& query) {
-        const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(query)));
-        if (RootState != ERootState::ERROR_TIMEOUT) {
-            InvokeQ.push_back(TInvokeOperation{actorId});
-            if (InvokeQ.size() == 1) {
-                TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
+        const bool deferExecution = RootState == ERootState::ERROR_TIMEOUT;
+        auto& queue = deferExecution ? InvokePending : InvokeQ;
+        std::shared_ptr<TFreshConfigQueryGroup> group;
+        if (auto *op = std::get_if<TInvokeExternalOperation>(&query); op && !IsBridged()
+            && op->Command.HasQueryConfig() && op->Command.GetQueryConfig().GetRequireFresh()) {
+            const ui32 refillNodeId = op->Command.GetQueryConfig().GetRefillNodeId();
+            if (refillNodeId) {
+                const auto it = PendingRefillQueryGroups.find(refillNodeId);
+                if (it != PendingRefillQueryGroups.end()) {
+                    if (auto pending = it->second.lock()) {
+                        auto request = std::exchange(pending->RefillRequests.at(refillNodeId), std::move(*op));
+                        auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+                        response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE);
+                        response->Record.SetErrorReason("refill request superseded");
+                        SendInvokeResult(request.Sender, SelfId(), request.Cookie, request.SessionId, std::move(response));
+                        return;
+                    }
+                    PendingRefillQueryGroups.erase(it);
+                }
             }
-        } else {
-            InvokePending.push_back(TInvokeOperation{actorId});
+            group = PendingFreshConfigQueryGroup.lock();
+            if (group && !group->Started && !queue.empty() && queue.back().ActorId == group->ActorId) {
+                if (refillNodeId) {
+                    group->RefillRequests.emplace(refillNodeId, std::move(*op));
+                    PendingRefillQueryGroups[refillNodeId] = group;
+                } else {
+                    group->AdditionalRequests.push_back(std::move(*op));
+                }
+                return;
+            }
+            group = std::make_shared<TFreshConfigQueryGroup>();
+            PendingFreshConfigQueryGroup = group;
+            if (refillNodeId) {
+                group->RefillRequests.emplace(refillNodeId, *op);
+                PendingRefillQueryGroups[refillNodeId] = group;
+            }
+        }
+        const TActorId actorId = RegisterWithSameMailbox(new TInvokeRequestHandlerActor(this, std::move(query), group));
+        if (group) {
+            group->ActorId = actorId;
+        }
+        queue.push_back(TInvokeOperation{actorId});
+        if (!deferExecution && queue.size() == 1) {
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, actorId, {}, nullptr, 0));
         }
     }
 
@@ -645,6 +979,8 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::OpQueueOnError(const TString& errorReason) {
+        PendingFreshConfigQueryGroup.reset();
+        PendingRefillQueryGroups.clear();
         for (const auto& item : std::exchange(InvokeQ, {})) {
             Send(item.ActorId, new TEvPrivate::TEvAbortQuery(errorReason));
         }

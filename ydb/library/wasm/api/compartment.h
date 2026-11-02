@@ -10,9 +10,7 @@ namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IWebAssemblyCompartment
-    : public TNonCopyable
-{
+struct IWebAssemblyCompartment: public TNonCopyable {
     virtual ~IWebAssemblyCompartment() = default;
 
     //! Adds new module in WebAssembly bytecode format.
@@ -105,4 +103,4 @@ void SetCurrentCompartment(IWebAssemblyCompartment* compartment);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

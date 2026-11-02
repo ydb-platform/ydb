@@ -427,7 +427,6 @@ private:
     std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
 
     ::NMonitoring::TDynamicCounterPtr DetailedGroup;
-    ::NMonitoring::TDynamicCounterPtr DetailedRawGroup;
     TProcessorDatabaseMetricsAggregatorPtr DetailedAggregator;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
@@ -444,6 +443,8 @@ private:
     TDbCountersServiceMap AggregatedLabeledState;
 
     std::unordered_map<NKikimrSysView::EDbCountersService, TIntrusivePtr<IDbCounters>> Counters;
+    // TABLETS_FOLLOWERS aggregates, read by the TABLETS ydb mapping; not exported
+    ::NMonitoring::TDynamicCounterPtr FollowerTabletsGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 };
 
 } // NSysView

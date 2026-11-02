@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_dq_integration.cpp
@@ -12,8 +12,6 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -99,8 +99,13 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplPDiskReadQuoter;
         TReplQuoter::TPtr ReplPDiskWriteQuoter;
 
+        struct TLifetimeToken {};
+        const std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
         ui32 RefCount = 0;
         bool Temporary = false;
+        TMonotonic TemporaryIdleDeadline;
+        ui64 StopCookie = 0;
+        std::unique_ptr<IEventHandle> StopForward;
         ui32 ExpectedSlotCount = 0;
         ui32 SlotSizeInUnits = 0;
         ui64 ExpectedSlotSize = 0;
@@ -158,7 +163,10 @@ namespace NKikimr::NStorage {
             std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk> Pending; // pending
         };
         THashMap<TString, TPDiskByPathInfo> PDiskByPath;
+        THashMap<TString, TActorId> MetadataReadsInFlight;
         THashSet<ui32> PDisksWaitingToStart;
+        ui64 NextPDiskStopCookie = 0;
+        THashMap<ui64, TPDiskKey> PDisksStopping;
 
         ui64 LastScrubCookie = RandomNumber<ui64>();
 
@@ -183,6 +191,9 @@ namespace NKikimr::NStorage {
         bool EnableProxyMock = false;
         NKikimrBlobStorage::TMockDevicesConfig MockDevicesConfig;
         NKikimrBlobStorage::TInferPDiskSlotCountSettings InferPDiskSlotCountSettings;
+        // blob_storage_config.vdisk_heap_allocator_num_leading_disks; unset is 0. Config notifications refresh it
+        // and do not restart VDisks.
+        ui32 VDiskHeapAllocatorNumLeadingDisks = 0;
 
         struct TEvPrivate {
             enum EEv {
@@ -197,6 +208,7 @@ namespace NKikimr::NStorage {
                 EvRetrySaveConfig,
                 EvRetrySlay,
                 EvRestartDrainReminder,
+                EvCleanupTemporaryPDisk,
             };
 
             struct TEvRestartDrainReminder : TEventLocal<TEvRestartDrainReminder, EvRestartDrainReminder> {
@@ -211,7 +223,29 @@ namespace NKikimr::NStorage {
 
             struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
                 TPDiskKey PDiskKey;
-                TEvDereferencePDisk(TPDiskKey pdiskKey) : PDiskKey(pdiskKey) {}
+                std::weak_ptr<TPDiskRecord::TLifetimeToken> PDiskLifetime;
+                std::optional<TString> ReadPath;
+                std::unique_ptr<IEventHandle> Forward;
+
+                TEvDereferencePDisk(TPDiskKey pdiskKey, std::weak_ptr<TPDiskRecord::TLifetimeToken> pdiskLifetime,
+                        std::optional<TString> readPath = {},
+                        std::unique_ptr<IEventHandle> forward = {})
+                    : PDiskKey(pdiskKey)
+                    , PDiskLifetime(std::move(pdiskLifetime))
+                    , ReadPath(std::move(readPath))
+                    , Forward(std::move(forward))
+                {}
+            };
+
+            struct TEvCleanupTemporaryPDisk : TEventLocal<TEvCleanupTemporaryPDisk, EvCleanupTemporaryPDisk> {
+                TPDiskKey PDiskKey;
+                std::weak_ptr<TPDiskRecord::TLifetimeToken> PDiskLifetime;
+
+                TEvCleanupTemporaryPDisk(TPDiskKey pdiskKey,
+                        std::weak_ptr<TPDiskRecord::TLifetimeToken> pdiskLifetime)
+                    : PDiskKey(pdiskKey)
+                    , PDiskLifetime(std::move(pdiskLifetime))
+                {}
             };
 
             struct TEvRetrySaveConfig : TEventLocal<TEvRetrySaveConfig, EvRetrySaveConfig> {
@@ -344,6 +378,9 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableStorageRetroTraceGeneration;
         TControlWrapper EnableStorageRetroTraceCollectionSlowRequests;
 
+        TControlWrapper UseFixedVDiskSlotSize{0, 0, 1};
+        bool UseFixedVDiskSlotSizeCached = false;
+
     public:
         struct TGroupRecord;
 
@@ -362,7 +399,7 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
             TString *configWarning = nullptr);
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
-            ui64 unitSizeInBytes, ui32 maxSlots);
+            ui64 unitSizeInBytes, ui32 maxSlots, bool useFixedVDiskSlotSize = false);
         void UpdateBlobStorageExecutorPoolMapping();
         // Engaged when the PDisk placement feature is enabled; disengaged means "no
         // assignment" and callers register actors on the System pool without pinning.
@@ -373,6 +410,8 @@ namespace NKikimr::NStorage {
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
         void DestroyLocalPDisk(ui32 pdiskId);
+        void FinishDestroyLocalPDisk(ui32 pdiskId);
+        void Handle(TEvents::TEvPoisonTaken::TPtr ev);
 
         void DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
         void OnUnableToRestartPDisk(ui32 pdiskId, TString error);
@@ -678,6 +717,7 @@ namespace NKikimr::NStorage {
             TActorId ProxyId; // actor id of running DS proxy or agent
             bool MustSubscribe = false; // keep RegisterNode subscription for this group even when proxy is not running
             bool AgentProxy = false; // was the group started as an BlobDepot agent proxy?
+            bool InlinePileProxy = false; // is the bridge proxy put in front of the DS proxy of the inline pile?
             bool GetGroupRequestPending = false; // if true, then we are waiting for GetGroup response for this group
             bool ProposeRequestPending = false; // if true, then we have sent ProposeKey request and waiting for the group
             TActorId GroupResolver; // resolver actor id
@@ -687,6 +727,7 @@ namespace NKikimr::NStorage {
 
         std::unordered_map<ui32, TGroupRecord> Groups;
         std::unordered_set<ui32> EjectedGroups;
+        std::unordered_set<ui32> StaticGroupIds; // static groups of the last static service set
         using TGroupPendingQueue = THashMap<ui32, std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>>>;
         TGroupPendingQueue GroupPendingQueue;
         std::set<std::tuple<TMonotonic, TGroupPendingQueue::value_type*>> TimeoutToQueue;
@@ -712,8 +753,13 @@ namespace NKikimr::NStorage {
         // issue GetGroup request to BSC/GroupResolver actor
         void RequestGroupConfig(ui32 groupId, TGroupRecord& group);
 
-        // process group information from the configuration message
-        void ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
+        // process group information from the configuration message; static groups missing in the comprehensive static
+        // service set are ejected (they go away along with the pile being removed, their ids are never reused)
+        void ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic,
+            bool comprehensive);
+
+        // stop the proxy of the group that has been destroyed and forget the group
+        void EjectGroup(ui32 groupId);
 
         // process group information obtained by one of managed entities
         void Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev);
@@ -789,6 +835,7 @@ namespace NKikimr::NStorage {
 
         void SendDiskMetrics(bool reportMetrics);
         static void SetCurrentVDiskId(const TVDiskRecord& vdisk, NKikimrBlobStorage::TVDiskMetrics *metrics);
+        void UpdatePDiskSettings();
         void Handle(TEvStatusUpdate::TPtr ev);
 
         void Handle(TEvBlobStorage::TEvDropDonor::TPtr ev);
@@ -890,8 +937,9 @@ namespace NKikimr::NStorage {
 
         void Handle(TEventHandle<TEvNodeWardenReadMetadata>::TPtr ev);
         void Handle(TEventHandle<TEvNodeWardenWriteMetadata>::TPtr ev);
-        TPDiskKey GetPDiskForMetadata(const TString& path);
+        std::optional<TPDiskKey> GetPDiskForMetadata(const TString& path);
         void Handle(TEvPrivate::TEvDereferencePDisk::TPtr ev);
+        void Handle(TEvPrivate::TEvCleanupTemporaryPDisk::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -1,6 +1,9 @@
 #include "collector_counters.h"
 
-#include <ydb/library/actors/core/async_frame_cache.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
+
+#include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
 
@@ -297,9 +300,7 @@ void TActorSystemCounters::Init(NMonitoring::TDynamicCounters* group) {
     AsyncFrameCacheCachedBytes = frameCacheGroup->GetCounter("CachedBytes", false);
 }
 
-void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TAsyncFrameCache::TProcessStats& frameCacheStats) {
-    *AsyncFrameCacheCachedFrames = frameCacheStats.CachedFrames;
-    *AsyncFrameCacheCachedBytes = frameCacheStats.CachedBytes;
+void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
     *MaxUsedCpuPercent = harmonizerStats.MaxUsedCpu;
     *MinUsedCpuPercent = harmonizerStats.MinUsedCpu;
@@ -314,3 +315,22 @@ void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TA
 }
 
 } // NActors 
+
+namespace NActors {
+
+void TActorSystemCounters::SetAllocationCacheStats(const std::vector<TAllocationCacheFamilyStats>& stats) {
+    *AsyncFrameCacheCachedFrames = 0;
+    *AsyncFrameCacheCachedBytes = 0;
+    auto cacheGroup = Group->GetSubgroup("subsystem", "allocation_cache");
+    for (const auto& family : stats) {
+        auto group = cacheGroup->GetSubgroup("family", family.Name);
+        *group->GetCounter("CachedBlocks", false) = family.Stats.CachedFrames;
+        *group->GetCounter("CachedBytes", false) = family.Stats.CachedBytes;
+        if (family.Name == TAsyncFrameCacheTag::Name) {
+            *AsyncFrameCacheCachedFrames = family.Stats.CachedFrames;
+            *AsyncFrameCacheCachedBytes = family.Stats.CachedBytes;
+        }
+    }
+}
+
+} // namespace NActors

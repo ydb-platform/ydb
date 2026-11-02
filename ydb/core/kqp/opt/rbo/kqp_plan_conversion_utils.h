@@ -51,12 +51,15 @@ private:
     struct TSharedImport {
         TIntrusivePtr<TReplicate> Hub;
         TBindingScope Bindings;
+        std::optional<TOrderedIUs<>> Projection;
     };
     void CountUses(const TExprNode::TPtr& root);
     THashMap<const TExprNode*, size_t> Uses;
     THashMap<TImportKey, TSharedImport> Converted;
     THashSet<TImportKey> Imported;
     THashMap<TImportKey, TBindingScope> OutputBindings;
+    // Visible output positions at the import boundary, independent of schema and ID order.
+    THashMap<TImportKey, TOrderedIUs<>> Projections;
     THashMap<const TExprNode*, bool> CaptureFreeNodes;
     THashSet<const TExprNode*> SubquerySources;
     TVector<const TExpression::TBindings*> OuterBindings;
@@ -65,6 +68,9 @@ private:
     std::pair<TIntrusivePtr<IOperator>, TBindingScope> ConvertSubquery(
         TExprNode::TPtr node, const TExpression::TBindings& bindings);
     TBindingScope GetBindings(const TExprNode::TPtr& node) const;
+    std::optional<TOrderedIUs<>> GetProjection(const TExprNode::TPtr& node) const;
+    void PropagateProjection(const TExprNode::TPtr& input, const TExprNode::TPtr& output,
+        const TSubstitutions& substitutions = {});
     TSortIUs ConvertSortKeys(const NNodes::TKqpOpSortList& keys,
         const TExpression::TBindings& bindings, TMapIUs& definitions);
 

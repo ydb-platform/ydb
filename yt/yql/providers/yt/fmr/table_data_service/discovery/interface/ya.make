@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_service_discovery.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yql/essentials/utils
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

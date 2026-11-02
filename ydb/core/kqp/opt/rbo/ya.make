@@ -1,9 +1,11 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
+    copy_logical_subtree.cpp
     global_inlining.cpp
     global_pruning.cpp
     kqp_expression.cpp
+    kqp_olap_aggregate.cpp
     kqp_olap_expr_inspection.cpp
     kqp_operator.cpp
     kqp_plan_conversion_utils.cpp
@@ -17,6 +19,7 @@ SRCS(
     kqp_rbo_utils.cpp
     kqp_rbo.cpp
     kqp_rbo_cbo.cpp
+    kqp_rbo_lookup_join.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
     analysis/logical_liveness.cpp
@@ -48,11 +51,10 @@ PEERDIR(
     ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
+    ydb/core/kqp/tracing
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

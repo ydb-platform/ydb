@@ -310,7 +310,7 @@ namespace NTi::NIo {
                         type = TDatetime64Type::InstanceRaw();
                         break;
                     case ETypeName::Timestamp64:
-                        type = TTzTimestamp64Type::InstanceRaw();
+                        type = TTimestamp64Type::InstanceRaw();
                         break;
                     case ETypeName::TzDate32:
                         type = TTzDate32Type::InstanceRaw();
@@ -319,7 +319,7 @@ namespace NTi::NIo {
                         type = TTzDatetime64Type::InstanceRaw();
                         break;
                     case ETypeName::TzTimestamp64:
-                        type = TTimestamp64Type::InstanceRaw();
+                        type = TTzTimestamp64Type::InstanceRaw();
                         break;
                     case ETypeName::Interval64:
                         type = TInterval64Type::InstanceRaw();

@@ -26,6 +26,7 @@
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
@@ -418,12 +419,14 @@ public:
                 return true;
             case EType::GlobalAsync:
                 return false;
-            case EType::GlobalSyncVectorKMeansTree:
+            case EType::GlobalSyncVectorKMeansTree: {
                 if (State != EIndexState::Ready) {
                     // Do not try to update vector indexes until their build is finished
                     return false;
                 }
-                return true;
+                const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription).GetSettings();
+                return !settings.has_autoupdate() || settings.autoupdate();
+            }
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
@@ -718,7 +721,7 @@ struct TKikimrColumnMetadata {
         }
 
         if (IsDefaultFromExpression()) {
-            const auto& defaultExpression = message->GetDefaultExpression();
+            const auto& defaultExpression = message->GetDefaultFromExpression();
             DefaultExpression = TDefaultExpressionColumnInfo{};
             DefaultExpression->ExprText = defaultExpression.GetExprText();
             DefaultExpression->Stored = defaultExpression.GetStored();
@@ -769,7 +772,7 @@ struct TKikimrColumnMetadata {
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
         if (DefaultExpression) {
-            auto& defaultExpression = *message->MutableDefaultExpression();
+            auto& defaultExpression = *message->MutableDefaultFromExpression();
             defaultExpression.SetExprText(DefaultExpression->ExprText);
             defaultExpression.SetStored(DefaultExpression->Stored);
             for (const auto& dep : DefaultExpression->Dependencies) {
@@ -900,8 +903,16 @@ public:
 };
 
 class TExternalDataSource {
+public:
+    enum class EKind {
+        Unknown,
+        Table,
+        MessageStream,
+    };
+
 private:
-    TString Type;
+    std::optional<EDatabaseType> DatabaseType;
+    EKind Kind = EKind::Unknown;
     TString Location;
     TString Installation;
     TString DataSourcePath;
@@ -915,7 +926,8 @@ private:
 public:
     static TExternalDataSource CreateFromDescription(
         const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-        const TString& dataSourcePath);
+        const TString& dataSourcePath,
+        EKind kind = EKind::Unknown);
 
     static TExternalDataSource CreateForLocalTopic(const TString& cluster,
         const TString& database, const TString& transientToken);
@@ -925,18 +937,20 @@ public:
     }
 
     void ApplyInferredMetadata(const TString& type, const TString& dataSourcePath);
-    void SetYdbTopicType();
+    void InitObjectKind(EKind kind);
 
     bool IsYdb() const;
-    bool IsYdbTopics() const;
-    bool IsYdbBased() const { return IsYdb() || IsYdbTopics(); }
+    bool IsMessageStream() const;
 
-    const TString& GetType() const { return Type; }
+    const std::optional<EDatabaseType>& GetDatabaseType() const { return DatabaseType; }
     const TString& GetLocation() const { return Location; }
     const TString& GetDataSourcePath() const { return DataSourcePath; }
     TString ComposeStructuredTokenJson() const {
         return Auth.ComposeStructuredTokenJson();
     }
+
+    // Resolve the provider name using the connection type and the resolved object kind.
+    TString GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const;
 
     TString GetDatabaseName() const;
     bool IsTlsEnabled() const;
@@ -949,7 +963,7 @@ public:
 class TExternalTable {
 private:
     struct TUnresolved {
-        TString Type;
+        std::optional<EDatabaseType> DatabaseType;
         TString DataSourcePath;
     };
 
@@ -969,11 +983,11 @@ public:
     // Allowed only once for an underlying source of the same type.
     void InitExternalDataSource(const TKikimrTableMetadataPtr& metadata);
 
-    const TString& GetType() const {
+    const std::optional<EDatabaseType>& GetDatabaseType() const {
         if (const auto* unresolved = std::get_if<TUnresolved>(&State)) {
-            return unresolved->Type;
+            return unresolved->DatabaseType;
         }
-        return GetUnderlyingDataSource().GetType();
+        return GetUnderlyingDataSource().GetDatabaseType();
     }
 
     const TString& GetLocation() const { return Location; }
@@ -1065,12 +1079,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return std::get<TExternalDataSource>(ExternalSource);
     }
 
-    const TString& GetExternalSourceType() const {
+    const std::optional<EDatabaseType>& GetExternalSourceDatabaseType() const {
         if (const auto* dataSource = std::get_if<TExternalDataSource>(&ExternalSource)) {
-            return dataSource->GetType();
+            return dataSource->GetDatabaseType();
         }
         YQL_ENSURE(IsExternalTable(), "Metadata does not hold an external source");
-        return std::get<TExternalTable>(ExternalSource).GetType();
+        return std::get<TExternalTable>(ExternalSource).GetDatabaseType();
     }
 
     const TExternalDataSource& GetResolvedExternalDataSource() const {
@@ -1256,6 +1270,7 @@ struct TAlterDatabaseSettings {
 
 struct TTruncateTableSettings {
     TString TablePath;
+    bool Unsafe = false;
 };
 
 struct TCreateUserSettings {
@@ -1505,6 +1520,8 @@ struct TReplicationSettings : public TReplicationSettingsBase {
 
     TMaybe<TRowConsistency> RowConsistency;
     TMaybe<TGlobalConsistency> GlobalConsistency;
+    TMaybe<bool> InitialScan;
+    TMaybe<NKikimrReplication::TAvailabilityPeriod> AvailabilityPeriod;
 
     TRowConsistency& EnsureRowConsistency() {
         if (!RowConsistency) {
@@ -1804,7 +1821,7 @@ public:
         const TMaybe<TString>& requestType,
         const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
+    virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
@@ -1861,6 +1878,9 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropObject(const TString& cluster, const TDropObjectSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> KillSession(const TString& cluster,
+        const TString& sessionId, bool isParameter) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterGroup(const TString& cluster, TAlterGroupSettings& settings) = 0;
@@ -1879,7 +1899,7 @@ public:
     virtual NThreading::TFuture<TGenericResult> CreateColumnTable(
         TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterColumnTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTableStore(const TString& cluster,
         const TCreateTableStoreSettings& settings, bool existingOk = false) = 0;
@@ -1916,6 +1936,7 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
 bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error);
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, NKikimrKqp::TKqpColumnMetadataProto& column, TString& error);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);

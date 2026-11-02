@@ -2321,18 +2321,7 @@ bool IsComparable(const TLogicalTypePtr& type)
 
 bool IsTzType(const TLogicalTypePtr& logicalType)
 {
-    auto simpleType = CastToV1Type(logicalType).first;
-    switch (simpleType) {
-        case ESimpleLogicalValueType::TzDate:
-        case ESimpleLogicalValueType::TzDatetime:
-        case ESimpleLogicalValueType::TzTimestamp:
-        case ESimpleLogicalValueType::TzDate32:
-        case ESimpleLogicalValueType::TzDatetime64:
-        case ESimpleLogicalValueType::TzTimestamp64:
-            return true;
-        default:
-            return false;
-    }
+    return IsTzType(CastToV1Type(logicalType).first);
 }
 
 bool HasAggregateStateType(const TLogicalTypePtr& logicalType)

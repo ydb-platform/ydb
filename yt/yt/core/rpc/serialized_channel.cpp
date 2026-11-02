@@ -126,7 +126,7 @@ private:
 
     using TEntryPtr = TIntrusivePtr<TEntry>;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::queue<TEntryPtr> Queue_;
     bool RequestInProgress_ = false;
 

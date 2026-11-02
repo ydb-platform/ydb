@@ -10,7 +10,6 @@ TMiniRunTool::TMiniRunTool(TString toolName)
 {
     GetRunOptions().UseRepeatableRandomAndTimeProviders = true;
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
-    GetRunOptions().OptimizeLibs = false;
     GetRunOptions().CustomTests = true;
     GetRunOptions().EnableCredentials = true;
 

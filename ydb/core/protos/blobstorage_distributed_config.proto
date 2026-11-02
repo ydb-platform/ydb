@@ -68,6 +68,9 @@ message TEvNodeConfigPush {
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
     TCacheUpdate CacheUpdate = 4;
     reserved 5;
+    optional uint32 SubtreeHeight = 6;
+    optional uint64 RequestedCommittedConfigGeneration = 7;
+    optional bool SupportsMetadataOnlyCollect = 8;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -78,6 +81,7 @@ message TEvNodeConfigReversePush {
     reserved 4;
     TCacheUpdate CacheUpdate = 5;
     reserved 6;
+    optional bool SupportsDirectRootQueries = 7; // QueryWorkingRoot bypasses the root operation queue
 }
 
 // Remove node from bound list.
@@ -87,6 +91,7 @@ message TEvNodeConfigUnbind {
 // Propagate query to the tree bottom and collect replies.
 message TEvNodeConfigScatter {
     message TCollectConfigs {
+        bool MetadataOnly = 1;
     }
 
     message TProposeStorageConfig {
@@ -97,14 +102,19 @@ message TEvNodeConfigScatter {
         repeated NActorsProto.TTraceId TraceId = 1;
     }
 
+    message TCollectBridgeCapability {
+    }
+
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
     optional bool Targeted = 5; // set when issuing updates to newly added nodes
+    optional uint64 TimeoutUs = 8;
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
         TDemandRetroTrace DemandRetroTrace = 6;
+        TCollectBridgeCapability CollectBridgeCapability = 7;
     }
 }
 
@@ -129,6 +139,7 @@ message TEvNodeConfigGather {
         repeated TPersistentConfig ProposedConfigs = 3;
         repeated TDiskIdentifier NoMetadata = 4;
         repeated TDiskIdentifier Errors = 5;
+        bool MetadataOnly = 6;
     }
 
     message TProposeStorageConfig {
@@ -158,6 +169,17 @@ message TEvNodeConfigGather {
     message TDemandRetroTrace {
     }
 
+    message TCollectBridgeCapability {
+        repeated uint32 CapableNodeIds = 1; // nodes running with BridgeConfig (static ones and their dynamic subscribers)
+        repeated uint32 NotCapableNodeIds = 2; // nodes running without BridgeConfig
+        repeated uint32 PileListChangeCapableNodeIds = 3; // nodes supporting changes of the list of piles
+        message TFeatureLevel {
+            uint32 NodeId = 1;
+            uint32 Level = 2;
+        }
+        repeated TFeatureLevel FeatureLevels = 4; // bridge feature levels reported by nodes (absent for older versions)
+    }
+
     optional uint64 Cookie = 1;
     optional bool Aborted = 4;
 
@@ -165,6 +187,7 @@ message TEvNodeConfigGather {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
         TDemandRetroTrace DemandRetroTrace = 5;
+        TCollectBridgeCapability CollectBridgeCapability = 6;
     }
 }
 
@@ -186,13 +209,22 @@ message TEvNodeConfigInvokeOnRoot {
         TStorageConfig Config = 1;
     }
 
-    message TQueryConfig
-    {}
+    message TQueryConfig {
+        // Recollect persistent configs before replying; ignored by older roots.
+        bool RequireFresh = 1;
+        uint32 RefillNodeId = 2;
+    }
 
     // Return a scepter only for a local root with a configured static group.
     // Do not forward or wait for root operations.
     message TQueryWorkingRoot
     {}
+
+    message TValidateTargetedProposition {
+        TStorageConfigMeta Config = 1;
+        uint64 ScatterCookie = 2;
+        fixed64 TaskId = 3;
+    }
 
     message TReassignGroupDisk {
         NKikimrBlobStorage.TVDiskID VDiskId = 1; // which one to reassign
@@ -298,7 +330,7 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TSwitchBridgeClusterState {
         NKikimrBridge.TClusterState NewClusterState = 1;
-        repeated uint32 SpecificBridgePileIds = 2; // obtain quorum only for specific pile set
+        repeated uint32 SpecificBridgePileIds = 2; // deprecated and ignored, the quorum comes from NewClusterState
     }
 
     message TNotifyBridgeSyncFinished {
@@ -328,6 +360,42 @@ message TEvNodeConfigInvokeOnRoot {
         repeated NActorsProto.TTraceId TraceId = 1;
     }
 
+    // Convert ordinary (not bridged) cluster into the single-pile bridged one: set up ClusterState and turn static
+    // groups into inline piles; groups managed by BSC are converted by BSC itself afterwards.
+    message TConvertToBridge {
+        // existing pools and groups managed by BSC are left non-bridged (they may be converted one by one later), and
+        // non-uniform storage gets activated along with the conversion; BridgeConfig must enable it then
+        bool SkipStoragePoolConversion = 1;
+    }
+
+    // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
+    // converted yet); clears ClusterStateDetails.BscConversionPending flag.
+    message TNotifyBscConversionFinished {
+    }
+
+    // Add INACTIVE pile to the cluster: allocate its parts of static groups and state storage, make it DISCONNECTED,
+    // then BSC adds its parts to the groups it manages; the pile may be rejoined when the operation is finished.
+    message TAddBridgePile {
+        string PileName = 1;
+    }
+
+    // Remove the DISCONNECTED pile from the cluster, deleting its parts of every storage group with the data; the pile
+    // becomes INACTIVE then.
+    message TRemoveBridgePile {
+        string PileName = 1;
+    }
+
+    // Sent by BSC when it has performed its part of pending pile operation, or has failed to do so (then it retries).
+    message TNotifyBridgePileOperation {
+        uint32 BridgePileId = 1;
+        optional string ErrorReason = 2; // set on failure
+        NKikimrBridge.TClusterStateDetails.TPendingPileOperation.EKind Kind = 3;
+        uint64 OperationId = 4; // the one of the pending operation BSC has performed its part of
+    }
+
+    // Read the static-node connectivity of the top of this binding component, even without global quorum.
+    message TQueryPileConnectivity {}
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -350,6 +418,13 @@ message TEvNodeConfigInvokeOnRoot {
         TDescendCommittedStorageConfig DescendCommittedStorageConfig = 22;
         TDemandRetroTrace DemandRetroTrace = 23;
         TQueryWorkingRoot QueryWorkingRoot = 24;
+        TConvertToBridge ConvertToBridge = 25;
+        TNotifyBscConversionFinished NotifyBscConversionFinished = 26;
+        TValidateTargetedProposition ValidateTargetedProposition = 27;
+        TAddBridgePile AddBridgePile = 28;
+        TNotifyBridgePileOperation NotifyBridgePileOperation = 29;
+        TRemoveBridgePile RemoveBridgePile = 30;
+        TQueryPileConnectivity QueryPileConnectivity = 31;
     }
 }
 
@@ -370,6 +445,8 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TQueryConfig {
         TStorageConfig Config = 1;
+        // Confirms that this root honored RequireFresh.
+        bool Fresh = 2;
     }
 
     message TFetchStorageConfig {
@@ -387,6 +464,27 @@ message TEvNodeConfigInvokeOnRootResult {
         NKikimrBlobStorage.TVSlotId TargetSlotId = 2;
     }
 
+    message TValidateTargetedProposition {
+        bool Confirmed = 1;
+    }
+
+    message TPileConnectivity {
+        message TPile {
+            uint32 BridgePileId = 1; // encoded TBridgePileId
+            uint32 NumStaticNodes = 2;
+            uint32 NumConnectedStaticNodes = 3;
+            bool HasNodeQuorum = 4;
+            bool RequiresConfigQuorum = 5;
+            bool RequiresDataQuorum = 6;
+            string PileName = 7; // name in the reporter's registry snapshot
+        }
+        uint32 ReporterNodeId = 1;
+        bool HasScepter = 2;
+        bool BindingInProgress = 3;
+        uint64 ClusterStateGeneration = 4;
+        repeated TPile Piles = 5; // free registry slots are omitted
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -399,7 +497,15 @@ message TEvNodeConfigInvokeOnRootResult {
         TReplaceStorageConfig ReplaceStorageConfig = 11;
         TStateStorageConfig StateStorageConfig = 12;
         TReassignGroupDisk ReassignGroupDisk = 13;
+        TValidateTargetedProposition ValidateTargetedProposition = 14;
+        TPileConnectivity PileConnectivity = 15;
     }
+}
+
+message TEvNodeWardenDynamicConfigSubscribe {
+    bool BridgeCapable = 1; // dynamic node runs with BridgeConfig
+    bool PileListChangeCapable = 2; // dynamic node supports changes of the list of piles
+    uint32 BridgeFeatureLevel = 3; // bridge features supported by the dynamic node (absent for older versions)
 }
 
 message TEvNodeWardenDynamicConfigPush {
@@ -412,4 +518,12 @@ message TConnectivityPayload {
     TStorageConfig StorageConfig = 1; // storage config of a sender
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
+    optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
+    bool PileListChangeCapable = 5; // sender takes pile ids from pile registry, not from positions in BridgeConfig
+    uint32 BridgeFeatureLevel = 6; // bridge features supported by the sender (absent for older versions)
+}
+
+// Ask CMS/Sentinel for a fresh SelfHealNodesStateUpdate. Sentinel replies only
+// after collecting enough observations to classify every configured node.
+message TEvNodeConfigGetSelfHealState {
 }

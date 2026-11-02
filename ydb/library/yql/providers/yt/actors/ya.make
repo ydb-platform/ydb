@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_lookup_actor.cpp
@@ -14,8 +14,6 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     yql/essentials/public/types
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

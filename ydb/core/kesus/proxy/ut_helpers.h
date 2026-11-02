@@ -45,7 +45,7 @@ struct TTestContext {
     // Extremely pedantic version of GrabEdgeEvent
     template<class TEvent>
     THolder<TEvent> ExpectEdgeEvent(const TActorId& actor, ui64 cookie) {
-        return Runtime->GrabEdgeEventIf<TEvent>(actor, [=](const auto& ev) {
+        return Runtime->GrabEdgeEventIf<TEvent>(actor, [=](const typename TEvent::TPtr& ev) {
             return ev->Cookie == cookie;
         })->Release();
     }

@@ -11,8 +11,10 @@ SRCS(
     kqp_explain_ut.cpp
     kqp_limits_ut.cpp
     kqp_params_ut.cpp
+    kqp_path_aliases_ut.cpp
     kqp_query_ut.cpp
     kqp_query_event_log_ut.cpp
+    kqp_relative_path_prefix_ut.cpp
     kqp_stats_ut.cpp
     kqp_types_ut.cpp
     kqp_write_affinity_ut.cpp

@@ -1331,6 +1331,21 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
     }
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    auto partition = Partitions.find(TPartitionId(record.GetPartitionId()));
+    if (partition == Partitions.end() || partition->second.Actor != ev->Sender) {
+        return;
+    }
+    auto pipe = PipesInfo.find(ActorIdFromProto(record.GetPipeClient()));
+    if (pipe == PipesInfo.end() || !pipe->second.ClientActor
+        || pipe->second.SessionId != record.GetSession()
+        || pipe->second.PartitionSessionId != record.GetPartitionSessionId()) {
+        return;
+    }
+    ctx.Send(pipe->second.ClientActor, ev->Release().Release());
+}
+
 void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
@@ -1497,7 +1512,7 @@ void TPersQueue::HandleDeleteSessionRequest(
 
 void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                             const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-                                            const TActorId& pipeClient, const TActorId&
+                                            const TActorId& pipeClient, const TActorId& sender
 ) {
     PQ_ENSURE(req.HasCmdCreateSession());
     const auto& cmd = req.GetCmdCreateSession();
@@ -1532,6 +1547,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
 
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
+            pipeIter->second.ClientActor = sender;
             LOG_D("Created session",
                 {"sessionId", cmd.GetSessionId()},
                 {"onPipe", pipeIter->first});
@@ -3087,17 +3103,17 @@ void TPersQueue::BeginDeleteTransaction(const TActorContext& ctx,
     CheckTxState(ctx, tx);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
     if (!InitCompleted) {
         AddPendingEvent(ev.Release());
         return;
     }
 
-    NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
+    NKikimrTxDataShard::TEvCancelTransactionProposal& event = ev->Get()->Record;
     PQ_ENSURE(event.HasTxId());
 
-    LOG_W("Handle TEvPersQueue::TEvCancelTransactionProposal for TxId",
+    LOG_W("Handle TEvDataShard::TEvCancelTransactionProposal for TxId",
         {"txId", event.GetTxId()});
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx) {
@@ -5872,6 +5888,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvPartitionUpdateReadMetrics, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
+        HFuncTraced(TEvPersQueue::TEvReplicationData, Handle);
         HFuncTraced(TEvPersQueue::TEvStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
@@ -5900,7 +5917,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
+        HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);

@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompact.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
 namespace {
 
@@ -34,6 +35,7 @@ namespace {
                     .FeatureFlags = MakeFeatureFlags(enableHeapAllocator),
                     .MinHugeBlobInBytes = 4096,
                     .PDiskChunkSize = pdiskChunkSize,
+                    .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
                 }}
             , Rng(seed)
         {
@@ -196,6 +198,162 @@ namespace {
         }
     };
 
+    TFeatureFlags HeapAllocatorFlag() {
+        TFeatureFlags ff;
+        ff.SetEnableVDiskHeapAllocator(true);
+        return ff;
+    }
+
+    // The "state" counters of the VDisk, under whichever pool name it started with.
+    ::NMonitoring::TDynamicCounterPtr VDiskStateCounters(TEnvironmentSetup& env, ui32 groupId, ui32 orderNumber,
+            const TActorId& vdiskActorId) {
+        ui32 nodeId, pdiskId;
+        std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
+        const std::pair<TString, TString> chain[] = {
+            {"group", Sprintf("%09" PRIu32, groupId)},
+            {"orderNumber", Sprintf("%02" PRIu32, orderNumber)},
+            {"pdisk", Sprintf("%09" PRIu32, pdiskId)},
+            {"media", "rot"},
+            {"subsystem", "state"},
+        };
+        const auto vdisks = GetServiceCounters(env.Runtime->GetNode(nodeId)->AppData->Counters, "vdisks");
+        std::vector<::NMonitoring::TDynamicCounterPtr> found;
+        vdisks->EnumerateSubgroups([&](const TString& poolLabel, const TString& poolName) {
+            auto counters = vdisks->FindSubgroup(poolLabel, poolName);
+            for (const auto& [label, value] : chain) {
+                if (counters) {
+                    counters = counters->FindSubgroup(label, value);
+                }
+            }
+            if (counters) {
+                found.push_back(counters);
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(found.size(), 1, "VDisk# " << vdiskActorId << " orderNumber# " << orderNumber);
+        return found.front();
+    }
+
+    // One character per VDisk of the group in order-number order, as its gauges report the heap it latched at start:
+    // '1' for the stripe heap, '0' for the size-class one.
+    TString HeapModes(TEnvironmentSetup& env, ui32 groupId) {
+        const auto info = env.GetGroupInfo(groupId);
+        TString modes;
+        for (ui32 orderNumber = 0; orderNumber < info->GetTotalVDisksNum(); ++orderNumber) {
+            const auto state = VDiskStateCounters(env, groupId, orderNumber, info->GetActorId(orderNumber));
+            const i64 sizeClass = state->GetCounter("HeapAllocatorSizeClass")->Val();
+            const i64 stripe = state->GetCounter("HeapAllocatorStripe")->Val();
+            UNIT_ASSERT_VALUES_EQUAL_C(sizeClass + stripe, 1, "orderNumber# " << orderNumber);
+            modes.push_back(stripe ? '1' : '0');
+        }
+        return modes;
+    }
+
+    // Restarts just these VDisks, so that each one latches the record its NodeWarden holds now.
+    void RestartVDisks(TEnvironmentSetup& env, ui32 groupId, std::initializer_list<ui32> orderNumbers) {
+        const auto info = env.GetGroupInfo(groupId);
+        for (ui32 orderNumber : orderNumbers) {
+            ui32 nodeId, pdiskId;
+            std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(info->GetActorId(orderNumber));
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), {},
+                new TEvBlobStorage::TEvAskRestartVDisk(pdiskId, info->GetVDiskId(orderNumber))), nodeId);
+        }
+        env.Sim(TDuration::Seconds(30));
+    }
+
+    NKikimrBlobStorage::TDefineStoragePool ReadStoragePool(TEnvironmentSetup& env, ui64 storagePoolId = 1) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableReadStoragePool();
+        cmd->SetBoxId(1);
+        cmd->AddStoragePoolId(storagePoolId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
+        return response.GetStatus(0).GetStoragePool(0);
+    }
+
+    void DefineStoragePool(TEnvironmentSetup& env, const NKikimrBlobStorage::TDefineStoragePool& pool) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // nullopt resets the setting, so that the pool inherits the global value again
+    void FillUpdateStoragePoolSettings(NKikimrBlobStorage::TUpdateStoragePoolSettings *cmd,
+            std::optional<ui32> numLeadingDisks, ui64 storagePoolId = 1) {
+        cmd->SetBoxId(1);
+        cmd->SetStoragePoolId(storagePoolId);
+        if (numLeadingDisks) {
+            cmd->MutableSettings()->SetVDiskHeapAllocatorNumLeadingDisks(*numLeadingDisks);
+        } else {
+            cmd->AddReset("VDiskHeapAllocatorNumLeadingDisks");
+        }
+    }
+
+    void UpdateStoragePoolSettings(TEnvironmentSetup& env, std::optional<ui32> numLeadingDisks, ui64 storagePoolId = 1) {
+        NKikimrBlobStorage::TConfigRequest request;
+        FillUpdateStoragePoolSettings(request.AddCommand()->MutableUpdateStoragePoolSettings(), numLeadingDisks,
+            storagePoolId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    ui64 VDiskStripeHeapUsedBytes(TEnvironmentSetup& env, const TActorId& vdiskActorId) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(vdiskActorId.NodeId(), __FILE__, __LINE__);
+        auto request = std::make_unique<TEvGetVDiskSpaceReportRequest>();
+        request->Record.SetForceRecalculation(true);
+        env.Runtime->Send(new IEventHandle(vdiskActorId, edge, request.release()), edge.NodeId());
+        const auto res = env.WaitForEdgeActorEvent<TEvGetVDiskSpaceReportResponse>(edge);
+        const auto& record = res->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::EReplyStatus_Name(NKikimrProto::OK));
+        return record.GetReport().GetStripeHeap().GetUsedBytes();
+    }
+
+    std::vector<ui64> StripeHeapUsedBytes(TEnvironmentSetup& env, ui32 groupId) {
+        const auto info = env.GetGroupInfo(groupId);
+        std::vector<ui64> used;
+        for (ui32 orderNumber = 0; orderNumber < info->GetTotalVDisksNum(); ++orderNumber) {
+            used.push_back(VDiskStripeHeapUsedBytes(env, info->GetActorId(orderNumber)));
+        }
+        return used;
+    }
+
+    // Reads every part the VDisk keeps of these blobs straight from it and compares them with the erasure split.
+    // Returns the number of parts found.
+    ui32 CheckLocalParts(TEnvironmentSetup& env, ui32 groupId, ui32 orderNumber,
+            const std::vector<std::pair<TLogoBlobID, TString>>& blobs) {
+        const auto info = env.GetGroupInfo(groupId);
+        const TVDiskID vdiskId = info->GetVDiskId(orderNumber);
+        ui32 numParts = 0;
+        env.WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
+            for (const auto& [id, data] : blobs) {
+                TDataPartSet parts;
+                info->Type.SplitData(static_cast<TBlobStorageGroupType::ECrcMode>(id.CrcMode()), data, parts);
+                const TActorId edge = env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
+                env.Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(
+                    vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead,
+                    TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), {{id, 0, 0}}).release()), queueId.NodeId());
+                const auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge);
+                const auto& record = res->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                for (const auto& result : record.GetResult()) {
+                    if (result.GetStatus() == NKikimrProto::NODATA) {
+                        continue;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrProto::OK, id);
+                    const TLogoBlobID partId = LogoBlobIDFromLogoBlobID(result.GetBlobID());
+                    UNIT_ASSERT_C(partId.PartId(), partId);
+                    const TString expected = parts.Parts[partId.PartId() - 1].OwnedString.ConvertToString();
+                    UNIT_ASSERT_C(res->Get()->GetBlobData(result).ConvertToString() ==
+                        expected.substr(0, info->Type.PartSize(partId)), partId);
+                    ++numParts;
+                }
+            }
+        });
+        return numParts;
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
@@ -212,6 +370,7 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
                     config.HeapAllocatorMaxSstInBytes = 1_MB;
                 },
                 .FeatureFlags = ff,
+                .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
             });
             env.CreateBoxAndPool(1, 1);
             env.Sim(TDuration::Seconds(30));
@@ -335,6 +494,7 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
                     config.HeapAllocatorMaxSstInBytes = stripeSstBytes;
                 },
                 .FeatureFlags = ff,
+                .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
             });
             env.CreateBoxAndPool(1, 1);
             env.Sim(TDuration::Seconds(30));
@@ -506,4 +666,327 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
         }
     }
 
+    Y_UNIT_TEST(FlagWithoutKnobStaysSizeClass) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .FeatureFlags = HeapAllocatorFlag(),
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, env.GetGroups().front()), "0");
+        UNIT_ASSERT(!ReadStoragePool(env).HasSettings());
+    }
+
+    // Neither the global value nor a pool setting enables the stripe heap without the feature flag.
+    Y_UNIT_TEST(KnobWithoutFlagStaysSizeClass) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "0");
+
+        UpdateStoragePoolSettings(env, Max<ui32>());
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "0");
+    }
+
+    // A pool setting replaces the global value, including 0, and only the first N VDisks of each group take the
+    // stripe heap. A running VDisk keeps the mode it latched. A VDisk-only restart reads the record that
+    // BS_CONTROLLER pushed to the live node, so this covers the push itself. A reset brings the global value back.
+    Y_UNIT_TEST(PoolSettingReplacesGlobalValue) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .FeatureFlags = HeapAllocatorFlag(),
+            .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const ui32 generation = env.GetGroupInfo(groupId)->GroupGeneration;
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "11111111");
+
+        UpdateStoragePoolSettings(env, 1);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env).GetSettings().GetVDiskHeapAllocatorNumLeadingDisks(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "11111111");
+
+        RestartVDisks(env, groupId, {1});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "10111111");
+        RestartVDisks(env, groupId, {0, 2, 3, 4, 5, 6, 7});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "10000000");
+
+        UpdateStoragePoolSettings(env, 0);
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "00000000");
+
+        UpdateStoragePoolSettings(env, std::nullopt);
+        UNIT_ASSERT(!ReadStoragePool(env).HasSettings());
+        RestartVDisks(env, groupId, {0, 1, 2, 3, 4, 5, 6, 7});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "11111111");
+        UNIT_ASSERT_VALUES_EQUAL(env.GetGroupInfo(groupId)->GroupGeneration, generation);
+    }
+
+    // DefineStoragePool, as Console issues it from its own template, neither carries nor resets the settings.
+    Y_UNIT_TEST(DefineStoragePoolKeepsSettings) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        UpdateStoragePoolSettings(env, 2);
+
+        auto pool = ReadStoragePool(env);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetVDiskHeapAllocatorNumLeadingDisks(), 2u);
+        pool.ClearSettings();
+        DefineStoragePool(env, pool);
+        pool = ReadStoragePool(env);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetSettings().GetVDiskHeapAllocatorNumLeadingDisks(), 2u);
+
+        pool.MutableSettings()->SetVDiskHeapAllocatorNumLeadingDisks(5);
+        DefineStoragePool(env, pool);
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env).GetSettings().GetVDiskHeapAllocatorNumLeadingDisks(), 2u);
+
+        auto expectError = [&](std::optional<ui32> numLeadingDisks, ui64 storagePoolId, const TString& reset,
+                const TString& error) {
+            NKikimrBlobStorage::TConfigRequest request;
+            auto *cmd = request.AddCommand()->MutableUpdateStoragePoolSettings();
+            FillUpdateStoragePoolSettings(cmd, numLeadingDisks, storagePoolId);
+            if (reset) {
+                cmd->AddReset(reset);
+            }
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), error);
+        };
+        expectError(3, 1, "VDiskHeapAllocatorNumLeadingDisks", "both set and reset");
+        expectError(3, 1, "NoSuchSetting", "unknown setting");
+        expectError(3, 42, {}, "not found");
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env).GetSettings().GetVDiskHeapAllocatorNumLeadingDisks(), 2u);
+    }
+
+    // RestartPDisk in the same request touches the VSlots of the PDisk without sending their records. The new
+    // setting still has to reach those VDisks before they start again.
+    Y_UNIT_TEST(PoolSettingWithPDiskRestartInOneRequest) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .FeatureFlags = HeapAllocatorFlag(),
+            .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "1");
+
+        ui32 nodeId, pdiskId;
+        std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(env.GetGroupInfo(groupId)->GetActorId(0));
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreDegradedGroupsChecks(true);
+        request.SetIgnoreDisintegratedGroupsChecks(true);
+        request.SetIgnoreGroupFailModelChecks(true);
+        FillUpdateStoragePoolSettings(request.AddCommand()->MutableUpdateStoragePoolSettings(), 0);
+        auto *target = request.AddCommand()->MutableRestartPDisk()->MutableTargetPDiskId();
+        target->SetNodeId(nodeId);
+        target->SetPDiskId(pdiskId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "0");
+    }
+
+    // MoveGroups changes the pool of a group without a new group generation. Its VDisk records are pushed again, so
+    // that a VDisk-only restart latches the target pool's value.
+    Y_UNIT_TEST(PoolSettingFollowsMovedGroup) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .FeatureFlags = HeapAllocatorFlag(),
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        UpdateStoragePoolSettings(env, 1);
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "1");
+
+        auto target = ReadStoragePool(env);
+        target.SetStoragePoolId(2);
+        target.SetName("target");
+        target.SetNumGroups(0);
+        target.SetItemConfigGeneration(0);
+        target.ClearSettings();
+        DefineStoragePool(env, target);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand()->MutableMoveGroups();
+        cmd->SetBoxId(1);
+        cmd->SetOriginStoragePoolId(1);
+        cmd->SetOriginStoragePoolGeneration(ReadStoragePool(env, 1).GetItemConfigGeneration());
+        cmd->SetTargetStoragePoolId(2);
+        cmd->SetTargetStoragePoolGeneration(ReadStoragePool(env, 2).GetItemConfigGeneration());
+        cmd->AddExplicitGroupId(groupId);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.Sim(TDuration::Seconds(10));
+
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "0");
+    }
+
+    // BS_CONTROLLER does not push settings to a slot that is being wiped, and the record that asked for the wipe
+    // carries the old value. The VDisk that starts after the wipe still gets a setting changed in between: NodeWarden
+    // starts it from the record BS_CONTROLLER sends in reply to the WIPED report.
+    Y_UNIT_TEST(PoolSettingChangedDuringWipe) {
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .FeatureFlags = HeapAllocatorFlag(),
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        UpdateStoragePoolSettings(env, 1);
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "1");
+
+        // hold the wipe back at PDisk, so that the setting changes while it is in flight
+        std::unique_ptr<IEventHandle> slayResult;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NPDisk::TEvSlayResult::EventType) {
+                slayResult = std::move(ev); // a retried slay supersedes the previous round
+                return false;
+            }
+            return true;
+        };
+        const auto info = env.GetGroupInfo(groupId);
+        ui32 nodeId, pdiskId, vslotId;
+        std::tie(nodeId, pdiskId, vslotId) = DecomposeVDiskServiceId(info->GetActorId(0));
+        env.Wipe(nodeId, pdiskId, vslotId, info->GetVDiskId(0));
+        const TInstant deadline = env.Now() + TDuration::Minutes(1);
+        while (!slayResult) {
+            UNIT_ASSERT_C(env.Now() < deadline, "PDisk did not answer the slay");
+            env.Sim(TDuration::Seconds(1));
+        }
+
+        UpdateStoragePoolSettings(env, 0);
+        env.Runtime->FilterFunction = {};
+        // if this round went stale meanwhile, the next retry completes the wipe
+        env.Runtime->Send(slayResult.release(), nodeId);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "0");
+    }
+
+    // A donor gets the pool setting like any other VDisk of the group, while its mode gauges stay at zero.
+    Y_UNIT_TEST(PoolSettingReachesDonor) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .FeatureFlags = HeapAllocatorFlag(),
+            .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
+        });
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(2, 1);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const TActorId donorActorId = env.GetGroupInfo(groupId)->GetActorId(0);
+        env.SettlePDisk(donorActorId);
+        UNIT_ASSERT_VALUES_UNEQUAL(env.GetGroupInfo(groupId)->GetActorId(0), donorActorId);
+
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "11111111");
+        const auto donorState = VDiskStateCounters(env, groupId, 0, donorActorId);
+        UNIT_ASSERT_VALUES_EQUAL(donorState->GetCounter("HeapAllocatorSizeClass")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(donorState->GetCounter("HeapAllocatorStripe")->Val(), 0);
+
+        ui32 nodeId, pdiskId, vslotId;
+        std::tie(nodeId, pdiskId, vslotId) = DecomposeVDiskServiceId(donorActorId);
+        std::optional<NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk> donorRecord;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& vdisk : record.GetServiceSet().GetVDisks()) {
+                    const auto& location = vdisk.GetVDiskLocation();
+                    if (location.GetNodeID() == nodeId && location.GetPDiskID() == pdiskId &&
+                            location.GetVDiskSlotID() == vslotId) {
+                        donorRecord = vdisk;
+                    }
+                }
+            }
+            return true;
+        };
+        UpdateStoragePoolSettings(env, 1);
+        env.Sim(TDuration::Seconds(5));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(donorRecord);
+        UNIT_ASSERT(donorRecord->HasDonorMode());
+        UNIT_ASSERT(donorRecord->HasVDiskHeapAllocatorNumLeadingDisks());
+        UNIT_ASSERT_VALUES_EQUAL(donorRecord->GetVDiskHeapAllocatorNumLeadingDisks(), 1u);
+    }
+
+    // With N = 1 only the first VDisk of the group allocates stripes. Switching it to the size-class heap and back
+    // with VDisk-only restarts keeps its data readable: a size-class disk reads its old stripes and puts nothing new
+    // there.
+    Y_UNIT_TEST(MixedGroupAllocation) {
+        TEnvironmentSetup env({
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .FeatureFlags = HeapAllocatorFlag(),
+            // MinHugeBlobInBytes applies to this disk type only, and CreateBoxAndPool makes ROT drives
+            .DiskType = NPDisk::EDeviceType::DEVICE_TYPE_ROT,
+            .MinHugeBlobInBytes = 4096,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        UpdateStoragePoolSettings(env, 1);
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "10000000");
+
+        std::vector<std::pair<TLogoBlobID, TString>> blobs;
+        auto write = [&](ui32 count) {
+            for (ui32 i = 0; i < count; ++i) {
+                const ui32 step = static_cast<ui32>(blobs.size()) + 1;
+                const ui32 size = (256 << 10) + step * 4096;
+                const TLogoBlobID id(1000, 1, step, 0, size, 0);
+                TString data = FastGenDataForLZ4(size, step);
+                env.PutBlob(groupId, id, data);
+                blobs.emplace_back(id, std::move(data));
+            }
+            env.Sim(TDuration::Seconds(5));
+        };
+
+        write(16);
+        const auto used = StripeHeapUsedBytes(env, groupId);
+        UNIT_ASSERT(used[0]);
+        for (ui32 orderNumber = 1; orderNumber < used.size(); ++orderNumber) {
+            UNIT_ASSERT_VALUES_EQUAL_C(used[orderNumber], 0u, orderNumber);
+        }
+        const ui32 numParts = CheckLocalParts(env, groupId, 0, blobs);
+        UNIT_ASSERT(numParts);
+
+        UpdateStoragePoolSettings(env, 0);
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "00000000");
+        UNIT_ASSERT_VALUES_EQUAL(CheckLocalParts(env, groupId, 0, blobs), numParts);
+        write(16);
+        UNIT_ASSERT_VALUES_EQUAL(StripeHeapUsedBytes(env, groupId)[0], used[0]);
+        const ui32 numPartsDisabled = CheckLocalParts(env, groupId, 0, blobs);
+        UNIT_ASSERT(numPartsDisabled > numParts);
+
+        UpdateStoragePoolSettings(env, 1);
+        RestartVDisks(env, groupId, {0});
+        UNIT_ASSERT_VALUES_EQUAL(HeapModes(env, groupId), "10000000");
+        UNIT_ASSERT_VALUES_EQUAL(CheckLocalParts(env, groupId, 0, blobs), numPartsDisabled);
+        write(8);
+        UNIT_ASSERT(StripeHeapUsedBytes(env, groupId)[0] > used[0]);
+        UNIT_ASSERT(CheckLocalParts(env, groupId, 0, blobs) > numPartsDisabled);
+    }
 }

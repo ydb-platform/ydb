@@ -16,9 +16,12 @@ namespace NKikimr::NTestShard {
     void TTestShardContext::TData::Action(TActorIdentity self, TEvStateServerRequest::TPtr ev) {
         const auto& record = ev->Get()->Record;
         switch (record.GetCommandCase()) {
-            case ::NTestShard::TStateServer::TRequest::kWrite: {
+            case ::NTestShard::TStateServer::TRequest::kWrite:
+            case ::NTestShard::TStateServer::TRequest::kInitialize: {
                 auto r = std::make_unique<TEvStateServerWriteResult>();
-                r->Record = Processor.Execute(record.GetWrite());
+                r->Record = record.HasWrite()
+                            ? Processor.Execute(record.GetWrite())
+                            : Processor.Execute(record.GetInitialize());
                 self.Send(ev->Sender, r.release(), 0, ev->Cookie);
                 break;
             }

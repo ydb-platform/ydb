@@ -4,12 +4,14 @@
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
+#include <ydb/core/tablet_flat/flat_part_slice.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/locks/locks.h>
 
 #include <util/digest/multi.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace NKikimr::NDataShard {
@@ -216,6 +218,7 @@ public:
     ui64 LastAckSeqNo = 0;
     ui64 FirstUnprocessedQuery = 0; // must be unsigned
     TString LastProcessedKey;
+    // Inclusive cursor: erased key for ordinary reads, possibly unread row for sampling.
     bool LastProcessedKeyErased = false;
 
     // used when read is implemented with a scan
@@ -230,6 +233,11 @@ public:
 
     // Vector search pushdown
     std::shared_ptr<TReadIteratorVectorTop> VectorTopK;
+
+    const NKikimrTxDataShard::TReadSampling* Sampling = nullptr;
+    // Retained until fully read, even if the layout changes.
+    std::optional<NTable::TBounds> PendingSelectedUnit;
+    NKikimrTxDataShard::TReadSamplingStats SamplingStats;
 };
 
 using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;

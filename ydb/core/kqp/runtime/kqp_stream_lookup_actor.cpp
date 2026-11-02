@@ -8,6 +8,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
@@ -113,6 +114,13 @@ public:
         , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , MaxInFlightLocks(MaxInFlightLocksStreamLookup())
         , Counters(counters)
+        , CollectShardMetas(
+            // The only consumer of the registered partitioning metadata is the
+            // split/merge handling (MoveShardTo), enabled only under the WriteSeqNum
+            // protocol (pessimistic ReadCommitted locks only): reuse the same
+            // feature flag as the write actor's AttachWriteSeqNum.
+            LockMode && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+            && AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum())
         , VectorIndexLevelsCache(std::move(vectorIndexLevelsCache))
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "Lookup rows")
     {
@@ -191,16 +199,7 @@ public:
 
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
-            // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty()) {
-                NKqpProto::TKqpTaskExtraStats extraStats;
-                if (stats->HasExtra()) {
-                    stats->GetExtra().UnpackTo(&extraStats);
-                }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
-                stats->MutableExtra()->PackFrom(extraStats);
-            }
+            LockInfo.FillExtraStats(stats);
         }
     }
 
@@ -577,21 +576,14 @@ private:
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
+        auto info = LockInfo.GetExtraData();
+        for (const auto& [shardId, meta] : ShardMetas) {
+            if (meta.IsKnown()) {
+                FillShardPartitioningInfo(*info.AddShardPartitioningInfo(), shardId, meta);
+            }
+        }
         google::protobuf::Any result;
-        NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
-        for (auto& lock : Locks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-
-        for (auto& lock : BrokenLocks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-
-        if (DeferredVictimQuerySpanId) {
-            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
-        }
-
-        result.PackFrom(resultInfo);
+        result.PackFrom(info);
         return result;
     }
 
@@ -649,7 +641,7 @@ private:
 
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-        Partitioning = resultSet[0].KeyDescription->Partitioning;
+        Partitioning = TShardPartitionIndex(resultSet[0].KeyDescription->Partitioning);
 
         ProcessInputRows();
 
@@ -697,20 +689,10 @@ private:
             {"locks", txLocks},
             {"brokenTxLocks", brokenTxLocks});
 
-        for (auto& lock : record.GetBrokenTxLocks()) {
-            BrokenLocks.push_back(lock);
-        }
-
-        for (auto& lock : record.GetTxLocks()) {
-            Locks.push_back(lock);
-        }
-
-        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
-            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
-        }
+        LockInfo.Add(record);
 
         if (UseFollowers) {
-            YQL_ENSURE(Locks.empty());
+            YQL_ENSURE(LockInfo.Locks.empty());
             if (!record.GetFinished() && !IsTableImmutable) {
                 RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return;
@@ -980,7 +962,7 @@ private:
 
         auto guard = BindAllocator();
 
-        StreamLookupWorker->BuildRequests(Partitioning, OperationId);
+        StreamLookupWorker->BuildRequests(Partitioning.GetPartitioning(), OperationId);
         ScheduleNextReads();
     }
 
@@ -999,7 +981,7 @@ private:
                 && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                 && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
-            StreamLockWorker->BuildLockRequests(Partitioning, OperationId);
+            StreamLockWorker->BuildLockRequests(Partitioning.GetPartitioning(), OperationId);
             DrainPendingLocks();
         }
     }
@@ -1035,6 +1017,25 @@ private:
             {"logPrefix", this->LogPrefix},
             {"shard", shardId});
         Counters->SentLocks->Inc();
+
+        // Remember the partitioning metadata of every shard that received a lock
+        // request: it is shipped to the executer together with the collected locks.
+        // Note: only pessimistic (ReadCommitted) lock requests carry metas here.
+        // Optimistic locks ride inside EvRead requests and their shards are registered
+        // by the executer without metas, so repartitioning during an optimistic tx is
+        // not verified (not currently supported).
+        // The only consumer of the registered metadata is the split/merge handling
+        // (MoveShardTo), enabled only under the WriteSeqNum protocol, so it is
+        // collected only then.
+        // During a re-resolve Partitioning is reset until the scheme cache replies: a
+        // scheduled lock retry may fire here and compute a version-less (unknown) meta
+        // against the empty partitioning, clobbering the meta remembered at send time.
+        // Keep the first (correct) one — same pattern as the buffer lock actor.
+        if (CollectShardMetas && !ShardMetas.contains(shardId)) {
+            ShardMetas.emplace(shardId, MakeShardMeta(
+                StreamLookupWorker->GetTableId(), Partitioning, shardId,
+                StreamLookupWorker->GetKeyColumnTypes().size()));
+        }
 
         ui64 requestId = request->Record.GetRequestId();
 
@@ -1161,7 +1162,7 @@ private:
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
                     && lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
-            Locks.push_back(lock);
+            LockInfo.Locks.push_back(lock);
         }
 
         StreamLockWorker->AddLockResult(requestId, ev->Get());
@@ -1220,7 +1221,7 @@ private:
             YQL_ENSURE(AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
         }
 
-        if (LockTxId && BrokenLocks.empty()) {
+        if (LockTxId && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(*LockTxId);
             if (LockMode) {
                 record.SetLockMode(*LockMode);
@@ -1396,7 +1397,7 @@ private:
             {"table", StreamLookupWorker->GetTablePath()});
         ResolveShardsInProgress = true;
 
-        Partitioning.reset();
+        Partitioning.Reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Database;
@@ -1469,12 +1470,17 @@ private:
     THashMap<ui64, TString> CacheKeys;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     NYql::NDq::TDqComputeActorWatermarks* WatermarksTracker;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
-    TVector<NKikimrDataEvents::TLock> Locks;
-    TVector<NKikimrDataEvents::TLock> BrokenLocks;
-    ui64 DeferredVictimQuerySpanId = 0;
+    TReadLockInfo LockInfo;
+    // Partitioning metadata of every shard that received a pessimistic (ReadCommitted)
+    // lock request, shipped to the executer together with the collected locks via
+    // ExtraData(). Optimistic locks ride inside EvRead requests and are registered
+    // without metas: repartitioning is not verified for optimistic transactions
+    // (not currently supported). Collected only when CollectShardMetas is set (the
+    // metadata is consumed only by the WriteSeqNum split/merge handling).
+    THashMap<ui64, TShardMeta> ShardMetas;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
@@ -1501,6 +1507,7 @@ private:
     ui64 MaxInFlightLocks = 50;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    const bool CollectShardMetas;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
 
     TShardReadTrace ShardReadTrace;

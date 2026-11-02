@@ -12,6 +12,14 @@ from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, i
 
 
 class TestSplitMergeBase(TestBase):
+    @classmethod
+    def get_datashard_config(cls):
+        # Size-based splitting needs flushed data and fresh shard statistics.
+        return {
+            "stats_report_interval_seconds": 1,
+            "idle_mem_compaction_interval_seconds": 1,
+        }
+
     def do_test_merge_split(
         self,
         long_string_type: str,

@@ -101,6 +101,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
 
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
+    {"Bridge.ConvertToBridge", ERequestType::BRIDGE_CONVERTTOBRIDGE},
+    {"Bridge.AddPile", ERequestType::BRIDGE_ADDPILE},
+    {"Bridge.RemovePile", ERequestType::BRIDGE_REMOVEPILE},
 
     {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
     {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},

@@ -65,9 +65,19 @@ class TestYdsBase(object):
     def read_stream(self, messages_count, commit_after_processing=True, topic_path=None, endpoint=None, timeout=None):
         database, fqdn = self.__unwrap_endpoint(endpoint)
         topic = topic_path if topic_path else self.output_topic
-        return read_stream(topic, messages_count, commit_after_processing, self.consumer_name, database=database, endpoint=fqdn, timeout=timeout)
+        return read_stream(
+            topic,
+            messages_count,
+            commit_after_processing,
+            self.consumer_name,
+            database=database,
+            endpoint=fqdn,
+            timeout=timeout,
+        )
 
-    def read_topic_messages_with_metadata(self, kikimr, messages_count, topic_path=None, endpoint=None, timeout_sec=None):
+    def read_topic_messages_with_metadata(
+        self, kikimr, messages_count, topic_path=None, endpoint=None, timeout_sec=None
+    ):
         """Read messages via Topic API (payload + metadata_items). Requires a read rule for ``consumer_name`` on the topic."""
         import ydb
 

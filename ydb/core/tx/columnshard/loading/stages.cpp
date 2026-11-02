@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -42,7 +43,11 @@ bool TOperationsManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactio
 
 bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     AFL_VERIFY(Self->StoragesManager);
-    return Self->StoragesManager->LoadIdempotency(txc.DB);
+    if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
+        return false;
+    }
+    Self->InitFindEmptyHistoryIntervals();
+    return true;
 }
 
 bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -199,9 +204,18 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
-        if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {
+        if (!tablesManagerLocal.InitFromDB(db, Self->Info(), &LoadDurations)) {
             return false;
         }
+    }
+    const std::pair<TString, TDuration> steps[] = {
+        { "tables", LoadDurations.Tables },
+        { "schema_presets", LoadDurations.SchemaPresets },
+        { "table_versions", LoadDurations.TableVersions },
+        { "schema_preset_versions", LoadDurations.SchemaPresetVersions },
+    };
+    for (const auto& [step, duration] : steps) {
+        TraceStartupStageFinished(Self->StartupTimeline.MutableOrbit(), Self->TabletID(), GetStageName() + "/" + step, duration);
     }
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());

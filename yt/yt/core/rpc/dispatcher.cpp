@@ -4,6 +4,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
+#include <yt/yt/core/concurrency/two_level_fair_share_thread_pool.h>
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
@@ -14,6 +15,15 @@ namespace NYT::NRpc {
 using namespace NConcurrency;
 using namespace NBus;
 using namespace NServiceDiscovery;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+const std::string LightPoolName = "RpcLight";
+const std::string HeavyPoolName = "RpcHeavy";
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,14 +51,37 @@ public:
         AlertOnUnsetRequestTimeout_.store(config->AlertOnUnsetRequestTimeout);
     }
 
-    const IInvokerPtr& GetLightInvoker()
+    IInvokerPtr GetLightInvoker()
     {
+        if (auto invoker = LightInvoker_.Acquire()) {
+            return invoker;
+        }
+
         return LightQueue_->GetInvoker();
     }
 
-    const IInvokerPtr& GetHeavyInvoker()
+    IInvokerPtr GetHeavyInvoker()
     {
+        if (auto invoker = HeavyInvoker_.Acquire()) {
+            return invoker;
+        }
+
         return HeavyPool_->GetInvoker();
+    }
+
+    void SetWorkerPool(ITwoLevelFairShareThreadPoolPtr workerPool)
+    {
+        if (workerPool) {
+            // NB: Resolve invokers once here to avoid taking the pool's
+            // mapping lock on every GetLightInvoker/GetHeavyInvoker call.
+            LightInvoker_.Store(workerPool->GetInvoker(LightPoolName, DefaultExecutionTag));
+            HeavyInvoker_.Store(workerPool->GetInvoker(HeavyPoolName, DefaultExecutionTag));
+        } else {
+            LightInvoker_.Store(nullptr);
+            HeavyInvoker_.Store(nullptr);
+        }
+
+        WorkerPool_.Store(std::move(workerPool));
     }
 
     const IPrioritizedInvokerPtr& GetPrioritizedCompressionPoolInvoker()
@@ -104,6 +137,10 @@ private:
 
     TLazyIntrusivePtr<IPrioritizedInvoker> CompressionPoolInvoker_;
 
+    TAtomicIntrusivePtr<ITwoLevelFairShareThreadPool> WorkerPool_;
+    TAtomicIntrusivePtr<IInvoker> LightInvoker_;
+    TAtomicIntrusivePtr<IInvoker> HeavyInvoker_;
+
     std::atomic<bool> AlertOnMissingRequestAnnotation_;
     std::atomic<bool> SendTracingBaggage_;
 
@@ -131,14 +168,19 @@ void TDispatcher::Configure(const TDispatcherConfigPtr& config)
     Impl_->Configure(config);
 }
 
-const IInvokerPtr& TDispatcher::GetLightInvoker()
+IInvokerPtr TDispatcher::GetLightInvoker()
 {
     return Impl_->GetLightInvoker();
 }
 
-const IInvokerPtr& TDispatcher::GetHeavyInvoker()
+IInvokerPtr TDispatcher::GetHeavyInvoker()
 {
     return Impl_->GetHeavyInvoker();
+}
+
+void TDispatcher::SetWorkerPool(NConcurrency::ITwoLevelFairShareThreadPoolPtr workerPool)
+{
+    Impl_->SetWorkerPool(std::move(workerPool));
 }
 
 const IPrioritizedInvokerPtr& TDispatcher::GetPrioritizedCompressionPoolInvoker()

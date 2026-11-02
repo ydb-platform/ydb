@@ -90,7 +90,7 @@ RECURSE_FOR_TESTS(
     ut_view
 )
 
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -415,12 +415,11 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
+    yql/essentials/public/udf
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(

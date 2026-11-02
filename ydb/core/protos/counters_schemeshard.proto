@@ -312,6 +312,12 @@ enum ESimpleCounters {
     COUNTER_WASM_COMPILE_CONTROLLER_COUNT = 240           [(CounterOpts) = {Name: "WasmCompileControllers"}];
 
     COUNTER_STORAGE_SPACE_EXHAUSTED = 241                 [(CounterOpts) = {Name: "StorageSpaceExhausted"}];
+
+    COUNTER_PARTITIONS_WITH_DEFERRED_SPLIT_DEMAND = 242 [(CounterOpts) = {Name: "PartitionsWithDeferredSplitDemand"}];
+    COUNTER_PARTITIONS_WITH_DEFERRED_MERGE_DEMAND = 243 [(CounterOpts) = {Name: "PartitionsWithDeferredMergeDemand"}];
+    COUNTER_PARTITIONS_WITH_DEFERRED_SPLIT_MERGE = 244 [(CounterOpts) = {Name: "PartitionsWithDeferredSplitMerge"}];
+    COUNTER_TABLES_WITH_DEFERRED_SPLIT_MERGE = 245 [(CounterOpts) = {Name: "TablesWithDeferredSplitMerge"}];
+
 }
 
 enum ECumulativeCounters {
@@ -516,6 +522,19 @@ enum ECumulativeCounters {
 
     // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
     COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
+
+    // Split/merge demand observability (independent of EnableSplitMergeDemandTracking).
+    // Monotonic: a stats cycle detected split/merge demand for a partition (cumulative).
+    // A shard with unmet demand re-reports every stats period, so the detection rate x period
+    // approximates the demand backlog; combined with the FinishedOps/Split|MergeTablePartition
+    // fire rate it gives the average demand wait as a dashboard formula, continuous across
+    // the feature-flag toggle (the A/B baseline for the fair-scheduling latency improvement).
+    COUNTER_SPLIT_DEMAND_DETECTED = 152 [(CounterOpts) = {Name: "SplitDemandDetected"}];
+    COUNTER_MERGE_DEMAND_DETECTED = 153 [(CounterOpts) = {Name: "MergeDemandDetected"}];
+    // Monotonic: a wanted split/merge was blocked (in-flight slot limit, no cached txId) (cumulative).
+    // The deferral is direction-aware in the demand-tracking state, but this counter is
+    // intentionally unified across directions and reasons.
+    COUNTER_SPLIT_MERGE_DEFERRALS = 154 [(CounterOpts) = {Name: "SplitMergeDeferrals"}];
 }
 
 enum EPercentileCounters {
@@ -847,4 +866,6 @@ enum ETxTypes {
     TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT = 129             [(TxTypeOpts) = {Name: "TxCancelSetColumnConstraint"}];
 
     TXTYPE_UPDATE_STORAGE_SPACE_STATE = 130               [(TxTypeOpts) = {Name: "TxUpdateStorageSpaceState"}];
+
+    TXTYPE_REVISIT_SPLIT_MERGE = 131                       [(TxTypeOpts) = {Name: "TxRevisitSplitMerge"}];
 }

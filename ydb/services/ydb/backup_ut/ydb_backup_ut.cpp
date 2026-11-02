@@ -3190,6 +3190,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
         TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3225,6 +3226,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
         AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(config.SecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3268,6 +3270,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST_TWIN(RestoreReplicationWithoutSecret, UseSchemeSecret) {
         using namespace fmt::literals;
         TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
@@ -3326,6 +3329,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
         NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -3369,6 +3373,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST_TWIN(RestoreExternalDataSourceWithoutSecret, UseSchemeSecret) {
         NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -3585,6 +3590,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
 
         NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
@@ -3693,6 +3699,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
         NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetDisableOldSecretCreation(false);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
@@ -4109,6 +4116,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST_TWIN(ReplicasAreNotBackedUp, UseSchemeSecret) {
         using namespace fmt::literals;
         TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetDisableOldSecretCreation(false);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
@@ -4325,7 +4333,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     ) {
         const auto listSettings = NConsoleClient::TRecursiveListSettings()
             .Filter(FilterSupportedSchemeObjects)
-            .SkipSys(false);
+            .SkipMode(NConsoleClient::ERecursiveListSkipMode::None);
 
         const auto sourceListing = NConsoleClient::RecursiveList(schemeClient, source, listSettings);
         UNIT_ASSERT_C(sourceListing.Status.IsSuccess(), sourceListing.Status.GetIssues());
@@ -4678,6 +4686,38 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(OlapColumnCompressionPreservedThroughExportImport) {
+        TS3TestEnv testEnv;
+        auto& session = testEnv.GetQuerySession();
+        constexpr const char* table = "/Root/olap_column_compression_backup";
+
+        ExecuteQuery(session, std::format(R"(
+            CREATE TABLE `{}` (
+                pk Uint64 NOT NULL,
+                plain Utf8 COMPRESSION(algorithm=off),
+                lz4 Utf8 COMPRESSION(algorithm=lz4),
+                zstd Utf8 COMPRESSION(algorithm=zstd,level=5),
+                default_compression Utf8,
+                PRIMARY KEY (pk)
+            ) PARTITION BY HASH(pk) WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", table), true);
+        ExecuteQuery(session, std::format(R"(
+            UPSERT INTO `{}` (pk, plain, lz4, zstd, default_compression) VALUES
+                (1u, "first", "first", "first", "first"),
+                (2u, NULL, "second", "second", NULL);
+        )", table));
+        const auto originalDdl = FetchShowCreateTableDdl(session, table);
+        UNIT_ASSERT_STRING_CONTAINS(originalDdl, "COMPRESSION");
+        const auto originalContent = GetTableContent(session, table, "pk");
+
+        CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port())();
+        ExecuteQuery(session, std::format("DROP TABLE `{}`;", table), true);
+        CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"olap_column_compression_backup"})();
+
+        UNIT_ASSERT_STRINGS_EQUAL(FetchShowCreateTableDdl(session, table), originalDdl);
+        CompareResults(GetTableContent(session, table, "pk"), originalContent);
+    }
+
     Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/olap_col_encodings_backup";
@@ -4812,6 +4852,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
         TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
@@ -4847,6 +4888,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
         TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
@@ -4914,6 +4956,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetDisableOldSecretCreation(false);
         featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());

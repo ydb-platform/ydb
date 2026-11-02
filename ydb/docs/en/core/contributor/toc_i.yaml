@@ -29,6 +29,8 @@ items:
       href: actor-system/coroutine-primitives.md
     - name: Coroutine Integration
       href: actor-system/coroutine-integration.md
+    - name: Coroutine Frame Cache
+      href: actor-system/coroutine-frame-cache.md
     - name: Testing Actors
       href: actor-system/testing.md
   - name: Distributed storage

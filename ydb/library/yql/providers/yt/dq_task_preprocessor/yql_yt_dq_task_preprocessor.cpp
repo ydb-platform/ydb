@@ -1,36 +1,33 @@
 #include "yql_yt_dq_task_preprocessor.h"
 
-#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
-#include <yt/yql/providers/yt/codec/yt_codec.h>
-#include <yt/yql/providers/yt/codec/yt_codec_io.h>
-#include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
-#include <yql/essentials/providers/common/codec/yql_codec.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/failure_injector/failure_injector.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/mkql_mem_info.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/utils/yql_panic.h>
-
-#include <yt/cpp/mapreduce/client/client.h>
-#include <yt/cpp/mapreduce/interface/io.h>
-
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_visitor.h>
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/writer.h>
-
-#include <util/generic/hash.h>
 #include <util/generic/guid.h>
-#include <util/generic/yexception.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
-#include <util/system/env.h>
-#include <util/stream/str.h>
+#include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/stream/mem.h>
+#include <util/stream/str.h>
+#include <util/system/env.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_mem_info.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yt/cpp/mapreduce/client/client.h>
+#include <yt/cpp/mapreduce/interface/io.h>
+#include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/codec/yt_codec_io.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 
 #include <string_view>
 
@@ -53,7 +50,7 @@ public:
     {
         Specs.SetUseSkiff("");
         Specs.Init(CodecContext, spec);
-        OutStream = tx->CreateRawWriter(NYT::TRichYPath{path}, Specs.MakeOutputFormat(), NYT::TTableWriterOptions());
+        OutStream = tx->CreateRawWriter(NYT::TRichYPath{ path }, Specs.MakeOutputFormat(), NYT::TTableWriterOptions());
         TableWriter = MakeHolder<TMkqlWriterImpl>(OutStream, 4_MB);
         TableWriter->SetSpecs(Specs);
         Alloc.Release();
@@ -117,7 +114,7 @@ private:
     TMkqlIOSpecs Specs;
     NYT::TRawTableWriterPtr OutStream;
     THolder<TMkqlWriterImpl> TableWriter;
-    ui64 RowCount{0};
+    ui64 RowCount{ 0 };
     bool Finished = false;
 };
 
@@ -159,8 +156,7 @@ public:
                 TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
                 NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
                 parser.Parse();
-            }
-            else {
+            } else {
                 YQL_ENSURE(TFile(Path, CreateAlways | WrOnly).IsOpen(), "Failed to create " << Path.Quote() << " file");
             }
 
@@ -196,13 +192,13 @@ private:
     TMkqlIOSpecs Specs;
     TStringStream OutStream;
     THolder<TMkqlWriterImpl> TableWriter;
-    ui64 RowCount{0};
+    ui64 RowCount{ 0 };
     bool Finished = false;
 };
 
-} // unnamed
+}   // namespace
 
-class TYtDqTaskPreprocessor : public IDqTaskPreprocessor {
+class TYtDqTaskPreprocessor: public IDqTaskPreprocessor {
 public:
     explicit TYtDqTaskPreprocessor(bool ytEmulationMode, IFunctionRegistry::TPtr funcRegistry)
         : YtEmulationMode_(ytEmulationMode)
@@ -213,7 +209,8 @@ public:
     TYtDqTaskPreprocessor(TYtDqTaskPreprocessor&&) = default;
     TYtDqTaskPreprocessor& operator=(TYtDqTaskPreprocessor&&) = default;
 
-    THashMap<TString, TString> GetTaskParams(const THashMap<TString, TString>& graphParams, const THashMap<TString, TString>& secureParams) final {
+    THashMap<TString, TString> GetTaskParams(
+        const THashMap<TString, TString>& graphParams, const THashMap<TString, TString>& secureParams) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("YtDqTaskPreprocessor"), __FUNCTION__);
         THashMap<TString, TString> result;
 
@@ -247,8 +244,7 @@ public:
                 YQL_LOG(DEBUG) << "Cluster " << server << ", creating nested " << subTxId << " for " << rootTxId;
                 result["yt.write.tx"] = subTxId;
                 WriteSubTx_ = std::move(subTx);
-            }
-            catch (const NYT::TErrorResponse& e) {
+            } catch (const NYT::TErrorResponse& e) {
                 TString errMsg = GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
                 throw yexception() << errMsg;
             }
@@ -263,7 +259,9 @@ public:
             if (WriteSubTx_) {
                 if (success) {
                     YQL_LOG(DEBUG) << "Committing " << GetGuidAsString(WriteSubTx_->GetId());
-                    TFailureInjector::Reach("fail_commit", [] { throw yexception() << "fail_commit"; });
+                    TFailureInjector::Reach("fail_commit", [] {
+                        throw yexception() << "fail_commit";
+                    });
                     WriteSubTx_->Commit();
                 } else {
                     YQL_LOG(DEBUG) << "Aborting " << GetGuidAsString(WriteSubTx_->GetId());
@@ -274,7 +272,9 @@ public:
             if (FullResultSubTx_) {
                 if (success) {
                     YQL_LOG(DEBUG) << "Committing " << GetGuidAsString(FullResultSubTx_->GetId());
-                    TFailureInjector::Reach("full_result_fail_commit", [] { throw yexception() << "full_result_fail_commit"; });
+                    TFailureInjector::Reach("full_result_fail_commit", [] {
+                        throw yexception() << "full_result_fail_commit";
+                    });
                     FullResultSubTx_->Commit();
                 } else {
                     YQL_LOG(DEBUG) << "Aborting " << GetGuidAsString(FullResultSubTx_->GetId());
@@ -294,7 +294,8 @@ public:
             try {
                 auto params = NYT::NodeFromYsonString(*p);
                 if (YtEmulationMode_) {
-                    return MakeHolder<TFileFullResultWriter>(FuncRegistry_, params["path"].AsString(), params["codecSpec"].AsString(), params["tableAttrs"].AsString());
+                    return MakeHolder<TFileFullResultWriter>(
+                        FuncRegistry_, params["path"].AsString(), params["codecSpec"].AsString(), params["tableAttrs"].AsString());
                 } else {
                     auto server = params["server"].AsString();
                     auto token = params["token"].AsString();
@@ -323,20 +324,20 @@ public:
                     }
 
                     auto path = params["path"].AsString();
-                    CreateParents({path}, parentTx);
+                    CreateParents({ path }, parentTx);
 
                     subTx->Create(path, NYT::NT_TABLE,
-                        NYT::TCreateOptions().Force(true).Attributes(NYT::NodeFromYsonString(params["tableAttrs"].AsString()))
-                    );
+                        NYT::TCreateOptions().Force(true).Attributes(NYT::NodeFromYsonString(params["tableAttrs"].AsString())));
 
-                    TFailureInjector::Reach("full_result_fail_create", [&] { throw yexception() << "full_result_fail_create"; });
+                    TFailureInjector::Reach("full_result_fail_create", [&] {
+                        throw yexception() << "full_result_fail_create";
+                    });
 
                     FullResultSubTx_ = subTx;
 
                     return MakeHolder<TYtFullResultWriter>(FuncRegistry_, subTx, path, params["codecSpec"].AsString());
                 }
-            }
-            catch (const NYT::TErrorResponse& e) {
+            } catch (const NYT::TErrorResponse& e) {
                 TString errMsg = GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
                 throw yexception() << errMsg;
             }
@@ -362,4 +363,4 @@ TDqTaskPreprocessorFactory CreateYtDqTaskPreprocessorFactory(bool ytEmulationMod
     };
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

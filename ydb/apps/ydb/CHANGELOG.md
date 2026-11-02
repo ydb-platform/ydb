@@ -1,4 +1,16 @@
 
+## 2.35.0 ##
+
+* Added recursive removal of Solomon (KeyValue) volumes, resource pools, and backup collections in `ydb scheme rmdir --recursive`.
+* Fixed `ydb scheme rmdir --recursive` skipping directories whose names start with `~`.
+* Fixed `ydb tools dump` and `ydb tools restore` skipping user directories whose names start with `~`; temporary directories starting with `~backup_` or `export-` remain excluded.
+
+## 2.34.0 ##
+
+* Fixed `ydb scheme rmdir --recursive` failing when a directory contains schema secrets.
+* Added support for repeating `--pile` in `ydb admin bridge failover` to disconnect multiple failed piles in one operation.
+* Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
+* Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.

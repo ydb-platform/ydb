@@ -444,6 +444,21 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory, helper, tablesData, fullCapture, qContext);
         ytState->PlanLimits = planLimits;
 
+        TVector<TAttr> mrJobLabels;
+        if (ytGatewayConfig && ytGatewayConfig->HasMrJobLabel()) {
+            auto& setting = mrJobLabels.emplace_back();
+            setting.SetName("MrJobLabel");
+            setting.SetValue(ytGatewayConfig->GetMrJobLabel().GetLabel());
+            if (ytGatewayConfig->GetMrJobLabel().HasActivation()) {
+                *setting.MutableActivation() = ytGatewayConfig->GetMrJobLabel().GetActivation();
+            }
+        }
+        const auto activationPolicy = NCommon::TActivationSelectionPolicy(
+            NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials),
+            [ytState](const TString& name) { RecordActivationStat(name, *ytState); });
+        const auto selectedLabels = activationPolicy.SelectAndSave<TAttr>(
+            "yt.MrJobLabel", qContext, mrJobLabels, /*hasProviderName=*/true);
+
         info.Names.insert({TString{YtProviderName}});
         info.Source = CreateYtDataSource(ytState);
         info.Sink = CreateYtDataSink(ytState);
@@ -453,6 +468,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
             statWriter,
             qContext,
             fullCapture,
+            mrJobLabel = selectedLabels.empty() ? TString{} : selectedLabels.front().GetValue(),
             useSecureTmp = ytState->UseSecureTmp,
             credentials = typeCtx->Credentials
         ](
@@ -472,6 +488,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                     .QContext(qContext)
                     .FullCapture(fullCapture)
                     .UseSecureTmp(useSecureTmp)
+                    .MrJobLabel(mrJobLabel)
             );
             return NThreading::MakeFuture();
         };

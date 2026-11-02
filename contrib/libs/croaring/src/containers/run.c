@@ -999,7 +999,7 @@ static inline int _avx2_run_container_cardinality(const run_container_t *run) {
     if (n_runs > step) {
         __m256i total = _mm256_setzero_si256();
         for (; k + step <= n_runs; k += step) {
-            __m256i ymm1 = _mm256_lddqu_si256((const __m256i *)(runs + k));
+            __m256i ymm1 = _mm256_loadu_si256((const __m256i *)(runs + k));
             __m256i justlengths = _mm256_srli_epi32(ymm1, 16);
             total = _mm256_add_epi32(total, justlengths);
         }

@@ -1,29 +1,27 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
+#include <util/string/split.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
-
 #include <yql/essentials/utils/log/log.h>
-
-#include <util/string/split.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
-class TSolomonDataSinkExecTransformer : public TExecTransformerBase {
+class TSolomonDataSinkExecTransformer: public TExecTransformerBase {
 public:
     explicit TSolomonDataSinkExecTransformer(TSolomonState::TPtr state)
         : State_(state)
     {
-        AddHandler({TCoCommit::CallableName()}, RequireFirst(), Hndl(&TSolomonDataSinkExecTransformer::HandleCommit));
-        AddHandler({TSoWriteToShard::CallableName()}, RequireFirst(), Hndl(&TSolomonDataSinkExecTransformer::HandleSoWriteToShard));
+        AddHandler({ TCoCommit::CallableName() }, RequireFirst(), Hndl(&TSolomonDataSinkExecTransformer::HandleCommit));
+        AddHandler({ TSoWriteToShard::CallableName() }, RequireFirst(), Hndl(&TSolomonDataSinkExecTransformer::HandleSoWriteToShard));
     }
 
     TStatusCallbackPair HandleCommit(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -43,12 +41,10 @@ public:
     }
 
 private:
-    TStatusCallbackPair DelegateExecutionToDqProvider(
-        const TExprNode::TPtr& input,
-        const TExprNode::TPtr& originInput,
-        TExprContext& ctx)
+    TStatusCallbackPair DelegateExecutionToDqProvider(const TExprNode::TPtr& input, const TExprNode::TPtr& originInput, TExprContext& ctx)
     {
         YQL_CLOG(INFO, ProviderSolomon) << "Delegate execution of " << input->Content() << " to dq provider";
+        // clang-format off
         auto delegatedNode = Build<TPull>(ctx, input->Pos())
             .Input(input)
             .BytesLimit()
@@ -74,11 +70,12 @@ private:
             .Origin(originInput)
             .Done()
             .Ptr();
+        // clang-format on
 
         auto atomType = ctx.MakeType<TUnitExprType>();
 
-        for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
-            TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
+        for (auto idx : { TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
+                 TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
             delegatedNode->Child(idx)->SetTypeAnn(atomType);
             delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
         }
@@ -87,7 +84,7 @@ private:
         delegatedNode->SetState(TExprNode::EState::ConstrComplete);
         originInput->SetState(TExprNode::EState::ExecutionInProgress);
 
-        auto dqProvider =  State_->Types->DataSourceMap.FindPtr(DqProviderName);
+        auto dqProvider = State_->Types->DataSourceMap.FindPtr(DqProviderName);
         YQL_ENSURE(dqProvider);
 
         TExprNode::TPtr delegatedNodeOutput;
@@ -100,14 +97,14 @@ private:
 
         auto dqFuture = dqProvider->Get()->GetCallableExecutionTransformer().GetAsyncFuture(*delegatedNode);
 
-        TAsyncTransformCallbackFuture callbackFuture = dqFuture.Apply(
-            [dqProvider, delegatedNode](const NThreading::TFuture<void>& completedFuture) {
+        TAsyncTransformCallbackFuture callbackFuture =
+            dqFuture.Apply([dqProvider, delegatedNode](const NThreading::TFuture<void>& completedFuture) {
                 return TAsyncTransformCallback(
                     [completedFuture, dqProvider, delegatedNode](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                         completedFuture.GetValue();
                         TExprNode::TPtr delegatedNodeOutput;
-                        auto dqWriteStatus = dqProvider->Get()->GetCallableExecutionTransformer()
-                            .ApplyAsyncChanges(delegatedNode, delegatedNodeOutput, ctx);
+                        auto dqWriteStatus =
+                            dqProvider->Get()->GetCallableExecutionTransformer().ApplyAsyncChanges(delegatedNode, delegatedNodeOutput, ctx);
 
                         YQL_ENSURE(dqWriteStatus != TStatus::Async, "ApplyAsyncChanges should not return Async.");
 
@@ -135,4 +132,4 @@ THolder<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState
     return THolder(new TSolomonDataSinkExecTransformer(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

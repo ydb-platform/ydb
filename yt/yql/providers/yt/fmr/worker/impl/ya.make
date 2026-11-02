@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_worker_impl.cpp
@@ -19,8 +19,6 @@ PEERDIR(
 RESOURCE(
     default_worker_settings.yson default_worker_settings.yson
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_worker_impl.h)
 

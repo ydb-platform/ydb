@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     alter_local_index.cpp
@@ -22,7 +22,5 @@ PEERDIR(
     ydb/services/bg_tasks
     ydb/core/tx/schemeshard/olap/operations/alter
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -4,7 +4,6 @@
 
 #include <optional>
 
-
 namespace NKikimr::NResourcePool {
 
 inline constexpr i64 CLASSIFIER_RANK_OFFSET = 1000;
@@ -19,8 +18,8 @@ struct TClassifierSettings {
 
     [[nodiscard]] std::optional<TString> Validate() const;
 
-    i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
-    std::optional<TString> ResourcePool; // absent when Action is Reject
+    i64 Rank = -1;   // -1 = max rank + CLASSIFIER_RANK_OFFSET
+    std::optional<TString> ResourcePool;   // absent when Action is Reject
     std::optional<TString> MemberName;
     std::optional<TString> HasAppName;
     std::optional<TRegexPredicate> HasFullScan;
@@ -29,4 +28,4 @@ struct TClassifierSettings {
     std::optional<EClassifierAction> Action;
 };
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

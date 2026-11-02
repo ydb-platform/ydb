@@ -1,10 +1,11 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     query_actor.cpp
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     ydb/library/actors/core
     library/cpp/threading/future
     ydb/core/base

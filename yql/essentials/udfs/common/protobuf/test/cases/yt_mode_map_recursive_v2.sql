@@ -1,3 +1,8 @@
+$input = [
+    <|TestField: Just(@@{"dict2":[{"key":"k2","value":{"dict2":[]}}],"dict3":[{"key":"k3","value":{"dict3":[]}}],"dict4":[{"key":"k4","value":{"dict4":[]}}],"dict5":[{"key":"k5","value":{"dict5":[]}}],"dict6":[{"key":"k6","value":{"dict6":[]}}],"dict7":[{"key":"k7","value":{"dict7":[]}}],"dict8":[{"key":"k8","value":{"dict8":[]}}], "dict9":[{"key":"k9","value":{"dict9":[]}}]}, @@)|>,
+    <|TestField: Just(@@{"dict2":[],"dict3":[],"dict4":[],"dict5":[],"dict6":[],"dict7":[],"dict8":[], "dict9":[]}@@)|>,
+];
+
 /*
 syntax='proto3';
 
@@ -45,4 +50,4 @@ SELECT
     $udfParse(TestField),
     $udfSerialize($udfParse(TestField)),
     Ensure("Success", StablePickle($udfParse(TestField)) == StablePickle($udfParse($udfSerialize($udfParse(TestField)))), "Fail"),
-FROM plato.Input;
+FROM AS_TABLE($input);

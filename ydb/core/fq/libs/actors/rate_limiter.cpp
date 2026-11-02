@@ -1,10 +1,11 @@
 #include "proxy.h"
 
 #include <ydb/core/fq/libs/private_client/events.h>
-#include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/lib/fq/scope.h>
+
 #include <library/cpp/retry/retry_policy.h>
 
 namespace NFq {
@@ -12,7 +13,7 @@ namespace NFq {
 namespace {
 
 template <class TRequest, class TResponse>
-class TRetryingActor : public NActors::TActorBootstrapped<TRetryingActor<TRequest, TResponse>> {
+class TRetryingActor: public NActors::TActorBootstrapped<TRetryingActor<TRequest, TResponse>> {
 public:
     using IRetryPolicy = IRetryPolicy<const NYdb::TStatus&>;
 
@@ -52,7 +53,7 @@ public:
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
         Canceled = true;
         if (RetryScheduled && LastResponse) {
-            Handle(LastResponse); // Will send last response to parent
+            Handle(LastResponse);   // Will send last response to parent
         }
     }
 
@@ -73,12 +74,8 @@ public:
         }
 
         const NYdb::EStatus st = status.GetStatus();
-        if (st == NYdb::EStatus::INTERNAL_ERROR
-            || st == NYdb::EStatus::UNAVAILABLE
-            || st == NYdb::EStatus::TIMEOUT
-            || st == NYdb::EStatus::BAD_SESSION
-            || st == NYdb::EStatus::SESSION_EXPIRED
-            || st == NYdb::EStatus::SESSION_BUSY) {
+        if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE || st == NYdb::EStatus::TIMEOUT ||
+            st == NYdb::EStatus::BAD_SESSION || st == NYdb::EStatus::SESSION_EXPIRED || st == NYdb::EStatus::SESSION_BUSY) {
             return ERetryErrorClass::ShortRetry;
         }
 
@@ -103,36 +100,30 @@ private:
     typename TResponse::TPtr LastResponse;
 };
 
-} // namespace
+}   // namespace
 
 NActors::IActor* CreateRateLimiterResourceCreator(
-    const NActors::TActorId& parent,
-    const TString& ownerId,
-    const TString& queryId,
-    const NYdb::NFq::TScope& scope,
-    const TString& tenant)
+    const NActors::TActorId& parent, const TString& ownerId, const TString& queryId, const NYdb::NFq::TScope& scope, const TString& tenant)
 {
     Fq::Private::CreateRateLimiterResourceRequest req;
     req.set_owner_id(ownerId);
     req.mutable_query_id()->set_value(queryId);
     req.set_scope(scope.ToString());
     req.set_tenant(tenant);
-    return new TRetryingActor<NFq::TEvInternalService::TEvCreateRateLimiterResourceRequest, NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse>(parent, req);
+    return new TRetryingActor<NFq::TEvInternalService::TEvCreateRateLimiterResourceRequest,
+        NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse>(parent, req);
 }
 
 NActors::IActor* CreateRateLimiterResourceDeleter(
-    const NActors::TActorId& parent,
-    const TString& ownerId,
-    const TString& queryId,
-    const NYdb::NFq::TScope& scope,
-    const TString& tenant)
+    const NActors::TActorId& parent, const TString& ownerId, const TString& queryId, const NYdb::NFq::TScope& scope, const TString& tenant)
 {
     Fq::Private::DeleteRateLimiterResourceRequest req;
     req.set_owner_id(ownerId);
     req.mutable_query_id()->set_value(queryId);
     req.set_scope(scope.ToString());
     req.set_tenant(tenant);
-    return new TRetryingActor<NFq::TEvInternalService::TEvDeleteRateLimiterResourceRequest, NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse>(parent, req);
+    return new TRetryingActor<NFq::TEvInternalService::TEvDeleteRateLimiterResourceRequest,
+        NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse>(parent, req);
 }
 
-} // namespace NFq
+}   // namespace NFq

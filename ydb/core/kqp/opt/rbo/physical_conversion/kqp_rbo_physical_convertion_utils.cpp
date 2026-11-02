@@ -64,8 +64,7 @@ TExprNode::TPtr BuildSwitch(TExprNode::TPtr input, TReplicate& hub, const TPhysi
     const auto& outputs = hub.GetOutputs();
     TVector<TOpReplicate*> ports(outputs.size());
     for (auto* port : outputs) {
-        Y_ENSURE(port->Props.StageOutputIndex);
-        ports.at(*port->Props.StageOutputIndex) = port;
+        ports.at(*GetReplicateOutputIndex(*port)) = port;
     }
     Y_ENSURE(!ports.empty());
     auto buildBranch = [&](TExprNode::TPtr stream, TOpReplicate& port) {
@@ -215,6 +214,93 @@ TExprNode::TPtr BuildVoidLambda(TExprContext& ctx, TPositionHandle pos) {
         .Body<TCoVoid>().Build()
     .Done().Ptr();
     // clang-format on
+}
+
+TVector<TString> GetFullNames(const TVector<TInfoUnitId>& columns, const TPhysicalNames& names) {
+    TVector<TString> result;
+    result.reserve(columns.size());
+    for (const auto id : columns) {
+        result.push_back(names.Get(id));
+    }
+    return result;
+}
+
+TExprNode::TPtr BuildWideProjection(TExprNode::TPtr input, const TVector<TString>& from, const TVector<TString>& to, TExprContext& ctx) {
+    THashMap<TString, ui32> indices;
+    indices.reserve(from.size());
+    for (ui32 i = 0; i < from.size(); ++i) {
+        indices.emplace(from[i], i);
+    }
+
+    TVector<TExprNode::TPtr> args;
+    args.reserve(from.size());
+    for (ui32 i = 0; i < from.size(); ++i) {
+        args.push_back(ctx.NewArgument(input->Pos(), "wide_" + ToString(i)));
+    }
+
+    TExprNode::TListType results;
+    results.reserve(to.size());
+    for (const auto& column : to) {
+        const auto it = indices.find(column);
+        Y_ENSURE(it != indices.end(), "Column " << column << " is not available in the wide stage body");
+        results.push_back(args[it->second]);
+    }
+
+    auto lambda = ctx.NewLambda(input->Pos(), ctx.NewArguments(input->Pos(), std::move(args)), std::move(results));
+    return ctx.NewCallable(input->Pos(), "WideMap", {std::move(input), std::move(lambda)});
+}
+
+TExprNode::TPtr TStageBody::AsWide(const TVector<TString>& columns, TExprContext& ctx, const TPhysicalNames& names) const {
+    Y_ENSURE(NarrowStream || WideFlow, "Stage body is empty");
+
+    if (!WideFlow) {
+        auto flow = ctx.NewCallable(NarrowStream->Pos(), "ToFlow", {NarrowStream});
+        return BuildExpandMapForNarrowInput(flow, columns, ctx, names);
+    }
+
+    if (WideColumns == columns) {
+        return WideFlow;
+    }
+    return BuildWideProjection(WideFlow, WideColumns, columns, ctx);
+}
+
+TExprNode::TPtr TStageBody::AsWide(const TVector<TInfoUnitId>& columns, TExprContext& ctx, const TPhysicalNames& names) const {
+    return AsWide(GetFullNames(columns, names), ctx, names);
+}
+
+TExprNode::TPtr TStageBody::AsNarrow(TExprContext& ctx) const {
+    Y_ENSURE(NarrowStream || WideFlow, "Stage body is empty");
+
+    if (NarrowStream) {
+        return NarrowStream;
+    }
+
+    const auto pos = WideFlow->Pos();
+    TExprNode::TListType args;
+    TExprNode::TListType members;
+    args.reserve(WideColumns.size());
+    members.reserve(WideColumns.size());
+    for (ui32 i = 0; i < WideColumns.size(); ++i) {
+        args.push_back(ctx.NewArgument(pos, "wide_input" + ToString(i)));
+        members.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, WideColumns[i]), args.back()}));
+    }
+    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(args)), ctx.NewCallable(pos, "AsStruct", std::move(members)));
+    auto narrow = ctx.NewCallable(pos, "NarrowMap", {WideFlow, std::move(lambda)});
+    return ctx.NewCallable(pos, "FromFlow", {std::move(narrow)});
+}
+
+TStageBody BuildLiveWideBody(TExprNode::TPtr flow, const TVector<TString>& columns, const THashSet<TString>& live, TExprContext& ctx) {
+    TVector<TString> liveColumns;
+    liveColumns.reserve(columns.size());
+    for (const auto& column : columns) {
+        if (live.contains(column)) {
+            liveColumns.push_back(column);
+        }
+    }
+    if (liveColumns.size() != columns.size()) {
+        flow = BuildWideProjection(std::move(flow), columns, liveColumns, ctx);
+    }
+    return TStageBody::Wide(std::move(flow), std::move(liveColumns));
 }
 
 } // namespace NKikimr::NKqp::NPhysicalConvertionUtils

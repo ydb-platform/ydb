@@ -3,6 +3,7 @@
 #include "replace_key.h"
 #include "simple_arrays_cache.h"
 
+#include "switch/compare.h"
 #include "switch/switch_type.h"
 #include "validation/validation.h"
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -24,6 +25,8 @@
 #include <util/system/yassert.h>
 
 #include <memory>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
@@ -440,34 +443,24 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
 
+        std::partial_ordering cmp = std::partial_ordering::equivalent;
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
             Y_ABORT_UNLESS(xval);
             Y_ABORT_UNLESS(yval);
-            TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());
-            TStringBuf yBuf(reinterpret_cast<const char*>(yval->data()), yval->size());
-            if (xBuf < yBuf) {
-                return -1;
-            } else if (yBuf < xBuf) {
-                return 1;
-            } else {
-                return 0;
-            }
-        }
-        if constexpr (std::is_arithmetic_v<TValue>) {
+            cmp = TComparator::CompareValueNotNull(
+                arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
+                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()));
+        } else if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            if (xval < yval) {
-                return -1;
-            } else if (yval < xval) {
-                return 1;
-            } else {
-                return 0;
-            }
+            cmp = TComparator::CompareValueNotNull(xval, yval);
+        } else {
+            Y_ABORT_UNLESS(false);   // TODO: non primitive types
         }
-        Y_ABORT_UNLESS(false);   // TODO: non primitive types
-        return 0;
+        // Preserve the scalar API's treatment of unordered floating-point values as equal.
+        return int(cmp > 0) - int(cmp < 0);
     });
 }
 
@@ -508,7 +501,9 @@ bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
     }
 
     if (!result.ok()) {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "ReserveData")("error", result.ToString());
+        YDB_LOG_ERROR("",
+            {"event", "ReserveData"},
+            {"error", result});
     }
     return result.ok();
 }
@@ -531,14 +526,18 @@ bool MergeBatchColumnsImpl(const std::vector<std::shared_ptr<TData>>& batches, s
         Y_ABORT_UNLESS(i);
         for (auto&& f : i->schema()->fields()) {
             if (!fieldNames.emplace(f->name(), fields.size()).second) {
-                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "duplicated column")("name", f->name());
+                YDB_LOG_ERROR("",
+                    {"event", "duplicated column"},
+                    {"name", f->name()});
                 return false;
             }
             fields.emplace_back(f);
         }
         if (i->num_rows() != batches.front()->num_rows()) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "inconsistency record sizes")("i", i->num_rows())(
-                "front", batches.front()->num_rows());
+            YDB_LOG_ERROR("",
+                {"event", "inconsistency record sizes"},
+                {"i", i->num_rows()},
+                {"front", batches.front()->num_rows()});
             return false;
         }
         for (auto&& c : i->columns()) {

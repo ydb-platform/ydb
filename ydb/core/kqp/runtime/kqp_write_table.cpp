@@ -9,6 +9,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/runtime/kqp_arrow_memory_pool.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -1926,11 +1927,11 @@ public:
     void OnPartitioningChanged(
         const TPartitioning::TCPtr& partitioning) override {
         IsOlap = false;
-        Partitioning = partitioning;
+        Partitioning = TShardPartitionIndex(partitioning);
         BeforePartitioningChanged();
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
-                Partitioning->GetTablePartitioning(),
+                Partitioning.GetPartitioning()->GetTablePartitioning(),
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -1960,6 +1961,10 @@ public:
     }
 
     TPartitioning::TCPtr GetPartitioning() const override {
+        return Partitioning.GetPartitioning();
+    }
+
+    const TShardPartitionIndex& GetShardPartitionIndex() const override {
         return Partitioning;
     }
 
@@ -1968,9 +1973,10 @@ public:
             return {};
         }
         AFL_ENSURE(Partitioning);
+        const auto& partitioning = *Partitioning.GetPartitioning();
         THashSet<ui64> resolvedShards;
-        resolvedShards.reserve(Partitioning->Size());
-        for (const auto& partition : Partitioning->GetTablePartitioning()) {
+        resolvedShards.reserve(partitioning.Size());
+        for (const auto& partition : partitioning.GetTablePartitioning()) {
             resolvedShards.insert(partition.ShardId);
         }
         TVector<ui64> deletedShards;
@@ -1990,27 +1996,34 @@ public:
         }
     }
 
-    void ReRouteShards(TVector<ui64>&& deletedShards) override {
+    void ReRouteShards(TVector<ui64>&& deletedShards,
+            const TVector<std::pair<ui64, TVector<ui64>>>& coveringTargets) override {
         // Batches must be pushed even if the sink finished producing (the controller
         // may already be closed): temporarily re-open, push, then close back.
         const auto wasClosed = ShardsInfo.Reopen();
+        THashMap<ui64, const TVector<ui64>*> targetsByShard;
+        targetsByShard.reserve(coveringTargets.size());
+        for (const auto& [shardId, targets] : coveringTargets) {
+            targetsByShard.emplace(shardId, &targets);
+        }
         for (const ui64 shardId : deletedShards) {
             auto batches = ShardsInfo.ExtractShard(shardId);
+            const TVector<ui64>* targets = nullptr;
+            if (auto it = targetsByShard.find(shardId); it != targetsByShard.end()) {
+                targets = it->second;
+            }
             for (auto& batch : batches) {
-                // WRITE mode only (the reroute window): no covering batches exist.
                 AFL_ENSURE(batch.Data);
                 AFL_ENSURE(batch.OriginalShard != 0);
                 const ui64 originalShard = batch.OriginalShard;
                 auto fragments = WriteInfos.at(batch.Token).Serializer->SplitBatchByShards(std::move(batch.Data));
-                for (auto& [destShardId, fragment] : fragments) {
-                    if (!fragment || fragment->IsEmpty()) {
-                        continue;
-                    }
+
+                auto pushReroutedBatch = [&](const ui64 destShardId, IDataBatchPtr&& data) {
                     auto& destShardInfo = ShardsInfo.GetShard(destShardId);
                     destShardInfo.PushBatch(TBatchWithMetadata{
                         .Token = batch.Token,
                         .OperationType = batch.OperationType,
-                        .Data = std::move(fragment),
+                        .Data = std::move(data),
                         .HasRead = batch.HasRead,
                         .QuerySpanId = batch.QuerySpanId,
                         .MvccSnapshot = batch.MvccSnapshot,
@@ -2025,6 +2038,40 @@ public:
                         .HasRead = batch.HasRead,
                         .QuerySpanId = batch.QuerySpanId,
                     });
+                };
+
+                if (Settings.EnableWriteSeqNum && targets) {
+                    // Every covering shard must receive the batch's chain position: a
+                    // target whose key range holds none of the batch's rows gets an
+                    // empty 0-row batch, so the datashard still validates/advances the
+                    // transferred ancestor chain for this position and the commit-time
+                    // prepare carries fresh echo locks from it.
+                    THashSet<ui64> routedTargets;
+                    for (auto& [destShardId, fragment] : fragments) {
+                        // SplitBatchByShards only ever returns non-empty fragments (its
+                        // flush loop breaks on an empty batcher flush); the deliberate
+                        // empty batches are manufactured below.
+                        AFL_ENSURE(fragment && !fragment->IsEmpty());
+                        routedTargets.insert(destShardId);
+                        pushReroutedBatch(destShardId, std::move(fragment));
+                    }
+                    for (const ui64 destShardId : *targets) {
+                        if (routedTargets.contains(destShardId)) {
+                            continue;
+                        }
+                        auto poolAlloc = CreateOffloadedPoolAllocator(Alloc);
+                        pushReroutedBatch(destShardId,
+                            MakeIntrusive<TRowBatch>(TOwnedCellVecBatch(poolAlloc->CreateMemoryPool()), std::move(poolAlloc)));
+                    }
+                } else {
+                    for (auto& [destShardId, fragment] : fragments) {
+                        // SplitBatchByShards only ever returns non-empty fragments (its
+                        // flush loop breaks on an empty batcher flush); the deliberate
+                        // empty batches are manufactured separately in the
+                        // EnableWriteSeqNum branch above.
+                        AFL_ENSURE(fragment && !fragment->IsEmpty());
+                        pushReroutedBatch(destShardId, std::move(fragment));
+                    }
                 }
             }
         }
@@ -2064,7 +2111,7 @@ public:
 
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
-                Partitioning->GetTablePartitioning(),
+                Partitioning.GetPartitioning()->GetTablePartitioning(),
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
                 Alloc);
@@ -2234,11 +2281,20 @@ public:
         for (size_t index = 0; index < shardInfo->GetBatchesInFlight(); ++index) {
             const auto& inFlightBatch = shardInfo->GetBatch(index);
             if (inFlightBatch.Data) {
-                AFL_ENSURE(!inFlightBatch.Data->IsEmpty());
+                const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
+                // A re-routed batch may carry no rows for this shard (an empty fragment
+                // for a covering target that received no data): it still must produce
+                // an operation carrying the write chain (WriteSeqNum + OriginalShard),
+                // so the datashard validates/advances the transferred ancestor chain.
+                TString payload;
+                if (inFlightBatch.Data->IsEmpty()) {
+                    payload = TSerializedCellMatrix::Serialize({}, 0, writeInfo.Serializer->GetWriteColumnIds().size());
+                } else {
+                    payload = inFlightBatch.Data->SerializeToString();
+                }
                 result.TotalDataSize += inFlightBatch.Data->GetMemory();
                 const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(evWrite)
-                        .AddDataToPayload(inFlightBatch.Data->SerializeToString());
-                const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
+                        .AddDataToPayload(std::move(payload));
                 auto& operation = evWrite.AddOperation(
                     inFlightBatch.OperationType,
                     writeInfo.Metadata.TableId,
@@ -2431,7 +2487,7 @@ private:
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     std::optional<bool> IsOlap;
 };
 

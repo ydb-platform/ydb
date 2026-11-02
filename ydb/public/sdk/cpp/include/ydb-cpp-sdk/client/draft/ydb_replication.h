@@ -141,10 +141,21 @@ public:
         Paused,
     };
 
+    enum class EAvailabilityPeriodKind {
+        Unknown, // Absent in an older server response or legacy configuration.
+        Finite,
+        Unlimited,
+        Invalid, // Present policy with an empty or malformed value.
+    };
+
     explicit TReplicationDescription(const Ydb::Replication::DescribeReplicationResult& desc);
 
     const TConnectionParams& GetConnectionParams() const;
     const std::vector<TItem> GetItems() const;
+
+    EAvailabilityPeriodKind GetAvailabilityPeriodKind() const;
+    // Contains the effective duration only for Finite.
+    const std::optional<TDuration>& GetAvailabilityPeriod() const;
 
     EConsistencyLevel GetConsistencyLevel() const;
     const TGlobalConsistency& GetGlobalConsistency() const;
@@ -158,6 +169,8 @@ public:
 private:
     TConnectionParams ConnectionParams_;
     std::vector<TItem> Items_;
+    EAvailabilityPeriodKind AvailabilityPeriodKind_ = EAvailabilityPeriodKind::Unknown;
+    std::optional<TDuration> AvailabilityPeriod_;
 
     std::variant<
         TRowConsistency,

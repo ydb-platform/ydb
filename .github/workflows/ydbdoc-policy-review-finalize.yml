@@ -1,0 +1,26 @@
+# Deployed alongside ydbdoc-policy-review.yml. This finalizer cannot call the model.
+name: Finalize YDB documentation policy review
+on:
+  workflow_run:
+    workflows: [YDB documentation policy review]
+    types: [completed]
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+  checks: write
+jobs:
+  finalize:
+    if: vars.YDBDOC_REVIEW_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.0.1
+        with:
+          mode: finalize
+          publish-token: ${{ github.token }}
+          ydb-endpoint: ${{ vars.YDB_ENDPOINT }}
+          ydb-database: ${{ vars.YDB_DATABASE }}
+          ydb-token: ${{ secrets.YDB_TOKEN }}
+          ydb-sa-key: ${{ secrets.YDB_SA_KEY }}

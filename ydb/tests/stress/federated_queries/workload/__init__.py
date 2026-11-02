@@ -80,8 +80,7 @@ class Workload:
         self.solomon_grpc_endpoint = f"localhost:{self.solomon_grpc_port}"
 
         logger.info(
-            f"starting solomon emulator: http={self.solomon_http_endpoint}, "
-            f"grpc={self.solomon_grpc_endpoint}"
+            f"starting solomon emulator: http={self.solomon_http_endpoint}, " f"grpc={self.solomon_grpc_endpoint}"
         )
         self.solomon_process = multiprocessing.Process(
             target=_run_solomon_emulator,
@@ -105,8 +104,7 @@ class Workload:
         while time.time() < deadline:
             if not self.solomon_process.is_alive():
                 raise Exception(
-                    f"solomon emulator process exited unexpectedly "
-                    f"with code {self.solomon_process.exitcode}"
+                    f"solomon emulator process exited unexpectedly " f"with code {self.solomon_process.exitcode}"
                 )
             try:
                 resp = requests.get(f"http://{self.solomon_http_endpoint}/ping", timeout=1)
@@ -134,23 +132,19 @@ class Workload:
 
     def create_external_data_source(self):
         logger.info("Workload::create_external_data_source")
-        self.pool.execute_with_retries(
-            f"""
+        self.pool.execute_with_retries(f"""
                 CREATE EXTERNAL DATA SOURCE `{self.prefix}/{self.SOURCE_NAME}` WITH (
                     SOURCE_TYPE = "Solomon",
                     LOCATION = "{self.solomon_http_endpoint}",
                     AUTH_METHOD = "NONE",
                     USE_TLS = "false"
                 );
-            """
-        )
+            """)
 
     def drop_external_data_source(self):
         logger.info("Workload::drop_external_data_source")
         try:
-            self.pool.execute_with_retries(
-                f"DROP EXTERNAL DATA SOURCE `{self.prefix}/{self.SOURCE_NAME}`;"
-            )
+            self.pool.execute_with_retries(f"DROP EXTERNAL DATA SOURCE `{self.prefix}/{self.SOURCE_NAME}`;")
         except Exception as e:
             logger.warning(f"failed to drop external data source: {e}")
 
@@ -165,10 +159,7 @@ class Workload:
             sensor = random.randint(*self.SENSOR_RANGE)
             ts_sec = self._base_ts_sec + self.attempted_inserts * self.INSERT_BATCH_SIZE + i
             ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts_sec))
-            rows.append(
-                f'SELECT Unwrap(CAST("{ts}" AS Timestamp)) AS Ts, '
-                f'"{label}" AS Label, {sensor} AS Sensor'
-            )
+            rows.append(f'SELECT Unwrap(CAST("{ts}" AS Timestamp)) AS Ts, ' f'"{label}" AS Label, {sensor} AS Sensor')
         return f"INSERT INTO {sink}\n" + "\nUNION ALL\n".join(rows) + ";"
 
     def write_to_solomon(self):
@@ -183,8 +174,7 @@ class Workload:
             except Exception as e:
                 logger.warning(f"insert failed: {e}")
         logger.info(
-            f"Workload::write_to_solomon end: "
-            f"attempts={self.attempted_inserts} successes={self.successful_inserts}"
+            f"Workload::write_to_solomon end: " f"attempts={self.attempted_inserts} successes={self.successful_inserts}"
         )
 
     def verify_metrics(self):
@@ -192,9 +182,7 @@ class Workload:
         if self.successful_inserts == 0:
             raise Exception("no successful inserts during the workload")
 
-        metrics = get_solomon_metrics(
-            self.SOLOMON_PROJECT, self.SOLOMON_CLUSTER, self.SOLOMON_SERVICE
-        )
+        metrics = get_solomon_metrics(self.SOLOMON_PROJECT, self.SOLOMON_CLUSTER, self.SOLOMON_SERVICE)
         total_rows = len(metrics)
         labels_seen = set()
         for m in metrics:
@@ -204,19 +192,14 @@ class Workload:
 
         expected_rows = self.successful_inserts * self.INSERT_BATCH_SIZE
         logger.info(
-            f"got {total_rows} metrics, "
-            f"expected ~{expected_rows}, "
-            f"unique labels seen={len(labels_seen)}"
+            f"got {total_rows} metrics, " f"expected ~{expected_rows}, " f"unique labels seen={len(labels_seen)}"
         )
         if total_rows < expected_rows * 0.5:
             raise Exception(
-                f"too few metrics received: got {total_rows}, "
-                f"expected at least {int(expected_rows * 0.5)}"
+                f"too few metrics received: got {total_rows}, " f"expected at least {int(expected_rows * 0.5)}"
             )
         if len(labels_seen) < 2:
-            raise Exception(
-                f"insufficient label diversity: got labels {labels_seen}"
-            )
+            raise Exception(f"insufficient label diversity: got labels {labels_seen}")
 
     def loop(self):
         try:

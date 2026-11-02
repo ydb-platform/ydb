@@ -1,7 +1,9 @@
 #include "ydb_bridge.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
@@ -50,6 +52,16 @@ namespace {
             case NYdb::NBridge::EPileState::PROMOTED: return "PROMOTED";
             case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
             case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
+            case NYdb::NBridge::EPileState::INACTIVE: return "INACTIVE";
+        }
+        return "UNKNOWN";
+    }
+
+    TString PendingPileOperationKindToString(NYdb::NBridge::TPendingPileOperation::EKind kind) {
+        switch (kind) {
+            case NYdb::NBridge::TPendingPileOperation::EKind::UNSPECIFIED: return "UNSPECIFIED";
+            case NYdb::NBridge::TPendingPileOperation::EKind::ADD: return "ADD";
+            case NYdb::NBridge::TPendingPileOperation::EKind::REMOVE: return "REMOVE";
         }
         return "UNKNOWN";
     }
@@ -64,6 +76,9 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeFailover>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeTakedown>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeRejoin>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeAddPile>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeRemovePile>(allowEmptyDatabase));
 }
 
 TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
@@ -77,10 +92,6 @@ void TCommandBridgeUpdate::Config(TConfig& config) {
     config.Opts->AddLongOption("set", "Set new state for a pile. Format: <pile-name>:<state>. Can be used multiple times.")
         .RequiredArgument("NAME:STATE").Handler([this](const TString& value) {
             PileStateUpdates.push_back(value);
-        });
-    config.Opts->AddLongOption("quorum-pile", "Acquire quorum only for specific set of piles. Can be used multiple times.")
-        .RequiredArgument("NAME").Handler([this](const TString& value) {
-            QuorumPiles.push_back(value);
         });
     config.Opts->AddLongOption('f', "file", "Path to a JSON file with state updates.")
         .RequiredArgument("PATH").StoreResult(&FilePath);
@@ -137,12 +148,7 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
-    std::vector<std::string> quorumPiles;
-    for (const auto& s : QuorumPiles) {
-        quorumPiles.push_back(std::string(s));
-    }
-
-    auto result = client.UpdateClusterState(Updates, quorumPiles).GetValueSync();
+    auto result = client.UpdateClusterState(Updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
@@ -195,6 +201,14 @@ int TCommandBridgeList::Run(TConfig& config) {
                 piles.AppendValue(item);
             }
             json.InsertValue("piles", piles);
+            json.InsertValue("conversion_in_progress", result.IsConversionInProgress());
+            if (const auto& op = result.GetPendingPileOperation()) {
+                NJson::TJsonValue item(NJson::JSON_MAP);
+                item.InsertValue("pile_name", op->PileName);
+                item.InsertValue("kind", PendingPileOperationKindToString(op->Kind));
+                item.InsertValue("error_reason", op->ErrorReason);
+                json.InsertValue("pending_pile_operation", item);
+            }
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
             break;
@@ -212,6 +226,16 @@ int TCommandBridgeList::Run(TConfig& config) {
                 ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
             }
             ss << "Generation: " << result.GetGeneration() << Endl;
+            if (result.IsConversionInProgress()) {
+                ss << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
+            }
+            if (const auto& op = result.GetPendingPileOperation()) {
+                ss << "Pending operation on pile " << op->PileName << ": " << PendingPileOperationKindToString(op->Kind)
+                    << Endl;
+                if (!op->ErrorReason.empty()) {
+                    ss << "Last attempt has failed (being retried): " << op->ErrorReason << Endl;
+                }
+            }
             Cout << ss.Str();
             break;
         }
@@ -254,15 +278,15 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
 }
 
 TCommandBridgeFailover::TCommandBridgeFailover(bool allowEmptyDatabase)
-    : TYdbCommand("failover", {}, "Perform an emergency failover when a pile becomes unresponsive")
+    : TYdbCommand("failover", {}, "Perform an emergency failover when one or more piles become unresponsive")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
 void TCommandBridgeFailover::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("pile", "Name of the pile that is down.")
-        .Required().RequiredArgument("PILE_NAME").StoreResult(&DownPile);
+    config.Opts->AddLongOption("pile", "Name of a pile that is down. Can be used multiple times.")
+        .Required().RequiredArgument("PILE_NAME").AppendTo(&DownPiles);
     config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
         .Optional().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -278,7 +302,9 @@ int TCommandBridgeFailover::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
-    updates.push_back({DownPile, NYdb::NBridge::EPileState::DISCONNECTED});
+    for (const auto& pile : DownPiles) {
+        updates.push_back({pile, NYdb::NBridge::EPileState::DISCONNECTED});
+    }
     if (!NewPrimaryPile.empty()) {
         updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PRIMARY});
     }
@@ -358,6 +384,118 @@ int TCommandBridgeRejoin::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeConvert::TCommandBridgeConvert(bool allowEmptyDatabase)
+    : TYdbCommand("convert", {}, "Convert a non-bridged cluster into a bridged one with a single pile. All nodes must "
+        "already run with a single-pile bridge config. By default, existing storage pools and their groups are "
+        "converted in the background.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+    CompletionDescription = "Convert a non-bridged cluster into a bridged one with a single pile";
+}
+
+void TCommandBridgeConvert::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption("skip-storage-pool-conversion",
+            "Leave existing storage pools and their groups non-bridged. They will not be replicated to added piles "
+            "until converted separately (ydb-dstool pool set-bridge-mode). Static storage groups are still converted "
+            "to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
+        .StoreTrue(&SkipStoragePoolConversion);
+}
+
+void TCommandBridgeConvert::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+int TCommandBridgeConvert::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.ConvertToBridge(NYdb::NBridge::TConvertToBridgeSettings()
+        .SkipStoragePoolConversion(SkipStoragePoolConversion)).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Cluster converted to bridge mode successfully." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeAddPile::TCommandBridgeAddPile(bool allowEmptyDatabase)
+    : TYdbCommand("add-pile", {}, "Add a pile listed in the bridge config with its hosts (and shown as INACTIVE) to the "
+        "cluster: create its parts of storage groups and make it DISCONNECTED.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandBridgeAddPile::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("pile", "Name of the pile to add.")
+        .Required().RequiredArgument("PILE_NAME").StoreResult(&Pile);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandBridgeAddPile::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+int TCommandBridgeAddPile::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.AddPile(Pile).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Pile added to the cluster successfully, it can be rejoined now." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeRemovePile::TCommandBridgeRemovePile(bool allowEmptyDatabase)
+    : TYdbCommand("remove-pile", {}, "Remove a DISCONNECTED pile from the cluster: delete its parts of every storage "
+        "group along with ALL THEIR DATA, which can't be undone, and make it INACTIVE. Waits until every storage group "
+        "loses its part in the pile; then the pile may be dropped from the bridge config along with its hosts.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+    CompletionDescription = "Remove a DISCONNECTED pile from the cluster along with ALL ITS DATA";
+}
+
+void TCommandBridgeRemovePile::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("pile", "Name of the pile to remove.")
+        .Required().RequiredArgument("PILE_NAME").StoreResult(&Pile);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandBridgeRemovePile::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+bool TCommandBridgeRemovePile::Prompt(TConfig& config) {
+    if (!config.AssumeYes) {
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
+        Cout << colors.RedColor() << "Every storage group of pile " << Pile << " will be deleted along with all the data "
+            "it holds. This can't be undone." << colors.OldColor() << " Use \"--assume-yes\" (\"-y\") option to "
+            "proceed without prompting." << Endl;
+        return AskYesOrNo("Do you want to remove pile " + Pile + " from the cluster?", /* defaultAnswer */ false);
+    }
+    return true;
+}
+
+int TCommandBridgeRemovePile::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.RemovePile(Pile).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Pile removed from the cluster successfully, it is INACTIVE now." << Endl;
 
     return EXIT_SUCCESS;
 }

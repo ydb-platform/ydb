@@ -75,7 +75,6 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
 
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
@@ -84,7 +83,9 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     }
 
     const bool usingBlockCrossJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
-    if (join->JoinKind == "Cross" && usingBlockCrossJoin) {
+    const bool forceInlining = ctx.KqpCtx.Config->GetEnableInlineJoinFiltersAfterCBO();
+
+    if (join->JoinKind == "Cross" && usingBlockCrossJoin && !forceInlining) {
         auto conjuncts = filter->GetFilterExpression().SplitConjunct();
         // If all not equal - we cannot rewrite cross to inner, just adding them as join filters.
         const bool containsEquiJoinCondition = AnyOf(conjuncts, [](const TExpression& conjunct) {

@@ -125,7 +125,8 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
-        ISignatureValidatorPtr signatureValidator)
+        ISignatureValidatorPtr signatureValidator,
+        IInvokerPtr heavyCommandInvoker)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
@@ -136,6 +137,7 @@ public:
             Config_->ProxyDiscoveryCache,
             RootClient_))
         , SignatureValidator_(std::move(signatureValidator))
+        , HeavyCommandInvoker_(std::move(heavyCommandInvoker))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
         // Register all commands.
@@ -500,7 +502,7 @@ public:
             request);
 
         return BIND(&TDriver::DoExecute, entry.Execute, context)
-            .AsyncVia(Connection_->GetInvoker())
+            .AsyncVia(GetCommandInvoker(entry.Descriptor))
             .Run();
     }
 
@@ -571,6 +573,7 @@ private:
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
     const ISignatureGeneratorPtr SignatureGenerator_;
     const ISignatureValidatorPtr SignatureValidator_;
+    const IInvokerPtr HeavyCommandInvoker_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
@@ -597,6 +600,13 @@ private:
             command.Execute(context);
         });
         YT_VERIFY(CommandNameToEntry_.emplace(descriptor.CommandName, entry).second);
+    }
+
+    IInvokerPtr GetCommandInvoker(const TCommandDescriptor& descriptor) const
+    {
+        return descriptor.Heavy && HeavyCommandInvoker_
+            ? HeavyCommandInvoker_
+            : Connection_->GetInvoker();
     }
 
     static void DoExecute(TExecuteCallback executeCallback, TCommandContextPtr context)
@@ -763,7 +773,8 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
-    ISignatureValidatorPtr signatureValidator)
+    ISignatureValidatorPtr signatureValidator,
+    IInvokerPtr heavyCommandInvoker)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
@@ -772,7 +783,8 @@ IDriverPtr CreateDriver(
     return New<TDriver>(
         std::move(config),
         std::move(connection),
-        std::move(signatureValidator));
+        std::move(signatureValidator),
+        std::move(heavyCommandInvoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

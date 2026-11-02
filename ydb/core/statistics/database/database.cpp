@@ -25,6 +25,21 @@ static TString SerializeColumnTags(const TColumnTags& tags) {
     return {};
 }
 
+static bool IsCompleteSamplingMetadata(const NKikimrStat::TSamplingStatistics& sampling) {
+    if (!sampling.HasRequestedRate() || !sampling.HasSampleRows()) {
+        return false;
+    }
+    switch (sampling.GetMethod()) {
+        case NKikimrStat::TSamplingStatistics::METHOD_UNSPECIFIED: // Older shard-subset samples.
+        case NKikimrStat::TSamplingStatistics::SHARD_SUBSET:
+            return sampling.HasEligibleUnits() && sampling.HasSelectedUnits();
+        case NKikimrStat::TSamplingStatistics::PK_UNIT_BERNOULLI:
+            return sampling.HasSeed();
+        default:
+            return false;
+    }
+}
+
 class TStatisticsTableCreator : public TActorBootstrapped<TStatisticsTableCreator> {
 public:
     explicit TStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> resultEvent, const TString& database)
@@ -165,7 +180,10 @@ public:
             if (item.Sampling) {
                 NKikimrStat::TSampledStatistic payload;
                 *payload.MutableSampling() = *item.Sampling;
-                payload.SetData(item.Data);
+                // No data supersedes an older sample without touching full statistics.
+                if (!item.Data.empty()) {
+                    payload.SetData(item.Data);
+                }
                 row.AddMember("data").String(payload.SerializeAsString());
             } else {
                 row.AddMember("data").String(item.Data);
@@ -316,8 +334,7 @@ void DispatchLoadStatisticsQuery(
                     const auto sampledData = parser.ColumnParser("sampled_data").GetOptionalString();
                     NKikimrStat::TSampledStatistic payload;
                     if (sampledData && payload.ParseFromString(*sampledData) && payload.HasData() && payload.HasSampling()
-                            && payload.GetSampling().HasRequestedRate() && payload.GetSampling().HasEligibleUnits()
-                            && payload.GetSampling().HasSelectedUnits() && payload.GetSampling().HasSampleRows()) {
+                            && IsCompleteSamplingMetadata(payload.GetSampling())) {
                         query_response->Data = std::move(*payload.MutableData());
                         query_response->Sampling = std::move(*payload.MutableSampling());
                     }

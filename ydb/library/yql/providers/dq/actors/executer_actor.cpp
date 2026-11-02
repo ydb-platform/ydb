@@ -145,14 +145,15 @@ private:
         });
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
         ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
-        if (ev->Get()->Record.GetRequest().GetStatsMode() != NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_UNSPECIFIED) {
-            StatsMode = ev->Get()->Record.GetRequest().GetStatsMode();
+        const auto& request = ev->Get()->Record.GetRequest();
+        if (request.GetStatsMode() != NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_UNSPECIFIED) {
+            StatsMode = request.GetStatsMode();
         }
         // These actors will be killed at exit.
         AddChild(ControlId);
         AddChild(ResultId);
 
-        int workerCount = ev->Get()->Record.GetRequest().GetTask().size();
+        int workerCount = request.GetTask().size();
         const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
         YQL_CLOG(INFO, ProviderDq) << (TStringBuilder() << "Trying to allocate " << workerCount << " workers [EnableComputeActor=" << enableComputeActor << "]");
 
@@ -166,12 +167,12 @@ private:
                 files.emplace(f.GetObjectId(), f);
             }
 
-            if (ev->Get()->Record.GetRequest().GetSecureParams().size() > 0) {
-                *taskMeta.MutableSecureParams() = ev->Get()->Record.GetRequest().GetSecureParams();
+            if (request.GetSecureParams().size() > 0) {
+                *taskMeta.MutableSecureParams() = request.GetSecureParams();
             }
 
-            if (ev->Get()->Record.GetRequest().GetCommonTaskParams().size() > 0) {
-                taskMeta.MutableTaskParams()->insert(ev->Get()->Record.GetRequest().GetCommonTaskParams().begin(), ev->Get()->Record.GetRequest().GetCommonTaskParams().end());
+            if (request.GetCommonTaskParams().size() > 0) {
+                taskMeta.MutableTaskParams()->insert(request.GetCommonTaskParams().begin(), request.GetCommonTaskParams().end());
             }
 
             Settings->Save(taskMeta);
@@ -185,8 +186,8 @@ private:
 
         ExecutionPlanner = THolder<IDqsExecutionPlanner>(new TGraphExecutionPlanner(
             tasks,
-            ev->Get()->Record.GetRequest().GetSourceId(),
-            ev->Get()->Record.GetRequest().GetResultType(),
+            request.GetSourceId(),
+            request.GetResultType(),
             SelfId(), ResultId));
 
 
@@ -202,6 +203,8 @@ private:
             StatsMode));
         auto allocateRequest = MakeHolder<TEvAllocateWorkersRequest>(workerCount, Username);
         allocateRequest->Record.SetTraceId(TraceId);
+        allocateRequest->Record.SetUploadPrefix(request.GetUploadPrefix());
+        allocateRequest->Record.SetUploadClusterAddress(request.GetUploadClusterAddress());
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         allocateRequest->Record.SetStatsMode(StatsMode);

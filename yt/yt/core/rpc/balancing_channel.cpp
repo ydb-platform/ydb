@@ -17,7 +17,7 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 namespace NYT::NRpc {
 
@@ -329,7 +329,7 @@ private:
     const IChannelFactoryPtr ChannelFactory_;
     const IPeerDiscoveryPtr PeerDiscovery_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     THashMap<std::string, TBalancingChannelSubproviderPtr> SubproviderMap_;
 
 

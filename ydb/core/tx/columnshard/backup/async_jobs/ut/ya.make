@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/public/lib/yson_value
     ydb/services/metadata
+    ydb/library/testlib/backup_test_enums
     ydb/library/testlib/s3_recipe_helper
 )
 

@@ -9,14 +9,14 @@ namespace NYT::NCGroups {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<std::string, std::string> ParseProcessCGroups(const TString& str)
+THashMap<std::string, std::string> ParseProcessCGroups(TStringBuf str)
 {
     THashMap<std::string, std::string> result;
 
     // /proc/<pid>/cgroup format:
     //   v1: "<hierarchy_id>:<subsystems>:<path>" — one line per controller.
     //   v2: "0::<path>" — single line, empty subsystems field.
-    for (const auto& line : SplitString(str, "\n")) {
+    for (const auto& line : SplitString(str.data(), str.size(), "\n")) {
         std::vector<std::string> tokens = StringSplitter(line).Split(':').Limit(3);
         if (tokens.size() != 3) {
             continue;

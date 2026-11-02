@@ -89,6 +89,14 @@ public:
     }
 
     TActorId CreateSession();
+
+    void Reconnect() {
+        Y_ABORT_UNLESS(Peer && Working && Peer->Working);
+        Y_ABORT_UNLESS(!SessionActor && !Peer->SessionActor);
+        ProcessPendingEvents();
+        Peer->ProcessPendingEvents();
+    }
+
     void ForwardToSession(TAutoPtr<IEventHandle> ev);
     void ForwardToSession(TEvForwardSubscribeSession::TPtr ev);
 
@@ -515,6 +523,12 @@ TMock::TSingleThreadInterconnectMock(ui64 burstCapacityBytes, ui64 bytesPerSecon
 
 TMock::~TSingleThreadInterconnectMock()
 {}
+
+void TMock::Reconnect(ui32 nodeId, ui32 peerNodeId) {
+    const auto it = Proxies.find({nodeId, peerNodeId});
+    Y_ABORT_UNLESS(it != Proxies.end() && it->second);
+    it->second->Reconnect();
+}
 
 std::unique_ptr<IActor> TMock::CreateProxyActor(ui32 nodeId, ui32 peerNodeId,
         TIntrusivePtr<TInterconnectProxyCommon> common) {

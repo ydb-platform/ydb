@@ -1,0 +1,6 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run bloat tool"
+    }
+}

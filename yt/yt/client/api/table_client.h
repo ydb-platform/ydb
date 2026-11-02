@@ -134,6 +134,10 @@ struct TAlterTableOptions
     std::optional<NTableClient::ETableSchemaModification> SchemaModification;
     std::optional<NChaosClient::TReplicationProgress> ReplicationProgress;
     std::optional<NTransactionClient::TTimestamp> ClipTimestamp;
+
+    //! Validates that no options unsupported by two-phase alter are present.
+    //! Keep this method in sync when adding new options above.
+    void ValidateForTwoPhaseAlter() const;
 };
 
 struct TTrimTableOptions

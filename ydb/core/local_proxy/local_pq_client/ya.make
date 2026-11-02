@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/library/actors/core
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/library/yql/providers/pq/gateway/clients/local
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue

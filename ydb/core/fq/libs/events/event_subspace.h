@@ -4,7 +4,7 @@
 
 namespace NFq {
 
-constexpr ui32 ES_YQ = 4213; // Must be compatible with the values defined in ydb/core/base/events.h.
+constexpr ui32 ES_YQ = 4213;   // Must be compatible with the values defined in ydb/core/base/events.h.
 
 // Declares YQ event subspace that can contain up to 512 events.
 constexpr ui32 YqEventSubspaceBegin(ui32 subspace) {
@@ -40,4 +40,4 @@ struct TYqEventSubspace {
     static_assert(YqEventSubspaceBegin(SubspacesEnd) <= EventSpaceEnd(ES_YQ), "All YQ events must be in YQ event space");
 };
 
-} // namespace NFq
+}   // namespace NFq

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_job_fmr.cpp
@@ -19,7 +19,5 @@ PEERDIR(
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl
     yt/yql/providers/yt/job
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

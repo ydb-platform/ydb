@@ -64,6 +64,19 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
+### RelativePathPrefix {#relative-path-prefix}
+
+| Value type | Default |
+| --- | --- |
+| String | — |
+
+Sets the prefix for schema object paths relative to the database root. The `RelativePathPrefix` value must be a string literal and must not start with `/`. Specify the pragma only once, only at the top level, and before SQL statements. It cannot be combined with `TablePathPrefix`. The pragma applies only to relative schema object paths in the SQL query; absolute paths remain unchanged.
+
+```yql
+PRAGMA RelativePathPrefix = "folder";
+SELECT * FROM test;
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Value type | Default |
@@ -207,7 +220,7 @@ Output the [column order](select/order_by.md) in SELECT/JOIN/UNION ALL and prese
 
 ### PositionalUnionAll {#positionalunionall}
 
-Enable the standard column-by-column execution for [UNION ALL](select/union.md#unionall). This automatically enables
+Enable the standard column-by-column execution for [UNION ALL](select/union.md#union-all). This automatically enables
 [ordered columns](#orderedcolumns).
 
 ### RegexUseRe2
@@ -282,7 +295,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.m
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 

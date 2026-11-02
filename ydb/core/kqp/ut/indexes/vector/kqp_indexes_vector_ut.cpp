@@ -299,6 +299,139 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
+    Y_UNIT_TEST_QUAD(VectorIndexAutoupdate, Prefixed, EnableIndexStreamWrite) {
+        for (const auto autoupdate : {std::optional<bool>(), std::make_optional(true), std::make_optional(false)}) {
+            auto settings = TKikimrSettings();
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+            TKikimrRunner kikimr(settings);
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableForVectorIndex(db);
+            const TString createIndex = TStringBuilder() << R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX index1
+                GLOBAL USING vector_kmeans_tree ON ()" << (Prefixed ? "data, emb" : "emb") << R"()
+                COVER (emb) WITH (similarity=cosine, vector_type="uint8", vector_dimension=2,
+                    levels=2, clusters=2)" << (autoupdate.has_value()
+                        ? TStringBuilder() << ", autoupdate=" << (*autoupdate ? "true" : "false")
+                        : TString()) << ");";
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = session.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX by_data GLOBAL ON (data);
+            )").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto checkSettings = [&](std::optional<bool> expected) {
+                auto description = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                bool found = false;
+                for (const auto& index : description.GetTableDescription().GetIndexDescriptions()) {
+                    if (index.GetIndexName() == "index1") {
+                        found = true;
+                        UNIT_ASSERT_EQUAL(std::get<TKMeansTreeSettings>(index.GetIndexSettings()).AutoUpdate, expected);
+                    }
+                }
+                UNIT_ASSERT(found);
+            };
+            checkSettings(autoupdate);
+
+            const TString postingPath = "/Root/TestTable/index1/indexImplPostingTable";
+            const TString originalPosting = ReadTableToYson(session, postingPath);
+            UNIT_ASSERT_STRINGS_UNEQUAL(originalPosting, "[]");
+            const TString levelPath = "/Root/TestTable/index1/indexImplLevelTable";
+            const TString originalLevel = ReadTableToYson(session, levelPath);
+            TString previousPosting = originalPosting;
+            TString previousMain = ReadTableToYson(session, "/Root/TestTable");
+            TString previousSecondary = ReadTableToYson(session, "/Root/TestTable/by_data/indexImplTable");
+
+            for (const TString& query : {
+                     R"(UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES (10, "\x03\x30\x02", "10"))",
+                     R"(INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES (11, "\x03\x30\x02", "11"))",
+                     R"(UPDATE `/Root/TestTable` SET emb="\x76\x76\x02", data="updated" WHERE pk=0)",
+                     R"(UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES (1, "\x76\x76\x02", "upserted"))",
+                     R"(REPLACE INTO `/Root/TestTable` (pk, emb, data) VALUES (2, "\x76\x76\x02", "replaced"))",
+                     R"(UPDATE `/Root/TestTable` ON (pk, emb, data) VALUES (5, "\x03\x30\x02", "update-on"))",
+                     R"(DELETE FROM `/Root/TestTable` WHERE pk=3)",
+                     R"(DELETE FROM `/Root/TestTable` ON (pk) VALUES (4))"}) {
+                auto write = ExecuteDataQuery(session, query + " RETURNING pk;");
+                UNIT_ASSERT_C(write.IsSuccess(), query << ": " << write.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(write.GetResultSet(0).RowsCount(), 1);
+
+                TString main = ReadTableToYson(session, "/Root/TestTable");
+                UNIT_ASSERT_STRINGS_UNEQUAL(main, previousMain);
+                previousMain = std::move(main);
+                TString secondary = ReadTableToYson(session, "/Root/TestTable/by_data/indexImplTable");
+                UNIT_ASSERT_STRINGS_UNEQUAL(secondary, previousSecondary);
+                previousSecondary = std::move(secondary);
+                TString posting = ReadTableToYson(session, postingPath);
+                if (autoupdate.value_or(true)) {
+                    UNIT_ASSERT_STRINGS_UNEQUAL(posting, previousPosting);
+                } else {
+                    UNIT_ASSERT_STRINGS_EQUAL(posting, originalPosting);
+                    UNIT_ASSERT_STRINGS_EQUAL(ReadTableToYson(session, levelPath), originalLevel);
+                }
+                previousPosting = std::move(posting);
+            }
+
+            // A frozen index remains searchable and serves its stored embeddings.
+            const TString searchQuery = TStringBuilder() << R"(
+                SELECT pk, emb FROM `/Root/TestTable` VIEW index1
+            )" << (Prefixed ? "WHERE data=\"6\"" : "") << R"(
+                ORDER BY Knn::CosineDistance(emb, "\x03\x30\x02") LIMIT 1;
+            )";
+            auto search = ExecuteDataQuery(session, searchQuery);
+            UNIT_ASSERT_C(search.IsSuccess(), search.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(search.GetResultSet(0).RowsCount(), 1);
+
+            if (!autoupdate.value_or(true)) {
+                result = session.ExecuteSchemeQuery(R"(
+                    ALTER TABLE `/Root/TestTable` REBUILD INDEX index1;
+                )").ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                checkSettings(false);
+                TString rebuilt = ReadTableToYson(session, postingPath);
+                UNIT_ASSERT_STRINGS_UNEQUAL(rebuilt, originalPosting);
+                auto write = ExecuteDataQuery(session, R"(
+                    UPDATE `/Root/TestTable` SET emb="\x03\x30\x02", data="after-rebuild" WHERE pk=0;
+                )");
+                UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+                UNIT_ASSERT_STRINGS_EQUAL(ReadTableToYson(session, postingPath), rebuilt);
+
+                result = session.ExecuteSchemeQuery(R"(
+                    ALTER TABLE `/Root/TestTable` REBUILD INDEX index1 WITH (autoupdate=true);
+                )").ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                checkSettings(true);
+                rebuilt = ReadTableToYson(session, postingPath);
+                write = ExecuteDataQuery(session, R"(
+                    UPDATE `/Root/TestTable` SET emb="\x76\x76\x02", data="autoupdate-restored" WHERE pk=0;
+                )");
+                UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+                UNIT_ASSERT_STRINGS_UNEQUAL(ReadTableToYson(session, postingPath), rebuilt);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(VectorIndexAutoupdateCreateTable) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestTable` (
+                pk Int64 NOT NULL, emb String, PRIMARY KEY (pk),
+                INDEX index1 GLOBAL USING vector_kmeans_tree ON (emb)
+                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2,
+                      levels=1, clusters=2, autoupdate=false)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto write = ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/TestTable` (pk, emb) VALUES (0, "\x03\x30\x02");
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        UNIT_ASSERT(!IsTableEmpty(session, "/Root/TestTable"));
+        UNIT_ASSERT(IsTableEmpty(session, "/Root/TestTable/index1/indexImplPostingTable"));
+    }
+
     std::vector<ui64> ReadPostingParents(TSession& session, const TString& postingTablePath, i64 pk) {
         const TString query = TStringBuilder()
             << "SELECT __ydb_parent FROM `" << postingTablePath << "` "
@@ -642,13 +775,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestVectorIndexPlanShape(F_COVERING, EnableVectorSearchActor);
     }
 
-    Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
+    void DoTestBadFormat(bool onBuild, bool streamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamWrite);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -662,40 +795,72 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString createTableSql(R"(
                 --!syntax_v1
                 CREATE TABLE TestVector2 (id Uint64, embedding String, PRIMARY KEY (id))
-                WITH (PARTITION_AT_KEYS = (9));
+                WITH (PARTITION_AT_KEYS = (100));
             )");
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        auto create = [&](bool expected_result) {
+        auto create = [&](bool expectOk, ui8 bad) {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
                 ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
             )"));
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess() == expected_result, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess() == expectOk, result.GetIssues().ToString());
+            if (!expectOk) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), Sprintf("Invalid vector format byte, got %02x, expected 02", bad));
+            }
         };
 
-        auto insert = [&]() {
-            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES
-                (1, ""), (2, "1"), (3, "40"), (4, "abcd"),
-                (5, "00\x02"), (6, "01\x02"), (7, "10\x02"), (8, "11\x02"),
-                (9, ""), (10, "1"), (11, "40"), (12, "abcd"),
-                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02"),
-                (17, null);)"));
+        TVector<TString> badValues = { "1", "40", "abcd", "02\\x81" };
+        TVector<ui8> badByte = { 0x31, 0x30, 0x64, 0x81 };
+        auto exec = [&](const TString query1) {
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
-        if (OnBuild) {
-            insert();
-            create(false);
+        if (onBuild) {
+            for (size_t i = 0; i < badValues.size(); i++) {
+                auto& bad = badValues[i];
+                TStringBuilder query1;
+                // One bad value + all good values for each partition
+                // "" and null in the beginning to check their skip
+                exec(Sprintf(
+                    R"(UPSERT INTO TestVector2 (id, embedding) VALUES
+                    (1, ""), (2, null), (3, "%s"), (4, "%s"), (5, "%s"),
+                    (10, "00\x02"), (11, "01\x02"), (12, "10\x02"), (13, "11\x02"),
+                    (100, ""), (101, null), (102, "%s"), (103, "%s"), (104, "%s"),
+                    (105, "00\x02"), (106, "01\x02"), (107, "10\x02"), (108, "11\x02"))",
+                    bad.c_str(), bad.c_str(), bad.c_str(),
+                    bad.c_str(), bad.c_str(), bad.c_str()
+                ));
+                create(false, badByte[i]);
+            }
         } else {
-            create(true);
-            insert();
+            create(true, 0);
+            // Add all bad and good values once
+            TStringBuilder query1;
+            query1 << "UPSERT INTO TestVector2 (id, embedding) VALUES (1, \"\"), (2, null)";
+            for (size_t i = 0; i < badValues.size(); i++) {
+                query1 << Sprintf(", (%zu, \"%s\")", 10+i, badValues[i].c_str());
+            }
+            query1 << R"(, (20, "00\x02"), (21, "01\x02"), (22, "10\x02"), (23, "11\x02"))";
+            exec(query1);
         }
+    }
+
+    Y_UNIT_TEST(BadFormat) {
+        DoTestBadFormat(false, false);
+    }
+
+    Y_UNIT_TEST(BadFormatWithStreamWrite) {
+        DoTestBadFormat(false, true);
+    }
+
+    Y_UNIT_TEST(BadFormatOnBuild) {
+        DoTestBadFormat(true, false);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {
@@ -835,6 +1000,49 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     << "enableVectorSearchActor=" << enableVectorSearchActor << " topK=" << topK;
                 UNIT_ASSERT_C(result.IsSuccess(), ctx << ": " << result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), topK, ctx);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OrderByCosineExpressionLimit) {
+        // A LIMIT (top-K) that is an arbitrary expression rather than a bare literal or
+        // parameter must be honored by both the legacy StreamLookup lowering and the new
+        // vector search actor. Regression guard: the actor path only knew how to encode a
+        // literal or a query parameter in the physical TopK value, so any other expression
+        // (e.g. `$topK + 1`) failed to compile.
+        for (bool enableVectorSearchActor : {false, true}) {
+            NKikimrConfig::TFeatureFlags featureFlags;
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetFeatureFlags(featureFlags)
+                .SetKqpSettings({setting});
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
+
+            TKikimrRunner kikimr(serverSettings);
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableAndVectorIndex(db);
+
+            const TString query(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                DECLARE $topK AS Uint64;
+                $target = "\x67\x71\x02";
+                SELECT pk FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT ($topK + 1);
+            )"));
+
+            for (ui64 topK : {ui64(2), ui64(0)}) {
+                auto params = TParamsBuilder()
+                    .AddParam("$topK").Uint64(topK).Build()
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(
+                    query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                    .ExtractValueSync();
+                const TString ctx = TStringBuilder()
+                    << "enableVectorSearchActor=" << enableVectorSearchActor << " topK=" << topK;
+                UNIT_ASSERT_C(result.IsSuccess(), ctx << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), topK + 1, ctx);
             }
         }
     }

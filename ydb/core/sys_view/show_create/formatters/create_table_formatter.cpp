@@ -25,6 +25,8 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <limits>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -41,6 +43,25 @@ namespace {
             return descr.GetUniformPartitionsCount();
         }
         return descr.SplitBoundarySize() + 1;
+    }
+
+    bool IsGlobalIndex(const TableIndex& index) {
+        switch (index.type_case()) {
+            case TableIndex::kGlobalIndex:
+            case TableIndex::kGlobalAsyncIndex:
+            case TableIndex::kGlobalUniqueIndex:
+            case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalFulltextPlainIndex:
+            case TableIndex::kGlobalFulltextRelevanceIndex:
+            case TableIndex::kGlobalJsonIndex:
+                return true;
+            case TableIndex::kLocalBloomFilterIndex:
+            case TableIndex::kLocalBloomNgramFilterIndex:
+            case TableIndex::kLocalMinMaxIndex:
+            case TableIndex::TYPE_NOT_SET:
+                return false;
+        }
+        Y_UNREACHABLE();
     }
 }
 
@@ -326,12 +347,13 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     if (!createRequest.indexes().empty()) {
-        Stream << ",\n";
         try {
-            Format(createRequest.indexes(0));
-            for (int i = 1; i < createRequest.indexes().size(); i++) {
-                Stream << ",\n";
-                Format(createRequest.indexes(i));
+            for (const auto& index : createRequest.indexes()) {
+                if (SeparateGlobalIndexes && IsGlobalIndex(index)) {
+                    continue;
+                }
+                Stream << ",\n\t";
+                Format(index);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -454,6 +476,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     Stream << ";";
 
+    if (SeparateGlobalIndexes) {
+        try {
+            for (const auto& index : createRequest.indexes()) {
+                if (!IsGlobalIndex(index)) {
+                    continue;
+                }
+                Stream << "\nALTER TABLE ";
+                EscapeName(tablePath, Stream);
+                Stream << " ADD ";
+                Format(index);
+                Stream << ";";
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
     if (!tableDesc.GetCdcStreams().empty()) {
         Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size(),
             "Number of CDC streams does not match the number of resolved changefeed topic descriptions");
@@ -561,7 +602,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 }
 
 void TCreateTableFormatter::Format(const TableIndex& index) {
-    Stream << "\tINDEX ";
+    Stream << "INDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
     std::optional<FulltextIndexSettings> fulltextIndexSettings;
@@ -1347,6 +1388,24 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     const auto& pqConfig = persQueue.GetPQTabletConfig();
     const auto& partitionConfig = pqConfig.GetPartitionConfig();
 
+    if (const ui64 resolvedTimestampsIntervalMs = cdcStream.GetResolvedTimestampsIntervalMs()) {
+        Stream << del << "BARRIERS_INTERVAL = INTERVAL(";
+
+        Y_ENSURE(resolvedTimestampsIntervalMs <= static_cast<ui64>(std::numeric_limits<i64>::max()) / 1000,
+            "Resolved timestamps interval is too large");
+
+        TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+
+        const i64 resolvedTimestampsIntervalUs = static_cast<i64>(resolvedTimestampsIntervalMs) * 1000;
+        const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(
+            NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(resolvedTimestampsIntervalUs));
+        Y_ENSURE(str.HasValue(), "Failed to convert resolved timestamps interval to string");
+
+        EscapeString(TString(str.AsStringRef()), Stream);
+        Stream << ")";
+        del = ", ";
+    }
+
     if (partitionConfig.HasLifetimeSeconds()) {
         Stream << del << "RETENTION_PERIOD = ";
         TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
@@ -1359,17 +1418,52 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
-    if (persQueue.HasTotalGroupCount()) {
+    const auto& partitionStrategy = pqConfig.GetPartitionStrategy();
+    bool autoPartitioning = false;
+    const char* autoPartitioningStrategy = nullptr;
+    switch (partitionStrategy.GetPartitionStrategyType()) {
+        case NKikimrPQ::TPQTabletConfig::DISABLED:
+            break;
+        case NKikimrPQ::TPQTabletConfig::CAN_SPLIT:
+            autoPartitioning = true;
+            autoPartitioningStrategy = "scale_up";
+            break;
+        case NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE:
+            autoPartitioning = true;
+            autoPartitioningStrategy = "scale_up_and_down";
+            break;
+        case NKikimrPQ::TPQTabletConfig::PAUSED:
+            autoPartitioning = true;
+            autoPartitioningStrategy = "paused";
+            break;
+    }
+
+    if (autoPartitioning) {
+        Stream << del << "TOPIC_AUTO_PARTITIONING = 'ENABLED'";
+        del = ", ";
+    }
+
+    const bool canFormatExplicitPartitionCount = [&] {
         switch (firstColumnTypeId) {
             case NScheme::NTypeIds::Uint32:
             case NScheme::NTypeIds::Uint64:
-            case NScheme::NTypeIds::Uuid: {
-                Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
-                Stream << persQueue.GetTotalGroupCount();
-                del = ", ";
-                break;
-            }
+            case NScheme::NTypeIds::Uuid:
+                return true;
+            default:
+                return false;
         }
+    }();
+
+    if (canFormatExplicitPartitionCount && (autoPartitioning || persQueue.HasTotalGroupCount())) {
+        Stream << del << "TOPIC_MIN_ACTIVE_PARTITIONS = ";
+        Stream << (autoPartitioning ? partitionStrategy.GetMinPartitionCount() : persQueue.GetTotalGroupCount());
+        del = ", ";
+    }
+
+    if (autoPartitioning) {
+        Stream << del << "TOPIC_MAX_ACTIVE_PARTITIONS = ";
+        Stream << partitionStrategy.GetMaxPartitionCount();
+        del = ", ";
     }
 
     if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan || cdcStream.HasScanProgress()) {
@@ -1377,6 +1471,34 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
     }
 
     Stream << ");";
+
+    if (autoPartitioning) {
+        Y_ENSURE(autoPartitioningStrategy, "Unexpected auto partitioning strategy");
+
+        Stream << "ALTER TOPIC ";
+        EscapeName(JoinPath({tablePath, cdcStream.GetName()}), Stream);
+        Stream << " SET (min_active_partitions = " << partitionStrategy.GetMinPartitionCount();
+        Stream << ", max_active_partitions = " << partitionStrategy.GetMaxPartitionCount();
+        Stream << ", auto_partitioning_strategy = ";
+        EscapeString(autoPartitioningStrategy, Stream);
+        Stream << ", auto_partitioning_stabilization_window = INTERVAL(";
+
+        {
+            TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
+            const i64 stabilizationWindowUs = static_cast<i64>(partitionStrategy.GetScaleThresholdSeconds()) * 1000000;
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(
+                NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(stabilizationWindowUs));
+            Y_ENSURE(str.HasValue(), "Failed to convert auto partitioning stabilization window to string");
+            EscapeString(TString(str.AsStringRef()), Stream);
+        }
+
+        Stream << ")";
+        Stream << ", auto_partitioning_up_utilization_percent = "
+            << partitionStrategy.GetScaleUpPartitionWriteSpeedThresholdPercent();
+        Stream << ", auto_partitioning_down_utilization_percent = "
+            << partitionStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent();
+        Stream << ");";
+    }
 }
 
 void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrSchemeOp::TSequenceDescription& sequence, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {

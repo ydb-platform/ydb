@@ -13,8 +13,8 @@ bool HasFreeCorrelation(const TIntrusivePtr<IOperator>& op, const TUnorderedIUs&
 bool IsNullableIU(const TIntrusivePtr<IOperator>& input, TInfoUnitId iu, TExprContext& ctx);
 // Here we want to support semantics where null == null.
 TJoinIUs MakeNullSafeJoinKeys(TIntrusivePtr<IOperator>& leftInput, TIntrusivePtr<IOperator>& rightInput,
-                                                              const TJoinIUs& joinKeys, TPositionHandle pos, TRBOContext& ctx,
-                                                              TPlanProps& props);
+                              const TJoinIUs& joinKeys, TPositionHandle pos, TRBOContext& ctx,
+                              TPlanProps& props);
 
 // Caller IDs -> fresh domain IDs. The caller keeps the primary Replicate port.
 struct TSubplanDomain {

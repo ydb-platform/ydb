@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt.cpp
@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo
+    ydb/core/kqp/tracing
     ydb/library/mkql_proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
@@ -41,8 +42,6 @@ PEERDIR(
     ydb/library/json_index
     yql/essentials/providers/common/mkql
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 

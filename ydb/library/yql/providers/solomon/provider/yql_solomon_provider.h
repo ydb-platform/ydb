@@ -1,9 +1,10 @@
 #pragma once
 
-#include "yql_solomon_gateway.h"
 #include "yql_solomon_config.h"
+#include "yql_solomon_gateway.h"
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+
 #include <yql/essentials/core/yql_data_provider.h>
 
 namespace NYql {
@@ -11,15 +12,14 @@ namespace NYql {
 constexpr i32 SolomonMaxLabelsCount = 16;
 constexpr i32 SolomonMaxSensorsCount = 50;
 
-struct TSolomonState : public TThrRefBase
-{
+struct TSolomonState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TSolomonState>;
 
 public:
     explicit TSolomonState(bool strictConfigValidation = false);
 
     bool IsRtmrMode() const {
-       return SupportRtmrMode;
+        return SupportRtmrMode;
     }
 
 public:
@@ -36,9 +36,10 @@ public:
     ui32 ExecutorPoolId = 0;
 };
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode = true, bool useYtflowEngine = false);
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode = true, bool useYtflowEngine = false);
 
 TIntrusivePtr<IDataProvider> CreateSolomonDataSource(TSolomonState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateSolomonDataSink(TSolomonState::TPtr state);
 
-} // namespace NYql
+}   // namespace NYql

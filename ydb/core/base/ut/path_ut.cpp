@@ -73,12 +73,18 @@ Y_UNIT_TEST_SUITE(Path) {
     }
 
     Y_UNIT_TEST(CanonizedStringIsSame1) {
+        if (!TStringUseCow) {
+            return; // the result is a copy without copy-on-write
+        }
         const TString in = "/Foo/Bar";
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());
     }
 
     Y_UNIT_TEST(CanonizedStringIsSame2) {
+        if (!TStringUseCow) {
+            return; // the result is a copy without copy-on-write
+        }
         const TString in = "/Foo";
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());

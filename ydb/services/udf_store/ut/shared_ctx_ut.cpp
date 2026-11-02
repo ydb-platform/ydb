@@ -30,17 +30,18 @@ Y_UNIT_TEST_SUITE(TWasmSharedCtxSnapshotTest) {
        (i32.store8 (i64.const 1030) (global.get $b))
        (i64.store (local.get $r) (call $str (i64.const 1024) (i64.const 7))))
     )
-    )", {"create", "filter_a", "filter_b", "snapshot"});
-        auto create = env.Function("create", {env.Type("String")}, env.Type("Uint64"));
+    )",
+            { "create", "filter_a", "filter_b", "snapshot" });
+        auto create = env.Function("create", { env.Type("String") }, env.Type("Uint64"));
         const auto config = env.ValueBuilder.NewString(TStringRef::Of(""));
         auto object = create->Invoke(&env.ValueBuilder, &config);
-        auto a = env.Function("filter_a", {env.Type("Uint64"), env.Type("Int64?")}, env.Type("Int64?"));
-        auto b = env.Function("filter_b", {env.Type("Uint64"), env.Type("Int64?")}, env.Type("Int64?"));
-        const TUnboxedValuePod args[] = {object, TUnboxedValuePod(i64(5))};
+        auto a = env.Function("filter_a", { env.Type("Uint64"), env.Type("Int64?") }, env.Type("Int64?"));
+        auto b = env.Function("filter_b", { env.Type("Uint64"), env.Type("Int64?") }, env.Type("Int64?"));
+        const TUnboxedValuePod args[] = { object, TUnboxedValuePod(i64(5)) };
         UNIT_ASSERT_VALUES_EQUAL(a->Invoke(&env.ValueBuilder, args).Get<i64>(), 5);
         a->Invoke(&env.ValueBuilder, args);
         b->Invoke(&env.ValueBuilder, args);
-        auto snapshot = env.Function("snapshot", {env.Type("Uint64")}, env.Type("String"));
+        auto snapshot = env.Function("snapshot", { env.Type("Uint64") }, env.Type("String"));
         const auto text = snapshot->Invoke(&env.ValueBuilder, &object);
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(text.AsStringRef()), "a=2;b=1");
         UNIT_ASSERT_VALUES_EQUAL(env.Query.BridgeNodes->DebugSize(), 0);

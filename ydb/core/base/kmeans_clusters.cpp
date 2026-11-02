@@ -457,8 +457,7 @@ public:
             return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
         }
         if (FormatByte != data.back()) {
-            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
-                << " expected " << static_cast<ui8>(FormatByte);
+            return Sprintf("Invalid vector format byte, got %02x, expected %02x", static_cast<ui8>(data.back()), FormatByte);
         }
         if (IsBitQuantized()) {
             auto actualDim = 0;
@@ -1150,6 +1149,8 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
+    } else if (nameLower == "autoupdate") {
+        settings.set_autoupdate(ParseBool(nameLower, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

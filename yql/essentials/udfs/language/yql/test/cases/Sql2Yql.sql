@@ -6,7 +6,7 @@ Yt {
 }
 SqlCore {
     ExtendedTranslationFlags {
-        Name: "Antlr4"
+        Name: "WindowNewPipeline"
     }
 }
 @@;

@@ -1,5 +1,3 @@
-ALLOCATOR(J)
-
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/udfs/common/python/sanitizer_suppressions.inc)
 
 SRCS(
@@ -27,4 +25,4 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_CURRENT_ABI_VERSION()

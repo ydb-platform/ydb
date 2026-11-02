@@ -189,6 +189,7 @@ void TPartitionActor::CompleteLoadState(
 {
     if (args.VolumeConfig.Defined()) {
         VolumeConfig = *args.VolumeConfig;
+        ReportDiskId(ctx);
 
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;
@@ -256,6 +257,11 @@ void TPartitionActor::CompleteLoadState(
             }
         }
     }
+
+    // Pipes stay closed until VolumeConfig and an in-flight host operation
+    // are loaded, so an earlier UpdateVolumeConfig cannot look like the
+    // initial allocation.
+    SignalTabletActive(ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

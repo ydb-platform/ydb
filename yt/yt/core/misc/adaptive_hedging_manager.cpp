@@ -134,7 +134,7 @@ private:
     std::atomic<double> HedgingDelay_;
     std::atomic<double> TokenCount_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DequeLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, DequeLock_);
     std::deque<THedgingRequestPtr> RequestDeque_;
 
     std::atomic<int> PrimaryRequestCount_ = 0;

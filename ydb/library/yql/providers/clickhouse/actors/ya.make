@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_ch_read_actor.cpp
@@ -13,7 +13,5 @@ PEERDIR(
     ydb/library/yql/providers/clickhouse/proto
     ydb/library/yql/providers/common/http_gateway
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

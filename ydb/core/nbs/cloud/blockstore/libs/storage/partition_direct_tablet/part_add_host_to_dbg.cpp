@@ -200,19 +200,18 @@ void TPartitionActor::HandleAddHostAllocationResult(
     const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
-    const size_t dbgId = ev->Cookie;
 
-    if (!AddHostInFlight.has_value() ||
-        AddHostInFlight->DirectBlockGroupId != dbgId)
-    {
+    if (!AddHostInFlight.has_value()) {
         LOG_WARN(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s AddHost response for unexpected dbgId=%lu (stale)",
+            "%s AddHost response with no in-flight request, cookie=%lu",
             LogTitle.GetWithTime().c_str(),
-            dbgId);
+            ev->Cookie);
         return;
     }
+
+    const size_t dbgId = AddHostInFlight->DirectBlockGroupId;
 
     const auto& dbgConnections =
         DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
@@ -429,7 +428,10 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
+    SendToBsc(
+        ctx,
+        EBscRequest::AddHost,
+        THolder<IEventBase>(request.release()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

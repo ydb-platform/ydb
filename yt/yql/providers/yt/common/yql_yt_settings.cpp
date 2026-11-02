@@ -59,21 +59,21 @@ void MediaValidator(const NYT::TNode& value) {
 }
 
 TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext)
-    : NCommon::TSettingDispatcher(YtProviderName, qContext, typeCtx.StrictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TYtSettings>(YtProviderName, qContext, typeCtx.StrictConfigValidation)
 {
-    const auto codecValidator = [] (const TString&, TString str) {
+    const auto codecValidator = [] (const TYtSettings&, const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
             throw yexception() << "Bad codec value";
         }
     };
 
-    const auto mediaValidator = [] (const TString&, const NYT::TNode& value) {
+    const auto mediaValidator = [] (const TYtSettings&, const TString&, const NYT::TNode& value) {
         MediaValidator(value);
     };
 
     REGISTER_SETTING(*this, Auth)
-        .ValueSetter([this](const TString&, const TString& value) {
-            Auth = value;
+        .ValueSetter([this](TYtSettings& settings, const TString&, const TString& value) {
+            settings.Auth = value;
             for (auto& x: Tokens) {
                 x.second = value;
             }
@@ -84,10 +84,10 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TablesTmpFolder).IgnoreInFullReplay();
     REGISTER_SETTING(*this, TempTablesTtl).IgnoreInFullReplay();
     REGISTER_SETTING(*this, KeepTempTables)
-        .ValueSetter([this](const TString& cluster, bool value) {
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, bool value) {
             Y_UNUSED(cluster);
             if (value) {
-                ReleaseTempData = EReleaseTempDataMode::Never;
+                settings.ReleaseTempData = EReleaseTempDataMode::Never;
             }
         });
     REGISTER_SETTING(*this, InflightTempTablesLimit);
@@ -99,8 +99,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         .Lower(1)
         .Upper(1000)
         .Parser([](const TString& v) { return v.empty() ? 1 : Max(1u, FromString<ui32>(v)); })
-        .Validator([this](const TString&, ui32) {
-            if (ForceInferSchema.Get()) {
+        .Validator([](const TYtSettings& settings, const TString&, ui32) {
+            if (settings.ForceInferSchema.Get()) {
                 throw yexception() << "InferSchema cannot be used together with ForceInferSchema";
             }
         });
@@ -109,8 +109,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         .Lower(1)
         .Upper(1000)
         .Parser([](const TString& v) { return v.empty() ? 1 : Max(1u, FromString<ui32>(v)); })
-        .Validator([this](const TString&, ui32) {
-            if (InferSchema.Get()) {
+        .Validator([](const TYtSettings& settings, const TString&, ui32) {
+            if (settings.InferSchema.Get()) {
                 throw yexception() << "ForceInferSchema cannot be used together with InferSchema";
             }
         });
@@ -165,15 +165,15 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         });
 
     REGISTER_SETTING(*this, DefaultCluster)
-        .Validator([this] (const TString&, TString value) {
+        .Validator([this](const TYtSettings&, const TString&, TString value) {
             if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
     REGISTER_SETTING(*this, UseTypeV2)
-        .ValueSetter([this](const TString& cluster, bool value) {
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, bool value) {
             Y_UNUSED(cluster);
-            UseNativeYtTypes = value;
+            settings.UseNativeYtTypes = value;
         })
         .Deprecated("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
@@ -182,29 +182,29 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, UseIntermediateStreams);
     REGISTER_SETTING(*this, StaticPool).IgnoreInFullReplay();
     REGISTER_SETTING(*this, UseFlow)
-        .ValueSetter([this](const TString&, bool value) {
-            UseFlow = value;
+        .ValueSetter([](TYtSettings& settings, const TString&, bool value) {
+            settings.UseFlow = value;
             if (value) {
-                UseSystemColumns = true;
+                settings.UseSystemColumns = true;
             } else {
-                MapJoinUseFlow = false;
+                settings.MapJoinUseFlow = false;
             }
         });
     REGISTER_SETTING(*this, WideFlowLimit)
-        .ValueSetter([this](const TString&, ui16 value) {
-            WideFlowLimit = value;
+        .ValueSetter([](TYtSettings& settings, const TString&, ui16 value) {
+            settings.WideFlowLimit = value;
             if (value > 0) {
-                UseSystemColumns = true;
+                settings.UseSystemColumns = true;
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
-        .ValueSetter([this] (const TString& cluster, TInstant value) {
-            ExpirationDeadline[cluster] = value;
+        .Lower(qContext.CanRead() ? TInstant::Zero() : Now())
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, TInstant value) {
+            settings.ExpirationDeadline[cluster] = value;
         });
     REGISTER_SETTING(*this, ExpirationInterval)
-        .ValueSetter([this] (const TString& cluster, TDuration value) {
-            ExpirationInterval[cluster] = value;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, TDuration value) {
+            settings.ExpirationInterval[cluster] = value;
         });
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
@@ -214,13 +214,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
 
     REGISTER_SETTING(*this, Owners)
         .NonEmpty()
-        .ValueSetterWithRestore([this] (const TString& cluster, TSet<TString> owners) {
+        .ValueSetterWithRestore([](TYtSettings& settings, const TString& cluster, TSet<TString> owners) {
             if (ALL_CLUSTERS == cluster) {
-                Owners.UpdateAll([&owners] (const TString&, TSet<TString>& val) {
+                settings.Owners.UpdateAll([&owners] (const TString&, TSet<TString>& val) {
                     val.insert(owners.begin(), owners.end());
                 });
             } else {
-                Owners[cluster].insert(owners.begin(), owners.end());
+                settings.Owners[cluster].insert(owners.begin(), owners.end());
             }
         })
         .IgnoreInFullReplay();
@@ -229,9 +229,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, SchedulingTagFilter).IgnoreInFullReplay();
     REGISTER_SETTING(*this, PoolTrees).IgnoreInFullReplay()
         .NonEmpty()
-        .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
-            HybridDqExecution = false;
-            PoolTrees[cluster] = trees;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, TSet<TString> trees) {
+            settings.HybridDqExecution = false;
+            settings.PoolTrees[cluster] = trees;
         });
     REGISTER_SETTING(*this, TentativePoolTrees).NonEmpty().IgnoreInFullReplay();
     REGISTER_SETTING(*this, TentativeTreeEligibilitySampleJobCount);
@@ -243,18 +243,18 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, PublishedReplicationFactor).Lower(1).Upper(10);
     REGISTER_SETTING(*this, TemporaryReplicationFactor).Lower(1).Upper(10);
     REGISTER_SETTING(*this, AutoMerge).Enum({"relaxed", "economy", "disabled"})
-        .ValueSetter([this](const TString& cluster, const TString& value) {
-            PublishedAutoMerge[cluster] = value;
-            TemporaryAutoMerge[cluster] = value;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, const TString& value) {
+            settings.PublishedAutoMerge[cluster] = value;
+            settings.TemporaryAutoMerge[cluster] = value;
         });
 
     REGISTER_SETTING(*this, PublishedAutoMerge).Enum({ "relaxed", "economy", "disabled" });
     REGISTER_SETTING(*this, TemporaryAutoMerge).Enum({ "relaxed", "economy", "disabled" });
     REGISTER_SETTING(*this, UseSkiff)
-        .ValueSetter([this](const TString& cluster, bool value) {
-            UseSkiff[cluster] = value;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, bool value) {
+            settings.UseSkiff[cluster] = value;
             if (!value) {
-                UseNativeYtTypes = false;
+                settings.UseNativeYtTypes = false;
             }
         });
     REGISTER_SETTING(*this, TableContentCompressLevel).Upper(11);
@@ -290,9 +290,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, LocalCalcLimit).Lower(1);
     REGISTER_SETTING(*this, DefaultCalcMemoryLimit);
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
-        .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {
-            LayerPaths[cluster] = value;
-            HybridDqExecution = false;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, const TVector<TString>& value) {
+            settings.LayerPaths[cluster] = value;
+            settings.HybridDqExecution = false;
         });
     REGISTER_SETTING(*this, LayerCaches)
         .Parser([](const TString& v) {
@@ -323,23 +323,23 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
             res[val["name"].GetString()] = std::move(paths);
             return res;
         })
-        .ValueSetter([this](const TString& cluster, const THashMap<TString, TVector<TString>>& val) {
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, const THashMap<TString, TVector<TString>>& val) {
             for (const auto& [name, paths]: val) {
-                LayerCaches[cluster][name] = paths;
+                settings.LayerCaches[cluster][name] = paths;
             }
         });
 
     REGISTER_SETTING(*this, DockerImage).NonEmpty()
-        .ValueSetter([this](const TString& cluster, const TString& value) {
-            DockerImage[cluster] = value;
-            HybridDqExecution = false;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, const TString& value) {
+            settings.DockerImage[cluster] = value;
+            settings.HybridDqExecution = false;
         });
     REGISTER_SETTING(*this, _EnableDq);
     // Deprecated. Use MaxInputTables instead
     REGISTER_SETTING(*this, ExtendTableLimit).Lower(2).Upper(3000)
-        .ValueSetter([this] (const TString& cluster, ui32 value) {
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, ui32 value) {
             Y_UNUSED(cluster);
-            MaxInputTables = value;
+            settings.MaxInputTables = value;
         })
         .Deprecated("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
     REGISTER_SETTING(*this, _CacheSchemaBySchemaId);
@@ -369,9 +369,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
     REGISTER_SETTING(*this, EnableFuseMapToMapReduce)
-        .ValueSetter([this](const TString& arg, bool value) {
+        .ValueSetter([](TYtSettings& settings, const TString& arg, bool value) {
             Y_UNUSED(arg);
-            FuseMapToMapReduce = value ? EFuseMapToMapReduceMode::Normal : EFuseMapToMapReduceMode::Disable;
+            settings.FuseMapToMapReduce = value ? EFuseMapToMapReduceMode::Normal : EFuseMapToMapReduceMode::Disable;
         })
         .Deprecated("Pragma EnableFuseMapToMapReduce is deprected. Use FuseMapToMapReduce instead");
     REGISTER_SETTING(*this, FuseMapToMapReduce).Parser([](const TString& v) { return FromString<EFuseMapToMapReduceMode>(v); });
@@ -385,10 +385,10 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TopSortSizePerJob).Lower(1);
     REGISTER_SETTING(*this, TopSortRowMultiplierPerJob).Lower(1);
     REGISTER_SETTING(*this, JoinUseColumnarStatistics)
-        .ValueSetter([this](const TString& arg, bool value) {
+        .ValueSetter([](TYtSettings& settings, const TString& arg, bool value) {
             Y_UNUSED(arg);
             if (!value) {
-                JoinCollectColumnarStatistics = EJoinCollectColumnarStatisticsMode::Disable;
+                settings.JoinCollectColumnarStatistics = EJoinCollectColumnarStatisticsMode::Disable;
             }
         })
         .Deprecated("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
@@ -402,7 +402,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, JoinEnableStarJoin);
     REGISTER_SETTING(*this, JobEnv)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
-        .Validator([] (const TString&, const NYT::TNode& value) {
+        .Validator([](const TYtSettings&, const TString&, const NYT::TNode& value) {
             if (!value.IsMap()) {
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
@@ -414,40 +414,40 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         });
     REGISTER_SETTING(*this, OperationSpec)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
-        .Validator([] (const TString&, const NYT::TNode& value) {
+        .Validator([](const TYtSettings&, const TString&, const NYT::TNode& value) {
             if (!value.IsMap()) {
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
         })
-        .ValueSetter([this](const TString& cluster, const NYT::TNode& spec) {
-            OperationSpec[cluster] = spec;
-            HybridDqExecution = false;
+        .ValueSetter([](TYtSettings& settings, const TString& cluster, const NYT::TNode& spec) {
+            settings.OperationSpec[cluster] = spec;
+            settings.HybridDqExecution = false;
         })
         .IgnoreInFullReplay();
     REGISTER_SETTING(*this, FmrOperationSpec)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
-        .Validator([] (const TString&, const NYT::TNode& value) {
+        .Validator([](const TYtSettings&, const TString&, const NYT::TNode& value) {
             if (!value.IsMap()) {
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
         });
     REGISTER_SETTING(*this, Annotations)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
-        .Validator([] (const TString&, const NYT::TNode& value) {
+        .Validator([](const TYtSettings&, const TString&, const NYT::TNode& value) {
             if (!value.IsMap()) {
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
         });
     REGISTER_SETTING(*this, Description)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
-        .Validator([] (const TString&, const NYT::TNode& value) {
+        .Validator([](const TYtSettings&, const TString&, const NYT::TNode& value) {
             if (!value.IsMap()) {
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
         });
     REGISTER_SETTING(*this, StartedBy)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
-        .Validator([] (const TString&, const NYT::TNode& value) {
+        .Validator([](const TYtSettings&, const TString&, const NYT::TNode& value) {
             if (!value.IsMap()) {
                 throw yexception() << "Expected yson map, but got " << value.GetType();
             }
@@ -467,11 +467,11 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TableContentMinAvgChunkSize);
     REGISTER_SETTING(*this, TableContentMaxInputTables);
     REGISTER_SETTING(*this, UseSystemColumns)
-        .ValueSetter([this](const TString&, bool value) {
-            UseSystemColumns = value;
+        .ValueSetter([](TYtSettings& settings, const TString&, bool value) {
+            settings.UseSystemColumns = value;
             if (!value) {
-                UseFlow = false;
-                WideFlowLimit = 0;
+                settings.UseFlow = false;
+                settings.WideFlowLimit = 0;
             }
         });
     REGISTER_SETTING(*this, PublishedMedia)
@@ -483,10 +483,10 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, PublishedPrimaryMedium);
     REGISTER_SETTING(*this, TemporaryPrimaryMedium);
     REGISTER_SETTING(*this, IntermediateDataMedium);
-    REGISTER_SETTING(*this, PrimaryMedium).ValueSetter([this](const TString& cluster, const TString& value) {
-        PublishedPrimaryMedium[cluster] = value;
-        TemporaryPrimaryMedium[cluster] = value;
-        IntermediateDataMedium[cluster] = value;
+    REGISTER_SETTING(*this, PrimaryMedium).ValueSetter([](TYtSettings& settings, const TString& cluster, const TString& value) {
+        settings.PublishedPrimaryMedium[cluster] = value;
+        settings.TemporaryPrimaryMedium[cluster] = value;
+        settings.IntermediateDataMedium[cluster] = value;
     });
     REGISTER_SETTING(*this, QueryCacheChunkLimit);
     REGISTER_SETTING(*this, IgnoreTypeV3);
@@ -523,6 +523,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, NetworkProject).IgnoreInFullReplay();
     REGISTER_SETTING(*this, StaticNetworkProject).IgnoreInFullReplay();
     REGISTER_SETTING(*this, FileCacheTtl).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, _EnableFileCacheLock);
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
@@ -609,7 +610,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, DropUnusedKeysFromKeyFilter);
     REGISTER_SETTING(*this, ReportEquiJoinStats);
     REGISTER_SETTING(*this, RuntimeCluster)
-        .Validator([this] (const TString& cluster, TString value) {
+        .Validator([this](const TYtSettings&, const TString& cluster, TString value) {
             if (cluster != "$all") {
                 throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
             }
@@ -619,7 +620,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
     REGISTER_SETTING(*this, DefaultRuntimeCluster)
-        .Validator([this] (const TString&, TString value) {
+        .Validator([this](const TYtSettings&, const TString&, TString value) {
             if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }

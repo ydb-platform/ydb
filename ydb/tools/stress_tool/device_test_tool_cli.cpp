@@ -18,8 +18,20 @@ const std::initializer_list<const char*> WorkloadOptions = {
     "background-write-ratio", "background-write-size-kib",
 };
 
-void AddOptionSection(NLastGetopt::TOpts& opts, const TString& title,
-        std::initializer_list<const char*> names) {
+const std::initializer_list<const char*> DDiskOptions = {
+    "disable-ddisk-checksums", "ddisk-checksums-cache-size", "force-ddisk-pdisk-fallback", "ddisk-devnull",
+};
+
+const std::initializer_list<const char*> NetworkOptions = {
+    "server", "client", "endpoint", "ic-port", "num-server-devices",
+};
+
+#ifndef _darwin_
+void AddOptionSection(
+    NLastGetopt::TOpts& opts,
+    const TString& title,
+    std::initializer_list<const char*> names)
+{
     TStringBuilder help;
     for (const char* name : names) {
         auto& opt = opts.GetLongOption(name);
@@ -36,6 +48,7 @@ void AddOptionSection(NLastGetopt::TOpts& opts, const TString& title,
     }
     opts.AddSection(title, help);
 }
+#endif
 
 ui32 PositiveValue(const NLastGetopt::TOptsParseResult& res, const TString& name) {
     const TString value = res.Get(name);
@@ -55,13 +68,23 @@ TCommandLine::TCommandLine(bool ddisk)
 {
     using namespace NLastGetopt;
     auto& opts = Opts;
+#ifdef _darwin_
+    opts.AddLongOption("path", "sector map: SectorMap:<name>[:<GiB>[:<mode>]] (repeat for multiple maps)")
+#else
     opts.AddLongOption("path", "path to device (can be specified multiple times for multi-device tests)")
+#endif
         .RequiredArgument("FILE")
         .AppendTo(&Paths);
+#ifdef _darwin_
+    auto& cfg = opts.AddLongOption("cfg", "path to config containing PDisk read, write, or log workloads").RequiredArgument("FILE");
+#else
     auto& cfg = opts.AddLongOption("cfg", "path to config file (cannot combine with DDisk workload options)").RequiredArgument("FILE");
+#endif
     if (!DDisk) {
         cfg.DefaultValue("cfg.txt");
+#ifndef _darwin_
         opts.AddSection("Commands", "  ddisk <options>  Run DDisk tests without a config file; see ddisk --help.\n");
+#endif
     } else {
         opts.SetFreeArgsNum(0);
     }
@@ -70,9 +93,15 @@ TCommandLine::TCommandLine(bool ddisk)
     opts.AddLongOption("output-format", "wiki|human|json").DefaultValue("wiki");
     opts.AddLongOption("mon-port", "port for monitoring http page").DefaultValue("0");
     opts.AddLongOption("run-count", "number of times to run each test").DefaultValue("1");
+#ifdef _darwin_
+    opts.AddLongOption("inflight", "override PDisk read/write InFlight with one positive value; mutually exclusive with an inflight range").RequiredArgument("N");
+    opts.AddLongOption("inflight-from", "override PDisk read/write InFlight starting value").DefaultValue("0");
+    opts.AddLongOption("inflight-to", "override PDisk read/write InFlight ending value").DefaultValue("0");
+#else
     opts.AddLongOption("inflight", "override InFlight with one positive value; mutually exclusive with an inflight range (config-free DDisk default: 128)").RequiredArgument("N");
     opts.AddLongOption("inflight-from", "override InFlight starting value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
     opts.AddLongOption("inflight-to", "override InFlight ending value (PDisk/DDisk/UringRouter tests)").DefaultValue("0");
+#endif
     opts.AddLongOption("no-logo", "disable logo printing on start").NoArgument();
     opts.AddLongOption("disable-file-lock", "disable file locking before test").NoArgument().DefaultValue("0");
     opts.AddLongOption("disable-pdisk-encryption", "disable PDisk data encryption").StoreTrue(&DisablePDiskDataEncryption);
@@ -88,7 +117,11 @@ TCommandLine::TCommandLine(bool ddisk)
     opts.AddLongOption("ddisk-devnull",
             "acknowledge DDisk data I/O without device reads/writes (zero-filled reads; router-attaching slots on a PDisk must agree)")
         .StoreTrue(&DDiskDevNullMode);
+#ifdef _darwin_
+    opts.AddLongOption("log-level", "log level for BS_LOAD_TEST: warn|info|debug|trace (default warn). BS_DEVICE/BS_PDISK are floored at WARN")
+#else
     opts.AddLongOption("log-level", "log level for BS_LOAD_TEST/BS_DDISK: warn|info|debug|trace (default warn). INTERCONNECT is floored at INFO; BS_DEVICE/BS_PDISK at WARN")
+#endif
         .RequiredArgument("LEVEL").DefaultValue("warn");
     opts.AddLongOption("server", DDisk
         ? "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect)"
@@ -115,25 +148,34 @@ TCommandLine::TCommandLine(bool ddisk)
         opts.AddLongOption("background-write-size-kib", "background write size in KiB (power of two, at least 4)").RequiredArgument("N").DefaultValue("4");
     }
 
-    AddOptionSection(opts, "DDisk options", {
-        "disable-ddisk-checksums", "ddisk-checksums-cache-size", "force-ddisk-pdisk-fallback", "ddisk-devnull",
-    });
+#ifdef _darwin_
+    for (const char* name : DDiskOptions) {
+        opts.GetLongOption(name).Hidden();
+    }
+    if (DDisk) {
+        for (const char* name : WorkloadOptions) {
+            opts.GetLongOption(name).Hidden();
+        }
+    }
+    opts.GetLongOption("disable-file-lock").Hidden();
+    opts.AddSection("Supported workloads", "  macOS supports local PDisk read, write, and log workloads on sector maps.\n");
+#else
+    AddOptionSection(opts, "DDisk options", DDiskOptions);
     if (DDisk) {
         AddOptionSection(opts, "DDisk workload options (without --cfg)", WorkloadOptions);
     }
-    AddOptionSection(opts, DDisk ? "DDisk client/server options" : "DDisk / Interconnect client/server options", {
-        "server", "client", "endpoint", "ic-port", "num-server-devices",
-    });
+    AddOptionSection(opts, DDisk ? "DDisk client/server options" : "DDisk / Interconnect client/server options", NetworkOptions);
+#endif
 }
 
-TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res, bool ddisk) {
+TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res) {
     if (res.Has("inflight")) {
         Y_ENSURE(!res.Has("inflight-from") && !res.Has("inflight-to"),
             "--inflight cannot be combined with --inflight-from/--inflight-to");
         const auto value = ToString(PositiveValue(res, "inflight"));
         return {value, value};
     }
-    if (ddisk && (res.Has("inflight-from") || res.Has("inflight-to"))) {
+    if (res.Has("inflight-from") || res.Has("inflight-to")) {
         Y_ENSURE(res.Has("inflight-from") && res.Has("inflight-to"),
             "--inflight-from and --inflight-to must be specified together");
         const ui32 from = PositiveValue(res, "inflight-from");
@@ -141,7 +183,6 @@ TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res, bool 
         Y_ENSURE(from <= to, "--inflight-from must not exceed --inflight-to");
         return {ToString(from), ToString(to)};
     }
-    // Preserve legacy parsing and its treatment of zero/incomplete ranges.
     return {res.Get("inflight-from"), res.Get("inflight-to")};
 }
 
@@ -218,6 +259,30 @@ void ValidateDDiskOptions(const NLastGetopt::TOptsParseResult& res) {
         "--ddisk-devnull has no effect on the client; pass it to the server process");
 }
 
+void ValidatePDiskSectorMapOptions(const NLastGetopt::TOptsParseResult& res, bool ddisk) {
+    Y_ENSURE(!ddisk, "macOS supports only PDisk sector-map workloads; the ddisk command is not supported");
+    for (const auto& names : {DDiskOptions, NetworkOptions}) {
+        for (const char* name : names) {
+            Y_ENSURE(!res.Has(name), "macOS supports only PDisk sector-map workloads; --" << name << " is not supported");
+        }
+    }
+}
+
+void ValidatePDiskSectorMapTests(const NDevicePerfTest::TPerfTests& tests) {
+    Y_ENSURE(tests.PDiskTestListSize() && !tests.AioTestListSize() && !tests.TrimTestListSize()
+        && !tests.HasDriveEstimatorTest() && !tests.DDiskTestListSize()
+        && !tests.UringRouterTestListSize() && !tests.PersistentBufferTestListSize()
+        && !tests.InterconnectTestListSize(),
+        "macOS requires a nonempty PDiskTestList containing only PDisk sector-map workloads");
+    for (const auto& test : tests.GetPDiskTestList()) {
+        Y_ENSURE(test.PDiskTestListSize(), "PDiskTestList must contain at least one PDisk read, write, or log load");
+        for (const auto& record : test.GetPDiskTestList()) {
+            Y_ENSURE(record.HasPDiskReadLoad() || record.HasPDiskWriteLoad() || record.HasPDiskLogLoad(),
+                "macOS PDiskTestList supports only PDiskReadLoad, PDiskWriteLoad, and PDiskLogLoad records");
+        }
+    }
+}
+
 NDevicePerfTest::TPerfTests LoadTests(const NLastGetopt::TOptsParseResult& res, bool ddisk) {
     if (ddisk && !res.Has("cfg")) {
         return MakeDDiskTests(res);
@@ -233,6 +298,11 @@ NDevicePerfTest::TPerfTests LoadTests(const NLastGetopt::TOptsParseResult& res, 
         Y_ENSURE(parsed, "cannot parse DDisk config: " << res.Get("cfg"));
         ValidateDDiskTests(tests);
     }
+#ifdef _darwin_
+    if (!ddisk) {
+        Y_ENSURE(parsed, "cannot parse PDisk config: " << res.Get("cfg"));
+    }
+#endif
     return tests;
 }
 

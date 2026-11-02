@@ -32,7 +32,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -303,6 +304,16 @@
                 {"Index": 5, "Name": "ResetFeatures", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "MissingOk", "Type": "TCoAtom"},
                 {"Index": 7, "Name": "Ast", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKiKillSession",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiKillSession!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "SessionId", "Type": "TExprBase"}
             ]
         },
         {

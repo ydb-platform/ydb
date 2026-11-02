@@ -1,16 +1,13 @@
 #pragma once
 
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/formats/arrow/arrow_helpers.h>
-
 #include <yql/essentials/types/binary_json/format.h>
 
-// Subcolumn builders that either copy an arrow-native value or decode one from BinaryJson.
+// Subcolumn builders that append a value from type-aware view or decode one from BinaryJson.
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 class TEncodingPlainBuilder: public TTrivialArray::TPlainBuilderBase {
@@ -28,8 +25,8 @@ public:
         AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AppendValueFromBinaryJson(builder, blob, ValueType); });
     }
 
-    void AddArrayElement(const ui32 recordIndex, const arrow::Array& array, const ui32 position) {
-        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append(builder, array, position)); });
+    void AddValue(const ui32 recordIndex, const TJsonValueView& value) {
+        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AppendValueFromView(builder, value, ValueType); });
     }
 };
 
@@ -48,8 +45,8 @@ public:
         AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AppendValueFromBinaryJson(builder, blob, ValueType); });
     }
 
-    void AddArrayElement(const ui32 recordIndex, const arrow::Array& array, const ui32 position) {
-        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append(builder, array, position)); });
+    void AddValue(const ui32 recordIndex, const TJsonValueView& value) {
+        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AppendValueFromView(builder, value, ValueType); });
     }
 };
 

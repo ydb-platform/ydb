@@ -54,6 +54,9 @@ class XdsBootstrap {
     friend bool operator==(const XdsServer& a, const XdsServer& b) {
       return a.Equals(b);
     }
+    friend bool operator!=(const XdsServer& a, const XdsServer& b) {
+      return !a.Equals(b);
+    }
   };
 
   class Authority {

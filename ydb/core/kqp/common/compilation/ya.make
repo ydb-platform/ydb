@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     result.cpp
@@ -10,7 +10,5 @@ PEERDIR(
     ydb/core/kqp/common/simple
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

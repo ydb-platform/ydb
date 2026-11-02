@@ -2,10 +2,12 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/global.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/export/session/control.h>
 #include <ydb/core/tx/columnshard/export/session/session.h>
 #include <ydb/core/tx/columnshard/export/session/task.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -13,12 +15,15 @@
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/inflight_test_enums.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/wrappers/abstract.h>
 
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
+#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <util/random/random.h>
 
@@ -228,6 +233,226 @@ void WriteAndCommitToMain(TTestBasicRuntime& runtime, TActorId& sender, ui64& tx
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
+    void TestScanPings(bool allowPings, bool savingCursor, bool failDuringSave = false) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        ui64 writeId = 1;
+        auto sender = runtime.AllocateEdgeActor();
+        WriteAndCommitToMain(runtime, sender, txId, planStep, tableId, { 0, 5 }, schema, writeId);
+
+        // These tests exercise the export actor's flow control, without waiting
+        // for asynchronous HTTP requests in the simulated actor runtime.
+        auto storageObserver = runtime.AddObserver<NWrappers::TEvExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            using TResponse = NWrappers::TEvExternalStorage::TEvPutObjectResponse;
+            runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, new TResponse(TString(ev->Get()->Request.GetKey()),
+                                                                         TResponse::TOutcome(Aws::S3::Model::PutObjectResult()))), 0, true);
+            ev.Reset();
+        });
+        TActorId exportActor;
+        TActorId scanner;
+        auto initObserver = runtime.AddObserver<NKqp::TEvKqpCompute::TEvScanInitActor>([&](auto& ev) {
+            exportActor = ev->Recipient;
+            scanner = ActorIdFromProto(ev->Get()->Record.GetScanActorId());
+            ev->Get()->Record.SetAllowPings(allowPings);
+            runtime.EnableScheduleForActor(exportActor);
+        });
+        ui32 pings = 0;
+        ui32 acks = 0;
+        auto pingObserver = runtime.AddObserver<NKqp::TEvKqpCompute::TEvScanPing>([&](auto& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, scanner);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Sender, exportActor);
+            ++pings;
+        });
+        auto ackObserver = runtime.AddObserver<NKqp::TEvKqpCompute::TEvScanDataAck>([&](auto&) {
+            ++acks;
+        });
+        NActors::TBlockEvents<TEvPrivate::TEvBackupExportRecordBatch> blockBatch(runtime, [&](const auto&) {
+            return !savingCursor;
+        });
+        const auto saving = GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight");
+        NActors::TBlockEvents<NOlap::NBackground::TEvLocalTransactionCompleted> blockSave(runtime, [&](const auto& ev) {
+            return savingCursor && ev->Recipient == exportActor && saving->Val() == 1;
+        });
+        const auto body = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId));
+        const auto backupTxId = ++txId;
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, body.SerializeAsString()));
+        TestWaitCondition(runtime, "export waiting for uploader or cursor save", [&]() {
+            return savingCursor ? !blockSave.empty() : !blockBatch.empty();
+        });
+        const auto acksBeforeWait = acks;
+        // The first wakeup may have been scheduled before enabling the actor's
+        // timers. Trigger it explicitly and verify the following periodic pings.
+        runtime.Send(new IEventHandle(exportActor, sender, new TEvents::TEvWakeup()), 0, true);
+        runtime.SimulateSleep(TDuration::Seconds(45));
+        UNIT_ASSERT_VALUES_EQUAL(acks, acksBeforeWait);
+        if (allowPings) {
+            UNIT_ASSERT_GE(pings, 3u);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(pings, 0);
+        }
+
+        if (failDuringSave) {
+            const TString error = "injected uploader scan reset";
+            runtime.Send(new IEventHandle(exportActor, sender, new TEvPrivate::TEvBackupExportError(error)), 0, true);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            blockSave.Stop().Unblock();
+            TestWaitCondition(runtime, "export failed after cursor save", [&]() {
+                return controller->GetFinishedExportsCount() >= 1 && GetExportActorsAliveCounter(runtime) == 0;
+            });
+            auto prepared = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+            planStep = TPlanStep(prepared->Get()->Record.GetMinStep());
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+            PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId));
+            auto completed = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
+            UNIT_ASSERT(!completed->Get()->Record.GetOpResult().GetSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(completed->Get()->Record.GetOpResult().GetExplain(), error);
+        } else {
+            runtime.Send(new IEventHandle(exportActor, sender, new TEvents::TEvPoisonPill()), 0, true);
+            TestWaitCondition(runtime, "export actor stopped", [&]() {
+                return GetExportActorsAliveCounter(runtime) == 0;
+            });
+        }
+        const auto pingsAtStop = pings;
+        runtime.SimulateSleep(TDuration::Seconds(45));
+        UNIT_ASSERT_VALUES_EQUAL(pings, pingsAtStop);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportReadInflight(runtime), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetExportAckInflight(runtime), 0);
+    }
+
+    Y_UNIT_TEST(PingsWhileWaitingForUploader) {
+        TestScanPings(true, false);
+    }
+
+    Y_UNIT_TEST(PingsWhileSavingCursor) {
+        TestScanPings(true, true);
+    }
+
+    Y_UNIT_TEST(NoPingsWhenScannerDisallowsThem) {
+        TestScanPings(false, false);
+    }
+
+    Y_UNIT_TEST(UploaderErrorDuringCursorSaveIsReported) {
+        TestScanPings(true, true, true);
+    }
+
+    Y_UNIT_TEST(StopExportClearsInflight, EExportInflightTestCase) {
+        const auto operation = Arg<0>();
+        NTestUtils::CreateBucket("test");
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
+        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        ui64 writeId = 1;
+        auto sender = runtime.AllocateEdgeActor();
+        WriteAndCommitToMain(runtime, sender, txId, planStep, tableId, { 0, 5 }, schema, writeId);
+
+        const auto reading = GetExportActorCounter(runtime, "Value/Export/Read/Inflight");
+        const auto writing = GetExportActorCounter(runtime, "Value/Export/Write/Inflight");
+        const auto saving = GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight");
+        const auto ack = GetExportActorCounter(runtime, "Value/Export/Ack/Inflight");
+        const auto counters =
+            GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
+                "ExportActor");
+        const auto histogramSamples = [&](const TString& name) {
+            const auto snapshot = counters->FindHistogram(name)->Snapshot();
+            ui64 count = 0;
+            for (ui32 i = 0; i < snapshot->Count(); ++i) {
+                count += snapshot->Value(i);
+            }
+            return count;
+        };
+        const auto written = GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")
+                                 ->GetSubgroup("subsystem", "columnshard")
+                                 ->GetSubgroup("module_id", "ExportActor")
+                                 ->GetCounter("Deriviative/Export/Batches/Written", true);
+        TActorId exportActorId;
+        bool cancelSaveBlocked = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            if ((operation == EExportInflightTestCase::Read || operation == EExportInflightTestCase::CancelledRead) &&
+                type == NKqp::TEvKqpCompute::TEvScanData::EventType) {
+                exportActorId = ev->GetRecipientRewrite();
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (operation == EExportInflightTestCase::Write && type == TEvPrivate::TEvBackupExportRecordBatch::EventType) {
+                exportActorId = ev->Sender;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == NOlap::NBackground::TEvExecuteGeneralLocalTransaction::EventType) {
+                if (operation == EExportInflightTestCase::SaveCursor && saving->Val() == 1) {
+                    exportActorId = ev->Sender;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                if (operation == EExportInflightTestCase::CancelledRead && exportActorId && ev->Sender == exportActorId) {
+                    cancelSaveBlocked = true;
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto body = MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId));
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, ++txId, body.SerializeAsString()));
+        TestWaitCondition(runtime, "export operation in flight", [&]() {
+            return !!exportActorId;
+        });
+        const bool readingOperation = operation == EExportInflightTestCase::Read || operation == EExportInflightTestCase::CancelledRead;
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reading->Val(), readingOperation ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(ack->Val(), readingOperation ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(writing->Val(), operation == EExportInflightTestCase::Write ? 1 : 0);
+        UNIT_ASSERT_VALUES_EQUAL(saving->Val(), operation == EExportInflightTestCase::SaveCursor ? 1 : 0);
+
+        const auto writtenBeforeStop = written->Val();
+        const auto readSamples = histogramSamples("Histogram/Export/Read/DurationMs/Histogram");
+        const auto writeSamples = histogramSamples("Histogram/Export/Write/DurationMs/Histogram");
+        const auto saveSamples = histogramSamples("Histogram/Export/SaveCursor/DurationMs/Histogram");
+        if (operation == EExportInflightTestCase::CancelledRead) {
+            // Keep the cancelled actor alive until a late scan error has been handled.
+            const NOlap::NBackground::TSessionControlContainer control(std::make_shared<NOlap::NBackground::TFakeStatusChannel>(),
+                std::make_shared<NOlap::NExport::TAbortSessionControl>("CS::EXPORT", "1"));
+            runtime.Send(new IEventHandle(exportActorId, sender, new NOlap::NBackground::TEvSessionControl(control)));
+            TestWaitCondition(runtime, "cancel state save blocked", [&]() {
+                return cancelSaveBlocked;
+            });
+            runtime.Send(new IEventHandle(exportActorId, sender, new NKqp::TEvKqpCompute::TEvScanError()));
+            TestWaitCondition(runtime, "late scan error handled", [&]() {
+                return ack->Val() == 0;
+            });
+        }
+
+        runtime.Send(new IEventHandle(exportActorId, sender, new TEvents::TEvPoisonPill()));
+        TestWaitCondition(runtime, "export actor stopped", [&]() {
+            return GetExportActorsAliveCounter(runtime) == 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(reading->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(writing->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(saving->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ack->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL_C(written->Val(), writtenBeforeStop, "stopping an export must not count an unfinished write as completed");
+        UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Export/Read/DurationMs/Histogram"), readSamples);
+        UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Export/Write/DurationMs/Histogram"), writeSamples);
+        UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Export/SaveCursor/DurationMs/Histogram"), saveSamples);
+    }
+
     Y_UNIT_TEST(AliveCounterReturnsToZeroAfterSuccessfulExport) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test", s3Client);
@@ -535,15 +760,22 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
             new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
-        const TPlanStep dupPlanStep{ ev->Get()->Record.GetMinStep() };
+        // A propose for a completed backup is ignored without a reply or a new operator.
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
-        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(dupPlanStep, backupTxId), false);
+        // Replay the original plan step: the duplicate propose does not return a new one.
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), false);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a duplicate propose and plan");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
         VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
@@ -583,14 +815,22 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
             new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
-        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        // A propose for a completed backup is ignored without a reply or a new operator.
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender, TDuration::Seconds(1)));
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvColumnShard::TEvNotifyTxCompletion(backupTxId));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "Completed backup must reply after a duplicate propose and cancel");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(InflightCountersLeakAfterRebootDuringWaitData) {

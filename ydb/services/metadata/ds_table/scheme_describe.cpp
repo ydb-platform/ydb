@@ -2,9 +2,10 @@
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -69,4 +70,4 @@ std::vector<TString> TTableInfo::GetPKFieldNames() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

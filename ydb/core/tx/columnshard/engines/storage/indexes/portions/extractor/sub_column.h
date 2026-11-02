@@ -48,7 +48,7 @@ private:
         const TRecordVisitor& recordVisitor) const override;
 
     virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* /*hashBase*/) const override {
-        return request.GetSubColumnName() == SubColumnName;
+        return request.GetSubColumnName().GetValue() == SubColumnName;
     }
 
     virtual THashMap<ui64, ui32> DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const override;

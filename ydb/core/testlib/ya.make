@@ -23,18 +23,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/apps/version
-    ydb/core/audit/audit_config
-    ydb/library/actors/core
-    ydb/library/actors/interconnect
-    ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/library/grpc/server
-    ydb/library/grpc/server/actors
     library/cpp/regex/pcre
     library/cpp/testing/gmock_in_unittest
     library/cpp/testing/unittest
-    ydb/core/driver_lib/run
+    ydb/apps/version
+    ydb/core/audit/audit_config
     ydb/core/base
+    ydb/core/blob_depot
     ydb/core/blobstorage/base
     ydb/core/blobstorage/pdisk
     ydb/core/client
@@ -42,6 +37,7 @@ PEERDIR(
     ydb/core/client/minikql_compile
     ydb/core/client/server
     ydb/core/cms/console
+    ydb/core/driver_lib/run
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
@@ -50,17 +46,14 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/grpc_services
     ydb/core/health_check
+    ydb/core/http_proxy
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
-    ydb/core/blob_depot
-    ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
-    ydb/services/scheme_secret
-    ydb/services/workload_manager/service
-    ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
+    ydb/core/kqp/script_executions/finalization
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -77,63 +70,69 @@ PEERDIR(
     ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
+    ydb/core/test_tablet
     ydb/core/testlib/actors
     ydb/core/testlib/basics
     ydb/core/tx/columnshard
+    ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/coordinator
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/long_tx_service
     ydb/core/tx/mediator
+    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/schemeshard
     ydb/core/tx/sequenceproxy
     ydb/core/tx/sequenceshard
     ydb/core/tx/time_cast
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
     ydb/library/folder_service/mock
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     ydb/library/mkql_proto/protos
     ydb/library/persqueue/topic_parser
     ydb/library/security
-    yql/essentials/minikql/comp_nodes/llvm16
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/s3/actors_factory
-    yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm16
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/persqueue_public
-    ydb/public/sdk/cpp/src/client/topic
-    ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/topic/codecs
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/services/auth
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
-    ydb/services/ymq
-    ydb/core/tx/conveyor/service
-    ydb/core/tx/conveyor/usage
-    ydb/core/tx/conveyor_composite/service
-    ydb/core/tx/conveyor_composite/usage
-    ydb/core/tx/priorities/service
-    ydb/core/tx/priorities/usage
-    ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus
+    ydb/services/metadata/ds_table
+    ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
-    ydb/services/monitoring
-    ydb/services/metadata/ds_table
+    ydb/services/scheme_secret
     ydb/services/tablet
+    ydb/services/workload_manager/service
     ydb/services/ydb
-
-    ydb/core/http_proxy
+    ydb/services/ymq
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/public/udf/service/exception_policy
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 YQL_LAST_ABI_VERSION()

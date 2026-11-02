@@ -1,8 +1,14 @@
+#include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
+#include <library/cpp/monlib/service/pages/resource_mon_page.h>
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
+
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 
@@ -11,6 +17,7 @@
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/config_units.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/event_filter.h>
@@ -85,6 +92,7 @@
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -217,7 +225,7 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
@@ -239,6 +247,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -260,7 +269,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -294,6 +303,8 @@
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NKikimrServicesInitializers {
 
@@ -358,6 +369,21 @@ static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
         return item->second;
     else
         return appData->SystemPoolId;
+}
+
+static ui32 GetPoolIdForQpCache(const NActors::TActorSystemSetup* setup,
+        const NKikimr::TAppData* appData, const TString& poolName) {
+    Y_DEBUG_ABORT_UNLESS(setup != nullptr);
+    Y_DEBUG_ABORT_UNLESS(appData != nullptr);
+    if (!poolName) {
+        return appData->BatchPoolId;
+    }
+    for (ui32 poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
+        if (setup->GetPoolName(poolId) == poolName) {
+            return poolId;
+        }
+    }
+    return appData->BatchPoolId;
 }
 
 static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInterconnectConfig& config, ui32 numNodes, ui32 numDataCenters) {
@@ -625,10 +651,37 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
+    setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
+        .MemoryBytes = 8ull << 20,
+        .MaxLines = 4096,
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer.", "actor_system.", "inmemory_metrics."},
+    }));
+
+    if (auto* mon = appData->Mon) {
+        auto monitoring = NActorSystemMonitoring::MakeConfig(
+            systemConfig, appData->BatchPoolId, useAutoConfig);
+        monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NActorSystemMonitoring::MakeActorSystemMonitoring(std::move(monitoring)));
+
+        NMetricChart::RegisterResources(mon);
+        mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
+            "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        NInMemoryMetricsMonitoring::TConfig metricsViewer;
+        metricsViewer.ExecutorPool = appData->BatchPoolId;
+        metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "metrics", "In-memory metrics", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NInMemoryMetricsMonitoring::MakeInMemoryMetricsMonitoring(std::move(metricsViewer)));
+    }
+
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
-    setup->AsyncFrameCacheSizeBytes = systemConfig.GetAsyncFrameCacheSizeBytes();
+    setup->RegisterSubSystem(std::make_unique<NActors::TAsyncFrameCache>(systemConfig.GetAsyncFrameCacheSizeBytes()));
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
@@ -748,9 +801,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                             break;
                     }
                 }
+                const ui32 qpCachePoolId = GetPoolIdForQpCache(setup, appData, icConfig.GetRdmaQpCachePoolName());
+                if (icConfig.GetRdmaQpPoolSize() > RdmaRuntimeMaxQpPoolSize) {
+                    Cerr << "Warning: RDMA QP pool size " << icConfig.GetRdmaQpPoolSize()
+                        << " exceeds the supported limit " << RdmaRuntimeMaxQpPoolSize
+                        << " and will be clamped" << Endl;
+                }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()), icConfig.GetEnableRdmaSendReceive()),
+                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()),
+                            icConfig.GetEnableRdmaSendReceive(), icConfig.GetRdmaQpPoolSize(), qpCachePoolId),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -775,14 +835,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 // negotiation and can be flipped later by a cluster config update, so the engine has to be
                 // in place beforehand. Zero Threads means the node never runs v2, whatever Enable says.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
-                // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
+                // OnActorSystemCreated installs its client). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // The engine takes its parameters from Common, so Settings/MonCounters must
                 // already be filled in by this point.
                 icCommon->UringEngineV2 = CreateUringEngine(icCommon);
-                setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
-                    if (engine) {
-                        engine->SetActorSystem(actorSystem);
+                setup->OnActorSystemCreated.push_back([common = icCommon](TActorSystem *actorSystem) {
+                    if (const auto& engine = common->UringEngineV2) {
+                        engine->SetClient(CreateUringEngineClient(*common, actorSystem));
                     }
                 });
             }
@@ -934,35 +994,29 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (Config.HasBridgeConfig()) {
                 // when we work in Bridge mode, we need special actor to ensure connectivity check between nodes
                 const auto& bridge = Config.GetBridgeConfig();
-                TString name;
+                std::optional<TString> bridgePileName;
 
                 if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
                     const auto& nodeInfo = Config.GetDynamicNodeConfig().GetNodeInfo();
                     Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                    const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
-                    Y_ABORT_UNLESS(bridgePileName);
-                    name = *bridgePileName;
+                    bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
                 } else {
                     const auto it = table->StaticNodeTable.find(NodeId);
                     Y_ABORT_UNLESS(it != table->StaticNodeTable.end());
-                    const auto& entry = it->second;
-                    const auto& bridgePileName = entry.Location.GetBridgePileName();
-                    Y_ABORT_UNLESS(bridgePileName);
-                    name = *bridgePileName;
+                    bridgePileName = it->second.Location.GetBridgePileName();
                 }
 
-                size_t i;
-                for (i = 0; i < bridge.PilesSize(); ++i) {
-                    if (bridge.GetPiles(i).GetName() == name) {
-                        break;
-                    }
-                }
-                Y_ABORT_UNLESS(i != bridge.PilesSize());
-                const auto selfBridgePileId = TBridgePileId::FromPileIndex(i);
+                // pile name may be omitted for the implicit pile (the only one of the cluster converted from
+                // non-bridged one); pile id is resolved against local config here as there is no storage config yet,
+                // the actor will correct it when it gets one
+                const auto index = NBridge::ResolvePileIndex(bridge, bridgePileName);
+                Y_VERIFY_S(index, "can't resolve bridge pile for this node BridgePileName# "
+                    << bridgePileName.value_or("<none>"));
+                const auto selfBridgePileId = TBridgePileId::FromPileIndex(*index);
 
                 const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
                 setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
-                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId),
+                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId, bridgePileName),
                     TMailboxType::ReadAsFilled,
                     interconnectPoolId));
                 icCommon->ConnectionCheckerActorIds.push_back(actorId);
@@ -1178,6 +1232,10 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                   const NKikimr::TAppData* appData) {
     setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+    const auto& selfHealConfig = Config.GetCmsConfig().GetSentinelConfig().GetStateStorageSelfHealConfig();
+    if (const ui32 timeout = selfHealConfig.GetSelfHealStateRequestTimeout()) {
+        nodeWardenConfig->SelfHealStateRequestTimeout = TDuration::MicroSeconds(timeout);
+    }
     nodeWardenConfig->BlobStorageExecutorPoolIds =
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {
@@ -2500,11 +2558,18 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
     );
 }
 
-TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(
+    const TKikimrRunConfig& runConfig,
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway)
     : IKikimrServicesInitializer(runConfig)
+    , Gateway_(std::move(gateway))
 {}
 
 void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.push_back(std::make_pair(
+        NWorkloadManager::MakeWorkloadManagerStateActorId(NodeId),
+        TActorSetupCmd(NWorkloadManager::CreateWorkloadManagerStateActor(Gateway_), TMailboxType::HTSwap, appData->UserPoolId)));
+
     auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
     setup->LocalServices.push_back(std::make_pair(
         NWorkloadManager::MakeServiceId(NodeId),
@@ -2608,7 +2673,8 @@ void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
     if (Config.GetScanGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableScanGroupedMemoryLimiterConfig()->SetCountBuckets(10);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()),
+        "invalid ScanGroupedMemoryLimiterConfig: %s", Config.GetScanGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2631,7 +2697,8 @@ void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
     if (Config.GetCompGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableCompGroupedMemoryLimiterConfig()->SetCountBuckets(1);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()),
+        "invalid CompGroupedMemoryLimiterConfig: %s", Config.GetCompGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2654,7 +2721,8 @@ void TDeduplicationGroupedMemoryLimiterInitializer::InitializeServices(NActors::
     if (Config.GetDeduplicationGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableDeduplicationGroupedMemoryLimiterConfig()->SetCountBuckets(1);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()),
+        "invalid DeduplicationGroupedMemoryLimiterConfig: %s", Config.GetDeduplicationGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2716,8 +2784,11 @@ TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializ
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse portions metadata cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse portions metadata cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2740,8 +2811,11 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse column data cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse column data cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2876,8 +2950,9 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         }
         auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
         if (overlaid.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
-                "error", overlaid.GetErrorMessage())("action", "keeping synthesized composite conveyor defaults");
+            YDB_LOG_ERROR("Cannot overlay composite conveyor config",
+                {"error", overlaid.GetErrorMessage()},
+                {"action", "keeping synthesized composite conveyor defaults"});
             return result;
         }
         return overlaid.DetachResult();
@@ -2885,8 +2960,11 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
 
     auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse composite conveyor config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse composite conveyor config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());

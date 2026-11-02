@@ -3,33 +3,33 @@
 #include "config.h"
 #include "private.h"
 
-#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
-
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/two_level_fair_share_thread_pool.h>
 
 #include <yt/yt/core/logging/log_manager.h>
 
-#include <yt/yt/core/misc/proc.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <yt/yt/library/cgroup/statistics.h>
+
+#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
+
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NRpc {
 
-using namespace NThreading;
+using namespace NCGroups;
 using namespace NConcurrency;
 using namespace NLogging;
 using namespace NProfiling;
+using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static const auto Logger = RpcServerLogger().WithTag("Controller", "Overload");
 static const std::string CpuThrottlingTrackerName = "CpuThrottling";
 static const std::string LogDropTrackerName = "LogDrop";
-static const std::string ControlGroupCpuName = "cpu";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -142,25 +142,24 @@ public:
 
     bool CalculateIsOverloaded(const TOverloadTrackerConfig& config) override
     {
-        auto cpuStats = GetStats();
-        if (!cpuStats) {
-            return {};
+        auto cpuThrottlingStatistics = FindCpuThrottlingStatistics();
+        if (!cpuThrottlingStatistics) {
+            return false;
         }
 
         TDuration throttlingTime;
 
-        if (LastCpuStats_) {
-            auto throttlingDelta = cpuStats->ThrottledTime - LastCpuStats_->ThrottledTime;
-            throttlingTime = TDuration::MicroSeconds(throttlingDelta / 1000);
+        if (LastCpuThrottlingStatistics_) {
+            throttlingTime = cpuThrottlingStatistics->ThrottledTime -
+                LastCpuThrottlingStatistics_->ThrottledTime;
 
             YT_TLOG_DEBUG("Reporting container CPU throttling time")
-                .With("LastCpuThrottlingTime", LastCpuStats_->ThrottledTime)
-                .With("CpuThrottlingTime", cpuStats->ThrottledTime)
-                .With("ThrottlingDelta", throttlingDelta)
+                .With("LastCpuThrottlingTime", LastCpuThrottlingStatistics_->ThrottledTime)
+                .With("CpuThrottlingTime", cpuThrottlingStatistics->ThrottledTime)
                 .With("ThrottlingTime", throttlingTime);
         }
 
-        LastCpuStats_ = cpuStats;
+        LastCpuThrottlingStatistics_ = cpuThrottlingStatistics;
 
         auto meanWaitTimeConfig = config.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
 
@@ -168,29 +167,24 @@ public:
     }
 
 private:
-    std::optional<TCgroupCpuStat> LastCpuStats_;
+    std::optional<TCpuThrottlingStatistics> LastCpuThrottlingStatistics_;
     bool CgroupErrorLogged_ = false;
 
-    std::optional<TCgroupCpuStat> GetStats()
+    std::optional<TCpuThrottlingStatistics> FindCpuThrottlingStatistics()
     {
         try {
-            auto cgroups = GetProcessCgroups();
-            for (const auto& group : cgroups) {
-                for (const auto& controller : group.Controllers) {
-                    if (controller == ControlGroupCpuName) {
-                        return GetCgroupCpuStat(group.ControllersName, group.Path);
-                    }
-                }
-            }
+            const auto* fetcher = TSelfCGroupsStatisticsFetcher::Get();
+            return fetcher->GetCpuThrottlingStatistics();
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
                 YT_TLOG_INFO("Failed to collect cgroup CPU statistics")
                     .With(ex);
+
                 CgroupErrorLogged_ = true;
             }
         }
 
-        return {};
+        return std::nullopt;
     }
 };
 
@@ -461,7 +455,7 @@ private:
         THashMap<std::string, TOverloadTrackerPtr> Trackers;
     };
 
-    using TSpinLockGuard = TGuard<NThreading::TSpinLock>;
+    using TSpinLockGuard = TGuard<TSpinLock>;
 
     const NConcurrency::TActionQueuePtr ControlThread_;
     const IInvokerPtr Invoker_;
@@ -470,7 +464,7 @@ private:
 
     TAtomicPtr<TState, /*EnableAcquireHazard*/ true> StateSnapshot_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TState State_;
 
     void Adjust()

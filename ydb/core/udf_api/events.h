@@ -1,10 +1,9 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/api/protos/ydb_udf.pb.h>
-
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_udf.pb.h>
 
 namespace NKikimr::NUdfApi {
 
@@ -30,35 +29,29 @@ struct TEvUdfApiResultBase: public NActors::TEventLocal<TEvSelf, EventType> {
     TEvUdfApiResultBase(Ydb::StatusIds::StatusCode status, TString errorMessage)
         : Status(status)
         , ErrorMessage(std::move(errorMessage))
-    {}
+    {
+    }
 
     explicit TEvUdfApiResultBase(TResultProto result)
         : Result(std::move(result))
-    {}
+    {
+    }
 };
 
-struct TEvUploadModuleResult
-    : public TEvUdfApiResultBase<TEvUploadModuleResult, EvUploadModuleResult, Ydb::Udf::UploadModuleResult>
-{
+struct TEvUploadModuleResult: public TEvUdfApiResultBase<TEvUploadModuleResult, EvUploadModuleResult, Ydb::Udf::UploadModuleResult> {
     using TEvUdfApiResultBase::TEvUdfApiResultBase;
 };
 
-struct TEvDeleteModuleResult
-    : public TEvUdfApiResultBase<TEvDeleteModuleResult, EvDeleteModuleResult, Ydb::Udf::DeleteModuleResult>
-{
+struct TEvDeleteModuleResult: public TEvUdfApiResultBase<TEvDeleteModuleResult, EvDeleteModuleResult, Ydb::Udf::DeleteModuleResult> {
     using TEvUdfApiResultBase::TEvUdfApiResultBase;
 };
 
-struct TEvListModulesResult
-    : public TEvUdfApiResultBase<TEvListModulesResult, EvListModulesResult, Ydb::Udf::ListModulesResult>
-{
+struct TEvListModulesResult: public TEvUdfApiResultBase<TEvListModulesResult, EvListModulesResult, Ydb::Udf::ListModulesResult> {
     using TEvUdfApiResultBase::TEvUdfApiResultBase;
 };
 
-struct TEvDescribeModuleResult
-    : public TEvUdfApiResultBase<TEvDescribeModuleResult, EvDescribeModuleResult, Ydb::Udf::DescribeModuleResult>
-{
+struct TEvDescribeModuleResult: public TEvUdfApiResultBase<TEvDescribeModuleResult, EvDescribeModuleResult, Ydb::Udf::DescribeModuleResult> {
     using TEvUdfApiResultBase::TEvUdfApiResultBase;
 };
 
-} // namespace NKikimr::NUdfApi
+}   // namespace NKikimr::NUdfApi

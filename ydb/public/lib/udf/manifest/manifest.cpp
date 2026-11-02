@@ -1,4 +1,5 @@
 #include "manifest.h"
+
 #include <library/cpp/json/json_reader.h>
 #include <util/generic/yexception.h>
 #include <util/string/strip.h>
@@ -20,7 +21,7 @@ void RejectAbiSelector(const NJson::TJsonValue& node, TStringBuf path) {
         }
     }
 }
-} // namespace
+}   // namespace
 
 TManifest Parse(TStringBuf json) {
     NJson::TJsonValue root;
@@ -57,7 +58,7 @@ TManifest Parse(TStringBuf json) {
         ythrow yexception() << "module_kind must be wasm or native";
     }
 
-    for (const auto field : {"functions", "objects", "required_libraries"}) {
+    for (const auto field : { "functions", "objects", "required_libraries" }) {
         if (root.Has(field) && (result.Type != EModuleType::Module || result.Kind != EModuleKind::Wasm)) {
             ythrow yexception() << field << " is only applicable to WASM modules";
         }
@@ -73,4 +74,4 @@ TManifest Parse(TStringBuf json) {
     }
     return result;
 }
-} // namespace NYdb::NUdfManifest
+}   // namespace NYdb::NUdfManifest

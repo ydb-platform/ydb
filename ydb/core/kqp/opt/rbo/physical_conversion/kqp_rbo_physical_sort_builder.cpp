@@ -89,22 +89,17 @@ TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TV
     return sortKeys;
 }
 
-TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
+NPhysicalConvertionUtils::TStageBody TPhysicalSortBuilder::BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) {
     const auto inputs = NPhysicalConvertionUtils::GetLiveInputIUs(Sort, 0);
     const auto& sortElements = Sort.GetSortElements();
-    // clang-format off
-    input = Build<TCoToFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
 
-    // Expand narrow input.
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputs, Ctx, Names);
+    auto wideInput = input.AsWide(inputs, Ctx, Names);
 
+    TExprNode::TPtr output;
     if (Sort.LimitCond.has_value()) {
         // clang-format off
-        input = Build<TCoWideTopSort>(Ctx, Pos)
-            .Input(input)
+        output = Build<TCoWideTopSort>(Ctx, Pos)
+            .Input(wideInput)
             .Count(Sort.LimitCond->GetExpressionBody())
             .Keys<TCoSortKeys>()
                 .Add(BuildSortKeysForWideSort(inputs, sortElements))
@@ -113,8 +108,8 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         // clang-format on
     } else {
         // clang-format off
-        input = Build<TCoWideSort>(Ctx, Pos)
-            .Input(input)
+        output = Build<TCoWideSort>(Ctx, Pos)
+            .Input(wideInput)
             .Keys<TCoSortKeys>()
                 .Add(BuildSortKeysForWideSort(inputs, sortElements))
             .Build()
@@ -122,19 +117,10 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         // clang-format on
     }
 
-    // Merge-connection keys are already included in LiveOut.
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(
-        input,
-        inputs,
-        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Sort), Names),
-        Ctx, Names);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical sort] " << KqpExprToPrettyString(TExprBase(output), Ctx);
 
-    // clang-format off
-    input = Build<TCoFromFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical sort] " << KqpExprToPrettyString(TExprBase(input), Ctx);
-    return input;
+    // WideSort passes every input slot through, so drop the ones that are dead past this
+    // operator. Merge-connection keys are already included in LiveOut.
+    return NPhysicalConvertionUtils::BuildLiveWideBody(output, NPhysicalConvertionUtils::GetFullNames(inputs, Names),
+        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Sort), Names), Ctx);
 }

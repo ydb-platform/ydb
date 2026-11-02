@@ -106,7 +106,7 @@ TString THostManager::GetProxyForHeavyRequest(const TClientContext& context)
     auto result = hostList.ChooseHostOrThrow();
     {
         auto guard = Guard(Lock_);
-        ClusterHosts_.emplace(cluster, std::move(hostList));
+        ClusterHosts_.insert_or_assign(cluster, std::move(hostList));
     }
     return result;
 }

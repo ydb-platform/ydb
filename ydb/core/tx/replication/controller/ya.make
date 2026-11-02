@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/base
@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
+    ydb/library/naming_conventions
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json
@@ -60,6 +61,7 @@ SRCS(
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
+    tx_index_build.cpp
     tx_init.cpp
     tx_schema_change.cpp
     tx_init_schema.cpp
@@ -68,11 +70,11 @@ SRCS(
     tx_resolve_secret_result.cpp
     tx_run_worker.cpp
     tx_worker_error.cpp
+    tx_source_offset_report.cpp
+    worker_lag_expiry_queue.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 
@@ -83,4 +85,5 @@ RECURSE_FOR_TESTS(
     ut_schema_change
     ut_stream_creator
     ut_target_discoverer
+    ut_worker_lifecycle
 )

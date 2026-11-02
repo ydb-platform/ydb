@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_convertion_utils.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_yql_ast_trace.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
@@ -130,22 +131,28 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     TVector<TVector<TExprNode::TPtr>> allPhyStages;
 
+    auto* trace = RBOCtx.GetCompileTrace();
+    const auto traced = [&](const char* name, auto&& func) {
+        TCompileTraceScope traceScope(trace, TCompileTraceLevels::Step, name);
+        return func();
+    };
+
     for (size_t i=0; i<Roots.size(); i++) {
-        auto phyStages = BuildPhysicalStageGraph(i);
+        auto phyStages = traced("Build stage graph", [&] { return BuildPhysicalStageGraph(i); });
         SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
         const bool fullPeephole = RBOCtx.KqpCtx.Config->GetEnableNewRBOPhysicalStagePeephole();
-        phyStages = PreparePhysicalStages(std::move(phyStages), fullPeephole);
+        phyStages = traced("Prepare physical stages", [&] { return PreparePhysicalStages(std::move(phyStages), fullPeephole); });
         SubmitPhysicalStagesTrace(RBOCtx, "After physical stage preparation", phyStages);
         if (!fullPeephole) {
-            phyStages = LowerPhysicalStageCompatibility(std::move(phyStages));
+            phyStages = traced("Lower incompatible callables", [&] { return LowerPhysicalStageCompatibility(std::move(phyStages)); });
             SubmitPhysicalStagesTrace(RBOCtx, "After compatibility lowering", phyStages);
         } else {
-            phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
+            phyStages = traced("Peephole physical stages", [&] { return PeepHoleOptimizePhysicalStages(std::move(phyStages)); });
             SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
         }
         allPhyStages.push_back(std::move(phyStages));
     }
-    auto physicalQuery = BuildPhysicalQuery(std::move(allPhyStages));
+    auto physicalQuery = traced("Build physical query", [&] { return BuildPhysicalQuery(std::move(allPhyStages)); });
     SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
     return physicalQuery;
 }
@@ -221,13 +228,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         TExprNode::TPtr stage;
         if (graph.IsSourceStageRowType(id)) {
             stage = Stages[rootIdx].at(id);
-            // Want to build materialize for ranges.
-            // TODO: Actually old optimizer has some machinery to compute ranges during compilation for some cases, for
-            // example when `LiteralRange` is defined, but currenlty we put any case in separate tx. Performance improvement is possible here.
+            // Computed ranges are materialized in a separate transaction. A literal range is taken by the source as is.
             auto rowSettingsPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadRangesSourceSettings>(node); });
             if (rowSettingsPtr) {
                 auto rowSettings = TExprBase(rowSettingsPtr).Cast<TKqpReadRangesSourceSettings>();
-                if (!rowSettings.RangesExpr().Maybe<TCoVoid>()) {
+                if (!rowSettings.RangesExpr().Maybe<TCoVoid>() && !rowSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
                     const auto materializeResult = BuildMaterialize(rootIdx, rowSettings.RangesExpr().Ptr());
                     // clang-fomrat off
                     const auto newRowSettings = Build<TKqpReadRangesSourceSettings>(ctx, rowSettingsPtr->Pos())
@@ -667,10 +672,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
 
     TVector<TExprNode::TPtr> listElements;
-    if (RBOCtx.EmptyPreamble) {
-        listElements.push_back(ctx.NewList(Roots[0]->Pos, {}));
-    }
-
     if (!phyTxSettings.WithEffects) {
         listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns}));
     } else {
@@ -939,7 +940,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
             argsType.push_back(argTypeAnn);
         }
 
-        newProgram = PeepHoleOptimize(newProgram, argsType);
+        {
+            TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail, "Peephole stage");
+            newProgram = PeepHoleOptimize(newProgram, argsType);
+            traceScope.SetSuccess(newProgram != nullptr);
+        }
         Y_ENSURE(newProgram);
         // Collect program after peephole.
         programsMap[program.Raw()] = newProgram;
@@ -1044,6 +1049,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
 }
 
 void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
+    TCompileTraceScope traceScope(RBOCtx.GetCompileTrace(), TCompileTraceLevels::Detail,
+        "Annotate physical stage");
     RBOCtx.TypeAnnTransformer.Rewind();
     TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);

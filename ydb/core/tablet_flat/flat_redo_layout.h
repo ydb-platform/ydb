@@ -18,6 +18,7 @@ namespace NRedo {
         CommitTx = 11,
         RemoveTx = 12,
         LockRowTx = 13,
+        UpdateTxSavepointSeqNum = 14,
     };
 
     #pragma pack(push, 1)
@@ -98,6 +99,11 @@ namespace NRedo {
         ui64 TxId;
     } Y_PACKED;
 
+    struct TEvUpdateTxSavepointSeqNum {
+        ui64 TxId;
+        ui32 SavepointSeqNum;
+    } Y_PACKED;
+
     struct TEvFlush {
         TChunk Label;
 
@@ -159,6 +165,7 @@ namespace NRedo {
     static_assert(sizeof(TEvUpdate) == 18, "");
     static_assert(sizeof(TEvUpdateV) == 16, "");
     static_assert(sizeof(TEvUpdateTx) == 8);
+    static_assert(sizeof(TEvUpdateTxSavepointSeqNum) == 12);
     static_assert(sizeof(TEvAnnex) == 12, "");
     static_assert(sizeof(TEvFlush) == 32, "");
     static_assert(sizeof(TEvRemoveTx) == 24);

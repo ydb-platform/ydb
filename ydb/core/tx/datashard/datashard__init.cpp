@@ -919,13 +919,22 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
             {"prev", FollowerState.LastSysUpdate},
             {"current", lastSysUpdate});
 
+        // Followers never watch the subdomain, the database default comes
+        // from the row persisted by the leader
+        ui64 subDomainTablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
         ready &= SysGetUi64(db, Schema::Sys_CurrentSchemeShardId, CurrentSchemeShardId);
+        ready &= SysGetUi64(db, Schema::Sys_StatisticsDisabled, StatisticsDisabled);
+        ready &= SysGetUi64(db, Schema::Sys_SubDomainTablesMetricsLevel, subDomainTablesMetricsLevel);
         ready &= SnapshotManager.ReloadSys(db);
         if (!ready) {
             return false;
         }
+
+        SubDomainTablesMetricsLevel =
+            static_cast<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel>(subDomainTablesMetricsLevel);
 
         FollowerState.LastSysUpdate = lastSysUpdate;
     }
@@ -1018,8 +1027,56 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     return true;
 }
 
+// Requests sync the scheme of a follower on their own, while an idle follower
+// needs this periodic sync to learn its tables and their metrics levels.
+// It runs only after the leader's changes have reached the follower
+class TDataShard::TTxSyncSchemeOnFollower : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxSyncSchemeOnFollower(TDataShard* self)
+        : TTransactionBase(self)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_SYNC_SCHEME_ON_FOLLOWER; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        // The follower might have been promoted to the leader meanwhile
+        if (!Self->IsFollower()) {
+            return true;
+        }
+
+        NKikimrTxDataShard::TError::EKind status;
+        TString errMessage;
+        if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+            return false;
+        }
+
+        // An error means the follower has not been initialized yet, the next tick retries
+        if (status != NKikimrTxDataShard::TError::OK) {
+            Self->SyncSchemeOnFollowerNeeded = true;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        Self->SyncSchemeOnFollowerPending = false;
+    }
+};
+
+ITransaction* TDataShard::CreateTxSyncSchemeOnFollower() {
+    return new TTxSyncSchemeOnFollower(this);
+}
+
+// The sync loads rows of Sys, UserTables and Snapshots only, and every local
+// scheme change writes the UserTables row in the same commit. The executor
+// cannot tell which tables have changed, so any data update of the follower
+// triggers the next periodic sync. Note that the leader keeps persisting its
+// low watermark for KeepSnapshotTimeout after its last write
+void TDataShard::OnFollowerDataUpdated() {
+    SyncSchemeOnFollowerNeeded = true;
+}
+
 }}
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

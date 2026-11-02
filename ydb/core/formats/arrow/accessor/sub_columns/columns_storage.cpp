@@ -62,23 +62,27 @@ void TColumnsData::TIterator::InitArrays() {
             FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
             ChunkAddress = std::nullopt;
         }
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
+            CurrentData = static_cast<const TDictionaryArray*>(FullArrayAddress->GetArray().get());
+            if (IsCurrentNull()) {
+                Next();
+            }
+            break;
+        }
         ChunkAddress = GlobalChunkedArray->GetChunk(ChunkAddress, CurrentIndex);
         const ui32 localIndex = ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
-        CurrentArrayData = ChunkAddress->GetArray().get();
-        // Dictionary columns materialize (decode) to a dense array, so they are
-        // read exactly like a plain Array here.
-        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
-            FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
-            if (CurrentArrayData->IsNull(localIndex)) {
+        CurrentData = ChunkAddress->GetArray().get();
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+            if (IsCurrentNull()) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-            AFL_VERIFY(localIndex < CurrentArrayData->length())
+            AFL_VERIFY(localIndex < ChunkAddress->GetArray()->length())
                 ("localIndex", localIndex)
-                ("CurrentArray->length()", CurrentArrayData->length())
-                ("CurrentArray", CurrentArrayData->ToString());
-            if (CurrentArrayData->IsNull(localIndex) &&
+                ("CurrentArray->length()", ChunkAddress->GetArray()->length())
+                ("CurrentArray", ChunkAddress->GetArray()->ToString());
+            if (ChunkAddress->GetArray()->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
             } else {

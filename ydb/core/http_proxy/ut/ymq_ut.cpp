@@ -1203,22 +1203,18 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         const TString queueUrl = CreateQueueForAuthMatrix(fixture, ESqsProtocol::Json, true);
 
-        const auto setupAccessServiceMock = [](auto& mock) {
-            // The service account belongs to folder A, but may send only to folder B (folder4).
-            auto* serviceAccount = mock.AuthenticateData["cross-folder-sa"].Response.mutable_subject()->mutable_service_account();
-            serviceAccount->set_id("cross-folder-sa-id");
-            serviceAccount->set_folder_id("folderA");
-            mock.AuthorizeData["cross-folder-sa-ymq.messages.send-folder4"]
-                .Response.mutable_subject()->mutable_service_account()->set_id("cross-folder-sa-id");
+        // The service account belongs to folder A, but may send only to folder B (folder4).
+        auto* serviceAccount = fixture.AccessServiceMock.AuthenticateData["cross-folder-sa"].Response.mutable_subject()->mutable_service_account();
+        serviceAccount->set_id("cross-folder-sa-id");
+        serviceAccount->set_folder_id("folderA");
+        fixture.AccessServiceMock.AuthorizeData["cross-folder-sa-ymq.messages.send-folder4"]
+            .Response.mutable_subject()->mutable_service_account()->set_id("cross-folder-sa-id");
 
-            auto* ownFolderServiceAccount = mock.AuthenticateData["own-folder-sa"].Response.mutable_subject()->mutable_service_account();
-            ownFolderServiceAccount->set_id("own-folder-sa-id");
-            ownFolderServiceAccount->set_folder_id("folderA");
-            mock.AuthorizeData["own-folder-sa-ymq.messages.send-folderA"]
-                .Response.mutable_subject()->mutable_service_account()->set_id("own-folder-sa-id");
-        };
-        setupAccessServiceMock(fixture.AccessServiceMock);
-        setupAccessServiceMock(fixture.AccessServiceMockV2);
+        auto* ownFolderServiceAccount = fixture.AccessServiceMock.AuthenticateData["own-folder-sa"].Response.mutable_subject()->mutable_service_account();
+        ownFolderServiceAccount->set_id("own-folder-sa-id");
+        ownFolderServiceAccount->set_folder_id("folderA");
+        fixture.AccessServiceMock.AuthorizeData["own-folder-sa-ymq.messages.send-folderA"]
+            .Response.mutable_subject()->mutable_service_account()->set_id("own-folder-sa-id");
 
         // A nonempty address disables the unconditional authorization mock in the SQS actor.
         // The folder service actor installed by the fixture still resolves folders to cloud4.
@@ -1410,6 +1406,38 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 const auto json = ParseSqsResponse(ESqsProtocol::Xml, res.Body);
                 UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
                 UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(ClientModificationsSendMessage, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        auto& flags = KikimrServer->GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableSQSMigrationCompatibility(false);
+        flags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto created = CreateQueue({{"QueueName", "ClientModifications"}});
+        auto queueUrl = GetByPath<TString>(created, "QueueUrl");
+        for (bool enableClientModifications : {false, true}) {
+            flags.SetEnableClientModifications(enableClientModifications);
+
+            auto single = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "single"}}, enableClientModifications ? 200 : 400);
+            auto batch = SendMessageBatch({
+                {"QueueUrl", queueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "first"}, {"MessageBody", "first"}},
+                    NJson::TJsonMap{{"Id", "second"}, {"MessageBody", "second"}}
+                }}
+            }, enableClientModifications ? 200 : 400);
+
+            if (enableClientModifications) {
+                UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
+                UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
+            } else {
+                for (const auto* result : {&single, &batch}) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "__type"), "AccessDeniedException");
+                    UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "message"), "Client data writes are disabled");
+                }
             }
         }
     }

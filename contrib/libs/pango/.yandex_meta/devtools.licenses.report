@@ -1,0 +1,342 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+# INSTALL documents installation instructions, while we need only code
+# NEWS do not participate in build either
+IGNORE_FILES INSTALL NEWS
+
+KEEP     LGPL-2.0-only        056528f8dea4943412c70b4ed1c570e2
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 103
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-only
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.0.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-only
+    Files with this license:
+        COPYING [1:482]
+
+KEEP     LGPL-2.0-or-later    2392f007d42027c7a87722aab68d1753
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 97.14
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        pango/pango-version-macros.h [6:17]
+
+KEEP     ICU                  63eda52324eba57dcd812f3f58618c96
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        pango/pango-script.c [30:53]
+
+KEEP     LGPL-2.1-or-later    66447e1f73a4b004a8b89d6f7949ae10
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.1-standalone.html, https://spdx.org/licenses/LGPL-2.1-or-later
+    Files with this license:
+        pango/json/gtkjsonparser.c [4:15]
+        pango/json/gtkjsonparserprivate.h [4:15]
+        pango/json/gtkjsonprinter.c [4:15]
+        pango/json/gtkjsonprinterprivate.h [4:15]
+
+KEEP     BSD-3-Clause         6bc9843a68b77a5c9f4548d8fc503a5b
+BELONGS ya.make
+    License text:
+        // Use of this source code is governed by a BSD-style license that can be
+        // found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pango/emoji_presentation_scanner.c [4:5]
+
+KEEP     BSD-3-Clause         720be7eb831bfde6b4599190542bfa9a
+BELONGS ya.make
+    License text:
+         * // Use of this source code is governed by a BSD-style license that can be
+         * // found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pango/pango-emoji.c [44:45]
+
+KEEP     LGPL-2.0-or-later    89439fe8f802960f58ad32f99ce413a6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 99.05
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        pango/pango-trace-private.h [6:17]
+        pango/pango-trace.c [6:17]
+
+SKIP     LicenseRef-scancode-unknown-license-reference AND LGPL-2.0-or-later 9cd106456df9b0dd60ed3dec7972b980
+BELONGS ya.make
+    # ...This code is licensed under the same license as the containing project...
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        pango/pango-enum-types.c [2:2]
+        pango/pango-enum-types.h [2:2]
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 75.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        pango/pango-enum-types.c [2:2]
+        pango/pango-enum-types.h [2:2]
+
+KEEP     LGPL-2.0-or-later    a24a52bc60ba8ce05325b70c75d76480
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        pango/break-arabic.c [9:22]
+        pango/break-indic.c [7:20]
+        pango/break.c [6:19]
+        pango/ellipsize.c [6:19]
+        pango/glyphstring.c [6:19]
+        pango/modules.c [6:19]
+        pango/pango-attributes-private.h [4:17]
+        pango/pango-bidi-type.c [6:19]
+        pango/pango-bidi-type.h [6:19]
+        pango/pango-color.c [6:19]
+        pango/pango-color.h [6:19]
+        pango/pango-coverage-private.h [6:19]
+        pango/pango-coverage.c [6:19]
+        pango/pango-coverage.h [6:19]
+        pango/pango-direction.h [6:19]
+        pango/pango-emoji-private.h [6:19]
+        pango/pango-emoji.c [6:19]
+        pango/pango-engine.c [6:19]
+        pango/pango-engine.h [6:19]
+        pango/pango-font-private.h [6:19]
+        pango/pango-fontmap-private.h [6:19]
+        pango/pango-fontmap.h [6:19]
+        pango/pango-fontset-simple-private.h [6:19]
+        pango/pango-fontset-simple.h [6:19]
+        pango/pango-fontset.h [6:19]
+        pango/pango-glyph-item.c [6:19]
+        pango/pango-glyph-item.h [6:19]
+        pango/pango-gravity.c [6:19]
+        pango/pango-gravity.h [6:19]
+        pango/pango-impl-utils.h [7:20]
+        pango/pango-language.c [6:19]
+        pango/pango-layout-private.h [6:19]
+        pango/pango-layout.h [6:19]
+        pango/pango-markup.c [6:19]
+        pango/pango-matrix.c [6:19]
+        pango/pango-matrix.h [6:19]
+        pango/pango-modules.h [6:19]
+        pango/pango-ot-buffer.c [6:19]
+        pango/pango-ot-info.c [6:19]
+        pango/pango-ot-private.h [6:19]
+        pango/pango-ot-ruleset.c [6:19]
+        pango/pango-ot-tag.c [6:19]
+        pango/pango-ot.h [6:19]
+        pango/pango-script-private.h [6:19]
+        pango/pango-script.c [6:19]
+        pango/pango-script.h [6:19]
+        pango/pango-tabs.h [6:19]
+        pango/pango-types.h [6:19]
+        pango/pango-utils-internal.h [6:19]
+        pango/pango-utils-private.h [6:19]
+        pango/pango-utils.c [6:19]
+        pango/pango-utils.h [6:19]
+        pango/pango.h [6:19]
+        pango/pangocairo-context.c [6:19]
+        pango/pangocairo-coretext.h [7:20]
+        pango/pangocairo-coretextfont.h [7:20]
+        pango/pangocairo-fc-private.h [6:19]
+        pango/pangocairo-fc.h [6:19]
+        pango/pangocairo-fcfont.c [6:19]
+        pango/pangocairo-fcfontmap.c [6:19]
+        pango/pangocairo-font.c [6:19]
+        pango/pangocairo-fontmap.c [6:19]
+        pango/pangocairo-private.h [6:19]
+        pango/pangocairo-render.c [6:19]
+        pango/pangocairo-win32.h [6:19]
+        pango/pangocairo.h [6:19]
+        pango/pangocoretext-private.h [8:21]
+        pango/pangocoretext.h [7:20]
+        pango/pangofc-decoder.c [6:19]
+        pango/pangofc-decoder.h [6:19]
+        pango/pangofc-font-private.h [6:19]
+        pango/pangofc-font.c [6:19]
+        pango/pangofc-font.h [6:19]
+        pango/pangofc-fontmap-private.h [6:19]
+        pango/pangofc-fontmap.c [6:19]
+        pango/pangofc-fontmap.h [6:19]
+        pango/pangofc-private.h [7:20]
+        pango/pangoft2-fontmap.c [7:20]
+        pango/pangoft2-private.h [7:20]
+        pango/pangoft2-render.c [7:20]
+        pango/pangoft2.c [7:20]
+        pango/pangoft2.h [7:20]
+        pango/pangowin32-private.h [8:21]
+        pango/pangowin32.h [8:21]
+        pango/pangoxft-private.h [6:19]
+        pango/pangoxft-render.h [6:19]
+        pango/pangoxft.h [7:20]
+        pango/reorder-items.c [6:19]
+        pango/serializer.c [6:19]
+
+KEEP     Unicode              c1f357eb75ec4da49c17887b565118e9
+BELONGS ya.make
+    License text:
+         * # Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
+         * # For terms of use and license, see https://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 70.00
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        pango/pango-break-table.h [12:13]
+        pango/pango-break-table.h [20:21]
+        pango/pango-break-table.h [73:74]
+        pango/pango-break-table.h [114:115]
+        pango/pango-emoji-table.h [12:13]
+
+KEEP     LGPL-2.0-or-later    ce8e9c60fefd4ee3fc66f2dcda95ecca
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: README.md at line 64
+    License text:
+        Most of the code of Pango is licensed under the terms of the
+        GNU Lesser Public License (LGPL) - see the file COPYING for details.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 54.55
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        README.md [63:64]
+
+KEEP     Unicode              d56a2724ecf4a816b2276241bf962896
+BELONGS ya.make
+    License text:
+         * # For terms of use and license, see https://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        pango/pango-break-table.h [13:13]
+        pango/pango-break-table.h [21:21]
+        pango/pango-break-table.h [74:74]
+        pango/pango-break-table.h [115:115]
+        pango/pango-emoji-table.h [13:13]
+
+KEEP     LGPL-2.0-or-later    f0ec17b2a2630563b4e1a54bd8e19c21
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        pango/break-latin.c [6:18]
+        pango/break-thai.c [6:18]
+
+KEEP     LGPL-2.0-or-later    fa41245e4a115654faadba04cb6aba1f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
+    Files with this license:
+        pango/fonts.c [6:19]
+        pango/itemize.c [6:19]
+        pango/pango-attributes.c [6:19]
+        pango/pango-attributes.h [6:19]
+        pango/pango-break.h [6:19]
+        pango/pango-context-private.h [6:19]
+        pango/pango-context.c [6:19]
+        pango/pango-context.h [6:19]
+        pango/pango-font.h [6:19]
+        pango/pango-fontmap.c [6:19]
+        pango/pango-fontset-simple.c [6:19]
+        pango/pango-fontset.c [6:19]
+        pango/pango-glyph.h [6:19]
+        pango/pango-item-private.h [5:18]
+        pango/pango-item.c [6:19]
+        pango/pango-item.h [6:19]
+        pango/pango-language.h [6:19]
+        pango/pango-layout.c [6:19]
+        pango/pango-markup.h [6:19]
+        pango/pango-renderer.c [6:19]
+        pango/pango-renderer.h [6:19]
+        pango/pango-tabs.c [6:19]
+        pango/shape.c [6:19]
+
+KEEP     TCL                  fa6b900807dc81a31e4e488c964261b9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: TCL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.tcl.tk/software/tcltk/license.html, https://spdx.org/licenses/TCL
+    Files with this license:
+        pango/pango-color.c [113:146]

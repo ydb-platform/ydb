@@ -1,9 +1,11 @@
 #include "aio.h"
+#include "aio_completion.h"
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_countedqueueoneone.h>
 #include <ydb/core/debug/valgrind_check.h>
 
 #include <util/system/file.h>
+#include <util/system/error.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -51,32 +53,18 @@ void PreadBad(TFileHandle *file, void* data, ui32 size, ui64 offset) {
 #endif
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// PwriteBad
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void PwriteBad(TFileHandle *file, const void* data, ui32 size, ui64 offset) {
-    while (size) {
-        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
-        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&offset, sizeof(offset));
-        i32 sizeDone = file->Pwrite(data, size, offset);
-        if (sizeDone == (i32)size) {
-            break;
+i64 PwriteAll(TFileHandle* file, const void* data, ui64 size, ui64 offset) {
+    return NDetail::WriteAll(data, size, offset, [file](const void* part, ui32 partSize, ui64 partOffset) -> i64 {
+        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(part, partSize);
+        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&partOffset, sizeof(partOffset));
+        const i32 result = file->Pwrite(part, partSize, partOffset);
+        if (result < 0) {
+            const int error = LastSystemError();
+            return error ? -static_cast<i64>(error) : -EIO;
         }
-
-        if (sizeDone < 0) {
-            // TODO: get errno, report bad sectors
-            sizeDone = 0;
-        }
-        ui64 badOffset = ((offset + sizeDone) / 4096) * 4096;
-        ui64 nextOffset = badOffset + 4096;
-        ui32 sizeSkipped = (ui32)(nextOffset - offset) - sizeDone;
-
-        size -= sizeDone + sizeSkipped;
-        data = (void*)((ui8*)data + sizeDone + sizeSkipped);
-        offset = nextOffset;
-    }
+        return result;
+    });
 }
-
 
 struct TAsyncIoOperation : IObjectInQueue, IAsyncIoOperation {
     TMutex &Mutex;
@@ -87,6 +75,7 @@ struct TAsyncIoOperation : IObjectInQueue, IAsyncIoOperation {
     ui64 Size;
     TFileHandle *File;
     EType Type;
+    i64 Result = 0;
     TReqId ReqId;
     ICallback *Callback;
     NWilson::TTraceId TraceId;
@@ -135,9 +124,10 @@ struct TAsyncIoOperation : IObjectInQueue, IAsyncIoOperation {
         switch (Type) {
             case IAsyncIoOperation::EType::PRead:
                 PreadBad(File, Data, Size, Offset);
+                Result = Size;
                 break;
             case IAsyncIoOperation::EType::PWrite:
-                PwriteBad(File, Data, Size, Offset);
+                Result = PwriteAll(File, Data, Size, Offset);
                 break;
             default:
                 Y_FAIL_S("Unexpected operation type# " << (i64)Type);
@@ -209,7 +199,11 @@ public:
                 for (TAtomicBase idx = 0; idx < size; ++idx) {
                     TAsyncIoOperation *op = static_cast<TAsyncIoOperation*>(CompleteQueue.Pop());
                     events[outputIdx].Operation = op;
-                    events[outputIdx].Result = EIoResult::Ok;
+                    const i64 result = NDetail::CheckIoCompletion(op->Result, op->Size);
+                    events[outputIdx].Result = result < 0 ? EIoResult::IOError : EIoResult::Ok;
+                    if (result < 0) {
+                        LastErrno = -result;
+                    }
                     events[outputIdx].Operation->ExecCallback(&events[outputIdx]);
                     ++outputIdx;
                     if (outputIdx == maxEvents) {

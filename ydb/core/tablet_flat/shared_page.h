@@ -28,7 +28,8 @@ struct TPage
     : public TSharedPageHandle
     , public TIntrusiveListItem<TPage>
 {
-    ui32 State : 4 = PageStateNo;
+    // Note: 16-bit types on purpose, MSVC packs bit-fields by declared type size
+    ui16 State : 4 = PageStateNo;
     ECacheMode CacheMode : 2 = ECacheMode::Regular;
 
     ES3FIFOPageLocation Location : 4 = ES3FIFOPageLocation::None;

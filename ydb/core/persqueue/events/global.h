@@ -50,7 +50,7 @@ namespace NKikimr::TEvPersQueue {
         EvReportPartitionError,
         EvProposeTransaction,
         EvProposeTransactionResult,
-        EvCancelTransactionProposal,
+        EvCancelTransactionProposal, // reserved: TEvCancelTransactionProposal removed
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
@@ -63,6 +63,7 @@ namespace NKikimr::TEvPersQueue {
         EvPartitionUpdateReadMetrics,
         EvCheckMessageDeduplicationRequest,
         EvCheckMessageDeduplicationResponse,
+        EvReplicationData,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -185,6 +186,9 @@ namespace NKikimr::TEvPersQueue {
         TEvStatusResponse() {}
     };
 
+    struct TEvReplicationData : public TEventPB<TEvReplicationData,
+            NKikimrPQ::TEvReplicationData, EvReplicationData> {};
+
     struct TEvHasDataInfo : public TEventPB<TEvHasDataInfo,
             NKikimrPQ::THasDataInfo, EvHasDataInfo> {
         TEvHasDataInfo() {}
@@ -245,14 +249,6 @@ namespace NKikimr::TEvPersQueue {
     };
 
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrPQ::TEvProposeTransactionResult, EvProposeTransactionResult> {
-    };
-
-    struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrPQ::TEvCancelTransactionProposal, EvCancelTransactionProposal> {
-        TEvCancelTransactionProposal() = default;
-
-        explicit TEvCancelTransactionProposal(ui64 txId) {
-            Record.SetTxId(txId);
-        }
     };
 
     struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {

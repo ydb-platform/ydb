@@ -5,8 +5,9 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 
-#define MAX_TOTAL_PARTS 8
-#define MAX_LINES_IN_BLOCK 8
+// EVENODD 8+2 uses p=11, including the imaginary zero row in syndromes.
+static constexpr ui32 MaxPrime = 11;
+static constexpr size_t MaxBlockSize = (NKikimr::TErasureType::MaxTotalParts - 2) * (MaxPrime - 1) * sizeof(ui64);
 
 #define IS_VERBOSE 0
 #define IS_TRACE 0
@@ -65,6 +66,7 @@ const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) 
         case Erasure4Plus3Block:    return "4Plus3Block";
         case Erasure3Plus3Block:    return "3Plus3Block";
         case ErasureMirror3of4:     return "ErasureMirror3of4";
+        case Erasure8Plus2Block:    return "8Plus2Block";
         default:                    return "UNKNOWN";
     }
 }
@@ -77,13 +79,14 @@ struct TErasureParameters {
 };
 
 const TErasureParameters& GetErasureParameters(TErasureType::EErasureSpecies species) {
-    static constexpr std::array<TErasureParameters, 6> ErasureParameters = {
+    static constexpr std::array<TErasureParameters, 7> ErasureParameters = {
         TErasureParameters{TErasureType::ErasureMirror, 1, 0, 1},
         TErasureParameters{TErasureType::ErasureParityBlock, 4, 2, 5},
         TErasureParameters{TErasureType::ErasureMirror, 1, 2, 1},
         TErasureParameters{TErasureType::ErasureParityBlock, 4, 3, 5},
         TErasureParameters{TErasureType::ErasureParityBlock, 3, 3, 3},
-        TErasureParameters{TErasureType::ErasureMirror, 1, 2, 1}
+        TErasureParameters{TErasureType::ErasureMirror, 1, 2, 1},
+        TErasureParameters{TErasureType::ErasureParityBlock, 8, 2, 11}
     };
 
     switch (species) {
@@ -99,6 +102,8 @@ const TErasureParameters& GetErasureParameters(TErasureType::EErasureSpecies spe
             return ErasureParameters[4];
         case TErasureType::EErasureSpecies::ErasureMirror3of4:
             return ErasureParameters[5];
+        case TErasureType::EErasureSpecies::Erasure8Plus2Block:
+            return ErasureParameters[6];
     }
 
     Y_ABORT("Unknown erasure species = %d", static_cast<int>(species));
@@ -192,7 +197,7 @@ public:
     ui32 Prime;
     TErasureType::ECrcMode CrcMode;
 
-    using TBufferDataPart = TStackVec<ui64*, MAX_TOTAL_PARTS>;
+    using TBufferDataPart = TStackVec<ui64*, TErasureType::MaxTotalParts>;
     TBufferDataPart BufferDataPart;
     char *Data;
 
@@ -225,6 +230,7 @@ public:
         TailSize = (ui32)(DataSize % BlockSize);
 
         Prime = type.Prime();
+        Y_DEBUG_ABORT_UNLESS(TotalParts <= TErasureType::MaxTotalParts && Prime <= MaxPrime && BlockSize <= MaxBlockSize);
         CrcMode = crcMode;
 
         Data = nullptr;
@@ -302,7 +308,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -559,7 +565,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
                 PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
@@ -594,7 +600,7 @@ public:
         // Use the remaining parts to fill in the last block
         // Write the tail of the data
         if (hasTail && outPartSet.IsSplitDone()) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             if (!isFromDataParts) {
                 PrepareLastBlockData<isStripe>(lastBlockSource, bufferDataPart);
@@ -778,7 +784,7 @@ public:
         // Read the tail of the data
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("EoDiagonalRestorePart tail" << Endl);
-            char lastBlock[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlock[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlock, bufferDataPart);
 
@@ -830,9 +836,9 @@ public:
             adj1 = adj0 ^ adj1;
             adj2 = adj0 ^ adj2;
             // 2) Syndrome calculation
-            ui64 s0[MAX_LINES_IN_BLOCK];
-            ui64 s1[MAX_LINES_IN_BLOCK];
-            ui64 s2[MAX_LINES_IN_BLOCK];
+            ui64 s0[MaxPrime];
+            ui64 s1[MaxPrime];
+            ui64 s2[MaxPrime];
             ui32 row;
             for (ui32 i = 0; i < LineCount; ++i) {
                 s0[i] = IN_M(i);
@@ -934,8 +940,8 @@ public:
             }
             VERBOSE_COUT("adj12# " << DebugFormatBits(adj12) << Endl);
             // 2) Syndrome calculation
-            ui64 s1[MAX_LINES_IN_BLOCK];
-            ui64 s2[MAX_LINES_IN_BLOCK];
+            ui64 s1[MaxPrime];
+            ui64 s2[MaxPrime];
             //ui32 row_adj;
             for (ui32 i = 0; i < LineCount; ++i) {
                 IN_M(i) = 0;
@@ -1015,7 +1021,7 @@ public:
             VERBOSE_COUT_BLOCK(true, IN_EL, IN_EL, IN_M, IN_M12);
             // compute diagonal partiy s
             ui64 s = 0;
-            ui64 s0[MAX_LINES_IN_BLOCK];
+            ui64 s0[MaxPrime];
             for (ui32 l = 0; l < LineCount; ++l) {
                 ui64 tmp = IN_M(l);
                 s0[l] = tmp;
@@ -1039,7 +1045,7 @@ public:
             }
 
             // compute diagonal syndromes s1
-            ui64 s1[MAX_LINES_IN_BLOCK];
+            ui64 s1[MaxPrime];
             for (ui32 u = 0; u < m; ++u) {
                 s1[u] = s;
                 VERBOSE_COUT("S1 = s = " << DebugFormatBits(s1[u]) << Endl);
@@ -1145,7 +1151,7 @@ public:
                     partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB);
 
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -1177,7 +1183,7 @@ public:
                     partSet, 0ull, WholeBlocks, missingDataPartIdxA, missingDataPartIdxB, missingDataPartIdxC);
 
         if (TailSize) {
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -1223,7 +1229,7 @@ public:
 
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("EoMainRestoreParts restore tail" << Endl);
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -1343,7 +1349,7 @@ public:
 
         if (TailSize && (partSet.Parts[presentPartIdx].Size + readPosition > WholeBlocks * ColumnSize)) {
             TRACE("Restore tail, restoreFullData# " << restoreFullData << " restoreParts# " << restoreParts << Endl);
-            char lastBlockSource[MAX_TOTAL_PARTS * (MAX_TOTAL_PARTS - 2) * sizeof(ui64)] = {};
+            alignas(ui64) char lastBlockSource[MaxBlockSize] = {};
             TBufferDataPart bufferDataPart;
             PrepareLastBlockPointers<isStripe>(lastBlockSource, bufferDataPart);
 
@@ -2952,7 +2958,7 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
             << " while expected " << (erasure.DataParts + erasure.ParityParts);
     }
     Y_DEBUG_ABORT_UNLESS(restoreFullData || restoreParts);
-    Y_DEBUG_ABORT_UNLESS(erasure.Prime <= MAX_LINES_IN_BLOCK);
+    Y_DEBUG_ABORT_UNLESS(erasure.Prime <= MaxPrime);
     switch (erasure.ErasureFamily) {
         case TErasureType::ErasureMirror:
             if (restoreParts) {

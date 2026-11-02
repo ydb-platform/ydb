@@ -1,0 +1,13 @@
+std::result_of is removed in C++20; use std::invoke_result instead.
+
+--- contrib/libs/grpc/src/core/lib/promise/detail/promise_like.h	(index)
++++ contrib/libs/grpc/src/core/lib/promise/detail/promise_like.h	(working tree)
+@@ -71,7 +71,7 @@
+ 
+ template <typename F>
+ class PromiseLike<F, y_absl::enable_if_t<!std::is_void<
+-                         typename std::result_of<F()>::type>::value>> {
++                         typename std::invoke_result<F>::type>::value>> {
+  private:
+   GPR_NO_UNIQUE_ADDRESS F f_;
+ 

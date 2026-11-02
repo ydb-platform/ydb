@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_yson_tds_block_iterator.cpp
@@ -17,8 +17,6 @@ PEERDIR(
     yt/yql/providers/yt/fmr/utils/hasher
     yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

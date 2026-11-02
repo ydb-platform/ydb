@@ -1,20 +1,13 @@
 #pragma once
 
-#include <library/cpp/retry/retry_policy.h>
-#include <library/cpp/threading/future/future.h>
-
-#include <util/generic/size_literals.h>
-
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
@@ -22,10 +15,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
+#include <library/cpp/retry/retry_policy.h>
+#include <library/cpp/threading/future/future.h>
+#include <util/generic/size_literals.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 
-class TQueryBase : public NActors::TActorBootstrapped<TQueryBase> {
+class TQueryBase: public NActors::TActorBootstrapped<TQueryBase> {
     using TBase = NActors::TActorBootstrapped<TQueryBase>;
 
 protected:
@@ -50,7 +47,7 @@ protected:
 private:
     struct TEvQueryBasePrivate {
         // Event ids
-        enum EEv : ui32 {
+        enum EEv: ui32 {
             EvDataQueryResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvStreamQueryResultPart,
 
@@ -66,7 +63,7 @@ private:
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
         // Events
-        struct TEvDataQueryResult : public NActors::TEventLocal<TEvDataQueryResult, EvDataQueryResult> {
+        struct TEvDataQueryResult: public NActors::TEventLocal<TEvDataQueryResult, EvDataQueryResult> {
             TEvDataQueryResult(Ydb::Table::ExecuteDataQueryResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
@@ -74,7 +71,7 @@ private:
             Ydb::Table::ExecuteQueryResult Result;
         };
 
-        struct TEvStreamQueryResultPart : public NActors::TEventLocal<TEvStreamQueryResultPart, EvStreamQueryResultPart> {
+        struct TEvStreamQueryResultPart: public NActors::TEventLocal<TEvStreamQueryResultPart, EvStreamQueryResultPart> {
             TEvStreamQueryResultPart(Ydb::Table::ExecuteScanQueryPartialResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
@@ -82,7 +79,7 @@ private:
             Ydb::ResultSet ResultSet;
         };
 
-        struct TEvCreateSessionResult : public NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
+        struct TEvCreateSessionResult: public NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
             TEvCreateSessionResult(Ydb::Table::CreateSessionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
@@ -90,21 +87,21 @@ private:
             TString SessionId;
         };
 
-        struct TEvDeleteSessionResponse : public NActors::TEventLocal<TEvDeleteSessionResponse, EvDeleteSessionResponse> {
+        struct TEvDeleteSessionResponse: public NActors::TEventLocal<TEvDeleteSessionResponse, EvDeleteSessionResponse> {
             TEvDeleteSessionResponse(Ydb::Table::DeleteSessionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
         };
 
-        struct TEvRollbackTransactionResponse : public NActors::TEventLocal<TEvRollbackTransactionResponse, EvRollbackTransactionResponse> {
+        struct TEvRollbackTransactionResponse: public NActors::TEventLocal<TEvRollbackTransactionResponse, EvRollbackTransactionResponse> {
             TEvRollbackTransactionResponse(Ydb::Table::RollbackTransactionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
             NYql::TIssues Issues;
         };
 
-        struct TEvCommitTransactionResponse : public NActors::TEventLocal<TEvCommitTransactionResponse, EvCommitTransactionResponse> {
+        struct TEvCommitTransactionResponse: public NActors::TEventLocal<TEvCommitTransactionResponse, EvCommitTransactionResponse> {
             TEvCommitTransactionResponse(Ydb::Table::CommitTransactionResponse&& response);
 
             const Ydb::StatusIds::StatusCode Status;
@@ -136,7 +133,8 @@ protected:
     void Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError = true);
     void Finish();
 
-    void RunDataQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
+    void RunDataQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx(),
+        TDuration operationTimeout = TDuration::Zero());
     void RunStreamQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, ui64 channelBufferSize = 60_MB);
     void CancelStreamQuery();
     void CommitTransaction();
@@ -163,8 +161,13 @@ protected:
 private:
     // Methods for implementing in derived classes.
     virtual void OnRunQuery() = 0;
-    virtual void OnQueryResult() {} // Must either run next query or finish
-    virtual void OnStreamResult(NYdb::TResultSet&&) {}
+
+    virtual void OnQueryResult() {
+    }   // Must either run next query or finish
+
+    virtual void OnStreamResult(NYdb::TResultSet&&) {
+    }
+
     virtual void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) = 0;
 
 private:
@@ -263,8 +266,8 @@ protected:
     TActorId SelfId;
 };
 
-template<typename TQueryActor, typename TResponse, typename ...TArgs>
-class TQueryRetryActor : public NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>, public TQueryRetryActorBase {
+template <typename TQueryActor, typename TResponse, typename... TArgs>
+class TQueryRetryActor: public NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>, public TQueryRetryActorBase {
     static_assert(std::is_base_of<TQueryBase, TQueryActor>::value, "Query actor must inherit from TQueryBase");
     static_assert(std::is_base_of<IEventBase, TResponse>::value, "Invalid response type");
 
@@ -273,24 +276,23 @@ class TQueryRetryActor : public NActors::TActorBootstrapped<TQueryRetryActor<TQu
 public:
     explicit TQueryRetryActor(const NActors::TActorId& replyActorId, TArgs... args)
         : ReplyActorId(replyActorId)
-        , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-            Retryable, TDuration::MilliSeconds(10),
-            TDuration::MilliSeconds(200), TDuration::Seconds(1),
-            std::numeric_limits<size_t>::max(), TDuration::Seconds(1)
-        ))
-        , CreateQueryActor([...args = std::forward<TArgs>(args)]() {
+        , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(Retryable, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200),
+              TDuration::Seconds(1), std::numeric_limits<size_t>::max(), TDuration::Seconds(1)))
+        , CreateQueryActor([... args = std::forward<TArgs>(args)]() {
             return std::make_unique<TQueryActor>(args...);
         })
-    {}
+    {
+    }
 
     TQueryRetryActor(const NActors::TActorId& replyActorId, IRetryPolicy::TPtr retryPolicy, TArgs... args)
         : ReplyActorId(replyActorId)
         , RetryPolicy(std::move(retryPolicy))
-        , CreateQueryActor([...args = std::forward<TArgs>(args)]() {
+        , CreateQueryActor([... args = std::forward<TArgs>(args)]() {
             return std::make_unique<TQueryActor>(args...);
         })
         , RetryState(RetryPolicy->CreateRetryState())
-    {}
+    {
+    }
 
     void StartQueryActor() {
         auto queryActor = CreateQueryActor();
@@ -358,21 +360,21 @@ private:
     ui64 RetryAttempts = 0;
 };
 
-template<typename TQueryActor, typename TResponse>
+template <typename TQueryActor, typename TResponse>
 class TQueryRetryActorMixin {
-    template<typename... TArgs>
+    template <typename... TArgs>
     using TRetry = TQueryRetryActor<TQueryActor, TResponse, TArgs...>;
 
 public:
-    template<typename... TArgs>
+    template <typename... TArgs>
     static auto MakeRetry(const NActors::TActorId& replyActorId, TArgs&&... args) {
         return new TRetry<std::decay_t<TArgs>...>(replyActorId, std::forward<TArgs>(args)...);
     }
 
-    template<typename... TArgs>
+    template <typename... TArgs>
     static auto MakeRetry(const NActors::TActorId& replyActorId, TQueryRetryActorBase::IRetryPolicy::TPtr retryPolicy, TArgs&&... args) {
         return new TRetry<std::decay_t<TArgs>...>(replyActorId, std::move(retryPolicy), std::forward<TArgs>(args)...);
     }
 };
 
-} // namespace NKikimr
+}   // namespace NKikimr

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
@@ -241,6 +242,32 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             PartitionEndWatcher.SetEvent(std::move(*x), Client);
             return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            THolder<TEvYdbProxy::TEvReadTopicResponse> response;
+            try {
+                response = MakeHolder<TEvYdbProxy::TEvReadTopicResponse>(*x);
+            } catch (...) {
+                // Locate the SDK decompression failure only on the error path, before
+                // updating pending offsets or adding this batch to DeferredCommit.
+                if (!x->HasCompressedMessages()) {
+                    for (const auto& msg : x->GetMessages()) {
+                        if (!msg.HasException()) {
+                            continue;
+                        }
+                        try {
+                            msg.GetData();
+                        } catch (...) {
+                            const auto& partition = x->GetPartitionSession();
+                            auto issue = MakeDecompressionIssue(TString(partition->GetTopicPath()),
+                                partition->GetPartitionId(), msg.GetOffset(), CurrentExceptionMessage());
+                            return Leave(Client, TStatus(EStatus::EXTERNAL_ERROR,
+                                NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(issue)}),
+                                TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError);
+                        }
+                    }
+                }
+                auto status = TStatus(EStatus::EXTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage())});
+                return Leave(Client, std::move(status));
+            }
             PartitionEndWatcher.UpdatePendingCommittedOffset(*x);
             if (AutoCommit) {
                 DeferredCommit.Add(*x);
@@ -248,7 +275,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             Y_ABORT_UNLESS(ReadRequest);
             const auto [sender, cookie] = *ReadRequest;
             ReadRequest.reset();
-            return (void)Send(sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, cookie);
+            return (void)Send(sender, response.Release(), 0, cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
             PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, Client);
             return ContinueWaiting();
@@ -264,8 +291,10 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         }
     }
 
-    void Leave(const TActorId& client, TStatus&& status) {
-        Send(client, new TEvYdbProxy::TEvTopicReaderGone(std::move(status)));
+    void Leave(const TActorId& client, TStatus&& status,
+        TEvYdbProxy::TEvTopicReaderGone::EFailureKind kind = TEvYdbProxy::TEvTopicReaderGone::EFailureKind::Unspecified)
+    {
+        Send(client, new TEvYdbProxy::TEvTopicReaderGone(std::move(status), kind));
         PassAway();
     }
 
@@ -377,7 +406,14 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         auto cb = [request, func, args = std::move(args)](const TAsyncCreateSessionResult& result) {
             auto sessionResult = result.GetValueSync();
             if (!sessionResult.IsSuccess()) {
-                return Complete<TEvYdbProxy::TEvCreateSessionResponse>(request, sessionResult);
+                using TResult = typename TEvResponse::TResult;
+                if constexpr (std::is_same_v<TResult, TStatus>) {
+                    return Complete<TEvResponse>(request, TResult(sessionResult));
+                } else {
+                    static_assert(std::is_same_v<TResult, TDescribeTableResult>);
+                    return Complete<TEvResponse>(request, TResult(TStatus(sessionResult),
+                        Ydb::Table::DescribeTableResult{}, std::get<TDescribeTableSettings>(args)));
+                }
             }
 
             auto session = sessionResult.GetSession();

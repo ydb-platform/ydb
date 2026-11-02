@@ -1,11 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/library/actors/util
     ydb/library/formats/arrow/hash
-    ydb/library/mkql_proto
     ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/common
@@ -43,8 +42,6 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

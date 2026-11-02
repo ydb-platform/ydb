@@ -37,7 +37,7 @@ class TestBasicReading(SolomonReadingTestBase):
 
         result_size = len(result[0].rows)
 
-        if (result_size != 1):
+        if result_size != 1:
             return False, "should only have a single return row, have: {}".format(result_size)
 
         return True, None

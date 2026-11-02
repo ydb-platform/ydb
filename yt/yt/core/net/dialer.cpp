@@ -214,7 +214,7 @@ private:
     const TGuid Id_;
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     SOCKET Socket_ = INVALID_SOCKET;
     bool Dialed_ = false;
     bool Finished_ = false;
@@ -262,7 +262,7 @@ private:
         YT_UNUSED_FUTURE(Poller_->Unregister(pollable));
     }
 
-    void Connect(TGuard<NThreading::TSpinLock>& guard)
+    void Connect(TGuard<TSpinLock>& guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 

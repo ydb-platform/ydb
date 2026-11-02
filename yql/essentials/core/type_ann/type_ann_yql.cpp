@@ -1243,6 +1243,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         }
     }
 
+    if (input->Child(2)->IsCallable("Void")) {
+        ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr), "Aggregate functions are not allowed in this context"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     if (auto status = TryFinishYqlTypeSlot(input->ChildPtr(2), input, ctx)) {
         return *status;
     }
@@ -1527,7 +1532,7 @@ IGraphTransformer::TStatus YqlWinWrapper(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    const TStringBuf name = input->Head().Content();
+    const TStringBuf name = input->Child(0)->Content();
     const bool isRank = IsIn({"rank", "denserank", "percentrank"}, name);
     THashSet<TStringBuf> supportedSettings;
     if (isRank) {
@@ -1535,6 +1540,9 @@ IGraphTransformer::TStatus YqlWinWrapper(
         supportedSettings.insert("warnNoAnsi");
         supportedSettings.insert("window_expr");
         supportedSettings.insert("warned_unordered_window");
+    }
+    if (name == "cumedist") {
+        supportedSettings.insert("ansi");
     }
 
     auto settingsValidator = [](TStringBuf name, TExprNode& setting, TExprContext& ctx) {

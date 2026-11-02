@@ -1,18 +1,21 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -48,7 +51,7 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         return false;
     }));
     if (markCount == mask.size()) {
-        return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew, NeedNullsCountCalculation);
+        return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew);
     }
     // Build old dictionary index -> new (filtered) dictionary index.
     std::vector<ui32> oldToNew(ArrayDictionary->length(), 0);
@@ -58,15 +61,19 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         }
     }
     auto filtered = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
+    const bool addNullEntry = positionsNew->null_count() && (!filtered || !filtered->null_count());
     std::shared_ptr<arrow::Array> dictArray;
     if (!filtered || filtered->num_chunks() == 0) {
-        dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 0);
-    } else if (filtered->num_chunks() == 1) {
+        dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), addNullEntry ? 1 : 0);
+    } else if (filtered->num_chunks() == 1 && !addNullEntry) {
         dictArray = filtered->chunk(0);
     } else {
         arrow::ArrayVector parts;
         for (int i = 0; i < filtered->num_chunks(); ++i) {
             parts.push_back(filtered->chunk(i));
+        }
+        if (addNullEntry) {
+            parts.emplace_back(TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 1));
         }
         dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
     }
@@ -101,7 +108,7 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         return false;
     }));
     auto positionsRemapped = NArrow::FinishBuilder(std::move(positionsBuilder));
-    return std::make_shared<TDictionaryArray>(dictArray, positionsRemapped, NeedNullsCountCalculation);
+    return std::make_shared<TDictionaryArray>(dictArray, positionsRemapped);
 }
 
 NJson::TJsonValue TDictionaryArray::DoDebugJson() const {
@@ -138,6 +145,9 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     return *result;
 }
 
+TJsonValueView TDictionaryArray::GetJsonValueView(const ui32 index, const NSubColumns::EValueType valueType) const {
+    return NSubColumns::ArrayElementToJsonValueView(*ArrayDictionary, GetIndexImpl(index), valueType);
+}
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
     return TMinMax::Compute(ArrayDictionary);

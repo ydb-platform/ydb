@@ -18,8 +18,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/atomic_object.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -72,6 +72,7 @@ public:
 private:
     const NAuth::ITvmServicePtr TvmService_;
     const std::string Endpoint_;
+    const THashMap<std::string, std::string> CollectorHeaders_;
 
     const TInstant ReopenTime_;
     const TDuration RpcTimeout_;
@@ -117,7 +118,7 @@ private:
     i64 TotalMemory_ = 0;
     i64 TotalSize_ = 0;
 
-    NThreading::TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
+    TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
 
     THashMap<std::string, TJaegerChannelManagerPtr> CollectorChannels_;
     NRpc::NGrpc::TChannelConfigPtr OpenChannelConfig_;

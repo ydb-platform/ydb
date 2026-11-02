@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_job_base.cpp
@@ -38,7 +38,5 @@ PEERDIR(
     yt/yql/providers/yt/lib/lambda_builder
     yt/yql/providers/yt/lib/mkql_helpers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

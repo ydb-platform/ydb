@@ -68,7 +68,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
 
     Ydb::Table::BulkUpsertRequest request;
     request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
-    request.set_data(data);
+    request.set_data(std::move(data));
     request.set_table(testTable);
 
     std::atomic<size_t> responses = 0;

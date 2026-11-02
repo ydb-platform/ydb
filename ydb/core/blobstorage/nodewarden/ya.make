@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     blobstorage_executor_pool_mapping.cpp
@@ -52,6 +52,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/xxhash
+    library/cpp/containers/absl
     library/cpp/json
     library/cpp/openssl/crypto
     ydb/core/base

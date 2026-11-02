@@ -14,7 +14,7 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/producer.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 #include <library/cpp/yt/misc/leaky_global.h>
 
@@ -303,7 +303,8 @@ private:
 
     void CollectSensors(ISensorWriter* writer) override
     {
-        i64 timeDeltaUsec = TInstant::Now().MicroSeconds() - LastUpdateTime_.MicroSeconds();
+        auto now = TInstant::Now();
+        i64 timeDeltaUsec = now.MicroSeconds() - LastUpdateTime_.MicroSeconds();
         if (timeDeltaUsec <= 0) {
             return;
         }
@@ -312,7 +313,7 @@ private:
         CollectSensorsAggregatedTimings(writer, TidToInfo_, tidToInfo, timeDeltaUsec);
         TidToInfo_ = tidToInfo;
 
-        LastUpdateTime_ = TInstant::Now();
+        LastUpdateTime_ = now;
     }
 
     struct TTimings
@@ -347,10 +348,10 @@ private:
     };
 
     // Thread id -> stats
-    using TThreadInfoMap = THashMap<NThreading::TThreadId, TThreadInfo>;
+    using TThreadInfoMap = THashMap<TThreadId, TThreadInfo>;
     TThreadInfoMap TidToInfo_;
 
-    std::optional<TThreadInfo> TryParseThreadInfo(NThreading::TThreadId tid)
+    std::optional<TThreadInfo> TryParseThreadInfo(TThreadId tid)
     {
         TThreadInfo info;
 
@@ -457,7 +458,7 @@ private:
 
         for (int index = 0; index < static_cast<int>(dirsList.Size()); ++index) {
             auto tidStr = TStringBuf(dirsList.Next());
-            NThreading::TThreadId tid;
+            TThreadId tid;
             if (!TryFromString(tidStr, tid)) {
                 continue;
             }

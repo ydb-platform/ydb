@@ -2662,25 +2662,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            TPathId prevTableId;
-
             TInstant now = AppData()->TimeProvider->Now();
             while (!rowSet.EndOfSet()) {
                 const TPathId tableId = TPathId(
                     rowSet.GetValue<Schema::TablePartitionStats::TableOwnerId>(),
                     rowSet.GetValue<Schema::TablePartitionStats::TableLocalId>());
-
-                if (tableId != prevTableId) {
-                    if (prevTableId) {
-                        Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                        TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                        if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
-                        }
-                    }
-
-                    prevTableId = tableId;
-                }
 
                 Y_ABORT_UNLESS(Self->Tables.contains(tableId));
                 TTableInfo::TPtr tableInfo = Self->Tables.at(tableId);
@@ -2768,14 +2754,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
             }
-
-            if (prevTableId) {
-                Y_ABORT_UNLESS(Self->Tables.contains(prevTableId));
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
-                }
-            }
         }
 
         // Read partition stats (ShardIdx format)
@@ -2786,7 +2764,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            TPathId prevTableId;
             TInstant now = AppData()->TimeProvider->Now();
             while (!rowSet.EndOfSet()) {
                 const TPathId tableId = TPathId(
@@ -2795,20 +2772,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const TShardIdx shardIdx = TShardIdx(
                     rowSet.GetValue<T::OwnerShardIdx>(),
                     rowSet.GetValue<T::LocalShardIdx>());
-
-                if (tableId != prevTableId) {
-                    // Aggregate the previous table's newly updated stats.
-                    // (Tables also processed by the positional block get re-aggregated here;
-                    // that is acceptable since the domain aggregate will self-correct on the
-                    // first live stats update from any shard.)
-                    if (prevTableId && Self->Tables.contains(prevTableId)) {
-                        TTableInfo::TPtr prevTableInfo = Self->Tables.at(prevTableId);
-                        if (!prevTableInfo->IsBackup && !prevTableInfo->IsShardsStatsDetached()) {
-                            Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, prevTableInfo->GetStats().Aggregated);
-                        }
-                    }
-                    prevTableId = tableId;
-                }
 
                 if (!Self->Tables.contains(tableId)) {
                     if (!rowSet.Next()) {
@@ -2822,6 +2785,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         return false;
                     }
                     continue;
+                }
+
+                if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
+                    if (shardInfo->PathId != tableId) {
+                        tableInfo->DetachShardsStats();
+                    }
                 }
 
                 TPartitionStats stats;
@@ -2876,12 +2845,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
             }
+        }
 
-            if (prevTableId && Self->Tables.contains(prevTableId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(prevTableId);
-                if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-                    Self->ResolveDomainInfo(prevTableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
-                }
+        // Both formats may contain stats for the same table. Aggregate once, after
+        // loading both, so newer ShardIdx rows can replace legacy partition stats.
+        for (const auto& [tableId, tableInfo] : Self->Tables) {
+            if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
+                Self->ResolveDomainInfo(tableId)->AggrDiskSpaceUsage(Self, tableInfo->GetStats().Aggregated);
             }
         }
 
@@ -3982,6 +3952,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
+                txState.LoadSplitLineage = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::LoadSplitLineage>(false);
 
                 if (Self->TolerateOrphanedPaths) {
                     const bool orphanTarget = !Self->PathsById.contains(txState.TargetPathId);

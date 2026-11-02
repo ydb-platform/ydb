@@ -3,7 +3,7 @@ UNITTEST()
 FORK_SUBTESTS()
 SPLIT_FACTOR(300)
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -57,6 +57,8 @@ SRCS(
     sync.cpp
     validation.cpp
     vdisk_malfunction.cpp
+    virtual_group.cpp
+    vrestore_part.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
     retro_tracing.cpp

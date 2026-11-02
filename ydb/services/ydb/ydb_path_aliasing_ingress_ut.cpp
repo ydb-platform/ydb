@@ -474,7 +474,7 @@ namespace NKikimr::NGRpcService {
             auto* changedRelative = alter.add_alter_consumers();
             changedRelative->set_name("relative_consumer");
             changedRelative->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
-                ->mutable_alter_move_action()->set_set_dead_letter_queue(relativeDlq);
+                ->mutable_alter_move_action()->set_set_dead_letter_queue("dlq");
             if (enableRelativePaths) {
                 addedPolicy->mutable_move_action()->set_dead_letter_queue("/Root/other/dlq");
                 UNIT_ASSERT_VALUES_EQUAL(Status(Call(*stub, &TTopic::AlterTopic, alter, "/alias")), Ydb::StatusIds::BAD_REQUEST);
@@ -486,7 +486,7 @@ namespace NKikimr::NGRpcService {
                     ->mutable_alter_move_action()->set_set_dead_letter_queue("/alias/dlq");
             }
             Success(Call(*stub, &TTopic::AlterTopic, alter, "/alias"));
-            checkDlq("relative_consumer", expectedRelativeDlq);
+            checkDlq("relative_consumer", enableRelativePaths ? "/Root/kfront/dlq" : "dlq");
             checkDlq("added_relative_consumer", expectedRelativeDlq);
 
             Ydb::Topic::AlterTopicRequest setMove;
@@ -498,7 +498,7 @@ namespace NKikimr::NGRpcService {
             auto* changedRelativeMove = setMove.add_alter_consumers();
             changedRelativeMove->set_name("relative_consumer");
             changedRelativeMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
-                ->mutable_set_move_action()->set_dead_letter_queue(relativeDlq);
+                ->mutable_set_move_action()->set_dead_letter_queue("Root/other/dlq");
             if (enableRelativePaths) {
                 changedMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                     ->mutable_set_move_action()->set_dead_letter_queue("/Root/other/dlq");
@@ -507,7 +507,7 @@ namespace NKikimr::NGRpcService {
                     ->mutable_set_move_action()->set_dead_letter_queue("/alias/dlq");
             }
             Success(Call(*stub, &TTopic::AlterTopic, setMove, "/alias"));
-            checkDlq("relative_consumer", expectedRelativeDlq);
+            checkDlq("relative_consumer", enableRelativePaths ? "/Root/kfront/Root/other/dlq" : "Root/other/dlq");
             checkDlq("alias_consumer", "/Root/kfront/dlq");
             checkDlq("sqs_consumer", "sqs://account/queue");
         }

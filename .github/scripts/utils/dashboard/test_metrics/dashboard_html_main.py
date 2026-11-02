@@ -786,12 +786,29 @@ def build_html_dashboard(
         buildSec = Math.max(0, buildEnd - buildSpan.start);
       }}
       if (!hasTest && testSpan) {{
-        testSec = Math.max(0, testSpan.end - testSpan.start);
+        let testStart = testSpan.start;
+        let testEnd = testSpan.end;
+        // Match Python: if Test workers (TM) start later than report-backed
+        // activity, clamp — early report points sit left of the chart range.
+        const tmSpan = activitySpanSec(['test_tm']);
+        if (tmSpan && tmSpan.start > testStart) {{
+          testStart = tmSpan.start;
+          if (tmSpan.end > testEnd) testEnd = tmSpan.end;
+        }}
+        testSec = Math.max(0, testEnd - testStart);
       }}
       const starts = [];
       const ends = [];
       if (buildSpan) {{ starts.push(buildSpan.start); ends.push(buildSpan.start + buildSec); }}
-      if (testSpan) {{ starts.push(testSpan.start); ends.push(testSpan.end); }}
+      if (testSec > 0) {{
+        const tmSpan = activitySpanSec(['test_tm']);
+        const t0 = (tmSpan && testSpan && tmSpan.start > testSpan.start) ? tmSpan.start : (testSpan ? testSpan.start : null);
+        const t1 = t0 != null ? t0 + testSec : null;
+        if (t0 != null) starts.push(t0);
+        if (t1 != null) ends.push(t1);
+      }} else if (testSpan) {{
+        starts.push(testSpan.start); ends.push(testSpan.end);
+      }}
       if (starts.length && ends.length) {{
         totalSec = Math.max(0, Math.max.apply(null, ends) - Math.min.apply(null, starts));
       }} else if (!totalSec) {{
@@ -853,8 +870,8 @@ def build_html_dashboard(
         ? 'Whole-job build/archive/link wall (cache excluded); overlap past test start counts, post-test-only spikes do not'
         : 'Build/archive/link wall (cache excluded); overlap past test start counts, post-test-only spikes do not';
       const testTip = suiteFiltered
-        ? 'Filtered suites only: first matching test start → last matching test end (overlap with build allowed)'
-        : 'First → last test start/end (overlap with build allowed)';
+        ? 'Filtered suites only: first matching test start → last matching test end (TM clamp if report starts early)'
+        : 'First → last test wall (start clamped to Test workers / TM when report starts before the chart)';
       const totalTip = suiteFiltered
         ? 'Earliest of whole-job build / filtered test start → latest end (overlap not summed)'
         : 'Earliest of build/test start → latest of build/test end (overlap not summed)';

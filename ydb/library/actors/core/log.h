@@ -62,7 +62,7 @@
 
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream)                                                               \
     do {                                                                                                                       \
-        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, 0u;;)) {                                        \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, 0ull)) {                                        \
             TStringBuilder logStringBuilder;                                                                                   \
             logStringBuilder << stream;                                                                                        \
             ::NActors::MemLogAdapter(                                                                                          \

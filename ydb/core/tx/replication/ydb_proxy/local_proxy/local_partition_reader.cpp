@@ -193,6 +193,11 @@ private:
         Offset = SentOffset;
 
         if (AutoCommit && !request.SkipCommit) {
+            if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+                Send(Parent, MakeError(NYdb::EStatus::PRECONDITION_FAILED, "Consumer offset commits are disabled"));
+                PassAway();
+                return;
+            }
             request.SkipCommit = true;
             NTabletPipe::SendData(SelfId(), PartitionPipeClient, MakeCommitRequest().release());
         }

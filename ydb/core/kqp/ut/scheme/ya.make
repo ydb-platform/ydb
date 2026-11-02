@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_client_data_writes_ut.cpp
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_scheme_ut.cpp
@@ -23,6 +24,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/client/import
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common

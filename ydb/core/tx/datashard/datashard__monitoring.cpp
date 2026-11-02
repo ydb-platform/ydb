@@ -363,7 +363,7 @@ void TDataShard::HandleMonSendReadSetToSelf(NMon::TEvRemoteHttpInfo::TPtr ev, co
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nInvalid request parameters."));
         return;
     }
-    auto tx = GetVolatileTxManager().FindByCommitTxId(txId);
+    auto tx = GetVolatileTxManager().FindByTxId(txId);
     if (!tx) {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nTransaction not found."));
         return;

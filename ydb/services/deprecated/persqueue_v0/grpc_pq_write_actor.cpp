@@ -173,6 +173,11 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvDone::TPtr&, const TActorContext&
 }
 
 void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
+
     Y_ABORT_UNLESS(ACLCheckInProgress);
     Y_ABORT_UNLESS(SecurityObject);
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
@@ -191,6 +196,10 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", NPersQueue::NErrorCode::PRECONDITION_FAILED, ctx);
+        return;
+    }
     THolder<TEvPQProxy::TEvWriteInit> event(ev->Release());
 
     if (State != ES_CREATED) {

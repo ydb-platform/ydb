@@ -53,6 +53,23 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         switch (importInfo->State) {
         case TImportInfo::EState::Done:
         case TImportInfo::EState::Cancelled:
+            // Kill leftover helper actors: each holds a TImportInfo::TPtr and would
+            // otherwise pin the import state in RAM long after it is forgotten.
+            if (auto schemaMappingGetter = std::exchange(importInfo->SchemaMappingGetter, {})) {
+                Send(schemaMappingGetter, new TEvents::TEvPoisonPill());
+                Self->RunningImportSchemeGetters.erase(schemaMappingGetter);
+            }
+            for (auto& item : importInfo->Items) {
+                if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
+                    Send(schemeGetter, new TEvents::TEvPoisonPill());
+                    Self->RunningImportSchemeGetters.erase(schemeGetter);
+                }
+                if (auto schemeQueryExecutor = std::exchange(item.SchemeQueryExecutor, {})) {
+                    Send(schemeQueryExecutor, new TEvents::TEvPoisonPill());
+                    Self->RunningImportSchemeQueryExecutors.erase(schemeQueryExecutor);
+                }
+            }
+
             Self->PersistRemoveImport(db, *importInfo);
             return respond(Ydb::StatusIds::SUCCESS);
 

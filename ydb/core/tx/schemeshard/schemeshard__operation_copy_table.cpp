@@ -983,7 +983,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsResolved()
             .NotDeleted()
             .NotUnderDeleting()
-            .IsTable();
+            .IsTable()
+            // Never allow copying a backup table as a source
+            .NotBackupTable();
 
         // Allow copying index impl tables when feature flag is enabled
         if (checks && !srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {

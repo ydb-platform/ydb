@@ -2283,7 +2283,7 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(
     TIntrusivePtr<TKikimrSessionContext> sessionCtx)
 {
-    return new TKiSinkIntentDeterminationTransformer(sessionCtx);
+    return CreateSqlPathAliasesTransformer(sessionCtx, new TKiSinkIntentDeterminationTransformer(sessionCtx));
 }
 
 } // namespace NYql

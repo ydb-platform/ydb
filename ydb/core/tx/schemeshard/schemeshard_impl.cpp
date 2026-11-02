@@ -3768,29 +3768,37 @@ void TSchemeShard::PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId 
     db.Table<Schema::ExternalDataSource>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, const TPath& referrer) {
+void TSchemeShard::AddExternalDataSourceReference(TPathId pathId, const TPath& referrer) {
     auto findSource = ExternalDataSources.FindPtr(pathId);
     Y_ABORT_UNLESS(findSource);
     auto* ref = (*findSource)->ExternalTableReferences.AddReferences();
     ref->SetPath(referrer.PathString());
     referrer->PathId.ToProto(ref->MutablePathId());
-    db.Table<Schema::ExternalDataSource>()
-        .Key(pathId.OwnerId, pathId.LocalPathId)
-        .Update(
-            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
 }
 
-void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, TPathId referrer) {
+void TSchemeShard::RemoveExternalDataSourceReference(TPathId pathId, TPathId referrer) {
     auto findSource = ExternalDataSources.FindPtr(pathId);
     Y_ABORT_UNLESS(findSource);
     EraseIf(*(*findSource)->ExternalTableReferences.MutableReferences(),
         [referrer](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
             return TPathId::FromProto(reference.GetPathId()) == referrer;
         });
+}
+
+void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, const TPath& referrer) {
+    AddExternalDataSourceReference(pathId, referrer);
     db.Table<Schema::ExternalDataSource>()
         .Key(pathId.OwnerId, pathId.LocalPathId)
         .Update(
-            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ ExternalDataSources.at(pathId)->ExternalTableReferences.SerializeAsString() });
+}
+
+void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, TPathId referrer) {
+    RemoveExternalDataSourceReference(pathId, referrer);
+    db.Table<Schema::ExternalDataSource>()
+        .Key(pathId.OwnerId, pathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ ExternalDataSources.at(pathId)->ExternalTableReferences.SerializeAsString() });
 }
 
 void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -6000,6 +6008,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NBackground::TEvListRequest, Handle);
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
+        HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -7746,14 +7755,8 @@ void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx) {
-    if (IsReadOnlyMode) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Ignoring message TEvSchemeShard::TEvCancelTx" <<
-                   " reason# schemeshard in readonly" <<
-                   " schemeshard# " << TabletID());
-        return;
-    }
-
+    // Read-only mode rejects new schema operations, but existing backups and
+    // restores must still be cancellable so exports and imports can finish.
     Execute(CreateTxOperationPropose(ev), ctx);
 }
 

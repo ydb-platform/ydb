@@ -356,7 +356,7 @@ public:
     }
 
     bool IsErasable() const {
-        return Portions.empty();
+        return Portions.empty() && InsertedPortions.empty();
     }
 
     void OnCompactionStarted();

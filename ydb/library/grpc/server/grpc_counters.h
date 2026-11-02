@@ -18,6 +18,8 @@ struct ICounterBlock : public TThrRefBase {
     virtual void CountRequestsWithoutDatabase() {}
     virtual void CountRequestsWithoutToken() {}
     virtual void CountRequestWithoutTls() {}
+    virtual void CountRelativeDatabase() {}
+    virtual void CountRelativeResource() {}
 
     virtual TIntrusivePtr<ICounterBlock> Clone() { return this; }
     virtual void UseDatabase(const TString& database) { Y_UNUSED(database); }

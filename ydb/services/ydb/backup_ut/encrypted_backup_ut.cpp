@@ -384,6 +384,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/EncryptedExport/001/data_00.csv.enc",
+                "/test_bucket/EncryptedExport/001/data_complete.json",
                 "/test_bucket/EncryptedExport/001/data_00.csv.sha256",
                 "/test_bucket/EncryptedExport/001/metadata.json.enc",
                 "/test_bucket/EncryptedExport/001/metadata.json.sha256",
@@ -395,6 +396,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/EncryptedExport/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.enc",
                 "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/EncryptedExport/export_complete.json",
                 "/test_bucket/EncryptedExport/metadata.json",
                 "/test_bucket/EncryptedExport/metadata.json.sha256",
             });
@@ -423,6 +425,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -436,6 +439,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
             });
         }
@@ -464,6 +468,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -475,6 +480,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.enc",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
@@ -515,6 +521,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -526,6 +533,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.enc",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
@@ -580,6 +588,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -593,6 +602,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/001/changefeed_description.pb.enc",
                 "/test_bucket/Prefix/001/001/changefeed_description.pb.sha256",
@@ -629,6 +639,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         )sql";
 
         TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -655,6 +666,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         )sql";
 
         TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -692,6 +704,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -737,6 +750,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -764,6 +778,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -807,6 +822,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -845,7 +861,8 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
 
 protected:
     bool NotEncryptedFileName(const TString& key, const TString& metadataPrefix) {
-        return key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
+        const bool completionMarker = key.EndsWith("/data_complete.json") || key.EndsWith("/export_complete.json");
+        return completionMarker || key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {

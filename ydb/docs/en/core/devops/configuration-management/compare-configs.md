@@ -11,8 +11,8 @@ This article describes the key differences between these two approaches.
 | **Configuration structure**     | Separate: [static](../../devops/configuration-management/configuration-v1/static-config.md) and [dynamic](../../devops/configuration-management/configuration-v1/dynamic-config.md). | [**Unified**](../configuration-management/configuration-v2/config-overview.md) configuration. |
 | **File management**         | Static: manual file placement on each node.<br>Dynamic: centralized upload via CLI. | Unified: [centralized upload](../configuration-management/configuration-v2/update-config.md) via CLI, automatic delivery to all nodes. |
 | **Delivery and application mechanism** | Static: read and applied from a local file at startup.<br>Dynamic: through `Console` tablet. | Fully automatic via the distributed configuration mechanism. |
-| **State Storage and static group management** | **Manual**: mandatory [`domains_config`](../../reference/configuration/domains_config.md#domains-state) and [`blob_storage_config`](../../reference/configuration/blob_storage_config.md#blob_storage_config) sections in static configuration. | **Automatic**: managed by the distributed configuration system. |
-| **Recommended for {{ ydb-short-name }} versions** | All versions before 25.1.1.                             | Version 25.1 and above.                                |
+| **State Storage and static group management** | **Manual**: mandatory [`domains_config`](../../reference/configuration/domains_config.md#domains-state) and [`blob_storage_config`](../../reference/configuration/blob_storage_config.md#blob_storage_config) sections in static configuration. | **Automatic**: managed by the [distributed configuration](../../concepts/glossary.md#distributed-configuration) system. |
+| **Recommended for {{ ydb-short-name }} versions** | Production use for all {{ ydb-short-name }} versions. | Experimental use on clusters version 25.1 and above. |
 
 ## Configuration V1
 
@@ -28,7 +28,7 @@ If your cluster is running on configuration V1, it is recommended to perform [mi
 Starting from {{ ydb-short-name }} version 25.1, [configuration V2](../configuration-management/configuration-v2/config-overview.md) is supported. Key features:
 
 * **Unified configuration file:** the entire cluster configuration is stored and managed as a single entity.
-* **Centralized management:** configuration is loaded to the cluster using the [`ydb admin cluster config replace`](../configuration-management/configuration-v2/update-config.md) command and automatically delivered to all nodes by the {{ ydb-short-name }} cluster itself through the distributed configuration mechanism.
+* **Centralized management:** configuration is loaded to the cluster using the [`ydb admin cluster config replace`](../configuration-management/configuration-v2/update-config.md) command and automatically delivered to all nodes by the {{ ydb-short-name }} cluster itself through the [distributed configuration](../../concepts/glossary.md#distributed-configuration) mechanism.
 * **Early validation:** the configuration file is validated before delivering it to cluster nodes, not when restarting  the server process.
 * **Automatic State Storage and static group management:** V2 supports [automatic configuration](../configuration-management/configuration-v2/config-overview.md), which allows skipping these sections in the configuration file.
 * **Storage on nodes:** the current configuration is automatically saved by each node in a special directory (specified by the `--config-dir` option when starting `ydbd`) and used during subsequent restarts.

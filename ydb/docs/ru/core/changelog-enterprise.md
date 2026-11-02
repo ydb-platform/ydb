@@ -1,6 +1,54 @@
 # Список изменений сервера Корпоративной СУБД Яндекса
 
+## Версия 25.3 {#25-3}
+
+### Версия 25.3.1.ent.3 {#25-3-1-ent-3}
+
+Дата выхода: 12 июня 2026.
+
+#### Функциональность
+
+* Добавлена поддержка конфигурации 2 ДЦ с синхронной записью данных (режим [`Bridge`](./concepts/bridge.md)).
+* Улучшения топиков:
+  * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
+  * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
+* Реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/33758) ошибка, приводившая к утечке сессий на серверной стороне.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/36926) ошибка, из-за которой в редких случаях чтения из таблицы могли заблокировать её удаление.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/20238) состояние гонки при обновлении soft-лимита CPU.
+* [Исправлено поведение](https://github.com/ydb-platform/ydb/pull/18121), при котором `ALTER TABLE` мог завершаться с ошибкой для таблиц с векторным индексом.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/18088) неконсистентные результаты в некоторых read-write транзакциях — конфликтующие записи больше не затирают незакоммиченные изменения.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/18234) нарушение сериализуемости в read-write транзакциях после рестартов шарда.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20560) ошибка управления памятью при коммите смещения в топиках со включённым автоматическим партиционированием.
+* [Добавлены](https://github.com/ydb-platform/ydb/pull/18698) проверки включённого шифрования в zero-copy передаче.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20519) ошибка, приводящая к зависанию VDisk в local recovery после ошибки `ChunkRead`.
+* [Исключено](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
+* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) определение состояния PDisk — теперь используется фактическое состояние из BSC, что повышает точность healthcheck.
+* При завершении сессии через attach stream теперь [отправляется](https://github.com/ydb-platform/ydb/pull/22298) уведомление.
+* Сервис координации теперь корректно [возвращает](https://github.com/ydb-platform/ydb/pull/16901) код `SCHEME_ERROR` для несуществующих ресурсов вместо ошибочно использовавшегося кода `INTERNAL_ERROR`.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/20157) ошибки работы с памятью и нарушения внутренней согласованности данных в Workload Manager и связанном с планировщиком коде.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20432) проблема, из-за которой запросы информации о PDisk могли завершаться таймаутом, если целевой узел был отключён или недоступен.
+
 ## Версия 25.2 {#25-2}
+
+### Версия 25.2.1.ent.13 {#25-2-1-ent-13}
+
+Дата выхода: 12 июня 2026.
+
+#### Производительность
+
+* [Сокращено](https://github.com/ydb-platform/ydb/pull/32880) потребление памяти при обработке запросов с операцией `TopSort` (`SELECT ... ORDER BY x LIMIT n`).
+* Добавлена оптимизация, позволяющая фильтровать строки по колонкам из вторичного индекса до обращения к основной таблице, что снижает количество операций чтения.
+
+#### Исправления ошибок
+
+* [Устранена](https://github.com/ydb-platform/ydb/issues/24779) ошибка `Unexpected end of buffer, Handle(): requirement chunkSize <= Buffer.size() failed`, приводившая к аварийному завершению работы динамических узлов.
+* Устранён ряд ситуаций потенциального зависания выполняемых запросов при индексном доступе `StreamIndexLookup`.
+* Исправлено игнорирование лимита при чтении из индекса — устранён баг, из-за которого лимит из текста запроса не применялся к индексной таблице, что приводило к избыточному чтению из индекса.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/38425) уязвимость [LDAP-аутентификации](./security/authentication.md): зная логин и пароль любого LDAP-пользователя (в том числе не входящего в группу с доступом к {{ ydb-short-name }}), можно было обойти проверку членства в группе и получить доступ к кластеру (инъекция в LDAP-фильтр поиска пользователя; добавлено экранирование спецсимволов по RFC 2254).
 
 ### Версия 25.2.1.ent.4 {#25-2-1-ent-4}
 
@@ -62,7 +110,7 @@
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](./recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](./recipes/ydb-sdk/vector-search?version=v25.1). Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/?version=v25.1#feature_flags). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](./recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](./recipes/ydb-sdk/vector-search?version=v25.1).
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка [консистентной асинхронной репликации](./concepts/async-replication.md?version=v25.1).
 * Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs?version=v25.1) механизмов конфигурации V1 и V2.
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md?version=v25.1#numeric).
@@ -72,7 +120,7 @@
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) для потоков изменений (changefeed).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/19507) возможность создавать потоки изменений к индексным таблицам.
 * Добавлена возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) для вторичного индекса. Включается установкой флага `enable_access_to_index_impl_tables` в конфигурации кластера.
-* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/issues/7054) потоки изменений. Чтобы воспользоваться функциональностью, необходимо установить флаги `enable_changefeeds_export` и `enable_changefeeds_export` в секции `feature_flags` конфигурации [базы данных](./maintenance/manual/dynamic-config) или **[кластера](./devops/configuration-management/configuration-v1/static-config)**.
+* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/issues/7054) потоки изменений. Чтобы воспользоваться функциональностью, необходимо установить флаги `enable_changefeeds_export` и `enable_changefeeds_export` в секции `feature_flags` конфигурации [базы данных](./devops/configuration-management/configuration-v1/dynamic-config.md) или [кластера](./devops/configuration-management/configuration-v1/static-config.md).
 * Добавлено автоудаление временных директорий и таблиц при экспорте в S3. Включается установкой флага `enable_export_auto_dropping` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, предотвращающая восстановление из повреждённых резервных копий и защищающая от потери данных.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md?version=v25.1#udf) в запросах.
@@ -181,7 +229,7 @@
 
 #### Функциональность
 
-* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/pull/25675) представления (VIEW). Чтобы воспользоваться функциональностью, необходимо установить флаг `enable_view_export` в секции `feature_flags` конфигурации [базы данных](./maintenance/manual/dynamic-config) или **[кластера](./devops/configuration-management/configuration-v1/static-config)**.
+* В операциях резервного копирования и восстановления [поддержаны](https://github.com/ydb-platform/ydb/pull/25675) представления (VIEW). Чтобы воспользоваться функциональностью, необходимо установить флаг `enable_view_export` в секции `feature_flags` конфигурации [базы данных](./devops/configuration-management/configuration-v1/dynamic-config.md) или [кластера](./devops/configuration-management/configuration-v1/static-config.md).
 * В текст ошибок [Transaction locks invalidated](./troubleshooting/performance/queries/transaction-lock-invalidation) в случае невозможности идентифицировать таблицу (Unknown table) добавляются дополнительные идентификаторы: идентификатор пути к объекту (`PathId`) и идентификатор таблетки (`TabletId`).
 
 ### Версия 24.4.4.15 {#24-4-4-15}
@@ -208,7 +256,7 @@
 * [Добавлены](https://github.com/ydb-platform/ydb/pull/11775) приоритеты проверки аутентификационных тикетов [с использованием стороннего IAM-провайдера](./security/authentication.md#iam), с самым высоким приоритетом обрабатываются запросы от новых пользователей. Тикеты в кеше обновляют свою информацию с приоритетом ниже.
 * Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
 * Включены по умолчанию:
-  
+
   * поддержка [представлений (VIEW)](./concepts/datamodel/view.md);
   * режим [автопартиционирования](./concepts/datamodel/topic.md#autopartitioning) топиков;
   * [транзакции с участием топиков и строковых таблиц](./concepts/transactions.md#topic-table-transactions);

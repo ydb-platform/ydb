@@ -1723,21 +1723,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext&
     }
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    auto partition = Partitions.find(TPartitionId(record.GetPartitionId()));
-    if (partition == Partitions.end() || partition->second.Actor != ev->Sender) {
-        return;
-    }
-    auto pipe = PipesInfo.find(ActorIdFromProto(record.GetPipeClient()));
-    if (pipe == PipesInfo.end() || !pipe->second.ClientActor
-        || pipe->second.SessionId != record.GetSession()
-        || pipe->second.PartitionSessionId != record.GetPartitionSessionId()) {
-        return;
-    }
-    ctx.Send(pipe->second.ClientActor, ev->Release().Release());
-}
-
 void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
@@ -1931,6 +1916,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
                 responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), cmd.GetPartitionSessionId(), cmd.GetGeneration(), cmd.GetStep(),
                 pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
         );
+        event->ReadSessionActor = sender;
 
         if (isDirectRead) {
             auto pipeIter = PipesInfo.find(pipeClient);
@@ -1944,10 +1930,13 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
 <<<<<<< HEAD
+<<<<<<< HEAD
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Created session",
                 {"logPrefix", LogPrefix()},
 =======
             pipeIter->second.ClientActor = sender;
+=======
+>>>>>>> d81df83dbbc (fix offsets mirroring (#57826))
             LOG_D("Created session",
 >>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
                 {"sessionId", cmd.GetSessionId()},
@@ -2404,7 +2393,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
 void TPersQueue::HandleReadRequest(
         const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-        const TActorId& pipeClient, const TActorId&
+        const TActorId& pipeClient, const TActorId& sender
 ) {
     PQ_ENSURE(req.HasCmdRead());
 
@@ -2477,6 +2466,7 @@ void TPersQueue::HandleReadRequest(
                                        clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
+        event->ReadSessionActor = sender;
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }
@@ -6321,7 +6311,6 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-        HFuncTraced(TEvPersQueue::TEvReplicationData, Handle);
         HFuncTraced(TEvPersQueue::TEvStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);

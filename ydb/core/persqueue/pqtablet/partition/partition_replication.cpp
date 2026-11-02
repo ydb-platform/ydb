@@ -74,6 +74,32 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
     PendingReplicationData.reset();
 }
 
+void TPartition::RestoreReadSessionActor(TUserInfo& userInfo, const TString& sessionId,
+                                       const TActorId& readSessionActor, const TActorContext& ctx) {
+    if (userInfo.ReadSessionActor || !readSessionActor || userInfo.Session != sessionId) {
+        return;
+    }
+
+    // A session change may already be waiting for its KV write to complete.
+    if (auto* pending = GetPendingUserIfExists(userInfo.User)) {
+        if (pending->Session != sessionId || pending->Generation != userInfo.Generation
+            || pending->Step != userInfo.Step
+            || (pending->ReadSessionActor && pending->ReadSessionActor != readSessionActor)) {
+            return;
+        }
+        pending->ReadSessionActor = readSessionActor;
+    }
+    userInfo.ReadSessionActor = readSessionActor;
+
+    LOG_D("Restored read session actor",
+        {"consumer", userInfo.User},
+        {"readSessionActor", readSessionActor});
+
+    if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+        SendOffsetsToReplicationConsumer(ctx);
+    }
+}
+
 void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TConstArrayRef<const TUserInfo*> userInfos) {
     NKikimrPQ::TReplicationDataPayload replicationData;
     if (userInfos.empty()) {
@@ -88,7 +114,7 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
     const TString payload = replicationData.SerializeAsString();
     for (const auto& [consumer, info] : UsersInfoStorage->ViewAll()) {
         if (info.Type != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
-            || info.Session.empty() || !info.PipeClient) {
+            || info.Session.empty() || !info.ReadSessionActor) {
             continue;
         }
         auto event = MakeHolder<TEvPersQueue::TEvReplicationData>();
@@ -98,8 +124,7 @@ void TPartition::SendOffsetsToReplicationConsumer(const TActorContext& ctx, TCon
         event->Record.SetStep(info.Step);
         event->Record.SetPayload(payload);
         event->Record.SetPartitionSessionId(info.PartitionSessionId);
-        ActorIdToProto(info.PipeClient, event->Record.MutablePipeClient());
-        ctx.Send(TabletActorId, event.Release());
+        ctx.Send(info.ReadSessionActor, event.Release());
     }
 }
 

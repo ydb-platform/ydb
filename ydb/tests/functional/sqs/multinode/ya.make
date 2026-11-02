@@ -6,7 +6,7 @@ TEST_SRCS(
     test_recompiles_requests.py
 )
 
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

@@ -9,7 +9,9 @@ TEST_SRCS(
     test_state_storage_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:2)
+FORK_SUBTESTS()
+SPLIT_FACTOR(3)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

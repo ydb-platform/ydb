@@ -489,6 +489,7 @@ struct TEvPQ {
         bool Strict;
         bool MLPRequest;
         TActorId PipeClient;
+        TActorId ReadSessionActor;
         std::optional<TString> CommittedMetadata;
         bool IsInternal = false;
     };

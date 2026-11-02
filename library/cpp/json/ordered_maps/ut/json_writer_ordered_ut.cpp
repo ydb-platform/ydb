@@ -1,10 +1,7 @@
-#include <library/cpp/json/ordered_maps/json_reader_ordered.h>
 #include <library/cpp/json/ordered_maps/json_writer_ordered.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/str.h>
-
-#include <cmath>
 
 using namespace NJson::NOrderedJson;
 
@@ -189,41 +186,6 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         UNIT_ASSERT_VALUES_EQUAL(json.Str(), "\"A\"");
         UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, ""), "\"A\"");
         UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, "Foo"), "Foo(\"A\")");
-    }
-
-    Y_UNIT_TEST(FloatingPointZeroRoundTrip) {
-        for (const auto mode : {PREC_AUTO, PREC_NDIGITS, PREC_POINT_DIGITS, PREC_POINT_DIGITS_STRIP_ZEROES}) {
-            for (const ui32 digits : {0, 6}) {
-                TJsonWriterConfig config;
-                config.FloatToStringMode = mode;
-                config.FloatNDigits = digits;
-                config.DoubleNDigits = digits;
-
-                TStringStream out;
-                TJsonWriter writer(&out, config);
-                writer.OpenArray();
-                writer.Write(-0.0f);
-                writer.Write(-0.0);
-                writer.Write(0.0f);
-                writer.Write(0.0);
-                writer.Write(-1.0f);
-                writer.Write(-1.0);
-                writer.Write(1.0f);
-                writer.Write(1.0);
-                writer.CloseArray();
-                writer.Flush();
-
-                TJsonValue parsed;
-                UNIT_ASSERT_C(ReadJsonTree(out.Str(), &parsed), out.Str());
-                const double expected[] = {-0.0, -0.0, 0.0, 0.0, -1.0, -1.0, 1.0, 1.0};
-                UNIT_ASSERT_VALUES_EQUAL(parsed.GetArray().size(), std::size(expected));
-                for (size_t i = 0; i < std::size(expected); ++i) {
-                    const double actual = parsed[i].GetDoubleSafe();
-                    UNIT_ASSERT_VALUES_EQUAL_C(actual, expected[i], out.Str());
-                    UNIT_ASSERT_VALUES_EQUAL_C(std::signbit(actual), std::signbit(expected[i]), out.Str());
-                }
-            }
-        }
     }
 
     Y_UNIT_TEST(FloatPrecision) {

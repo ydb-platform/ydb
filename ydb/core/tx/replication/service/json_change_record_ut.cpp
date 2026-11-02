@@ -21,6 +21,7 @@
 #include <util/string/builder.h>
 
 #include <cmath>
+#include <limits>
 
 namespace NKikimr::NReplication::NService {
 
@@ -136,6 +137,104 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
 
     Y_UNIT_TEST(FloatingPointRoundTripReset) {
         CheckFloatingPointRoundTrip(true);
+    }
+
+    Y_UNIT_TEST_QUAD(CdcJsonSerialization, Reset, Debezium) {
+        const NScheme::TTypeInfo keyType(NScheme::NTypeIds::Uint32);
+        auto schema = MakeIntrusive<NDataShard::TUserTable>();
+        schema->KeyColumnIds = {1};
+        schema->KeyColumnTypes = {keyType};
+        schema->Columns.emplace(1, NDataShard::TUserTable::TUserColumn(keyType, "", "key", true));
+        schema->Columns.emplace(2, NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Float), "", "float_value"));
+        schema->Columns.emplace(3, NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Double), "", "double_value"));
+        schema->Columns.emplace(4, NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Json), "", "json"));
+        schema->Columns.emplace(5, NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "text"));
+        THolder<NDataShard::IChangeRecordSerializer> serializer(NDataShard::CreateChangeRecordSerializer({
+            .StreamFormat = Debezium ? NKikimrSchemeOp::ECdcStreamFormatDebeziumJson : NKikimrSchemeOp::ECdcStreamFormatJson,
+            .StreamMode = Debezium ? NKikimrSchemeOp::ECdcStreamModeNewAndOldImages : NKikimrSchemeOp::ECdcStreamModeUpdate,
+        }));
+        const TString nested = R"({"array":[-0.0,{"negative":-0.0},0,0.0,-1,1.2345678901234567,true,null,18446744073709551615,-9223372036854775808],"escaped\"key":"-0\n\"\\"})";
+        const TString text = "-0\n\"\\строка";
+        const auto writeScalar = [](const NJson::TJsonValue& value) {
+            TStringStream out;
+            NJson::WriteJson(&out, &value, NFormats::DefaultJsonWriterConfig());
+            return out.Str();
+        };
+
+        for (const double value : {
+            -0.0, 0.0, -1.25, 1.25, 1.2345678901234567, std::nextafter(1.0, 2.0),
+            std::numeric_limits<double>::min(), std::numeric_limits<double>::max(),
+            std::numeric_limits<double>::denorm_min(),
+            static_cast<double>(std::numeric_limits<float>::min()),
+            static_cast<double>(std::numeric_limits<float>::max()),
+            static_cast<double>(std::numeric_limits<float>::denorm_min()),
+            std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(),
+            std::numeric_limits<double>::quiet_NaN(),
+        }) {
+            float floatValue;
+            if (value > std::numeric_limits<float>::max()) {
+                floatValue = std::numeric_limits<float>::infinity();
+            } else if (value < -std::numeric_limits<float>::max()) {
+                floatValue = -std::numeric_limits<float>::infinity();
+            } else {
+                floatValue = static_cast<float>(value);
+            }
+
+            NKikimrChangeExchange::TDataChange body;
+            body.MutableKey()->AddTags(1);
+            body.MutableKey()->SetData(TSerializedCellVec::Serialize(TVector<TCell>{TCell::Make(ui32(1))}));
+            auto* values = Reset ? body.MutableReset() : body.MutableUpsert();
+            for (const ui32 tag : {2, 3, 4, 5}) {
+                values->AddTags(tag);
+            }
+            values->SetData(TSerializedCellVec::Serialize(TVector<TCell>{
+                TCell::Make(floatValue), TCell::Make(value),
+                TCell(nested.data(), nested.size()), TCell(text.data(), text.size()),
+            }));
+            if (Debezium) {
+                *body.MutableOldImage() = *values;
+                *body.MutableNewImage() = *values;
+            }
+            auto source = NDataShard::TChangeRecordBuilder(NDataShard::TChangeRecord::EKind::CdcDataChange)
+                .WithOrder(1).WithSchema(schema).WithBody(body.SerializeAsString()).Build();
+            NKikimrClient::TPersQueuePartitionRequest::TCmdWrite command;
+            serializer->Serialize(command, *source);
+            NKikimrPQClient::TDataChunk chunk;
+            UNIT_ASSERT(chunk.ParseFromString(command.GetData()));
+
+            // Other scalars retain the default precision, escaping and NaN/Inf policy.
+            for (const auto& [name, number] : {
+                std::pair{"float_value", static_cast<double>(floatValue)}, std::pair{"double_value", value},
+            }) {
+                const TString expected = number == 0.0 && std::signbit(number)
+                    ? "-0.0" : writeScalar(NJson::TJsonValue(number));
+                const TString field = TStringBuilder() << '"' << name << "\":" << expected;
+                UNIT_ASSERT_C(chunk.GetData().Contains(field), chunk.GetData());
+            }
+            const TString textField = TStringBuilder() << "\"text\":" << writeScalar(NJson::TJsonValue(text));
+            UNIT_ASSERT_C(chunk.GetData().Contains(textField), chunk.GetData());
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(chunk.GetData(), &json));
+            const auto& update = Debezium ? json["payload"]["after"] : json[Reset ? "reset" : "update"];
+            if (Debezium) {
+                UNIT_ASSERT_VALUES_EQUAL(chunk.MessageMetaSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(chunk.GetMessageMeta(0).key(), "__key");
+                NJson::TJsonValue key;
+                UNIT_ASSERT(NJson::ReadJsonTree(chunk.GetMessageMeta(0).value(), &key));
+                UNIT_ASSERT_VALUES_EQUAL(key["payload"]["key"].GetUInteger(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(NJson::WriteJson(json["payload"]["before"]), NJson::WriteJson(update));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(update["text"].GetString(), text);
+            const auto& array = update["json"]["array"];
+            for (const auto* zero : {&array[0], &array[1]["negative"]}) {
+                UNIT_ASSERT_VALUES_EQUAL(zero->GetType(), NJson::JSON_DOUBLE);
+                UNIT_ASSERT_VALUES_EQUAL(zero->GetDouble(), 0.0);
+                UNIT_ASSERT(std::signbit(zero->GetDouble()));
+            }
+            NJson::TJsonValue expectedNested;
+            UNIT_ASSERT(NJson::ReadJsonTree(nested, &expectedNested));
+            UNIT_ASSERT_VALUES_EQUAL(NJson::WriteJson(update["json"]), NJson::WriteJson(expectedNested));
+        }
     }
 
     Y_UNIT_TEST_QUAD(YsonRoundTrip, Reset, VirtualTimestamps) {

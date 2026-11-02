@@ -24,6 +24,8 @@
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
+#include <cmath>
+
 namespace NKikimr::NDataShard {
 
 class TBaseSerializer: public IChangeRecordSerializer {
@@ -293,9 +295,33 @@ protected:
         }
     }
 
+    static void WriteJson(NJson::TJsonWriter& writer, const NJson::TJsonValue& value) {
+        if (value.IsMap()) {
+            writer.OpenMap();
+            for (const auto& [key, item] : value.GetMap()) {
+                writer.WriteKey(key);
+                WriteJson(writer, item);
+            }
+            writer.CloseMap();
+        } else if (value.IsArray()) {
+            writer.OpenArray();
+            for (const auto& item : value.GetArray()) {
+                WriteJson(writer, item);
+            }
+            writer.CloseArray();
+        } else if (value.GetType() == NJson::JSON_DOUBLE && value.GetDouble() == 0.0 && std::signbit(value.GetDouble())) {
+            // Integer parsing of "-0" loses its sign during replication.
+            writer.UnsafeWrite("-0.0");
+        } else {
+            writer.Write(value);
+        }
+    }
+
     TString JsonToString(const NJson::TJsonValue& json) const {
         TStringStream str;
-        NJson::WriteJson(&str, &json, JsonConfig);
+        NJson::TJsonWriter writer(&str, JsonConfig, true);
+        WriteJson(writer, json);
+        writer.Flush();
         return str.Str();
     }
 
@@ -736,17 +762,11 @@ protected:
         NJson::TJsonValue json;
         SerializeToJson(json, record);
         {
-            TStringStream str;
-            NJson::WriteJson(&str, &json["key"], JsonConfig);
             auto& messageMeta = *data.AddMessageMeta();
             messageMeta.set_key("__key");
-            messageMeta.set_value(str.Str());
+            messageMeta.set_value(JsonToString(json["key"]));
         }
-        {
-            TStringStream str;
-            NJson::WriteJson(&str, &json["value"], JsonConfig);
-            data.SetData(str.Str());
-        }
+        data.SetData(JsonToString(json["value"]));
     }
 
 public:

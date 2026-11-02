@@ -199,6 +199,10 @@ public:
         return *InsertWriteId;
     }
 
+    bool HasCommitSnapshot() const {
+        return CommitSnapshot.has_value();
+    }
+
     void SetCommitSnapshot(const TSnapshot& snap) {
         AFL_VERIFY(!!InsertWriteId);
         AFL_VERIFY(!CommitSnapshot);

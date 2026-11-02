@@ -149,7 +149,8 @@ public:
     bool LoadCounters(IDbWrapper& db);
 
 public:
-    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
+    virtual std::shared_ptr<ITxReader> BuildLoader(
+        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, std::vector<TPortionAddress>&& uncommittedPortions) override;
     bool FinishLoading();
     void PrefetchPortionsMetadata();
     bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);

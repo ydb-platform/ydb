@@ -167,6 +167,19 @@ bool TDbWrapper::LoadColumns(const std::function<void(TColumnChunkLoadContextV2&
     }
 }
 
+bool TDbWrapper::LoadPortionVerified(const TPortionAddress& address,
+    const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) {
+    NIceDb::TNiceDb db(Database);
+    auto rowset = db.Table<NColumnShard::Schema::IndexPortions>().Key(address.GetPathId().GetRawValue(), address.GetPortionId()).Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+    AFL_VERIFY(!rowset.EndOfSet())("address", address.DebugString());
+    auto [portion, metaProto] = MakePortionInfoConstructor(rowset);
+    callback(std::move(portion), metaProto);
+    return true;
+}
+
 bool TDbWrapper::LoadPortions(
     const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback,
     const std::optional<TInternalPathId> pathId, const std::optional<ui64> portionId) {

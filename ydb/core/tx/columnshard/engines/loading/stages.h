@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 
 namespace NKikimr::NOlap {
@@ -44,6 +45,22 @@ private:
 
 public:
     using TBase::TBase;
+};
+
+class TEngineUncommittedPortionsReader: public IEngineTxReader {
+private:
+    using TBase = IEngineTxReader;
+    const std::vector<TPortionAddress> Addresses;
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
+public:
+    TEngineUncommittedPortionsReader(const TString& name, TColumnEngineForLogs* self, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
+        std::vector<TPortionAddress>&& addresses)
+        : TBase(name, self, dsGroupSelector)
+        , Addresses(std::move(addresses))
+    {
+    }
 };
 
 class TEngineLoadingFinish: public ITxReader {

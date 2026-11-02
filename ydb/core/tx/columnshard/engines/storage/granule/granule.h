@@ -402,6 +402,10 @@ public:
         return InsertedPortions;
     }
 
+    bool HasInsertedPortion(const ui64 portionId) const {
+        return InsertedPortionsById.contains(portionId);
+    }
+
     const std::shared_ptr<TWrittenPortionInfo>& GetInsertedPortionVerifiedPtr(const TInsertWriteId portionId) const {
         auto it = InsertedPortions.find(portionId);
         AFL_VERIFY(it != InsertedPortions.end());

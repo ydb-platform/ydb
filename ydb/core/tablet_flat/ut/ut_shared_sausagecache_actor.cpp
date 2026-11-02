@@ -541,7 +541,9 @@ Y_UNIT_TEST_SUITE(TSharedCacheMetadataMemory) {
         {
             auto& collection = InitCollection(collections, new TPageCollectionMock(1, 1, 100));
             request.PageCollection = collection.PageCollection;
+            request.IsInFlightFetch = true;
             collection.AddMetadataRequest(request);
+            UNIT_ASSERT_VALUES_EQUAL(collection.InFlightFetches, 1);
             collection.SetPageCollection(new TPageCollectionMock(1, 1, 200));
             UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 300);
             const auto id = collection.Id;
@@ -711,9 +713,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 4);
 
-        auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 30);
-        data->Pages = {TLoadedPageData(_P(1).Offset, TSharedData{}), TLoadedPageData(_P(2).Offset, TSharedData{}), TLoadedPageData(_P(3).Offset, TSharedData{})};
-        sharedCache.Send(sharedCache.BlockIoSender, data, NO_QUEUE_COOKIE);
+        sharedCache.Fail(sharedCache.Collection1, { _P(1), _P(2), _P(3) });
         sharedCache.CheckResults({
             TFetch{1, sharedCache.Collection1, {}},
             TFetch{3, sharedCache.Collection1, {}}
@@ -821,9 +821,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 4);
 
-        auto data = new NBlockIO::TEvData(NKikimrProto::ERROR, sharedCache.Collection1, 10);
-        data->Pages = {TLoadedPageData(_P(1).Offset, TSharedData{})};
-        sharedCache.Send(sharedCache.BlockIoSender, data, ASYNC_QUEUE_COOKIE);
+        sharedCache.Fail(sharedCache.Collection1, { _P(1) }, ASYNC_QUEUE_COOKIE);
         sharedCache.CheckResults({
             TFetch{1, sharedCache.Collection1, {}},
             TFetch{2, sharedCache.Collection1, {}},
@@ -1365,6 +1363,88 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.SetLimit(0).Wakeup();
         UNIT_ASSERT_VALUES_EQUAL(counters.CollectionMetadataBytes->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters.DetachedCollectionMetadataBytes->Val(), 0);
+    }
+
+    Y_UNIT_TEST(Metadata_PreloadRetainsReplacedDescriptorUntilCompletion) {
+        for (bool fail : { false, true }) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetMemoryLimit(4096);
+            TSharedPageCacheMock sharedCache(config);
+            sharedCache.Collection1 = new TPageCollectionMock(1, 1, 104);
+            const TIntrusiveConstPtr<TPageCollectionMock> replacement = new TPageCollectionMock(1, 1, 192);
+
+            sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+            sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(0) } } });
+            sharedCache.Attach(sharedCache.Sender2, replacement, ECacheMode::TryKeepInMemory);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+            sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+            sharedCache.Detach(sharedCache.Sender2, replacement);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+
+            if (fail) {
+                sharedCache.Fail(sharedCache.Collection1, { _P(0) }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+            } else {
+                sharedCache.Provide(sharedCache.Collection1, { _P(0) }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+            }
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), fail ? 0 : 192);
+            sharedCache.SetLimit(0).Wakeup();
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(Metadata_CancelledRequestsRetainFetchesUntilLastError) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(4096);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 2, 104);
+        const TIntrusiveConstPtr<TPageCollectionMock> replacement = new TPageCollectionMock(1, 2, 192);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(0) });
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({
+            TFetch{ 10, sharedCache.Collection1, { _P(0) } },
+            TFetch{ 10, sharedCache.Collection1, { _P(1) } },
+        });
+        sharedCache.Attach(sharedCache.Sender2, replacement);
+        sharedCache.Unregister(sharedCache.Sender1);
+        sharedCache.CheckResults({
+                                     TFetch{ 1, sharedCache.Collection1, {} },
+                                     TFetch{ 2, sharedCache.Collection1, {} },
+                                 }, NKikimrProto::RACE);
+        sharedCache.Unregister(sharedCache.Sender2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+
+        sharedCache.Fail(sharedCache.Collection1, { _P(0) });
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+        sharedCache.Fail(sharedCache.Collection1, { _P(1) });
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 0);
+    }
+
+    Y_UNIT_TEST(Metadata_QueuedFetchCanUseRetiredDescriptor) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(4096);
+        config.SetAsyncQueueInFlyLimit(0);
+        TSharedPageCacheMock sharedCache(config);
+        sharedCache.Collection1 = new TPageCollectionMock(1, 2, 104);
+        const TIntrusiveConstPtr<TPageCollectionMock> replacement = new TPageCollectionMock(1, 2, 192);
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, { _P(0), _P(1) }, EPriority::Bkgr);
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(0) } } });
+        sharedCache.Attach(sharedCache.Sender2, replacement);
+        sharedCache.Provide(sharedCache.Collection1, { _P(0) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 104 + 192);
+        sharedCache.Provide(sharedCache.Collection1, { _P(1) }, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection1, { _P(0), _P(1) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->MetadataBytes->Val(), 192);
     }
 
     Y_UNIT_TEST(Metadata_GlobsReadCountsAllocationsByIdentity) {

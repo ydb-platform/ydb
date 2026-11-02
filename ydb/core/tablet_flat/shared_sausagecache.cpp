@@ -21,6 +21,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/set.h>
+#include <util/generic/scope.h>
 
 namespace NKikimr::NSharedCache {
 
@@ -121,8 +122,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     TCollections Collections;
     TCacheBTreeWalkController Walks{ *this };
     // Keyed by the per-fetch TBlockIO actor returned by Start; removed when its TEvData arrives.
-    // A fetch that dies without reporting leaves both this entry and its run waiting for completion.
-    THashMap<TActorId, TLogoBlobID> WalkFetches;
+    // Keep metadata charged independently of the initiating request until completion.
+    THashMap<TActorId, THolder<TRequest>> Fetches;
     TPendingInMemoryPages PendingInMemoryPages;
     THashMap<TActorId, THashMap<TCollection*, TIntrusiveList<TRequest>>> Owners;
     TRequestQueue AsyncRequests{EBlockIOFetchTypeCookie::AsyncQueue};
@@ -895,11 +896,22 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
+        THolder<TRequest> fetchRequest;
         TLogoBlobID walkCollectionId;
-        if (auto it = WalkFetches.find(ev->Sender); it != WalkFetches.end()) {
-            walkCollectionId = it->second;
-            WalkFetches.erase(it);
+        if (auto it = Fetches.find(ev->Sender); it != Fetches.end()) {
+            fetchRequest = std::move(it->second);
+            walkCollectionId = fetchRequest->WalkCollectionId;
+            Fetches.erase(it);
         }
+        Y_DEFER {
+            if (fetchRequest) {
+                const auto collectionId = fetchRequest->PageCollection->Label();
+                fetchRequest.Reset();
+                if (auto* collection = Collections.FindPtr(collectionId)) {
+                    TryDropExpiredCollection(*collection);
+                }
+            }
+        };
 
         LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Receive page collection " << msg->PageCollection->Label()
             << " status " << msg->Status
@@ -1037,6 +1049,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         // Drop unnecessary collections from memory
         if (!collection.Owners &&
             !collection.PendingRequests &&
+            !collection.InFlightFetches &&
             Walks.IsIdle(collection.Id) &&
             collection.PageSet.empty())
         {
@@ -1276,6 +1289,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     }
 
     void SendRequest(TRequest& request, TVector<TPageLocation>&& pages, ui64 bytes, EBlockIOFetchTypeCookie cookie) {
+        auto fetchRequest = MakeHolder<TRequest>();
+        fetchRequest->PageCollection = request.PageCollection;
+        fetchRequest->WalkCollectionId = request.WalkCollectionId;
+        fetchRequest->IsInFlightFetch = true;
+        Y_ENSURE(request.MetadataOwner);
+        request.MetadataOwner->AddMetadataRequest(*fetchRequest);
         if (request.WalkCollectionId) {
             Walks.FetchStarted(request.WalkCollectionId);
         }
@@ -1292,10 +1311,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             fetch->TraceId = std::move(request.TraceId);            
         }
         const TActorId bioActor = NBlockIO::Start(this, request.Sender, static_cast<ui64>(cookie), fetch);
-        if (request.WalkCollectionId) {
-            const bool inserted = WalkFetches.emplace(bioActor, request.WalkCollectionId).second;
-            Y_ENSURE(inserted);
-        }
+        const bool inserted = Fetches.emplace(bioActor, std::move(fetchRequest)).second;
+        Y_ENSURE(inserted);
     }
 
     void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError, EBlockIOFetchTypeCookie fetchType) {

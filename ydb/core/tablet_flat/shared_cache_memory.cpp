@@ -127,7 +127,7 @@ TCollection::~TCollection() {
     if (CollectionSet && PageCollection) {
         UnrefMetadata(*PageCollection);
     }
-    Y_DEBUG_ABORT_UNLESS(!MetadataRequestCount && !RetiredMetadata && !MetadataBytes);
+    Y_DEBUG_ABORT_UNLESS(!MetadataRequestCount && !InFlightFetches && !RetiredMetadata && !MetadataBytes);
 }
 
 bool TCollection::HasSharedMeta(
@@ -224,14 +224,30 @@ void TCollection::SetPageCollection(TIntrusiveConstPtr<NPageCollection::IPageCol
 }
 
 void TCollection::AddMetadataRequest(TRequest& request) {
-    Y_ENSURE(CollectionSet && !request.MetadataOwner && request.PageCollection == PageCollection);
-    ++MetadataRequestCount;
+    Y_ENSURE(CollectionSet && !request.MetadataOwner && request.PageCollection);
+    if (request.PageCollection == PageCollection) {
+        ++MetadataRequestCount;
+    } else {
+        Y_ENSURE(RetiredMetadata);
+        auto* reference = FindIfPtr(*RetiredMetadata, [&](const auto& item) {
+            return item.Descriptor == request.PageCollection.Get();
+        });
+        Y_ENSURE(reference);
+        ++reference->References;
+    }
+    if (request.IsInFlightFetch) {
+        ++InFlightFetches;
+    }
     request.MetadataOwner = this;
     MetadataRequests.PushBack(&request);
 }
 
 void TCollection::RemoveMetadataRequest(TRequest& request) {
     Y_ENSURE(request.MetadataOwner == this);
+    if (request.IsInFlightFetch) {
+        Y_ENSURE(InFlightFetches);
+        --InFlightFetches;
+    }
     request.MetadataOwner = nullptr;
     request.TIntrusiveListItem<TRequest, TMetadataRequestTag>::Unlink();
     if (request.PageCollection == PageCollection) {

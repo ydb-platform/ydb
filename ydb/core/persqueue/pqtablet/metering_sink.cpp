@@ -237,6 +237,7 @@ TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMetering
             {"type", static_cast<int>(type)},
             {"tabletId", Parameters_.TabletId},
             {"stream", Parameters_.StreamName});
+        return {};
     };
 }
 

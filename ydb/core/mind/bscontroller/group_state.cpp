@@ -18,47 +18,106 @@ void TBlobStorageController::UpdateGroupStateActor(TGroupId groupId) {
         message->Info->States = group->FailRealmStates.value_or(TFailRealmStates{});
         for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
             message->Info->VDisks.push_back({slot->GetVDiskId(),
-                MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId), slot->ConfigObservationEpoch});
+                MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId)});
         }
     }
-    std::unique_ptr<TEvGroupState::TEvUpdate> configMessage = std::make_unique<TEvGroupState::TEvUpdate>(groupId.GetRawId());
-    configMessage->Info = message->Info;
-    Send(GroupConfigActorId, configMessage.release());
     Send(GroupStateActorId, message.release());
 }
 
-void TBlobStorageController::ResetGroupConfigObservations(TNodeId nodeId) {
-    THashSet<TGroupId> groups;
-    const TVSlotId startingId(nodeId, 0, 0);
-    for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
-        it->second->ConfirmedGroupGeneration = 0;
-        ++it->second->ConfigObservationEpoch;
-        if (it->second->Group) {
-            groups.insert(it->second->GroupId);
-        }
-    }
-    for (TGroupId groupId : groups) {
-        UpdateGroupStateActor(groupId);
-    }
-}
 
-void TBlobStorageController::Handle(TEvGroupState::TEvConfigObserved::TPtr& ev) {
-    if (ev->Sender != GroupConfigActorId) {
-        return;
-    }
-    const TEvGroupState::TEvConfigObserved& message = *ev->Get();
-    TGroupInfo* group = FindGroup(TGroupId::FromValue(message.GroupId));
-    if (!group || group->Generation != message.RequestedGeneration
-            || message.VDiskId.GroupGeneration > group->Generation) {
-        return;
-    }
-    for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : group->VDisksInGroup) {
-        const TActorId serviceId = MakeBlobStorageVDiskID(slot->VSlotId.NodeId, slot->VSlotId.PDiskId, slot->VSlotId.VSlotId);
-        if (serviceId == message.ServiceId && message.VDiskId.SameExceptGeneration(slot->GetVDiskId())
-                && slot->ConfigObservationEpoch == message.ObservationEpoch) {
-            FindVSlot(slot->VSlotId)->ConfirmedGroupGeneration = message.VDiskId.GroupGeneration;
-            return;
+class TBlobStorageController::TTxPersistGroupConfigAcknowledgements : public TTransactionBase<TBlobStorageController> {
+    using TBase = TTransactionBase<TBlobStorageController>;
+    google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> Reports;
+    TMap<TVSlotId, TGroupConfigAcknowledgement> Committed;
+
+public:
+    TTxPersistGroupConfigAcknowledgements(TBlobStorageController* controller,
+            const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& reports)
+        : TBase(controller), Reports(reports) {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_DISK_METRICS; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+        Committed.clear();
+        for (const NKikimrBlobStorage::TVDiskStatus& report : Reports) {
+            if (!report.GetPersistedGroupGeneration() || !report.HasVDiskId()) {
+                continue;
+            }
+            const TVSlotId slotId(report.GetNodeId(), report.GetPDiskId(), report.GetVSlotId());
+            const TVSlotInfo* slot = Self->FindVSlot(slotId);
+            const TVDiskID disk = VDiskIDFromVDiskID(report.GetVDiskId());
+            if (!slot || slot->IsBeingDeleted() || slot->PDisk->Guid != report.GetPDiskGuid()
+                    || !disk.SameExceptGeneration(slot->GetVDiskId())
+                    || report.GetPersistedGroupGeneration() > slot->GetVDiskId().GroupGeneration) {
+                continue;
+            }
+            // Read the durable slot row too: an earlier config transaction may already have deleted it.
+            using TSlot = Schema::VSlot;
+            auto slotRow = db.Table<TSlot>().Key(slotId.GetKey()).Select();
+            if (!slotRow.IsReady()) {
+                return false;
+            }
+            if (!slotRow.IsValid() || slotRow.GetValue<TSlot::GroupID>() != disk.GroupID
+                    || slotRow.GetValue<TSlot::RingIdx>() != disk.FailRealm
+                    || slotRow.GetValue<TSlot::FailDomainIdx>() != disk.FailDomain
+                    || slotRow.GetValue<TSlot::VDiskIdx>() != disk.VDisk
+                    || slotRow.GetValue<TSlot::Mood>() == TMood::Delete) {
+                continue;
+            }
+            using T = Schema::GroupConfigAcknowledgement;
+            auto row = db.Table<T>().Key(slotId.GetKey()).Select();
+            if (!row.IsReady()) {
+                return false;
+            }
+            ui32 generation = report.GetPersistedGroupGeneration();
+            if (row.IsValid() && row.GetValue<T::GroupId>() == disk.GroupID.GetRawId()
+                    && row.GetValue<T::PDiskGuid>() == report.GetPDiskGuid()
+                    && row.GetValue<T::FailRealm>() == disk.FailRealm
+                    && row.GetValue<T::FailDomain>() == disk.FailDomain && row.GetValue<T::VDisk>() == disk.VDisk) {
+                generation = Max(generation, row.GetValue<T::Generation>());
+            }
+            db.Table<T>().Key(slotId.GetKey()).Update<T::GroupId, T::Generation, T::PDiskGuid,
+                T::FailRealm, T::FailDomain, T::VDisk>(disk.GroupID.GetRawId(), generation, report.GetPDiskGuid(),
+                    disk.FailRealm, disk.FailDomain, disk.VDisk);
+            Committed[slotId] = {disk, report.GetPDiskGuid(), generation};
         }
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        for (const auto& [slotId, acknowledgement] : Committed) {
+            const TVSlotInfo* slot = Self->FindVSlot(slotId);
+            if (slot && !slot->IsBeingDeleted() && slot->PDisk->Guid == acknowledgement.PDiskGuid
+                    && slot->GetVDiskId().SameExceptGeneration(acknowledgement.VDiskId)) {
+                TGroupConfigAcknowledgement& current = Self->GroupConfigAcknowledgements[slotId];
+                if (current.PDiskGuid != acknowledgement.PDiskGuid
+                        || !current.VDiskId.SameExceptGeneration(acknowledgement.VDiskId)
+                        || current.Generation < acknowledgement.Generation) {
+                    current = acknowledgement;
+                }
+            }
+        }
+    }
+};
+
+void TBlobStorageController::PersistGroupConfigAcknowledgements(
+        const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& reports) {
+    google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> changed;
+    for (const NKikimrBlobStorage::TVDiskStatus& report : reports) {
+        if (!report.GetPersistedGroupGeneration()) {
+            continue;
+        }
+        const TVSlotId slotId(report.GetNodeId(), report.GetPDiskId(), report.GetVSlotId());
+        const TVDiskID disk = VDiskIDFromVDiskID(report.GetVDiskId());
+        const auto it = GroupConfigAcknowledgements.find(slotId);
+        if (it == GroupConfigAcknowledgements.end() || it->second.Generation < report.GetPersistedGroupGeneration()
+                || it->second.PDiskGuid != report.GetPDiskGuid() || !it->second.VDiskId.SameExceptGeneration(disk)) {
+            changed.Add()->CopyFrom(report);
+        }
+    }
+    if (!changed.empty()) {
+        Execute(new TTxPersistGroupConfigAcknowledgements(this, changed));
     }
 }
 

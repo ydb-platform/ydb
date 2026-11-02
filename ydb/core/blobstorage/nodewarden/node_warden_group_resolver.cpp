@@ -350,6 +350,12 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TEvNodeWardenQueryGroupInfo::TPtr ev) {
         const auto& r = ev->Get()->Record;
+        if (r.GetMinGeneration()) {
+            TGroupRecord& group = Groups[r.GetGroupId()];
+            if (!group.Group || group.Group->GetGroupGeneration() < r.GetMinGeneration()) {
+                RequestGroupConfig(r.GetGroupId(), group);
+            }
+        }
         auto res = std::make_unique<TEvNodeWardenGroupInfo>();
         auto& record = res->Record;
         if (const auto it = Groups.find(r.GetGroupId()); it != Groups.end() && it->second.Group) {

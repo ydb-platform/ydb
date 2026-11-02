@@ -1278,6 +1278,7 @@ message TVDiskStatus {
 
     // payload
     optional NKikimrBlobStorage.EVDiskStatus Status = 6;
+    optional uint32 PersistedGroupGeneration = 8; // durable lower bound applied by the VDisk
     optional bool OnlyPhantomsRemain = 7; // substate of REPLICATING status
 }
 
@@ -1437,6 +1438,7 @@ message TEvControllerDatabaseSpaceState {
 
 message TEvNodeWardenQueryGroupInfo {
     optional uint32 GroupId = 1;
+    optional uint32 MinGeneration = 2;
 }
 
 message TEvNodeWardenGroupInfo {

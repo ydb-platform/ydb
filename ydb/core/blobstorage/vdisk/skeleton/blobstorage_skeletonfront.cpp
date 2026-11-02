@@ -1898,8 +1898,7 @@ namespace NKikimr {
             }
         }
 
-        void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-                const TActorContext& ctx) {
+        bool CheckGenerationChange(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info) const {
             // check group id
             Y_VERIFY_S(info->GroupID == GInfo->GroupID, VCtx->VDiskLogPrefix
                     << "GroupId# " << GInfo->GroupID.GetRawId() << " new GroupId# " << info->GroupID.GetRawId());
@@ -1915,9 +1914,19 @@ namespace NKikimr {
             // check that NewInfo has the same topology as the one VDisk started with
             Y_VERIFY_S(VCtx->Top->EqualityCheck(info->GetTopology()), VCtx->VDiskLogPrefix);
 
-            // check generation for possible race
-            if (info->GroupGeneration <= GInfo->GroupGeneration) {
-                // its just a race -- we already have newer group generation
+            return info->GroupGeneration > GInfo->GroupGeneration;
+        }
+
+        void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+                const TActorContext& ctx) {
+            if (CheckGenerationChange(vdiskId, info)) {
+                ctx.Send(SkeletonId, new TEvVGenerationChange(vdiskId, info));
+            }
+        }
+
+        void ApplyGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+                const TActorContext& ctx) {
+            if (!CheckGenerationChange(vdiskId, info)) {
                 return;
             }
 
@@ -1932,7 +1941,7 @@ namespace NKikimr {
             const auto& prevVDiskId = std::exchange(SelfVDiskId, vdiskId);
 
             // forward message to Skeleton
-            ctx.Send(SkeletonId, new TEvVGenerationChange(vdiskId, info));
+            ctx.Send(SkeletonId, new TEvVGenerationChange(vdiskId, info, true));
 
             // notify whiteboard
             Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
@@ -1942,7 +1951,11 @@ namespace NKikimr {
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
-            ChangeGeneration(msg->NewVDiskId, msg->NewInfo, ctx);
+            if (msg->ConfigPersisted && ev->Sender == SkeletonId) {
+                ApplyGeneration(msg->NewVDiskId, msg->NewInfo, ctx);
+            } else {
+                ChangeGeneration(msg->NewVDiskId, msg->NewInfo, ctx);
+            }
         }
 
         void Handle(TEvPDiskErrorStateChange::TPtr &ev, const TActorContext &ctx) {

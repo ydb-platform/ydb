@@ -2295,5 +2295,93 @@
                 ]
             }
         }
+    },
+    {
+        "TableId": 137,
+        "TableName": "GroupConfigAcknowledgement",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "NodeID",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "PDiskID",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "VSlotID",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "GroupId",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Generation",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "PDiskGuid",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "FailRealm",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "FailDomain",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "VDisk",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
     }
 ]

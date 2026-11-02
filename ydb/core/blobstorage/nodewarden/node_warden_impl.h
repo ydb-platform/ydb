@@ -592,6 +592,8 @@ namespace NKikimr::NStorage {
             bool OnlyPhantomsRemain = false;
             std::optional<NKikimrBlobStorage::EVDiskStatus> ReportedVDiskStatus; // last reported to BSC
             std::optional<bool> ReportedOnlyPhantomsRemain;
+            ui32 PersistedGroupGeneration = 0;
+            std::optional<ui32> ReportedPersistedGroupGeneration;
 
             enum EScrubState : ui32 {
                 IDLE,

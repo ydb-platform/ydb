@@ -19,7 +19,6 @@ struct TGroupReplicationInfo {
     struct TVDisk {
         TVDiskID Id;
         TActorId ActorId;
-        ui64 ObservationEpoch = 0;
     };
     TVector<TVDisk> VDisks;
 };
@@ -27,7 +26,6 @@ struct TGroupReplicationInfo {
 struct TEvGroupState {
     enum EEv {
         EvUpdate = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 1000,
-        EvConfigObserved,
     };
 
     struct TEvUpdate : TEventLocal<TEvUpdate, EvUpdate> {
@@ -35,19 +33,9 @@ struct TEvGroupState {
         std::optional<TGroupReplicationInfo> Info;
         explicit TEvUpdate(ui32 groupId) : GroupId(groupId) {}
     };
-    struct TEvConfigObserved : TEventLocal<TEvConfigObserved, EvConfigObserved> {
-        ui32 GroupId;
-        ui32 RequestedGeneration;
-        TVDiskID VDiskId;
-        TActorId ServiceId;
-        ui64 ObservationEpoch;
-        TEvConfigObserved(ui32 groupId, ui32 requestedGeneration, const TVDiskID& vdiskId, const TActorId& serviceId, ui64 observationEpoch)
-            : GroupId(groupId), RequestedGeneration(requestedGeneration), VDiskId(vdiskId), ServiceId(serviceId)
-            , ObservationEpoch(observationEpoch) {}
-    };
+
 };
 
-IActor* CreateGroupConfigActor(const TActorId& controllerId);
 IActor* CreateGroupStateActor(const TActorId& controllerId);
 
 } // namespace NKikimr::NBsController

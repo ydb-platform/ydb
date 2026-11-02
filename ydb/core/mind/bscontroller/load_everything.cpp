@@ -79,6 +79,25 @@ public:
             }
         }
 
+        Self->GroupConfigAcknowledgements.clear();
+        {
+            using T = Schema::GroupConfigAcknowledgement;
+            auto rows = db.Table<T>().Range().Select();
+            if (!rows.IsReady()) {
+                return false;
+            }
+            while (!rows.EndOfSet()) {
+                const TVSlotId slotId(rows.GetValue<T::NodeID>(), rows.GetValue<T::PDiskID>(), rows.GetValue<T::VSlotID>());
+                const ui32 generation = rows.GetValue<T::Generation>();
+                const TVDiskID disk(rows.GetValue<T::GroupId>(), generation, rows.GetValue<T::FailRealm>(),
+                    rows.GetValue<T::FailDomain>(), rows.GetValue<T::VDisk>());
+                Self->GroupConfigAcknowledgements[slotId] = {disk, rows.GetValue<T::PDiskGuid>(), generation};
+                if (!rows.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // State
         Self->DataCenterStates.clear();
         {

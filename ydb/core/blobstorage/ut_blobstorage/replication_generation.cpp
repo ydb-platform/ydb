@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <ydb/core/blobstorage/vdisk/metadata/metadata_actor.h>
 
 namespace {
 
@@ -206,5 +207,84 @@ Y_UNIT_TEST_SUITE(ReplicationGeneration) {
     // must not be reported as evidence of lost data.
     Y_UNIT_TEST(DataSurvivesSourceDisconnectionAfterGenerationChange) {
         CheckReplicationAfterGenerationChange(true, false);
+    }
+}
+
+Y_UNIT_TEST_SUITE(VDiskConfigurationGeneration) {
+    Y_UNIT_TEST(PersistsBeforeApplyingAndRejectsStaleConfigAfterRestart) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 9,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+        const ui32 groupId = env.GetGroups().front();
+        const TIntrusivePtr<TBlobStorageGroupInfo> oldInfo = env.GetGroupInfo(groupId);
+        TBlobStorageGroupInfo::TDynamicInfo dynamic(oldInfo->GetDynamicInfo());
+        ++dynamic.GroupGeneration;
+        const TIntrusivePtr<TBlobStorageGroupInfo> newInfo = MakeIntrusive<TBlobStorageGroupInfo>(
+            oldInfo->PickTopology(), std::move(dynamic), "", TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
+        const TVDiskID oldDisk = oldInfo->GetVDiskId(0);
+        const TVDiskID newDisk = newInfo->GetVDiskId(0);
+        const TActorId service = oldInfo->GetActorId(0);
+        const ui32 nodeId = service.NodeId();
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        env.Runtime->FilterFunction = [&](ui32 recipientNode, std::unique_ptr<IEventHandle>& event) {
+            if (recipientNode == nodeId && event->GetTypeRewrite() == TEvBlobStorage::EvCommitVDiskMetadataDone
+                    && event->Get<TEvCommitVDiskMetadataDone>()->MinGroupGeneration == newInfo->GroupGeneration) {
+                held.push_back(std::move(event));
+                return false;
+            }
+            return true;
+        };
+        const std::function<TEvBlobStorage::TEvVStatusResult::TPtr(const TVDiskID&)> getStatus = [&](const TVDiskID& disk) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            env.Runtime->Send(new IEventHandle(service, edge, new TEvBlobStorage::TEvVStatus(disk)));
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
+        };
+        const TActorId sender = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(service, sender, new TEvVGenerationChange(newDisk, newInfo)));
+        env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT(!held.empty());
+        UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(getStatus(oldDisk)->Get()->Record.GetVDiskID()).GroupGeneration,
+            oldInfo->GroupGeneration);
+        env.Runtime->FilterFunction = {};
+        for (std::unique_ptr<IEventHandle>& event : held) {
+            env.Runtime->Send(event.release());
+        }
+        env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(getStatus(newDisk)->Get()->Record.GetVDiskID()).GroupGeneration,
+            newInfo->GroupGeneration);
+
+        // BSC still publishes the old generation. Local recovery must enforce the durable floor.
+        env.Cleanup();
+        env.Initialize();
+        ui32 requestsForNewConfig = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenQueryGroupInfo
+                    && event->Get<TEvNodeWardenQueryGroupInfo>()->Record.GetMinGeneration() == newInfo->GroupGeneration) {
+                ++requestsForNewConfig;
+            }
+            return true;
+        };
+        env.Sim(TDuration::Seconds(20));
+        UNIT_ASSERT(requestsForNewConfig);
+        UNIT_ASSERT(getStatus(oldDisk)->Get()->Record.GetStatus() != NKikimrProto::OK);
+        env.Runtime->FilterFunction = {};
+
+        NKikimrBlobStorage::TConfigRequest request;
+        request.SetIgnoreGroupFailModelChecks(true);
+        NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition* definition =
+            request.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+        definition->SetGroupId(groupId);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
+        }
+        const NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(getStatus(newDisk)->Get()->Record.GetStatus(), NKikimrProto::OK);
+        const TString data(1024, 'C');
+        env.PutBlob(groupId, TLogoBlobID(1, 1, 1, 0, data.size(), 0), data);
     }
 }

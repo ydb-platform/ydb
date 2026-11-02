@@ -3095,14 +3095,16 @@ namespace NKikimr {
     struct TEvVGenerationChange: public TEventLocal<TEvVGenerationChange, TEvBlobStorage::EvVGenerationChange> {
         TVDiskID NewVDiskId;
         TIntrusivePtr<TBlobStorageGroupInfo> NewInfo;
+        bool ConfigPersisted = false;
 
-        TEvVGenerationChange(const TVDiskID &newVDiskId, const TIntrusivePtr<TBlobStorageGroupInfo> &newInfo)
+        TEvVGenerationChange(const TVDiskID &newVDiskId, const TIntrusivePtr<TBlobStorageGroupInfo> &newInfo, bool configPersisted = false)
             : NewVDiskId(newVDiskId)
             , NewInfo(newInfo)
+            , ConfigPersisted(configPersisted)
         {}
 
         TEvVGenerationChange *Clone() {
-            return new TEvVGenerationChange(NewVDiskId, NewInfo);
+            return new TEvVGenerationChange(NewVDiskId, NewInfo, ConfigPersisted);
         }
 
         TString ToString() const override {

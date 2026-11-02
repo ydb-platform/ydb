@@ -1,4 +1,5 @@
 #include "kqp_stage_graph.h"
+#include "kqp_explain_json.h"
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -21,35 +22,6 @@ void DFS(ui32 vertex, TList<ui32>& sortedStages, THashSet<ui32>& visited, const 
         }
     }
     sortedStages.push_back(vertex);
-}
-
-TString FormatSortElements(const TSortIUs& sortElements, const TInfoUnitRegistry& registry) {
-    TStringBuilder result;
-    TStringBuf separator;
-    for (const auto& [id, order] : sortElements.Items()) {
-        result << separator << registry.GetDisplayName(id) << (order.Ascending ? " asc " : " desc ")
-            << (order.NullsFirst ? "nulls first" : "nulls last");
-        separator = ", ";
-    }
-    return result;
-}
-
-NJson::TJsonValue MakeKeyColumnsJson(const TOrderedIUs<>& keys, const TInfoUnitRegistry& registry) {
-    NJson::TJsonValue keyColumns(NJson::EJsonValueType::JSON_ARRAY);
-    for (const auto id : keys.Items()) {
-        keyColumns.AppendValue(TString(TStringBuilder() << registry.GetDisplayName(id)));
-    }
-    return keyColumns;
-}
-
-NJson::TJsonValue MakeSortColumnsJson(const TSortIUs& sortElements, const TInfoUnitRegistry& registry) {
-    NJson::TJsonValue sortColumns(NJson::EJsonValueType::JSON_ARRAY);
-    for (const auto& [id, order] : sortElements.Items()) {
-        TStringBuilder sortColumn;
-        sortColumn << registry.GetDisplayName(id) << " (" << (order.Ascending ? "Asc" : "Desc") << ")";
-        sortColumns.AppendValue(TString(sortColumn));
-    }
-    return sortColumns;
 }
 
 } // anonymous namespace
@@ -88,7 +60,7 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
 NJson::TJsonValue TUnionAllConnection::ToJson(const TInfoUnitRegistry& registry) const {
     auto json = TConnection::ToJson(registry);
     if (Parallel) {
-        json["Parallel"] = "True";
+        json["Parallel"] = true;
     }
     return json;
 }
@@ -123,7 +95,7 @@ NJson::TJsonValue TShuffleConnection::ToJson(const TInfoUnitRegistry& registry) 
     const auto hashFunc = ToString(*HashFuncType);
     json["HashFunc"] = hashFunc;
 
-    const auto keyColumns = MakeKeyColumnsJson(Keys, registry);
+    const auto keyColumns = MakeColumnsJson(Keys.Items(), registry);
     json["KeyColumns"] = keyColumns;
     return json;
 }
@@ -154,8 +126,7 @@ TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TP
 
 NJson::TJsonValue TMergeConnection::ToJson(const TInfoUnitRegistry& registry) const {
     auto json = TConnection::ToJson(registry);
-    const auto sortBy = FormatSortElements(Order, registry);
-    json["SortBy"] = sortBy;
+    json["SortBy"] = MakeSortColumnsJson(Order, registry);
     json["SortColumns"] = MakeSortColumnsJson(Order, registry);
     return json;
 }

@@ -84,6 +84,24 @@ inline const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson:
     return nullptr;
 }
 
+inline const NJson::TJsonValue* FindAggregation(const NJson::TJsonValue& planNode, const TString& function,
+    const TString& output = {}) {
+    for (const auto& op : planNode["Operators"].GetArray()) {
+        for (const auto& aggregation : op["Aggregation"].GetArray()) {
+            if (aggregation["Function"].GetStringSafe() == function
+                && (output.empty() || aggregation["Output"].GetStringSafe() == output)) {
+                return &aggregation;
+            }
+        }
+    }
+    for (const auto& child : planNode["Plans"].GetArray()) {
+        if (const auto* aggregation = FindAggregation(child, function, output)) {
+            return aggregation;
+        }
+    }
+    return nullptr;
+}
+
 inline const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const TString& connectionName) {
     if (node.IsMap()) {
         const auto& map = node.GetMapSafe();

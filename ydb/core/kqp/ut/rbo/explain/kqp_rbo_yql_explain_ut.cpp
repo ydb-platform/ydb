@@ -24,6 +24,7 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -38,12 +39,14 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/xml/document/xml-document.h>
 
 #include <util/string/split.h>
 
 #include <algorithm>
 #include <array>
 #include <ctime>
+#include <limits>
 #include <optional>
 #include <regex>
 #include <fstream>
@@ -269,6 +272,62 @@ using namespace NYqlTests;
 
 Y_UNIT_TEST_SUITE(KqpRboYql) {
 
+    Y_UNIT_TEST_TWIN(ExplainPlanRenderers, NewRbo) {
+        using NYdb::NConsoleClient::EDataFormat;
+        using NYdb::NConsoleClient::TQueryPlanPrinter;
+
+        auto appConfig = CreateExplainPlanTestAppConfig();
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateExplainPlanTestTables(kikimr);
+        BulkUpsertExplainPlanTestRows(kikimr);
+        auto session = CreateQuerySession(kikimr);
+
+        const TVector<TString> queries = {
+            "SELECT a, b FROM `/Root/t1` WHERE a > 5 ORDER BY b DESC, a ASC LIMIT 5;",
+            "SELECT b, COUNT(DISTINCT a) AS n, SUM(a) AS s FROM `/Root/t1` GROUP BY b ORDER BY b;",
+            "SELECT a, SUM(b) OVER (PARTITION BY c ORDER BY a ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS s FROM `/Root/t1`;",
+            "SELECT a FROM `/Root/t1` UNION ALL SELECT a FROM `/Root/t2`;",
+        };
+        for (const auto& query : queries) {
+            for (const bool analyze : {false, true}) {
+                const TString plan = analyze ? ExecuteExplainAnalyze(session, query) : ExecuteExplain(session, query);
+                NJson::TJsonValue original;
+                UNIT_ASSERT(NJson::ReadJsonTree(plan, &original));
+
+                for (const auto format : {EDataFormat::Pretty, EDataFormat::PrettyTable,
+                    EDataFormat::JsonUnicode, EDataFormat::JsonBase64, EDataFormat::JsonBase64Simplify,
+                    EDataFormat::Svg})
+                {
+                    TStringStream output;
+                    TQueryPlanPrinter(format, analyze, output).Print(plan);
+                    if (format == EDataFormat::Svg) {
+                        UNIT_ASSERT_C(output.Str().StartsWith("<svg"), query);
+                        UNIT_ASSERT_C(output.Str().Contains("t1"), query);
+                        NXml::TDocument document(output.Str(), NXml::TDocument::String);
+                        Y_UNUSED(document);
+                    } else if (format == EDataFormat::Pretty || format == EDataFormat::PrettyTable) {
+                        UNIT_ASSERT_C(output.Str().Contains("t1"), query);
+                    } else {
+                        NJson::TJsonValue printed;
+                        UNIT_ASSERT_C(NJson::ReadJsonTree(output.Str(), &printed), query);
+                        const auto& expected = format == EDataFormat::JsonBase64Simplify
+                            ? original.GetMapSafe().at("SimplifiedPlan") : original;
+                        UNIT_ASSERT_VALUES_EQUAL_C(printed, expected, query);
+                    }
+                }
+
+                NPlan2Svg::TPlanVisualizer visualizer;
+                visualizer.LoadPlans(plan, /*simplified=*/true);
+                const auto svg = visualizer.PrintSvg();
+                UNIT_ASSERT_C(svg.StartsWith("<svg"), query);
+                UNIT_ASSERT_C(svg.Contains("t1"), query);
+                NXml::TDocument document(svg, NXml::TDocument::String);
+                Y_UNUSED(document);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ExplainAnalyze) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -346,8 +405,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(leftRead, plan);
         UNIT_ASSERT_C(rightRead, plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*leftRead, "E-Rows"), "123", plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*rightRead, "E-Rows"), "456", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(leftRead->GetMapSafe().at("E-Rows").GetDoubleSafe(), 123, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(rightRead->GetMapSafe().at("E-Rows").GetDoubleSafe(), 456, plan);
     }
 
     Y_UNIT_TEST(ExplainOriginalRowsHints) {
@@ -377,9 +436,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(readR, plan);
         UNIT_ASSERT_C(readS, plan);
         UNIT_ASSERT_C(readT, plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readR, "E-Rows"), "2000000000", plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readS, "E-Rows"), "3000000000", plan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readT, "E-Rows"), "777", plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(readR->GetMapSafe().at("E-Rows").GetDoubleSafe(), 2000000000, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(readS->GetMapSafe().at("E-Rows").GetDoubleSafe(), 3000000000, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(readT->GetMapSafe().at("E-Rows").GetDoubleSafe(), 777, plan);
     }
 
     Y_UNIT_TEST(ExplainOriginalRowsHintsOldRbo) {
@@ -430,18 +489,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedSortPlan = GetSimplifiedPlan(sortPlan);
         const auto* topSortOp = FindOperatorByStringField(simplifiedSortPlan, "Name", "TopSort");
         UNIT_ASSERT_C(topSortOp, sortPlan);
-        const auto topSortBy = GetStringField(*topSortOp, "TopSortBy");
-        UNIT_ASSERT_C(topSortBy.Contains("t1.a desc nulls first"), sortPlan);
-        UNIT_ASSERT_C(topSortBy.Contains("t1.b asc nulls first"), sortPlan);
+        NJson::TJsonValue expectedSort;
+        UNIT_ASSERT(NJson::ReadJsonTree(R"([
+            {"Column":"t1.a","Ascending":false,"NullsFirst":true},
+            {"Column":"t1.b","Ascending":true,"NullsFirst":true}
+        ])", &expectedSort));
+        UNIT_ASSERT_VALUES_EQUAL_C((*topSortOp)["TopSortBy"], expectedSort, sortPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*topSortOp, "Limit"), "5", sortPlan);
 
         const auto* mergeConnection = FindConnectionNode(simplifiedSortPlan, "Merge");
         UNIT_ASSERT_C(mergeConnection, sortPlan);
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*mergeConnection, "Node Type"), "Merge", sortPlan);
-        const auto mergeSortBy = GetStringField(*mergeConnection, "SortBy");
-        UNIT_ASSERT_C(mergeSortBy.Contains("t1.a desc nulls first"), sortPlan);
-        UNIT_ASSERT_C(mergeSortBy.Contains("t1.b asc nulls first"), sortPlan);
-        UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C((*mergeConnection)["SortBy"], expectedSort, sortPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C((*mergeConnection)["SortColumns"], expectedSort, sortPlan);
     }
 
     Y_UNIT_TEST(ExplainReadPushdown) {
@@ -454,14 +514,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             order by t1.a desc
             limit 5;
         )");
-        const auto simplifiedPushedReadPlan = GetSimplifiedPlan(pushedReadPlan);
-        const auto* readOp = FindOperatorByStringField(simplifiedPushedReadPlan, "Table", "t1");
-        UNIT_ASSERT_C(readOp, pushedReadPlan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Storage"), "Column", pushedReadPlan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "SortDirection"), "desc", pushedReadPlan);
-        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
-        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(pushedReadPlan, &planJson, true), pushedReadPlan);
+        for (const auto* planField : {"Plan", "SimplifiedPlan"}) {
+            const auto* readOp = FindOperatorByStringField(planJson.GetMapSafe().at(planField), "Table", "t1");
+            UNIT_ASSERT_C(readOp, pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Path"), "/Root/t1", pushedReadPlan);
+            for (const auto* field : {"E-Rows", "E-Size", "E-Cost"}) {
+                UNIT_ASSERT_C((*readOp)[field].IsDouble() || (*readOp)[field].IsUInteger() || (*readOp)[field].IsInteger(), pushedReadPlan);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Storage"), "Column", pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "SortDirection"), "desc", pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*readOp, "Limit"), "5", pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a"), pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.a"), pushedReadPlan);
+            UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.b"), pushedReadPlan);
+            UNIT_ASSERT_VALUES_EQUAL_C(readOp->GetMapSafe().at("Columns").GetArraySafe().size(), 2, pushedReadPlan);
+        }
     }
 
     Y_UNIT_TEST(ExplainRangePushdown) {
@@ -478,6 +548,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "b"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.a"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "Columns", "t1.b"), plan);
         UNIT_ASSERT_C(!readOp->GetMapSafe().contains("Predicate"), plan);
         UNIT_ASSERT_C(!readOp->GetMapSafe().contains("ReadRangesPointPrefixLen"), plan);
 
@@ -647,6 +719,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(readOp, plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadRangesKeys", "a"), plan);
         UNIT_ASSERT_C(StringArrayFieldContains(*readOp, "ReadColumns", "a (5, +∞)"), plan);
+        const auto& columns = readOp->GetMapSafe().at("Columns").GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL_C(columns.size(), 1, plan);
+        // The range-only key is not live after pushdown, so its display name retains an IU suffix.
+        UNIT_ASSERT_C(columns.front().GetStringSafe().StartsWith("t1.a_"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Rows"), plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, plan);
         UNIT_ASSERT_C(readOp->GetMapSafe().contains("A-Size"), plan);
@@ -663,11 +739,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             group by t1.b;
         )");
         const auto simplifiedAggregatePlan = GetSimplifiedPlan(aggregatePlan);
-        const auto* aggregateOp = FindOperatorByStringFieldContaining(simplifiedAggregatePlan, "Aggregation", ": count(");
-        UNIT_ASSERT_C(aggregateOp, aggregatePlan);
-        const auto aggregation = GetStringField(*aggregateOp, "Aggregation");
-        UNIT_ASSERT_C(aggregation.Contains(": sum("), aggregatePlan);
-        UNIT_ASSERT_C(aggregation.Contains(": count("), aggregatePlan);
+        const auto* count = FindAggregation(simplifiedAggregatePlan, "count");
+        UNIT_ASSERT_C(count, aggregatePlan);
+        UNIT_ASSERT_C(FindAggregation(simplifiedAggregatePlan, "sum"), aggregatePlan);
+        UNIT_ASSERT_C(!GetBoolField(*count, "Distinct"), aggregatePlan);
+        UNIT_ASSERT_C(!GetStringField(*count, "Output").empty(), aggregatePlan);
+        UNIT_ASSERT_VALUES_EQUAL_C((*count)["Arguments"].GetArraySafe().size(), 1, aggregatePlan);
     }
 
     Y_UNIT_TEST(ExplainUnionAll) {
@@ -683,6 +760,23 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto* unionOp = FindOperatorByStringField(simplifiedUnionPlan, "Name", "UnionAll");
         UNIT_ASSERT_C(unionOp, unionPlan);
         UNIT_ASSERT_C(!GetBoolField(*unionOp, "Ordered"), unionPlan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*unionOp, "Columns", "a"), unionPlan);
+        UNIT_ASSERT_VALUES_EQUAL_C(unionOp->GetMapSafe().at("Columns").GetArraySafe().size(), 1, unionPlan);
+    }
+
+    Y_UNIT_TEST(ExplainParameterSourceColumns) {
+        TExplainPlanTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            DECLARE $param AS List<Struct<id:Int32,value:String>>;
+            SELECT id, value FROM AS_TABLE($param);
+        )");
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* source = FindOperatorByStringField(simplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(source, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*source, "Parameter"), "$param", plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*source, "Columns", "id"), plan);
+        UNIT_ASSERT_C(StringArrayFieldContains(*source, "Columns", "value"), plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(source->GetMapSafe().at("Columns").GetArraySafe().size(), 2, plan);
     }
 
     Y_UNIT_TEST(ExplainScalarSubquery) {
@@ -697,8 +791,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedScalarSubplanPlan = GetSimplifiedPlan(scalarSubplanPlan);
         // The subplan is reduced to a single row by an aggregate that counts its rows along the way, so
         // that a subquery returning several rows fails the query instead of picking one of them.
-        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Aggregation", ": max("), scalarSubplanPlan);
-        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Aggregation", ": count("), scalarSubplanPlan);
+        UNIT_ASSERT_C(FindAggregation(simplifiedScalarSubplanPlan, "max"), scalarSubplanPlan);
+        UNIT_ASSERT_C(FindAggregation(simplifiedScalarSubplanPlan, "count"), scalarSubplanPlan);
         UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedScalarSubplanPlan, "Name", "Join"), scalarSubplanPlan);
     }
 
@@ -990,6 +1084,139 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(sequential.PlanJson);
     }
 
+}
+
+Y_UNIT_TEST_SUITE(KqpRboExplainProperties) {
+    void AssertJson(const NJson::TJsonValue& actual, TStringBuf expectedText) {
+        NJson::TJsonValue expected;
+        UNIT_ASSERT(NJson::ReadJsonTree(expectedText, &expected));
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
+    Y_UNIT_TEST(NumericEstimates) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        auto read = ctx.Read({a});
+        auto root = ctx.Root(read, {{a, "a"}});
+        root->PlanProps.InfoUnitRegistry.FinalizeDisplayNames({a});
+        read->Props.Statistics.emplace();
+        read->Props.Statistics->ERows = 1.25;
+        read->Props.Statistics->EBytes = 2048.5;
+        read->Props.Cost = 3.75;
+        ui64 counter = 0;
+        auto plan = root->GetExplainJson(counter, {});
+        const auto* scan = FindOperatorByStringField(plan, "Name", "TableFullScan");
+        UNIT_ASSERT(scan);
+        UNIT_ASSERT_VALUES_EQUAL((*scan)["E-Rows"].GetDoubleSafe(), 1.25);
+        UNIT_ASSERT_VALUES_EQUAL((*scan)["E-Size"].GetDoubleSafe(), 2048.5);
+        UNIT_ASSERT_VALUES_EQUAL((*scan)["E-Cost"].GetDoubleSafe(), 3.75);
+
+        read->Props.Statistics->ERows = std::numeric_limits<double>::infinity();
+        read->Props.Statistics->EBytes = std::numeric_limits<double>::quiet_NaN();
+        read->Props.Cost = -std::numeric_limits<double>::infinity();
+        plan = root->GetExplainJson(counter, {});
+        scan = FindOperatorByStringField(plan, "Name", "TableFullScan");
+        UNIT_ASSERT(scan);
+        for (const auto* field : {"E-Rows", "E-Size", "E-Cost"}) {
+            UNIT_ASSERT(!scan->Has(field));
+        }
+        NJson::TJsonValue parsed;
+        UNIT_ASSERT(NJson::ReadJsonTree(plan.GetStringRobust(), &parsed));
+    }
+
+    Y_UNIT_TEST(SortAndWindowKeys) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a, b");
+        const auto b = ctx.Id("b");
+        auto& registry = ctx.Props.InfoUnitRegistry;
+        registry.FinalizeDisplayNames({a, b});
+        auto read = ctx.Read({a, b});
+        TSortIUs keys{{b, {false, false}}, {a, {true, true}}};
+        const TString expected = R"([
+            {"Column":"b","Ascending":false,"NullsFirst":false},
+            {"Column":"a, b","Ascending":true,"NullsFirst":true}
+        ])";
+        TOpSort sort(read, ctx.Pos, keys);
+        AssertJson(sort.ToJson(0, registry)["SortBy"], expected);
+        TOpSort top(read, ctx.Pos, keys, ctx.Constant());
+        AssertJson(top.ToJson(0, registry)["TopSortBy"], expected);
+        TMergeConnection merge(keys, 0);
+        AssertJson(merge.ToJson(registry)["SortBy"], expected);
+        AssertJson(merge.ToJson(registry)["SortColumns"], expected);
+
+        TOrderedIUs<> partitions{b, a};
+        TOpWindowFrame frame;
+        frame.BeginKind = EWindowFrameBound::Preceding;
+        frame.BeginValue = 3;
+        frame.EndKind = EWindowFrameBound::Following;
+        frame.EndValue = 0;
+        TOpWindow window(read, ctx.Pos, TWindowIUs{}, partitions, keys, frame);
+        const auto json = window.ToJson(0, registry);
+        AssertJson(json["PartitionBy"], R"(["b","a, b"])");
+        AssertJson(json["OrderBy"], expected);
+        AssertJson(json["Frame"], R"({"Type":"Rows","Begin":{"Kind":"Preceding","Value":3},"End":{"Kind":"Following","Value":0}})");
+
+        TOpWindow defaultWindow(read, ctx.Pos, TWindowIUs{}, TOrderedIUs<>{}, TSortIUs{}, TOpWindowFrame{});
+        const auto defaults = defaultWindow.ToJson(0, registry);
+        AssertJson(defaults["Frame"], R"({"Type":"Rows","Begin":{"Kind":"UnboundedPreceding"},"End":{"Kind":"CurrentRow"}})");
+        UNIT_ASSERT(!defaults.Has("PartitionBy"));
+        UNIT_ASSERT(!defaults.Has("OrderBy"));
+    }
+
+    Y_UNIT_TEST(AggregationAndFlags) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        const auto b = ctx.Id("b");
+        const auto distinctCount = ctx.Id("distinct_count");
+        const auto count = ctx.Id("count");
+        auto& registry = ctx.Props.InfoUnitRegistry;
+        registry.FinalizeDisplayNames({a, b, distinctCount, count});
+        TAggregationIUs aggregations;
+        aggregations.Add(distinctCount, TOpAggregationTraits{a, "count", true});
+        aggregations.Add(count, TOpAggregationTraits{a, "count", false});
+        TOrderedIUs<> keys{b, a};
+        TOpAggregate aggregate(ctx.Read({a, b}), aggregations, keys, EOpPhase::Intermediate, false, ctx.Pos);
+        aggregate.SetPushedToOlap();
+        const auto json = aggregate.ToJson(0, registry);
+        AssertJson(json["GroupBy"], R"(["b","a"])");
+        AssertJson(json["Aggregation"], R"([
+            {"Output":"distinct_count","Function":"count","Arguments":["a"],"Distinct":true},
+            {"Output":"count","Function":"count","Arguments":["a"],"Distinct":false}
+        ])");
+        UNIT_ASSERT(GetBoolField(json, "Pushdown"));
+        TUnionAllConnection parallel(0, true);
+        UNIT_ASSERT(GetBoolField(parallel.ToJson(registry), "Parallel"));
+        TUnionAllConnection sequential(0, false);
+        UNIT_ASSERT(!sequential.ToJson(registry).Has("Parallel"));
+    }
+
+    Y_UNIT_TEST(ReadRangeAndLookupPrefix) {
+        NTests::TIdTestContext ctx;
+        const auto a = ctx.Id("a");
+        auto& registry = ctx.Props.InfoUnitRegistry;
+        registry.FinalizeDisplayNames({a});
+        auto read = ctx.Read({a});
+        read->RangeInfo.emplace();
+        read->RangeInfo->ExpectedMaxRanges = 17;
+        const auto json = read->ToJson(0, registry);
+        UNIT_ASSERT_VALUES_EQUAL(json["ReadRangesExpectedSize"].GetUIntegerSafe(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(json["Path"].GetStringSafe(), "/Root/table");
+
+        TOpTableLookup::TLookupKeys keys{{a, "a"}};
+        TOpTableLookup::TLookupKeyPrefix prefix;
+        prefix.Columns = {"z", "x, y"};
+        const auto* keyType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Int32);
+        prefix.PointsItemType = ctx.ExprCtx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            ctx.ExprCtx.MakeType<TItemExprType>("z", keyType),
+            ctx.ExprCtx.MakeType<TItemExprType>("x, y", keyType)
+        });
+        const auto* pointsType = ctx.ExprCtx.MakeType<TListExprType>(prefix.PointsItemType);
+        prefix.Points = ctx.ExprCtx.NewCallable(ctx.Pos, "List", {ExpandType(ctx.Pos, *pointsType, ctx.ExprCtx)});
+        TOpTableLookup lookup(read, ctx.Pos, read->TableCallable, TUnorderedIUs{a}, keys, "Inner", std::nullopt, prefix);
+        AssertJson(lookup.ToJson(0, registry)["LookupKeyPrefix"], R"(["z","x, y"])");
+        auto empty = ctx.Read({});
+        AssertJson(empty->ToJson(0, registry)["Columns"], "[]");
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -938,7 +938,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto simplifiedPlan = GetSimplifiedPlan(plan);
         UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner"), plan);
         UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "JoinKind", "Left"), plan);
-        UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedPlan, "Aggregation", ": max("), plan);
+        UNIT_ASSERT_C(FindAggregation(simplifiedPlan, "max"), plan);
         UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "UnionAll"), plan);
         UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "Name", "TopSort") || FindOperatorByStringField(simplifiedPlan, "Name", "Sort"), plan);
         UNIT_ASSERT_C(plan.Contains("Join"), plan);

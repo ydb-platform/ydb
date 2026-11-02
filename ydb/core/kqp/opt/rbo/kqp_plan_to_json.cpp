@@ -7,14 +7,22 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <cmath>
+
 namespace NKikimr::NKqp {
 
 namespace {
 
 void AddOptimizerEstimates(NJson::TJsonValue& json, IOperator* op) {
-    json["E-Rows"] = TStringBuilder() << op->Props.Statistics->ERows;
-    json["E-Size"] = TStringBuilder() << op->Props.Statistics->EBytes;
-    json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
+    auto addEstimate = [&](TStringBuf name, double value) {
+        // Non-finite estimates cannot be represented by a JSON number.
+        if (std::isfinite(value)) {
+            json[name] = value;
+        }
+    };
+    addEstimate("E-Rows", op->Props.Statistics->ERows);
+    addEstimate("E-Size", op->Props.Statistics->EBytes);
+    addEstimate("E-Cost", *op->Props.Cost);
 }
 
 NJson::TJsonValue MakeJson(IOperator* op, ui32 explainFlags, const TInfoUnitRegistry& registry) {

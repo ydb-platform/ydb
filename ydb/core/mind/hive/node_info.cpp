@@ -163,6 +163,10 @@ void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& 
     auto oldResourceValues = ResourceValues;
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     ResourceValues += delta;
+    if (!before.NamedResources.Empty() || !after.NamedResources.Empty()) {
+        NamedResourceValues.Subtract(before.NamedResources);
+        NamedResourceValues.Add(after.NamedResources);
+    }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     YDB_LOG_TRACE("TNodeInfo::UpdateResourceValues updated resource values",
         {"logPrefix", GetLogPrefix()},
@@ -488,6 +492,12 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
     if (metrics.HasNetwork()) {
         std::get<NMetrics::EResource::Network>(ResourceMaximumValues) = metrics.GetNetwork();
     }
+    // node reports the complete set of its named resource capacities every time
+    NamedResourceMaximum.clear();
+    for (const auto& resource : metrics.GetNamedResources()) {
+        NamedResourceMaximum[resource.GetName()] = resource.GetValue();
+        Hive.RegisterNamedResource(resource.GetName());
+    }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
     Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
@@ -531,6 +541,22 @@ double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, ERes
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;
+}
+
+std::optional<ui64> TNodeInfo::GetNamedResourceMaximum(const TString& name) const {
+    auto it = NamedResourceMaximum.find(name);
+    if (it != NamedResourceMaximum.end()) {
+        return it->second;
+    }
+    return Hive.GetNamedResourceSettings(name).DefaultMaximum;
+}
+
+std::optional<double> TNodeInfo::GetNamedResourceUsage(const TString& name, ui64 extra) const {
+    auto maximum = GetNamedResourceMaximum(name);
+    if (!maximum) {
+        return std::nullopt;
+    }
+    return static_cast<double>(NamedResourceValues.GetValue(name) + extra) / std::max<ui64>(*maximum, 1);
 }
 
 double TNodeInfo::GetNodeUsage(EResourceToBalance resource) const {

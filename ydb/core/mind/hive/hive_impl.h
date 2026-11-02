@@ -172,6 +172,7 @@ protected:
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
+    friend struct TTabletInfo;
     friend class TReassignTabletsActor;
     friend class TMoveDataActor;
 
@@ -362,6 +363,8 @@ protected:
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetrics;
     std::unordered_map<TTabletTypes::EType, TVector<i64>> TabletTypeAllowedMetricsDefaults; // built from CurrentConfig
+    TNamedResourceRegistry NamedResourceRegistry; // configured from CurrentConfig
+    size_t NextNamedResourceToCheck = 0; // round robin over named resources in balancer triggers
     std::unordered_map<TString, TStoragePoolInfo> StoragePools;
     std::unordered_map<TSubDomainKey, TDomainInfo> Domains;
     std::unordered_set<TOwnerId> BlockedOwners;
@@ -687,7 +690,9 @@ protected:
     struct TNotEnoughResources {};
     using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
+    using TNodeFilterFunc = std::function<bool(const TNodeInfo&)>;
+    // nodeFilter, if set, additionally restricts candidate nodes
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0, const TNodeFilterFunc& nodeFilter = {});
 
     struct TSelectedNode {
         double Usage;
@@ -1147,6 +1152,26 @@ protected:
         double StDevAfter = 0;
     };
     TMoveExpediency CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    // Whether moving the tablet to the node improves distribution of the named resource.
+    // targetExtra is the amount of the resource already moved to the node, but not reported by it yet.
+    TMoveExpediency CheckNamedResourceMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node, const TString& name, ui64 targetExtra = 0) const;
+public:
+    // How long the transferable part of named resources of a restarted tablet is assumed to stay with it
+    // until reported by the new incarnation
+    static constexpr TDuration NAMED_RESOURCE_ESTIMATE_TIMEOUT = TDuration::Minutes(2);
+    void ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline);
+    void Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
+    void RegisterNamedResource(const TString& name) {
+        NamedResourceRegistry.Register(name);
+    }
+    const TNamedResourceSettings& GetNamedResourceSettings(const TString& name) const {
+        return NamedResourceRegistry.GetSettings(name);
+    }
+    // Returns settings of the balancer for a named resource which needs balancing among the nodes, if any
+    template<std::forward_iterator TIter>
+    std::optional<TBalancerSettings> CheckNamedResources(TIter begin, TIter end);
+protected:
     bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
         return CheckTabletMoveExpediency(tablet, node).Expedient;
     }

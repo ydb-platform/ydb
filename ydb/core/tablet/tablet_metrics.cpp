@@ -16,7 +16,26 @@ ui64 TDecayingAverageWithSum::GetRawValue() const
     return RawValue;
 }
 
+static void FillNamedResource(NKikimrTabletBase::TMetrics& metrics, const TString& name, const TResourceMetricsValues::TNamedValue& value) {
+    auto& resource = *metrics.AddNamedResources();
+    resource.SetName(name);
+    resource.SetValue(value.Value);
+    if (value.Transferable) {
+        resource.SetTransferable(*value.Transferable);
+    }
+}
+
+void TResourceMetricsValues::SetNamed(const TString& name, ui64 value, std::optional<ui64> transferable) {
+    Named[name] = TNamedValue{.Value = value, .Transferable = transferable};
+}
+
 void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
+    metrics.ClearNamedResources();
+    for (const auto& [name, value] : Named) {
+        if (value.Value != 0) {
+            FillNamedResource(metrics, name, value);
+        }
+    }
     if (CPU.IsValueReady()) {
         metrics.SetCPU(CPU.GetValue());
     }
@@ -258,6 +277,23 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
             iops.SetGroupID(groupId);
             iops.SetIops(value);
         });
+
+    for (auto it = src.Named.begin(); it != src.Named.end();) {
+        const auto& [name, value] = *it;
+        auto sent = SentNamed.find(name);
+        if (force || sent == SentNamed.end() || sent->second != value) {
+            FillNamedResource(metrics, name, value);
+            have = true;
+        }
+        if (value.Value == 0) {
+            // zero has been reported (now or earlier), forget the resource
+            SentNamed.erase(name);
+            src.Named.erase(it++);
+        } else {
+            SentNamed[name] = value;
+            ++it;
+        }
+    }
 
     return have;
 }

@@ -192,8 +192,8 @@ TActorContext TExecutor::OwnerCtx() const {
 void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
-    Broker = new TBroker(this, Emitter);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
+    Broker = new TBroker(this, Emitter, Owner->TabletID(), FollowerId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId, FollowerId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     auto& icb = *AppData()->Icb;

@@ -475,6 +475,24 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         const auto& records = metrics.GetGroupWriteThroughput();
         ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
     }
+    bool namedEstimatesLoaded = false;
+    for (const auto& resource : metrics.GetNamedResources()) {
+        // instantaneous values, no windowed maximum: e.g. queue usage must disappear as soon as the work is done.
+        // Estimate deadline is present only in metrics persisted by Hive itself.
+        ResourceValues.NamedResources.Set(resource.GetName(), resource.GetValue(),
+            resource.HasTransferable() ? resource.GetTransferable() : resource.GetValue(),
+            TInstant::MilliSeconds(resource.GetEstimateDeadline()));
+        namedEstimatesLoaded |= resource.HasEstimateDeadline();
+        if (resource.GetValue() != 0) {
+            Hive.RegisterNamedResource(resource.GetName());
+        }
+    }
+    ResourceValues.NamedResources.DropExpiredEstimates(now);
+    if (namedEstimatesLoaded) {
+        if (TInstant deadline = ResourceValues.NamedResources.GetEarliestEstimateDeadline()) {
+            Hive.ScheduleNamedResourceEstimatesCheck(GetFullTabletId(), deadline);
+        }
+    }
     i64 counterBefore = ResourceValues.Counter;
     ActualizeCounter();
     i64 counterAfter = ResourceValues.Counter;
@@ -490,6 +508,35 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             }
         }
     }
+}
+
+void TTabletInfo::CarryOverNamedResources() {
+    if (ResourceValues.NamedResources.Empty()) {
+        return;
+    }
+    auto before = ResourceValues;
+    const TInstant deadline = TActivationContext::Now() + THive::NAMED_RESOURCE_ESTIMATE_TIMEOUT;
+    if (!ResourceValues.NamedResources.CarryOverTransferable(deadline)) {
+        return;
+    }
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateResourceValues(this, before, ResourceValues);
+    }
+    Hive.EnqueueUpdateMetrics(this);
+    if (!ResourceValues.NamedResources.Empty()) {
+        Hive.ScheduleNamedResourceEstimatesCheck(GetFullTabletId(), deadline);
+    }
+}
+
+void TTabletInfo::DropExpiredNamedResourceEstimates() {
+    auto before = ResourceValues;
+    if (!ResourceValues.NamedResources.DropExpiredEstimates(TActivationContext::Now())) {
+        return;
+    }
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateResourceValues(this, before, ResourceValues);
+    }
+    Hive.EnqueueUpdateMetrics(this);
 }
 
 TResourceRawValues TTabletInfo::GetResourceCurrentValues() const {
@@ -568,6 +615,7 @@ const TNodeFilter& TTabletInfo::GetNodeFilter() const {
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {
     if (BecomeStarting(node->Id, EHiveEventReason::BootQueue)) {
+        CarryOverNamedResources();
         PostponedStart = {};
         TFullTabletId tabletId = GetFullTabletId();
         Hive.ExecuteStartTablet(tabletId, node->Local, tabletId.first, false);

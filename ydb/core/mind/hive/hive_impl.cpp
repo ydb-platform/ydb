@@ -871,6 +871,7 @@ void THive::BuildCurrentConfig() {
             TabletTypeAllowedMetricsDefaults.insert_or_assign(tabletType, std::move(metricIds));
         }
     }
+    NamedResourceRegistry.Configure(CurrentConfig.GetNamedResources());
     BalancerIgnoreTabletTypes.clear();
     for (auto i : CurrentConfig.GetBalancerIgnoreTabletTypes()) {
         const auto type = TTabletTypes::EType(i);
@@ -1532,7 +1533,7 @@ TVector<THive::TSelectedNode> THive::SelectMaxPriorityNodes(TVector<TSelectedNod
     return selectedNodes;
 }
 
-THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId) {
+THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId, const TNodeFilterFunc& nodeFilter) {
     YDB_LOG_DEBUG("[FBN] finding best node for tablet",
         {"logPrefix", GetLogPrefix()},
         {"tablet", tablet});
@@ -1549,7 +1550,8 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     if (tablet.PreferredNodeId != 0) {
         TNodeInfo* node = FindNode(tablet.PreferredNodeId);
         if (node != nullptr) {
-            if (node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
+            if (node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)
+                    && (!nodeFilter || nodeFilter(*node))) {
                 YDB_LOG_TRACE("[FBN] chose node because of preferred node",
                     {"logPrefix", GetLogPrefix()},
                     {"tablet", tablet},
@@ -1569,7 +1571,8 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
 
     if (suggestedNodeId != 0) {
         TNodeInfo* node = FindNode(suggestedNodeId);
-        if (node && node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)) {
+        if (node && node->IsAlive() && node->IsAllowedToRunTablet(tablet) && node->IsAbleToScheduleTablet() && node->IsAbleToRunTablet(tablet)
+                && (!nodeFilter || nodeFilter(*node))) {
             YDB_LOG_TRACE("[FBN] chose node because of suggested node",
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet},
@@ -1655,6 +1658,13 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
     bool thereAreNodesWithManyStarts = false;
 
     for (auto& [_, nodeInfo] : Nodes) {
+        if (nodeFilter && !nodeFilter(nodeInfo)) {
+            YDB_LOG_TRACE("[FBN] node rejected by filter",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", tablet},
+                {"nodeId", nodeInfo.Id});
+            continue;
+        }
         if (nodeInfo.IsAlive()) {
             if (nodeInfo.IsAllowedToRunTablet(tablet, &debugState)) {
                 if (nodeInfo.IsAbleToScheduleTablet()) {
@@ -2373,6 +2383,137 @@ THive::TMoveExpediency THive::CheckTabletMoveExpediency(const TTabletInfo& table
     return {.Expedient = result, .Reason = EHiveEventReason::ResourceStDevImproved, .StDevBefore = before, .StDevAfter = after};
 }
 
+THive::TMoveExpediency THive::CheckNamedResourceMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node, const TString& name, ui64 targetExtra) const {
+    const TNodeInfo* source = tablet.Node;
+    if (!tablet.IsAlive() || source == nullptr || source->Id == node.Id || source->Freeze || node.Freeze || node.Down) {
+        return {.Expedient = false};
+    }
+    if (node.IsOverloaded()) {
+        return {.Expedient = false};
+    }
+    const ui64 transferable = tablet.GetResourceValues().NamedResources.GetTransferable(name);
+    if (transferable == 0) {
+        return {.Expedient = false};
+    }
+    const auto sourceUsage = source->GetNamedResourceUsage(name);
+    const auto targetUsage = node.GetNamedResourceUsage(name, targetExtra + transferable);
+    if (!sourceUsage || !targetUsage) {
+        return {.Expedient = false};
+    }
+    bool result = false;
+    switch (GetNamedResourceSettings(name).BalanceMode) {
+        case NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION:
+            // moving work which waits on the source to the node which can do it right away
+            result = *sourceUsage > 1 && *targetUsage <= 1;
+            break;
+        case NKikimrConfig::THiveConfig::TNamedResourceSettings::SCATTER:
+            result = *targetUsage < *sourceUsage;
+            break;
+        default:
+            break;
+    }
+    YDB_LOG_TRACE("[TME] named resource move expediency",
+        {"logPrefix", GetLogPrefix()},
+        {"tablet", tablet},
+        {"resource", name},
+        {"tabletNodeId", source->Id},
+        {"nodeId", node.Id},
+        {"sourceUsage", *sourceUsage},
+        {"targetUsageAfter", *targetUsage},
+        {"expedient", result});
+    return {.Expedient = result, .Reason = EHiveEventReason::NamedResourceImproved};
+}
+
+template<std::forward_iterator TIter>
+std::optional<TBalancerSettings> THive::CheckNamedResources(TIter begin, TIter end) {
+    const auto& names = NamedResourceRegistry.GetKnownNames();
+    struct TNodeUsage {
+        TNodeId NodeId;
+        double Usage;
+        ui64 Transferable;
+    };
+    std::vector<TNodeUsage> usages;
+    for (size_t i = 0; i < names.size(); ++i) {
+        const size_t index = (NextNamedResourceToCheck + i) % names.size();
+        const TString& name = names[index];
+        const auto& settings = GetNamedResourceSettings(name);
+        if (!settings.IsBalanced()) {
+            continue;
+        }
+        usages.clear();
+        for (auto it = begin; it != end; ++it) {
+            const TNodeInfo& node = *it;
+            if (!node.IsAlive() || node.Down) {
+                continue;
+            }
+            auto usage = node.GetNamedResourceUsage(name);
+            if (!usage) {
+                continue; // capacity unknown
+            }
+            usages.push_back({node.Id, *usage, node.NamedResourceValues.GetTransferable(name)});
+        }
+        if (usages.size() < 2) {
+            continue;
+        }
+        std::vector<TNodeId> sources;
+        switch (settings.BalanceMode) {
+            case NKikimrConfig::THiveConfig::TNamedResourceSettings::SATURATION: {
+                bool hasSpareCapacity = false;
+                for (const auto& usage : usages) {
+                    hasSpareCapacity |= usage.Usage < 1;
+                }
+                if (!hasSpareCapacity) {
+                    break;
+                }
+                for (const auto& usage : usages) {
+                    if (usage.Usage > 1 && usage.Transferable > 0) {
+                        sources.push_back(usage.NodeId);
+                    }
+                }
+                break;
+            }
+            case NKikimrConfig::THiveConfig::TNamedResourceSettings::SCATTER: {
+                const double minScatter = settings.MinScatterToBalance;
+                if (!(minScatter >= 0.0 && minScatter < 1.0)) {
+                    break;
+                }
+                auto [minIt, maxIt] = std::minmax_element(usages.begin(), usages.end(), [](const TNodeUsage& a, const TNodeUsage& b) {
+                    return a.Usage < b.Usage;
+                });
+                if (maxIt->Usage <= 0 || (maxIt->Usage - minIt->Usage) / maxIt->Usage <= minScatter) {
+                    break;
+                }
+                const double threshold = minIt->Usage / (1.0 - minScatter);
+                for (const auto& usage : usages) {
+                    if (usage.Usage > threshold && usage.Transferable > 0) {
+                        sources.push_back(usage.NodeId);
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        if (sources.empty()) {
+            continue;
+        }
+        YDB_LOG_DEBUG("ProcessTabletBalancer: named resource triggered balancer",
+            {"logPrefix", GetLogPrefix()},
+            {"resource", name},
+            {"sourceNodes", sources});
+        NextNamedResourceToCheck = (index + 1) % names.size();
+        return TBalancerSettings{
+            .Type = EBalancerType::ScatterNamed,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(sources),
+            .NamedResource = name,
+        };
+    }
+    return std::nullopt;
+}
+
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
     if (info) {
         TInstant now = TActivationContext::Now();
@@ -2943,6 +3084,21 @@ void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
     }
 }
 
+void THive::ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline) {
+    TInstant now = TActivationContext::Now();
+    Schedule(deadline > now ? deadline - now : TDuration::Zero(), new TEvPrivate::TEvCheckNamedResourceEstimates(tabletId));
+}
+
+void THive::Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev) {
+    if (TTabletInfo* tablet = FindTablet(ev->Get()->TabletId)) {
+        tablet->DropExpiredNamedResourceEstimates();
+    }
+}
+
+void THive::HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev) {
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvCheckNamedResourceEstimates(ev->Get()->TabletId));
+}
+
 void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     YDB_LOG_WARN("HandleInit TEvPrivate::TEvProcessTabletBalancer: received while in StateInit",
         {"logPrefix", GetLogPrefix()});
@@ -3055,6 +3211,15 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 
         if (settings && maybeStartBalancer()) {
             continue;
+        }
+
+        // Work waiting for a saturated resource on one node while other nodes have spare capacity
+        // is a more concrete problem than general scatter, so it goes first.
+        if (auto namedSettings = CheckNamedResources(nodes.begin(), nodes.end())) {
+            settings.emplace(std::move(*namedSettings));
+            if (maybeStartBalancer()) {
+                continue;
+            }
         }
 
         auto scatteredResource = CheckScatter(stats.ScatterByResource);
@@ -3558,6 +3723,7 @@ TDuration THive::GetBalancerCooldown(EBalancerType balancerType) const {
         case EBalancerType::ScatterNetwork:
         case EBalancerType::SpreadNeighbours:
         case EBalancerType::Storage:
+        case EBalancerType::ScatterNamed:
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
@@ -3867,6 +4033,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
         hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
+        hFunc(TEvPrivate::TEvCheckNamedResourceEstimates, Handle);
         hFunc(TEvHive::TEvShrinkStoragePool, Handle);
         hFunc(TEvHive::TEvShrinkStoragePoolReply, Handle);
         hFunc(TEvHive::TEvShrinkStoragePoolDone, Handle);
@@ -3886,6 +4053,7 @@ STFUNC(THive::StateInit) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
+        hFunc(TEvPrivate::TEvCheckNamedResourceEstimates, HandleInit);
         hFunc(TEvNodeWardenStorageConfig, HandleInit);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, HandleInit);
         // We subscribe to config updates before hive is fully loaded

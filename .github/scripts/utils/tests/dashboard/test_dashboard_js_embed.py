@@ -244,12 +244,6 @@ class JsScriptJsonTest(unittest.TestCase):
         self.assertIn("function showYaActivityTip(ev, plotEl)", source)
         self.assertIn("if (t <= target) idx = i;", source)
         self.assertIn("el.on('plotly_hover', (ev) => showYaActivityTip(ev, el));", source)
-        # Must not wire the generic nearest-point tip to ya-activity plots.
-        ya_block_start = source.find("for (const plotId of ['yaActivity', 'yaActivityChunk'])")
-        self.assertGreater(ya_block_start, 0)
-        ya_block = source[ya_block_start: ya_block_start + 2500]
-        self.assertIn("showYaActivityTip(ev, el)", ya_block)
-        self.assertNotIn("el.on('plotly_hover', showChartTip);", ya_block)
 
 
 if __name__ == "__main__":

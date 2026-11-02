@@ -166,22 +166,3 @@ def downsample_active_series(
         selected.add(max(indexes, key=lambda i: ys[i]))
     ordered = sorted(selected)
     return [xs[i] for i in ordered], [ys[i] for i in ordered]
-
-
-def step_y_at(xs: list[float], ys: list[float], t: float) -> float:
-    """Value of an hv step series at time t: last ys[i] with xs[i] <= t.
-
-    Mirrors the dashboard JS ``stepYAtX`` used by ya-activity hover. Nearest-point
-    lookup disagrees with the drawn step when samples are irregularly spaced.
-    """
-    if not xs or not ys:
-        return 0.0
-    idx = -1
-    for i, x in enumerate(xs):
-        if float(x) <= float(t):
-            idx = i
-        else:
-            break
-    if idx < 0:
-        return 0.0
-    return float(ys[idx])

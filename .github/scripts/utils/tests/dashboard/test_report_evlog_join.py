@@ -21,7 +21,7 @@ from tests_resource_dashboard import (
     parse_report_chunks,
 )
 from dashboard_html_payload import build_dashboard_payload
-from dashboard_html_series import downsample_active_series, step_y_at
+from dashboard_html_series import downsample_active_series
 
 
 def test_report_chunk_key_and_evlog_run_match():
@@ -504,17 +504,6 @@ def test_payload_keeps_exact_active_series_past_former_8k_cap():
     assert max(report["ys"] or [0]) == max(exact_ys)
 
 
-def test_step_y_at_matches_hv_drawn_value_not_nearest_sample():
-    # Sparse samples like post-downsample ya_activity kinds: nearest-point hover
-    # at t=15 would pick y=50 (closer to x=20), but the hv line is still at 1.
-    xs = [0.0, 10.0, 20.0, 30.0]
-    ys = [0.0, 1.0, 50.0, 0.0]
-    assert step_y_at(xs, ys, 15.0) == 1.0
-    assert step_y_at(xs, ys, 20.0) == 50.0
-    assert step_y_at(xs, ys, 9.9) == 0.0
-    assert step_y_at(xs, ys, -1.0) == 0.0
-
-
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     for fn in (
@@ -531,7 +520,6 @@ def load_tests(loader, tests, pattern):
         test_active_series_downsampling_preserves_short_peak,
         test_dashboard_main_falls_back_to_evlog_when_report_missing,
         test_payload_keeps_exact_active_series_past_former_8k_cap,
-        test_step_y_at_matches_hv_drawn_value_not_nearest_sample,
     ):
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite
@@ -551,5 +539,4 @@ if __name__ == "__main__":
     test_active_series_downsampling_preserves_short_peak()
     test_dashboard_main_falls_back_to_evlog_when_report_missing()
     test_payload_keeps_exact_active_series_past_former_8k_cap()
-    test_step_y_at_matches_hv_drawn_value_not_nearest_sample()
     print("OK")

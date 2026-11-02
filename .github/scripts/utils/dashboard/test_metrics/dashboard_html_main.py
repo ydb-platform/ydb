@@ -2332,13 +2332,11 @@ def build_html_dashboard(
       tip.style.display = 'block';
       positionChartTip(ev);
     }}
-    // hv step charts: Plotly unified hover picks the nearest sample per trace,
-    // which disagrees with the drawn step (last sample <= cursor) and mixes
-    // different timestamps across independently-downsampled ya_activity kinds.
+    // hv steps: Plotly nearest-point y disagrees with the drawn last-sample-<=x value,
+    // and independently-downsampled ya_activity kinds land on different timestamps.
     function stepYAtX(xs, ys, xCursor) {{
-      if (!Array.isArray(xs) || !Array.isArray(ys) || !xs.length) return null;
       const target = _toMs(xCursor);
-      if (target == null) return null;
+      if (target == null || !Array.isArray(xs) || !Array.isArray(ys) || !xs.length) return null;
       let idx = -1;
       for (let i = 0; i < xs.length; i++) {{
         const t = _toMs(xs[i]);
@@ -2350,46 +2348,21 @@ def build_html_dashboard(
       const v = Number(ys[idx]);
       return Number.isFinite(v) ? v : null;
     }}
-    function yaActivityHoverX(ev) {{
-      if (ev && Array.isArray(ev.xvals) && ev.xvals.length) return ev.xvals[0];
-      if (ev && ev.points && ev.points[0]) return ev.points[0].x;
-      return null;
-    }}
     function showYaActivityTip(ev, plotEl) {{
       const tip = document.getElementById('chartTip');
-      if (!tip || !ev || !ev.points || !ev.points.length) return;
+      if (!tip || !ev || !ev.points || !ev.points.length || !plotEl || !plotEl.data) return;
       clearTimeout(chartTipHideTimer);
-      const xCursor = yaActivityHoverX(ev);
+      const xCursor = (ev.xvals && ev.xvals.length) ? ev.xvals[0] : ev.points[0].x;
       const labelMs = _toMs(xCursor);
       const label = labelMs != null
         ? _getFormatter(true).format(new Date(labelMs))
         : formatPointTime(ev.points[0]);
-      const traces = (plotEl && Array.isArray(plotEl.data))
-        ? plotEl.data
-        : (ev.points[0].xaxis && ev.points[0].xaxis._gd && ev.points[0].xaxis._gd.data) || null;
       const lines = [];
-      const seen = new Set();
-      if (Array.isArray(traces) && traces.length && xCursor != null) {{
-        for (const tr of traces) {{
-          if (!tr || tr.hoverinfo === 'none') continue;
-          const name = tr.name || '';
-          if (!name || seen.has(name)) continue;
-          const y = stepYAtX(tr.x, tr.y, xCursor);
-          if (y == null) continue;
-          seen.add(name);
-          lines.push(name + ': ' + Math.round(y));
-        }}
-      }} else {{
-        for (const p of ev.points) {{
-          const name = (p.data && p.data.name) || '';
-          if (!name || seen.has(name)) continue;
-          const y = (xCursor != null)
-            ? stepYAtX(p.data && p.data.x, p.data && p.data.y, xCursor)
-            : Number(p.y);
-          if (!Number.isFinite(y)) continue;
-          seen.add(name);
-          lines.push(name + ': ' + Math.round(y));
-        }}
+      for (const tr of plotEl.data) {{
+        if (!tr || !tr.name || tr.hoverinfo === 'none') continue;
+        const y = stepYAtX(tr.x, tr.y, xCursor);
+        if (y == null) continue;
+        lines.push(tr.name + ': ' + Math.round(y));
       }}
       tip.textContent = [label].concat(lines).join('\\n');
       tip.style.display = 'block';

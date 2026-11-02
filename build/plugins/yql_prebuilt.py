@@ -17,6 +17,8 @@ def _YQL_PREBUILT_FINALIZE(unit: ymake.Unit):
         unit.onprimary_output(['${BINDIR}/' + output])
         unit.set(['_YQL_PROGRAM_LINK_CMD' if program else 'YQL_UDF_LINK_CMD', '$_YQL_PREBUILT_TOOL_CMD'])
     else:
+        if unit.get('_YQL_PREBUILT_KIND') == 'PYTHON_UDF':
+            unit.on_yql_python_udf_source_finalize([])
         if not program:
             unit.on_add_yql_udf_deps_contrib([])
         suppressions = (unit.get('_YQL_SOURCE_SUPPRESSIONS') or '').split()

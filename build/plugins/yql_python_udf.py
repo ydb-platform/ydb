@@ -1,3 +1,5 @@
+import json
+
 import ymake
 
 
@@ -14,7 +16,16 @@ def REGISTER_YQL_PYTHON_UDF(
 
     if not RESOURCE_NAME:
         RESOURCE_NAME = NAME
-    add_libra_modules = ADD_LIBRA_MODULES == 'yes'
+    if unit.get('_YQL_PREBUILT_KIND') == 'PYTHON_UDF':
+        registrations = json.loads(unit.get('_YQL_PYTHON_REGISTRATIONS') or '[]')
+        registrations.append([NAME, RESOURCE_NAME, ADD_LIBRA_MODULES])
+        unit.set(['_YQL_PYTHON_REGISTRATIONS', json.dumps(registrations)])
+    else:
+        register_python_udf(unit, NAME, RESOURCE_NAME, ADD_LIBRA_MODULES)
+
+
+def register_python_udf(unit, name, resource_name, add_libra_modules):
+    add_libra_modules = add_libra_modules == 'yes'
 
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == 'yes'
     py3 = unit.get('PYTHON3') == 'yes'
@@ -53,14 +64,14 @@ def REGISTER_YQL_PYTHON_UDF(
     if add_libra_modules:
         output_includes.append('yql/udfs/quality/libra/module/module.h')
 
-    path = NAME + '.yql_python_udf.cpp'
+    path = name + '.yql_python_udf.cpp'
     libra_flag = '1' if add_libra_modules else '0'
     unit.onrun_python3(
         [
             'build/scripts/gen_yql_python_udf.py',
             flavor,
-            NAME,
-            RESOURCE_NAME,
+            name,
+            resource_name,
             path,
             libra_flag,
             'OUT',
@@ -69,3 +80,13 @@ def REGISTER_YQL_PYTHON_UDF(
         ]
         + output_includes
     )
+
+
+@ymake.macro
+def _YQL_PYTHON_UDF_SOURCE_FINALIZE(unit: ymake.Unit):
+    if unit.get('_YQL_PREBUILT_PYTHON_VERSION') == '3':
+        unit.on_make_yql_python3_udf([])
+    else:
+        unit.on_make_yql_python_udf([])
+    for registration in json.loads(unit.get('_YQL_PYTHON_REGISTRATIONS') or '[]'):
+        register_python_udf(unit, *registration)

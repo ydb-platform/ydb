@@ -1,5 +1,7 @@
 #include "kqp_column_statistics_utils.h"
 
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
+
 #include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NKikimr::NKqp {
@@ -18,7 +20,7 @@ struct TTableMeta {
 void DispatchStatRequests(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures,
                           TKikimrTablesData& tables, const TString& cluster, const TString& database,
                           const NKikimr::NStat::EStatType type,
-                          const TVector<std::pair<TString, TVector<TString>>>& columnTuples) {
+                          const TVector<std::pair<TString, TVector<TString>>>& columnTuples, TCompileTraceDependencies* trace) {
     THashMap<TPathId, TTableMeta> tableMetaByPathId;
     std::vector<NKikimr::NStat::TRequest> statRequests;
 
@@ -127,11 +129,13 @@ void DispatchStatRequests(TActorSystem* actorSystem, TVector<NThreading::TFuture
 
     auto promise = NThreading::NewPromise<TColumnStatisticsResponse>();
 
+    auto dependency = trace ? trace->Start("Load column statistics") : NWilson::TSpan();
     auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
-    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, request.Release(), promise, callback);
+    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, request.Release(), promise, callback, dependency.GetTraceId());
     actorSystem->Register(requestHandler, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
 
-    futures.push_back(promise.GetFuture());
+    futures.push_back(TraceCompileDependency(promise.GetFuture(), std::move(dependency),
+        [](const TColumnStatisticsResponse& result) { return result.Issues().Empty(); }));
 }
 
 } // anonymous namespace
@@ -139,7 +143,7 @@ void DispatchStatRequests(TActorSystem* actorSystem, TVector<NThreading::TFuture
 // These functions are moved from kqp_op_statistics_requester to be able to use them in other transformers.
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
-                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics) {
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics, TCompileTraceDependencies* trace) {
     TVector<std::pair<TString, TVector<TString>>> columnTuples;
 
     for (const auto& [table, columns] : columnsByTableName) {
@@ -158,13 +162,13 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
         }
     }
 
-    DispatchStatRequests(actorSystem, futures, tables, cluster, database, type, columnTuples);
+    DispatchStatRequests(actorSystem, futures, tables, cluster, database, type, columnTuples, trace);
 }
 
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
                     const THashMap<TString, THashMap<TString, TVector<TString>>>& columnTuplesByTableName,
-                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics) {
+                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics, TCompileTraceDependencies* trace) {
     TVector<std::pair<TString, TVector<TString>>> columnTuples;
 
     for (const auto& [table, tuples] : columnTuplesByTableName) {
@@ -183,7 +187,7 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
         }
     }
 
-    DispatchStatRequests(actorSystem, futures, tables, cluster, database, type, columnTuples);
+    DispatchStatRequests(actorSystem, futures, tables, cluster, database, type, columnTuples, trace);
 }
 
 } // namespace NKikimr::NKqp

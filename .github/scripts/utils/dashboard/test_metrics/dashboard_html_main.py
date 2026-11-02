@@ -822,14 +822,14 @@ def build_html_dashboard(
           + 'from ya activity.">build = whole job</span>')
         : '';
       const buildTip = suiteFiltered
-        ? 'Whole-job build/archive/cache/link activity until the first filtered-suite test start'
-        : 'From the first build/archive/cache/link activity to the first test start';
+        ? 'Whole-job build/archive/cache/link: first → last activity (overlap with tests allowed)'
+        : 'First → last build/archive/cache/link activity (overlap with tests allowed)';
       const testTip = suiteFiltered
-        ? 'Filtered suites only: first matching test start → last matching test end'
-        : 'From the first test start to the last test end';
+        ? 'Filtered suites only: first matching test start → last matching test end (overlap with build allowed)'
+        : 'First → last test start/end (overlap with build allowed)';
       const totalTip = suiteFiltered
-        ? 'Earliest of whole-job build start / filtered test start → latest end'
-        : 'From the first build/archive/cache/link activity to the last test end';
+        ? 'Earliest of whole-job build / filtered test start → latest end (overlap not summed)'
+        : 'Earliest of build/test start → latest of build/test end (overlap not summed)';
       const runLine =
         '<div class="headline-run">' +
           '<div class="headline-run-row">' +

@@ -52,8 +52,23 @@
 #define IS_DEBUG_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_DEBUG, component)
 #define IS_TRACE_LOG_ENABLED(component) IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, component)
 
-#define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
-#define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
+#define LOG_LOG(actorCtxOrSystem, priority, component, ...)                                                                    \
+    do {                                                                                                                       \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, 0ull)) {                                        \
+            ::NActors::MemLogAdapter(                                                                                          \
+                actorCtxOrSystem, priority, component, __FILE_NAME__, __LINE__, __VA_ARGS__);                                  \
+        }                                                                                                                      \
+    } while (0) /**/
+
+#define LOG_LOG_S(actorCtxOrSystem, priority, component, stream)                                                               \
+    do {                                                                                                                       \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, 0u;;)) {                                        \
+            TStringBuilder logStringBuilder;                                                                                   \
+            logStringBuilder << stream;                                                                                        \
+            ::NActors::MemLogAdapter(                                                                                          \
+                actorCtxOrSystem, priority, component, __FILE_NAME__, __LINE__, std::move(logStringBuilder));                  \
+        }                                                                                                                      \
+    } while (0) /**/
 
 #define LOG_LOG_SOURCELESS_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, ...)                                      \
     do {                                                                                                                        \

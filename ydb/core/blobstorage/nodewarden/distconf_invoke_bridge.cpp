@@ -79,6 +79,15 @@ namespace NKikimr::NStorage {
                             throw TExError() << "Can't switch to NOT_SYNCHRONIZED_2 directly";
 
                         case NKikimrBridge::TClusterState::SUSPENDED:
+                            if (currentState != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+                                // the suspended pile takes part in configuration quorum and its state storage rings
+                                // count as synchronized ones, which only the pile in sync can have
+                                throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name << "' is "
+                                    << NKikimrBridge::TClusterState::EPileState_Name(currentState)
+                                    << ", only SYNCHRONIZED pile can be suspended; switch it to DISCONNECTED instead";
+                            }
+                            break;
+
                         case NKikimrBridge::TClusterState::HOT_STANDBY:
                             // explicit request is allowed for a non-primary pile
                             break;
@@ -195,11 +204,12 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(registry);
             *details->MutablePileRegistry() = std::move(*registry);
             details->MutablePileRegistry()->SetRequiredFeatureLevel(BridgeFeatureLevelHotStandby);
+            // the nodes of the piles that can't connect now (like the DISCONNECTED one turning HOT_STANDBY) are fenced by
+            // the handshake when they come back, as the required level is persisted
             THashSet<ui32> requiredNodeIds;
             THashSet<ui32> ignoredNodeIds;
             for (const auto& pile : Self->BridgeInfo->Piles) {
-                auto& nodes = NBridge::PileStateTraits(NBridge::GetPileState(*clusterState, pile.BridgePileId))
-                    .AllowsConnection ? requiredNodeIds : ignoredNodeIds;
+                auto& nodes = NBridge::PileStateTraits(pile.State).AllowsConnection ? requiredNodeIds : ignoredNodeIds;
                 nodes.insert(pile.StaticNodeIds.begin(), pile.StaticNodeIds.end());
             }
             RequireBridgeCapability(BridgeFeatureLevelHotStandby, std::move(requiredNodeIds), std::move(ignoredNodeIds),

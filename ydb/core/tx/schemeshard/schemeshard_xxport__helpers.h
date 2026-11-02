@@ -17,6 +17,8 @@ namespace NKikimrSchemeOp {
 
 namespace NKikimr::NSchemeShard {
 
+inline constexpr char KesusResourcesFileName[] = "rate_limiter_resources.pb";
+
 class TSchemeShard;
 struct TExportInfo;
 struct TImportInfo;

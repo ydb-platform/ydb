@@ -147,6 +147,11 @@ message Resource {
     MeteringConfig metering_config = 3;
 }
 
+// A set of full rate limiter resource descriptions, used by backups.
+message Resources {
+    repeated Resource resources = 1;
+}
+
 //
 // CreateResource method.
 //

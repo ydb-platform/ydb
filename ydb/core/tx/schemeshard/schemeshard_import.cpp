@@ -32,11 +32,20 @@ namespace {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 
         for (const auto& item : importInfo.Items) {
+            // New persisted states cannot be inserted into the old enum ordering.
+            // Compare their public phases so a mixed import keeps reporting the
+            // earliest unfinished phase rather than the smallest storage value.
+            auto itemState = item.State;
+            if (itemState == TImportInfo::EState::CreateKesusParent) {
+                itemState = TImportInfo::EState::CreateSchemeObject;
+            } else if (itemState == TImportInfo::EState::RestoreKesusResources) {
+                itemState = TImportInfo::EState::Transferring;
+            }
             if (state == TImportInfo::EState::Invalid) {
-                state = item.State;
+                state = itemState;
             }
 
-            state = Min(state, item.State);
+            state = Min(state, itemState);
         }
 
         return state;
@@ -251,7 +260,8 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
         NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo.DomainPathId.LocalPathId),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size()),
         NIceDb::TUpdate<Schema::Imports::PeerName>(importInfo.PeerName),
-        NIceDb::TUpdate<Schema::Imports::SanitizedToken>(importInfo.SanitizedToken)
+        NIceDb::TUpdate<Schema::Imports::SanitizedToken>(importInfo.SanitizedToken),
+        NIceDb::TUpdate<Schema::Imports::CanRestoreRateLimiterMetering>(importInfo.CanRestoreRateLimiterMetering)
     );
 
     if (importInfo.UserSID) {
@@ -320,6 +330,9 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& i
         if (item.WaitTxId != InvalidTxId) {
             TxIdToImport.erase(item.WaitTxId);
         }
+        if (item.CreateKesusTxId != InvalidTxId) {
+            TxIdToImport.erase(item.CreateKesusTxId);
+        }
     }
 
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
@@ -352,6 +365,7 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
+        NIceDb::TUpdate<Schema::ImportItems::CreateKesusTxId>(item.CreateKesusTxId),
         NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),
         NIceDb::TUpdate<Schema::ImportItems::NextChangefeedIdx>(item.NextChangefeedIdx),
         NIceDb::TUpdate<Schema::ImportItems::Issue>(item.Issue)
@@ -373,6 +387,18 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     if (item.Topic) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Topic>(item.Topic->SerializeAsString())
+        );
+    }
+
+    if (item.CoordinationNode) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::CoordinationNode>(item.CoordinationNode->SerializeAsString())
+        );
+    }
+    if (item.RateLimiterResources) {
+        // Persist an explicitly empty message too: an absent column is not an empty backup.
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::RateLimiterResources>(item.RateLimiterResources->SerializeAsString())
         );
     }
 
@@ -458,6 +484,26 @@ void TSchemeShard::Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, con
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvImportKesusResourcesResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvImportRetryKesusParent::TPtr& ev, const TActorContext& ctx) {
+    const auto& message = *ev->Get();
+    const auto it = Imports.find(message.ImportId);
+    if (it == Imports.end() || it->second->State != TImportInfo::EState::Waiting
+        || message.ItemIdx >= it->second->Items.size())
+    {
+        return;
+    }
+    const auto& item = it->second->Items.at(message.ItemIdx);
+    if (item.State == TImportInfo::EState::CreateKesusParent
+        && item.SubState == TImportInfo::TItem::ESubState::WaitingForParent)
+    {
+        Execute(CreateTxProgressImport(message.ImportId, message.ItemIdx), ctx);
+    }
 }
 
 void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx) {

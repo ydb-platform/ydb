@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <util/system/condvar.h>
 #include <util/system/info.h>
@@ -569,6 +570,7 @@ void DoMirror3dcRealmDisconnectionTest(EMirror3dcDisconnectionScenario scenario)
 
 void DoMirror3dcReinforcementTest(NKikimrProto::EReplyStatus failure) {
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    using TSpaceColor = NKikimrBlobStorage::TPDiskSpaceColor;
     std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
     TFailRealmStates appliedStates = states;
     NKikimrBlobStorage::TGroupInfo originalGroup;
@@ -579,10 +581,14 @@ void DoMirror3dcReinforcementTest(NKikimrProto::EReplyStatus failure) {
     bool holdReplDone = false;
     bool failOsirisPut = true;
     bool holdGenerationChange = false;
+    ui32 spaceBlockedNode = 0;
+    bool holdSpaceReports = true;
+    std::optional<TSpaceColor::E> reportedSpaceColor;
     TActorId releasedOsirisId;
     std::set<TActorId> skeletons;
     std::map<ui32, NKikimrWhiteboard::TVDiskStateInfo> whiteboardStates;
     std::vector<std::unique_ptr<IEventHandle>> heldGenerationChanges;
+    std::vector<std::unique_ptr<IEventHandle>> heldSpaceReports;
     std::vector<std::unique_ptr<IEventHandle>> heldSyncDone;
     std::vector<std::unique_ptr<IEventHandle>> heldOsirisDone;
     std::vector<std::unique_ptr<IEventHandle>> heldReplDone;
@@ -590,7 +596,7 @@ void DoMirror3dcReinforcementTest(NKikimrProto::EReplyStatus failure) {
         .NodeCount = 9,
         .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
     });
-    env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+    env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
         switch (event->GetTypeRewrite()) {
             case TEvBlobStorage::EvControllerNodeServiceSetUpdate: {
                 NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& record =
@@ -642,10 +648,26 @@ void DoMirror3dcReinforcementTest(NKikimrProto::EReplyStatus failure) {
                 osirisWrites += event->Get<TEvAnubisOsirisPut>()->IsOsiris();
                 if (failOsirisPut && event->Get<TEvAnubisOsirisPut>()->IsOsiris()) {
                     failOsirisPut = false;
+                    if (failure == NKikimrProto::OUT_OF_SPACE) {
+                        spaceBlockedNode = nodeId;
+                    }
                     env.Runtime->Send(new IEventHandle(event->Sender, event->Recipient,
                         new TEvAnubisOsirisPutResult(failure,
                             env.Runtime->GetClock(), nullptr, nullptr), 0, event->Cookie), event->Sender.NodeId());
                     return false;
+                }
+                break;
+            case TEvBlobStorage::EvCheckSpaceResult:
+                if (nodeId == spaceBlockedNode) {
+                    if (holdSpaceReports) {
+                        heldSpaceReports.push_back(std::move(event));
+                        return false;
+                    }
+                    if (reportedSpaceColor) {
+                        NPDisk::TEvCheckSpaceResult* report = event->Get<NPDisk::TEvCheckSpaceResult>();
+                        report->StatusFlags = SpaceColorToStatusFlag(*reportedSpaceColor);
+                        report->LogStatusFlags = report->StatusFlags;
+                    }
                 }
                 break;
         }
@@ -779,8 +801,21 @@ void DoMirror3dcReinforcementTest(NKikimrProto::EReplyStatus failure) {
     applyStates();
     UNIT_ASSERT_VALUES_EQUAL(osirisWrites, writesBeforeRetry);
     env.Sim(TDuration::Minutes(2));
+    UNIT_ASSERT_VALUES_EQUAL(osirisWrites, writesBeforeRetry);
+    UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 5);
+    UNIT_ASSERT_C(!heldSpaceReports.empty(), "The space tracker must have a report pending");
+
+    // Even after the old retry deadline, a low-space report must keep the scan stopped.
+    holdSpaceReports = false;
+    reportedSpaceColor = TSpaceColor::RED;
+    deliver(heldSpaceReports);
+    UNIT_ASSERT_VALUES_EQUAL(osirisWrites, writesBeforeRetry);
+    UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 5);
+    reportedSpaceColor = TSpaceColor::ORANGE;
+    env.Sim(TDuration::Seconds(30));
     UNIT_ASSERT_VALUES_EQUAL(heldOsirisDone.size(), 6);
-    UNIT_ASSERT_C(osirisWrites > writesBeforeRetry, "Space failures must restart a fresh scan after the delay");
+    UNIT_ASSERT_C(osirisWrites > writesBeforeRetry, "Usable space must restart a fresh scan");
+    reportedSpaceColor.reset();
     holdOsirisDone = false;
     holdReplDone = true;
     deliver(heldOsirisDone);

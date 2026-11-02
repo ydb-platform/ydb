@@ -284,6 +284,10 @@ namespace NKikimr {
         return stat.Pass(DefaultAllow(color));
     }
 
+    bool TOutOfSpaceLogic::WouldAllowOsirisPut() const {
+        return GetSpaceColor() <= TSpaceColor::ORANGE;
+    }
+
     bool TOutOfSpaceLogic::Allow(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr &ev) const {
         const ESpaceColor color = GetSpaceColor();
         auto &stat = Stat->Lookup(TStat::AnubisOsirisPut, color).HandleMsg(ev->Get()->ByteSize());

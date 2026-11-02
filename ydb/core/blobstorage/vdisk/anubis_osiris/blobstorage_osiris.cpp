@@ -10,6 +10,15 @@ using namespace NKikimrServices;
 
 namespace NKikimr {
 
+    TEvCallOsiris::TEvCallOsiris(bool waitForSpace)
+        : WaitForSpace(waitForSpace)
+    {}
+
+    TEvOsirisDone::TEvOsirisDone(ui64 dbBirthLsn, NKikimrProto::EReplyStatus status)
+        : DbBirthLsn(dbBirthLsn)
+        , Status(status)
+    {}
+
     ////////////////////////////////////////////////////////////////////////////
     // THullOsirisActor
     ////////////////////////////////////////////////////////////////////////////

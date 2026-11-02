@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.h>
 #include <ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h>
@@ -7,8 +8,8 @@
 
 namespace {
 
-enum class ERestartPoint {
-    FullSync,
+enum class ERestartPoint : ui8 {
+    FullSync = 0,
     OsirisWriteReply,
     OsirisDone,
     OsirisOutOfSpace,
@@ -20,6 +21,7 @@ enum class ERestartPoint {
 };
 
 void TestRestart(ERestartPoint point) {
+    using TSpaceColor = NKikimrBlobStorage::TPDiskSpaceColor;
     TEnvironmentSetup env(TEnvironmentSetup::TSettings{
         .NodeCount = 8,
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -96,7 +98,11 @@ void TestRestart(ERestartPoint point) {
     ui32 osirisCallsAfterRestart = 0;
     ui32 osirisWrites = 0;
     ui32 osirisCallsBeforeRestart = 0;
+    ui32 osirisDoneBeforeRestart = 0;
     bool recoveryCommitted = false;
+    bool holdSpaceReports = true;
+    std::optional<TSpaceColor::E> reportedSpaceColor;
+    std::vector<std::unique_ptr<IEventHandle>> heldSpaceReports;
     std::optional<ui64> dbBirthLsnAfterRestart;
     std::optional<NSyncer::EDecision> decisionAfterRestart;
     env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
@@ -114,6 +120,17 @@ void TestRestart(ERestartPoint point) {
             }
             return true;
         }
+        if (stopped && point == ERestartPoint::OsirisOutOfSpace && type == TEvBlobStorage::EvCheckSpaceResult) {
+            if (holdSpaceReports) {
+                heldSpaceReports.push_back(std::move(ev));
+                return false;
+            }
+            if (reportedSpaceColor) {
+                NPDisk::TEvCheckSpaceResult* report = ev->Get<NPDisk::TEvCheckSpaceResult>();
+                report->StatusFlags = SpaceColorToStatusFlag(*reportedSpaceColor);
+                report->LogStatusFlags = report->StatusFlags;
+            }
+        }
         if (type == TEvBlobStorage::EvAnubisOsirisPut) {
             ++osirisWrites;
             if (!stopped && (point == ERestartPoint::OsirisOutOfSpace || point == ERestartPoint::OsirisTerminalError)) {
@@ -129,6 +146,8 @@ void TestRestart(ERestartPoint point) {
             }
         } else if (type == TEvBlobStorage::EvCallOsiris) {
             ++osirisCallsBeforeRestart;
+        } else if (type == TEvBlobStorage::EvOsirisDone) {
+            ++osirisDoneBeforeRestart;
         } else if (type == TEvBlobStorage::EvSyncerLostDataRecovered) {
             recoveryCommitted = true;
         }
@@ -158,13 +177,27 @@ void TestRestart(ERestartPoint point) {
     }
     waitUntil([&] { return stopped; }, "The recovery must reach the requested restart point");
     if (point == ERestartPoint::OsirisOutOfSpace || point == ERestartPoint::OsirisTerminalError) {
-        env.Sim(TDuration::Minutes(4));
-        UNIT_ASSERT_VALUES_EQUAL(osirisCallsBeforeRestart, 1);
+        env.Sim(TDuration::Minutes(6));
+        UNIT_ASSERT_VALUES_EQUAL(osirisDoneBeforeRestart, 1);
         UNIT_ASSERT(!recoveryCommitted);
-        env.Sim(TDuration::Minutes(2));
         if (point == ERestartPoint::OsirisOutOfSpace) {
+            // The second call is deferred; it must not take another snapshot until space is reported.
             UNIT_ASSERT_VALUES_EQUAL(osirisCallsBeforeRestart, 2);
+            UNIT_ASSERT_C(!heldSpaceReports.empty(), "The space tracker must have a report pending");
+            holdSpaceReports = false;
+            reportedSpaceColor = TSpaceColor::RED;
+            for (std::unique_ptr<IEventHandle>& report : heldSpaceReports) {
+                env.Runtime->Send(report.release(), recoveringNode);
+            }
+            heldSpaceReports.clear();
+            env.Sim(TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(osirisDoneBeforeRestart, 1);
+            UNIT_ASSERT(!recoveryCommitted);
+            reportedSpaceColor = TSpaceColor::ORANGE;
+            env.Sim(TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(osirisDoneBeforeRestart, 2);
             UNIT_ASSERT(recoveryCommitted);
+            reportedSpaceColor.reset();
         } else {
             UNIT_ASSERT_VALUES_EQUAL(osirisCallsBeforeRestart, 1);
             UNIT_ASSERT(!recoveryCommitted);

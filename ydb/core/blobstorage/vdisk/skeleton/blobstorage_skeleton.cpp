@@ -64,6 +64,8 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/scope.h>
 
+#include <set>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SKELETON
 
 using namespace NKikimrServices;
@@ -80,7 +82,6 @@ namespace NKikimr {
                 EvCheckSnapshotExpiration = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvProcessLocalSyncDataQueue,
                 EvProcessLocalSyncDataQueueWakeup,
-                EvRetryRecovery,
             };
 
             struct TEvProcessLocalSyncDataQueue :
@@ -88,8 +89,6 @@ namespace NKikimr {
 
             struct TEvProcessLocalSyncDataQueueWakeup :
                 TEventLocal<TEvProcessLocalSyncDataQueueWakeup, EvProcessLocalSyncDataQueueWakeup> {};
-
-            struct TEvRetryRecovery : TEventLocal<TEvRetryRecovery, EvRetryRecovery> {};
         };
 
         ////////////////////////////////////////////////////////////////////////
@@ -2248,7 +2247,25 @@ namespace NKikimr {
         }
 
         void Handle(TEvCallOsiris::TPtr& ev, const TActorContext& ctx) {
-            StartOsiris(ev->Sender, EOsirisMode::Recovery, ctx);
+            if (ev->Get()->WaitForSpace) {
+                OsirisSpaceWaiters.insert(ev->Sender);
+            } else {
+                StartOsiris(ev->Sender, EOsirisMode::Recovery, ctx);
+            }
+        }
+
+        void HandleDiskSpaceUpdated(const TActorContext& ctx) {
+            if (!OutOfSpaceLogic->WouldAllowOsirisPut()) {
+                return;
+            }
+            // A fresh tracker observation, rather than elapsed time or a group
+            // change, releases scans stopped by space pressure.
+            RepeatRecoveryWaitingForSpace = false;
+            TryRepeatRecovery(ctx);
+            for (const TActorId& notifyId : OsirisSpaceWaiters) {
+                StartOsiris(notifyId, EOsirisMode::Recovery, ctx);
+            }
+            OsirisSpaceWaiters.clear();
         }
 
         void HandleOsirisError(TEvCallOsiris::TPtr& ev, const TActorContext& ctx) {
@@ -2263,7 +2280,7 @@ namespace NKikimr {
             if (CurrentStateFunc() != &TThis::StateNormal
                     || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !ReplDone
                     || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)
-                    || ctx.Monotonic() < RepeatRecoveryRetryAt) {
+                    || RepeatRecoveryWaitingForSpace) {
                 return;
             }
             if (ReinforcementRequired() && ReinforcementSyncGeneration < ReinforcementGeneration) {
@@ -2302,11 +2319,11 @@ namespace NKikimr {
                     return;
                 case NKikimrProto::OUT_OF_SPACE:
                     RepeatRecoveryPending = true;
-                    RepeatRecoveryRetryAt = ctx.Monotonic() + OsirisRetryInterval;
-                    ctx.Schedule(OsirisRetryInterval, new TEvPrivate::TEvRetryRecovery);
+                    RepeatRecoveryWaitingForSpace = true;
                     break;
                 default:
                     RepeatRecoveryPending = false;
+                    RepeatRecoveryWaitingForSpace = false;
                     break;
             }
             ReplDone = true;
@@ -2605,6 +2622,10 @@ namespace NKikimr {
                                 NKikimrWhiteboard::EVDiskState state)
         {
             Become(&TThis::StateDatabaseError);
+            for (const TActorId& notifyId : OsirisSpaceWaiters) {
+                ctx.Send(notifyId, new TEvOsirisDone(0, NKikimrProto::ERROR));
+            }
+            OsirisSpaceWaiters.clear();
             VDiskMonGroup.VDiskState(state);
             // notify SkeletonFront
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(phase,
@@ -2726,7 +2747,7 @@ namespace NKikimr {
 
             // run out of disk space tracker
             Db->DskSpaceTrackerID.Set(ctx.Register(CreateDskSpaceTracker(VCtx, PDiskCtx,
-                Config->DskTrackerInterval)));
+                Config->DskTrackerInterval, SelfId())));
             ActiveActors.Insert(Db->DskSpaceTrackerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run LogCutter in the same mailbox
@@ -3825,6 +3846,7 @@ namespace NKikimr {
         )
 
         COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,
+            CFunc(TEvDiskSpaceUpdated::EventType, HandleDiskSpaceUpdated)
             HFunc(TEvReinforcementSyncDone, Handle)
             HFunc(TEvBlobStorage::TEvVPut, HandlePutSyncGuidRecovery)
             HFunc(TEvHullLogHugeBlob, Handle)
@@ -3890,7 +3912,7 @@ namespace NKikimr {
 
         COUNTED_STRICT_STFUNC(StateNormal,
             HFunc(TEvReinforcementSyncDone, Handle)
-            CFunc(TEvPrivate::EvRetryRecovery, TryRepeatRecovery)
+            CFunc(TEvDiskSpaceUpdated::EventType, HandleDiskSpaceUpdated)
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
@@ -3974,7 +3996,7 @@ namespace NKikimr {
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
             IgnoreFunc(TEvReinforcementSyncDone)
-            IgnoreFunc(TEvPrivate::TEvRetryRecovery)
+            IgnoreFunc(TEvDiskSpaceUpdated)
             HFunc(TEvCallOsiris, HandleOsirisError)
             HFunc(TEvAnubisOsirisPut, HandleOsirisError)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
@@ -4100,7 +4122,8 @@ namespace NKikimr {
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         bool RepeatRecoveryPending = false;
-        TMonotonic RepeatRecoveryRetryAt;
+        bool RepeatRecoveryWaitingForSpace = false;
+        std::set<TActorId> OsirisSpaceWaiters;
         ui32 ReinforcementGeneration = 0;
         ui32 ReinforcementSyncGeneration = 0;
         ui32 ReplReinforcementGeneration = 0;

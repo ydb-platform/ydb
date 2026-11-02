@@ -20,6 +20,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskContext> VCtx;
         TPDiskCtxPtr PDiskCtx;
         const TDuration DskTrackerInterval;
+        const TActorId NotifyId;
         NMonGroup::TDskOutOfSpaceGroup MonGroup;
         // how many 'wait intervals' we spent in 'bad' zones
         ui64 YellowZonePeriods = 0;
@@ -100,6 +101,7 @@ namespace NKikimr {
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             VCtx->OutOfSpaceState.UpdateLocalTotalChunks(msg->TotalChunks);
             VCtx->OutOfSpaceState.UpdateSpaceHeadroom(msg->Headroom, SpaceObservationGeneration);
+            ctx.Send(NotifyId, new TEvDiskSpaceUpdated());
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
@@ -233,11 +235,13 @@ namespace NKikimr {
         TDskSpaceTrackerActor(
                 TIntrusivePtr<TVDiskContext> vctx,
                 TPDiskCtxPtr pdiskCtx,
-                TDuration dskTrackerInterval)
+                TDuration dskTrackerInterval,
+                TActorId notifyId)
             : TActorBootstrapped<TDskSpaceTrackerActor> ()
             , VCtx(std::move(vctx))
             , PDiskCtx(pdiskCtx)
             , DskTrackerInterval(dskTrackerInterval)
+            , NotifyId(notifyId)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
         {}
     };
@@ -248,9 +252,10 @@ namespace NKikimr {
     IActor* CreateDskSpaceTracker(
                 TIntrusivePtr<TVDiskContext> vctx,
                 TPDiskCtxPtr pdiskCtx,
-                TDuration dskTrackerInterval)
+                TDuration dskTrackerInterval,
+                TActorId notifyId)
     {
-        return new TDskSpaceTrackerActor(std::move(vctx), std::move(pdiskCtx), dskTrackerInterval);
+        return new TDskSpaceTrackerActor(std::move(vctx), std::move(pdiskCtx), dskTrackerInterval, notifyId);
     }
 
 } // NKikimr

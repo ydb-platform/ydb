@@ -7,18 +7,20 @@
 
 namespace NKikimr {
 
-    enum class EOsirisMode {
-        Recovery,
-        Reinforcement,
+    enum class EOsirisMode : ui8 {
+        Recovery = 0,
+        Reinforcement = 1,
     };
-
-    constexpr TDuration OsirisRetryInterval = TDuration::Minutes(5);
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvCallOsiris
     ////////////////////////////////////////////////////////////////////////////
     struct TEvCallOsiris : public TEventLocal<TEvCallOsiris, TEvBlobStorage::EvCallOsiris>
-    {};
+    {
+        const bool WaitForSpace;
+
+        explicit TEvCallOsiris(bool waitForSpace = false);
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvOsirisDone
@@ -27,10 +29,7 @@ namespace NKikimr {
     {
         const ui64 DbBirthLsn = 0;
         const NKikimrProto::EReplyStatus Status;
-        TEvOsirisDone(ui64 dbBirthLsn, NKikimrProto::EReplyStatus status)
-            : DbBirthLsn(dbBirthLsn)
-            , Status(status)
-        {}
+        TEvOsirisDone(ui64 dbBirthLsn, NKikimrProto::EReplyStatus status);
     };
 
     ////////////////////////////////////////////////////////////////////////////////

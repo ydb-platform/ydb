@@ -29,6 +29,7 @@ namespace NKikimr {
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvLocalSyncData::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr &ev) const;
+        bool WouldAllowOsirisPut() const;
         bool Allow(const TActorContext &ctx, TEvRecoveredHugeBlob::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvDetectedPhantomBlob::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev, bool hasExistingEntry) const;

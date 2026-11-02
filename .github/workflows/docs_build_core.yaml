@@ -10,10 +10,48 @@ on:
         type: string
 
 jobs:
+  check-docs-changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - name: Check whether documentation changed
+        id: check
+        uses: actions/github-script@v8
+        env:
+          FEATURE_FLAG_DEFAULTS_ENABLED: ${{ vars.FEATURE_FLAG_DEFAULTS_ENABLED }}
+        with:
+          script: |
+            if (process.env.FEATURE_FLAG_DEFAULTS_ENABLED !== 'false' || context.eventName === 'workflow_dispatch') {
+              core.setOutput('build', 'true');
+              return;
+            }
+
+            try {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              });
+              const docsChanged = files.some(({ filename }) =>
+                filename.startsWith('ydb/docs/') || filename.startsWith('.github/workflows/docs_'));
+              core.setOutput('build', String(docsChanged));
+              if (!docsChanged) core.notice('Skipping documentation build for code-only changes while feature flag defaults are disabled');
+            } catch (error) {
+              core.warning(`Could not inspect PR files; building documentation: ${error.message}`);
+              core.setOutput('build', 'true');
+            }
+
   build-docs:
+    needs: check-docs-changes
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.state == 'open'
+      needs.check-docs-changes.outputs.build == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.pull_request.state == 'open')
     # Include event_name so rebuild_docs workflow_dispatch does not cancel the
     # pull_request build. Dispatch runs on main and its check attaches to main
     # SHA; only the pull_request run updates the PR's build-docs status (#48409).

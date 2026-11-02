@@ -11,6 +11,31 @@
 
 namespace NKikimr {
 
+// With the scope validation of interconnect, a Board subscription gets its updates from a system replica, and the
+// tenant subscriber unsubscribes from it; the replica going down tells its subscribers so
+Y_UNIT_TEST_SUITE(TStateStorageEventScopes) {
+    bool Passes(ui32 type, const TScopeId& origin, const TScopeId& local) {
+        auto filter = std::make_shared<TEventFilter>();
+        RegisterStateStorageEventScopes(filter);
+        IEventHandle ev(TActorId(), type, 0, TActorId(), TActorId(), nullptr, 0, origin, {});
+        return filter->CheckIncomingEvent(ev, local);
+    }
+
+    const TScopeId SystemScope(0, 1);
+    const TScopeId TenantScope(1, 2);
+
+    Y_UNIT_TEST(BoardSubscriptionEventsPass) {
+        // from the system replica to the tenant subscriber
+        UNIT_ASSERT(Passes(TEvStateStorage::EvReplicaBoardInfoUpdate, SystemScope, TenantScope));
+        UNIT_ASSERT(Passes(TEvStateStorage::EvReplicaShutdown, SystemScope, TenantScope));
+        // from the tenant subscriber to the system replica
+        UNIT_ASSERT(Passes(TEvStateStorage::EvReplicaBoardUnsubscribe, TenantScope, SystemScope));
+        // the control: the initial lookup passes as it did
+        UNIT_ASSERT(Passes(TEvStateStorage::EvReplicaBoardLookup, TenantScope, SystemScope));
+        UNIT_ASSERT(Passes(TEvStateStorage::EvReplicaBoardInfo, SystemScope, TenantScope));
+    }
+}
+
 namespace NStateStorageOld {
 struct TStateStorageInfo : public TThrRefBase {
         struct TSelection {

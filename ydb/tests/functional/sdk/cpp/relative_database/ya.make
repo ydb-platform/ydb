@@ -14,6 +14,7 @@ USE_RECIPE(
 )
 
 REQUIREMENTS(cpu:2)
+
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)

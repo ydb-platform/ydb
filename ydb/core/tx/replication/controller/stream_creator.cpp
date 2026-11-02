@@ -8,6 +8,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -154,13 +155,13 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case ETopicOperation::CreateConsumer: {
             auto& consumer = settings.BeginAddConsumer(SrcConsumerName);
             if (IsOwnedChangefeed()) {
-                consumer.Important(false).AvailabilityPeriod(ConsumerAvailabilityPeriod);
+                consumer.Important(ConsumerImportant).AvailabilityPeriod(ConsumerAvailabilityPeriod);
             }
             break;
         }
         case ETopicOperation::ConfigureConsumer:
             settings.BeginAlterConsumer(SrcConsumerName)
-                .SetImportant(false)
+                .SetImportant(ConsumerImportant)
                 .SetAvailabilityPeriod(ConsumerAvailabilityPeriod);
             break;
         case ETopicOperation::SetRetention:
@@ -217,8 +218,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
 
         if (IsOwnedChangefeed() && TopicOperation != ETopicOperation::SetRetention) {
-            // Keep the bootstrap retention until the consumer's finite
-            // availability has been installed and confirmed by the source.
+            // Keep the bootstrap retention until the consumer's protection
+            // has been installed and confirmed by the source.
             return CheckConsumerExists(true);
         }
 
@@ -274,9 +275,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         });
 
         if (consumer != consumers.end() && VerifyConsumerSettings) {
-            if (consumer->GetImportant() || consumer->GetAvailabilityPeriod() != ConsumerAvailabilityPeriod) {
+            if (consumer->GetImportant() != ConsumerImportant || consumer->GetAvailabilityPeriod() != ConsumerAvailabilityPeriod) {
                 NYdb::NIssue::TIssues issues;
-                issues.AddIssue("Source did not apply the replication consumer's finite availability period");
+                issues.AddIssue("Source did not apply the replication consumer's availability policy");
                 return Reply(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
             }
             return AlterTopic(ETopicOperation::SetRetention);
@@ -410,7 +411,8 @@ public:
             bool initialScan,
             bool describeOnly,
             TDuration streamRetentionPeriod,
-            TDuration consumerAvailabilityPeriod)
+            TDuration consumerAvailabilityPeriod,
+            bool consumerImportant)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -427,6 +429,7 @@ public:
         }, schemaChanges, initialScan))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
+        , ConsumerImportant(consumerImportant)
         , NeedCreate(needCreate)
         , DescribeOnly(describeOnly)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
@@ -436,10 +439,10 @@ public:
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (!DescribeOnly && IsOwnedChangefeed()
-            && (StreamRetentionPeriod < TDuration::Seconds(1) || ConsumerAvailabilityPeriod < TDuration::Seconds(1)))
+            && (StreamRetentionPeriod < TDuration::Seconds(1) || (!ConsumerImportant && !ConsumerAvailabilityPeriod)))
         {
             NYdb::NIssue::TIssues issues;
-            issues.AddIssue("Replication stream retention and consumer availability must be at least one second");
+            issues.AddIssue("Replication stream retention must be at least one second and finite consumer availability must be positive");
             return Finish(NYdb::TStatus(NYdb::EStatus::BAD_REQUEST, std::move(issues)));
         }
 
@@ -473,6 +476,7 @@ private:
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const TDuration StreamRetentionPeriod;
     const TDuration ConsumerAvailabilityPeriod;
+    const bool ConsumerImportant;
     ETopicOperation TopicOperation = ETopicOperation::CreateConsumer;
     bool VerifyConsumerSettings = false;
     const bool NeedCreate;
@@ -494,6 +498,11 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
     const bool schemaChanges = AppData()->FeatureFlags.GetEnableAsyncReplicationSchemaChanges();
     const bool initialScan = config.GetInitialScan() || target->IsIndexBuild();
+    const bool consumerImportant = !config.HasTransferSpecific() && config.GetAvailabilityPeriod().HasUnlimited();
+    // Preserve the cluster-wide finite window for legacy configurations without a policy.
+    const auto consumerAvailabilityPeriod = consumerImportant ? TDuration::Zero()
+        : config.GetAvailabilityPeriod().HasDuration() ? GetDuration(config.GetAvailabilityPeriod().GetDuration())
+        : TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
@@ -501,7 +510,7 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
         supportsTopicAutopartitioning, needCreate, schemaChanges, initialScan, describeOnly,
         TDuration::Seconds(AppData()->ReplicationConfig.GetStreamRetentionPeriodSeconds()),
-        TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds()));
+        consumerAvailabilityPeriod, consumerImportant);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
@@ -509,11 +518,11 @@ IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
         bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool initialScan, bool describeOnly,
-        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod)
+        TDuration streamRetentionPeriod, TDuration consumerAvailabilityPeriod, bool consumerImportant)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
         streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
-        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod);
+        schemaChanges, needCreate, initialScan, describeOnly, streamRetentionPeriod, consumerAvailabilityPeriod, consumerImportant);
 }
 
 }

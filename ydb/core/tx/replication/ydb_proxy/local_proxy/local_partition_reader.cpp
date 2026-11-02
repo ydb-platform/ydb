@@ -38,7 +38,7 @@ public:
     TLocalTopicPartitionReaderActor(
             const TActorId& parent,
             const std::string& database,
-            TEvYdbProxy::TTopicReaderSettings& settings)
+            TEvYdbProxy::TTopicReaderSettings&& settings)
         : TBaseLocalTopicPartitionActor(
             database,
             settings.GetBase().Topics_[0].Path_,
@@ -329,8 +329,16 @@ private:
             }
             bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
             if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
-                const auto* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
-                data = codec->Decompress(proto.GetData());
+                try {
+                    const auto* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
+                    data = codec->Decompress(proto.GetData());
+                } catch (...) {
+                    auto error = MakeError(NYdb::EStatus::EXTERNAL_ERROR, MakeDecompressionIssue(
+                        TString(TopicPath), PartitionId, result.GetOffset(), CurrentExceptionMessage(), proto.codec() + 1));
+                    error->FailureKind = TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError;
+                    Send(Parent, std::move(error));
+                    return PassAway();
+                }
                 isCompressed = false;
             } else {
                 data = std::move(*proto.MutableData());
@@ -388,7 +396,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev
     AFL_VERIFY(1 == topics.size())("topic count", topics.size());
     AFL_VERIFY(1 == topics.at(0).PartitionIds_.size())("partition count", topics.at(0).PartitionIds_.size());
 
-    auto reader = RegisterWithSameMailbox(new TLocalTopicPartitionReaderActor(ev->Sender, Database, settings));
+    auto reader = RegisterWithSameMailbox(new TLocalTopicPartitionReaderActor(ev->Sender, Database, std::move(settings)));
     Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader), 0, ev->Cookie);
 }
 

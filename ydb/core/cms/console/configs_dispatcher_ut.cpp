@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/cms/console/ut_configs_dispatcher/ut_private_database_config.pb.h>
 #include <ydb/library/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -215,6 +216,7 @@ struct TEvPrivate {
     struct TEvGotNotification : public TEventLocal<TEvGotNotification, EvGotNotification> {
         TConfigId ConfigId;
         NKikimrConfig::TAppConfig Config;
+        bool Local = false;
     };
 
     struct TEvComplete : public TEventLocal<TEvComplete, EvComplete> {};
@@ -285,6 +287,7 @@ public:
             auto *event = new TEvPrivate::TEvGotNotification;
             event->ConfigId.Load(rec.GetConfigId());
             event->Config = rec.GetConfig();
+            event->Local = rec.GetLocal();
             ctx.Send(Sink, event);
         }
 
@@ -426,6 +429,70 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
         auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
         UNIT_ASSERT(!notification->Config.HasCompositeConveyorConfig());
+    }
+
+    void CheckLateCmsConfigSubscription(bool yaml) {
+        NKikimrConfig::TAppConfig config;
+        auto* selfHeal = config.MutableCmsConfig()->MutableSentinelConfig()->MutableStateStorageSelfHealConfig();
+        selfHeal->SetEnable(true);
+        selfHeal->SetPileupReplicas(true);
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), yaml ? NKikimrConfig::TAppConfig() : config);
+        TAutoPtr<IEventHandle> handle;
+        auto dispatcher = InitConfigsDispatcher(runtime);
+
+        // Receiving an unrelated kind ensures the dispatcher is initialized
+        // before CMS subscribes.
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        if (yaml) {
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  log_config:
+    cluster_name: cms-config-ready
+  cms_config:
+    sentinel_config:
+      state_storage_self_heal_config:
+        enable: true
+        pileup_replicas: true
+)");
+            auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(notification->Config.GetLogConfig().GetClusterName(), "cms-config-ready");
+        }
+
+        // Cover a new subscription and a new subscriber joining an already
+        // acknowledged subscription, as after a CMS tablet restart.
+        for (ui32 i = 0; i < 2; ++i) {
+            AddSubscriber(runtime, {
+                (ui32)NKikimrConsole::TConfigItem::CmsConfigItem,
+                (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
+            });
+            auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+            UNIT_ASSERT_C(notification->Local,
+                "CMS ignores dispatcher notifications without Local=true");
+            const auto& received = notification->Config.GetCmsConfig()
+                .GetSentinelConfig().GetStateStorageSelfHealConfig();
+            UNIT_ASSERT(received.GetEnable());
+            UNIT_ASSERT(received.GetPileupReplicas());
+
+            // Process the subscriber's ACK before adding another subscriber.
+            runtime.Send(new IEventHandle(dispatcher, runtime.Sender,
+                new TEvConfigsDispatcher::TEvGetStateRequest()));
+            runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
+        }
+    }
+
+    Y_UNIT_TEST(TestLateCmsConfigSubscription) {
+        CheckLateCmsConfigSubscription(false);
+    }
+
+    Y_UNIT_TEST(TestLateCmsYamlConfigSubscription) {
+        CheckLateCmsConfigSubscription(true);
     }
 
     Y_UNIT_TEST(TestSubscriptionNotification) {
@@ -2827,6 +2894,199 @@ selector_config:
         }
         UNIT_ASSERT_VALUES_EQUAL(opaqueSubscriber->parsedCnt.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(opaqueSubscriber->resetCnt.load(), 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TConfigsDispatcherDatabaseConfigTypesTests) {
+
+    const TString PermissiveTenantAttribute = TString(TENANT_ATTR_ALLOW_ALL_TYPES_IN_DATABASE_CONFIG);
+    const TString MainConfig = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+  log_config:
+    cluster_name: main
+    default_level: 5
+)";
+    const TString DatabaseConfigTemplate = R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  log_config:
+    cluster_name: CLUSTER_NAME
+    default_level: 6
+)";
+
+    // Configure a dispatcher runtime that can create databases through a real SchemeShard.
+    TTenantTestConfig DatabaseConfigTypesTestConfig()
+    {
+        TTenantTestConfig config = DefaultConsoleTestConfig();
+        config.FakeSchemeShard = false;
+        config.Domains[0].Subdomains.clear();
+        config.Nodes[0].TenantPoolConfig.StaticSlots.clear();
+        return config;
+    }
+
+    // Build a versioned database config with an unmarked log_config section.
+    TString MakeDatabaseConfig(ui32 version, const TString& clusterName)
+    {
+        TString config = DatabaseConfigTemplate;
+        SubstGlobal(config, "VERSION", ToString(version));
+        SubstGlobal(config, "CLUSTER_NAME", clusterName);
+        return config;
+    }
+
+    // Check the parsed log config delivered by ConfigsDispatcher to the end subscriber.
+    void CheckLogConfigNotification(TTenantTestRuntime& runtime, const TString& clusterName, ui32 level)
+    {
+        TAutoPtr<IEventHandle> handle;
+        auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle, TDuration::Seconds(1));
+        UNIT_ASSERT_C(notification, "The log subscriber must receive a config notification");
+        UNIT_ASSERT(notification->Config.HasLogConfig());
+        UNIT_ASSERT_VALUES_EQUAL(notification->Config.GetLogConfig().GetClusterName(), clusterName);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Config.GetLogConfig().GetDefaultLevel(), level);
+    }
+
+    // Check that a rejected database config produces no notification for the end subscriber.
+    void CheckNoLogConfigNotification(TTenantTestRuntime& runtime)
+    {
+        TAutoPtr<IEventHandle> handle;
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle, TDuration::MilliSeconds(100)));
+    }
+
+    // Verify that unmarked database config updates reach the subscriber and clearing restores the main config.
+    Y_UNIT_TEST(TestEndToEndUnmarkedConfigType) {
+        // Start a database node and establish the subscriber's main-config values.
+        NKikimrConfig::TAppConfig appConfig;
+        auto* label = appConfig.AddLabels();
+        label->SetName("tenant");
+        label->SetValue(TENANT1_1_NAME);
+        appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+        auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
+        TTenantTestRuntime runtime(DatabaseConfigTypesTestConfig(), appConfig);
+        runtime.GetAppData().ConfigSwissKnife = configValidator.get();
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfig);
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        CheckLogConfigNotification(runtime, "main", 5);
+
+        // Reject the unmarked section by default without delivering a config change.
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, MakeDatabaseConfig(0, "database"),
+            "is not allowed to be used in the database configuration");
+        CheckNoLogConfigNotification(runtime);
+
+        // Enable the permission and verify the parsed database values at the subscriber.
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantAttribute, "true");
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, MakeDatabaseConfig(0, "database"));
+        CheckLogConfigNotification(runtime, "database", 6);
+
+        // Replace the database override and verify that the next version reaches the subscriber.
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, MakeDatabaseConfig(1, "updated"));
+        CheckLogConfigNotification(runtime, "updated", 6);
+
+        // Clear the database override and verify that the subscriber returns to the main config.
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 2
+config: {}
+)");
+        CheckLogConfigNotification(runtime, "main", 5);
+    }
+
+    // Verify that an unmarked selector config reaches matching nodes and leaves other nodes on the main config.
+    Y_UNIT_TEST(TestEndToEndUnmarkedSelectorConfig) {
+        for (const TString& nodeType : {"compute", "storage"}) {
+            // Enable both permissions on a database node with an explicit selector label.
+            NKikimrConfig::TAppConfig appConfig;
+            auto* label = appConfig.AddLabels();
+            label->SetName("tenant");
+            label->SetValue(TENANT1_1_NAME);
+            label = appConfig.AddLabels();
+            label->SetName("node_type");
+            label->SetValue(nodeType);
+            appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+            auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
+            TTenantTestRuntime runtime(DatabaseConfigTypesTestConfig(), appConfig);
+            runtime.GetAppData().ConfigSwissKnife = configValidator.get();
+            CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}},
+                {{PermissiveTenantAttribute, "true"}, {TString(TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS), "true"}});
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfig);
+            AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+            CheckLogConfigNotification(runtime, "main", 5);
+
+            // Submit an unmarked config type that appears only inside a database selector.
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, R"(
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config: {}
+selector_config:
+- description: compute log config
+  selector:
+    node_type: compute
+  config:
+    log_config: !inherit
+      cluster_name: database
+      default_level: 6
+)");
+
+            // Check the effective values at the end subscriber for matching and non-matching labels.
+            if (nodeType == "compute") {
+                CheckLogConfigNotification(runtime, "database", 6);
+            } else {
+                CheckNoLogConfigNotification(runtime);
+            }
+            AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+            CheckLogConfigNotification(runtime, nodeType == "compute" ? "database" : "main",
+                nodeType == "compute" ? 6 : 5);
+        }
+    }
+
+    // Verify that disabling or deleting permission preserves the dispatched config across a Console restart.
+    Y_UNIT_TEST(TestUnmarkedConfigKeepsWorkingAfterPermissionRemoved) {
+        for (const TString& value : {"false", ""}) {
+            // Create a database with permission and deliver an unmarked override to its subscriber.
+            NKikimrConfig::TAppConfig appConfig;
+            auto* label = appConfig.AddLabels();
+            label->SetName("tenant");
+            label->SetValue(TENANT1_1_NAME);
+            appConfig.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+            auto configValidator = NYamlConfig::CreateDefaultConfigSwissKnife();
+            TTenantTestRuntime runtime(DatabaseConfigTypesTestConfig(), appConfig);
+            runtime.GetAppData().ConfigSwissKnife = configValidator.get();
+            CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}},
+                {{PermissiveTenantAttribute, "true"}});
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfig);
+            AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+            CheckLogConfigNotification(runtime, "main", 5);
+            const TString databaseConfig = MakeDatabaseConfig(0, "database");
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, databaseConfig);
+            CheckLogConfigNotification(runtime, "database", 6);
+
+            // Revoke permission and reject a new override without notifying the subscriber.
+            CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                PermissiveTenantAttribute, value);
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, MakeDatabaseConfig(1, "rejected"),
+                "is not allowed to be used in the database configuration");
+            CheckNoLogConfigNotification(runtime);
+
+            // Restart Console and verify that a new subscriber still receives the accepted override.
+            GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+            CheckDatabaseConfigReplacedWith(runtime, TENANT1_1_NAME, databaseConfig);
+            AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+            CheckLogConfigNotification(runtime, "database", 6);
+        }
     }
 }
 

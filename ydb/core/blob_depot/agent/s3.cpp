@@ -25,11 +25,21 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId) {
+        if (!LifetimeToken) {
+            LifetimeToken = std::make_shared<TLifetimeToken>();
+        }
+
         TPendingS3Read read{
             .Key = key,
             .Offset = offset,
             .Len = len,
-            .Finish = std::move(finish),
+            // the query may end (and go away) while the read is still queued or in flight
+            .Finish = [lifetimeToken = std::weak_ptr<TLifetimeToken>(LifetimeToken), finish = std::move(finish)](
+                    std::optional<TString> data, const char *error) {
+                if (!lifetimeToken.expired()) {
+                    finish(std::move(data), error);
+                }
+            },
             .ReadId = readId,
             .Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
                 "BlobDepotAgent.ReadS3", NWilson::EFlags::AUTO_END),
@@ -85,9 +95,18 @@ namespace NKikimr::NBlobDepot {
                 , Read(std::move(read))
             {}
 
+            // the read completes in the context of the agent, which owns the queries waiting for it
             void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
-                auto& msg = *ev->Get();
+                InvokeOtherActor(Agent, &TBlobDepotAgent::Invoke, [&] { Process(*ev->Get()); });
+                PassAway();
+            }
 
+            void HandleUndelivered() {
+                InvokeOtherActor(Agent, &TBlobDepotAgent::Invoke, [&] { ProcessUndelivered(); });
+                PassAway();
+            }
+
+            void Process(NWrappers::TEvExternalStorage::TEvGetObjectResponse& msg) {
                 YDB_LOG_DEBUG("Received TEvGetObjectResponse",
                     {"marker", "BDA55"},
                     {"agentId", Agent.LogId},
@@ -101,7 +120,6 @@ namespace NKikimr::NBlobDepot {
                     const ui64 bytes = msg.Body.size();
                     Read.Complete(std::move(msg.Body), "");
                     Agent.OnS3GetCompleted(/*success=*/true, bytes);
-                    PassAway();
                     return;
                 }
 
@@ -131,7 +149,6 @@ namespace NKikimr::NBlobDepot {
                         ++Read.SlowDownRetries;
                         Agent.IssueOrEnqueueS3Read(std::move(Read));
                     }
-                    PassAway();
                     return;
                 }
 
@@ -141,10 +158,9 @@ namespace NKikimr::NBlobDepot {
                     Read.Complete(std::nullopt, error.GetMessage().c_str());
                 }
                 Agent.OnS3GetCompleted(/*success=*/false, 0);
-                PassAway();
             }
 
-            void HandleUndelivered() {
+            void ProcessUndelivered() {
                 YDB_LOG_DEBUG("Received TEvUndelivered",
                     {"marker", "BDA56"},
                     {"agentId", Agent.LogId},
@@ -152,7 +168,6 @@ namespace NKikimr::NBlobDepot {
                 ++*Agent.S3GetsError;
                 Read.Complete(std::nullopt, "wrapper actor terminated");
                 Agent.OnS3GetCompleted(/*success=*/false, 0);
-                PassAway();
             }
 
             STRICT_STFUNC(StateFunc,
@@ -273,7 +288,9 @@ namespace NKikimr::NBlobDepot {
     TActorId TBlobDepotAgent::TQuery::IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id, TS3Locator locator) {
         class TWriteActor : public TActor<TWriteActor> {
             std::weak_ptr<TLifetimeToken> LifetimeToken;
-            TQuery* const Query;
+            TBlobDepotAgent& Agent;
+            TQuery* const Query; // valid only while LifetimeToken is not expired
+            const ui64 QueryId;
             TLogoBlobID Id;
             TS3Locator Locator;
 
@@ -281,7 +298,9 @@ namespace NKikimr::NBlobDepot {
             TWriteActor(std::weak_ptr<TLifetimeToken> lifetimeToken, TQuery *query, TLogoBlobID id, TS3Locator locator)
                 : TActor(&TThis::StateFunc)
                 , LifetimeToken(std::move(lifetimeToken))
+                , Agent(query->Agent)
                 , Query(query)
+                , QueryId(query->QueryId)
                 , Id(id)
                 , Locator(locator)
             {}
@@ -302,9 +321,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
-                InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
-                    auto& Agent = Query->Agent;
-                    const auto& QueryId = Query->QueryId;
+                InvokeOtherActor(Agent, &TBlobDepotAgent::Invoke, [&] {
                     if (!LifetimeToken.expired()) {
                         Agent.IncS3HttpErrorCounter("Puts", httpCode);
 

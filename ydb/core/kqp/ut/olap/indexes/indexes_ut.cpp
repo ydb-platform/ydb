@@ -218,6 +218,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ------
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
+        ------
+        WAIT_BACKGROUND_PROCESSES
     )";
 
     Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage, ELocalIndexAsSchemeObject) {
@@ -249,6 +251,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ------
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
+        ------
+        WAIT_BACKGROUND_PROCESSES
     )";
 
     Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {

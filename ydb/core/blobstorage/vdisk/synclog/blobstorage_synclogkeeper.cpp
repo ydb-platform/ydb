@@ -158,6 +158,11 @@ namespace NKikimr {
                 PerformActions(ctx);
             }
 
+            void Handle(TEvSyncLogDbBirthLsn::TPtr& ev, const TActorContext& ctx) {
+                KeepState.AdvanceRecoveryBase(ev->Get()->DbBirthLsn);
+                PerformActions(ctx);
+            }
+
             void Handle(TEvSyncLogTrim::TPtr &ev, const TActorContext &ctx) {
                 const ui64 trimTailLsn = ev->Get()->Lsn;
                 KeepState.TrimTailEvent(trimTailLsn);
@@ -318,6 +323,7 @@ namespace NKikimr {
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
                 HFunc(TEvSyncLogTrim, Handle)
+                HFunc(TEvSyncLogDbBirthLsn, Handle)
                 HFunc(TEvSyncLogFreeChunk, Handle)
                 HFunc(TEvSyncLogCommitDone, Handle)
                 HFunc(TEvSyncLogDiskOutOfSpace, Handle)

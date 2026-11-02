@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/ydb)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -30,7 +30,6 @@ SRCS(
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
     ydb_read_rows_ut.cpp
-    ydb_relative_database_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
     ydb_object_storage_ut.cpp

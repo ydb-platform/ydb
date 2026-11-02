@@ -138,11 +138,7 @@
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/library @ydb-platform/Engineering
 /ydb/tests/stress @ydb-platform/engineering
-/ydb/core/control/ut @ydb-platform/engineering
-/ydb/core/graph @ydb-platform/engineering
 /ydb/tests/functional/minidumps @ydb-platform/engineering
-/ydb/tests/functional/restarts @ydb-platform/engineering
-/ydb/tests/functional/wardens @ydb-platform/engineering
 
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/core/subsystems @ydb-platform/blobstorage
@@ -216,6 +212,9 @@
 /ydb/core/tx/datashard/ut_incremental_backup @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
 /ydb/services/ydb/backup_ut @ydb-platform/core
+/ydb/core/control/ut @ydb-platform/core
+/ydb/tests/functional/restarts @ydb-platform/core
+/ydb/tests/functional/wardens @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/core/raw_socket/ut @ydb-platform/topics
@@ -284,6 +283,7 @@
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
+/ydb/core/graph @ydb-platform/ui-backend
 
 #NBS / Network Blockstore TEAM:@ydb-platform/nbs
 /ydb/services/nbs/ut @ydb-platform/nbs

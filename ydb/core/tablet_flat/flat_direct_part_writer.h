@@ -269,6 +269,10 @@ namespace NTabletFlatExecutor {
                         auto& location = loadedPage.Location;
                         auto sharedPage = MakeIntrusive<TPage>(location.Offset, location.Size,
                             location.Type, location.Crc32, nullptr);
+                        if (loadedPage.Location.Type == NTable::NPage::EPage::Globs) {
+                            Y_ENSURE(!saveCompactedPages->GlobsPageData);
+                            saveCompactedPages->GlobsPageData = loadedPage.Data;
+                        }
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {

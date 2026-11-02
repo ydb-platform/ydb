@@ -120,6 +120,7 @@ private:
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 page) const;
+    TStringBuf GetMonitoringBootStatus(const TWorkerId& id) const;
 
     // state functions
     STFUNC(StateInit);

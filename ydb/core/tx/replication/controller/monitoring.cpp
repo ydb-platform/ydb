@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
+#include <ydb/core/util/proto_duration.h>
 
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -36,6 +37,21 @@ TString Text(bool value) {
 
 TString Lag(const std::optional<TDuration>& value) {
     return value ? value->ToString() : "unknown";
+}
+
+TString AvailabilityPeriod(const NKikimrReplication::TReplicationConfig& config) {
+    if (config.HasTransferSpecific() && config.GetTransferSpecific().GetTarget().HasConsumerName()) {
+        return "external consumer";
+    }
+    const auto& policy = config.GetAvailabilityPeriod();
+    if (!config.HasTransferSpecific() && policy.HasUnlimited()) {
+        return "unlimited";
+    }
+    if (policy.HasDuration()) {
+        return GetDuration(policy.GetDuration()).ToString() + " (configured)";
+    }
+    return TDuration::Seconds(AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds()).ToString()
+        + " (cluster default)";
 }
 
 // Every cell is escaped here, including paths, issues and protobuf diagnostics.
@@ -101,8 +117,9 @@ auto SortedKeys(const TMap& map) {
     return keys;
 }
 
-void Metric(IOutputStream& out, TStringBuf name, size_t value) {
-    out << "<div class='rc-metric'><span>" << name << "</span><strong>" << value << "</strong></div>";
+template <typename T>
+void Metric(IOutputStream& out, TStringBuf name, const T& value) {
+    out << "<div class='rc-metric'><span>" << name << "</span><strong>" << Text(value) << "</strong></div>";
 }
 
 const char* const Styles = R"HTML(
@@ -246,6 +263,62 @@ auto StorageValue(const typename TColumn::Type& value) {
 
 } // anonymous namespace
 
+TStringBuf TController::GetMonitoringBootStatus(const TWorkerId& id) const {
+    if (!BootQueue.contains(id)) {
+        return "not queued";
+    }
+    if (ReplicationsWithSourceOffsetMismatch.contains(id.ReplicationId())) {
+        return "blocked by source offset mismatch";
+    }
+    if (!IsValidWorker(id)) {
+        return "replication or target is not ready";
+    }
+    const auto worker = Workers.find(id);
+    if (worker == Workers.end()) {
+        return "worker missing";
+    }
+    if (worker->second.HasSession()) {
+        return "already assigned";
+    }
+
+    // Inspect the same prerequisites as ProcessBootQueue without choosing a node.
+    const auto replication = Find(id.ReplicationId());
+    if (!replication->IsCredentialsReady()) {
+        return "waiting for credentials";
+    }
+    const auto* target = replication->FindTarget(id.TargetId());
+    const auto* base = replication->FindBaseTableTarget(*target);
+    if (base && base->GetStreamState() == TReplication::EStreamState::Creating) {
+        return "waiting for base stream";
+    }
+    if (base && !base->GetStreamSchemaChanges().has_value()) {
+        return "waiting for base stream capabilities";
+    }
+    const auto& tenant = replication->GetDatabase();
+    if (tenant.empty()) {
+        return "waiting for database resolution";
+    }
+    if (!NodesManager.HasTenant(tenant)) {
+        return "waiting for node discovery";
+    }
+    if (!NodesManager.HasNodes(tenant)) {
+        return "waiting for tenant nodes";
+    }
+    const bool needsSourceOffsets = TracksSourceOffsets(id) && ProcessedSourceOffsets.contains(id);
+    bool hasReadySession = false;
+    for (auto node : NodesManager.GetNodes(tenant)) {
+        const auto session = Sessions.find(node);
+        if (session == Sessions.end() || !session->second.IsReady()) {
+            continue;
+        }
+        hasReadySession = true;
+        if (!needsSourceOffsets || session->second.SupportsSourceOffsets) {
+            return "eligible nodes available";
+        }
+    }
+    return hasReadySession ? "waiting for source-offset support" : "waiting for ready session";
+}
+
 bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 page) const {
     const auto matches = [replicationId](ui64 id) { return !replicationId || id == replicationId; };
     bool hasMore = false;
@@ -255,9 +328,16 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     size_t targets = 0;
     size_t errors = 0;
     size_t running = 0;
+    size_t unavailableLag = 0;
+    std::optional<TDuration> maxLag;
     for (const auto& [_, replication] : Replications) {
         targets += replication->GetTargets().size();
         errors += replication->GetState() == TReplication::EState::Error;
+        if (const auto lag = replication->GetLag()) {
+            maxLag = Max(maxLag.value_or(TDuration::Zero()), *lag);
+        } else {
+            ++unavailableLag;
+        }
     }
     for (const auto& [_, worker] : Workers) {
         running += worker.HasSession();
@@ -271,6 +351,10 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     Metric(out, "Workers total", Workers.size());
     Metric(out, "Sessions", Sessions.size());
     Metric(out, "Replication errors", errors);
+    Metric(out, "Source offset mismatches", ReplicationsWithSourceOffsetMismatch.size());
+    Metric(out, "Maximum known lag", Lag(maxLag));
+    Metric(out, "Replications with unavailable lag", unavailableLag);
+    Metric(out, "Stopping workers", StoppingWorkers.size());
     Metric(out, "Boot / stop / remove queued", BootQueue.size() + StopQueue.size() + RemoveQueue.size());
     Metric(out, "Schema barriers", SchemaBarriers.size());
     out << "</div>";
@@ -279,7 +363,8 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
     }
 
     {
-        auto table = makeTable("Replications", {"ID", "Path ID", "Database", "State", "Desired state", "Lag",
+        auto table = makeTable("Replications", {"ID", "Path ID", "Database", "State", "Desired state",
+            "Credentials ready", "Availability period", "Source offset mismatch", "Lag",
             "Targets", "Next target ID", "Committed version", "Deferred alter", "DB resolve attempts left", "Issue"});
         for (auto id : SortedKeys(Replications)) {
             if (!matches(id)) {
@@ -289,7 +374,8 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             auto committed = CommittedVersions.find(id);
             auto unresolved = UnresolvedDatabaseReplications.find(id);
             table.Row(id, replication.GetPathId(), replication.GetDatabase(), replication.GetState(),
-                replication.GetDesiredState(), Lag(replication.GetLag()), replication.GetTargets().size(),
+                replication.GetDesiredState(), replication.IsCredentialsReady(), AvailabilityPeriod(replication.GetConfig()),
+                ReplicationsWithSourceOffsetMismatch.contains(id), Lag(replication.GetLag()), replication.GetTargets().size(),
                 replication.GetNextTargetId(), committed == CommittedVersions.end() ? "unknown" : ToString(committed->second),
                 DeferredAlters.contains(id), unresolved == UnresolvedDatabaseReplications.end() ? "resolved" : ToString(ui32(unresolved->second)),
                 replication.GetIssue());
@@ -316,8 +402,8 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
         }
     }
     {
-        auto table = makeTable("Workers", {"Replication", "Target", "Worker / partition", "Node", "Has command", "Data ended",
-            "Heartbeat", "Pending heartbeat", "Quorum participant", "Boot queued", "Remove queued"});
+        auto table = makeTable("Workers", {"Replication", "Target", "Worker / partition", "Node", "Data ended",
+            "Heartbeat", "Pending heartbeat", "Quorum participant", "Boot queued", "Boot status", "Stopping", "Remove queued"});
         for (const auto& id : SortedKeys(Workers)) {
             if (!matches(id.ReplicationId())) {
                 continue;
@@ -325,16 +411,16 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             const auto& worker = Workers.at(id);
             auto pending = PendingHeartbeats.find(id);
             table.Row(id.ReplicationId(), id.TargetId(), id.WorkerId(), worker.HasSession() ? ToString(worker.GetSession()) : "unassigned",
-                worker.HasCommand(), worker.IsDataEnded(), worker.HasHeartbeat() ? ToString(worker.GetHeartbeat()) : "unknown",
+                worker.IsDataEnded(), worker.HasHeartbeat() ? ToString(worker.GetHeartbeat()) : "unknown",
                 pending == PendingHeartbeats.end() ? "none" : ToString(pending->second), IsHeartbeatParticipant(id),
-                BootQueue.contains(id), RemoveQueue.contains(id));
+                BootQueue.contains(id), GetMonitoringBootStatus(id), StoppingWorkers.contains(id), RemoveQueue.contains(id));
         }
     }
     {
-        auto table = makeTable("Sessions (all nodes)", {"Node", "Ready", "Attached workers"});
+        auto table = makeTable("Sessions (all nodes)", {"Node", "Ready", "Supports source offsets", "Attached workers"});
         for (auto node : SortedKeys(Sessions)) {
             const auto& session = Sessions.at(node);
-            table.Row(node, session.IsReady(), session.GetWorkers().size());
+            table.Row(node, session.IsReady(), session.SupportsSourceOffsets, session.GetWorkers().size());
         }
     }
     {
@@ -349,6 +435,14 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
         table.Row("Heartbeat participants", CountHeartbeatParticipants());
         table.Row("Pending heartbeats", PendingHeartbeats.size());
         table.Row("Queue processing scheduled", ProcessQueuesScheduled);
+        table.Row("Processed source offsets", ProcessedSourceOffsets.size());
+        table.Row("Worker lag timeout", WorkerLagTimeout);
+        table.Row("Lag expiry entries", LagExpiryQueue.GetSize());
+        table.Row("Lag expiry scheduled", LagExpiryScheduled);
+        const auto deadline = LagExpiryQueue.GetNextDeadline();
+        const auto now = TActivationContext::Monotonic();
+        table.Row("Next lag expiry in", deadline
+            ? (*deadline > now ? (*deadline - now).ToString() : TString("due")) : TString("none"));
         table.Row("Create stream: queued", RequestedCreateStream.size());
         table.Row("Create stream: in flight", InflightCreateStream.size());
         table.Row("Drop stream: queued", RequestedDropStream.size());
@@ -363,28 +457,41 @@ bool TController::RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 
             ? TStringBuilder() << ActiveSchemaTargetFlush->first << "/" << ActiveSchemaTargetFlush->second : TString("none"));
     }
     {
-        auto table = makeTable("Worker queues", {"Queue", "Replication", "Target", "Worker", "Node"});
+        auto table = makeTable("Worker queues", {"Queue", "Replication", "Target", "Worker", "Node", "Boot status"});
         // Queue membership can outlive a live worker entry.
         auto boot = TVector<TWorkerId>(BootQueue.begin(), BootQueue.end());
         Sort(boot);
         for (const auto& id : boot) {
             if (matches(id.ReplicationId())) {
-                table.Row("Boot", id.ReplicationId(), id.TargetId(), id.WorkerId(), "any");
+                table.Row("Boot", id.ReplicationId(), id.TargetId(), id.WorkerId(), "any", GetMonitoringBootStatus(id));
             }
         }
         auto stop = TVector<std::pair<TWorkerId, ui32>>(StopQueue.begin(), StopQueue.end());
         Sort(stop);
         for (const auto& [id, node] : stop) {
             if (matches(id.ReplicationId())) {
-                table.Row("Stop", id.ReplicationId(), id.TargetId(), id.WorkerId(), node);
+                table.Row("Stop", id.ReplicationId(), id.TargetId(), id.WorkerId(), node, "n/a");
             }
         }
         auto remove = TVector<TWorkerId>(RemoveQueue.begin(), RemoveQueue.end());
         Sort(remove);
         for (const auto& id : remove) {
             if (matches(id.ReplicationId())) {
-                table.Row("Remove", id.ReplicationId(), id.TargetId(), id.WorkerId(), "any");
+                table.Row("Remove", id.ReplicationId(), id.TargetId(), id.WorkerId(), "any", "n/a");
             }
+        }
+    }
+    {
+        // Offsets survive pause/resume and need not have a live Workers entry.
+        auto table = makeTable("Processed source offsets", {"Replication", "Target", "Worker / partition",
+            "Next offset", "Persisted next offset", "Worker present"});
+        for (const auto& id : SortedKeys(ProcessedSourceOffsets)) {
+            if (!matches(id.ReplicationId())) {
+                continue;
+            }
+            const auto& offset = ProcessedSourceOffsets.at(id);
+            table.Row(id.ReplicationId(), id.TargetId(), id.WorkerId(), offset.NextOffset,
+                offset.PersistedNextOffset ? ToString(*offset.PersistedNextOffset) : TString("unknown"), Workers.contains(id));
         }
     }
     {
@@ -520,9 +627,10 @@ public:
             return ReadTable<S::Replications, S::Replications::Id, S::Replications::PathOwnerId,
                 S::Replications::PathLocalId, S::Replications::Database, S::Replications::State,
                 S::Replications::DesiredState, S::Replications::Issue, S::Replications::NextTargetId,
-                S::Replications::DeferredAlter, S::Replications::CommittedStep, S::Replications::CommittedTxId>(db,
+                S::Replications::DeferredAlter, S::Replications::CommittedStep, S::Replications::CommittedTxId,
+                S::Replications::SourceOffsetMismatch>(db,
                 {"ID", "Path owner", "Path local ID", "Database", "State", "Desired state", "Issue", "Next target ID",
-                    "Deferred alter", "Committed step", "Committed tx ID"});
+                    "Deferred alter", "Committed step", "Committed tx ID", "Source offset mismatch"});
         } else if (TableName == "Targets") {
             return ReadTable<S::Targets, S::Targets::ReplicationId, S::Targets::Id, S::Targets::Kind,
                 S::Targets::SrcPath, S::Targets::DstPath, S::Targets::DstState, S::Targets::DstPathOwnerId,
@@ -541,6 +649,10 @@ public:
             return ReadTable<S::SrcStreams, S::SrcStreams::ReplicationId, S::SrcStreams::TargetId, S::SrcStreams::Name,
                 S::SrcStreams::State, S::SrcStreams::ConsumerName, S::SrcStreams::SchemaChanges>(db,
                 {"Replication", "Target", "Name", "State", "Consumer", "Schema changes"});
+        } else if (TableName == "ProcessedSourceOffsets") {
+            return ReadTable<S::ProcessedSourceOffsets, S::ProcessedSourceOffsets::ReplicationId,
+                S::ProcessedSourceOffsets::TargetId, S::ProcessedSourceOffsets::WorkerId, S::ProcessedSourceOffsets::NextOffset>(db,
+                {"Replication", "Target", "Worker", "Next offset"});
         } else if (TableName == "TxIds") {
             return ReadTable<S::TxIds, S::TxIds::VersionStep, S::TxIds::VersionTxId, S::TxIds::WriteTxId>(db,
                 {"Version step", "Version tx ID", "Write tx ID"});
@@ -569,7 +681,7 @@ public:
             << " rows per page. Runtime sessions and queues are not persisted. Configurations, credentials "
             << "and arbitrary binary system parameters are omitted.</p><nav class='rc-nav'>";
         for (TStringBuf name : {"Replications", "Targets", "SrcStreams", "Workers", "TxIds", "SysParams",
-                "SchemaBarrierWorkers", "IndexBuildWorkers"}) {
+                "SchemaBarrierWorkers", "IndexBuildWorkers", "ProcessedSourceOffsets"}) {
             out << "<a class='rc-button " << (name == TableName ? "rc-active" : "") << "' href='"
                 << Url(Self->TabletID(), "storage", 0, false, name) << "'>" << name << "</a>";
         }

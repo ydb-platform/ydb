@@ -124,7 +124,8 @@ struct TEvWorker {
             SCHEME_ERROR,
             UNAVAILABLE,
             OVERLOAD,
-            DATA_ERROR
+            DATA_ERROR,
+            DATA_LOSS,
         };
 
         EStatus Status;

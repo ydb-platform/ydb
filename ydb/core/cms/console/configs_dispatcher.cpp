@@ -1339,7 +1339,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         if (serialized != PathAliasesConfig) {
             try {
                 PathNormalizer = aliases.RulesSize()
-                    ? std::make_shared<NPathAliasing::TPathNormalizer>(aliases) : nullptr;
+                    ? std::make_shared<NPathAliasing::TPathNormalizer>(aliases, AppData()->Counters) : nullptr;
                 PathAliasesConfig = serialized;
                 AppData()->SetPathNormalizer(PathNormalizer);
                 if (AppData()->Mon) {

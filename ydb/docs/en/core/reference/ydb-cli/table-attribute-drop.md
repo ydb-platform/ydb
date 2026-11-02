@@ -1,6 +1,6 @@
 # table attribute drop
 
-With the `table attribute drop` command, you can drop a [custom attribute](../../concepts/datamodel/table.md) from your table.
+With the `table attribute drop` command, you can drop a [custom attribute](../../dev/custom-attributes.md) from your table.
 
 General format of the command:
 

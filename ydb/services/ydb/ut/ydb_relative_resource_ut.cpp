@@ -42,7 +42,7 @@ struct TResourceFixture {
             TDriver rootDriver(TDriverConfig()
                 .SetEndpoint(TStringBuilder() << "localhost:" << Server.GetPort()).SetDatabase("/Root")
                 .SetDiscoveryMode(EDiscoveryMode::Sync));
-            AssertSuccess(NScheme::TSchemeClient(rootDriver).MakeDirectory(parent).GetValueSync());
+            AssertSuccess(NYdb::NScheme::TSchemeClient(rootDriver).MakeDirectory(parent).GetValueSync());
         }
         Ydb::Cms::CreateDatabaseRequest request;
         request.set_path(database);

@@ -28,7 +28,7 @@ Banana,3,100,2024-01-02
 Apple,2,22,2024-03-04
 Pear,15,33,2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -84,7 +84,7 @@ Pear,15,33,2024-05-06'''
 Apple,2,22,2024-03-04
 Pear,15,33,2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits_noheader.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -188,7 +188,7 @@ Pear,15,33,2024-05-06'''
             ContentType='application/octet-stream',
         )
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -239,7 +239,7 @@ Pear,15,33,2024-05-06'''
             ContentType='text/plain',
         )
 
-        storage_connection_name = unique_prefix + "infer_disabled_bucket"
+        storage_connection_name = client.path(unique_prefix + "infer_disabled_bucket")
         client.create_external_data_source(storage_connection_name, "ibucket")
 
         sql = f'''
@@ -278,7 +278,7 @@ Pear,15,33,2024-05-06'''
 { "a" : [10, 20, 30] , "b" : { "key" : "value" } }
 { "a" : [10, 20, 30] , "b" : { "key" : "value" } }'''
         s3_client.put_object(Body=data, Bucket='fbucket', Key='unsupported.json', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "unsupported_bucket"
+        storage_connection_name = client.path(unique_prefix + "unsupported_bucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -312,7 +312,7 @@ Banana,3,
 Apple,2,
 Pear,15,'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -363,7 +363,7 @@ Banana,,,2024-01-02
 Apple,2,22,
 ,15,33,2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -422,7 +422,7 @@ Apple,2,22,
 
         s3_client.put_object(Body=read_data_1, Bucket='fbucket', Key='test/sub dir/1.csv', ContentType='text/plain')
         s3_client.put_object(Body=read_data_2, Bucket='fbucket', Key='test/sub dir/2.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "multiple_files_bucket"
+        storage_connection_name = client.path(unique_prefix + "multiple_files_bucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -470,7 +470,7 @@ Apple,2,22,
 
         read_data = '''{"a" : [10, 20, 30]}'''
         s3_client.put_object(Body=read_data, Bucket='fbucket', Key='data.json', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "json_bucket"
+        storage_connection_name = client.path(unique_prefix + "json_bucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -503,7 +503,7 @@ Pear|15|33|2024-05-06'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test1.csv', ContentType='text/plain')
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test2.csv', ContentType='text/plain')
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=10/month=5/test3.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -578,7 +578,7 @@ Pear|15|33|2024-05-06'''
 { "a" : "2024-08-29", "b" : "2024-08-29 10:20:30", "c" : "2024-08-29T10:20:30.01" }'''
         s3_client.put_object(Body=csv_data, Bucket='fbucket', Key='timestamp.csv', ContentType='text/plain')
         s3_client.put_object(Body=json_data, Bucket='fbucket', Key='timestamp.json', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -650,7 +650,7 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='year=2023/fruits.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = (
@@ -722,7 +722,7 @@ Pear,15,33'''
 2,Apple,2
 3,Pear,15'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -767,7 +767,7 @@ Pear,15,33'''
 { "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 20 }
 { "a" : [10, 20, 30] , "b" : { "key" : "value" }, "c" : 30 }'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.json', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -833,7 +833,7 @@ Pear,15,33'''
     )
     def test_format_inference(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self._create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -856,7 +856,7 @@ Apple,2,22
 Pear,15,33'''
         self._create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         # XXX replace with other unsupported parameter when/if this one become supported

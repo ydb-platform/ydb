@@ -30,7 +30,7 @@ class TestS3:
         """
 
         s3_client.put_object(Body=info, Bucket='fbucket', Key='info.txt', ContentType='text/plain')
-        storage_connection_name = unique_prefix + "test-connection"
+        storage_connection_name = client.path(unique_prefix + "test-connection")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''

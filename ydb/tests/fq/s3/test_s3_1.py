@@ -30,7 +30,7 @@ class TestS3:
                 fruit += "A" + str(j) + ",1,1\n"
             s3_client.put_object(Body=fruit, Bucket='wbucket', Key='fruits' + str(j) + '.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "wbucket")
 
         time.sleep(10)  # 2 x node info update period
@@ -80,7 +80,7 @@ class TestS3:
         s3_client.put_object(Body="text3", Bucket='pbucket', Key='file3.txt', ContentType='text/plain')
         s3_client.put_object(Body="text2", Bucket='pbucket', Key='file2.txt', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "prebucket"
+        storage_connection_name = client.path(unique_prefix + "prebucket")
         client.create_external_data_source(storage_connection_name, "pbucket")
 
         sql = f'''
@@ -123,7 +123,7 @@ class TestS3:
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "fp"
+        storage_connection_name = client.path(unique_prefix + "fp")
         client.create_external_data_source(storage_connection_name, "fpbucket")
 
         sql = f'''
@@ -178,7 +178,7 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -218,7 +218,7 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -276,7 +276,7 @@ Pear,15,33'''
 103'''
         s3_client.put_object(Body=fruits, Bucket='ibucket', Key=i18n_name, ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "i18nbucket"
+        storage_connection_name = client.path(unique_prefix + "i18nbucket")
         client.create_external_data_source(storage_connection_name, "ibucket")
 
         if path_pattern == "exact_file":
@@ -341,7 +341,7 @@ Pear,15,33'''
             Body=fruits, Bucket='ibucket', Key=f"dataset/folder=に/{i18n_name}", ContentType='text/plain'
         )
 
-        storage_connection_name = unique_prefix + "i18nbucket"
+        storage_connection_name = client.path(unique_prefix + "i18nbucket")
         client.create_external_data_source(storage_connection_name, "ibucket")
 
         format = "raw" if raw else "csv_with_names"
@@ -413,7 +413,7 @@ Pear,15,33'''
         bucket.create(ACL='public-read')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "hugebucket"
+        storage_connection_name = client.path(unique_prefix + "hugebucket")
         client.create_external_data_source(storage_connection_name, "hbucket")
 
         long_literal = "*" * 1024
@@ -469,7 +469,7 @@ Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='2024-08-09.csv', ContentType='text/plain')
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='2024-08-08.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "test_top_level_listing"
+        storage_connection_name = client.path(unique_prefix + "test_top_level_listing")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -543,7 +543,7 @@ Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='/a/2024-08-08.csv', ContentType='text/plain')
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='/b/test.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "test_top_level_listing_2"
+        storage_connection_name = client.path(unique_prefix + "test_top_level_listing_2")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''

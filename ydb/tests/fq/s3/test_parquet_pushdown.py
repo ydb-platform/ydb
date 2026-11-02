@@ -32,8 +32,7 @@ class TestS3ParquetPushdown:
         """Create S3 bucket, upload parquet file, and create storage connection."""
         pq.write_table(table, yatest.common.work_path(filename), row_group_size=2)
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
-        client.create_external_data_source(unique_prefix + "conn", "fbucket")
-        return unique_prefix + "conn"
+        return client.create_external_data_source(unique_prefix + "conn", "fbucket").name
 
     def _assert_pushdown_correctness(self, client, sql, expected_rows, column_names=None):
         """

@@ -36,7 +36,7 @@ class TestS3PushDown:
         s3_client = TestS3PushDown.create_s3_client(s3)
         s3_client.put_object(Body=file_content, Bucket=BUCKET_NAME, Key='fruits.csv')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, 'fbucket')
 
         sql = f'''

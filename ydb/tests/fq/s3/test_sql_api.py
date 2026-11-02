@@ -42,8 +42,8 @@ class TestS3SqlApi:
     def test_list_directory_with_topic(self, s3, client, unique_prefix):
         name, _ = self.prepare(s3, client, unique_prefix)
         topic = unique_prefix + 'topic'
-        client.query(f'CREATE TOPIC `{topic}`;')
-        client.objects.append(('TOPIC', topic))
+        client.query(f'CREATE TOPIC `{client.path(topic)}`;')
+        client.objects.append(('TOPIC', client.path(topic)))
         entries = {entry.name: entry.type for entry in client.list_directory().children}
         assert entries[name] == ydb.scheme.SchemeEntryType.EXTERNAL_TABLE
         assert entries[topic] == ydb.scheme.SchemeEntryType.TOPIC
@@ -60,7 +60,7 @@ class TestS3SqlApi:
     def test_stream_execute_query(self, s3, client, unique_prefix):
         name, _ = self.prepare(s3, client, unique_prefix)
         with client.pool.checkout() as session:
-            with session.execute(f'SELECT Fruit FROM `{client.directory}/{name}` ORDER BY Fruit;') as stream:
+            with session.execute(f'SELECT Fruit FROM `{client.path(name)}` ORDER BY Fruit;') as stream:
                 rows = [row for part in stream if part is not None for row in part.rows]
         assert [row['Fruit'] for row in rows] == [b'Apple', b'Banana', b'Pear']
 
@@ -88,7 +88,7 @@ class TestS3SqlApi:
 
     def test_describe_external_table(self, s3, client, unique_prefix):
         name, columns = self.prepare(s3, client, unique_prefix)
-        description = client.ydb_client.driver.scheme_client.describe_path(client.directory + '/' + name)
+        description = client.ydb_client.driver.scheme_client.describe_path(client.path(name))
         assert description.type == ydb.scheme.SchemeEntryType.EXTERNAL_TABLE
         result = client.query(f'SELECT * FROM `{name}` LIMIT 0;')[0]
         assert list(result.columns) == columns

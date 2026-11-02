@@ -39,7 +39,7 @@ class TestS3Inflight:
         for i in range(count):
             bucket.put_object(Key=f'fruits{i}.csv', Body='Fruit,Price,Weight\nBanana,3,100\nApple,2,22\nPear,15,33')
         source = client.create_external_data_source(unique_prefix + 'source', 'inflight').name
-        return f'`{client.directory}/{source}`.`*`'
+        return f'`{client.path(source)}`.`*`'
 
     @pytest.mark.parametrize('kikimr_params', [{'inflight': 1}, {'inflight': 2}, {'inflight': 5}], indirect=True)
     def test_inflight(self, kikimr, s3, client, unique_prefix, kikimr_params):

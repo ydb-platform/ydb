@@ -1077,7 +1077,7 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename", [("date_null/as_default/test.csv"), ("date_null/parse_error/test.csv")])
     def test_date_null(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1101,7 +1101,7 @@ Pear;15;33'''
     @pytest.mark.parametrize("filename", [("date_null/as_default/test.csv"), ("date_null/parse_error/test.csv")])
     def test_date_null_with_not_null_type(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1130,7 +1130,7 @@ Pear;15;33'''
     )
     def test_date_null_multi(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1160,7 +1160,7 @@ Pear;15;33'''
     )
     def test_string_not_null_multi(self, kikimr, s3, client, filename, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1198,7 +1198,7 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1657,7 +1657,7 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -1891,7 +1891,7 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -2029,7 +2029,7 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -2168,7 +2168,7 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename))
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        storage_connection_name = unique_prefix + "evanevannnn"
+        storage_connection_name = client.path(unique_prefix + "evanevannnn")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -2343,7 +2343,7 @@ Pear;15;33'''
         pq.write_table(table, yatest.common.work_path(filename), row_group_size=2)
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
 
-        storage_connection_name = unique_prefix + "hcpp"
+        storage_connection_name = client.path(unique_prefix + "hcpp")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''

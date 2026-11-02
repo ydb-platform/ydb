@@ -64,7 +64,7 @@ class TestS3Compressions:
     )
     def test_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = '''
@@ -97,7 +97,7 @@ class TestS3Compressions:
     )
     def test_compression_inference(self, kikimr, s3, client, filename, compression, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = '''
@@ -126,7 +126,7 @@ class TestS3Compressions:
     )
     def test_big_compression(self, kikimr, s3, client, filename, compression, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = '''
@@ -168,7 +168,7 @@ Apple,2,22
 Pear,15,33'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = fR'''
@@ -205,7 +205,7 @@ Pear,15,33'''
 
         s3_client.put_object(Body='{}', Bucket='fbucket', Key='data.json', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = fR'''
@@ -233,7 +233,7 @@ Pear,15,33'''
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = fR'''
@@ -265,7 +265,7 @@ Pear,15,33'''
         fruits = R'''[{"name" : "banana", "price" : 3, "weight" : 100}]'''
         s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.json', ContentType='text/plain')
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = fR'''

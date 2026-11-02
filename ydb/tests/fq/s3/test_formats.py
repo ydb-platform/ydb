@@ -71,7 +71,7 @@ class TestS3Formats:
     )
     def test_format(self, kikimr, s3, client, filename, type_format, unique_prefix):
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -97,7 +97,7 @@ class TestS3Formats:
 
     def test_btc(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "btct"
+        storage_connection_name = client.path(unique_prefix + "btct")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -137,7 +137,7 @@ Apple,2,22
 Pear,15,33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -159,7 +159,7 @@ Pear,15,33'''
 
     def test_invalid_input_compression(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body("blahblahblah", "fruits", s3, kikimr, bucket_name="ibucket")
-        storage_connection_name = unique_prefix + "input_bucket"
+        storage_connection_name = client.path(unique_prefix + "input_bucket")
         client.create_external_data_source(storage_connection_name, "ibucket")
 
         sql = f'''
@@ -179,7 +179,7 @@ Pear,15,33'''
 
     def test_invalid_output_compression(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body("blahblahblah", "fruits", s3, kikimr, bucket_name="obucket")
-        storage_connection_name = unique_prefix + "output_bucket"
+        storage_connection_name = client.path(unique_prefix + "output_bucket")
         client.create_external_data_source(storage_connection_name, "obucket")
 
         sql = f'''
@@ -205,7 +205,7 @@ Pear,15,33'''
     Pear;15;33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -235,7 +235,7 @@ Apple;2;22
 Pear;15;33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits_sep.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket_csv"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket_csv")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -261,7 +261,7 @@ Pear;15;33'''
     def test_csv_delimiter_invalid_format_rejected(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body('{"time":"lunch"}\n', "one_row.jsonl", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "delimiterinvalidbucket"
+        storage_connection_name = client.path(unique_prefix + "delimiterinvalidbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -283,7 +283,7 @@ Pear;15;33'''
     def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file_body("x\n", "one_col.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "delimitersizebucket"
+        storage_connection_name = client.path(unique_prefix + "delimitersizebucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -309,7 +309,7 @@ Pear;15;33'''
         """
         self.create_bucket_and_upload_file_body("b,a\nbb,aa\n", "two_cols.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "twocolbucket"
+        storage_connection_name = client.path(unique_prefix + "twocolbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -339,7 +339,7 @@ Pear;15;33'''
         """csv (no header row): SCHEMA fixes field order; SELECT b, a only reorders output columns."""
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_two_cols.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "headerless_twocolbucket"
+        storage_connection_name = client.path(unique_prefix + "headerless_twocolbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -369,7 +369,7 @@ Pear;15;33'''
         """Headerless csv: SCHEMA = () must be rejected (no column names to define field order in the file)."""
         self.create_bucket_and_upload_file_body("x", "empty_schema.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "emptyschemabucket"
+        storage_connection_name = client.path(unique_prefix + "emptyschemabucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -397,7 +397,7 @@ Pear;15;33'''
         """
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_select_one_col.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "headerless_onecolbucket"
+        storage_connection_name = client.path(unique_prefix + "headerless_onecolbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -428,7 +428,7 @@ Pear;15;33'''
         """
         self.create_bucket_and_upload_file_body("bb,aa", "headerless_b_a.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "headerless_ba_bucket"
+        storage_connection_name = client.path(unique_prefix + "headerless_ba_bucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f"""
@@ -457,7 +457,7 @@ Pear;15;33'''
     def test_no_not_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -488,7 +488,7 @@ Pear,15
 """
         self.create_bucket_and_upload_file_body(csv_body, "fruits_missing_col.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -513,7 +513,7 @@ Pear,15
     def test_no_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -534,7 +534,7 @@ Pear,15
     def test_invalid_column_type_in_csv(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql1 = f'''
@@ -574,7 +574,7 @@ Pear,15
 
     def test_invalid_column_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -597,7 +597,7 @@ Pear,15
 
     def test_missing_optional_column_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -635,7 +635,7 @@ Pear,15
 
     def test_only_missing_optional_columns_in_parquet(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -657,7 +657,7 @@ Pear,15
 
     def test_simple_pg_types(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -678,7 +678,7 @@ Pear,15
 
     def test_precompute(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -717,7 +717,7 @@ Pear,15
 
     def test_raw_empty_schema_query(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
         sql = f'''
             SELECT * FROM `{storage_connection_name}`.`*`
@@ -733,7 +733,7 @@ Pear,15
     def test_csv_no_header_three_rows(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -761,7 +761,7 @@ Pear,15
         # (Fruit < Price < Weight тЖТ Price is the middle column).
         self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -800,7 +800,7 @@ Pear,15
 33,15,Pear'''
         self.create_bucket_and_upload_file_body(fruits, "fruits_reversed.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''
@@ -838,7 +838,7 @@ Apple;2;22
 Pear;15;33'''
         self.create_bucket_and_upload_file_body(fruits, "fruits_semicolon.csv", s3, kikimr)
 
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "fbucket")
 
         sql = f'''

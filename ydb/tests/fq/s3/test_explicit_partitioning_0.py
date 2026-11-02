@@ -363,7 +363,7 @@ Pear,15,33'''
         json_body = "{}"
         s3_client.put_object(Body=json_body, Bucket='json_bucket', Key='2022/03/obj.json', ContentType='text/json')
 
-        storage_connection_name = unique_prefix + "json_bucket"
+        storage_connection_name = client.path(unique_prefix + "json_bucket")
         client.create_external_data_source(storage_connection_name, "json_bucket")
 
         sql = (
@@ -576,7 +576,7 @@ Banana,3,100'''
             Body=json_body, Bucket='logs2', Key='logs/year=2023/month=01/day=16/obj2.json', ContentType='text/json'
         )
 
-        storage_connection_name = unique_prefix + "logs2"
+        storage_connection_name = client.path(unique_prefix + "logs2")
         client.create_external_data_source(storage_connection_name, "logs2")
 
         sql = (
@@ -679,7 +679,7 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "test_projection_integer_type_validation")
 
         sql = (
@@ -776,7 +776,7 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "test_projection_enum_type_invalid_validation")
 
         sql = (

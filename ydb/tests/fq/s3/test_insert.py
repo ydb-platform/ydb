@@ -34,7 +34,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = f'''
@@ -47,7 +47,7 @@ class TestS3(object):
         query.check()
 
         sql = f'''
-            select foo, bar from {storage_connection_name}.`{dataset_name}/*` with (format={format}, schema(
+            select foo, bar from `{storage_connection_name}`.`{dataset_name}/*` with (format={format}, schema(
                 foo Int NOT NULL,
                 bar String NOT NULL
             ))
@@ -81,7 +81,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket_compression"
+        storage_connection_name = client.path(unique_prefix + "ibucket_compression")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         test_text = "hello world"
@@ -208,7 +208,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = f'''
@@ -249,7 +249,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "abucket"
+        storage_connection_name = client.path(unique_prefix + "abucket")
         client.create_external_data_source(storage_connection_name, "append_bucket")
 
         sql = f'''
@@ -303,7 +303,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "sbucket"
+        storage_connection_name = client.path(unique_prefix + "sbucket")
         client.create_external_data_source(storage_connection_name, "split_bucket")
 
         sql = f'''
@@ -342,7 +342,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "mbucket"
+        storage_connection_name = client.path(unique_prefix + "mbucket")
         client.create_external_data_source(storage_connection_name, "merge_bucket")
 
         sql = f'''
@@ -471,7 +471,7 @@ class TestS3(object):
         bucket.create(ACL=acl)
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ebucket"
+        storage_connection_name = client.path(unique_prefix + "ebucket")
         client.create_external_data_source(storage_connection_name, "error_bucket")
 
         sql = R'''
@@ -534,7 +534,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = f'''
@@ -559,7 +559,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = f'''
@@ -624,7 +624,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = self.get_insert_test_query(f"`{storage_connection_name}`.`/test/`")
@@ -661,7 +661,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = "PRAGMA s3.UseBlocksSink = \"true\";\n" + self.get_insert_test_query(
@@ -702,7 +702,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket"
+        storage_connection_name = client.path(unique_prefix + "ibucket")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = f'''
@@ -732,7 +732,7 @@ class TestS3(object):
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "ibucket_partition_limit"
+        storage_connection_name = client.path(unique_prefix + "ibucket_partition_limit")
         client.create_external_data_source(storage_connection_name, "insert_bucket")
 
         sql = f'''

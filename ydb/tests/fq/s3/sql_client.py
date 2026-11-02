@@ -137,6 +137,10 @@ class S3Client:
         self.pool = ydb.QuerySessionPool(ydb_client.driver, query_client_settings=settings)
         self.objects = []
 
+    def path(self, name: str) -> str:
+        """Resolve a schema object; TablePathPrefix does not qualify dynamic source names."""
+        return name if name.startswith('/') else self.directory + '/' + name
+
     def execute(self, sql, *, explain=False, timeout=120, parameters=None):
         statement = f'PRAGMA TablePathPrefix = {sql_string(self.directory)};\n{sql}'
         result = SqlResult()
@@ -159,6 +163,7 @@ class S3Client:
         return self.execute(sql, **kwargs).check().result_sets
 
     def create_external_data_source(self, name, bucket, *, expect_error=False):
+        name = self.path(name)
         result = self.execute(f'''
             CREATE EXTERNAL DATA SOURCE {sql_identifier(name)} WITH (
                 SOURCE_TYPE = 'ObjectStorage',
@@ -186,9 +191,10 @@ class S3Client:
         compression=None,
         expect_error=False,
     ):
+        name = self.path(name)
         schema = ',\n'.join(f'{sql_identifier(col.name)} {column_type(col.type)}' for col in columns)
         options = {
-            'DATA_SOURCE': data_source if data_source.startswith('/') else self.directory + '/' + data_source,
+            'DATA_SOURCE': self.path(data_source),
             'LOCATION': path,
             'FORMAT': format,
         }
@@ -211,6 +217,7 @@ class S3Client:
         return self.ydb_client.driver.scheme_client.list_directory(self.directory)
 
     def drop(self, kind, name):
+        name = self.path(name)
         self.execute(f'DROP {kind} {sql_identifier(name)};').check()
         self.objects.remove((kind, name))
 

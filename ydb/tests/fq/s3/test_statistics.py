@@ -16,7 +16,7 @@ class TestS3(object):
         bucket = resource.Bucket("egress_bucket")
         bucket.create(ACL='public-read-write')
 
-        storage_connection_name = unique_prefix + "sbucket"
+        storage_connection_name = client.path(unique_prefix + "sbucket")
         client.create_external_data_source(storage_connection_name, "egress_bucket")
 
         sql = f'''
@@ -46,7 +46,7 @@ class TestS3(object):
         bucket = resource.Bucket("convert_bucket")
         bucket.create(ACL='public-read-write')
 
-        storage_connection_name = unique_prefix + "sbucket"
+        storage_connection_name = client.path(unique_prefix + "sbucket")
         client.create_external_data_source(storage_connection_name, "convert_bucket")
 
         sql = f'''
@@ -116,7 +116,7 @@ class TestS3(object):
         bucket = resource.Bucket("pbucket")
         bucket.create(ACL='public-read-write')
 
-        storage_connection_name = unique_prefix + "pb"
+        storage_connection_name = client.path(unique_prefix + "pb")
         client.create_external_data_source(storage_connection_name, "pbucket")
 
         sql = f'''
@@ -179,7 +179,7 @@ class TestS3(object):
         bucket = resource.Bucket(bucket_name)
         bucket.create(ACL='public-read-write')
 
-        storage_connection_name = unique_prefix + "sbucket"
+        storage_connection_name = client.path(unique_prefix + "sbucket")
         client.create_external_data_source(storage_connection_name, bucket_name)
 
         sql = f'''

@@ -20,10 +20,10 @@ class TestExternalTables:
     @staticmethod
     def create_table(client, name, source, location):
         client.query(f'''
-            CREATE EXTERNAL TABLE {sql_identifier(name)} (a Int32 NOT NULL, b Utf8 NOT NULL)
-            WITH (DATA_SOURCE={sql_string(client.directory + '/' + source)}, LOCATION={sql_string(location)}, FORMAT='json_each_row');
+            CREATE EXTERNAL TABLE {sql_identifier(client.path(name))} (a Int32 NOT NULL, b Utf8 NOT NULL)
+            WITH (DATA_SOURCE={sql_string(client.path(source))}, LOCATION={sql_string(location)}, FORMAT='json_each_row');
         ''')
-        client.objects.append(('EXTERNAL TABLE', name))
+        client.objects.append(('EXTERNAL TABLE', client.path(name)))
 
     @pytest.mark.parametrize(
         'kikimr_settings', [{'is_replace_if_exists': True}, {'is_replace_if_exists': False}], indirect=True
@@ -41,8 +41,8 @@ class TestExternalTables:
         assert client.query(f'SELECT * FROM `{table}`;')[0].rows == [{'a': 42, 'b': 'first'}]
 
         replacement = f'''
-            CREATE OR REPLACE EXTERNAL TABLE `{table}` (a Int32 NOT NULL, b Utf8 NOT NULL)
-            WITH (DATA_SOURCE='{client.directory}/{source}', LOCATION='second.json', FORMAT='json_each_row');
+            CREATE OR REPLACE EXTERNAL TABLE `{client.path(table)}` (a Int32 NOT NULL, b Utf8 NOT NULL)
+            WITH (DATA_SOURCE='{client.path(source)}', LOCATION='second.json', FORMAT='json_each_row');
         '''
         result = client.execute(replacement)
         result.check(kikimr_settings['is_replace_if_exists'])
@@ -63,7 +63,7 @@ class TestExternalTables:
         union = ' UNION ALL '.join(f'SELECT * FROM `{name}`' for name in names)
         assert client.query(f'SELECT COUNT(*) AS count FROM ({union});')[0].rows[0]['count'] == 100
         client.query(f'''
-            CREATE OR REPLACE EXTERNAL DATA SOURCE `{source}` WITH (
+            CREATE OR REPLACE EXTERNAL DATA SOURCE `{client.path(source)}` WITH (
                 SOURCE_TYPE='ObjectStorage', LOCATION={sql_string(s3.s3_url + '/external-tables/')}, AUTH_METHOD='NONE'
             );
         ''')
@@ -78,7 +78,7 @@ class TestExternalTables:
         result = client.create_external_data_source(table, 'external-tables', expect_error=True)
         assert result.error_code == 'SCHEME_ERROR'
         result = client.execute(f'''
-            CREATE EXTERNAL TABLE `{source}` (a Int32)
-            WITH (DATA_SOURCE='{client.directory}/{source}', LOCATION='first.json', FORMAT='json_each_row');
+            CREATE EXTERNAL TABLE `{client.path(source)}` (a Int32)
+            WITH (DATA_SOURCE='{client.path(source)}', LOCATION='first.json', FORMAT='json_each_row');
         ''').check(False)
         assert result.error_code == 'SCHEME_ERROR'

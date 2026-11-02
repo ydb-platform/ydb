@@ -17,7 +17,7 @@ class TestEarlyFinish(StreamingTestBase):
             SELECT stream.Data AS Data1, dictionary.Data AS Data2
             FROM {topic} WITH (STREAMING='TRUE', FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS stream
             INNER JOIN (
-                SELECT Data FROM `{client.directory}/{source}`.`*`
+                SELECT Data FROM `{client.path(source)}`.`*`
                 WITH (FORMAT=raw, SCHEMA=(Data String NOT NULL))
                 ORDER BY Data DESC
             ) AS dictionary ON stream.Data = dictionary.Data

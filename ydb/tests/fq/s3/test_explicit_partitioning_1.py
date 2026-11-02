@@ -55,7 +55,7 @@ Banana,3,100'''
             Key='2022-03-05/fruits.csv',
             ContentType='text/plain',
         )
-        storage_connection_name = unique_prefix + "fruitbucket"
+        storage_connection_name = client.path(unique_prefix + "fruitbucket")
         client.create_external_data_source(storage_connection_name, "test_projection_date_type_invalid_validation")
 
         sql = (
@@ -330,7 +330,7 @@ Banana,3,100'''
             ContentType='text/plain',
         )
 
-        storage_connection_name = unique_prefix + "rawbucket"
+        storage_connection_name = client.path(unique_prefix + "rawbucket")
         client.create_external_data_source(storage_connection_name, "raw_bucket")
 
         sql = (
@@ -400,7 +400,7 @@ Banana,3,100'''
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
 
-        storage_connection_name = unique_prefix + "pb"
+        storage_connection_name = client.path(unique_prefix + "pb")
         client.create_external_data_source(storage_connection_name, "parquets")
 
         sql = fR'''
@@ -497,7 +497,7 @@ text3''',
             ContentType='text/plain',
         )
 
-        storage_connection_name = unique_prefix + "bucket"
+        storage_connection_name = client.path(unique_prefix + "bucket")
         client.create_external_data_source(storage_connection_name, "bucket")
 
         sql = (

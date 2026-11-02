@@ -12,7 +12,7 @@ class TestTopicS3Join(StreamingTestBase):
             SELECT stream.Data AS Fruit, dictionary.Price AS Price
             FROM {topic} WITH (STREAMING='TRUE', FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS stream
             LEFT JOIN (
-                SELECT Fruit, Price FROM `{client.directory}/{source}`.`fruits.csv`
+                SELECT Fruit, Price FROM `{client.path(source)}`.`fruits.csv`
                 WITH (FORMAT=csv_with_names, SCHEMA=(Fruit String NOT NULL, Price Int32 NOT NULL))
             ) AS dictionary ON stream.Data = dictionary.Fruit
             LIMIT 1;

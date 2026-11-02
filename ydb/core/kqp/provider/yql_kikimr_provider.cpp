@@ -720,6 +720,18 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
         maybeLiteral = maybeJust.Cast().Input();
     }
 
+    if (maybeLiteral.Maybe<TCoNothing>()) {
+        YQL_ENSURE(valueType);
+
+        TString error;
+        if (!SetColumnType(&RemoveOptionality(*valueType), false, *proto.mutable_type(), error)) {
+            return error;
+        }
+
+        proto.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        return std::nullopt;
+    }
+
     if (auto literal = maybeLiteral.Maybe<TCoDataCtor>()) {
         FillLiteralProto(literal.Cast(), proto);
         return std::nullopt;

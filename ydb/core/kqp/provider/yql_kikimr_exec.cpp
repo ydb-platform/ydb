@@ -2211,6 +2211,12 @@ public:
                             return SyncError();
                         }
 
+                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
+                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                "Cannot add not null column with NULL default value"));
+                            return SyncError();
+                        }
+
                         for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
                             auto columnItem = columnTuple.Item(itemIdx);
                             if (!columnItem.Maybe<TExprList>()) {

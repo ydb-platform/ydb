@@ -2006,7 +2006,7 @@ void TPersQueue::HandleGetOwnershipRequest(const ui64 responseCookie, NWilson::T
 void TPersQueue::HandleReadRequest(
         const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
         const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,
-        const TActorId& pipeClient, const TActorId&
+        const TActorId& pipeClient, const TActorId& sender
 ) {
     PQ_ENSURE(req.HasCmdRead());
 
@@ -2079,6 +2079,7 @@ void TPersQueue::HandleReadRequest(
                                        clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
+        event->ReadSessionActor = sender;
 
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }

@@ -185,7 +185,9 @@ def _phase_durations_sec(
     """Independent wall clocks for build / test / whole job.
 
     Overlap is allowed and counted in both phases:
-    - test: first suite/chunk start → last end (report/evlog runs)
+    - test: first → last report/evlog run, but if ya ``test_tm`` workers
+      start later than the earliest report timestamp, clamp the start to
+      the first TM activity (early report outliers sit left of the chart)
     - build: first → last build/archive/link activity (cache excluded —
       it stays noisy during tests). Intervals that only start after tests
       are dropped when build itself began before tests; true overlap that
@@ -204,13 +206,29 @@ def _phase_durations_sec(
     ]
     test_start = min(starts) if starts else None
     test_end = max(ends) if ends else None
+
+    deltas_by_kind = ya_activity_deltas or {}
+    tm_intervals = _active_intervals_sec(list(deltas_by_kind.get("test_tm") or []))
+    if tm_intervals and test_start is not None:
+        tm_start = tm_intervals[0][0]
+        tm_end = tm_intervals[-1][1]
+        # Report chunk starts can precede the monitored ya make window (and
+        # the chart x-range). Prefer TM when it starts later — that matches
+        # the green "Test workers" series the user sees.
+        if tm_start > float(test_start):
+            test_start = float(tm_start)
+        if tm_end > float(test_end or tm_end):
+            test_end = float(tm_end)
+    elif tm_intervals and test_start is None:
+        test_start = tm_intervals[0][0]
+        test_end = tm_intervals[-1][1]
+
     test_duration = (
         max(0.0, float(test_end) - float(test_start))
         if test_start is not None and test_end is not None
         else 0.0
     )
 
-    deltas_by_kind = ya_activity_deltas or {}
     # Cache is omitted: From/Put cache keeps firing through the test phase
     # and would stretch the headline build wall to ~total.
     build_deltas: list[tuple[float, int]] = []

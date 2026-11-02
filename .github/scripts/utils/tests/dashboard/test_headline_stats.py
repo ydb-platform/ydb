@@ -122,7 +122,8 @@ class HeadlineHostStatsTest(unittest.TestCase):
 
     def test_phase_durations_build_after_skewed_early_test_start(self):
         # Report test times can precede ya build events; still report the
-        # build/archive/link wall (cache ignored).
+        # build/archive/link wall (cache ignored). Without test_tm, report
+        # wall is kept as-is for tests.
         phases = _phase_durations_sec(
             runs=[
                 {"suite_path": "s", "chunk": 0, "start_us": 1_000_000, "end_us": 30_000_000},
@@ -136,6 +137,22 @@ class HeadlineHostStatsTest(unittest.TestCase):
         self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
         self.assertAlmostEqual(phases["test_duration_sec"], 29.0)
         self.assertAlmostEqual(phases["total_duration_sec"], 29.0)
+
+    def test_phase_durations_clamps_early_report_start_to_test_tm(self):
+        # Early report chunk timestamps sit left of the chart; TM matches the
+        # green Test workers series (~1h), not the 2h+ report min→max wall.
+        phases = _phase_durations_sec(
+            runs=[
+                {"suite_path": "s", "chunk": 0, "start_us": 0, "end_us": 120_000_000},
+            ],
+            ya_activity_deltas={
+                "build": [(50_000_000, 1), (55_000_000, -1)],
+                "test_tm": [(60_000_000, 1), (120_000_000, -1)],
+            },
+        )
+        self.assertAlmostEqual(phases["test_duration_sec"], 60.0)
+        self.assertAlmostEqual(phases["build_duration_sec"], 5.0)
+        self.assertAlmostEqual(phases["total_duration_sec"], 70.0)
 
     def test_phase_durations_late_link_and_build_only(self):
         # Link after compile, no tests → build span only.

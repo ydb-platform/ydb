@@ -93,27 +93,30 @@ TCommandBridgeSetDatabaseMode::TCommandBridgeSetDatabaseMode()
 void TCommandBridgeSetDatabaseMode::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.AllowEmptyDatabase = true;
-    config.SetFreeArgsNum(0);
-    config.Opts->AddLongOption("target-database", "Absolute path of the database whose bridge mode to change. "
-            "Independent of the global --database connection and authentication context.")
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<mode>", "bridged: enable bridge replication across all provisioned piles; "
+        "data synchronization continues in the background.\n"
+        "ordinary: disable bridge replication; redundant copies are deleted in the background.");
+    config.Opts->GetOpts().GetFreeArgSpec(0)
+        .Completer(NLastGetopt::NComp::Choice({{"bridged", "Enable bridge replication"},
+                                             {"ordinary", "Disable bridge replication"}}));
+    config.Opts->AddLongOption("target-database", "Absolute path of the database to change. "
+            "Does not change the connection or authentication database set by global --database.")
         .Required().RequiredArgument("PATH").StoreResult(&TargetDatabase);
-    config.Opts->AddLongOption("bridged", "Replicate database data across active piles; synchronization continues in the background.")
-        .StoreTrue(&Bridged);
-    config.Opts->AddLongOption("ordinary", "Disable replication between piles; redundant data copies are deleted in the background.")
-        .StoreTrue(&Ordinary);
-    config.Opts->MutuallyExclusive("bridged", "ordinary");
-    config.Opts->AddLongOption("retain-pile", "With --ordinary, retain data copies in this pile. "
-            "By default, copies to retain are selected automatically.")
-        .RequiredArgument("NAME").StoreResult(&RetainPile);
+    config.Opts->AddLongOption("retain-pile", "With mode ordinary, keep data in this pile, which must already have synchronized copies. "
+            "By default, select copies automatically; they may be in different piles. Does not relocate existing ordinary data.")
+        .RequiredArgument("PILE_NAME").StoreResult(&RetainPile);
 }
 
 void TCommandBridgeSetDatabaseMode::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    if (Bridged == Ordinary) {
-        ythrow yexception() << "Specify exactly one of --bridged or --ordinary.";
+    const auto mode = config.ParseResult->GetFreeArgs()[0];
+    if (mode != "bridged" && mode != "ordinary") {
+        throw TMisuseException() << "Invalid mode \"" << mode << "\". Use bridged or ordinary.";
     }
-    if (config.ParseResult->Has("retain-pile") && !Ordinary) {
-        ythrow yexception() << "--retain-pile requires --ordinary.";
+    Bridged = mode == "bridged";
+    if (config.ParseResult->Has("retain-pile") && Bridged) {
+        throw TMisuseException() << "--retain-pile requires mode ordinary.";
     }
 }
 
@@ -402,9 +405,11 @@ int TCommandBridgeTakedown::Run(TConfig& config) {
 }
 
 TCommandBridgeJoinPile::TCommandBridgeJoinPile(bool allowEmptyDatabase)
-    : TYdbCommand("join-pile", {"rejoin"}, "Join a provisioned pile or rejoin a pile after maintenance or recovery")
+    : TYdbCommand("join-pile", {"rejoin"}, "Join a provisioned pile or rejoin one after maintenance or recovery. "
+        "Starts synchronization in the background; use bridge list to check when the pile becomes SYNCHRONIZED.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
+    CompletionDescription = "Join or rejoin a pile and start synchronization";
 }
 
 void TCommandBridgeJoinPile::Config(TConfig& config) {
@@ -449,8 +454,8 @@ void TCommandBridgeConvert::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("skip-storage-pool-conversion",
             "Leave existing storage pools and their groups non-bridged. They will not be replicated to added piles "
-            "until converted separately (ydb admin cluster bridge set-database-mode --bridged). Static storage groups are still converted "
-            "to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
+            "until converted separately (ydb admin cluster bridge set-database-mode bridged --target-database PATH). "
+            "Static storage groups are still converted to bridge mode. Requires bridge_config.enable_non_uniform_storage=true.")
         .StoreTrue(&SkipStoragePoolConversion);
 }
 
@@ -472,8 +477,8 @@ int TCommandBridgeConvert::Run(TConfig& config) {
 }
 
 TCommandBridgeProvisionPile::TCommandBridgeProvisionPile(bool allowEmptyDatabase)
-    : TYdbCommand("provision-pile", {}, "Provision a pile listed in the bridge config with its hosts (and shown as INACTIVE) in the "
-        "cluster: create its parts of storage groups and make it DISCONNECTED.")
+    : TYdbCommand("provision-pile", {}, "Prepare storage in an INACTIVE pile listed in the bridge config with its hosts, "
+        "then set it to DISCONNECTED. Run join-pile to start synchronization.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
@@ -503,9 +508,8 @@ int TCommandBridgeProvisionPile::Run(TConfig& config) {
 }
 
 TCommandBridgeDestroyPile::TCommandBridgeDestroyPile(bool allowEmptyDatabase)
-    : TYdbCommand("destroy-pile", {}, "Destroy a DISCONNECTED pile: delete its parts of every storage "
-        "group along with ALL THEIR DATA, which can't be undone, and make it INACTIVE. Waits until every storage group "
-        "loses its part in the pile; then the pile may be dropped from the bridge config along with its hosts.")
+    : TYdbCommand("destroy-pile", {}, "Delete storage-group parts and data in a DISCONNECTED pile, then set it to INACTIVE. "
+        "This cannot be undone. Waits for removal to complete; afterwards, the pile and its hosts can be removed from the bridge config.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
     CompletionDescription = "Destroy a DISCONNECTED pile along with ALL ITS DATA";
@@ -526,8 +530,8 @@ void TCommandBridgeDestroyPile::Parse(TConfig& config) {
 bool TCommandBridgeDestroyPile::Prompt(TConfig& config) {
     if (!config.AssumeYes) {
         NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
-        Cout << colors.RedColor() << "Every storage group of pile " << Pile << " will be deleted along with all the data "
-            "it holds. This can't be undone." << colors.OldColor() << " Use \"--assume-yes\" (\"-y\") option to "
+        Cout << colors.RedColor() << "All storage-group parts and data in pile " << Pile << " will be deleted. "
+            "This cannot be undone." << colors.OldColor() << " Use \"--assume-yes\" (\"-y\") option to "
             "proceed without prompting." << Endl;
         return AskYesOrNo("Do you want to destroy pile " + Pile + "?", /* defaultAnswer */ false);
     }

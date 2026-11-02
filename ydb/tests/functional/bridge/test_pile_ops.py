@@ -249,7 +249,7 @@ class TestBridgePileOps(BridgeKiKiMRTest):
         # removal deletes all the data of the pile, so the command asks for confirmation; nothing happens without it
         code, output = self.ydb_cli(['admin', 'cluster', 'bridge', 'destroy-pile', '--pile', ORIGINAL_PILE], stdin=b"n\n")
         assert_that(code != 0, output)
-        assert_that("will be deleted along with all the data" in output, output)
+        assert_that(f"All storage-group parts and data in pile {ORIGINAL_PILE} will be deleted." in output, output)
         assert_that(self.states(), is_({ORIGINAL_PILE: DISCONNECTED, ADDED_PILE: PRIMARY}))
 
         code, output = self.ydb_cli(['-y', 'admin', 'cluster', 'bridge', 'destroy-pile', '--pile', ORIGINAL_PILE])

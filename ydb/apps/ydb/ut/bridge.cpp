@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         ExpectLogin();
         const auto password = EnvFile("password");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "--user", "bridge-admin", "--password-file", password,
-                "admin", "cluster", "bridge", "set-database-mode", "--target-database", "/Root/app", "--bridged"});
+                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--target-database", "/Root/app"});
         UNIT_ASSERT(Service<TBridgeLogin>().Calls.load() >= 1);
         UNIT_ASSERT(Service<TBridgeDiscovery>().Calls.load() >= 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
@@ -143,14 +143,14 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         Service<TBridgeService>().Database.clear();
         const auto password = EnvFile("password");
         RunCli({"-e", GetEndpoint(), "-y", "--user", "bridge-admin", "--password-file", password,
-                "admin", "cluster", "bridge", "set-database-mode", "--target-database", "/Root/app", "--bridged"});
+                "admin", "cluster", "bridge", "set-database-mode", "bridged", "--target-database", "/Root/app"});
         UNIT_ASSERT(Service<TBridgeLogin>().Calls.load() >= 1);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
     }
 
     Y_UNIT_TEST_F(ConnectionDatabaseDoesNotSupplyTarget, TBridgeCliFixture) {
         ExpectFail();
-        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "set-database-mode", "--bridged"});
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "set-database-mode", "bridged"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
@@ -166,20 +166,31 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
 
     Y_UNIT_TEST_F(RetainPileRequiresOrdinaryMode, TBridgeCliFixture) {
         ExpectFail();
-        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode",
-                "--target-database", "/Root/app", "--bridged", "--retain-pile", "secondary"});
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "bridged",
+                "--target-database", "/Root/app", "--retain-pile", "secondary"});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
     }
 
     Y_UNIT_TEST_F(OrdinaryModePassesRetainedPile, TBridgeCliFixture) {
+        Service<TBridgeDiscovery>().Database.clear();
+        Service<TBridgeService>().Database.clear();
         Service<TBridgeService>().Bridged = false;
         Service<TBridgeService>().RetainPile = "secondary";
-        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "-y", "admin", "cluster", "bridge", "set-database-mode",
-                "--target-database", "/Root/app", "--ordinary", "--retain-pile", "secondary"},
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "ordinary",
+                "--target-database", "/Root/app", "--retain-pile", "secondary"},
                {{"YDB_TOKEN", "bridge-admin-token"}});
         UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 1);
+    }
+
+    Y_UNIT_TEST_F(UnknownDatabaseModeIsRejected, TBridgeCliFixture) {
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-y", "admin", "cluster", "bridge", "set-database-mode", "unknown",
+                "--target-database", "/Root/app"});
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeLogin>().Calls.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeDiscovery>().Calls.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ModeCalls.load(), 0);
     }
 
     Y_UNIT_TEST_F(JoinPileSupportsLegacyRejoinAlias, TBridgeCliFixture) {

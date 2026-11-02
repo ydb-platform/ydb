@@ -25,7 +25,6 @@ public:
 private:
     TString TargetDatabase;
     bool Bridged = false;
-    bool Ordinary = false;
     TString RetainPile;
 };
 

@@ -1,6 +1,7 @@
 import errno
 import os
 import shutil
+import tempfile
 import yatest.common
 import yql_utils
 import cyson as yson
@@ -121,6 +122,10 @@ class YQLRun(object):
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
                  wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None,
                  attrs={}):
+        if not isinstance(check_error, (bool, yql_utils.CheckFailure)):
+            raise TypeError('check_error must be True, False or CheckFailure')
+        tmp_dir = tempfile.mkdtemp(prefix='yqlrun_')
+
         del pretty_plan, attrs
 
         res_dir = self.res_dir
@@ -131,7 +136,7 @@ class YQLRun(object):
         opt_file = res_file_path('opt.yql')
         results_file = res_file_path('results.txt')
         plan_file = res_file_path('plan.txt')
-        err_file = res_file_path('err.txt')
+        err_file = os.path.join(tmp_dir, 'err.txt')
 
         udfs_dir = self.udfs_path
         prov = self.prov
@@ -167,6 +172,7 @@ class YQLRun(object):
                 'TZ': 'UTC0'
             }
             env.update(extra_env)
+            env['TMPDIR'] = tmp_dir
             for var in [
                 'LLVM_PROFILE_FILE',
                 'GO_COVERAGE_PREFIX',
@@ -208,8 +214,9 @@ class YQLRun(object):
             '--gateways-cfg=%(gateways_cfg_file)s ' \
             '--fs-cfg=%(fs_cfg_file)s ' % locals()
 
+        # minirun uses TMPDIR and does not support --tmp-dir.
         if prov != 'pure':
-            cmd += '--tmp-dir=%(res_dir)s ' % locals()
+            cmd += '--tmp-dir=%s ' % tmp_dir
 
         if self.udfs_path is not None and "--test-partial-typecheck" not in self.extra_args:
             if self.udfs is None:
@@ -336,6 +343,7 @@ class YQLRun(object):
             'TZ': 'UTC0'
         }
         env.update(extra_env)
+        env['TMPDIR'] = tmp_dir
         for var in [
             'LLVM_PROFILE_FILE',
             'GO_COVERAGE_PREFIX',
@@ -352,21 +360,34 @@ class YQLRun(object):
             yql_utils.log('GDB launch command:')
             yql_utils.log('(cd "%s" && %s ya tool gdb --args %s)' % (res_dir, env_setters, cmd.replace(udfs_dir, debug_udfs_dir)))
 
-        stderr_file = res_file_path('stderr.txt')
-        with open(stderr_file, 'w') as stderr:
-            proc_result = yatest.common.process.execute(
-                command=cmd.strip().split(),
-                stderr=stderr,
-                check_exit_code=False,
-                cwd=res_dir,
-                env=env,
-            )
+        stderr_file = os.path.join(tmp_dir, 'stderr.txt')
+        proc_result = yatest.common.process.execute(
+            command=cmd.strip().split(),
+            stderr=stderr_file,
+            check_exit_code=False,
+            check_sanitizer=False,
+            cwd=res_dir,
+            env=env,
+        )
 
-        if proc_result.exit_code != 0 and check_error:
-            with open(err_file, 'r') as f:
-                err_file_text = f.read()
+        execution_failed = proc_result.exit_code != 0
+        check_succeeded = not (check_error is True and execution_failed)
+        error_message = 'Expected execution to succeed' if not check_succeeded else ''
+        if isinstance(check_error, yql_utils.CheckFailure):
+            error_text = ''
+            if check_error.callback is not None:
+                err, _ = yql_utils.read_res_file(err_file)
+                yql_utils.skip_on_ubsan_known_failure(err)
+                error_text = yql_utils.normalize_source_code_path(err.replace(res_dir, '<tmp_path>').replace(tmp_dir, '<tmp_path>'))
+            check_succeeded, error_message = check_error.check(execution_failed, error_text)
+        if not check_succeeded:
+            err_file_text = ''
+            if execution_failed or os.path.exists(err_file):
+                with open(err_file, 'r') as f:
+                    err_file_text = f.read()
 
-            yql_utils.skip_on_ubsan_known_failure(err_file_text)
+            if check_error is True:
+                yql_utils.skip_on_ubsan_known_failure(err_file_text)
 
             with open(stderr_file, 'r') as f:
                 stderr_file_text = f.read()
@@ -379,8 +400,12 @@ class YQLRun(object):
 
             err_file_text = truncated(err_file_text)
             stderr_file_text = truncated(stderr_file_text)
+            saved_tmp_dir = os.path.join(res_dir, os.path.basename(tmp_dir))
+            shutil.copytree(tmp_dir, saved_tmp_dir)
+            yql_utils.log('YQL temporary files saved to: ' + saved_tmp_dir)
 
             assert False, (
+                '%(error_message)s\n'
                 'binary %(binary)s exited with code %(code)d\n'
                 '\n'
                 'Res    File: %(results_file)s\n'
@@ -388,6 +413,7 @@ class YQLRun(object):
                 'Plan   File: %(plan_file)s\n'
                 'Err    File: %(err_file)s\n'
                 'StdErr File: %(stderr_file)s\n'
+                'Tmp    Dir:  %(saved_tmp_dir)s\n'
                 '\n'
                 '%(stderr_file_text)s\n'
                 '\n'
@@ -395,14 +421,16 @@ class YQLRun(object):
                 '\n'
                 'See a full command in a Log file below:'
             ) % {
+                'error_message': six.ensure_str(error_message),
                 'binary': os.path.basename(binary),
                 'code': proc_result.exit_code,
                 'results_file': results_file,
                 'opt_file': opt_file,
                 'plan_file': plan_file,
-                'stderr_file': stderr_file,
+                'stderr_file': os.path.join(saved_tmp_dir, os.path.basename(stderr_file)),
+                'saved_tmp_dir': saved_tmp_dir,
                 'stderr_file_text': stderr_file_text,
-                'err_file': err_file,
+                'err_file': os.path.join(saved_tmp_dir, os.path.basename(err_file)),
                 'err_file_text': err_file_text,
             }
 
@@ -428,7 +456,7 @@ class YQLRun(object):
 
         return yql_utils.YQLExecResult(
             proc_result.std_out,
-            yql_utils.normalize_source_code_path(err.replace(res_dir, '<tmp_path>')),
+            yql_utils.normalize_source_code_path(err.replace(res_dir, '<tmp_path>').replace(tmp_dir, '<tmp_path>')),
             results,
             results_file,
             opt,

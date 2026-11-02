@@ -7,7 +7,7 @@ import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_con
 
 from google.protobuf import text_format
 from yql_utils import execute, get_supported_providers, get_tables, get_files, get_http_files, \
-    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, skip_on_ubsan_known_failure, yql_binary_path, do_custom_error_check
+    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, skip_on_ubsan_known_failure, yql_binary_path, check_custom_error, CheckFailure
 from yqlrun import YQLRun
 
 from test_utils import get_parameters_json, replace_vars, get_case_file
@@ -137,6 +137,9 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         patch_cfg_file=patch_cfg_file,
     )
 
+    def check_error_text(error_text):
+        return check_custom_error(error_text, sql_query)
+
     res, tables_res = execute(
         yqlrun,
         program=sql_query,
@@ -144,7 +147,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         output_tables=out_tables,
         files=files,
         urls=http_files_urls,
-        check_error=not xfail,
+        check_error=CheckFailure(check_error_text) if xfail else True,
         run_sql=run_sql,
         verbose=True,
         parameters=parameters)
@@ -152,8 +155,6 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
     fixed_stderr = res.std_err
     skip_on_ubsan_known_failure(res.std_err)
     if xfail:
-        assert res.execution_result.exit_code != 0
-        do_custom_error_check(res, sql_query)
         fixed_stderr = None
 
     fixed_result = YQLExecResult(res.std_out,

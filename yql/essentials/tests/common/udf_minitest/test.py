@@ -86,10 +86,11 @@ def test(case, mode):
     if mode == 'Results':
         extra_args = ['--udf-bridge', udf_bridge_path()] if spec.udf_bridge else []
         canon_runner = make_canon_runner(RUNNER_FACTORY, spec, extra_args)
-        canon_results = canon_runner.yql_exec(check_error=not spec.xfail, **exec_args)
+        canon_results = canon_runner.yql_exec(
+            check_error=yql_utils.CheckFailure() if spec.xfail else True,
+            **exec_args
+        )
 
-        if spec.xfail:
-            assert canon_results.execution_result.exit_code != 0
         return canonize_results(case, canon_results, spec.xfail, spec.canonize_ast, spec.diff_tool)
     elif mode == 'LLVM':
         canon_runner = make_canon_runner(RUNNER_FACTORY, spec)

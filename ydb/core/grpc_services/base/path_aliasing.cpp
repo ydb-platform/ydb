@@ -17,7 +17,7 @@ namespace NKikimr::NGRpcService {
         PathNormalizer_.reset();
     }
 
-    TString IAuditCtx::GetDatabaseRelativePath(TStringBuf path, TStringBuf base) const {
+    TString IRequestCtxBaseMtSafe::GetDatabaseRelativePath(TStringBuf path, TStringBuf base) const {
         if (!AppData()->FeatureFlags.GetEnableRelativePaths()) {
             return NormalizePath(path);
         }

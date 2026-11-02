@@ -5,26 +5,18 @@
 
 using namespace NYdb::NConsoleClient;
 
-namespace {
-
-TClientSettings MakeClientSettings() {
-    TClientSettings settings;
-    settings.EnableSsl = false;
-    settings.UseAccessToken = false;
-    settings.UseDefaultTokenFile = false;
-    settings.UseIamAuth = false;
-    settings.UseExportToYt = false;
-    settings.UseStaticCredentials = false;
-    settings.MentionUserAccount = false;
-    settings.UseOauth2TokenExchange = false;
-    settings.YdbDir = "ydb-relative-database-ut";
-    return settings;
-}
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(RelativeDatabase) {
     Y_UNIT_TEST(IsPreservedByCliConfiguration) {
+        TClientSettings settings;
+        settings.EnableSsl = false;
+        settings.UseAccessToken = false;
+        settings.UseDefaultTokenFile = false;
+        settings.UseIamAuth = false;
+        settings.UseExportToYt = false;
+        settings.UseStaticCredentials = false;
+        settings.MentionUserAccount = false;
+        settings.UseOauth2TokenExchange = false;
+        settings.YdbDir = "ydb-relative-database-ut";
         for (TString database : {"/Root/mydb", "Root/mydb", "mydb"}) {
             char arg0[] = "ydb";
             char arg1[] = "-e";
@@ -33,7 +25,6 @@ Y_UNIT_TEST_SUITE(RelativeDatabase) {
             char* argv[] = {arg0, arg1, arg2, arg3, database.begin()};
 
             TClientCommand::TConfig config(Y_ARRAY_SIZE(argv), argv);
-            const auto settings = MakeClientSettings();
             TClientCommandRootCommon root("ydb", settings);
 
             root.Prepare(config);

@@ -27,7 +27,6 @@ ENDIF()
 PEERDIR(
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
-    ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/scheme

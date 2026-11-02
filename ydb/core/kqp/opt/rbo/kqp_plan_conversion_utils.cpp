@@ -361,6 +361,32 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         Projections[key] = std::move(projection);
         OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(bindings);
         result = std::move(read);
+    } else if (TKqlStreamLookupTable::Match(node.Get())) {
+        const auto lookup = TKqlStreamLookupTable(node);
+        Y_ENSURE(TKqpStreamLookupSettings::Parse(lookup.Settings()).Strategy == EStreamLookupStrategyType::LookupRows);
+        auto input = ExprNodeToOperator(lookup.LookupKeys().Ptr());
+        const auto inputBindings = GetBindings(lookup.LookupKeys().Ptr());
+        TOpTableLookup::TLookupKeys keys;
+        const auto* schema = lookup.LookupKeys().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto* field : schema->GetItems()) {
+            keys.Append(ResolveBinding(*inputBindings, field->GetName()), TString(field->GetName()));
+        }
+        TUnorderedIUs columns;
+        TOrderedIUs<> projection;
+        auto bindings = std::make_shared<TExpression::TBindings>();
+        for (const auto column : lookup.Columns()) {
+            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", column.StringValue()));
+            columns.Add(id);
+            projection.Append(id);
+            Y_ENSURE(bindings->emplace(column.StringValue(), id).second);
+        }
+        auto op = MakeIntrusive<TOpTableLookup>(std::move(input), node->Pos(), lookup.Table().Ptr(),
+            std::move(columns), std::move(keys));
+        // Index rows can refer to a nullable main-table primary key.
+        op->AllowNullKeys = true;
+        Projections[key] = std::move(projection);
+        OutputBindings[key] = std::move(bindings);
+        result = std::move(op);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
         result = ConvertTKqpOpMap(node);
     } else if (NYql::NNodes::TKqpInfuseDependents::Match(node.Get())) {
@@ -978,7 +1004,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
         options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlUpdateRows") {
         type = EEffectType::UpdateRows;
@@ -990,14 +1016,14 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
 
         options.Columns = processColumns(columns.Cast());
         options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
-    } else if (effectType == "KqlUpsertRows") {
-        type = EEffectType::UpsertRows;
+    } else if (effectType == "KqlUpsertRows" || effectType == "KqlUpsertRowsIndex") {
+        type = effectType == "KqlUpsertRowsIndex" ? EEffectType::UpsertRowsIndex : EEffectType::UpsertRows;
 
         options.Columns = processColumns(columns.Cast());
         options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
             options.DefaultColumns = processColumns(defaultColumns.Cast());
         }
@@ -1008,13 +1034,13 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         type = EEffectType::DeleteRows;
 
         options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "KqlDeleteRowsIndex") {
         type = EEffectType::DeleteRowsIndex;
 
         options.ReturningColumns = processColumns(returningColumns.Cast());
-        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else {
         Y_ENSURE(false, "Unexpected table effects operation");

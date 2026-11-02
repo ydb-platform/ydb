@@ -13,6 +13,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
+#include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
@@ -153,6 +154,10 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
         allPhyStages.push_back(std::move(phyStages));
     }
     auto physicalQuery = traced("Build physical query", [&] { return BuildPhysicalQuery(std::move(allPhyStages)); });
+    TypeAnnotate(physicalQuery);
+    // Physical rewriting replaces lambdas; refresh their non-owning scope
+    // pointers before the MiniKQL compiler uses them for memoization.
+    Y_ENSURE(UpdateCompletness(physicalQuery, physicalQuery, RBOCtx.ExprCtx) == IGraphTransformer::TStatus::Ok);
     SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
     return physicalQuery;
 }
@@ -298,6 +303,12 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
     // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
     Y_ENSURE(!stageIds.empty());
     const auto maybeFinalStage = finalizedStages.at(stageIds.back());
+    if (Roots[rootIdx]->PlanProps.WithEffects) {
+        // A sink consumes its stream and exposes no result output. In
+        // particular, do not add a union/result stage on its output zero.
+        Y_ENSURE(!phyStages.empty() && phyStages.back() == maybeFinalStage);
+        return phyStages;
+    }
     const auto finalStage = GetFinalStage(maybeFinalStage);
     const bool needFinalNarrowing = NeedFinalNarrowing(rootIdx);
     const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(rootIdx, finalStage) : finalStage;
@@ -476,209 +487,95 @@ TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(int rootId
 }
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprNode::TPtr>>&& physicalStages) {
-    Y_ENSURE(physicalStages.size());
+    Y_ENSURE(physicalStages.size() == Roots.size() && !Roots.empty());
     auto& ctx = RBOCtx.ExprCtx;
-    auto pos = Roots[0]->Pos;
-
-    // FIXME: Support paramenter binding and materialize for multiple statements
-    TVector<TExprBase> phyTxs;
-    TVector<TKqpParamBinding> paramBindingsAllRoots;
-
-    TVector<TExprBase> phyStagesForMaterialize;
-    TVector<TExprBase> resultsForMaterialize;
-    TVector<TExprBase> paramBindingsForMaterialize;
-
-    // Prepare physical txs and bindings for materialize if needed.
-    ui32 materializeSize = 0;
-    ui32 materializeIdx = 0;
-
-    for (size_t i=0; i<Roots.size(); i++) {
-        auto paramBindingsCurr = CollectParamBindings(i, physicalStages[i].back());
-        paramBindingsAllRoots.insert(paramBindingsAllRoots.end(), paramBindingsCurr.begin(), paramBindingsCurr.end());
-
-        materializeSize += Materialize[i].size();
-
-        for (ui32 j = 0; j < Materialize[i].size(); ++j) {
-            auto param = TExprBase(Materialize[i][j].first).Cast<TCoParameter>();
-            auto materializeResult = TExprBase(Materialize[i][j].second).Cast<TDqCnValue>();
-
-            // clang-format off
-            auto resultBinding = Build<TKqpTxResultBinding>(ctx, pos)
-                .Type(ExpandType(pos, *materializeResult.Ptr()->GetTypeAnn(), ctx))
-                .TxIndex().Build("0")
-                .ResultIndex().Build(ToString(materializeIdx++))
-            .Done();
-            // clang-format on
-
-            // clang-format off
-            auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
-                .Name(param.Name())
-                .Binding(resultBinding.Ptr())
-            .Done();
-            // clang-format on
-            // Binding from materialize to main tx.
-            paramBindingsAllRoots.emplace_back(paramBinding);
-
-            auto materializeStage = materializeResult.Output().Stage();
-            const auto paramBindingsMaterialize = CollectParamBindings(i, materializeStage.Ptr());
-            // Bindings params in materialize.
-            paramBindingsForMaterialize.insert(paramBindingsForMaterialize.end(), paramBindingsMaterialize.begin(), paramBindingsMaterialize.end());
-            // Stages for phy tx.
-            phyStagesForMaterialize.emplace_back(materializeStage);
-            resultsForMaterialize.emplace_back(materializeResult);
-        }
-    }
-
-    if (materializeSize) {
-        TKqpPhyTxSettings txSettings;
-        txSettings.Type = EPhysicalTxType::Compute;
-
-        // clang-format off
-        auto phyTx = Build<TKqpPhysicalTx>(ctx, pos)
-            .Stages()
-                .Add(phyStagesForMaterialize)
-            .Build()
-            .Results()
-                .Add(resultsForMaterialize)
-            .Build()
-            .ParamBindings()
-                .Add(paramBindingsForMaterialize)
-            .Build()
-            .Settings(txSettings.BuildNode(ctx, pos))
-        .Done().Ptr();
-        // clang-format on
-
-        phyTxs.emplace_back(phyTx);
-    }
-
-    TExprNode::TPtr columnOrder;
-    TVector<TExprNode::TPtr> dqResults;
+    const auto pos = Roots.front()->Pos;
+    TVector<TExprNode::TPtr> transactions;
     TVector<TExprNode::TPtr> resultBindings;
 
-    TString txIndex = materializeSize ? "1" : "0";
-    int resultIndex = 0;
-
-    for (size_t i=0; i<Roots.size(); i++) {
-        TVector<TCoAtom> columnAtomList;
-
-        for (const auto& [id, label] : Roots[i]->GetColumns().Items()) {
-            columnAtomList.push_back(Build<TCoAtom>(ctx, Roots[i]->Pos).Value(label).Done());
+    // A query block's reads share a snapshot. Its effects also share a
+    // snapshot, with sink priorities preserving their write order. Only cross
+    // a transaction boundary when the frontend starts another block/phase.
+    for (size_t begin = 0; begin < Roots.size();) {
+        size_t end = begin + 1;
+        while (end < Roots.size() && Roots[end]->PlanProps.PhysicalTxGroup == Roots[begin]->PlanProps.PhysicalTxGroup) {
+            ++end;
         }
-        columnOrder = Build<TCoAtomList>(ctx, Roots[i]->Pos).Add(columnAtomList).Done().Ptr();
+        TVector<TKqpParamBinding> paramBindings;
+        THashSet<TString> paramNames;
+        TVector<TExprNode::TPtr> materializeStages;
+        TVector<TExprNode::TPtr> materializeResults;
+        TVector<TKqpParamBinding> materializeParams;
+        THashSet<TString> materializeParamNames;
+        for (size_t i = begin; i < end; ++i) {
+            for (const auto& parameter : CollectParamBindings(i, physicalStages[i].back())) {
+                if (paramNames.insert(parameter.Name().StringValue()).second) {
+                    paramBindings.push_back(parameter);
+                }
+            }
+            for (const auto& [paramNode, resultNode] : Materialize[i]) {
+                const auto param = TCoParameter(paramNode);
+                const auto result = TDqCnValue(resultNode);
+                auto binding = Build<TKqpTxResultBinding>(ctx, pos)
+                    .Type(ExpandType(pos, *resultNode->GetTypeAnn(), ctx))
+                    .TxIndex().Build(ToString(transactions.size()))
+                    .ResultIndex().Build(ToString(materializeResults.size()))
+                    .Done();
+                paramBindings.push_back(Build<TKqpParamBinding>(ctx, pos)
+                    .Name(param.Name()).Binding(binding.Ptr()).Done());
+                for (const auto& parameter : CollectParamBindings(i, result.Output().Stage().Ptr())) {
+                    if (materializeParamNames.insert(parameter.Name().StringValue()).second) {
+                        materializeParams.push_back(parameter);
+                    }
+                }
+                materializeStages.push_back(result.Output().Stage().Ptr());
+                materializeResults.push_back(resultNode);
+            }
+        }
+        if (!materializeResults.empty()) {
+            TKqpPhyTxSettings settings;
+            settings.Type = EPhysicalTxType::Compute;
+            transactions.push_back(Build<TKqpPhysicalTx>(ctx, pos)
+                .Stages().Add(materializeStages).Build()
+                .Results().Add(materializeResults).Build()
+                .ParamBindings().Add(materializeParams).Build()
+                .Settings(settings.BuildNode(ctx, pos)).Done().Ptr());
+        }
 
-        // clang-format off
-        // wrap in DqResult
-        auto dqResult = Build<TDqCnResult>(ctx, Roots[i]->Pos)
-            .Output()
-                .Stage(physicalStages[i].back())
-                .Index().Build("0")
-            .Build()
-            .ColumnHints(columnOrder)
-        .Done().Ptr();
-        // clang-format on
-
-        TypeAnnotate(dqResult);
-        YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
-
-        dqResults.push_back(dqResult);
-
-        // clang-format off
-        auto resultBinding = Build<TKqpTxResultBinding>(ctx, Roots[i]->Pos)
-            .Type(ExpandType(Roots[i]->Pos, *dqResult->GetTypeAnn(), ctx))
-            .TxIndex().Build(txIndex)
-            .ResultIndex().Build(TStringBuilder() << resultIndex++)
-        .Done().Ptr();
-        // clang-format on
-
-        resultBindings.push_back(resultBinding);
+        TVector<TExprNode::TPtr> stages;
+        TVector<TExprNode::TPtr> results;
+        const auto settings = GetPhysicalTxSettings(begin);
+        for (size_t i = begin; i < end; ++i) {
+            Y_ENSURE(Roots[i]->PlanProps.WithEffects == settings.WithEffects);
+            stages.insert(stages.end(), physicalStages[i].begin(), physicalStages[i].end());
+            if (settings.WithEffects) {
+                continue;
+            }
+            TVector<TCoAtom> columns;
+            for (const auto& [id, label] : Roots[i]->GetColumns().Items()) {
+                columns.push_back(Build<TCoAtom>(ctx, pos).Value(label).Done());
+            }
+            auto result = Build<TDqCnResult>(ctx, pos)
+                .Output().Stage(physicalStages[i].back()).Index().Build("0").Build()
+                .ColumnHints().Add(columns).Build().Done().Ptr();
+            TypeAnnotate(result);
+            resultBindings.push_back(Build<TKqpTxResultBinding>(ctx, pos)
+                .Type(ExpandType(pos, *result->GetTypeAnn(), ctx))
+                .TxIndex().Build(ToString(transactions.size()))
+                .ResultIndex().Build(ToString(results.size())).Done().Ptr());
+            results.push_back(result);
+        }
+        transactions.push_back(Build<TKqpPhysicalTx>(ctx, pos)
+            .Stages().Add(stages).Build()
+            .Results().Add(results).Build()
+            .ParamBindings().Add(paramBindings).Build()
+            .Settings(settings.BuildNode(ctx, pos)).Done().Ptr());
+        begin = end;
     }
-
-    TVector<TExprNode::TPtr> allPhysicalStages;
-    for (auto & stages : physicalStages) {
-        allPhysicalStages.insert(allPhysicalStages.end(), stages.begin(), stages.end());
-    }
-
-    TExprNode::TPtr mainTx;
-
-    auto phyTxSettings = GetPhysicalTxSettings();
-    if (phyTxSettings.WithEffects) {
-        // clang-format off
-        // Build PhysicalTx
-        mainTx = Build<TKqpPhysicalTx>(ctx, Roots[0]->Pos)
-                .Stages()
-                    .Add(allPhysicalStages)
-                .Build()
-                .Results().Build()
-                .ParamBindings()
-                    .Add(paramBindingsAllRoots)
-                .Build()
-                .Settings(phyTxSettings.BuildNode(ctx, Roots[0]->Pos))
-            .Done().Ptr();
-        // clang-format on
-    }
-    else {
-        // clang-format off
-        // Build PhysicalTx
-        mainTx = Build<TKqpPhysicalTx>(ctx, Roots[0]->Pos)
-                .Stages()
-                    .Add(allPhysicalStages)
-                .Build()
-                .Results()
-                    .Add(dqResults)
-                .Build()
-                .ParamBindings()
-                    .Add(paramBindingsAllRoots)
-                .Build()
-                .Settings(phyTxSettings.BuildNode(ctx, Roots[0]->Pos))
-            .Done().Ptr();
-        // clang-format on
-    }
-    phyTxs.emplace_back(mainTx);
-
-
-    auto phyQuerySettings = GetPhysicalQuerySettings();
-    TExprNode::TPtr phyQuery;
-
-    // Build Physical query
-    if (phyTxSettings.WithEffects) {
-        // clang-format off
-        phyQuery = Build<TKqpPhysicalQuery>(ctx, Roots[0]->Pos)
-            .Transactions()
-                .Add(phyTxs)
-            .Build()
-            .Results().Build()
-            .Settings(phyQuerySettings.BuildNode(ctx, Roots[0]->Pos))
-        .Done().Ptr();
-        // clang-format on
-    } else {
-        // clang-format off
-        phyQuery = Build<TKqpPhysicalQuery>(ctx, Roots[0]->Pos)
-            .Transactions()
-                .Add(phyTxs)
-            .Build()
-            .Results()
-                .Add(resultBindings)
-            .Build()
-            .Settings(phyQuerySettings.BuildNode(ctx, Roots[0]->Pos))
-        .Done().Ptr();
-        // clang-format on
-    }
-
-    TVector<TCoAtom> queryColumnAtomList;
-
-    for (const auto& name : Roots.back()->GetQueryColumns()) {
-        queryColumnAtomList.push_back(Build<TCoAtom>(ctx, Roots.back()->Pos).Value(name).Done());
-    }
-    auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
-
-    TVector<TExprNode::TPtr> listElements;
-    if (!phyTxSettings.WithEffects) {
-        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns}));
-    } else {
-        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery}));
-    }
-
-    return ctx.NewList(Roots[0]->Pos, std::move(listElements));
+    return Build<TKqpPhysicalQuery>(ctx, pos)
+        .Transactions().Add(transactions).Build()
+        .Results().Add(resultBindings).Build()
+        .Settings(GetPhysicalQuerySettings().BuildNode(ctx, pos)).Done().Ptr();
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
@@ -705,13 +602,10 @@ TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {
     return querySettings;
 }
 
-TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
+TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings(size_t rootIdx) const {
     auto& kqpCtx = RBOCtx.KqpCtx;
     TKqpPhyTxSettings txSettings;
-    bool withEffects = false;
-    for (auto & root : Roots) {
-        withEffects |= root->PlanProps.WithEffects;
-    }
+    const bool withEffects = Roots[rootIdx]->PlanProps.WithEffects;
     txSettings.WithEffects = withEffects;
 
     switch (kqpCtx.QueryCtx->Type) {
@@ -1056,6 +950,7 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
         status = RBOCtx.TypeAnnTransformer.Transform(input, output, RBOCtx.ExprCtx);
+        input = output;
     } while (status == IGraphTransformer::TStatus::Repeat);
 
     if (status != IGraphTransformer::TStatus::Ok) {

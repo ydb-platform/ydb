@@ -197,6 +197,9 @@ struct TPlanProps {
     TSubplans Subplans;
     TColumnLineage ColumnLineage;
     bool PgSyntax = false;
+    // Logical query-block phase and write order, preserved through RBO rules.
+    ui64 PhysicalTxGroup = 0;
+    ui64 EffectPriority = 0;
     bool WithEffects = false;
     bool WithReturning = false;
 };

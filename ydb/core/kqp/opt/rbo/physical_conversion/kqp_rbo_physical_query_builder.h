@@ -41,7 +41,7 @@ private:
     NYql::TExprNode::TPtr TypeAnnotateProgram(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType);
     void TypeAnnotate(NYql::TExprNode::TPtr& input);
     NYql::TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
-    NYql::TKqpPhyTxSettings GetPhysicalTxSettings() const;
+    NYql::TKqpPhyTxSettings GetPhysicalTxSettings(size_t rootIdx) const;
     NYql::TExprNode::TPtr GetFinalStage(const NYql::TExprNode::TPtr& stage) const;
     bool NeedFinalNarrowing(int rootIdx);
     NYql::TExprNode::TPtr BuildFinalNarrowStage(int rootIdx, const NYql::TExprNode::TPtr& stage) const;

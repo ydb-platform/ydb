@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffectsNewRbo) {
                 UPSERT INTO SecondaryKeys (Key, Fk, Value) VALUES
                     (6u, 60u, "Payload60");
 
-                SELECT * FROM SecondaryKeys VIEW Index;
+                SELECT Fk, Key, Value FROM SecondaryKeys VIEW Index;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffectsNewRbo) {
                 UPSERT INTO SecondaryComplexKeys (Key, Fk1, Fk2) VALUES
                     (8u, 8u, "Fk9");
 
-                SELECT * FROM SecondaryComplexKeys VIEW Index;
+                SELECT Fk1, Fk2, Key, Value FROM SecondaryComplexKeys VIEW Index;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffectsNewRbo) {
                 UPSERT INTO SecondaryWithDataColumns (Key, Index2, Value) VALUES
                     ("Primary2", "Secondary22", "Value22");
 
-                SELECT * FROM SecondaryWithDataColumns VIEW Index;
+                SELECT ExtPayload, Index2, Key, Value FROM SecondaryWithDataColumns VIEW Index;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([

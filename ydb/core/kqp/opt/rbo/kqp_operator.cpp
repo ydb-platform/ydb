@@ -961,7 +961,7 @@ TUnorderedIUs TOpTableEffect::GetUsedIUs(TPlanProps& props) {
     return Columns_.Unordered();
 }
 
-TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
+TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) {
     if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
         Y_ENSURE(false, "Returning columns not supported in new optimizer");
     }
@@ -971,6 +971,8 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
     switch(EffectType) {
         case EEffectType::InsertRows:
         case EEffectType::InsertRowsIndex:
+            Y_ENSURE(!Options.OnConflict || *Options.OnConflict == "abort",
+                "INSERT conflict handling must be expanded before building sink settings");
             mode = "insert";
             break;
         case EEffectType::UpdateRows:
@@ -987,6 +989,17 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
             break;
         default:
             Y_ENSURE(false, "Unsupported DML in new optimizer");
+    }
+
+    // KqlUpsertRows also represents REPLACE and predicate UPDATE. The
+    // frontend's mode determines both main-table and index maintenance.
+    if (Options.Settings) {
+        for (const auto& setting : *Options.Settings) {
+            if (setting->Head().IsAtom("Mode")) {
+                Y_ENSURE(setting->ChildrenSize() == 2 && setting->Child(1)->IsAtom());
+                mode = setting->Child(1)->Content();
+            }
+        }
     }
 
     TString isBatch = "false";
@@ -1010,7 +1023,7 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
             .Table(Table)
             .InconsistentWrite().Build("false")
             .Mode().Build(mode)
-            .Priority().Build("0")
+            .Priority().Build(::ToString(priority))
             .StreamWrite().Build("false")
             .IsBatch().Build(isBatch)
             .IsIndexImplTable().Build("false")

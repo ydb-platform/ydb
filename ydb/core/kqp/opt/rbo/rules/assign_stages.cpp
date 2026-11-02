@@ -325,7 +325,7 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
     } else if (input->Kind == EOperator::TableEffect) {
         auto tableEffect = CastOperator<TOpTableEffect>(input);
 
-        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx));
+        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx, props.EffectPriority));
         const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
         const auto outputIndex = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
 

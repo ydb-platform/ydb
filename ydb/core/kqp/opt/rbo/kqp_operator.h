@@ -1422,7 +1422,7 @@ public:
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
-    TExprNode::TPtr BuildSettings(TExprContext& ctx);
+    TExprNode::TPtr BuildSettings(TExprContext& ctx, ui64 priority);
 
     TExprNode::TPtr Table;
     EEffectType EffectType;

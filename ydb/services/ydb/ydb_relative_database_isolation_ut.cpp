@@ -3,6 +3,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 
@@ -127,7 +128,7 @@ struct TFixture {
 
     void CheckAccess(TStringBuf database, TStringBuf token, TStringBuf ownTable, TStringBuf otherTable, ui64 key) {
         const TString session = Open(database, token);
-        for (const TString table : {TString("marker"), TString(ownTable)}) {
+        for (const TString& table : {TString("marker"), TString(ownTable)}) {
             const auto result = Result<Ydb::Table::ExecuteQueryResult>(Query(session, database, token,
                 TStringBuilder() << "SELECT Key FROM `" << table << "`;"));
             UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);

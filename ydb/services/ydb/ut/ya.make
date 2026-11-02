@@ -32,7 +32,6 @@ SRCS(
     ydb_read_rows_ut.cpp
     ydb_relative_database_ut.cpp
     ydb_relative_resource_ut.cpp
-    ydb_relative_database_describe_ut.cpp
     ydb_relative_database_isolation_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp

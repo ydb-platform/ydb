@@ -439,7 +439,7 @@ private:
 
         if (req->has_ttl_settings()) {
             auto ttlSettings = req->ttl_settings();
-            ResolveTtlStoragePaths(ttlSettings, *Request_);
+            NormalizeTtlStoragePaths(ttlSettings, *Request_);
             if (!FillTtlSettings(*create->MutableTtlSettings()->MutableEnabled(), ttlSettings, status, error)) {
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
@@ -601,7 +601,7 @@ private:
         TString error;
         if (req->has_set_ttl_settings()) {
             auto ttlSettings = req->set_ttl_settings();
-            ResolveTtlStoragePaths(ttlSettings, *Request_);
+            NormalizeTtlStoragePaths(ttlSettings, *Request_);
             if (!FillTtlSettings(*alter->MutableAlterTtlSettings()->MutableEnabled(), ttlSettings, status, error)) {
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }

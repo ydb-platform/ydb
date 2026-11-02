@@ -8,6 +8,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <expected>
+#include <initializer_list>
 #include <utility>
 
 using namespace NKikimr;
@@ -217,9 +218,17 @@ Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
 
 Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndLeadingSlash, TNameResolverFixture) {
     ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
+    auto checkPaths = [&](const TString& database, TStringBuf expectedDatabase,
+                          std::initializer_list<std::pair<TString, TString>> cases) {
+        for (const auto& [name, expected] : cases) {
+            const auto resolved = OkFull(ResolveName(database, name, {}, {}, true));
+            UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, database << ": " << name);
+            UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, expectedDatabase);
+        }
+    };
     for (const TString database : {"/Root/Db", "Root/Db", "/Root/team/Db", "/Root/Root/Db"}) {
         const TString canonicalDatabase = CanonizePath(database);
-        const std::pair<TString, TString> cases[] = {
+        checkPaths(database, canonicalDatabase, {
             {"topic", canonicalDatabase + "/topic"},
             {"Db/topic", canonicalDatabase + "/Db/topic"},
             {"Root2/topic", canonicalDatabase + "/Root2/topic"},
@@ -230,13 +239,20 @@ Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndLeadingSlash, TNameResolverFixture) 
             {"/Root2/topic", "/Root2/topic"},
             {"/rt3.dc1--account--topic", "/rt3.dc1--account--topic"},
             {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
-        };
-        for (const auto& [name, expected] : cases) {
-            const auto resolved = OkFull(ResolveName(database, name, {}, {}, true));
-            UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, database << ": " << name);
-            UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, canonicalDatabase);
-        }
+        });
     }
+    checkPaths("/Other/Db", "/Other/Db", {
+        {"Root/other/topic", "/Other/Db/Root/other/topic"},
+        {"Other/topic", "/Other/Db/Other/topic"},
+        {"Root2/topic", "/Other/Db/Root2/topic"},
+    });
+    checkPaths("", "", {
+        {"topic", "/topic"},
+        {"Root/Db/topic", "/Root/Db/topic"},
+        {"/Root/Db/topic", "/Root/Db/topic"},
+        {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
+        {"", ""},
+    });
 }
 
 Y_UNIT_TEST_F(RelativePathsRequireFlagAndCallerOptIn, TNameResolverFixture) {
@@ -250,36 +266,6 @@ Y_UNIT_TEST_F(RelativePathsRequireFlagAndCallerOptIn, TNameResolverFixture) {
     ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(false);
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "Root/Db/topic", {}, {}, true)), "/Root/Db/topic");
     UNIT_ASSERT_VALUES_EQUAL(Ok(ResolveName(Database, "/other/topic", {}, {}, true)), "/Root/Db/other/topic");
-}
-
-Y_UNIT_TEST_F(FccTreatsConfiguredRootNameAsRelative, TNameResolverFixture) {
-    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
-    const std::pair<TStringBuf, TStringBuf> cases[] = {
-        {"Root/other/topic", "/Other/Db/Root/other/topic"},
-        {"Other/topic", "/Other/Db/Other/topic"},
-        {"Root2/topic", "/Other/Db/Root2/topic"},
-    };
-    for (const auto& [name, expected] : cases) {
-        const auto resolved = OkFull(ResolveName("/Other/Db", name, {}, {}, true));
-        UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, name);
-        UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Other/Db");
-    }
-}
-
-Y_UNIT_TEST_F(FccWithoutDatabaseKeepsAbsoluteTopicAndEmptyNavigation, TNameResolverFixture) {
-    ActorSystemStub.AppData.FeatureFlags.SetEnableRelativePaths(true);
-    const std::pair<TStringBuf, TStringBuf> cases[] = {
-        {"topic", "/topic"},
-        {"Root/Db/topic", "/Root/Db/topic"},
-        {"/Root/Db/topic", "/Root/Db/topic"},
-        {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
-        {"", ""},
-    };
-    for (const auto& [name, expected] : cases) {
-        const auto resolved = OkFull(ResolveName("", name, {}, {}, true));
-        UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, name);
-        UNIT_ASSERT(resolved.NavigateDatabase.empty());
-    }
 }
 
 Y_UNIT_TEST_F(FccKeepsLiteralRt3, TNameResolverFixture) {

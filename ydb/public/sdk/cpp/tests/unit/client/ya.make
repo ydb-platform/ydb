@@ -18,6 +18,5 @@ RECURSE(
     retry
     retry_range
     table
-    topic
     value
 )

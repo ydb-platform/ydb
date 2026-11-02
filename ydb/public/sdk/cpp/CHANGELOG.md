@@ -1,5 +1,7 @@
 * Added database-relative resource paths for gRPC APIs, the CLI, and C++ SDK. Paths starting with `/` remain absolute.
 
+* Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
+
 * Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
 
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.

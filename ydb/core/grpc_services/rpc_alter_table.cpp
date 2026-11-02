@@ -495,7 +495,7 @@ private:
             || req->add_columns_size() || req->alter_columns_size()) {
             requestWithNormalizedPaths.CopyFrom(*req);
             if (req->has_set_ttl_settings() && req->set_ttl_settings().has_tiered_ttl()) {
-                ResolveTtlStoragePaths(*requestWithNormalizedPaths.mutable_set_ttl_settings(), *Request_);
+                NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_set_ttl_settings(), *Request_);
             }
             const auto normalizeSequences = [this](auto& columns) {
                 for (auto& column : columns) {

@@ -130,6 +130,89 @@ namespace NKikimr::NStorage {
         StandbyDirty[msg.TargetGroupId] |= msg.Data;
     }
 
+    void TNodeWarden::Handle(TEvNodeWardenRegisterBridgeProxy::TPtr ev) {
+        auto& msg = *ev->Get();
+        if (msg.Registered) {
+            BridgeProxies[msg.GroupId].insert(ev->Sender);
+        } else if (const auto it = BridgeProxies.find(msg.GroupId); it != BridgeProxies.end()) {
+            it->second.erase(ev->Sender);
+            if (it->second.empty()) {
+                BridgeProxies.erase(it);
+            }
+        }
+    }
+
+    void TNodeWarden::ApplyStandbySeals(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {
+        bool report = false;
+        for (const auto& item : update.GetStandbySeals()) {
+            using T = std::decay_t<decltype(item)>;
+            const auto groupId = TGroupId::FromProto(&item, &T::GetBridgeProxyGroupId);
+            const auto targetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId);
+            const auto it = BridgeProxies.find(groupId);
+            if (it == BridgeProxies.end()) {
+                // no proxy of the group runs here, so nothing is written to the part from this node
+                StandbySealed.emplace_back(targetGroupId, item.GetSealId());
+                report = true;
+                continue;
+            }
+            const ui64 cookie = ++LastStandbySealCookie;
+            StandbySealsInProgress.emplace(cookie, TStandbySealInProgress{
+                .TargetGroupId = targetGroupId,
+                .SealId = item.GetSealId(),
+                .ProxiesPending = static_cast<ui32>(it->second.size()),
+            });
+            for (const TActorId& proxyId : it->second) {
+                Send(proxyId, new TEvNodeWardenStandbySeal(targetGroupId, item.GetBridgeProxyGroupGeneration()),
+                    IEventHandle::FlagTrackDelivery, cookie);
+            }
+        }
+        if (report) {
+            auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+            FillInStandbyReports(&notify->Record);
+            SendToController(std::move(notify));
+        }
+    }
+
+    void TNodeWarden::Handle(TEvNodeWardenStandbySealed::TPtr ev) {
+        OnStandbySealResolved(ev->Cookie);
+    }
+
+    void TNodeWarden::OnStandbySealResolved(ui64 cookie) {
+        const auto it = StandbySealsInProgress.find(cookie);
+        if (it == StandbySealsInProgress.end()) {
+            Y_DEBUG_ABORT();
+            return;
+        }
+        if (--it->second.ProxiesPending) {
+            return;
+        }
+        StandbySealed.emplace_back(it->second.TargetGroupId, it->second.SealId);
+        StandbySealsInProgress.erase(it);
+        // the promotion waits for it, so it is reported at once
+        auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+        FillInStandbyReports(&notify->Record);
+        SendToController(std::move(notify));
+    }
+
+    bool TNodeWarden::FillInStandbyReports(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update) {
+        // the marks lost along with the pipe don't matter: BSC takes every standby part for dirty when the node registers;
+        // the marks go before the seals, as the proxies have sent them before answering
+        const bool res = !StandbyDirty.empty() || !StandbySealed.empty();
+        for (const auto& [targetGroupId, data] : std::exchange(StandbyDirty, {})) {
+            auto *item = update->AddStandbyDirty();
+            targetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
+            if (data) {
+                item->SetData(true);
+            }
+        }
+        for (const auto& [targetGroupId, sealId] : std::exchange(StandbySealed, {})) {
+            auto *item = update->AddStandbySealed();
+            targetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
+            item->SetSealId(sealId);
+        }
+        return res;
+    }
+
     bool TNodeWarden::FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update,
             TWorkingSyncer& syncer, bool forceProgress) {
         auto *item = update->AddSyncers();
@@ -191,15 +274,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::NotifySyncersProgress() {
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
-        // the marks lost along with the pipe don't matter: BSC takes every standby part for dirty when the node registers
-        bool doSend = !StandbyDirty.empty();
-        for (const auto& [targetGroupId, data] : std::exchange(StandbyDirty, {})) {
-            auto *item = notify->Record.AddStandbyDirty();
-            targetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
-            if (data) {
-                item->SetData(true);
-            }
-        }
+        bool doSend = FillInStandbyReports(&notify->Record);
         for (const TWorkingSyncer& syncer : WorkingSyncers) {
             if (FillInWorkingSyncer(&notify->Record, const_cast<TWorkingSyncer&>(syncer), false)) {
                 doSend = true;

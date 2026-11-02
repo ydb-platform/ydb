@@ -221,4 +221,37 @@ namespace NKikimr::NStorage {
         {}
     };
 
+    // the bridge proxy of the group tells it has started (or stopped), so that it gets the seals of the parts promoted
+    // from HOT_STANDBY
+    struct TEvNodeWardenRegisterBridgeProxy
+        : TEventLocal<TEvNodeWardenRegisterBridgeProxy, TEvBlobStorage::EvNodeWardenRegisterBridgeProxy>
+    {
+        const TGroupId GroupId;
+        const bool Registered;
+
+        TEvNodeWardenRegisterBridgeProxy(TGroupId groupId, bool registered)
+            : GroupId(groupId)
+            , Registered(registered)
+        {}
+    };
+
+    // the bridge proxy answers with TEvNodeWardenStandbySealed (with the same cookie) once it has the group generation
+    // given and holds no background writes to the part, having reported every one it has lost with
+    // TEvNodeWardenStandbyDirty
+    struct TEvNodeWardenStandbySeal
+        : TEventLocal<TEvNodeWardenStandbySeal, TEvBlobStorage::EvNodeWardenStandbySeal>
+    {
+        const TGroupId TargetGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+
+        TEvNodeWardenStandbySeal(TGroupId targetGroupId, ui32 bridgeProxyGroupGeneration)
+            : TargetGroupId(targetGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+        {}
+    };
+
+    struct TEvNodeWardenStandbySealed
+        : TEventLocal<TEvNodeWardenStandbySealed, TEvBlobStorage::EvNodeWardenStandbySealed>
+    {};
+
 } // NKikimr::NStorage

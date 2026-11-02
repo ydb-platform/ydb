@@ -57,7 +57,18 @@ public:
                 if (auto *pile = NBridge::GetGroupPile(state, unsyncedBridgePileId)) {
                     const auto targetGroupId = TGroupId::FromProto(pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     if (pile->GetBecameUnsyncedGeneration() < pss.GetBecameUnsyncedGeneration()) {
-                        pile->ClearStage(); // initial stage
+                        const auto pileState = Config.GetClusterState().GetPerPileState(
+                            unsyncedBridgePileId.GetPileIndex());
+                        const bool promotion = pileState == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2 &&
+                            pss.GetFromHotStandby();
+                        if (pileState == NKikimrBridge::TClusterState::HOT_STANDBY || promotion) {
+                            // The stage means nothing to the writers while the pile is in standby. When it is promoted,
+                            // the writers taking it into data quorum before knowing this reset send it every write,
+                            // instead of skipping it, as they would at the initial stage.
+                            pile->SetStage(NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA);
+                        } else {
+                            pile->ClearStage(); // initial stage
+                        }
                         pile->SetBecameUnsyncedGeneration(pss.GetBecameUnsyncedGeneration());
                         State->GroupContentChanged.insert(groupId);
 
@@ -67,7 +78,12 @@ public:
                         if (inserted) {
                             Self->EnqueueSyncer(it->second);
                         }
-                        it->second.StandbyDirty = EStandbyDirty::Data; // the reset part of HOT_STANDBY pile holds unknown state
+                        if (!promotion) {
+                            // the part of the pile entering HOT_STANDBY holds unknown state; the promoted one is known to
+                            // have missed what it has been marked for
+                            it->second.StandbyDirty = EStandbyDirty::Data;
+                        }
+                        it->second.StandbySealId = 0;
                     }
                     if (pile->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
                         somethingUnsynced = true;
@@ -1210,11 +1226,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
     // make set of existing target-source tuples to drop unused ones
     THashSet<TSyncerState*> unlistedSyncerState;
     if (comprehensive) {
-        // the node registers after it has restarted with its writes to the parts of HOT_STANDBY piles in flight, or after
-        // the marks of the parts that missed something have been lost along with the pipe
-        for (auto& [targetGroupId, syncerState] : TargetGroupToSyncerState) {
-            MarkStandbyDirty(syncerState, true);
-        }
+        OnStandbyWriterLost();
         for (auto it = NodeToSyncerState.lower_bound({nodeId, nullptr}); it != NodeToSyncerState.end() &&
                 std::get<0>(*it) == nodeId; ++it) {
             unlistedSyncerState.insert(std::get<1>(*it));
@@ -1368,6 +1380,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
 
         if (syncer.GetFinished()) {
             const bool thorough = perNodeInfo.Thorough;
+            const bool promote = perNodeInfo.Promote;
 
             // syncer is finished, so we remove it from working set
             size_t numErased = NodeToSyncerState.erase({nodeId, &syncerState});
@@ -1378,7 +1391,10 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             EnqueueSyncer(syncerState);
             updateNodeWarden = true;
 
-            if (syncer.GetReconcile()) {
+            if (promote && syncer.HasErrorReason()) {
+                MarkStandbyDirty(syncerState, thorough); // and the sync is retried as the failed one is
+            }
+            if (syncer.GetReconcile() && !promote) {
                 // the stage of the standby part stays as it is
                 const TMonotonic now = TActivationContext::Monotonic();
                 if (syncer.HasErrorReason()) {
@@ -1589,13 +1605,14 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             numReconcilersCounted.emplace(0);
             for (const auto& [targetGroupId, syncerState] : TargetGroupToSyncerState) {
                 *numReconcilersCounted += std::ranges::any_of(syncerState.NodeIds | std::views::values,
-                    &TSyncerState::TPerNodeInfo::Reconcile);
+                    [](const auto& item) { return item.Reconcile && !item.Promote; });
             }
         }
         return *numReconcilersCounted;
     };
 
     TMonotonic retryAt = TMonotonic::Max();
+    TStandbySeals seals;
     // groups being made fully bridged ones take the slots left by the piles getting back, which regain redundancy
     for (const bool upgradePass : {false, true}) {
         for (auto it = SyncersRequiringAction.begin(); it != SyncersRequiringAction.end(); ) {
@@ -1678,15 +1695,60 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
                     continue;
                 }
 
-                if (!reconcile) {
-                    // the sync is started as soon as possible
-                } else if (bridgePileId == authorityPileId || syncerState.StandbyDirty == EStandbyDirty::None) {
-                    continue; // the authority part takes no background writes; or the part has missed nothing
-                } else if (now < syncerState.StandbyNotBefore) {
-                    retryAt = Min(retryAt, syncerState.StandbyNotBefore);
-                    continue;
-                } else if (MaxStandbyReconcilers <= numReconcilers()) {
-                    continue; // it waits for a running pass to finish
+                // the part of the pile switched to NOT_SYNCHRONIZED_2 right from HOT_STANDBY is synced by reconciliation,
+                // if it has missed anything at all
+                const auto *pss = FindPileSyncState(bridgePileId);
+                const bool promotion = proxyGroup &&
+                    bridgePile->State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2 &&
+                    pss && pss->GetFromHotStandby() &&
+                    pile.GetStage() == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA;
+                bool promote = false;
+
+                if (reconcile) {
+                    if (bridgePileId == authorityPileId || syncerState.StandbyDirty == EStandbyDirty::None) {
+                        continue; // the authority part takes no background writes; or the part has missed nothing
+                    } else if (now < syncerState.StandbyNotBefore) {
+                        retryAt = Min(retryAt, syncerState.StandbyNotBefore);
+                        continue;
+                    } else if (MaxStandbyReconcilers <= numReconcilers()) {
+                        continue; // it waits for a running pass to finish
+                    }
+                } else if (promotion) {
+                    // a part missing a blob write is thoroughly reconciled at once; whether the rest have missed anything
+                    // is known when every node has resolved its background writes
+                    if (syncerState.StandbyDirty != EStandbyDirty::Data) {
+                        if (!syncerState.StandbySealId) {
+                            syncerState.StandbySealId = ++NextStandbySealId;
+                            syncerState.StandbySealDeadline = now + StandbySealTimeout;
+                            syncerState.StandbySealPendingNodes.clear();
+                            for (const auto& [nodeId, node] : Nodes) {
+                                if (node.Registered) {
+                                    syncerState.StandbySealPendingNodes.insert(nodeId);
+                                    auto& seal = seals[nodeId].emplace_back();
+                                    syncerState.BridgeProxyGroupId.CopyToProto(&seal,
+                                        &std::decay_t<decltype(seal)>::SetBridgeProxyGroupId);
+                                    seal.SetBridgeProxyGroupGeneration(proxyGroup->Generation);
+                                    targetGroupId.CopyToProto(&seal, &std::decay_t<decltype(seal)>::SetTargetGroupId);
+                                    seal.SetSealId(syncerState.StandbySealId);
+                                }
+                            }
+                        }
+                        if (syncerState.StandbySealPendingNodes && now < syncerState.StandbySealDeadline) {
+                            retryAt = Min(retryAt, syncerState.StandbySealDeadline);
+                            continue;
+                        } else if (syncerState.StandbySealPendingNodes) {
+                            YDB_LOG_NOTICE("standby seal timed out",
+                                {"marker", "BSCBR22"},
+                                {"targetGroupId", targetGroupId},
+                                {"pendingNodes", FormatList(syncerState.StandbySealPendingNodes)});
+                            MarkStandbyDirty(syncerState, true);
+                        }
+                    }
+                    if (syncerState.StandbyDirty == EStandbyDirty::None) {
+                        CommitStandbyPromotion(syncerState, syncerState.BridgeProxyGroupId, *proxyGroup);
+                        break; // the entry is in commit now
+                    }
+                    promote = true;
                 }
 
                 // pick the pile to sync from, the primary one preferably; only the part of the synchronized pile is sure to
@@ -1785,12 +1847,13 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 
                 auto& perNodeInfo = syncerState.NodeIds[nodeId];
                 perNodeInfo.SourceGroupId = *sourceGroupId;
-                if (reconcile) {
+                if (reconcile || promote) {
                     // what is missed from now on is repaired by the next pass
                     perNodeInfo.Reconcile = true;
                     perNodeInfo.Thorough = syncerState.StandbyDirty == EStandbyDirty::Data;
+                    perNodeInfo.Promote = promote;
                     syncerState.StandbyDirty = EStandbyDirty::None;
-                    ++numReconcilers();
+                    numReconcilers() += reconcile;
                 }
                 NodeToSyncerState.emplace(nodeId, &syncerState);
                 BridgeSyncNodeRatesDirty = true;
@@ -1805,17 +1868,27 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         TActivationContext::Schedule(retryAt, new IEventHandle(TEvPrivate::EvRetrySyncers, 0, SelfId(), {}, nullptr, 0));
     }
 
+    for (const auto& [nodeId, items] : seals) {
+        nodesToUpdate.insert(nodeId);
+    }
     UpdateBridgeSyncNodeRates(nodesToUpdate);
-    SendSyncersToNodes(nodesToUpdate);
+    SendSyncersToNodes(nodesToUpdate, &seals);
 }
 
-void TBlobStorageController::SendSyncersToNodes(const THashSet<TNodeId>& nodeIds) {
+void TBlobStorageController::SendSyncersToNodes(const THashSet<TNodeId>& nodeIds, TStandbySeals *seals) {
     for (TNodeId nodeId : nodeIds) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         FillBridgeSyncNodeRate(nodeId, &ev->Record);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
+        if (seals) {
+            if (const auto it = seals->find(nodeId); it != seals->end()) {
+                for (auto& seal : it->second) {
+                    ev->Record.AddStandbySeals()->Swap(&seal);
+                }
+            }
+        }
         YDB_LOG_DEBUG("SendSyncersToNodes: sending an update",
             {"marker", "BSCBR09"},
             {"nodeId", nodeId},
@@ -1884,6 +1957,33 @@ void TBlobStorageController::FillBridgeSyncNodeRate(TNodeId nodeId,
     SentBridgeSyncNodeRates[nodeId] = rate;
 }
 
+void TBlobStorageController::OnStandbyWriterLost() {
+    for (auto& [targetGroupId, syncerState] : TargetGroupToSyncerState) {
+        MarkStandbyDirty(syncerState, true);
+    }
+}
+
+void TBlobStorageController::CommitStandbyPromotion(TSyncerState& syncerState, TGroupId groupId, const TGroupInfo& group) {
+    YDB_LOG_INFO("part promoted from HOT_STANDBY is synced",
+        {"marker", "BSCBR23"},
+        {"groupId", groupId},
+        {"targetGroupId", syncerState.TargetGroupId});
+
+    NKikimrBlobStorage::TGroupInfo bridgeGroupInfo(*group.BridgeGroupInfo);
+    auto *pile = NBridge::FindGroupPileByGroupId(bridgeGroupInfo.MutableBridgeGroupState(), syncerState.TargetGroupId);
+    Y_ABORT_UNLESS(pile);
+    pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+
+    syncerState.InCommit = true;
+    syncerState.Unlink();
+
+    std::vector<TTxUpdateBridgeSyncState::TGroupStateUpdate> updates;
+    updates.emplace_back(syncerState.TargetGroupId, TTxUpdateBridgeSyncState::TChangeStage{});
+    Execute(std::make_unique<TTxUpdateBridgeSyncState>(this, std::move(updates), TActivationContext::Now()));
+    Execute(std::make_unique<TTxUpdateBridgeGroupInfo>(this, groupId, group.Generation, std::move(bridgeGroupInfo),
+        syncerState.TargetGroupId));
+}
+
 void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<TGroupId>& groupIdsToRead) {
     for (auto it = NodeToSyncerState.lower_bound({nodeId, nullptr}); it != NodeToSyncerState.end() && std::get<0>(*it) == nodeId; ++it) {
@@ -1931,6 +2031,14 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerSta
         const auto targetGroupId = TGroupId::FromProto(&item, &std::decay_t<decltype(item)>::GetTargetGroupId);
         if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
             MarkStandbyDirty(it->second, item.GetData()); // ApplySyncerState below starts the pass when it is due
+        }
+    }
+    // the marks of the node come before its seals, in this message or in a previous one
+    for (const auto& item : ev->Get()->Record.GetStandbySealed()) {
+        const auto targetGroupId = TGroupId::FromProto(&item, &std::decay_t<decltype(item)>::GetTargetGroupId);
+        if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end() &&
+                it->second.StandbySealId == item.GetSealId()) {
+            it->second.StandbySealPendingNodes.erase(nodeId);
         }
     }
     TSet<TGroupId> groupIdsToRead;
@@ -2034,7 +2142,8 @@ void TBlobStorageController::RenderBridge(IOutputStream& out) {
                             TABLED() {
                                 out << state;
                                 if (perNodeInfo.Reconcile) {
-                                    out << (perNodeInfo.Thorough ? " (thorough reconcile)" : " (reconcile)");
+                                    out << (perNodeInfo.Thorough ? " (thorough reconcile" : " (reconcile")
+                                        << (perNodeInfo.Promote ? " to promote)" : ")");
                                 }
                             }
                             TABLED() {

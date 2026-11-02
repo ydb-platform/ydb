@@ -639,6 +639,8 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     node.InterconnectSessionId = {};
     node.Registered = false;
     DatabaseSpace.UnsubscribeNode(nodeId);
+    OnStandbyWriterLost();
+    ProcessSyncers(); // the parts being promoted from HOT_STANDBY don't wait for the seal anymore
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {

@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 
+#include <util/generic/scope.h>
+
 #include <optional>
 
 using NBridgeTest::GetBridgedLocation;
@@ -72,9 +74,122 @@ struct TFixture {
     }
 };
 
+void TestLostConcurrentReply(bool expectedGeneration) {
+    TFixture f;
+    auto& env = f.Env;
+    auto& runtime = env.Runtime;
+    const auto initial = NBridgeTest::InvokeDistconf(env, [](auto& record) {
+        record.MutableQueryConfig();
+    });
+    UNIT_ASSERT_C(initial.GetStatus() == TInvokeResult::OK && initial.HasScepter(), initial.DebugString());
+    const ui32 root = initial.GetScepter().GetNodeId();
+    const ui32 nodeId = root == 1 ? 2 : 1; // a forwarding node in the surviving primary pile
+    const auto state = initial.GetQueryConfig().GetConfig().GetClusterState();
+    auto next = state;
+    next.SetGeneration(state.GetGeneration() + 1);
+    next.SetPerPileState(2, TClusterState::DISCONNECTED);
+
+    const auto edge = runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+    auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+    auto *cmd = request->Record.MutableSwitchBridgeClusterState();
+    cmd->MutableNewClusterState()->CopyFrom(next);
+    if (expectedGeneration) {
+        cmd->SetExpectedGeneration(state.GetGeneration());
+    }
+
+    std::unique_ptr<IEventHandle> delayed;
+    TActorId forwarder;
+    THashMap<TActorId, TActorId> sessions;
+    ui32 hop = 0;
+    bool replyLost = false;
+    auto previousFilter = std::move(runtime->FilterFunction);
+    Y_DEFER { runtime->FilterFunction = std::move(previousFilter); };
+    runtime->FilterFunction = [&](ui32 destination, std::unique_ptr<IEventHandle>& ev) {
+        if (!previousFilter(destination, ev)) {
+            return false;
+        }
+        if (destination == nodeId && ev->GetTypeRewrite() == TEvInterconnect::TEvNodeConnected::EventType) {
+            sessions[ev->Recipient] = ev->Sender;
+        }
+        if (!forwarder && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                && ev->Sender.NodeId() == nodeId && destination != nodeId
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasSwitchBridgeClusterState()) {
+            forwarder = ev->Sender;
+            hop = destination;
+            delayed = std::move(ev);
+            return false;
+        }
+        if (ev->Recipient == forwarder) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                const auto& result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                UNIT_ASSERT_C(result.GetStatus() == (expectedGeneration
+                    ? TInvokeResult::GENERATION_MISMATCH : TInvokeResult::ERROR), result.DebugString());
+                replyLost = true;
+                return false;
+            }
+        }
+        return true;
+    };
+    runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, request.release()), nodeId);
+    NBridgeTest::WaitUntil(env, [&] { return delayed && sessions.contains(forwarder); }, "delayed forwarding request",
+        TDuration::MilliSeconds(1), 30000);
+
+    // The competing CAS commits exactly the same state while the first request is still in flight.
+    const auto winner = NBridgeTest::InvokeDistconf(env, [&](auto& record) {
+        auto *change = record.MutableSwitchBridgeClusterState();
+        change->MutableNewClusterState()->CopyFrom(next);
+        change->SetExpectedGeneration(state.GetGeneration());
+    }, root, runtime->GetClock() + TDuration::Seconds(30));
+    UNIT_ASSERT_C(winner.GetStatus() == TInvokeResult::OK, winner.DebugString());
+    const auto committed = f.Query();
+    auto expected = next;
+    expected.SetGuid(committed.GetGuid()); // distconf assigns a new GUID when proposing the state
+    UNIT_ASSERT_VALUES_EQUAL(committed.SerializeAsString(), expected.SerializeAsString());
+
+    // Wait until the forwarding node has received the winner's configuration, which enables the fallback.
+    const auto localEdge = runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+    runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), localEdge,
+        new TEvNodeWardenQueryStorageConfig(true)), nodeId);
+    const auto deadline = runtime->GetClock() + TDuration::Seconds(30);
+    for (;;) {
+        auto local = env.WaitForEdgeActorEvent<TEvNodeWardenStorageConfig>(localEdge, false, deadline);
+        UNIT_ASSERT_C(local && local->Get()->Config, "Timed out waiting for the winner's local configuration");
+        if (local->Get()->Config->GetClusterState().SerializeAsString() == committed.SerializeAsString()) {
+            break;
+        }
+    }
+    runtime->Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+        MakeBlobStorageNodeWardenID(nodeId), localEdge, nullptr, 0), nodeId);
+
+    // Let the losing request reach the root, but drop its rejection before the forwarding actor sees it.
+    runtime->Send(delayed.release(), hop);
+    NBridgeTest::WaitUntil(env, [&] { return replyLost; }, "lost losing-request reply",
+        TDuration::MilliSeconds(1), 30000);
+    runtime->Send(new IEventHandle(forwarder, sessions.at(forwarder),
+        new TEvInterconnect::TEvNodeDisconnected(hop)), nodeId);
+    auto result = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false,
+        runtime->GetClock() + TDuration::Seconds(30));
+    UNIT_ASSERT_C(result, "Timed out waiting for forwarding failure");
+    const auto& record = result->Get()->Record;
+    UNIT_ASSERT_C(record.GetStatus() == (expectedGeneration ? TInvokeResult::RACE : TInvokeResult::OK),
+        record.DebugString());
+    if (expectedGeneration) {
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "Hop node disconnected");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(f.Query().SerializeAsString(), committed.SerializeAsString());
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BridgeExpectedGeneration) {
+    Y_UNIT_TEST(LostConcurrentCasReplyIsUnknown) {
+        TestLostConcurrentReply(true);
+    }
+
+    Y_UNIT_TEST(LostConcurrentLegacyReplyKeepsSuccess) {
+        TestLostConcurrentReply(false);
+    }
+
     Y_UNIT_TEST(StaleRebasedRequestIsNotApplied) {
         TFixture f;
         const auto s0 = f.Query();

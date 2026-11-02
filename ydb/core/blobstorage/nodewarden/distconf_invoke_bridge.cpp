@@ -33,9 +33,7 @@ namespace NKikimr::NStorage {
         if (cmd.HasExpectedGeneration()) {
             const ui64 expected = cmd.GetExpectedGeneration();
             const auto& storageConfig = *Self->StorageConfig;
-            if (!storageConfig.HasClusterState()) {
-                throw TExGenerationMismatch() << "No cluster state, expected generation# " << expected;
-            } else if (const ui64 current = storageConfig.GetClusterState().GetGeneration(); current != expected) {
+            if (const ui64 current = storageConfig.GetClusterState().GetGeneration(); current != expected) {
                 throw TExGenerationMismatch() << "Cluster state generation# " << current << " expected# " << expected;
             } else if (cmd.GetNewClusterState().GetGeneration() != expected + 1) {
                 throw TExError() << "New cluster state generation# " << cmd.GetNewClusterState().GetGeneration()

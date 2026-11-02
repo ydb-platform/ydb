@@ -72,7 +72,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
             auto it = Self->Transactions.find(txid);
             if (it == Self->Transactions.end()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found"
+                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found",
                     {"selfId", Self->TabletID()},
                     {"internalTxGen", internalTxGen},
                     {"internalTxStep", internalTxStep},

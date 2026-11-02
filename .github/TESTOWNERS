@@ -52,9 +52,8 @@
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/tiering @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
-/ydb/tests/stress/olap_workload  @ydb-platform/cs
-/ydb/core/kqp/ut/olap @ydb-platform/cs
 /ydb/tests/stress/olap_workload @ydb-platform/cs
+/ydb/core/kqp/ut/olap @ydb-platform/cs
 /ydb/tests/functional/tpc @ydb-platform/cs
 /ydb/tests/compatibility/olap @ydb-platform/cs
 /ydb/core/keyvalue @ydb-platform/cs

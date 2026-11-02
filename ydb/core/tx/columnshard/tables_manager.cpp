@@ -428,7 +428,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 
     TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
     for (auto&& i : Tables) {
-        PrimaryIndex->RegisterTable(i.first);
+        PrimaryIndex->RegisterTableToLoad(i.first);
     }
     return true;
 }

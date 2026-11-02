@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -534,6 +535,8 @@ TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NA
     const TTestBlobOptions& options = {}, const std::set<std::string>& notNullColumns = {});
 TSerializedTableRange MakeTestRange(
     std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo, const std::vector<NArrow::NTest::TTestColumn>& columns);
+// The key MakeTestBlob gives to the row of this value.
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk);
 
 }   // namespace NKikimr::NTxUT
 

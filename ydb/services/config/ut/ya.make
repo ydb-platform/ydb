@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/services/config)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     bsconfig_ut.cpp

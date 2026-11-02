@@ -185,7 +185,7 @@ using NTabletFlatExecutor::TTransactionContext;
 //#define COORDINATOR_LOG_TO_FILE
 
 #ifdef COORDINATOR_LOG_TO_FILE
-#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, values) \
+#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, ...) \
 do { \
     ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((actorCtxOrSystem).LoggerSettings()); \
     ::NActors::NLog::EPriority mPriority = (::NActors::NLog::EPriority)(priority); \
@@ -194,18 +194,18 @@ do { \
         TStringBuilder logStringBuilder; \
         logStringBuilder << text << " "; \
         NActors::NStructuredLog::TTextWriter writer; \
-        writer.Write(logStringBuilder, YDB_LOG_CREATE_MESSAGE(values)); \
+        writer.Write(logStringBuilder, YDB_LOG_CREATE_MESSAGE(__VA_ARGS__)); \
         Self->DebugLog << (TString)logStringBuilder << Endl; \
     } \
 } while(0) \
 /**/
 #else
-#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, values) \
-    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, values)
+#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, ...) \
+    YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, __VA_ARGS__)
 #endif
 
-#define FLOG_LOG_S(actorCtxOrSystem, priority, component, text, values) YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, text, values)
-#define FLOG_DEBUG_S(actorCtxOrSystem, component, text, values) FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, text, values)
+#define FLOG_LOG_S(actorCtxOrSystem, priority, component, text, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, text, __VA_ARGS__)
+#define FLOG_DEBUG_S(actorCtxOrSystem, component, text, ...) FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, text, __VA_ARGS__)
 
 class TCoordinatorStateActor;
 

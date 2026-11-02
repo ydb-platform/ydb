@@ -491,25 +491,16 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         return;
     }
 
-    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
-    for (const auto& [consumer, offset] : OffsetsByConsumers) {
-        if (offset > EndOffset) {
-            continue;
-        }
-
-        offsetsByConsumersToSend[consumer] = offset;
-    }
-
-    if (offsetsByConsumersToSend.empty()) {
-        return;
+    for (auto& [consumer, offset] : OffsetsByConsumers) {
+        OffsetsByConsumers[consumer] = Min(offset, EndOffset);
     }
 
     ReplicationDataInFlight = true;
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
+    for (const auto& [consumer, offset] : OffsetsByConsumers) {
         (event->OffsetsByConsumers)[consumer] = offset;
-        OffsetsByConsumers.erase(consumer);
     }
+    OffsetsByConsumers.clear();
     if (MirroredOffsetToSend) {
         event->MirroredOffset = *MirroredOffsetToSend;
         MirroredOffsetToSend = Nothing();

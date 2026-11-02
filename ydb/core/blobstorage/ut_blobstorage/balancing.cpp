@@ -468,8 +468,8 @@ Y_UNIT_TEST_SUITE(VDiskBalancing) {
             .VDiskReplPausedAtStart = false,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
             .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
-                config.BlobStorageConfig->MutableVDiskBalancingConfig()->SetEnableSend(true);
-                config.BlobStorageConfig->MutableVDiskBalancingConfig()->SetSecondsToSleepIfNothingToDo(3600);
+                config.BlobStorageConfig.MutableVDiskBalancingConfig()->SetEnableSend(true);
+                config.BlobStorageConfig.MutableVDiskBalancingConfig()->SetSecondsToSleepIfNothingToDo(3600);
             },
         });
         bool durabilityReplicated = false;

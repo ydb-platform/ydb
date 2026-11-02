@@ -360,6 +360,7 @@ TStringBuf ToString(EPredicateKind kind) {
         case EPredicateKind::NonConstant: return "NonConstant";
         case EPredicateKind::Parameter: return "Parameter";
         case EPredicateKind::MergedRanges: return "MergedRanges";
+        case EPredicateKind::NullCheck: return "NullCheck";
         case EPredicateKind::Unknown: return "Unknown";
     }
     return "?";
@@ -581,6 +582,17 @@ std::shared_ptr<TTreeNode> TPredicateTreeBuilder::ProcessRegexPredicate(
 
     // input is the string the regular expression is applied to, unknown when reached through the UDF name only
     return CreateLeafNode(EPredicateKind::Regex, input, nullptr, EInequalityPredicateType::Equal, underNot);
+}
+
+std::shared_ptr<TTreeNode> TPredicateTreeBuilder::ProcessNullCheckPredicate(
+    const TExprBase& column,
+    bool underNot,
+    bool collectMembers
+) {
+    Y_UNUSED(collectMembers);
+
+    // Exists(column) is IS NOT NULL, IS NULL under NOT
+    return CreateLeafNode(EPredicateKind::NullCheck, &column, nullptr, EInequalityPredicateType::Equal, underNot);
 }
 
 std::shared_ptr<TTreeNode> TPredicateTreeBuilder::ConvertInequalityToRange(
@@ -996,6 +1008,10 @@ std::shared_ptr<TTreeNode> TPredicateTreeBuilder::ComputeImpl(
     // Process regular expression UDF calls (REGEXP, MATCH, ILIKE), keeping the string they are applied to
     else if (auto re2Input = GetRe2Input(input)) {
         return ProcessRegexPredicate(&re2Input.GetRef(), underNot, collectMembers);
+    }
+
+    else if (auto exists = input.Maybe<TCoExists>(); exists && IsAttribute(exists.Cast().Optional())) {
+        return ProcessNullCheckPredicate(exists.Cast().Optional(), underNot, collectMembers);
     }
 
     else if (

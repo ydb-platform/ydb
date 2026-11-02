@@ -32,6 +32,7 @@ enum class EPredicateKind : ui8 {
     NonConstant,  // column vs a non-constant expression
     Parameter,    // column vs an expression with parameters
     MergedRanges, // comparisons on one attribute, the column is in the union of Ranges
+    NullCheck,    // IS NOT NULL on a column, IS NULL under NOT
     Unknown,      // a predicate the builder does not recognize; kept so that an Or or a key match does not lose it
 };
 
@@ -105,8 +106,7 @@ void CollectTableAliases(const std::shared_ptr<TTreeNode>& node, TSet<TString>& 
 
 } // namespace NPredicateTree
 
-// Builds the predicate tree from a predicate expression and normalizes it. Uses statistics only as a fallback for
-// column types; computes no selectivity.
+// Builds the predicate tree from a predicate expression and normalizes it.
 class TPredicateTreeBuilder {
 public:
     TPredicateTreeBuilder(
@@ -180,6 +180,12 @@ protected:
         const TExprBase* input,
         bool underNot,
         bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessNullCheckPredicate(
+        const TExprBase& column,
+        bool underNot,
+        bool collectMembers
     );
 
     std::shared_ptr<TTreeNode> ProcessStringPredicate(

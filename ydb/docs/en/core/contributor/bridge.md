@@ -77,9 +77,11 @@ To transition from mode `PRIMARY/NOT_SYNCHRONIZED` to `PRIMARY/SYNCHRONIZED`, sy
 
 ### HOT_STANDBY prototype {#hot-standby}
 
-`HOT_STANDBY` keeps a pile connected while excluding it from read, write, and configuration quorums. For groups replicated across piles, dsproxy-proxy sends `Put`, `Patch`, `Block`, and `KEEP` flags to the standby in the background. Client completion depends only on the required piles; standby replies, including errors and generation mismatches (`RACE`), neither delay completion nor restart the client request. Reads do not use the standby. A group whose only authoritative copy is in that pile cannot use this behavior to acknowledge writes elsewhere.
+`HOT_STANDBY` keeps a pile connected while excluding it from read, write, and configuration quorums. For groups replicated across piles, dsproxy-proxy sends `Put`, `Patch`, `Block`, and `KEEP` flags to the standby in the background. Client completion depends only on the required piles; standby replies, including errors and generation mismatches (`RACE`), neither delay completion nor restart the client request. dsproxy-proxy resends a background write that met `RACE` once it learns the newer generation of the standby part. Background writes in flight on a node are limited by the `DSProxyControls.BridgeStandbyMaxBytesInFlight` immediate control (256 MiB by default); the writes beyond it are dropped, so a slow or unreachable standby does not grow memory. Reads do not use the standby. A group whose only authoritative copy is in that pile cannot use this behavior to acknowledge writes elsewhere.
 
-Database endpoint discovery does not advertise endpoints in `HOT_STANDBY` piles for client traffic. The response still includes these piles in the pile-state metadata.
+Database endpoint discovery does not advertise endpoints in `HOT_STANDBY` piles for client traffic. The response still includes these piles in the pile-state metadata. gRPC servers of the pile stop, and Hive moves the tablets out of it.
+
+A `HOT_STANDBY` pile can't be suspended (the `takedown` command): only a `SYNCHRONIZED` pile can enter `SUSPENDED`. To take the standby down, switch it to `DISCONNECTED`.
 
 To enable the prototype for an existing secondary pile, use the hidden `update` command:
 
@@ -87,7 +89,7 @@ To enable the prototype for an existing secondary pile, use the hidden `update` 
 ydb admin cluster bridge update --set pile_name:HOT_STANDBY
 ```
 
-Entering `HOT_STANDBY` marks the pile unsynchronized and resets its group synchronization stages. Background writes may be missed, and the prototype does not run periodic synchronization. Before promotion, start normal rejoin and wait for the pile to reach `SYNCHRONIZED`:
+Entering `HOT_STANDBY` marks the pile unsynchronized and resets its group synchronization stages. Background writes may be missed (dropped over the limit, failed, or lost with a restarted node), and the prototype does not run periodic synchronization. Before promotion, start normal rejoin and wait for the pile to reach `SYNCHRONIZED`:
 
 ```bash
 ydb admin cluster bridge rejoin --pile pile_name

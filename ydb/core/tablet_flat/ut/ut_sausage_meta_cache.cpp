@@ -93,7 +93,15 @@ Y_UNIT_TEST_SUITE(TSharedMetaCore) {
         collection.SetPageCollection(second);
         const i64 expected = 2 * sizeof(TPageCollection) + meta->GetMemoryUsage();
         UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
+        NSharedCache::TRequest fetch;
+        fetch.PageCollection = first;
+        fetch.IsInFlightFetch = true;
+        collection.AddMetadataRequest(fetch);
         request.ReleaseMetadata();
+        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(collection.InFlightFetches, 1);
+        fetch.ReleaseMetadata();
+        UNIT_ASSERT_VALUES_EQUAL(collection.InFlightFetches, 0);
         UNIT_ASSERT(!collection.RetiredMetadata);
         UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), second->GetMetadataMemoryUsage());
         collection.SetPageCollection({});
@@ -108,7 +116,11 @@ Y_UNIT_TEST_SUITE(TSharedMetaCore) {
         collection.SetPageCollection(third);
         UNIT_ASSERT_VALUES_EQUAL(
             collections.GetMetadataMemoryUsage(), expected + separate->GetMemoryUsage() - raw.GetAllocationSize());
+        collection.AddMetadataRequest(fetch);
         request.ReleaseMetadata();
+        UNIT_ASSERT_VALUES_EQUAL(
+            collections.GetMetadataMemoryUsage(), expected + separate->GetMemoryUsage() - raw.GetAllocationSize());
+        fetch.ReleaseMetadata();
         collection.SetPageCollection({});
         UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 0);
     }

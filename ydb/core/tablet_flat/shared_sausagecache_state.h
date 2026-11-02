@@ -32,6 +32,7 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     NTabletFlatExecutor::NBlockIO::EPriority Priority;
     TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
     TCollection* MetadataOwner = nullptr;
+    bool IsInFlightFetch = false;
     ui64 EventCookie = 0;
     ui64 RequestCookie = 0;
     ui64 PendingBlocks = 0;
@@ -108,6 +109,7 @@ struct TCollection {
     // Descriptor objects and Steps; allocation tags account for shared Raw buffers.
     i64 MetadataBytes = 0;
     size_t MetadataRequestCount = 0; // Requests retaining PageCollection
+    size_t InFlightFetches = 0;
     THolder<TVector<TMetadataReference>> RetiredMetadata;
     TIntrusiveList<TRequest, TMetadataRequestTag> MetadataRequests;
     TSet<TActorId> InMemoryOwners;

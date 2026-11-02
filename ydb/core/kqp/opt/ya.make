@@ -31,6 +31,7 @@ PEERDIR(
     ydb/core/kqp/opt/rbo
     ydb/core/kqp/tracing
     ydb/library/mkql_proto
+    ydb/library/generated_columns
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann

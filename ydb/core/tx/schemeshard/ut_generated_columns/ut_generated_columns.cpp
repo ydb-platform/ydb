@@ -76,9 +76,262 @@ void CheckGeneratedColumn(const NKikimrScheme::TEvDescribeSchemeResult& describe
     }
 }
 
+const TString MixedForwardChain = R"(
+    Name: "Table"
+    Columns { Name: "key" Type: "Uint32" }
+    Columns { Name: "a" Type: "Int32" }
+    Columns { Name: "g3" Type: "Int32" DefaultFromExpression {
+        ExprText: "g2 + 1" Stored: false DependencyColumnNames: ["g2"]
+    } }
+    Columns { Name: "g2" Type: "Int32" DefaultFromExpression {
+        ExprText: "g1 * 2" Stored: true DependencyColumnNames: ["g1"]
+    } }
+    Columns { Name: "g1" Type: "Int32" DefaultFromExpression {
+        ExprText: "a + 1" Stored: false DependencyColumnNames: ["a"]
+    } }
+    KeyColumnNames: ["key"]
+)";
+
+void CheckRejectedDependencies(const TString& columns, const TString& error) {
+    TTestBasicRuntime runtime;
+    TTestEnv env(runtime);
+    EnableGeneratedColumns(runtime);
+    const TString schema = TStringBuilder() << R"(Name: "Table" Columns { Name: "key" Type: "Uint32" })"
+        << columns << R"( KeyColumnNames: ["key"])";
+    TestCreateTable(runtime, 101, "/MyRoot", schema,
+        {{NKikimrScheme::StatusSchemeError, error}});
+    TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+}
+
+void CheckDependencySafeMultiDrop(bool reverseOrder) {
+    TTestBasicRuntime runtime;
+    TTestEnv env(runtime);
+    EnableGeneratedColumns(runtime);
+    TestCreateTable(runtime, 101, "/MyRoot", MixedForwardChain);
+    env.TestWaitNotification(runtime, 101);
+    TStringBuilder alter;
+    alter << "Name: \"Table\"";
+    const TVector<TString> drops = reverseOrder ? TVector<TString>{"a", "g1", "g2", "g3"}
+        : TVector<TString>{"g3", "g2", "g1", "a"};
+    for (const auto& name : drops) {
+        alter << " DropColumns { Name: \"" << name << "\" }";
+    }
+    TestAlterTable(runtime, 102, "/MyRoot", alter);
+    env.TestWaitNotification(runtime, 102);
+    for (const auto& name : drops) {
+        UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), name));
+    }
+    TestAlterTable(runtime, 103, "/MyRoot", R"(
+        Name: "Table" Columns { Name: "a" Type: "Int32" }
+        Columns { Name: "g1" Type: "Int32" DefaultFromExpression {
+            ExprText: "a + 2" Stored: true DependencyColumnNames: ["a"]
+        } }
+    )");
+    env.TestWaitNotification(runtime, 103);
+    CheckGeneratedColumn(DescribePath(runtime, "/MyRoot/Table"), "g1", "a + 2", true, {"a"});
+}
+
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardGeneratedColumnsTest) {
+    Y_UNIT_TEST(RejectExpressionDependencyMismatch) {
+        for (const TString dependencies : {"", R"(DependencyColumnNames: ["key"])", R"(DependencyColumnNames: ["a", "key"])"}) {
+            CheckRejectedDependencies(TStringBuilder() << R"(
+                Columns { Name: "a" Type: "Int32" }
+                Columns { Name: "g" Type: "Int32" DefaultFromExpression {
+                    ExprText: "a + 1" Stored: true )" << dependencies << " } }", "inconsistent dependencies");
+        }
+    }
+
+    Y_UNIT_TEST(RejectConcealedUnknownExpressionReference) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "a" Type: "Int32" }
+            Columns { Name: "g" Type: "Int32" DefaultFromExpression {
+                ExprText: "missing + 1" Stored: false DependencyColumnNames: ["a"]
+            } }
+        )", "inconsistent dependencies");
+    }
+
+    Y_UNIT_TEST(RejectDisconnectedMalformedExpression) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "good" Type: "Int32" DefaultFromExpression {
+                ExprText: "key + 1" Stored: true DependencyColumnNames: ["key"]
+            } }
+            Columns { Name: "bad" Type: "Int32" DefaultFromExpression {
+                ExprText: "bad + 1" Stored: false DependencyColumnNames: []
+            } }
+        )", "inconsistent dependencies");
+    }
+
+    Y_UNIT_TEST(CanonicalizeDuplicateUnsortedDependencies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+        TestCreateTable(runtime, 101, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Uint32" }
+            Columns { Name: "g" Type: "Uint32" DefaultFromExpression {
+                ExprText: "key + a + a" Stored: true DependencyColumnNames: ["key", "a", "key", "a"]
+            } }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, 101);
+        CheckGeneratedColumn(DescribePath(runtime, "/MyRoot/Table"), "g", "key + a + a", true, {"a", "key"});
+    }
+
+    Y_UNIT_TEST(DependencySafeMultiDropForwardOrder) {
+        CheckDependencySafeMultiDrop(false);
+    }
+
+    Y_UNIT_TEST(DependencySafeMultiDropReverseOrder) {
+        CheckDependencySafeMultiDrop(true);
+    }
+
+    Y_UNIT_TEST(RejectMalformedGeneratedColumnOnAlter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+        TestCreateTable(runtime, 101, "/MyRoot", MixedForwardChain);
+        env.TestWaitNotification(runtime, 101);
+        TestAlterTable(runtime, 102, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "bad" Type: "Int32" DefaultFromExpression {
+                ExprText: "g1 + 1" Stored: true DependencyColumnNames: ["g2"]
+            } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "inconsistent dependencies"}});
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT(!FindColumn(describe, "bad"));
+        CheckGeneratedColumn(describe, "g3", "g2 + 1", false, {"g2"});
+    }
+
+    Y_UNIT_TEST(RejectNewReferenceToSimultaneouslyDroppedColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+        TestCreateTable(runtime, 101, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "key" Type: "Uint32" } Columns { Name: "a" Type: "Int32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, 101);
+        TestAlterTable(runtime, 102, "/MyRoot", R"(
+            Name: "Table" DropColumns { Name: "a" }
+            Columns { Name: "g" Type: "Int32" DefaultFromExpression {
+                ExprText: "a + 1" Stored: true DependencyColumnNames: ["a"]
+            } }
+        )", {{NKikimrScheme::StatusInvalidParameter, "unknown column"}});
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT(FindColumn(describe, "a"));
+        UNIT_ASSERT(!FindColumn(describe, "g"));
+    }
+
+    Y_UNIT_TEST(RejectInvalidExpressionText) {
+        for (const TString expression : {"", "a +"}) {
+            CheckRejectedDependencies(TStringBuilder() << R"(
+                Columns { Name: "a" Type: "Int32" }
+                Columns { Name: "g" Type: "Int32" DefaultFromExpression { ExprText: ")"
+                << expression << R"(" Stored: true } }
+            )", "Failed to compile");
+        }
+    }
+
+    Y_UNIT_TEST(RejectSelfCycle) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "g" Type: "Int32" DefaultFromExpression {
+                ExprText: "g + 1" Stored: true DependencyColumnNames: ["g"]
+            } }
+        )", "can not reference itself");
+    }
+
+    Y_UNIT_TEST(RejectTwoNodeCycle) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "g1" Type: "Int32" DefaultFromExpression {
+                ExprText: "g2 + 1" Stored: true DependencyColumnNames: ["g2"]
+            } }
+            Columns { Name: "g2" Type: "Int32" DefaultFromExpression {
+                ExprText: "g1 + 1" Stored: true DependencyColumnNames: ["g1"]
+            } }
+        )", "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectDisconnectedCycle) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "good" Type: "Uint32" DefaultFromExpression {
+                ExprText: "key + 1" Stored: true DependencyColumnNames: ["key"]
+            } }
+            Columns { Name: "g1" Type: "Int32" DefaultFromExpression {
+                ExprText: "g2 + 1" Stored: true DependencyColumnNames: ["g2"]
+            } }
+            Columns { Name: "g2" Type: "Int32" DefaultFromExpression {
+                ExprText: "g3 + 1" Stored: true DependencyColumnNames: ["g3"]
+            } }
+            Columns { Name: "g3" Type: "Int32" DefaultFromExpression {
+                ExprText: "g1 + 1" Stored: true DependencyColumnNames: ["g1"]
+            } }
+        )", "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectMixedKindCycle) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "g1" Type: "Int32" DefaultFromExpression {
+                ExprText: "g2 + 1" Stored: false DependencyColumnNames: ["g2"]
+            } }
+            Columns { Name: "g2" Type: "Int32" DefaultFromExpression {
+                ExprText: "g1 + 1" Stored: true DependencyColumnNames: ["g1"]
+            } }
+        )", "Generated column dependency cycle:");
+    }
+
+    Y_UNIT_TEST(RejectUnknownDependency) {
+        CheckRejectedDependencies(R"(
+            Columns { Name: "g" Type: "Int32" DefaultFromExpression {
+                ExprText: "missing + 1" Stored: false DependencyColumnNames: ["missing"]
+            } }
+        )", "unknown column");
+    }
+
+    Y_UNIT_TEST(AcyclicForwardChainSurvivesRestartAndCopy) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", MixedForwardChain);
+        env.TestWaitNotification(runtime, txId);
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestCopyTable(runtime, ++txId, "/MyRoot", "Copy", "/MyRoot/Table");
+        env.TestWaitNotification(runtime, txId);
+        for (const TString path : {"/MyRoot/Table", "/MyRoot/Copy"}) {
+            const auto describe = DescribePath(runtime, path);
+            CheckGeneratedColumn(describe, "g1", "a + 1", false, {"a"});
+            CheckGeneratedColumn(describe, "g2", "g1 * 2", true, {"g1"});
+            CheckGeneratedColumn(describe, "g3", "g2 + 1", false, {"g2"});
+            const auto physical = GetDataShardTableDescription(runtime, path);
+            UNIT_ASSERT(FindDataShardColumn(physical, "g2"));
+            UNIT_ASSERT(!FindDataShardColumn(physical, "g1"));
+            UNIT_ASSERT(!FindDataShardColumn(physical, "g3"));
+        }
+    }
+
+    Y_UNIT_TEST(DropIntermediateGeneratedColumnRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableGeneratedColumns(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", MixedForwardChain);
+        env.TestWaitNotification(runtime, txId);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(Name: "Table" DropColumns { Name: "g2" })",
+            {{NKikimrScheme::StatusInvalidParameter, "it is used by generated column 'g3'"}});
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        CheckGeneratedColumn(describe, "g2", "g1 * 2", true, {"g1"});
+        CheckGeneratedColumn(describe, "g3", "g2 + 1", false, {"g2"});
+        for (const TString name : {"g3", "g2", "g1"}) {
+            TestAlterTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"Table\" DropColumns { Name: \"" << name << "\" }");
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT(!FindColumn(DescribePath(runtime, "/MyRoot/Table"), name));
+        }
+    }
+
     Y_UNIT_TEST(CreateTableWithStoredGeneratedColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

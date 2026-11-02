@@ -15,6 +15,8 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/generated_columns/generated_column_dependencies.h>
+#include <ydb/library/generated_columns/expr/generated_column_expr.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme/scheme_type_info.h>
@@ -480,6 +482,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
+    THashSet<TString> droppingColumns;
+    for (const auto& column : op.GetDropColumns()) {
+        droppingColumns.insert(column.GetName());
+    }
+
     bool allowSystemColumns = op.GetSystemColumnNamesAllowed();
 
     for (auto& col : *op.MutableColumns()) {
@@ -591,7 +598,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
 
                 for (const auto& [_, srcCol] : source->Columns) {
-                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped() || droppingColumns.contains(srcCol.Name)) {
                         continue;
                     }
 
@@ -819,7 +826,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             for (const auto& [srcColId, srcCol] : source->Columns) {
-                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
+                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped() || droppingColumns.contains(srcCol.Name)) {
                     continue;
                 }
 
@@ -842,6 +849,59 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             alterData->Columns[colId] = colIt->second;
             alterData->Columns[colId].DeleteVersion = alterData->AlterVersion;
+        }
+    }
+
+    // AlterData contains only changed columns. Validate the complete live schema
+    // after overlaying those changes, including components unrelated to this operation.
+    {
+        TVector<TString> columnNames;
+        TMap<TString, TVector<TString>> dependencies;
+        const auto addColumn = [&](const TColumn& column) {
+            if (column.IsDropped()) {
+                return true;
+            }
+            columnNames.push_back(column.Name);
+            if (column.DefaultKind == ETableColumnDefaultKind::FromExpression) {
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription descriptor;
+                if (!descriptor.ParseFromString(column.DefaultValue)) {
+                    errStr = TStringBuilder() << "Cannot read generated expression descriptor for column '" << column.Name << "'";
+                    return false;
+                }
+                auto& refs = dependencies[column.Name];
+                refs.assign(descriptor.GetDependencyColumnNames().begin(), descriptor.GetDependencyColumnNames().end());
+                if (!NYql::ValidateGeneratedExpressionDependencies(descriptor.GetExprText(), column.Name, refs, errStr)) {
+                    return false;
+                }
+                if (auto* changed = alterData->Columns.FindPtr(column.Id)) {
+                    descriptor.ClearDependencyColumnNames();
+                    for (const auto& name : refs) {
+                        descriptor.AddDependencyColumnNames(name);
+                    }
+                    if (!descriptor.SerializeToString(&changed->DefaultValue)) {
+                        errStr = TStringBuilder() << "Cannot serialize generated expression descriptor for column '" << column.Name << "'";
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        if (source) {
+            for (const auto& [id, column] : source->Columns) {
+                const auto* changed = alterData->Columns.FindPtr(id);
+                if (!addColumn(changed ? *changed : column)) {
+                    return nullptr;
+                }
+            }
+        }
+        for (const auto& [id, column] : alterData->Columns) {
+            if ((!source || !source->Columns.contains(id)) && !addColumn(column)) {
+                return nullptr;
+            }
+        }
+        NGeneratedColumns::TGeneratedColumnDependencyGraph graph;
+        if (!NGeneratedColumns::BuildGeneratedColumnDependencyGraph(columnNames, dependencies, graph, errStr)) {
+            return nullptr;
         }
     }
 

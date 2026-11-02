@@ -408,6 +408,8 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/aclib/protos/identity
     ydb/library/backup/proto
+    ydb/library/generated_columns
+    ydb/library/generated_columns/expr
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer

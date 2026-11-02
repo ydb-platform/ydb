@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/provider)
 
 SRCS(
+    generated_column_ut.cpp
     read_attributes_utils_ut.cpp
     sql_path_aliases_ut.cpp
     yql_kikimr_gateway_ut.cpp

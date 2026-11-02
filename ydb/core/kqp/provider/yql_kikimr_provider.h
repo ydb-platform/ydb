@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/generated_columns/generated_column_dependencies.h>
 
 #include <yql/essentials/ast/yql_pos_handle.h>
 #include <yql/essentials/core/issue/yql_issue.h>
@@ -198,6 +199,11 @@ public:
     TMaybe<TString> RelativePath;
 
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
+
+    // Metadata is immutable between loads, apart from compiled expression caches.
+    // This graph contains no expression nodes and is invalidated by Load().
+    const NKikimr::NGeneratedColumns::TGeneratedColumnDependencyGraph* GetGeneratedColumnGraph(
+        TPositionHandle pos, TExprContext& ctx) const;
     void ToYson(NYson::TYsonWriter& writer) const;
 
     TMaybe<ui32> GetKeyColumnIndex(const TString& name) const;
@@ -218,6 +224,7 @@ public:
     bool GetSysViewRewritten() const { return SysViewRewritten; }
 
 private:
+    mutable TMaybe<NKikimr::NGeneratedColumns::TGeneratedColumnDependencyGraph> GeneratedColumnGraph;
     THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
     bool NeedsStats = false;
     bool NeedAuthInfo = true;

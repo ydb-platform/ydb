@@ -874,9 +874,13 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
                     const auto resultIndex = returningInfo->ResultIndex;
                     const auto returningList = TKqlReturningList(returningInfo->ReturningList);
                     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returningList.Table().Path());
-                    auto resultValue = BuildVirtualGeneratedColumnProjection(
+                    const auto projection = BuildVirtualGeneratedColumnProjection(
                         TExprBase(returning), query.Results().Item(resultIndex).ColumnHints(),
-                        table, returningList.Pos(), ctx).Ptr();
+                        table, returningList.Pos(), ctx);
+                    if (!projection) {
+                        return false;
+                    }
+                    auto resultValue = projection->Ptr();
 
                     if (resultValue.Get() != returning.Get()) {
                         AFL_ENSURE(TDqCnUnionAll::Match(returning.Get()));

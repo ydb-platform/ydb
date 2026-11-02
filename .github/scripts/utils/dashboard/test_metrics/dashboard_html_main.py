@@ -2332,6 +2332,42 @@ def build_html_dashboard(
       tip.style.display = 'block';
       positionChartTip(ev);
     }}
+    // hv steps: Plotly nearest-point y disagrees with the drawn last-sample-<=x value,
+    // and independently-downsampled ya_activity kinds land on different timestamps.
+    function stepYAtX(xs, ys, xCursor) {{
+      const target = _toMs(xCursor);
+      if (target == null || !Array.isArray(xs) || !Array.isArray(ys) || !xs.length) return null;
+      let idx = -1;
+      for (let i = 0; i < xs.length; i++) {{
+        const t = _toMs(xs[i]);
+        if (t == null) continue;
+        if (t <= target) idx = i;
+        else break;
+      }}
+      if (idx < 0) return 0;
+      const v = Number(ys[idx]);
+      return Number.isFinite(v) ? v : null;
+    }}
+    function showYaActivityTip(ev, plotEl) {{
+      const tip = document.getElementById('chartTip');
+      if (!tip || !ev || !ev.points || !ev.points.length || !plotEl || !plotEl.data) return;
+      clearTimeout(chartTipHideTimer);
+      const xCursor = (ev.xvals && ev.xvals.length) ? ev.xvals[0] : ev.points[0].x;
+      const labelMs = _toMs(xCursor);
+      const label = labelMs != null
+        ? _getFormatter(true).format(new Date(labelMs))
+        : formatPointTime(ev.points[0]);
+      const lines = [];
+      for (const tr of plotEl.data) {{
+        if (!tr || !tr.name || tr.hoverinfo === 'none') continue;
+        const y = stepYAtX(tr.x, tr.y, xCursor);
+        if (y == null) continue;
+        lines.push(tr.name + ': ' + Math.round(y));
+      }}
+      tip.textContent = [label].concat(lines).join('\\n');
+      tip.style.display = 'block';
+      positionChartTip(ev);
+    }}
     function hideChartTipSoon() {{
       clearTimeout(chartTipHideTimer);
       chartTipHideTimer = setTimeout(() => {{
@@ -2585,10 +2621,10 @@ def build_html_dashboard(
         // Clone per plot — Plotly mutates traces/layout in place.
         const clone = (obj) => JSON.parse(JSON.stringify(obj));
         Plotly.newPlot(plotId, clone(traces), clone(yaLayout), yaOpts);
-        // Native Plotly unified hover ignores the Timezone selector; use the
-        // same custom tip as other charts so the clock matches axis ticks.
+        // Native Plotly unified hover ignores the Timezone selector and uses
+        // nearest-point y (wrong for hv steps). Floor-lookup at one cursor x.
         el.classList.add('tz-hover');
-        el.on('plotly_hover', showChartTip);
+        el.on('plotly_hover', (ev) => showYaActivityTip(ev, el));
         el.on('plotly_unhover', hideChartTipSoon);
       }}
     }})();

@@ -102,6 +102,9 @@ struct TProtobufAttributeDictionaryElement
 struct TProtobufRepeatedElement
 {
     TProtobufElement Element;
+
+    //! Non-null if the entire list is encoded as one message annotated with yson_list.
+    const TProtobufMessageType* YsonListMessage = nullptr;
 };
 
 struct TProtobufMapElement

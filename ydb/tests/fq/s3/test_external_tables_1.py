@@ -1,7 +1,7 @@
-from decimal import Decimal
-
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+from decimal import Decimal
 
 import boto3
 import logging

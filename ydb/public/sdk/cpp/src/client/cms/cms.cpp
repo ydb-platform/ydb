@@ -268,6 +268,9 @@ void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& requ
 }
 
 void TAlterDatabaseSettings::SerializeTo(Ydb::Cms::AlterDatabaseRequest& request) const {
+    if (Freeze_.has_value()) {
+        request.set_freeze(*Freeze_);
+    }
     for (const auto& [name, value] : AlterAttributes_) {
         (*request.mutable_alter_attributes())[name] = value;
     }
@@ -373,10 +376,31 @@ public:
         request.set_path(path);
         settings.SerializeTo(request);
 
-        return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
-            std::move(request),
+        if (!request.has_freeze()) {
+            return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
+                std::move(request),
+                &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase,
+                TRpcRequestSettings::Make(settings));
+        }
+
+        auto promise = NThreading::NewPromise<TStatus>();
+        auto extractor = [promise](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
+            if (operation) {
+                status.SetCostInfo(std::move(*operation->mutable_cost_info()));
+                // Old endpoints may silently ignore an unknown freeze field.
+                // A successful freeze always has a durable operation id.
+                if (status.Ok() && operation->id().empty()) {
+                    status.Status = EStatus::UNSUPPORTED;
+                    status.Issues.AddIssue(NYdb::NIssue::TIssue("Server does not support database freeze operations"));
+                }
+            }
+            promise.SetValue(TStatus(std::move(status)));
+        };
+        Connections_->RunDeferred<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
+            std::move(request), std::move(extractor),
             &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase,
-            TRpcRequestSettings::Make(settings));
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings), true);
+        return promise.GetFuture();
     }
 };
 

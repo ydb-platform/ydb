@@ -62,6 +62,10 @@ public:
                          Sprintf("Database '%s' is busy", path.data()), ctx);
 
         // Check idempotency key
+        if (Self->IsDatabaseFreezePending(Tenant)) {
+            return Error(Ydb::StatusIds::UNAVAILABLE, "Database freeze operation is in progress", ctx);
+        }
+
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
             YDB_LOG_DEBUG_CTX(ctx, "Returning success due to idempotency key match");
             auto &operation = *Response->Record.MutableResponse()->mutable_operation();

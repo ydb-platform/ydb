@@ -382,13 +382,12 @@ void CheckResourceDatabaseResolution(
         });
 
     runtime->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
-    auto request = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
+    auto request = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
         setup.DbPath,
         TMaybe<TString>("Bearer " + setup.UserSid),
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-        "192.168.0.101",
-        "resource-database-resolution-request-id");
+        "192.168.0.101");
     setup.RequestCheckActor(std::move(request));
 
     TAutoPtr<IEventHandle> handle;

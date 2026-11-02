@@ -10,7 +10,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:1)
+    REQUIREMENTS(ram:32 cpu:2)
 ELSE()
     REQUIREMENTS(ram:16 cpu:1)
 ENDIF()

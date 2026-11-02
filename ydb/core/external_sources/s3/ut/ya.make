@@ -23,7 +23,7 @@ IF (AUTOCHECK)
     )
 
     REQUIREMENTS(
-        cpu:1
+        cpu:4
         container:4467981730
         dns:dns64
     )

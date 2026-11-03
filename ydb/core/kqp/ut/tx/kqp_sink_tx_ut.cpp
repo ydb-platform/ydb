@@ -3547,6 +3547,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UPSERT INTO `/Root/test` (Key, Value1, Value2) VALUES (2u, "a2", "b2");
         )"), TTxControl::Tx(tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        // The abort must come from the index maintenance mode conflict, not from anything else.
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+            [](const NYdb::NIssue::TIssue& issue) {
+                return issue.GetMessage().find(
+                    "both through the index stream write and through direct writes") != std::string::npos;
+            }), result.GetIssues().ToString());
 
         result = session.ExecuteQuery(Q_(R"(
             PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";

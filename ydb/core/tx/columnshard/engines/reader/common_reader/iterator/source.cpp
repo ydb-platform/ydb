@@ -49,8 +49,7 @@ TString TExecutionContext::BuildStatsDescription(IDataSource& source, ui32 nodeI
     }
     TString description = NArrow::NSSA::BuildStatsExpression(function, columns, nodeId);
     if (const auto* constant = dynamic_cast<const NArrow::NSSA::TConstProcessor*>(processor.get())) {
-        const auto value = constant->GetScalarConstant()->ToString();
-        description = NArrow::NSSA::BoundStatsDescription(TStringBuf(value.data(), value.size()), nodeId);
+        description = NArrow::NSSA::BuildStatsConstant(*constant->GetScalarConstant(), nodeId);
     }
     const auto type = processor->GetProcessorType();
     if (type == NArrow::NSSA::EProcessorType::Calculation || type == NArrow::NSSA::EProcessorType::Const ||

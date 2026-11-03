@@ -64,6 +64,27 @@ namespace NKikimr::NArrow::NSSA {
             UNIT_ASSERT_STRINGS_EQUAL(BoundStatsDescription("42", 8), "42");
         }
 
+        Y_UNIT_TEST(KnownBinaryKernelDescriptionsUseQueryOperators) {
+            const auto modulo = BuildStatsExpression("Mod", {"metric", "3"}, 1);
+            const auto predicate = BuildStatsExpression("NotEquals", {modulo, "2"}, 2);
+            UNIT_ASSERT_STRINGS_EQUAL(predicate, "((metric % 3) <> 2)");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("And", {"(marker = 'target')", predicate}, 3),
+                "((marker = 'target') AND ((metric % 3) <> 2))");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Or", {"(marker = 'target')", predicate}, 4),
+                "((marker = 'target') OR ((metric % 3) <> 2))");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Sub", {"metric", "1"}, 5), "(metric - 1)");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Div", {"metric", "3"}, 6), "(metric / 3)");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("unknown_mod", {"metric", "3"}, 7), "unknown_mod(metric, 3)");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Mod", {"metric"}, 8), "Mod(metric)");
+        }
+
+        Y_UNIT_TEST(StatsConstantsUseScalarTypeForQuoting) {
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(arrow::StringScalar("target"), 1), "'target'");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(arrow::StringScalar("user's value"), 2), "'user''s value'");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(arrow::Int64Scalar(3), 3), "3");
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(arrow::StringScalar(), 4), "NULL");
+        }
+
         Y_UNIT_TEST(ArgumentDomainCountsArraysOnceAndBroadcastsScalars) {
             const auto three = NKernels::NumVecToArray(arrow::int32(), {1, 2, 3});
             const auto two = NKernels::NumVecToArray(arrow::int32(), {1, 2});

@@ -18,6 +18,26 @@ namespace NKikimr::NArrow::NSSA {
         return TString(Utf8TruncateRobust(description, MaxStatsDescriptionBytes - suffix.size())) + suffix;
     }
 
+    inline TString BuildStatsConstant(const arrow::Scalar& scalar, ui32 nodeId) {
+        if (!scalar.is_valid) {
+            return "NULL";
+        }
+        const auto value = scalar.ToString();
+        TString description;
+        if (scalar.type->id() == arrow::Type::STRING || scalar.type->id() == arrow::Type::LARGE_STRING) {
+            description = "'";
+            for (char c : value) {
+                description += c;
+                if (c == '\'') { description += '\''; }
+                if (description.size() > MaxStatsDescriptionBytes) { break; }
+            }
+            description += '\'';
+        } else {
+            description = TString(value.data(), value.size());
+        }
+        return BoundStatsDescription(description, nodeId);
+    }
+
     inline TString BuildStatsExpression(TStringBuf function, const std::vector<TString>& arguments, ui32 nodeId) {
         TString description;
         const auto append = [&](TStringBuf part) {
@@ -28,15 +48,18 @@ namespace NKikimr::NArrow::NSSA {
         TStringBuf infix;
         if (function == "And") { infix = " AND "; }
         else if (function == "Or") { infix = " OR "; }
-        else if (function == "TCompareKernel{Equals}") { infix = " = "; }
-        else if (function == "TCompareKernel{NotEquals}") { infix = " != "; }
-        else if (function == "TCompareKernel{Greater}") { infix = " > "; }
-        else if (function == "TCompareKernel{GreaterOrEqual}") { infix = " >= "; }
-        else if (function == "TCompareKernel{Less}") { infix = " < "; }
-        else if (function == "TCompareKernel{LessOrEqual}") { infix = " <= "; }
+        else if (function == "TCompareKernel{Equals}" || function == "Equals") { infix = " = "; }
+        else if (function == "TCompareKernel{NotEquals}" || function == "NotEquals") { infix = " <> "; }
+        else if (function == "TCompareKernel{Greater}" || function == "Greater") { infix = " > "; }
+        else if (function == "TCompareKernel{GreaterOrEqual}" || function == "GreaterOrEqual") { infix = " >= "; }
+        else if (function == "TCompareKernel{Less}" || function == "Less") { infix = " < "; }
+        else if (function == "TCompareKernel{LessOrEqual}" || function == "LessOrEqual") { infix = " <= "; }
         else if (function == "Add") { infix = " + "; }
+        else if (function == "Sub") { infix = " - "; }
         else if (function == "Mul") { infix = " * "; }
-        if (arguments.size() < 2) { infix = {}; }
+        else if (function == "Div") { infix = " / "; }
+        else if (function == "Mod") { infix = " % "; }
+        if (arguments.size() < 2 || (arguments.size() != 2 && function != "And" && function != "Or")) { infix = {}; }
         if (!infix) { append(function); }
         append("(");
         bool first = true;

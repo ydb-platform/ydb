@@ -628,7 +628,8 @@ void TPlan::PrintStageOperators(const std::shared_ptr<TStage>& s) {
         }
 
         s->Svg
-            << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, yt + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name + ": " + op.Info);
+            << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2
+                + (index == 0 && s->ColumnShardHeight ? INTERNAL_WIDTH : 0), yt + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name + ": " + op.Info);
         if (op.OutputRows) {
             TStringBuilder tooltip;
             auto textSum = FormatTooltip(tooltip, "Output Rows", op.OutputRows.get(), FormatInteger);
@@ -1136,7 +1137,7 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
 
     if (s->ColumnShardHeight) {
         s->Svg << "<g class='cs-stage-toggle button' role='button' tabindex='0' aria-expanded='false' data-cs-stage='"
-            << s->PhysicalStageId << "' transform='translate(" << Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X
+            << s->PhysicalStageId << "' transform='translate(" << Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 2
             << ',' << INTERNAL_GAP_Y + 2 << ")'><title>Show ColumnShard read statistics for Stage "
             << s->PhysicalStageId << "</title><rect width='10' height='10' fill='transparent'/>"
             << "<path d='M1 1 L7 5 L1 9 Z' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
@@ -1236,7 +1237,8 @@ void TPlan::PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& s
             << "</g>" << Endl;
     }
 
-    builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
+    builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << '\''
+        << (stage->ColumnShardHeight ? " style='overflow:hidden'" : "") << '>' << Endl;
     builder << stage->Svg;
     if (stage->ColumnShardHeight) {
         builder << "<svg data-cs-panel='" << stage->PhysicalStageId << "' data-height='" << stage->ColumnShardHeight
@@ -1626,8 +1628,19 @@ TString StepDetails(const TStepGroup& group, TStringBuf kind, TStringBuilder& to
 }
 
 void StepCell(TStringBuilder& svg, ui32 x, ui32 width, TStringBuf text) {
-    svg << "<svg x='" << x << "' y='0' width='" << width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y << "'>"
-        << SvgTextS(INTERNAL_GAP_X, (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, text) << "</svg>";
+    const ui32 available = width > INTERNAL_GAP_X * 2 ? width - INTERNAL_GAP_X * 2 : 0;
+    const size_t limit = available * 10 / (INTERNAL_TEXT_HEIGHT * 7);
+    TString display(text);
+    if (text.size() > limit) {
+        size_t cut = limit > 3 ? limit - 3 : 0;
+        while (cut && (static_cast<unsigned char>(text[cut]) & 0xc0) == 0x80) {
+            --cut;
+        }
+        display = TString(text.substr(0, cut)) + "...";
+    }
+    svg << "<svg x='" << x << "' y='0' width='" << width << "' height='" << INTERNAL_HEIGHT + INTERNAL_GAP_Y
+        << "' style='overflow:hidden'><title>" << SvgEscape(text) << "</title>"
+        << SvgTextS(INTERNAL_GAP_X, (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, display) << "</svg>";
 }
 
 TString ColumnShardKind(TString kind) {
@@ -2431,7 +2444,9 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
             << ",0) scale(0.014)' fill='" << viz.Config.Palette.ConnectionText << "'/></g>";
     }
     const ui32 indent = std::min<ui32>((depth + 1) * INTERNAL_WIDTH, 270);
-    StepCell(svg, indent, 315 - indent, node.Name + (semanticLabel ? " (" + semanticLabel + ")" : TString()));
+    const TString name = semanticLabel.StartsWith(node.Name + "(") ? semanticLabel
+        : node.Name + (semanticLabel ? " (" + semanticLabel + ")" : TString());
+    StepCell(svg, indent, 315 - indent, name);
     StepCell(svg, 315, 90, TStringBuilder() << node.ActiveTablets.size() << '/' << read.Denominator()
         << (read.ExpectedKnown ? "" : " recv"));
     StepCell(svg, 405, 65, FormatInteger(node.Calls));

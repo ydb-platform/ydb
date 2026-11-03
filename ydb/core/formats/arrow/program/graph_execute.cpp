@@ -298,8 +298,7 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
                 }
                 TString description = BuildStatsExpression(function, columns, it->GetCurrentNodeId());
                 if (const auto* constant = dynamic_cast<const TConstProcessor*>(processor.get())) {
-                    const auto value = constant->GetScalarConstant()->ToString();
-                    description = BoundStatsDescription(TStringBuf(value.data(), value.size()), it->GetCurrentNodeId());
+                    description = BuildStatsConstant(*constant->GetScalarConstant(), it->GetCurrentNodeId());
                 }
                 if (type == EProcessorType::Calculation || type == EProcessorType::Const ||
                     type == EProcessorType::StreamLogic || type == EProcessorType::CheckIndexData ||

@@ -3,29 +3,108 @@ name: Run and debug tests
 on:
   workflow_dispatch:
     inputs:
-      test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+      executor:
+        description: 'Where to run tests: ydb_yc (current runners) or remote (dispatch ci_remote_executor.yml)'
+        required: false
+        type: choice
+        options:
+          - ydb_yc
+          - remote
+        default: ydb_yc
+      remote_executor_ref:
+        description: 'Branch/ref that hosts ci_remote_executor.yml (required for executor=remote during same-repo bootstrap)'
         required: false
         type: string
-        default: 'ydb/tests/olap/'
+        default: 'dev/ci-remote-executor-smoke'
+      code_ref:
+        description: 'Git ref/SHA for remote executor to checkout (empty = this run SHA)'
+        required: false
+        type: string
+        default: ''
+      test_targets:
+        description: 'Paths to tests (e.g., "ydb/library/actors/util/ut")'
+        required: false
+        type: string
+        default: 'ydb/library/actors/util/ut'
       build_preset:
         description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
         required: false
         type: string
-        default: 'relwithdebinfo, release-asan'
+        default: 'relwithdebinfo'
       branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        description: 'Branches to test (comma-separated / JSON; empty = current). Used only for executor=ydb_yc'
         required: false
         type: string
         default: ''
       use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+        description: 'If true, use branches from .github/config/stable_tests_branches.json (ydb_yc only)'
         required: false
         type: boolean
         default: false
 
 jobs:
+  # --- remote path: tiny dispatch to ci_remote_executor.yml ---
+  dispatch_remote:
+    if: inputs.executor == 'remote'
+    runs-on: [self-hosted, tiny-worker]
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch CI remote executor
+        env:
+          # GITHUB_TOKEN does not start new workflow runs; use PAT.
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          REMOTE_EXECUTOR_REF: ${{ inputs.remote_executor_ref }}
+          CODE_REF: ${{ inputs.code_ref || github.sha }}
+          TEST_TARGETS: ${{ inputs.test_targets }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # remote path: single preset only (first token if comma-separated)
+          preset="${BUILD_PRESET%%,*}"
+          preset="$(echo "$preset" | xargs)"
+          echo "Dispatching ci_remote_executor.yml"
+          echo "- executor_ref: $REMOTE_EXECUTOR_REF"
+          echo "- code_ref: $CODE_REF"
+          echo "- build_preset: $preset"
+          echo "- test_targets: $TEST_TARGETS"
+
+          gh workflow run ci_remote_executor.yml \
+            --repo "${{ github.repository }}" \
+            --ref "$REMOTE_EXECUTOR_REF" \
+            -f "code_ref=$CODE_REF" \
+            -f "test_targets=$TEST_TARGETS" \
+            -f "build_preset=$preset" \
+            -f "test_size=small,medium" \
+            -f "kind=debug"
+
+          # Resolve the new run URL (best-effort; may race briefly)
+          sleep 3
+          run_url="$(gh run list --repo "${{ github.repository }}" \
+            --workflow=ci_remote_executor.yml \
+            --branch "$REMOTE_EXECUTOR_REF" \
+            --limit 1 \
+            --json url \
+            --jq '.[0].url' || true)"
+          {
+            echo "### Dispatched CI remote executor"
+            echo ""
+            echo "- **executor ref:** \`$REMOTE_EXECUTOR_REF\`"
+            echo "- **code ref:** \`$CODE_REF\`"
+            echo "- **preset:** \`$preset\`"
+            echo "- **targets:** \`$TEST_TARGETS\`"
+            if [ -n "$run_url" ]; then
+              echo "- **run:** $run_url"
+            else
+              echo "- **runs:** https://github.com/${{ github.repository }}/actions/workflows/ci_remote_executor.yml"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # --- ydb_yc path: existing run_tests matrix ---
   prepare:
+    if: inputs.executor == 'ydb_yc'
     runs-on: ubuntu-latest
     outputs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
@@ -35,18 +114,15 @@ jobs:
         id: format-branches
         run: |
           if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
             echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
             IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
             JSON_BRANCHES="["
             FIRST=true
             for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
+              branch=$(echo "$branch" | xargs)
               if [ -n "$branch" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -68,17 +144,15 @@ jobs:
           if [ -z "$BUILD_PRESET_INPUT" ]; then
             BUILD_PRESET_INPUT="relwithdebinfo"
           fi
-          
-          # Check if already JSON array
+
           if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
             echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
             IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
             JSON_PRESETS="["
             FIRST=true
             for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
+              preset=$(echo "$preset" | xargs)
               if [ -n "$preset" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -95,6 +169,7 @@ jobs:
 
   main:
     name: Run and debug tests
+    if: inputs.executor == 'ydb_yc'
     needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
@@ -111,5 +186,5 @@ jobs:
 
   collect_combined_summary:
     needs: main
-    if: always()
+    if: always() && inputs.executor == 'ydb_yc'
     uses: ./.github/workflows/collect_combined_summary.yml

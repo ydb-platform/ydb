@@ -85,6 +85,21 @@ namespace NKikimr::NArrow::NSSA {
             UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(arrow::StringScalar(), 4), "NULL");
         }
 
+        Y_UNIT_TEST(BinaryStatsConstantsRemainTypedAndReadable) {
+            const arrow::BinaryScalar target(arrow::Buffer::FromString("target"), arrow::binary());
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(target, 1), "'target'");
+            const auto literal = BuildStatsConstant(target, 1);
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Equals", {"marker", literal}, 2), "(marker = 'target')");
+            const arrow::BinaryScalar apostrophe(arrow::Buffer::FromString("user's value"), arrow::binary());
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(apostrophe, 3), "'user''s value'");
+            const arrow::BinaryScalar bytes(arrow::Buffer::FromString(std::string("\x00\x7f\xff", 3)), arrow::binary());
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(bytes, 4), "X'007FFF'");
+            const arrow::LargeBinaryScalar large(arrow::Buffer::FromString("target"), arrow::large_binary());
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(large, 5), "'target'");
+            const arrow::FixedSizeBinaryScalar fixed(arrow::Buffer::FromString("target"), arrow::fixed_size_binary(6));
+            UNIT_ASSERT_STRINGS_EQUAL(BuildStatsConstant(fixed, 6), "'target'");
+        }
+
         Y_UNIT_TEST(ArgumentDomainCountsArraysOnceAndBroadcastsScalars) {
             const auto three = NKernels::NumVecToArray(arrow::int32(), {1, 2, 3});
             const auto two = NKernels::NumVecToArray(arrow::int32(), {1, 2});

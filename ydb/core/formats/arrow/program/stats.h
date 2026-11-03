@@ -22,9 +22,30 @@ namespace NKikimr::NArrow::NSSA {
         if (!scalar.is_valid) {
             return "NULL";
         }
-        const auto value = scalar.ToString();
+        auto value = scalar.ToString();
+        const auto type = scalar.type->id();
+        const bool binary = type == arrow::Type::BINARY || type == arrow::Type::LARGE_BINARY ||
+            type == arrow::Type::FIXED_SIZE_BINARY;
+        if (binary) {
+            value = static_cast<const arrow::BaseBinaryScalar&>(scalar).value->ToString();
+        }
         TString description;
-        if (scalar.type->id() == arrow::Type::STRING || scalar.type->id() == arrow::Type::LARGE_STRING) {
+        bool hex = false;
+        if (binary) {
+            for (const unsigned char c : value) {
+                if (c < 32 || c >= 127) { hex = true; break; }
+            }
+        }
+        if (hex) {
+            static constexpr char digits[] = "0123456789ABCDEF";
+            description = "X'";
+            for (const unsigned char c : value) {
+                description += digits[c >> 4];
+                description += digits[c & 15];
+                if (description.size() > MaxStatsDescriptionBytes) { break; }
+            }
+            description += '\'';
+        } else if (binary || type == arrow::Type::STRING || type == arrow::Type::LARGE_STRING) {
             description = "'";
             for (char c : value) {
                 description += c;

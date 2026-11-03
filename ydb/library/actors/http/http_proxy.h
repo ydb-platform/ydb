@@ -132,6 +132,11 @@ struct TEvHttpProxy {
         {}
     };
 
+    // Replies to the sender echo this request's full actor-envelope cookie, including zero:
+    // TEvHttpIncomingResponse, TEvHttpIncompleteIncomingResponse and every
+    // TEvHttpIncomingDataChunk (including end-of-data and error events).
+    // This also applies to outgoing-cache hits and each coalesced waiter.
+    // The cookie is local correlation metadata; it does not affect HTTP bytes.
     struct TEvHttpOutgoingRequest : NActors::TEventLocal<TEvHttpOutgoingRequest, EvHttpOutgoingRequest> {
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;

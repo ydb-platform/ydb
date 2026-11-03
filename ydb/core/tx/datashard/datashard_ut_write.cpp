@@ -1930,12 +1930,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             .MaxStep = Min(sourcePrepared.GetMaxStep(), targetPrepared.GetMaxStep()),
             .Volatile = volatileTransactions,
         });
-        const auto expectedStatus = prepareWithoutOverflow
-            ? NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
-            : NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
         THashSet<ui64> completedShards;
         for (size_t responseIndex = 0; responseIndex < 2; ++responseIndex) {
-            completedShards.insert(WaitForWriteCompleted(runtime, sender, expectedStatus).GetOrigin());
+            const auto response = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            const auto& result = response->Get()->Record;
+            const auto expectedStatus = prepareWithoutOverflow
+                ? NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                : volatileTransactions && result.GetOrigin() == targetShard
+                    ? NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED
+                    : NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN;
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTxId(), transactionId);
+            completedShards.insert(result.GetOrigin());
         }
         UNIT_ASSERT(completedShards.contains(sourceShard));
         UNIT_ASSERT(completedShards.contains(targetShard));

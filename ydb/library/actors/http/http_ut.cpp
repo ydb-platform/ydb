@@ -1129,6 +1129,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
+        AssertHttpConnectionClosed(actorSystem, clientId, handle->Sender);
     }
 
     /*Y_UNIT_TEST(AdvancedRunning) {
@@ -1151,7 +1152,6 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         actorSystem.Send(outgoingProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest("[::]:13337", std::move(httpRequest)));
 
         Sleep(TDuration::Minutes(60));
-        AssertHttpConnectionClosed(actorSystem, clientId, handle->Sender);
     }*/
 
     Y_UNIT_TEST(TooLongURL) {

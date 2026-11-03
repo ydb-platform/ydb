@@ -1,4 +1,4 @@
-* Fixed Topic and PersQueue writers unnecessarily refreshing the initial authentication token and failing against servers with authentication disabled.
+* Fixed redundant initial token refreshes in Topic and PersQueue writers.
 
 * Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
 

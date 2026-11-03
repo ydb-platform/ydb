@@ -185,6 +185,9 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
+    , PrevToken(DbDriverState->GetCredentialsProvider()
+        ? DbDriverState->GetCredentialsProvider()->GetAuthInfoAsync()
+        : NThreading::MakeFuture(std::string()))
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -893,7 +896,6 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
     NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
     TRpcRequestSettings reqSettings;
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> connectionFactory;
-    auto initialAuthToken = std::make_shared<std::string>();
 
     // Callbacks
     std::function<void(TPlainStatus&&, typename IProcessor::TPtr&&)> connectCallback;
@@ -965,9 +967,9 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
         connectCallback = [cbContext = SelfContext,
-                           connectContext = connectContext, initialAuthToken](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
+                           connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
             if (auto self = cbContext->LockShared()) {
-                self->OnConnect(std::move(st), std::move(processor), connectContext, std::move(*initialAuthToken));
+                self->OnConnect(std::move(st), std::move(processor), connectContext);
             }
         };
 
@@ -988,8 +990,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             std::move(connectTimeoutContext),
             std::move(connectTimeoutCallback),
             delay,
-            std::move(connectDelayContext),
-            std::move(initialAuthToken)
+            std::move(connectDelayContext)
     );
 }
 
@@ -1022,8 +1023,7 @@ void TWriteSessionImpl::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr&
 
 // RPC callback.
 void TWriteSessionImpl::OnConnect(
-        TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext,
-        std::string initialAuthToken
+        TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext
 ) {
     THandleResult handleResult;
     {
@@ -1035,8 +1035,6 @@ void TWriteSessionImpl::OnConnect(
             ConnectDelayContext = nullptr;
 
             if (st.Ok()) {
-                PrevToken = std::move(initialAuthToken);
-                UpdateTokenInProgress = false;
                 Processor = std::move(processor);
                 InitImpl();
                 // Still should call ReadFromProcessor();
@@ -1869,7 +1867,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: try to update token");
 
     auto credentialsProvider = DbDriverState->GetCredentialsProvider();
-    if (!credentialsProvider || !credentialsProvider->IsValid() || UpdateTokenInProgress || !SessionEstablished || Aborting) {
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting) {
         return;
     }
 
@@ -1880,18 +1878,15 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     }
     UpdateTokenInProgress = true;
     try {
-        authInfo.Subscribe([cbContext = SelfContext, connectionGeneration = ConnectionGeneration](const auto& future) {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
             if (auto self = cbContext->LockShared()) try {
-                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future, connectionGeneration](bool ok) {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
                     if (auto self = cbContext->LockShared()) {
                         if (!ok) {
                             self->UpdateTokenInProgress = false;
                             return;
                         }
                         std::lock_guard guard(self->Lock);
-                        if (connectionGeneration != self->ConnectionGeneration) {
-                            return;
-                        }
                         self->UpdateTokenImpl(future);
                     }
                 });
@@ -1919,14 +1914,14 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
         CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
         return;
     }
-    if (token == PrevToken) {
+    if (PrevToken.HasValue() && token == PrevToken.GetValue()) {
         return;
     }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: updating token");
 
     UpdateTokenInProgress = true;
-    PrevToken = token;
+    PrevToken = future;
 
     TClientMessage clientMessage;
     clientMessage.mutable_update_token_request()->set_token(TStringType{token});

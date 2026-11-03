@@ -436,7 +436,7 @@ private:
     void InitWriter();
 
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-                const NYdbGrpc::IQueueClientContextPtr& connectContext, std::string initialAuthToken);
+                const NYdbGrpc::IQueueClientContextPtr& connectContext);
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);
@@ -502,7 +502,7 @@ private:
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
-    std::string PrevToken;
+    NThreading::TFuture<std::string> PrevToken;
     std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;

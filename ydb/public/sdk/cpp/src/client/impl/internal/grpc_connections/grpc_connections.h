@@ -654,8 +654,7 @@ public:
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr,
-        NThreading::TFuture<std::string> authInfo = {},
-        std::shared_ptr<std::string> initialAuthToken = nullptr)
+        NThreading::TFuture<std::string> authInfo = {})
     {
         using NYdbGrpc::TGrpcStatus;
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
@@ -663,7 +662,7 @@ public:
 
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context, authInfo); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
-                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context, authInfo, initialAuthToken]
+                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context, authInfo]
                 (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
                     if (status) {
                         connectedCallback(std::move(*status), nullptr);
@@ -675,8 +674,7 @@ public:
                         std::move(dbState),
                         requestSettings,
                         std::move(context),
-                        std::move(authInfo),
-                        std::move(initialAuthToken));
+                        std::move(authInfo));
                 });
             return;
         }
@@ -692,7 +690,7 @@ public:
         }
 
         WithServiceConnection<TService>(
-            [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState, authInfo = std::move(authInfo), initialAuthToken = std::move(initialAuthToken)]
+            [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState, authInfo = std::move(authInfo)]
                 (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                     if (!status.Ok()) {
                         context.reset();
@@ -705,15 +703,6 @@ public:
                     TCallMeta meta;
                     try {
                         meta = MakeCallMeta(requestSettings, dbState, authInfo);
-                        if (initialAuthToken) {
-                            initialAuthToken->clear();
-                            for (const auto& [name, value] : meta.Aux) {
-                                if (name == YDB_AUTH_TICKET_HEADER) {
-                                    *initialAuthToken = value;
-                                    break;
-                                }
-                            }
-                        }
                     } catch (const TYdbException& e) {
                         context.reset();
                         RunStreamCallback(

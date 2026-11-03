@@ -230,6 +230,8 @@ THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
 void LogCounters(THolder<TSharedPageCacheCounters>& counters) {
     Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val()
         << ", Passive:" << counters->PassiveBytes->Val()
+        << ", Metadata:" << counters->MetadataBytes->Val()
+        << ", Used:" << counters->UsedBytes->Val()
         << ", MemLimit:" << counters->MemLimitBytes->Val()
         << Endl;
 }
@@ -2157,8 +2159,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    // Metadata shares the 10 MiB budget, leaving room for one fewer page.
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 136);
+    // Metadata shares the 10 MiB budget, reducing the number of retained index pages.
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 135);
     CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
@@ -2177,7 +2179,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100}));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 136);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 135);
     CheckCacheUsageWithMetadata(*counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->PassiveBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->PassivePages->Val(), 1);
